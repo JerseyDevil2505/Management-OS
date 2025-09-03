@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from './lib/supabaseClient';
-import { openDB } from 'idb';
 import './App.css'; 
 import AdminJobManagement from './components/AdminJobManagement';
 import EmployeeManagement from './components/EmployeeManagement';
@@ -19,7 +18,6 @@ const App = () => {
   // ==========================================
   // URL-BASED VIEW STATE (FIXES F5 ISSUE!)
   // ==========================================
-// REPLACE WITH:
   const [activeView, setActiveView] = useState(() => {
     // Read from URL on initial load
     const path = window.location.pathname.slice(1) || 'admin-jobs';
@@ -35,7 +33,7 @@ const App = () => {
   }, []);
 
   // Listen for browser back/forward buttons
-useEffect(() => {
+  useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
       const parts = path.split('/');
@@ -64,19 +62,8 @@ useEffect(() => {
   // ==========================================
   const performanceRef = useRef({
     appStartTime: Date.now(),
-    cacheHits: 0,
-    cacheMisses: 0,
     dbQueries: 0,
     avgLoadTime: 0
-  });
-
-  // ==========================================
-  // DATABASE CONCURRENCY CONTROL
-  // ==========================================
-  const dbOperationRef = useRef({
-    isLoading: false,
-    pendingOperations: 0,
-    lastOperationTime: 0
   });
 
   // ==========================================
@@ -131,139 +118,6 @@ useEffect(() => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-
-  // ==========================================
-  // PERSISTENT STORAGE HELPERS
-  // ==========================================
-  const saveToStorage = useCallback(async (data) => {
-    try {
-      // Try IndexedDB first (no size limits)
-      if (dbRef.current) {
-        const dataToStore = {
-          ...data,
-          timestamp: Date.now(),
-          version: CACHE_VERSION
-        };
-        
-        // Store large data separately
-        const largeFields = ['jobs', 'employees', 'activeJobs', 'legacyJobs'];
-        const coreData = { ...dataToStore };
-        
-        for (const field of largeFields) {
-          if (coreData[field] && coreData[field].length > 100) {
-            await dbRef.current.put('largeData', coreData[field], field);
-            coreData[field] = { _ref: field }; // Store reference instead
-          }
-        }
-        
-        await dbRef.current.put('masterCache', coreData, 'main');
-        return true;
-      }
-    } catch (error) {
-      console.error('IndexedDB save failed:', error.message);
-      console.error('Error details:', error);
-      
-      // Fallback to localStorage for critical data
-      try {
-        const minimalCache = {
-          billingMetrics: data.billingMetrics,
-          globalInspectionAnalytics: data.globalInspectionAnalytics,
-          lastFetched: data.lastFetched,
-          version: CACHE_VERSION,
-          timestamp: Date.now()
-        };
-        localStorage.setItem('lojikCacheFallback', JSON.stringify(minimalCache));
-      } catch (e) {
-        console.error('All storage methods failed:', e);
-      }
-    }
-    return false;
-  }, []);
-
-  const loadFromStorage = useCallback(async () => {
-    const startTime = Date.now();
-    
-    try {
-      // Initialize IndexedDB
-      if (!dbRef.current) {
-        dbRef.current = await initDB();
-      }
-      
-      // Try to load from IndexedDB
-      const coreData = await dbRef.current.get('masterCache', 'main');
-      
-      if (coreData && coreData.version === CACHE_VERSION) {
-        const cacheAge = Date.now() - coreData.timestamp;
-        
-        // Resolve large data references
-        const fullData = { ...coreData };
-        for (const [key, value] of Object.entries(coreData)) {
-          if (value && typeof value === 'object' && value._ref) {
-            fullData[key] = await dbRef.current.get('largeData', value._ref) || [];
-          }
-        }
-        
-        const loadTime = Date.now() - startTime;
-        
-        // Determine cache freshness
-        let loadSource = 'cache';
-        let shouldBackgroundRefresh = false;
-        
-        if (cacheAge < CACHE_EXPIRY.hot) {
-          // HOT cache - using without refresh
-        } else if (cacheAge < CACHE_EXPIRY.warm) {
-          // WARM cache - using with background refresh
-          shouldBackgroundRefresh = true;
-        } else if (cacheAge < CACHE_EXPIRY.cold) {
-          // COLD cache - showing stale warning
-          loadSource = 'cache-stale';
-          shouldBackgroundRefresh = true;
-        } else {
-          // EXPIRED cache - will refresh
-          return null;
-        }
-        
-        performanceRef.current.cacheHits++;
-        
-        return {
-          data: fullData,
-          cacheAge,
-          loadSource,
-          shouldBackgroundRefresh,
-          loadTime
-        };
-      }
-    } catch (error) {
-      console.error('Failed to load from IndexedDB:', error);
-      
-      // Try localStorage fallback
-      try {
-        const fallback = localStorage.getItem('lojikCacheFallback');
-        if (fallback) {
-          const parsed = JSON.parse(fallback);
-          if (parsed.version === CACHE_VERSION) {
-            console.log('���� Using localStorage fallback');
-            return {
-              data: parsed,
-              cacheAge: Date.now() - parsed.timestamp,
-              loadSource: 'fallback',
-              shouldBackgroundRefresh: true,
-              loadTime: Date.now() - startTime
-            };
-          }
-        }
-      } catch (e) {
-        console.error('localStorage fallback failed:', e);
-      }
-    }
-    
-    performanceRef.current.cacheMisses++;
-    return null;
-  }, []);
-
-  // ==========================================
-  // INTELLIGENT DATA LOADING
-  // ==========================================
   // ==========================================
   // JOB FRESHNESS CALCULATOR
   // ==========================================
@@ -296,7 +150,6 @@ useEffect(() => {
         };
       } catch (error) {
         console.error(`Error loading freshness for job ${job.id}:`, error.message);
-        console.error('Error details:', error);
         freshnessData[job.id] = {
           lastFileUpload: null,
           lastProductionRun: null,
@@ -307,575 +160,312 @@ useEffect(() => {
     
     return freshnessData;
   }, []);
-  const loadMasterData = useCallback(async (options = {}) => {
-    const { 
-      force = false, 
-      components = ['all'],
-      background = false 
-    } = options;
 
-    // Don't interrupt if already loading (unless forced)
-    if (masterCache.isLoading && !force) {
-      return masterCache;
-    }
-
-    const loadStartTime = Date.now();
-    
-    // For background refreshes, don't show loading state
-    if (!background) {
-      setMasterCache(prev => ({ ...prev, isLoading: true }));
-      setCacheStatus(prev => ({ ...prev, isRefreshing: true, message: 'Loading data...' }));
-    }
+  // ==========================================
+  // LIVE DATA LOADING - NO CACHING
+  // ==========================================
+  const loadLiveData = useCallback(async (components = ['all']) => {
+    console.log('📡 Loading fresh data from database:', components);
 
     try {
-      performanceRef.current.dbQueries++;
-      
-      const loadPromises = [];
-      const loadKeys = [];
+      setLoadingStatus(prev => ({ ...prev, isRefreshing: true, message: 'Loading fresh data...' }));
+      setAppData(prev => ({ ...prev, isLoading: true }));
 
-      // ==========================================
-      // SMART QUERY BUILDER
-      // ==========================================
-      if (components.includes('all') || components.includes('jobs')) {
-        loadKeys.push('jobs');
-        loadPromises.push(
-          supabase
-            .from('jobs')
-            .select(`
-              *,
-              job_responsibilities(count),
-              job_contracts(
-                contract_amount,
-                retainer_percentage,
-                retainer_amount,
-                end_of_job_percentage,
-                end_of_job_amount,
-                first_year_appeals_percentage,
-                first_year_appeals_amount,
-                second_year_appeals_percentage,
-                second_year_appeals_amount
-              ),
-              billing_events(
-                id,
-                billing_date,
-                percentage_billed,
-                status,
-                invoice_number,
-                amount_billed,
-                billing_type,
-                remaining_due
-              ),
-              workflow_stats,
-              job_assignments(
-                employee_id,
-                role,
-                employees!employee_id(id, first_name, last_name)
-              )
-            `)
-            .order('created_at', { ascending: false })
-        );
-        
-        loadKeys.push('countyHpi');
-        loadPromises.push(
-          supabase
-            .from('county_hpi_data')
-            .select('*')
-            .order('county_name, observation_year')
-        );
+      const updates = {};
 
-        loadKeys.push('jobResponsibilities');
-        loadPromises.push(
-          supabase
-            .from('job_responsibilities')
-            .select('*')
-        ); 
-      }
+      // Load jobs data
+      if (components.includes('jobs') || components.includes('all')) {
+        console.log('📊 Loading jobs data...');
 
-      if (components.includes('all') || components.includes('employees')) {
-        loadKeys.push('employees');
-        loadPromises.push(
-          supabase
-            .from('employees')
-            .select(`
-              *,
-              job_assignments!employee_id(
-                job_id,
-                role,
-                jobs!job_id(id, job_name, status)
-              )
-            `)
-            .order('last_name')
-        );
-      }
+        const { data: jobsData } = await supabase
+          .from('jobs')
+          .select(`
+            *,
+            job_responsibilities(count),
+            job_contracts(
+              contract_amount,
+              retainer_percentage,
+              retainer_amount,
+              end_of_job_percentage,
+              end_of_job_amount,
+              first_year_appeals_percentage,
+              first_year_appeals_amount,
+              second_year_appeals_percentage,
+              second_year_appeals_amount
+            ),
+            billing_events(
+              id,
+              billing_date,
+              percentage_billed,
+              status,
+              invoice_number,
+              amount_billed,
+              billing_type,
+              remaining_due
+            ),
+            workflow_stats,
+            job_assignments(
+              employee_id,
+              role,
+              employees!employee_id(id, first_name, last_name)
+            )
+          `)
+          .order('created_at', { ascending: false });
 
-      if (components.includes('all') || components.includes('planning')) {
-        loadKeys.push('planning');
-        loadPromises.push(
-          supabase
-            .from('planning_jobs')
-            .select('*')
-            .order('end_date')
-        );
-      }
+        if (jobsData) {
+          // Transform jobs to match what AdminJobManagement expects
+          const transformedJobs = jobsData.map(job => ({
+            ...job,
+            // Core fields AdminJobManagement needs
+            name: job.job_name || job.name || '',
+            municipality: job.municipality || '',
+            ccdd: job.ccdd || job.ccdd_code || '',
+            county: job.county || '',
+            vendor: job.vendor || '',
+            status: job.status || 'active',
+            
+            // Transform property counts - use workflow_stats if available
+            totalProperties: job.workflow_stats?.totalRecords || job.total_properties || 0,
+            inspectedProperties: (typeof job.workflow_stats === 'string' ? JSON.parse(job.workflow_stats) : job.workflow_stats)?.validInspections || job.inspected_properties || 0,
+            totalresidential: job.totalresidential || 0,
+            totalcommercial: job.totalcommercial || 0,
+            
+            // Billing and dates
+            percentBilled: job.percent_billed || 0,
+            dueDate: job.due_date || job.target_completion_date || '',
+            
+            // Assignment flags
+            has_property_assignments: job.has_property_assignments || false,
+            assigned_has_commercial: job.assigned_has_commercial || false,
+            assignedPropertyCount: job.job_responsibilities?.[0]?.count || 0,
+            
+            // Transform assigned managers from job_assignments
+            assignedManagers: job.job_assignments?.map(ja => ({
+              id: ja.employee_id,
+              name: ja.employees ? 
+                `${ja.employees.first_name} ${ja.employees.last_name}` : 
+                'Unknown',
+              role: ja.role || 'Lead Manager'
+            })) || [],
+            
+            // Workflow stats - read the ACTUAL fields ProductionTracker saves
+            workflowStats: job.workflow_stats ? {
+              jobEntryRate: job.workflow_stats.jobEntryRate || 0,
+              jobRefusalRate: job.workflow_stats.jobRefusalRate || 0,
+              commercialCompletePercent: job.workflow_stats.commercialCompletePercent || 0,
+              pricingCompletePercent: job.workflow_stats.pricingCompletePercent || 0,
+              validInspections: job.workflow_stats.validInspections || 0,
+              totalRecords: job.workflow_stats.totalRecords || 0
+            } : null
+          }));
 
-      if (components.includes('all') || components.includes('billing')) {
-        const currentYear = new Date().getFullYear();
-        
-        loadKeys.push('expenses');
-        loadPromises.push(
-          supabase
-            .from('expenses')
-            .select('*')
-            .eq('year', currentYear)
-        );
-
-        loadKeys.push('receivables');
-        loadPromises.push(
-          supabase
-            .from('office_receivables')
-            .select('*')
-            .order('created_at', { ascending: false })
-        );
-
-        loadKeys.push('distributions');
-        loadPromises.push(
-          supabase
-            .from('shareholder_distributions')
-            .select('*')
-            .eq('year', currentYear)
-        );
-      }
-
-      if (components.includes('all') || components.includes('payroll')) {
-        loadKeys.push('payrollPeriods');
-        loadPromises.push(
-          supabase
-            .from('payroll_periods')
-            .select('*')
-            .order('end_date', { ascending: false })
-            .limit(12)
-        );
-      }
-
-      // ==========================================
-      // DATABASE CONCURRENCY CONTROL
-      // ==========================================
-
-      // Check if database is busy
-      const timeSinceLastOp = Date.now() - dbOperationRef.current.lastOperationTime;
-      const isBusy = dbOperationRef.current.isLoading || dbOperationRef.current.pendingOperations > 0;
-
-      // If this is a background refresh and database is busy, defer it
-      if (background && isBusy && timeSinceLastOp < 5000) {
-        setTimeout(() => loadMasterData(true), 10000); // Retry in 10 seconds
-        return masterCache;
-      }
-
-      // Mark operation as starting
-      dbOperationRef.current.isLoading = true;
-      dbOperationRef.current.pendingOperations++;
-      dbOperationRef.current.lastOperationTime = Date.now();
-
-      // ==========================================
-      // EXECUTE QUERIES WITH RETRY LOGIC
-      // ==========================================
-      const executeWithRetry = async (promises, maxRetries = 3) => {
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          try {
-            // Adjust timeout based on background vs foreground
-            const timeoutDuration = background ? 60000 : 30000; // 60s for background, 30s for foreground
-
-            const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Database timeout')), timeoutDuration)
-            );
-
-            const results = await Promise.race([
-              Promise.all(promises),
-              timeoutPromise
-            ]);
-
-            return results;
-
-          } catch (error) {
-            if (attempt === maxRetries) {
-              throw error;
+          updates.jobs = transformedJobs.filter(j => j.status === 'active');
+          updates.archivedJobs = transformedJobs.filter(j => 
+            j.status === 'archived' || j.status === 'draft'
+          );
+          updates.activeJobs = transformedJobs.filter(j => j.job_type === 'standard');
+          updates.legacyJobs = transformedJobs.filter(j => j.job_type === 'legacy_billing');
+          
+          // Process workflow stats for quick lookup
+          updates.workflowStats = {};
+          transformedJobs.forEach(job => {
+            if (job.workflowStats) {
+              updates.workflowStats[job.id] = job.workflowStats;
             }
-
-            // Exponential backoff: 2s, 4s, 8s
-            const backoffTime = Math.min(2000 * Math.pow(2, attempt - 1), 8000);
-            await new Promise(resolve => setTimeout(resolve, backoffTime));
-          }
-        }
-      };
-
-      const results = await executeWithRetry(loadPromises);
-      
-      // Process results
-      const updates = {
-        lastFetched: {},
-        loadSource: 'database'
-      };
-      
-      results.forEach((result, index) => {
-        const key = loadKeys[index];
-        if (!result.error) {
-          updates.lastFetched[key] = Date.now();
-          
-          switch(key) {
-            case 'jobs':
-              const allJobs = result.data || [];
-              
-              // Transform jobs to match what AdminJobManagement expects
-              const transformedJobs = allJobs.map(job => ({
-                ...job,
-                // Core fields AdminJobManagement needs
-                name: job.job_name || job.name || '',
-                municipality: job.municipality || '',
-                ccdd: job.ccdd || job.ccdd_code || '',
-                county: job.county || '',
-                vendor: job.vendor || '',
-                status: job.status || 'active',
-                
-                // Transform property counts - use workflow_stats if available
-                totalProperties: job.workflow_stats?.totalRecords || job.total_properties || 0,
-                inspectedProperties: (typeof job.workflow_stats === 'string' ? JSON.parse(job.workflow_stats) : job.workflow_stats)?.validInspections || job.inspected_properties || 0,
-                totalresidential: job.totalresidential || 0,
-                totalcommercial: job.totalcommercial || 0,
-                
-                // Billing and dates
-                percentBilled: job.percent_billed || 0,
-                dueDate: job.due_date || job.target_completion_date || '',
-                
-                // Assignment flags
-                has_property_assignments: job.has_property_assignments || false,
-                assigned_has_commercial: job.assigned_has_commercial || false,
-                assignedPropertyCount: job.job_responsibilities?.[0]?.count || 0,
-                
-                // Transform assigned managers from job_assignments
-                assignedManagers: job.job_assignments?.map(ja => ({
-                  id: ja.employee_id,
-                  name: ja.employees ? 
-                    `${ja.employees.first_name} ${ja.employees.last_name}` : 
-                    'Unknown',
-                  role: ja.role || 'Lead Manager'
-                })) || [],
-                
-                // Workflow stats - read the ACTUAL fields ProductionTracker saves
-                workflowStats: job.workflow_stats ? {
-                  jobEntryRate: job.workflow_stats.jobEntryRate || 0,
-                  jobRefusalRate: job.workflow_stats.jobRefusalRate || 0,
-                  commercialCompletePercent: job.workflow_stats.commercialCompletePercent || 0,
-                  pricingCompletePercent: job.workflow_stats.pricingCompletePercent || 0,
-                  validInspections: job.workflow_stats.validInspections || 0,
-                  totalRecords: job.workflow_stats.totalRecords || 0
-                } : null
-              }));
-              
-              updates.jobs = transformedJobs.filter(j => j.status === 'active');
-
-              // CHECK URL for job selection after jobs load
-              const path = window.location.pathname;
-              const parts = path.split('/');
-              if (parts[1] === 'job' && parts[2]) {
-                const jobId = parts[2];
-                const job = updates.jobs.find(j => j.id === jobId);
-                if (job) {
-                  setSelectedJob(job);
-                  setActiveView('job-modules');
-                  console.log('📍 Restored job from URL:', jobId);
-                }
-              }
-              updates.archivedJobs = transformedJobs.filter(j => 
-                j.status === 'archived' || j.status === 'draft'
-              );
-              updates.activeJobs = transformedJobs.filter(j => j.job_type === 'standard');
-              updates.legacyJobs = transformedJobs.filter(j => j.job_type === 'legacy_billing');
-              
-              // Process workflow stats for quick lookup
-              updates.workflowStats = {};
-              transformedJobs.forEach(job => {
-                if (job.workflowStats) {
-                  updates.workflowStats[job.id] = job.workflowStats;
-                }
-              });
-              
-              // Calculate job freshness
-              updates.jobFreshness = {};
-              transformedJobs.forEach(job => {
-                updates.jobFreshness[job.id] = {
-                  lastFileUpload: job.last_file_upload || null,
-                  lastProductionRun: job.last_production_run || null,
-                  needsUpdate: false
-                };
-              });
-              break;
-              
-            case 'employees':
-              updates.employees = result.data || [];
-              updates.managers = (result.data || []).filter(e => 
-                e.inspector_type === 'management' || 
-                e.inspector_type === 'Management'
-              );
-              break;
-          
-            case 'countyHpi':
-              updates.countyHpiData = result.data || [];
-              break;
-
-            case 'jobResponsibilities':
-              updates.jobResponsibilities = result.data || [];
-              break;
-              
-            case 'planning':
-              updates.planningJobs = result.data || [];
-              break;
-              
-            case 'expenses':
-              updates.expenses = result.data || [];
-              break;
-              
-            case 'receivables':
-              updates.receivables = result.data || [];
-              break;
-              
-            case 'distributions':
-              updates.distributions = result.data || [];
-              break;
-              
-            case 'payrollPeriods':
-              updates.archivedPayrollPeriods = result.data || [];
-              break;
-          }
-        } else {
-          console.error(`Failed to load ${key}:`, result.error?.message || result.error);
-          console.error('Full error details:', {
-            key: key,
-            error: result.error,
-            code: result.error?.code,
-            message: result.error?.message,
-            details: result.error?.details
           });
+          
+          // Calculate job freshness
+          updates.jobFreshness = await loadJobFreshness(transformedJobs);
+
+          // CHECK URL for job selection after jobs load
+          const path = window.location.pathname;
+          const parts = path.split('/');
+          if (parts[1] === 'job' && parts[2]) {
+            const jobId = parts[2];
+            const job = updates.jobs.find(j => j.id === jobId);
+            if (job) {
+              setSelectedJob(job);
+              setActiveView('job-modules');
+              console.log('📍 Restored job from URL:', jobId);
+            }
+          }
         }
-      });
-      
-      // ==========================================
-      // LOAD JOB FRESHNESS DATA
-      // ==========================================
-      if (updates.jobs && updates.jobs.length > 0) {
-        updates.jobFreshness = await loadJobFreshness(updates.jobs);
+
+        // Load county HPI data
+        const { data: countyHpiData } = await supabase
+          .from('county_hpi_data')
+          .select('*')
+          .order('county_name, observation_year');
+
+        if (countyHpiData) {
+          updates.countyHpiData = countyHpiData;
+        }
+
+        // Load job responsibilities
+        const { data: jobResponsibilities } = await supabase
+          .from('job_responsibilities')
+          .select('*');
+
+        if (jobResponsibilities) {
+          updates.jobResponsibilities = jobResponsibilities;
+        }
       }
 
-      // ==========================================
-      // CALCULATE DERIVED METRICS
-      // ==========================================
-      if (updates.activeJobs || updates.legacyJobs) {
+      // Load employees data
+      if (components.includes('employees') || components.includes('all')) {
+        console.log('👥 Loading employees data...');
+
+        const { data: employeesData } = await supabase
+          .from('employees')
+          .select(`
+            *,
+            job_assignments!employee_id(
+              job_id,
+              role,
+              jobs!job_id(id, job_name, status)
+            )
+          `)
+          .order('last_name');
+
+        if (employeesData) {
+          updates.employees = employeesData;
+          updates.managers = employeesData.filter(e => 
+            e.inspector_type === 'management' || 
+            e.inspector_type === 'Management'
+          );
+
+          // Calculate global inspection analytics
+          updates.globalInspectionAnalytics = calculateInspectionAnalytics(employeesData);
+        }
+      }
+
+      // Load billing data
+      if (components.includes('billing') || components.includes('all')) {
+        console.log('💰 Loading billing data...');
+
+        // Load planning jobs
+        const { data: planningData } = await supabase
+          .from('planning_jobs')
+          .select('*')
+          .order('end_date');
+
+        if (planningData) {
+          updates.planningJobs = planningData;
+        }
+
+        // Load expenses
+        const currentYear = new Date().getFullYear();
+        const { data: expensesData } = await supabase
+          .from('expenses')
+          .select('*')
+          .eq('year', currentYear);
+
+        if (expensesData) {
+          updates.expenses = expensesData;
+        }
+
+        // Load receivables
+        const { data: receivablesData } = await supabase
+          .from('office_receivables')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (receivablesData) {
+          updates.receivables = receivablesData;
+        }
+
+        // Load distributions
+        const { data: distributionsData } = await supabase
+          .from('shareholder_distributions')
+          .select('*')
+          .eq('year', currentYear);
+
+        if (distributionsData) {
+          updates.distributions = distributionsData;
+        }
+
+        // Calculate billing metrics
         updates.billingMetrics = calculateBillingMetrics(
-          updates.activeJobs || masterCache.activeJobs,
-          updates.legacyJobs || masterCache.legacyJobs,
-          updates.planningJobs || masterCache.planningJobs,
-          updates.expenses || masterCache.expenses,
-          updates.receivables || masterCache.receivables
+          updates.activeJobs || appData.activeJobs,
+          updates.legacyJobs || appData.legacyJobs,
+          updates.planningJobs || appData.planningJobs,
+          updates.expenses || appData.expenses,
+          updates.receivables || appData.receivables
         );
       }
 
-      if (updates.employees) {
-        updates.globalInspectionAnalytics = calculateInspectionAnalytics(
-          updates.employees
-        );
+      // Load payroll data
+      if (components.includes('payroll') || components.includes('all')) {
+        console.log('💼 Loading payroll data...');
+
+        const { data: payrollData } = await supabase
+          .from('payroll_periods')
+          .select('*')
+          .order('end_date', { ascending: false })
+          .limit(12);
+
+        if (payrollData) {
+          updates.archivedPayrollPeriods = payrollData;
+        }
       }
 
-      // ==========================================
-      // UPDATE STATE & PERSIST
-      // ==========================================
-      const loadTime = Date.now() - loadStartTime;
-      performanceRef.current.avgLoadTime = 
-        (performanceRef.current.avgLoadTime + loadTime) / 2;
-
-      const now = Date.now();
-      const newCache = {
-        ...masterCache,
+      // Update app data
+      const newData = {
+        ...appData,
         ...updates,
-        lastFetched: {
-          ...masterCache.lastFetched,
-          ...updates.lastFetched,
-          all: components.includes('all') ? now : masterCache.lastFetched.all
-        },
-        isLoading: false,
         isInitialized: true,
-        cacheAge: 0,
-        version: CACHE_VERSION
+        isLoading: false
       };
 
-      setMasterCache(newCache);
-      
-      // Persist to storage
-      await saveToStorage(newCache);
-      
-      if (!background) {
-        setCacheStatus({
-          isStale: false,
-          isRefreshing: false,
-          lastError: null,
-          message: `Data loaded in ${(loadTime / 1000).toFixed(1)}s`
-        });
-      }
+      setAppData(newData);
 
-      console.log(`✅ Data loaded from database in ${loadTime}ms`);
+      setLoadingStatus({
+        isRefreshing: false,
+        lastError: null,
+        message: 'Data loaded successfully'
+      });
 
-      // Mark operation as complete
-      dbOperationRef.current.isLoading = false;
-      dbOperationRef.current.pendingOperations = Math.max(0, dbOperationRef.current.pendingOperations - 1);
+      console.log('✅ Fresh data loaded successfully');
+      performanceRef.current.dbQueries++;
 
-      return newCache;
+      return newData;
 
     } catch (error) {
-      console.error('❌ Error loading data:', error);
-
-      // Always reset operation flags on error
-      dbOperationRef.current.isLoading = false;
-      dbOperationRef.current.pendingOperations = Math.max(0, dbOperationRef.current.pendingOperations - 1);
-
-      if (!background) {
-        setMasterCache(prev => ({ ...prev, isLoading: false }));
-        setCacheStatus(prev => ({
-          ...prev,
-          isRefreshing: false,
-          lastError: error.message,
-          message: error.message.includes('timeout') ?
-            'Database timeout - system may be busy. Please try again.' :
-            'Failed to load data'
-        }));
-      }
-
+      console.error('❌ Error loading live data:', error);
+      setAppData(prev => ({ ...prev, isLoading: false }));
+      setLoadingStatus({
+        isRefreshing: false,
+        lastError: error.message,
+        message: 'Error loading data'
+      });
       throw error;
     }
-  }, [masterCache, saveToStorage]);
+  }, [appData, loadJobFreshness]);
 
-// ==========================================
-  // SURGICAL CACHE UPDATES
-  // ==========================================
-  const updateCacheItem = useCallback(async (type, id, data, options = {}) => {
-    console.log('🔧 Updating cache item:', type, id);
-    const { persist = true } = options;
-    
-    let updates = {};
-    
+  const updateAppData = useCallback(async (type, id, data) => {
+    console.log('🔧 Updating app data:', type, id);
+
+    // For any billing-related updates, just reload fresh data
+    if (type.includes('billing') || type.includes('event')) {
+      console.log('🔄 Billing data updated, reloading fresh data...');
+      await loadLiveData(['billing']);
+      return;
+    }
+
+    // For other updates, reload the appropriate section
     switch(type) {
       case 'job':
-        updates = {
-          jobs: masterCache.jobs.map(j => j.id === id ? { ...j, ...data } : j),
-          activeJobs: masterCache.activeJobs.map(j => j.id === id ? { ...j, ...data } : j)
-        };
+        await loadLiveData(['jobs']);
         break;
-        
-      case 'billing_event':
-        updates = {
-          activeJobs: masterCache.activeJobs.map(job => {
-            if (job.id === id) {
-              return {
-                ...job,
-                billing_events: [...(job.billing_events || []), data]
-              };
-            }
-            return job;
-          })
-        };
-        
-        // Recalculate billing metrics
-        const newActiveJobs = updates.activeJobs || masterCache.activeJobs;
-        updates.billingMetrics = calculateBillingMetrics(
-          newActiveJobs,
-          masterCache.legacyJobs,
-          masterCache.planningJobs,
-          masterCache.expenses,
-          masterCache.receivables
-        );
-        break;  // <-- ADD THIS BREAK STATEMENT!
-        
-      case 'billing_event_status':
-        // Update the billing event status in both activeJobs and legacyJobs
-        updates = {
-          activeJobs: masterCache.activeJobs.map(job => {
-            if (job.billing_events) {
-              return {
-                ...job,
-                billing_events: job.billing_events.map(event => 
-                  event.id === id ? { ...event, status: data.status } : event
-                )
-              };
-            }
-            return job;
-          }),
-          legacyJobs: masterCache.legacyJobs.map(job => {
-            if (job.billing_events) {
-              return {
-                ...job,
-                billing_events: job.billing_events.map(event => 
-                  event.id === id ? { ...event, status: data.status } : event
-                )
-              };
-            }
-            return job;
-          })
-        };
-        
-        // Recalculate billing metrics with updated data
-        updates.billingMetrics = calculateBillingMetrics(
-          updates.activeJobs,
-          updates.legacyJobs,
-          masterCache.planningJobs,
-          masterCache.expenses,
-          masterCache.receivables
-        );
-        break;
-        
       case 'employee':
-        updates = {
-          employees: masterCache.employees.map(e => e.id === id ? { ...e, ...data } : e)
-        };
-        
-        if (data.role === 'Manager' || data.can_be_lead) {
-          updates.managers = updates.employees.filter(e => 
-            e.role === 'Manager' || e.can_be_lead
-          );
-        }
+        await loadLiveData(['employees']);
         break;
-        
-      case 'expense':
-        updates = {
-          expenses: data.id 
-            ? masterCache.expenses.map(e => e.id === data.id ? data : e)
-            : [...masterCache.expenses, data]
-        };
-        break;
-        
-      case 'delete':
-        switch(data.table) {
-          case 'jobs':
-            updates = {
-              jobs: masterCache.jobs.filter(j => j.id !== id),
-              activeJobs: masterCache.activeJobs.filter(j => j.id !== id)
-            };
-            break;
-          case 'employees':
-            updates = {
-              employees: masterCache.employees.filter(e => e.id !== id),
-              managers: masterCache.managers.filter(m => m.id !== id)
-            };
-            break;
-        }
-        break;
+      default:
+        await loadLiveData(['all']);
     }
-    
-    const newCache = { ...masterCache, ...updates };
-    setMasterCache(newCache);
-    
-    if (persist) {
-      await saveToStorage(newCache);
-    }
-    
-    return newCache;
-  }, [masterCache, saveToStorage]);
+
+    return appData;
+  }, [appData, loadLiveData]);
 
   // ==========================================
   // JOB SELECTION HANDLERS
@@ -896,75 +486,16 @@ useEffect(() => {
     
     // Refresh jobs data to show any updates made in modules
     console.log('🔄 Refreshing jobs data after returning from modules');
-    loadMasterData({ force: true, components: ['jobs'] });
-  }, [loadMasterData]);
+    loadLiveData(['jobs']);
+  }, [loadLiveData]);
 
   const handleFileProcessed = useCallback(() => {
-    // REMOVED: Immediate data reload during job viewing to prevent 500 errors
-    // App.js should only refresh when going back to jobs list, not during job viewing
     console.log('📁 File processed acknowledged - jobs list will refresh when user returns to jobs');
-
-    // JobContainer will handle its own data refresh timing when modal closes
   }, []);
 
   const handleWorkflowStatsUpdate = useCallback(() => {
-    // REMOVED: Immediate jobs refresh during job viewing to prevent 500 errors
-    // Workflow stats will be reflected when user returns to jobs list
     console.log('📊 Workflow stats updated - jobs list will refresh when user returns to jobs');
-
-    // Only refresh jobs list when actually viewing the jobs list
   }, []);
-
-  // ==========================================
-  // BACKGROUND REFRESH MANAGER
-  // ==========================================
-  const scheduleBackgroundRefresh = useCallback((delay = CACHE_EXPIRY.warm) => {
-    // Clear existing timer
-    if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current);
-    }
-    
-    refreshTimerRef.current = setTimeout(() => {
-      console.log('🔄 Background refresh triggered');
-      loadMasterData({ background: true });
-    }, delay);
-  }, [loadMasterData]);
-
-  // ==========================================
-  // CACHE INVALIDATION
-  // ==========================================
-  const invalidateCache = useCallback(async (components = ['all']) => {
-    console.log('🗑️ Invalidating cache for:', components);
-    
-    if (components.includes('all')) {
-      // Clear everything
-      if (dbRef.current) {
-        await dbRef.current.clear('masterCache');
-        await dbRef.current.clear('largeData');
-      }
-      localStorage.removeItem('lojikCacheFallback');
-      
-      setMasterCache(prev => ({
-        ...prev,
-        lastFetched: {},
-        isInitialized: false
-      }));
-    } else {
-      // Selective invalidation
-      setMasterCache(prev => ({
-        ...prev,
-        lastFetched: Object.keys(prev.lastFetched).reduce((acc, key) => {
-          if (!components.includes(key)) {
-            acc[key] = prev.lastFetched[key];
-          }
-          return acc;
-        }, {})
-      }));
-    }
-    
-    // Force reload
-    return loadMasterData({ force: true, components });
-  }, [loadMasterData]);
 
   // ==========================================
   // CALCULATION FUNCTIONS
@@ -1150,129 +681,6 @@ useEffect(() => {
     };
   };
 
-  // ==========================================
-  // LIVE DATA LOADING - NO CACHING
-  // ==========================================
-  const loadLiveData = useCallback(async (components = ['all']) => {
-    console.log('📡 Loading fresh data from database:', components);
-
-    try {
-      setLoadingStatus(prev => ({ ...prev, isRefreshing: true, message: 'Loading fresh data...' }));
-
-      const updates = {};
-
-      // Load billing data
-      if (components.includes('billing') || components.includes('all')) {
-        console.log('📊 Loading billing data...');
-
-        // Load jobs with billing events
-        const { data: jobsData } = await supabase
-          .from('jobs')
-          .select(`
-            *,
-            job_contracts(*),
-            billing_events(*)
-          `)
-          .in('job_type', ['standard', 'legacy_billing']);
-
-        if (jobsData) {
-          const activeJobs = jobsData.filter(j => j.job_type === 'standard');
-          const legacyJobs = jobsData.filter(j => j.job_type === 'legacy_billing');
-
-          updates.jobs = jobsData;
-          updates.activeJobs = activeJobs;
-          updates.legacyJobs = legacyJobs;
-        }
-
-        // Load planning jobs
-        const { data: planningData } = await supabase
-          .from('planning_jobs')
-          .select('*');
-
-        if (planningData) {
-          updates.planningJobs = planningData;
-        }
-
-        // Load expenses
-        const { data: expensesData } = await supabase
-          .from('expenses')
-          .select('*');
-
-        if (expensesData) {
-          updates.expenses = expensesData;
-        }
-
-        // Load receivables
-        const { data: receivablesData } = await supabase
-          .from('office_receivables')
-          .select('*');
-
-        if (receivablesData) {
-          updates.receivables = receivablesData;
-        }
-
-        // Load distributions
-        const { data: distributionsData } = await supabase
-          .from('shareholder_distributions')
-          .select('*');
-
-        if (distributionsData) {
-          updates.distributions = distributionsData;
-        }
-
-        // Calculate billing metrics
-        updates.billingMetrics = calculateBillingMetrics(
-          updates.activeJobs || appData.activeJobs,
-          updates.legacyJobs || appData.legacyJobs,
-          updates.planningJobs || appData.planningJobs,
-          updates.expenses || appData.expenses,
-          updates.receivables || appData.receivables
-        );
-      }
-
-      // Update app data
-      const newData = {
-        ...appData,
-        ...updates,
-        isInitialized: true
-      };
-
-      setAppData(newData);
-
-      setLoadingStatus({
-        isRefreshing: false,
-        lastError: null,
-        message: 'Data loaded successfully'
-      });
-
-      console.log('✅ Fresh data loaded successfully');
-
-      return newData;
-
-    } catch (error) {
-      console.error('❌ Error loading live data:', error);
-      setLoadingStatus({
-        isRefreshing: false,
-        lastError: error.message,
-        message: 'Error loading data'
-      });
-      throw error;
-    }
-  }, [appData]);
-
-  const updateAppData = useCallback(async (type, id, data) => {
-    console.log('🔧 Updating app data:', type, id);
-
-    // For any billing-related updates, just reload fresh data
-    if (type.includes('billing') || type.includes('event')) {
-      console.log('🔄 Billing data updated, reloading fresh data...');
-      await loadLiveData(['billing']);
-      return;
-    }
-
-    return appData;
-  }, [appData, loadLiveData]);
-
   // Check for existing session or dev mode on mount
   useEffect(() => {
     checkSession();
@@ -1346,140 +754,49 @@ useEffect(() => {
   };  
 
   // ==========================================
-  // INITIAL LOAD WITH CACHE
+  // INITIAL LOAD
   // ==========================================
   useEffect(() => {
     const initializeApp = async () => {
-      const appStartTime = Date.now();
-      console.log('🚀 App initializing...');
-      
-      // Try to load from cache first
-      const cached = await loadFromStorage();
-      
-      if (cached && cached.data) {
-        // Use cached data immediately
-        setMasterCache({
-          ...cached.data,
-          isLoading: false,
-          isInitialized: true,
-          loadSource: cached.loadSource,
-          cacheAge: cached.cacheAge
-        });
-        
-        const initTime = Date.now() - appStartTime;
-        console.log(`⚡ App ready in ${initTime}ms using ${cached.loadSource}`);
-        
-        // Show cache status
-        if (cached.loadSource === 'cache-stale') {
-          setCacheStatus({
-            isStale: true,
-            isRefreshing: false,
-            lastError: null,
-            message: `Using cached data from ${Math.floor(cached.cacheAge / 60000)} minutes ago`
-          });
-        }
-        
-        // DISABLED: Background refresh - causing unwanted Supabase calls
-        // if (cached.shouldBackgroundRefresh) {
-        //   setTimeout(() => {
-        //     console.log('🔄 Starting background refresh...');
-        //     loadMasterData({ background: true });
-        //   }, 1000);
-        // }
+      if (!user) return;
 
-        // DISABLED: Schedule next refresh - causing unwanted Supabase calls
-        // scheduleBackgroundRefresh();
-        
-      } else {
-        // No cache or expired - load fresh
-        console.log('📡 No valid cache, loading from database...');
-        await loadMasterData({ components: ['all'] });
-        
+      console.log('🚀 App initializing with live data...');
+      const appStartTime = Date.now();
+      
+      try {
+        await loadLiveData(['all']);
         const initTime = Date.now() - appStartTime;
-        console.log(`✅ App ready in ${initTime}ms (fresh load)`);
+        console.log(`✅ App ready in ${initTime}ms (live data)`);
+      } catch (error) {
+        console.error('❌ Failed to initialize app:', error);
       }
     };
     
     initializeApp();
-    
-    // Cleanup
-    return () => {
-      if (refreshTimerRef.current) {
-        clearTimeout(refreshTimerRef.current);
-      }
-    };
-  }, []); // Only run once on mount
+  }, [user]); // Only run when user is available
 
-   // ==========================================
+  // ==========================================
   // URL-BASED JOB RESTORATION (FIX FOR F5)
   // ==========================================
   useEffect(() => {
     // Only run if we have jobs loaded and no job currently selected
-    if (masterCache.jobs && masterCache.jobs.length > 0 && !selectedJob) {
+    if (appData.jobs && appData.jobs.length > 0 && !selectedJob) {
       const path = window.location.pathname;
       const parts = path.split('/');
       
       // Check if URL indicates a specific job
       if (parts[1] === 'job' && parts[2]) {
         const jobId = parts[2];
-        const job = masterCache.jobs.find(j => j.id === jobId);
+        const job = appData.jobs.find(j => j.id === jobId);
         
         if (job) {
-          console.log('📍 Restoring job from URL after cache/data load:', jobId);
+          console.log('📍 Restoring job from URL after data load:', jobId);
           setSelectedJob(job);
           setActiveView('job-modules');
         }
       }
     }
-  }, [masterCache.jobs]); // Re-run when jobs are loaded/updated
-
-  // ==========================================
-  // VISIBILITY CHANGE HANDLER - DISABLED
-  // ==========================================
-  // DISABLED: Causing unwanted automatic Supabase calls
-  // useEffect(() => {
-  //   const handleVisibilityChange = () => {
-  //     if (!document.hidden && masterCache.isInitialized) {
-  //       const cacheAge = Date.now() - (masterCache.lastFetched.all || 0);
-  //
-  //       if (cacheAge > CACHE_EXPIRY.warm) {
-  //         console.log('👁️ App became visible, cache is stale, refreshing...');
-  //         loadMasterData({ background: true });
-  //       } else {
-  //         console.log('👁️ App became visible, cache is fresh');
-  //       }
-  //     }
-  //   };
-  //
-  //   document.addEventListener('visibilitychange', handleVisibilityChange);
-  //   return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  // }, [masterCache, loadMasterData]);
-
-  // ==========================================
-  // PERFORMANCE REPORTING
-  // ==========================================
-  useEffect(() => {
-    const reportPerformance = () => {
-      const stats = performanceRef.current;
-      const uptime = (Date.now() - stats.appStartTime) / 1000;
-
-      console.log('📊 Performance Report:', {
-        uptime: `${Math.floor(uptime / 60)}m ${Math.floor(uptime % 60)}s`,
-        cacheHits: stats.cacheHits,
-        cacheMisses: stats.cacheMisses,
-        cacheHitRate: stats.cacheHits + stats.cacheMisses > 0
-          ? `${Math.round((stats.cacheHits / (stats.cacheHits + stats.cacheMisses)) * 100)}%`
-          : 'N/A',
-        dbQueries: stats.dbQueries,
-        avgLoadTime: `${Math.round(stats.avgLoadTime)}ms`
-      });
-    };
-
-    // DISABLED: Report every 5 minutes - not needed in production
-    // const interval = setInterval(reportPerformance, 5 * 60 * 1000);
-    // return () => clearInterval(interval);
-  }, []);
-
+  }, [appData.jobs, selectedJob]); // Re-run when jobs are loaded/updated
 
   // ==========================================
   // RENDER UI
@@ -1497,210 +814,184 @@ useEffect(() => {
     );
   }
 
-  // Show landing page if not authenticated
+  // Show login if not authenticated
   if (!user) {
     return <LandingPage onLogin={handleLogin} />;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Cache Status Bar - Errors Only */}
-      {cacheStatus.lastError && (
-        <div className="fixed top-0 left-0 right-0 z-50 px-4 py-2 text-sm font-medium text-center bg-red-100 text-red-800">
-          {cacheStatus.message}
-        </div>
-      )}
+    <div className="app">
+      {/* Header Navigation */}
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-4">
+            {/* Logo/Title */}
+            <div className="flex items-center">
+              <h1 className="text-2xl font-bold text-gray-900">
+                LOJIK Administrative Management System
+              </h1>
+            </div>
 
-      {/* Top Navigation - Updated with Management OS styling */}
-      <div className="app-header">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex justify-between items-center mb-4">
-            <h1 style={{ 
-              color: '#FFFFFF',
-              fontSize: '2rem',
-              fontWeight: 'bold',
-              fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", 
-              letterSpacing: '-0.02em',
-              display: 'flex',
-              alignItems: 'center'
-            }}>
-              Management OS
-            </h1>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-white opacity-95">
+            {/* User Info & Logout */}
+            <div className="flex items-center space-x-4">
+              <span className="text-sm text-gray-600">
                 {user.employeeData?.name || user.email} ({user.role})
               </span>
               <button
-                onClick={() => {
-                  setCacheStatus(prev => ({ ...prev, isRefreshing: true, message: 'Refreshing...' }));
-                  loadMasterData({ force: true, components: ['all'] }).then(() => {
-                    setCacheStatus(prev => ({ ...prev, isRefreshing: false, message: 'Data refreshed' }));
-                    setTimeout(() => {
-                      setCacheStatus(prev => ({ ...prev, message: '' }));
-                    }, 2000);
-                  });
-                }}
-                disabled={cacheStatus.isRefreshing}
-                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200 disabled:opacity-50"
-              >
-                {cacheStatus.isRefreshing ? (
-                  <span className="flex items-center gap-2">
-                    <span className="animate-spin">⟳</span> Refreshing...
-                  </span>
-                ) : (
-                  '🔄 Refresh'
-                )}
-              </button>
-              <button
                 onClick={handleLogout}
-                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
+                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
               >
                 Logout
               </button>
             </div>
           </div>
-          
-          {/* Only show main navigation when NOT in job-specific modules */}
-          {activeView !== 'job-modules' && (
-            <nav className="flex space-x-4">
-              <button
-                onClick={() => handleViewChange('employees')}
-                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
-                  activeView === 'employees'
-                    ? 'text-blue-600 shadow-lg border-white'
-                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
-                }`}
-                style={activeView === 'employees' ? { 
-                  backgroundColor: '#FFFFFF',
-                  opacity: 1,
-                  backdropFilter: 'none'
-                } : {}}
-              >
-                👥 Employees ({masterCache.employees.length})
-              </button>
+        </div>
+      </div>
+
+      {/* Status Bar */}
+      {(loadingStatus.isRefreshing || loadingStatus.lastError || loadingStatus.message) && (
+        <div className={`px-4 py-2 text-sm ${
+          loadingStatus.lastError ? 'bg-red-50 text-red-700' : 
+          loadingStatus.isRefreshing ? 'bg-blue-50 text-blue-700' : 
+          'bg-green-50 text-green-700'
+        }`}>
+          <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+            <span>
+              {loadingStatus.lastError || loadingStatus.message}
+            </span>
+            {loadingStatus.isRefreshing && (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+            )}
+            <button
+              onClick={() => {
+                setLoadingStatus(prev => ({ ...prev, isRefreshing: true, message: 'Refreshing...' }));
+                loadLiveData(['all']).then(() => {
+                  setLoadingStatus(prev => ({ ...prev, isRefreshing: false, message: 'Data refreshed' }));
+                  setTimeout(() => {
+                    setLoadingStatus(prev => ({ ...prev, message: '' }));
+                  }, 2000);
+                });
+              }}
+              className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 transition-colors"
+              disabled={loadingStatus.isRefreshing}
+            >
+              {loadingStatus.isRefreshing ? 'Refreshing...' : 'Refresh Data'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main Navigation Tabs */}
+      {!selectedJob && (
+        <div className="bg-white border-b">
+          <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
+            <nav className="flex space-x-8">
+              {/* Admin Jobs Tab */}
               <button
                 onClick={() => handleViewChange('admin-jobs')}
-                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
                   activeView === 'admin-jobs'
-                    ? 'text-blue-600 shadow-lg border-white'
-                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
-                style={activeView === 'admin-jobs' ? { 
-                  backgroundColor: '#FFFFFF',
-                  opacity: 1,
-                  backdropFilter: 'none'
-                } : {}}
               >
-                📋 Jobs ({masterCache.jobs.length})
+                📋 Jobs ({appData.jobs.length})
               </button>
+
+              {/* Employees Tab */}
+              <button
+                onClick={() => handleViewChange('employees')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeView === 'employees'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                👥 Employees ({appData.employees.length})
+              </button>
+
+              {/* Billing Tab */}
               <button
                 onClick={() => handleViewChange('billing')}
-                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
                   activeView === 'billing'
-                    ? 'text-blue-600 shadow-lg border-white'
-                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
-                style={activeView === 'billing' ? { 
-                  backgroundColor: '#FFFFFF',
-                  opacity: 1,
-                  backdropFilter: 'none'
-                } : {}}
               >
                 💰 Billing
               </button>
+
+              {/* Payroll Tab */}
               <button
                 onClick={() => handleViewChange('payroll')}
-                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
                   activeView === 'payroll'
-                    ? 'text-blue-600 shadow-lg border-white'
-                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
-                style={activeView === 'payroll' ? { 
-                  backgroundColor: '#FFFFFF',
-                  opacity: 1,
-                  backdropFilter: 'none'
-                } : {}}
               >
-                💸 Payroll
+                💼 Payroll
               </button>
+
+              {/* Users Tab */}
               <button
                 onClick={() => handleViewChange('users')}
-                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
                   activeView === 'users'
-                    ? 'text-blue-600 shadow-lg border-white'
-                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
-                style={activeView === 'users' ? { 
-                  backgroundColor: '#FFFFFF',
-                  opacity: 1,
-                  backdropFilter: 'none'
-                } : {}}
               >
                 🔐 Users
               </button>
             </nav>
-          )}
-          
-          {/* Show job context when in job-specific modules */}
-          {activeView === 'job-modules' && selectedJob && (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-6">
-                <div>
-                  <p className="text-sm text-white opacity-75">Working on:</p>
-                  <p className="text-lg font-semibold text-white">{selectedJob.job_name || selectedJob.name}</p>
-                </div>
-                
-                {/* File Upload Controls */}
-                <div className="border-l border-white border-opacity-30 pl-6">
-                  <FileUploadButton
-                    job={selectedJob}
-                    onFileProcessed={handleFileProcessed}
-                    onDataRefresh={handleFileProcessed}
-                  />
-                </div>
-              </div>
-              
-              <button
-                onClick={handleBackToJobs}
-                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
-              >
-                ← Back to Jobs
-              </button>
-            </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Main Content */}
-      <main className={activeView === 'job-modules' ? 'py-6 px-4' : 'max-w-7xl mx-auto py-6 sm:px-6 lg:px-8'}>
+      {/* Main Content Area */}
+      <div className="flex-1">
         {/* Show loading overlay for initial load only */}
-        {!masterCache.isInitialized && masterCache.isLoading && (
+        {!appData.isInitialized && appData.isLoading && (
           <div className="fixed inset-0 bg-white bg-opacity-75 z-50 flex items-center justify-center">
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600">Loading application...</p>
+              <p className="mt-4 text-gray-600">Loading data...</p>
             </div>
           </div>
         )}
 
-        {/* Component Views */}
+        {/* Admin Jobs Management */}
         {activeView === 'admin-jobs' && (
           <AdminJobManagement
-            jobs={masterCache.jobs}
+            jobs={appData.jobs}
             onJobSelect={handleJobSelect}
-            planningJobs={masterCache.planningJobs}
-            archivedJobs={masterCache.archivedJobs}
-            managers={masterCache.managers}
-            countyHpiData={masterCache.countyHpiData}
-            jobResponsibilities={masterCache.jobResponsibilities}
-            jobFreshness={masterCache.jobFreshness}
-            inspectionData={masterCache.inspectionData}
-            workflowStats={masterCache.workflowStats}
-            onDataUpdate={updateCacheItem}
-            onRefresh={() => loadMasterData({ force: true, components: ['jobs'] })}
+            planningJobs={appData.planningJobs}
+            archivedJobs={appData.archivedJobs}
+            managers={appData.managers}
+            countyHpiData={appData.countyHpiData}
+            jobResponsibilities={appData.jobResponsibilities}
+            jobFreshness={appData.jobFreshness}
+            inspectionData={appData.inspectionData}
+            workflowStats={appData.workflowStats}
+            onDataUpdate={updateAppData}
+            userRole={user.role}
+            currentUser={user}
           />
         )}
 
+        {/* Employee Management */}
+        {activeView === 'employees' && (
+          <EmployeeManagement
+            employees={appData.employees}
+            globalAnalytics={appData.globalInspectionAnalytics}
+            onDataUpdate={updateAppData}
+            userRole={user.role}
+          />
+        )}
+
+        {/* Billing Management */}
         {activeView === 'billing' && (
           <BillingManagement
             activeJobs={appData.activeJobs}
@@ -1711,47 +1002,46 @@ useEffect(() => {
             distributions={appData.distributions}
             billingMetrics={appData.billingMetrics}
             onDataUpdate={updateAppData}
-            onRefresh={() => loadLiveData(['billing'])}
+            userRole={user.role}
           />
         )}
 
-        {activeView === 'employees' && (
-          <EmployeeManagement
-            employees={masterCache.employees}
-            globalAnalytics={masterCache.globalInspectionAnalytics}
-            onDataUpdate={updateCacheItem}
-            onRefresh={() => loadMasterData({ force: true, components: ['employees'] })}
-          />
-        )}
-
+        {/* Payroll Management */}
         {activeView === 'payroll' && (
           <PayrollManagement
-            employees={masterCache.employees.filter(e => 
+            employees={appData.employees.filter(e => 
               ['active', 'part_time', 'full_time'].includes(e.employment_status) && 
-              ['residential', 'management'].includes(e.inspector_type?.toLowerCase())
+              e.inspector_type !== 'terminated'
             )}      
-            jobs={masterCache.jobs}
-            archivedPeriods={masterCache.archivedPayrollPeriods}
-            dataRecency={masterCache.dataRecency}
-            onDataUpdate={updateCacheItem}
-            onRefresh={() => loadMasterData({ force: true, components: ['payroll'] })}
+            jobs={appData.jobs}
+            archivedPeriods={appData.archivedPayrollPeriods}
+            dataRecency={appData.dataRecency}
+            onDataUpdate={updateAppData}
+            userRole={user.role}
           />
         )}
 
+        {/* User Management */}
         {activeView === 'users' && (
-          <UserManagement />
+          <UserManagement
+            employees={appData.employees}
+            onDataUpdate={updateAppData}
+            userRole={user.role}
+          />
         )}
 
+        {/* Job Modules Container */}
         {activeView === 'job-modules' && selectedJob && (
-          <div>
-            <JobContainer
-              selectedJob={selectedJob}
-              onBackToJobs={handleBackToJobs}
-              onWorkflowStatsUpdate={handleWorkflowStatsUpdate}
-            />
-          </div>
+          <JobContainer
+            job={selectedJob}
+            onBackToJobs={handleBackToJobs}
+            onFileProcessed={handleFileProcessed}
+            onWorkflowUpdate={handleWorkflowStatsUpdate}
+            userRole={user.role}
+            currentUser={user}
+          />
         )}
-      </main>
+      </div>
     </div>
   );
 };
