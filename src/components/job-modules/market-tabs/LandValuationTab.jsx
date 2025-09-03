@@ -6738,41 +6738,68 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         <td style={{ padding: '6px 4px', color: '#6B7280', borderRight: '1px solid #E5E7EB', fontSize: '10px', textAlign: 'center' }}>
                           TBD
                         </td>
-                        <td style={{ padding: '10px 8px', fontSize: '11px', textAlign: 'center', borderRight: '1px solid #E5E7EB', fontFamily: 'monospace' }}>
-                          {impact && impact.withCount > 0 ? (
-                            <div style={{ lineHeight: '1.3' }}>
-                              <div style={{ fontWeight: '600' }}>Count: {impact.withCount}</div>
-                              <div>Avg Yr: {impact.withYearBuilt}</div>
-                              <div>Time: ${(impact.withNormTime/1000).toFixed(0)}k</div>
-                              <div>Size: ${(impact.withNormSize/1000).toFixed(0)}k</div>
-                              <div style={{ fontWeight: '600', color: '#1F2937' }}>Avg: ${(impact.withAvg/1000).toFixed(0)}k</div>
-                            </div>
-                          ) : (
-                            <span style={{ color: '#9CA3AF' }}>No data</span>
-                          )}
+                        {/* With Factor columns */}
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', backgroundColor: '#EEF2FF' }}>
+                          {impact && impact.withYearBuilt ? impact.withYearBuilt : '-'}
                         </td>
-                        <td style={{ padding: '10px 8px', fontSize: '11px', textAlign: 'center', borderRight: '1px solid #E5E7EB', fontFamily: 'monospace' }}>
-                          {impact && impact.withoutCount > 0 ? (
-                            <div style={{ lineHeight: '1.3' }}>
-                              <div style={{ fontWeight: '600' }}>Count: {impact.withoutCount}</div>
-                              <div>Avg Yr: {impact.withoutYearBuilt}</div>
-                              <div>Time: ${(impact.withoutNormTime/1000).toFixed(0)}k</div>
-                              <div>Size: ${(impact.withoutNormSize/1000).toFixed(0)}k</div>
-                              <div style={{ fontWeight: '600', color: '#1F2937' }}>Avg: ${(impact.withoutAvg/1000).toFixed(0)}k</div>
-                            </div>
-                          ) : (
-                            <span style={{ color: '#9CA3AF' }}>No data</span>
-                          )}
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', backgroundColor: '#EEF2FF' }}>
+                          {impact && impact.withLivingArea ? impact.withLivingArea.toLocaleString() : '-'}
+                        </td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', backgroundColor: '#EEF2FF' }}>
+                          {impact && impact.withSalePrice ? `$${(impact.withSalePrice/1000).toFixed(0)}k` : '-'}
+                        </td>
+
+                        {/* Without Factor columns */}
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', backgroundColor: '#F0FDF4' }}>
+                          {impact && impact.withoutYearBuilt ? impact.withoutYearBuilt : '-'}
+                        </td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', backgroundColor: '#F0FDF4' }}>
+                          {impact && impact.withoutLivingArea ? impact.withoutLivingArea.toLocaleString() : '-'}
+                        </td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', backgroundColor: '#F0FDF4' }}>
+                          {impact && impact.withoutSalePrice ? `$${(impact.withoutSalePrice/1000).toFixed(0)}k` : '-'}
+                        </td>
+
+                        {/* Adjusted Sales columns */}
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB' }}>
+                          {impact && impact.adjustedSaleWith ? `$${(impact.adjustedSaleWith/1000).toFixed(0)}k` : '-'}
+                        </td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB' }}>
+                          {impact && impact.adjustedSaleWithout ? `$${(impact.adjustedSaleWithout/1000).toFixed(0)}k` : '-'}
+                        </td>
+
+                        {/* Impact columns */}
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', fontWeight: 'bold' }}>
+                          {impact && impact.dollarImpact ? `$${(impact.dollarImpact/1000).toFixed(0)}k` : '-'}
                         </td>
                         <td style={{
-                          padding: '10px 8px',
+                          padding: '6px 4px',
                           textAlign: 'center',
                           fontWeight: 'bold',
-                          fontSize: '13px',
+                          fontSize: '10px',
                           borderRight: '1px solid #E5E7EB',
-                          color: impact && impact.impact ? (parseFloat(impact.impact) < 0 ? '#DC2626' : '#10B981') : '#9CA3AF'
+                          color: impact && impact.percentImpact !== 'N/A' ? (parseFloat(impact.percentImpact) < 0 ? '#DC2626' : '#10B981') : '#9CA3AF'
                         }}>
-                          {impact && impact.impact ? `${impact.impact}%` : 'Insufficient data'}
+                          {impact && impact.percentImpact ? `${impact.percentImpact}%` : 'N/A'}
+                        </td>
+
+                        {/* Applied adjustment columns */}
+                        <td style={{ padding: '6px 4px', textAlign: 'center', borderRight: '1px solid #E5E7EB' }}>
+                          <input
+                            type="number"
+                            value={actualAdjustments[`${key}_positive`] || ''}
+                            onChange={(e) => updateActualAdjustment(vcs, `${locationAnalysis}_positive`, e.target.value)}
+                            placeholder="-"
+                            style={{
+                              width: '40px',
+                              padding: '2px 4px',
+                              border: '1px solid #D1D5DB',
+                              borderRadius: '3px',
+                              fontSize: '10px',
+                              textAlign: 'center',
+                              backgroundColor: 'white'
+                            }}
+                          />
                         </td>
                         <td style={{ padding: '10px 8px', textAlign: 'center' }}>
                           <input
