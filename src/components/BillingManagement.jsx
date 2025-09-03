@@ -225,6 +225,47 @@ Thank you for your immediate attention to this matter.`;
     projectedProfitLossPercent: 0  
   });
 
+  // Load fresh data directly from database - BYPASSES ALL CACHING
+  const loadFreshDataFromDB = useCallback(async () => {
+    console.log('🔄 Loading fresh data directly from database...');
+
+    try {
+      setLoadingStatus(prev => ({ ...prev, isRefreshing: true, message: 'Loading fresh data...' }));
+
+      // Load jobs with billing events directly from DB
+      const { data: jobsData, error: jobsError } = await supabase
+        .from('jobs')
+        .select(`
+          *,
+          job_contracts(*),
+          billing_events(*)
+        `)
+        .in('job_type', ['standard', 'legacy_billing']);
+
+      if (jobsError) throw jobsError;
+
+      if (jobsData) {
+        const activeJobs = jobsData.filter(j => j.job_type === 'standard');
+        const legacyJobs = jobsData.filter(j => j.job_type === 'legacy_billing');
+
+        // Update local state immediately with fresh data
+        if (activeTab === 'active') {
+          setJobs(activeJobs);
+        } else if (activeTab === 'legacy') {
+          setLegacyJobs(legacyJobs);
+        }
+
+        console.log('✅ Fresh data loaded:', { activeJobs: activeJobs.length, legacyJobs: legacyJobs.length });
+      }
+
+      setLoadingStatus(prev => ({ ...prev, isRefreshing: false, message: 'Fresh data loaded' }));
+
+    } catch (error) {
+      console.error('❌ Error loading fresh data:', error);
+      setLoadingStatus(prev => ({ ...prev, isRefreshing: false, lastError: error.message }));
+    }
+  }, [activeTab]);
+
   useEffect(() => {
     // Set initial data from props
     loadJobCounts();
