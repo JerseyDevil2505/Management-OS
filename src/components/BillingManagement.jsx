@@ -302,11 +302,11 @@ Thank you for your immediate attention to this matter.`;
     setDistributions(distributions);
   };
 
-  // NEW: Function to fetch fresh data directly from database when needed
-  const fetchFreshData = async (forceRefresh = false) => {
-    if (forceRefresh && onRefresh) {
-      console.log('🔄 Forcing fresh data refresh...');
-      await onRefresh();
+  // Function to sync cache without forcing full refresh
+  const syncCacheItem = (type, id, data) => {
+    if (onDataUpdate) {
+      console.log(`🔄 Syncing cache item: ${type} ${id}`);
+      onDataUpdate(type, id, data);
     }
   };
   
