@@ -1222,6 +1222,8 @@ const loadJobs = async () => {
     } catch (error) {
       console.error('Error updating billing event:', error);
       alert('Error updating billing event: ' + error.message);
+    } finally {
+      setIsUpdatingBilling(false);
     }
   };
 
