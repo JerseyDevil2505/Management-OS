@@ -3745,7 +3745,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </div>
               <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                 <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                  Building Lot {categoryAnalysis.buildingLot.method === 'paired' && <span style={{ color: '#3B82F6' }}>✓ Paired</span>}
+                  Building Lot {categoryAnalysis.buildingLot.method === 'paired' && <span style={{ color: '#3B82F6' }}>�� Paired</span>}
                 </div>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#3B82F6' }}>
                   {valuationMode === 'sf' ? `$${categoryAnalysis.buildingLot.avg}` : `$${categoryAnalysis.buildingLot.avg.toLocaleString()}`}
@@ -6611,14 +6611,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </tr>
             </thead>
             <tbody>
-              {Object.keys(ecoObsFactors).sort().map(vcs => 
-                Object.keys(ecoObsFactors[vcs]).filter(codes => codes !== 'None').map((codes, index) => {
+              {Object.keys(ecoObsFactors).sort().map(vcs =>
+                Object.keys(ecoObsFactors[vcs]).map((codes, index) => {
                   const key = `${vcs}_${codes}`;
                   const typeUse = typeUseFilter[key] || 'all';
                   const impact = calculateEcoObsImpact(vcs, codes, typeUse);
-                  
-                  if (!impact) return null;
-                  
+
+                  // Show all rows, even if impact calculation fails
                   return (
                     <tr key={key} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB' }}>
                       <td style={{ padding: '8px', fontWeight: 'bold' }}>{vcs}</td>
@@ -6830,7 +6829,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           </button>
           <button
             onClick={() => {
-              console.log('���� MANUAL VCS RECALCULATION TRIGGERED');
+              console.log('������ MANUAL VCS RECALCULATION TRIGGERED');
               console.log('Current state:', {
                 targetAllocation,
                 hasCascadeRates: !!cascadeConfig.normal.prime,
