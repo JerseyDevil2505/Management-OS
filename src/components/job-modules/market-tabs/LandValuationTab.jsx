@@ -108,6 +108,9 @@ const LandValuationTab = ({
   const [modalSortField, setModalSortField] = useState('block');
   const [modalSortDirection, setModalSortDirection] = useState('asc');
 
+  // ========== ECONOMIC OBSOLESCENCE GLOBAL FILTER ==========
+  const [globalEcoObsTypeFilter, setGlobalEcoObsTypeFilter] = useState('1'); // Default to Single Family
+
   // ========== ALLOCATION STUDY STATE ==========
   const [vacantTestSales, setVacantTestSales] = useState([]);
   const [actualAllocations, setActualAllocations] = useState({});
@@ -2215,16 +2218,29 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }));
   };
 
+  const updateGlobalEcoObsTypeFilter = (typeUse) => {
+    setGlobalEcoObsTypeFilter(typeUse);
+  };
+
   const calculateEcoObsImpact = useCallback((vcs, codes, typeUse = null) => {
     if (!ecoObsFactors[vcs] || !ecoObsFactors[vcs][codes]) return null;
-    
+
     let withFactor = ecoObsFactors[vcs][codes].withFactor;
     let withoutFactor = ecoObsFactors[vcs][codes].withoutFactor;
-    
-    // Filter by type use if specified
-    if (typeUse && typeUse !== 'all') {
-      withFactor = withFactor.filter(p => p.typeUse === typeUse);
-      withoutFactor = withoutFactor.filter(p => p.typeUse === typeUse);
+
+    // Use global filter if no specific type use provided
+    const effectiveTypeUse = typeUse || globalEcoObsTypeFilter;
+
+    // Filter by type use if specified and not 'all'
+    if (effectiveTypeUse && effectiveTypeUse !== 'all') {
+      // Support Single Family umbrella (both '1' and '10')
+      if (effectiveTypeUse === '1') {
+        withFactor = withFactor.filter(p => p.typeUse === '1' || p.typeUse === '10');
+        withoutFactor = withoutFactor.filter(p => p.typeUse === '1' || p.typeUse === '10');
+      } else {
+        withFactor = withFactor.filter(p => p.typeUse === effectiveTypeUse);
+        withoutFactor = withoutFactor.filter(p => p.typeUse === effectiveTypeUse);
+      }
     }
     
     // Filter by traffic level for BS codes
@@ -5512,7 +5528,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'typeUse' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '��') : ''}
+                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '����') : ''}
                     </th>
                   </tr>
                 </thead>
@@ -6629,129 +6645,191 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   // ========== RENDER ECONOMIC OBSOLESCENCE TAB ==========
-  const renderEconomicObsolescenceTab = () => (
-    <div style={{ padding: '20px' }}>
-      <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>Economic Obsolescence Analysis</h3>
-        <button
-          onClick={() => exportToExcel('eco-obs')}
-          style={{
-            backgroundColor: '#10B981',
-            color: 'white',
-            padding: '8px 16px',
-            borderRadius: '4px',
-            border: 'none',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px'
-          }}
-        >
-          <Download size={16} /> Export
-        </button>
-      </div>
+  const renderEconomicObsolescenceTab = () => {
+    // Filter out entries with 'None' codes
+    const filteredFactors = Object.keys(ecoObsFactors).reduce((acc, vcs) => {
+      const vcsFactors = Object.keys(ecoObsFactors[vcs]).reduce((vcsAcc, codes) => {
+        if (codes !== 'None') {
+          vcsAcc[codes] = ecoObsFactors[vcs][codes];
+        }
+        return vcsAcc;
+      }, {});
 
-      <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', fontSize: '12px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#F9FAFB' }}>
-                <th style={{ padding: '8px' }}>VCS</th>
-                <th style={{ padding: '8px' }}>Location</th>
-                <th style={{ padding: '8px' }}>Code</th>
-                <th style={{ padding: '8px' }}>Traffic</th>
-                <th style={{ padding: '8px' }}>Type Use</th>
-                <th style={{ padding: '8px' }}>With (Count/YrBlt/Time/Size/Avg)</th>
-                <th style={{ padding: '8px' }}>Without (Count/YrBlt/Time/Size/Avg)</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>Impact</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>Apply</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.keys(ecoObsFactors).sort().map(vcs =>
-                Object.keys(ecoObsFactors[vcs]).map((codes, index) => {
-                  const key = `${vcs}_${codes}`;
-                  const typeUse = typeUseFilter[key] || 'all';
-                  const impact = calculateEcoObsImpact(vcs, codes, typeUse);
+      if (Object.keys(vcsFactors).length > 0) {
+        acc[vcs] = vcsFactors;
+      }
+      return acc;
+    }, {});
 
-                  // Show all rows, even if impact calculation fails
-                  return (
-                    <tr key={key} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                      <td style={{ padding: '8px', fontWeight: 'bold' }}>{vcs}</td>
-                      <td style={{ padding: '8px' }}>{codes}</td>
-                      <td style={{ padding: '8px' }}>{codes}</td>
-                      <td style={{ padding: '8px' }}>
-                        {codes.includes('BS') ? (
-                          <select
-                            value={trafficLevels[key] || ''}
-                            onChange={(e) => updateTrafficLevel(key, e.target.value)}
+    return (
+      <div style={{ padding: '20px' }}>
+        <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>Economic Obsolescence Analysis</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label style={{ fontSize: '14px', fontWeight: '500' }}>Type Use Filter:</label>
+              <select
+                value={globalEcoObsTypeFilter}
+                onChange={(e) => updateGlobalEcoObsTypeFilter(e.target.value)}
+                style={{
+                  padding: '6px 12px',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  minWidth: '140px',
+                  backgroundColor: 'white'
+                }}
+              >
+                <option value="all">All</option>
+                <option value="1">Single Family</option>
+                <option value="2">Two Family</option>
+                <option value="42">Multi-Family</option>
+                <option value="30">Townhouse</option>
+              </select>
+            </div>
+            <button
+              onClick={() => exportToExcel('eco-obs')}
+              style={{
+                backgroundColor: '#10B981',
+                color: 'white',
+                padding: '8px 16px',
+                borderRadius: '4px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <Download size={16} /> Export
+            </button>
+          </div>
+        </div>
+
+        <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#F8F9FA', borderBottom: '2px solid #E5E7EB' }}>
+                  <th style={{ padding: '12px 8px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>VCS</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>Location Analysis</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>Factor Code</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>Traffic</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>With Factor</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>Without Factor</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB' }}>Impact %</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600', color: '#374151' }}>Applied %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.keys(filteredFactors).sort().map(vcs => {
+                  return Object.keys(filteredFactors[vcs]).map((codes, index) => {
+                    const key = `${vcs}_${codes}`;
+                    const impact = calculateEcoObsImpact(vcs, codes, globalEcoObsTypeFilter);
+                    const rowIndex = Object.keys(filteredFactors).indexOf(vcs) * Object.keys(filteredFactors[vcs]).length + index;
+
+                    return (
+                      <tr key={key} style={{
+                        backgroundColor: rowIndex % 2 === 0 ? 'white' : '#FAFBFC',
+                        borderBottom: '1px solid #E5E7EB',
+                        '&:hover': { backgroundColor: '#F0F9FF' }
+                      }}>
+                        <td style={{ padding: '10px 8px', fontWeight: '600', color: '#1F2937', borderRight: '1px solid #E5E7EB' }}>{vcs}</td>
+                        <td style={{ padding: '10px 8px', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>
+                          {/* Show actual location analysis text from properties */}
+                          {(() => {
+                            const prop = properties.find(p => p.new_vcs === vcs && p.location_analysis &&
+                              (locationCodes[p.id] === codes || (!locationCodes[p.id] && codes === 'None')));
+                            return prop?.location_analysis || 'Various locations';
+                          })()}
+                        </td>
+                        <td style={{ padding: '10px 8px', color: '#6B7280', borderRight: '1px solid #E5E7EB', fontFamily: 'monospace' }}>{codes}</td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center', borderRight: '1px solid #E5E7EB' }}>
+                          {codes.includes('BS') ? (
+                            <select
+                              value={trafficLevels[key] || ''}
+                              onChange={(e) => updateTrafficLevel(key, e.target.value)}
+                              style={{
+                                padding: '4px 6px',
+                                border: '1px solid #D1D5DB',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                backgroundColor: 'white'
+                              }}
+                            >
+                              <option value="">-</option>
+                              <option value="LT">LT</option>
+                              <option value="MT">MT</option>
+                              <option value="HT">HT</option>
+                            </select>
+                          ) : (
+                            <span style={{ color: '#9CA3AF' }}>-</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '10px 8px', fontSize: '11px', textAlign: 'center', borderRight: '1px solid #E5E7EB', fontFamily: 'monospace' }}>
+                          {impact && impact.withCount > 0 ? (
+                            <div style={{ lineHeight: '1.3' }}>
+                              <div style={{ fontWeight: '600' }}>Count: {impact.withCount}</div>
+                              <div>Avg Yr: {impact.withYearBuilt}</div>
+                              <div>Time: ${(impact.withNormTime/1000).toFixed(0)}k</div>
+                              <div>Size: ${(impact.withNormSize/1000).toFixed(0)}k</div>
+                              <div style={{ fontWeight: '600', color: '#1F2937' }}>Avg: ${(impact.withAvg/1000).toFixed(0)}k</div>
+                            </div>
+                          ) : (
+                            <span style={{ color: '#9CA3AF' }}>No data</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '10px 8px', fontSize: '11px', textAlign: 'center', borderRight: '1px solid #E5E7EB', fontFamily: 'monospace' }}>
+                          {impact && impact.withoutCount > 0 ? (
+                            <div style={{ lineHeight: '1.3' }}>
+                              <div style={{ fontWeight: '600' }}>Count: {impact.withoutCount}</div>
+                              <div>Avg Yr: {impact.withoutYearBuilt}</div>
+                              <div>Time: ${(impact.withoutNormTime/1000).toFixed(0)}k</div>
+                              <div>Size: ${(impact.withoutNormSize/1000).toFixed(0)}k</div>
+                              <div style={{ fontWeight: '600', color: '#1F2937' }}>Avg: ${(impact.withoutAvg/1000).toFixed(0)}k</div>
+                            </div>
+                          ) : (
+                            <span style={{ color: '#9CA3AF' }}>No data</span>
+                          )}
+                        </td>
+                        <td style={{
+                          padding: '10px 8px',
+                          textAlign: 'center',
+                          fontWeight: 'bold',
+                          fontSize: '13px',
+                          borderRight: '1px solid #E5E7EB',
+                          color: impact && impact.impact ? (parseFloat(impact.impact) < 0 ? '#DC2626' : '#10B981') : '#9CA3AF'
+                        }}>
+                          {impact && impact.impact ? `${impact.impact}%` : 'Insufficient data'}
+                        </td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                          <input
+                            type="number"
+                            value={actualAdjustments[key] || ''}
+                            onChange={(e) => updateActualAdjustment(vcs, codes, e.target.value)}
+                            placeholder="-"
                             style={{
-                              padding: '2px',
+                              width: '60px',
+                              padding: '4px 6px',
                               border: '1px solid #D1D5DB',
                               borderRadius: '4px',
-                              fontSize: '11px'
+                              fontSize: '12px',
+                              textAlign: 'center',
+                              backgroundColor: 'white'
                             }}
-                          >
-                            <option value="">-</option>
-                            <option value="LT">LT</option>
-                            <option value="MT">MT</option>
-                            <option value="HT">HT</option>
-                          </select>
-                        ) : '-'}
-                      </td>
-                      <td style={{ padding: '8px' }}>
-                        <select
-                          value={typeUse}
-                          onChange={(e) => updateTypeUseFilter(vcs, codes, e.target.value)}
-                          style={{
-                            padding: '2px',
-                            border: '1px solid #D1D5DB',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            width: '100px'
-                          }}
-                        >
-                          <option value="all">All</option>
-                          <option value="10">Single Family</option>
-                          <option value="11">Two Family</option>
-                          <option value="42">Multi-Family</option>
-                        </select>
-                      </td>
-                      <td style={{ padding: '8px', fontSize: '11px' }}>
-                        {impact ? `${impact.withCount}/${impact.withYearBuilt}/$${(impact.withNormTime/1000).toFixed(0)}k/$${(impact.withNormSize/1000).toFixed(0)}k/$${(impact.withAvg/1000).toFixed(0)}k` : 'No data'}
-                      </td>
-                      <td style={{ padding: '8px', fontSize: '11px' }}>
-                        {impact ? `${impact.withoutCount}/${impact.withoutYearBuilt}/$${(impact.withoutNormTime/1000).toFixed(0)}k/$${(impact.withoutNormSize/1000).toFixed(0)}k/$${(impact.withoutAvg/1000).toFixed(0)}k` : 'No data'}
-                      </td>
-                      <td style={{ padding: '8px', textAlign: 'center', fontWeight: 'bold', color: impact ? (parseFloat(impact.impact) < 0 ? '#DC2626' : '#10B981') : '#9CA3AF' }}>
-                        {impact ? `${impact.impact}%` : 'Insufficient data'}
-                      </td>
-                      <td style={{ padding: '8px' }}>
-                        <input
-                          type="number"
-                          value={actualAdjustments[key] || ''}
-                          onChange={(e) => updateActualAdjustment(vcs, codes, e.target.value)}
-                          placeholder="-"
-                          style={{
-                            width: '50px',
-                            padding: '2px',
-                            border: '1px solid #D1D5DB',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            textAlign: 'center'
-                          }}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                          />
+                        </td>
+                      </tr>
+                    );
+                  });
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // ========== MAIN RENDER ==========
   if (isLoading) {
