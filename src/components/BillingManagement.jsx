@@ -191,6 +191,7 @@ Thank you for your immediate attention to this matter.`;
   const [bulkBillingText, setBulkBillingText] = useState('');
   const [showEditBilling, setShowEditBilling] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
+  const [isUpdatingBilling, setIsUpdatingBilling] = useState(false);
   const [showLegacyJobForm, setShowLegacyJobForm] = useState(false);
   const [legacyJobForm, setLegacyJobForm] = useState({
     jobName: '',
