@@ -409,14 +409,28 @@ const calculateDistributionMetrics = async () => {
       const monthsElapsed = currentMonth;
       const monthsRemaining = 12 - currentMonth;
       
-      // Use distributions from props instead of fetching
-      const ytdDistributions = distributions
-        ?.filter(d => d.status === 'paid')
+      // Fetch fresh distributions data
+      const { data: distributionsData, error: distError } = await supabase
+        .from('shareholder_distributions')
+        .select('*')
+        .eq('year', currentYear)
+        .eq('status', 'paid');
+
+      if (distError) throw distError;
+
+      const ytdDistributions = distributionsData
         ?.reduce((sum, dist) => sum + parseFloat(dist.amount), 0) || 0;
-      
-      // Use planning jobs from props for the projection formula
-      const plannedContractsTotal = planningJobs
-        ?.filter(job => job.contract_amount && !job.is_archived)
+
+      // Fetch fresh planning jobs data
+      const { data: planningJobsData, error: planningError } = await supabase
+        .from('planning_jobs')
+        .select('*')
+        .eq('is_archived', false);
+
+      if (planningError) throw planningError;
+
+      const plannedContractsTotal = planningJobsData
+        ?.filter(job => job.contract_amount)
         ?.reduce((sum, job) => sum + (job.contract_amount || 0), 0) || 0;
       
       // Calculate monthly collection rate (keep for display purposes)
