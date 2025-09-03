@@ -249,7 +249,6 @@ useEffect(() => {
       parseFloat(loadedTargetAllocation) : loadedTargetAllocation;
     setTargetAllocation(numericValue);
   } else {
-    console.log('ℹ️ No target allocation found in database');
   }
 
 
