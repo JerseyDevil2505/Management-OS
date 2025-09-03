@@ -484,13 +484,17 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           // Sum additional SFLA
           const additionalSFLA = additionalCards.reduce((sum, card) => sum + (card.asset_sfla || 0), 0);
           
-          // Return property with combined SFLA
-          return {
-            ...prop,
-            original_sfla: prop.asset_sfla,
-            asset_sfla: prop.asset_sfla + additionalSFLA,
-            has_additional_cards: additionalCards.length > 0
-          };
+          // Return property with combined SFLA and all required display fields
+        return {
+          ...prop,
+          original_sfla: prop.asset_sfla,
+          asset_sfla: prop.asset_sfla + additionalSFLA,
+          has_additional_cards: additionalCards.length > 0,
+          // Ensure we have all fields needed for table display
+          property_class: prop.property_class || prop.property_m4_class,
+          sales_nu: prop.sales_nu || prop.sales_instrument || prop.nu,
+          values_mod_total: prop.values_mod_total || prop.assessed_value || 0
+        };
         }
         
         return prop;
