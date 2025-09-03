@@ -253,7 +253,6 @@ useEffect(() => {
 
 
   // Clear any existing allocation data to force fresh calculation
-  console.log('🧹 Clearing cached allocation data to force fresh calculation');
   setVacantTestSales([]);
 
   // If user is currently on allocation tab, force immediate recalculation
