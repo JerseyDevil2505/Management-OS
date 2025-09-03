@@ -423,8 +423,29 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
   const runTimeNormalization = useCallback(async () => {
     setIsProcessingTime(true);
     setTimeNormProgress({ current: 0, total: properties.length, message: 'Analyzing properties...' });
-    
+
     try {
+      // DEBUG: Check initial properties data structure
+      console.log(`🚀 Starting time normalization with ${properties.length} total properties`);
+      if (properties.length > 0) {
+        console.log('🔍 RAW PROPERTIES SAMPLE (first 2):');
+        properties.slice(0, 2).forEach((prop, i) => {
+          console.log(`Property ${i + 1}:`, {
+            id: prop.id,
+            composite_key: prop.property_composite_key,
+            // Check all possible field names
+            property_class: prop.property_class,
+            property_m4_class: prop.property_m4_class,
+            sales_nu: prop.sales_nu,
+            values_mod_total: prop.values_mod_total,
+            sales_price: prop.sales_price,
+            sales_date: prop.sales_date,
+            // Show all keys for debugging
+            all_keys: Object.keys(prop)
+          });
+        });
+      }
+
       // Create a map of existing keep/reject decisions
       const existingDecisions = {};
       timeNormalizedSales.forEach(sale => {
