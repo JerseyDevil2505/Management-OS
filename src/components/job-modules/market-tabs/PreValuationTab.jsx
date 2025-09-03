@@ -598,8 +598,8 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       
       // Save configuration to database
       const config = {
-        equalizationRatio,
-        outlierThreshold,
+        equalizationRatio: equalizationRatio || '',
+        outlierThreshold: outlierThreshold || '',
         normalizeToYear,
         salesFromYear,
         minSalePrice,
@@ -2100,7 +2100,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('qualifier')}
                             >
-                              Qual {normSortConfig.field === 'qualifier' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                              Qual {normSortConfig.field === 'qualifier' && (normSortConfig.direction === 'asc' ? '↑' : '��')}
                             </th>
                             <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
