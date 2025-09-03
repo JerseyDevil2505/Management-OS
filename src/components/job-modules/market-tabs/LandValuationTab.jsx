@@ -1526,7 +1526,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Log special region usage
       if (region !== 'Normal') {
-        console.log(`🌟 Using special region "${region}" rates for sale ${sale.property_block}/${sale.property_lot}:`, {
+        console.log(`���� Using special region "${region}" rates for sale ${sale.property_block}/${sale.property_lot}:`, {
           primeRate: cascadeRates.prime?.rate,
           secondaryRate: cascadeRates.secondary?.rate,
           excessRate: cascadeRates.excess?.rate
@@ -6772,7 +6772,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           {impact && impact.withLivingArea ? impact.withLivingArea.toLocaleString() : '-'}
                         </td>
                         <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
-                          {impact && impact.withSalePrice ? `$${(impact.withSalePrice/1000).toFixed(0)}k` : '-'}
+                          {impact && impact.withSalePrice ? `$${impact.withSalePrice.toLocaleString()}` : '-'}
                         </td>
 
                         {/* Without Factor columns */}
@@ -6783,20 +6783,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           {impact && impact.withoutLivingArea ? impact.withoutLivingArea.toLocaleString() : '-'}
                         </td>
                         <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
-                          {impact && impact.withoutSalePrice ? `$${(impact.withoutSalePrice/1000).toFixed(0)}k` : '-'}
+                          {impact && impact.withoutSalePrice ? `$${impact.withoutSalePrice.toLocaleString()}` : '-'}
                         </td>
 
                         {/* Adjusted Sales columns */}
                         <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
-                          {impact && impact.adjustedSaleWith ? `$${(impact.adjustedSaleWith/1000).toFixed(0)}k` : '-'}
+                          {impact && impact.adjustedSaleWith ? `$${impact.adjustedSaleWith.toLocaleString()}` : '-'}
                         </td>
                         <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
-                          {impact && impact.adjustedSaleWithout ? `$${(impact.adjustedSaleWithout/1000).toFixed(0)}k` : '-'}
+                          {impact && impact.adjustedSaleWithout ? `$${impact.adjustedSaleWithout.toLocaleString()}` : '-'}
                         </td>
 
                         {/* Impact columns */}
                         <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', fontWeight: 'bold', ...normalCellStyle }}>
-                          {impact && impact.dollarImpact ? `$${(impact.dollarImpact/1000).toFixed(0)}k` : '-'}
+                          {impact && impact.dollarImpact ? `$${impact.dollarImpact.toLocaleString()}` : '-'}
                         </td>
                         <td style={{
                           padding: '6px 4px',
