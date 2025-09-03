@@ -969,15 +969,16 @@ const loadJobs = async () => {
           } else {
             console.log(`✅ Updated job ${selectedJob.id} percent_billed to ${(actualTotalPercent * 100).toFixed(4)}% (recalculated from ${allBillingEvents.length} events)`);
 
-            // Force fresh data refresh for real-time updates
-            console.log('✅ Billing event added - forcing fresh data refresh');
-            await fetchFreshData(true);
+            // Sync cache without forcing full refresh
+            console.log('✅ Billing event added - syncing cache');
 
             // Notify parent components that data has changed
             if (onDataUpdate) {
-              onDataUpdate();
+              onDataUpdate('billing_event', selectedJob.id, { billing_events: 'updated' });
             }
-            if (onRefresh) {
+
+            // Only refresh if onDataUpdate isn't available
+            if (!onDataUpdate && onRefresh) {
               await onRefresh();
             }
           }
