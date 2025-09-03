@@ -2305,16 +2305,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const avgWithYear = Math.round(withFactor.reduce((sum, s) => sum + (s.year || 0), 0) / withFactor.length);
 
     // Get living area averages (SFLA from property data)
-    const withFactorSFLA = withFactor.filter(s => s.design && parseInt(s.design) > 0);
+    const withFactorSFLA = withFactor.filter(s => s.sfla && s.sfla > 0);
     const avgWithLivingArea = withFactorSFLA.length > 0 ?
-      Math.round(withFactorSFLA.reduce((sum, s) => sum + parseInt(s.design || 0), 0) / withFactorSFLA.length) : 0;
+      Math.round(withFactorSFLA.reduce((sum, s) => sum + s.sfla, 0) / withFactorSFLA.length) : 0;
 
     const avgWithoutTime = withoutFactor.reduce((sum, s) => sum + s.normalizedTime, 0) / withoutFactor.length;
     const avgWithoutYear = Math.round(withoutFactor.reduce((sum, s) => sum + (s.year || 0), 0) / withoutFactor.length);
 
-    const withoutFactorSFLA = withoutFactor.filter(s => s.design && parseInt(s.design) > 0);
+    const withoutFactorSFLA = withoutFactor.filter(s => s.sfla && s.sfla > 0);
     const avgWithoutLivingArea = withoutFactorSFLA.length > 0 ?
-      Math.round(withoutFactorSFLA.reduce((sum, s) => sum + parseInt(s.design || 0), 0) / withoutFactorSFLA.length) : 0;
+      Math.round(withoutFactorSFLA.reduce((sum, s) => sum + s.sfla, 0) / withoutFactorSFLA.length) : 0;
 
     // Use values_norm_time as adjusted sale prices
     const adjustedSaleWith = Math.round(avgWithTime);
