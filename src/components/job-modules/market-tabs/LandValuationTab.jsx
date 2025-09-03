@@ -222,10 +222,6 @@ useEffect(() => {
     setMethod1ExcludedSales(method1Excluded);
     window._method1ExcludedSales = method1Excluded;
 
-    console.log('🔄 Restored Method 1 excluded sales from new field:', {
-      count: method1Excluded.size,
-      ids: Array.from(method1Excluded)
-    });
   }
 
   // Restore Method 2 excluded sales
@@ -1913,7 +1909,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
 
       if (relevantSales.length === 0) {
-        console.log(`⚠��� No relevant sales found for VCS ${vcs} in past 3 years`);
+        console.log(`⚠️ No relevant sales found for VCS ${vcs} in past 3 years`);
         return;
       }
 
