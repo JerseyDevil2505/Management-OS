@@ -891,7 +891,7 @@ const loadJobs = async () => {
         secondYearAppealsPercentage: 0.02,
         thirdYearAppealsPercentage: 0.00
       });
-      if (onRefresh) onRefresh();
+      await loadFreshDataFromDB();
     } catch (error) {
       console.error('Error setting up contract:', error);
     }
