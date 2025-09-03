@@ -1961,128 +1961,129 @@ const loadJobs = async () => {
                                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                               >
                                 Add Billing Event
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setSelectedJob(job);
-                                  // Pre-fill contract form with existing values
-                                  const contract = job.job_contracts[0];
-                                  setContractSetup({
-                                    contractAmount: contract.contract_amount.toString(),
-                                    templateType: 'custom',
-                                    retainerPercentage: contract.retainer_percentage,
-                                    endOfJobPercentage: contract.end_of_job_percentage,
-                                    firstYearAppealsPercentage: contract.first_year_appeals_percentage,
-                                    secondYearAppealsPercentage: contract.second_year_appeals_percentage,
-                                    thirdYearAppealsPercentage: contract.third_year_appeals_percentage || 0
-                                  });
-                                  setShowContractSetup(true);
-                                }}
-                                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
-                              >
-                                Edit Contract
-                              </button>
-                            </>
-                          )}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedJob(job);
+                                // Pre-fill contract form with existing values
+                                const contract = job.job_contracts[0];
+                                setContractSetup({
+                                  contractAmount: contract.contract_amount.toString(),
+                                  templateType: 'custom',
+                                  retainerPercentage: contract.retainer_percentage,
+                                  endOfJobPercentage: contract.end_of_job_percentage,
+                                  firstYearAppealsPercentage: contract.first_year_appeals_percentage,
+                                  secondYearAppealsPercentage: contract.second_year_appeals_percentage,
+                                  thirdYearAppealsPercentage: contract.third_year_appeals_percentage || 0
+                                });
+                                setShowContractSetup(true);
+                              }}
+                              className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                            >
+                              Edit Contract
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {totals && (
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+                        <div className="bg-white p-3 rounded-md">
+                          <p className="text-sm text-gray-600">Contract Amount</p>
+                          <p className="text-lg font-semibold">{formatCurrency(totals.contractAmount)}</p>
+                        </div>
+                        <div className="bg-white p-3 rounded-md">
+                          <p className="text-sm text-gray-600">Percentage Billed</p>
+                          <p className="text-lg font-semibold">{totals.totalPercentageBilled.toFixed(2)}%</p>
+                        </div>
+                        <div className="bg-white p-3 rounded-md">
+                          <p className="text-sm text-gray-600">Amount Billed</p>
+                          <p className="text-lg font-semibold">{formatCurrency(totals.totalAmountBilled)}</p>
+                        </div>
+                        <div className="bg-white p-3 rounded-md">
+                          <p className="text-sm text-gray-600">Remaining Due</p>
+                          <p className="text-lg font-semibold">{formatCurrency(totals.remainingDue)}</p>
+                        </div>
+                        <div className="bg-white p-3 rounded-md border-2 border-blue-400">
+                          <p className="text-sm text-gray-600">Remaining (No Retainer)</p>
+                          <p className="text-lg font-semibold text-blue-600">
+                            {(() => {
+                              const remainingNoRet = (totals.contractAmount - job.job_contracts[0].retainer_amount) - totals.totalAmountBilled;
+                              return formatCurrency(remainingNoRet < 0 ? 0 : remainingNoRet);
+                            })()}
+                          </p>
                         </div>
                       </div>
+                    )}
 
-                      {totals && (
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
-                          <div className="bg-white p-3 rounded-md">
-                            <p className="text-sm text-gray-600">Contract Amount</p>
-                            <p className="text-lg font-semibold">{formatCurrency(totals.contractAmount)}</p>
+                    {/* Contract Breakdown */}
+                    {job.job_contracts?.[0] && (
+                      <div className="bg-white p-4 rounded-md border border-gray-200 mb-4">
+                        <p className="text-sm font-medium text-gray-700 mb-3">CONTRACT BREAKDOWN</p>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                          <div>
+                            <p className="text-gray-600">Total Contract</p>
+                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].contract_amount)}</p>
                           </div>
-                          <div className="bg-white p-3 rounded-md">
-                            <p className="text-sm text-gray-600">Percentage Billed</p>
-                            <p className="text-lg font-semibold">{totals.totalPercentageBilled.toFixed(2)}%</p>
+                          <div>
+                            <p className="text-gray-600">Retainer ({(job.job_contracts[0].retainer_percentage * 100).toFixed(0)}%)</p>
+                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].retainer_amount)}</p>
                           </div>
-                          <div className="bg-white p-3 rounded-md">
-                            <p className="text-sm text-gray-600">Amount Billed</p>
-                            <p className="text-lg font-semibold">{formatCurrency(totals.totalAmountBilled)}</p>
+                          <div>
+                            <p className="text-gray-600">End of Job ({(job.job_contracts[0].end_of_job_percentage * 100).toFixed(0)}%)</p>
+                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].end_of_job_amount)}</p>
                           </div>
-                          <div className="bg-white p-3 rounded-md">
-                            <p className="text-sm text-gray-600">Remaining Due</p>
-                            <p className="text-lg font-semibold">{formatCurrency(totals.remainingDue)}</p>
+                          <div>
+                            <p className="text-gray-600">1st Yr Appeals ({(job.job_contracts[0].first_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].first_year_appeals_amount)}</p>
                           </div>
-                          <div className="bg-white p-3 rounded-md border-2 border-blue-400">
-                            <p className="text-sm text-gray-600">Remaining (No Retainer)</p>
-                            <p className="text-lg font-semibold text-blue-600">
-                              {(() => {
-                                const remainingNoRet = (totals.contractAmount - job.job_contracts[0].retainer_amount) - totals.totalAmountBilled;
-                                return formatCurrency(remainingNoRet < 0 ? 0 : remainingNoRet);
-                              })()}
-                            </p>
+                          <div>
+                            <p className="text-gray-600">2nd Yr Appeals ({(job.job_contracts[0].second_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].second_year_appeals_amount)}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-600">3rd Yr Appeals ({(job.job_contracts[0].third_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].third_year_appeals_amount || 0)}</p>
                           </div>
                         </div>
-                      )}
+                      </div>
+                    )}
 
-                      {/* Contract Breakdown */}
-                      {job.job_contracts?.[0] && (
-                        <div className="bg-white p-4 rounded-md border border-gray-200 mb-4">
-                          <p className="text-sm font-medium text-gray-700 mb-3">CONTRACT BREAKDOWN</p>
-                          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
-                            <div>
-                              <p className="text-gray-600">Total Contract</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].contract_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">Retainer ({(job.job_contracts[0].retainer_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].retainer_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">End of Job ({(job.job_contracts[0].end_of_job_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].end_of_job_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">1st Yr Appeals ({(job.job_contracts[0].first_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].first_year_appeals_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">2nd Yr Appeals ({(job.job_contracts[0].second_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].second_year_appeals_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">3rd Yr Appeals ({(job.job_contracts[0].third_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].third_year_appeals_amount || 0)}</p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                    {/* Billing Events Table */}
+                    {job.billing_events && job.billing_events.length > 0 && (
+                      <div className="bg-white rounded-md overflow-hidden">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">%</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Invoice</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Billed</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remaining</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remaining (No Ret)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {job.billing_events
+                              .sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date))
+                              .map((event, index) => {
+                                // Simple calculation: (Contract - Total Retainer) - Amount Billed So Far
+                                const contractMinusRetainer = job.job_contracts[0].contract_amount - job.job_contracts[0].retainer_amount;
+                                const amountBilledSoFar = job.job_contracts[0].contract_amount - event.remaining_due;
+                                const remainingNoRetainer = contractMinusRetainer - amountBilledSoFar;
 
-                      {/* Billing Events Table */}
-                      {job.billing_events && job.billing_events.length > 0 && (
-                        <div className="bg-white rounded-md overflow-hidden">
-                          <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">%</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Invoice</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Billed</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remaining</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remaining (No Ret)</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200">
-                              {job.billing_events
-                                .sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date))
-                                .map((event, index) => {
-                                  // Simple calculation: (Contract - Total Retainer) - Amount Billed So Far
-                                  const contractMinusRetainer = job.job_contracts[0].contract_amount - job.job_contracts[0].retainer_amount;
-                                  const amountBilledSoFar = job.job_contracts[0].contract_amount - event.remaining_due;
-                                  const remainingNoRetainer = contractMinusRetainer - amountBilledSoFar;
-                                  
-                                  return (
-                                    <tr 
-                                      key={event.id}
-                                      className="hover:bg-gray-50 cursor-pointer"
-                                      onClick={() => {
-                                        setEditingEvent(event);
-                                        setShowEditBilling(true);
-                                      }}
+                                return (
+                                  <tr
+                                    key={event.id}
+                                    className="hover:bg-gray-50 cursor-pointer"
+                                    onClick={() => {
+                                      // Ensure job_id is included in editingEvent for active jobs
+                                      setEditingEvent({ ...event, job_id: job.id });
+                                      setShowEditBilling(true);
+                                    }}
                                     >
                                       <td className="px-4 py-2 text-sm text-gray-900">
                                         {new Date(event.billing_date).toLocaleDateString()}
