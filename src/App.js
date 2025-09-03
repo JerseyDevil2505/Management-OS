@@ -1155,6 +1155,129 @@ useEffect(() => {
     };
   };
 
+  // ==========================================
+  // LIVE DATA LOADING - NO CACHING
+  // ==========================================
+  const loadLiveData = useCallback(async (components = ['all']) => {
+    console.log('📡 Loading fresh data from database:', components);
+
+    try {
+      setLoadingStatus(prev => ({ ...prev, isRefreshing: true, message: 'Loading fresh data...' }));
+
+      const updates = {};
+
+      // Load billing data
+      if (components.includes('billing') || components.includes('all')) {
+        console.log('📊 Loading billing data...');
+
+        // Load jobs with billing events
+        const { data: jobsData } = await supabase
+          .from('jobs')
+          .select(`
+            *,
+            job_contracts(*),
+            billing_events(*)
+          `)
+          .in('job_type', ['standard', 'legacy_billing']);
+
+        if (jobsData) {
+          const activeJobs = jobsData.filter(j => j.job_type === 'standard');
+          const legacyJobs = jobsData.filter(j => j.job_type === 'legacy_billing');
+
+          updates.jobs = jobsData;
+          updates.activeJobs = activeJobs;
+          updates.legacyJobs = legacyJobs;
+        }
+
+        // Load planning jobs
+        const { data: planningData } = await supabase
+          .from('planning_jobs')
+          .select('*');
+
+        if (planningData) {
+          updates.planningJobs = planningData;
+        }
+
+        // Load expenses
+        const { data: expensesData } = await supabase
+          .from('expenses')
+          .select('*');
+
+        if (expensesData) {
+          updates.expenses = expensesData;
+        }
+
+        // Load receivables
+        const { data: receivablesData } = await supabase
+          .from('office_receivables')
+          .select('*');
+
+        if (receivablesData) {
+          updates.receivables = receivablesData;
+        }
+
+        // Load distributions
+        const { data: distributionsData } = await supabase
+          .from('shareholder_distributions')
+          .select('*');
+
+        if (distributionsData) {
+          updates.distributions = distributionsData;
+        }
+
+        // Calculate billing metrics
+        updates.billingMetrics = calculateBillingMetrics(
+          updates.activeJobs || appData.activeJobs,
+          updates.legacyJobs || appData.legacyJobs,
+          updates.planningJobs || appData.planningJobs,
+          updates.expenses || appData.expenses,
+          updates.receivables || appData.receivables
+        );
+      }
+
+      // Update app data
+      const newData = {
+        ...appData,
+        ...updates,
+        isInitialized: true
+      };
+
+      setAppData(newData);
+
+      setLoadingStatus({
+        isRefreshing: false,
+        lastError: null,
+        message: 'Data loaded successfully'
+      });
+
+      console.log('✅ Fresh data loaded successfully');
+
+      return newData;
+
+    } catch (error) {
+      console.error('❌ Error loading live data:', error);
+      setLoadingStatus({
+        isRefreshing: false,
+        lastError: error.message,
+        message: 'Error loading data'
+      });
+      throw error;
+    }
+  }, [appData]);
+
+  const updateAppData = useCallback(async (type, id, data) => {
+    console.log('🔧 Updating app data:', type, id);
+
+    // For any billing-related updates, just reload fresh data
+    if (type.includes('billing') || type.includes('event')) {
+      console.log('🔄 Billing data updated, reloading fresh data...');
+      await loadLiveData(['billing']);
+      return;
+    }
+
+    return appData;
+  }, [appData, loadLiveData]);
+
   // Check for existing session or dev mode on mount
   useEffect(() => {
     checkSession();
