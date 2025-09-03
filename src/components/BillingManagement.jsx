@@ -1348,7 +1348,11 @@ const loadJobs = async () => {
       // Update the job in state without reloading
       setShowEditBilling(false);
       setEditingEvent(null);
-      if (onRefresh) onRefresh();
+
+      // Small delay to ensure DB changes are committed before refresh
+      setTimeout(() => {
+        if (onRefresh) onRefresh();
+      }, 100);
     } catch (error) {
       console.error('Error deleting billing event:', error);
     }
