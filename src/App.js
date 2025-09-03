@@ -12,31 +12,8 @@ import LandingPage from './components/LandingPage';
 import UserManagement from './components/UserManagement';
 
 // ==========================================
-// PERSISTENT CACHE CONFIGURATION
+// LIVE DATA - NO CACHING
 // ==========================================
-const CACHE_VERSION = '1.0.0';
-const CACHE_EXPIRY = {
-  hot: 2 * 60 * 60 * 1000,        // 2 hours - use without checking
-  warm: 24 * 60 * 60 * 1000,      // 24 hours - use but refresh in background
-  cold: 7 * 24 * 60 * 60 * 1000   // 7 days - show stale warning
-};
-
-// ==========================================
-// IndexedDB Setup for Large Data
-// ==========================================
-const initDB = () => {
-  return openDB('LojikAppCache', 1, {
-    upgrade(db) {
-      // Create stores for different data types
-      if (!db.objectStoreNames.contains('masterCache')) {
-        db.createObjectStore('masterCache');
-      }
-      if (!db.objectStoreNames.contains('largeData')) {
-        db.createObjectStore('largeData');
-      }
-    },
-  });
-};
 
 const App = () => {
   // ==========================================
