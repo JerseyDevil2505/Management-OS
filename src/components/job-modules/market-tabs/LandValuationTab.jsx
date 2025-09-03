@@ -2092,8 +2092,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       if (hasSalesData && !prop.location_analysis) return;
       
       const vcs = prop.new_vcs;
-      const location = prop.location_analysis;
-      
+      const location = prop.location_analysis || 'No Analysis';
+
       // Assign location codes based on analysis
       let codes = [];
       const locationLower = location.toLowerCase();
