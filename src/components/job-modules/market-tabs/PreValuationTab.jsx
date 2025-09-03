@@ -2182,7 +2182,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('card')}
                             >
-                              Card {normSortConfig.field === 'card' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                              Card {normSortConfig.field === 'card' && (normSortConfig.direction === 'asc' ? '��' : '↓')}
                             </th>
                             <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-32 cursor-pointer hover:bg-gray-100"
@@ -2282,7 +2282,21 @@ const analyzeImportFile = async (file) => {
                                   <td className="px-4 py-3 text-sm">{parsed.qualifier || ''}</td>
                                   <td className="px-4 py-3 text-sm">{parsed.card || '1'}</td>
                                   <td className="px-4 py-3 text-sm">{sale.property_location}</td>
-                                  <td className="px-4 py-3 text-sm">{sale.property_m4_class}</td>
+                                  <td className="px-4 py-3 text-sm">
+                                    {(() => {
+                                      // DEBUG: Log what we're trying to display for class
+                                      const classValue = sale.property_m4_class || sale.property_class || sale.asset_building_class || 'No class found';
+                                      if (sale.id && sale.id.toString().endsWith('0')) { // Log every 10th for debugging
+                                        console.log(`🎯 Table render class for sale ${sale.id}:`, {
+                                          property_m4_class: sale.property_m4_class,
+                                          property_class: sale.property_class,
+                                          asset_building_class: sale.asset_building_class,
+                                          displaying: classValue
+                                        });
+                                      }
+                                      return classValue;
+                                    })()}
+                                  </td>
                                   <td className="px-4 py-3 text-sm">
                                     {getTypeUseDisplay(sale)}
                                   </td>
