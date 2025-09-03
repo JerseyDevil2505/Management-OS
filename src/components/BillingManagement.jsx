@@ -1078,8 +1078,17 @@ const loadJobs = async () => {
 
   const handleUpdateBillingEvent = async () => {
     if (!editingEvent) return;
-    
+
     try {
+      console.log('🔧 Updating billing event:', editingEvent);
+
+      // Check if job_id is available
+      if (!editingEvent.job_id) {
+        console.error('❌ Missing job_id in editingEvent:', editingEvent);
+        alert('Error: Missing job ID. Please refresh the page and try again.');
+        return;
+      }
+
       // Prepare update data
       const updateData = {
         status: editingEvent.status || '',
@@ -1087,6 +1096,8 @@ const loadJobs = async () => {
         billing_type: editingEvent.billing_type || null,
         invoice_number: editingEvent.invoice_number || ''
       };
+
+      console.log('📝 Update data:', updateData);
 
       // First update the billing event
       const { error: updateError } = await supabase
@@ -1098,23 +1109,31 @@ const loadJobs = async () => {
 
       // Call the cache update for status changes
       if (onDataUpdate) {
+        console.log('🔄 Calling onDataUpdate for cache update');
         onDataUpdate('billing_event_status', editingEvent.id, { status: editingEvent.status });
       }
 
+      console.log('📊 Fetching job data for job_id:', editingEvent.job_id);
+
       // Get all billing events for this job ordered by date
-      const { data: jobData } = await supabase
+      const { data: jobData, error: jobFetchError } = await supabase
         .from('jobs')
         .select(`
           id,
           job_contracts(contract_amount),
           billing_events(
-            id, 
+            id,
             amount_billed,
             billing_date
           )
         `)
         .eq('id', editingEvent.job_id)
         .single();
+
+      if (jobFetchError) {
+        console.error('❌ Error fetching job data:', jobFetchError);
+        throw jobFetchError;
+      }
 
       if (jobData && jobData.job_contracts?.[0]) {
         const contractAmount = jobData.job_contracts[0].contract_amount;
