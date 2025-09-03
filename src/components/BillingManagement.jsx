@@ -1394,9 +1394,13 @@ const loadJobs = async () => {
       setShowEditBilling(false);
       setEditingEvent(null);
 
+      // Force fresh data refresh for real-time updates
+      console.log('✅ Billing event deleted - forcing fresh data refresh');
+      await fetchFreshData(true);
+
       // Small delay to ensure DB changes are committed before refresh
-      setTimeout(() => {
-        if (onRefresh) onRefresh();
+      setTimeout(async () => {
+        if (onRefresh) await onRefresh();
       }, 100);
     } catch (error) {
       console.error('Error deleting billing event:', error);
