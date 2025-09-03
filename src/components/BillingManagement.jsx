@@ -226,7 +226,37 @@ Thank you for your immediate attention to this matter.`;
       setGlobalMetrics(billingMetrics);
     }
   }, [activeJobs, legacyJobs, planningJobs, billingMetrics]);
-  
+
+  // NEW: Update displayed lists when props change for truly live updates
+  useEffect(() => {
+    if (activeTab === 'active') {
+      setJobs(activeJobs);
+    } else if (activeTab === 'legacy') {
+      setLegacyJobs(legacyJobs);
+    } else if (activeTab === 'planned') {
+      setPlanningJobs(planningJobs);
+    }
+  }, [activeJobs, legacyJobs, planningJobs, activeTab]);
+
+  // Update other data when props change
+  useEffect(() => {
+    if (activeTab === 'expenses') {
+      setExpenses(expenses);
+    }
+  }, [expenses, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'receivables') {
+      setOfficeReceivables(receivables);
+    }
+  }, [receivables, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'distributions') {
+      setDistributions(distributions);
+    }
+  }, [distributions, activeTab]);
+
   useEffect(() => {
     // Load specific data when tab changes
     loadJobs();
@@ -607,17 +637,17 @@ const calculateDistributionMetrics = async () => {
 const loadJobs = async () => {
     try {
       setLoading(true);
-      
+
       if (activeTab === 'active') {
-        // Use cached activeJobs from props
+        // Use activeJobs from props but ensure fresh data
         setJobs(activeJobs);
         setJobCounts(prev => ({ ...prev, active: activeJobs.length }));
       } else if (activeTab === 'planned') {
-        // Use cached planningJobs from props
+        // Use planningJobs from props but ensure fresh data
         setPlanningJobs(planningJobs);
         setJobCounts(prev => ({ ...prev, planned: planningJobs.length }));
       } else if (activeTab === 'legacy') {
-        // Use cached legacyJobs from props
+        // Use legacyJobs from props but ensure fresh data
         setLegacyJobs(legacyJobs);
         setJobCounts(prev => ({ ...prev, legacy: legacyJobs.length }));
       }
