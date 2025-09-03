@@ -2084,12 +2084,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Group properties by VCS and location factor
     properties.forEach(prop => {
-      // More flexible filtering - allow properties without sales data for VCS structure
-      if (!prop.new_vcs) return;
-
-      // For properties with sales data, require location analysis
-      const hasSalesData = prop.sales_price && prop.sales_price > 0;
-      if (hasSalesData && !prop.location_analysis) return;
+      // Must have VCS and location analysis to appear in the table
+      if (!prop.new_vcs || !prop.location_analysis) return;
       
       const vcs = prop.new_vcs;
       const location = prop.location_analysis || 'No Analysis';
