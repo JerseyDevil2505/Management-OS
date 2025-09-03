@@ -2316,13 +2316,22 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const avgWithoutLivingArea = withoutFactorSFLA.length > 0 ?
       Math.round(withoutFactorSFLA.reduce((sum, s) => sum + s.sfla, 0) / withoutFactorSFLA.length) : 0;
 
-    // Use values_norm_time as adjusted sale prices
-    const adjustedSaleWith = Math.round(avgWithTime);
-    const adjustedSaleWithout = Math.round(avgWithoutTime);
+    // Calculate size-adjusted sale prices using your magic formula
+    // Average size between "with" and "without" groups
+    const averageSize = (avgWithLivingArea + avgWithoutLivingArea) / 2;
 
-    // Calculate dollar and percent impact
+    // Size adjustment formula: adjusted sale = sale price + ((average size - actual size) * (price per sqft) * 0.5)
+    const adjustedSaleWith = avgWithLivingArea > 0 ?
+      Math.round(avgWithTime + ((averageSize - avgWithLivingArea) * (avgWithTime / avgWithLivingArea) * 0.5)) :
+      Math.round(avgWithTime);
+
+    const adjustedSaleWithout = avgWithoutLivingArea > 0 ?
+      Math.round(avgWithoutTime + ((averageSize - avgWithoutLivingArea) * (avgWithoutTime / avgWithoutLivingArea) * 0.5)) :
+      Math.round(avgWithoutTime);
+
+    // Calculate dollar and percent impact using adjusted prices
     const dollarImpact = adjustedSaleWith - adjustedSaleWithout;
-    const percentImpact = avgWithoutTime > 0 ? ((avgWithTime - avgWithoutTime) / avgWithoutTime) * 100 : 0;
+    const percentImpact = adjustedSaleWithout > 0 ? ((adjustedSaleWith - adjustedSaleWithout) / adjustedSaleWithout) * 100 : 0;
 
     return {
       withCount: withFactor.length,
