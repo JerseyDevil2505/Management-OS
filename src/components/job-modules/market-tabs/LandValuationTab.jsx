@@ -108,6 +108,9 @@ const LandValuationTab = ({
   const [modalSortField, setModalSortField] = useState('block');
   const [modalSortDirection, setModalSortDirection] = useState('asc');
 
+  // ========== ECONOMIC OBSOLESCENCE GLOBAL FILTER ==========
+  const [globalEcoObsTypeFilter, setGlobalEcoObsTypeFilter] = useState('1'); // Default to Single Family
+
   // ========== ALLOCATION STUDY STATE ==========
   const [vacantTestSales, setVacantTestSales] = useState([]);
   const [actualAllocations, setActualAllocations] = useState({});
@@ -315,12 +318,18 @@ useEffect(() => {
     }
   }
 
-  if (marketLandData.economic_obsolescence) {
-    setEcoObsFactors(marketLandData.economic_obsolescence.factors || {});
-    setLocationCodes(marketLandData.economic_obsolescence.location_codes || {});
-    setTrafficLevels(marketLandData.economic_obsolescence.traffic_levels || {});
-    setActualAdjustments(marketLandData.economic_obsolescence.actual_adjustments || {});
-    setCustomLocationCodes(marketLandData.economic_obsolescence.custom_codes || []);
+  // Load economic obsolescence data from new schema fields
+  if (marketLandData.eco_obs_code_config) {
+    setEcoObsFactors(marketLandData.eco_obs_code_config.factors || {});
+    setLocationCodes(marketLandData.eco_obs_code_config.location_codes || {});
+    setTrafficLevels(marketLandData.eco_obs_code_config.traffic_levels || {});
+    setCustomLocationCodes(marketLandData.eco_obs_code_config.custom_codes || []);
+  }
+  if (marketLandData.eco_obs_applied_adjustments) {
+    setActualAdjustments(marketLandData.eco_obs_applied_adjustments);
+  }
+  if (marketLandData.eco_obs_compound_overrides) {
+    setComputedAdjustments(marketLandData.eco_obs_compound_overrides);
   }
 
   setLastSaved(marketLandData.updated_at ? new Date(marketLandData.updated_at) : null);
@@ -1415,7 +1424,7 @@ const getPricePerUnit = useCallback((price, size) => {
       }
 
       if (autoCategory) {
-        console.log(`🏗️ Auto-categorizing manually added ${p.property_block}/${p.property_lot} as ${autoCategory}`);
+        console.log(`🏗�� Auto-categorizing manually added ${p.property_block}/${p.property_lot} as ${autoCategory}`);
         setSaleCategories(prev => ({...prev, [p.id]: autoCategory}));
       }
     });
@@ -2055,78 +2064,81 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const analyzeEconomicObsolescence = useCallback(() => {
     if (!properties) return;
 
+    console.log('🔍 Economic Obsolescence Analysis Debug:', {
+      totalProperties: properties.length,
+      withNewVCS: properties.filter(p => p.new_vcs).length,
+      withLocationAnalysis: properties.filter(p => p.location_analysis).length,
+      withSalesData: properties.filter(p => p.sales_price > 0).length,
+      withVCSOnly: properties.filter(p => p.new_vcs && !p.location_analysis).length,
+      withVCSAndLocation: properties.filter(p => p.new_vcs && p.location_analysis).length,
+      withAllThree: properties.filter(p => p.new_vcs && p.location_analysis && p.sales_price > 0).length,
+      uniqueVCSCodes: [...new Set(properties.filter(p => p.new_vcs).map(p => p.new_vcs))],
+      samplePropertiesWithVCS: properties.filter(p => p.new_vcs).slice(0, 5).map(p => ({
+        new_vcs: p.new_vcs,
+        location_analysis: p.location_analysis,
+        sales_price: p.sales_price,
+        address: p.property_location
+      }))
+    });
+
     const factors = {};
     const computed = {};
 
-    // Group properties by VCS and location factor
+    // Create pivot table: Group properties by VCS and location_analysis (like Excel pivot table)
     properties.forEach(prop => {
-      if (!prop.new_vcs || !prop.sales_price || prop.sales_price <= 0) return;
-      if (!prop.location_analysis) return;
-      
+      // Must have VCS and valid location_analysis to appear in the table (exclude null/none/empty)
+      if (!prop.new_vcs || !prop.location_analysis ||
+          prop.location_analysis.trim() === '' ||
+          prop.location_analysis.toLowerCase().includes('none') ||
+          prop.location_analysis.toLowerCase().includes('no analysis')) {
+        return;
+      }
+
       const vcs = prop.new_vcs;
-      const location = prop.location_analysis;
-      
-      // Assign location codes based on analysis
-      let codes = [];
-      const locationLower = location.toLowerCase();
-      
-      // Check for negative factors
-      if (locationLower.includes('busy') || locationLower.includes('highway') || 
-          locationLower.includes('route') || locationLower.includes('traffic')) {
-        codes.push('BS');
-      }
-      if (locationLower.includes('commercial')) codes.push('CM');
-      if (locationLower.includes('railroad') || locationLower.includes('rail')) codes.push('RR');
-      if (locationLower.includes('power') || locationLower.includes('electric')) codes.push('PL');
-      if (locationLower.includes('easement')) codes.push('ES');
-      
-      // Check for positive factors
-      if (locationLower.includes('golf')) {
-        if (locationLower.includes('view')) codes.push('GV');
-        else codes.push('GC');
-      }
-      if (locationLower.includes('water') || locationLower.includes('lake') || 
-          locationLower.includes('river') || locationLower.includes('ocean')) {
-        if (locationLower.includes('front')) codes.push('WF');
-        else if (locationLower.includes('view')) codes.push('WV');
-      }
-      
-      const codeString = codes.join('/') || 'None';
-      setLocationCodes(prev => ({...prev, [prop.id]: codeString}));
+      const locationAnalysis = prop.location_analysis.trim();
+
+      // Use the actual location_analysis as the key (no dynamic code generation)
+      setLocationCodes(prev => ({...prev, [prop.id]: locationAnalysis}));
       
       if (!factors[vcs]) {
         factors[vcs] = {};
       }
-      
-      if (!factors[vcs][codeString]) {
-        factors[vcs][codeString] = {
+
+      if (!factors[vcs][locationAnalysis]) {
+        factors[vcs][locationAnalysis] = {
           withFactor: [],
           withoutFactor: []
         };
       }
-      
-      // Add property to appropriate group
-      factors[vcs][codeString].withFactor.push({
-        id: prop.id,
-        price: prop.sales_price,
-        normalizedTime: prop.values_norm_time || prop.sales_price,
-        normalizedSize: prop.values_norm_size || prop.sales_price,
-        acres: parseFloat(calculateAcreage(prop)),
-        address: prop.property_location,
-        year: prop.asset_year_built,
-        yearSold: new Date(prop.sales_date).getFullYear(),
-        typeUse: prop.asset_type_use,
-        design: prop.asset_design_style
-      });
+
+      // Add all properties to build VCS structure, but only include sales data if available
+      const hasSalesData = prop.sales_price && prop.sales_price > 0;
+
+      if (hasSalesData) {
+        factors[vcs][locationAnalysis].withFactor.push({
+          id: prop.id,
+          price: prop.sales_price,
+          normalizedTime: prop.values_norm_time || prop.sales_price,
+          normalizedSize: prop.values_norm_size || prop.sales_price,
+          acres: parseFloat(calculateAcreage(prop)),
+          address: prop.property_location,
+          year: prop.asset_year_built,
+          yearSold: prop.sales_date ? new Date(prop.sales_date).getFullYear() : null,
+          typeUse: prop.asset_type_use,
+          design: prop.asset_design_style,
+          sfla: parseFloat(prop.asset_sfla || 0)
+        });
+      }
     });
 
-    // Find comparable sales without factors for each VCS
+    // Find comparable sales without location factors for each VCS
     Object.keys(factors).forEach(vcs => {
-      // Get baseline sales (no location factors)
-      const baselineSales = properties.filter(prop => 
-        prop.new_vcs === vcs && 
-        (!prop.location_analysis || prop.location_analysis === '' || 
-         (!locationCodes[prop.id] || locationCodes[prop.id] === 'None')) &&
+      // Get baseline sales (no location factors - properties with same VCS but no location_analysis)
+      const baselineSales = properties.filter(prop =>
+        prop.new_vcs === vcs &&
+        (!prop.location_analysis || prop.location_analysis.trim() === '' ||
+         prop.location_analysis.toLowerCase().includes('none') ||
+         prop.location_analysis.toLowerCase().includes('no analysis')) &&
         prop.sales_price > 0
       ).map(prop => ({
         id: prop.id,
@@ -2137,15 +2149,34 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         year: prop.asset_year_built,
         yearSold: new Date(prop.sales_date).getFullYear(),
         typeUse: prop.asset_type_use,
-        design: prop.asset_design_style
+        design: prop.asset_design_style,
+        sfla: parseFloat(prop.asset_sfla || 0)
       }));
-      
-      // Store baseline for all location factors in this VCS
-      Object.keys(factors[vcs]).forEach(codes => {
-        if (codes !== 'None') {
-          factors[vcs][codes].withoutFactor = baselineSales;
-        }
+
+      // Store baseline for all location analyses in this VCS
+      Object.keys(factors[vcs]).forEach(locationAnalysis => {
+        factors[vcs][locationAnalysis].withoutFactor = baselineSales;
       });
+    });
+
+    console.log('📊 Economic Obsolescence Analysis Complete:', {
+      totalVCSCodes: Object.keys(factors).length,
+      vcsCodesWithFactors: Object.keys(factors).map(vcs => ({
+        vcs,
+        factorTypes: Object.keys(factors[vcs]),
+        totalFactorTypes: Object.keys(factors[vcs]).length,
+        propertiesPerFactor: Object.keys(factors[vcs]).map(code => ({
+          code,
+          withFactorCount: factors[vcs][code].withFactor.length,
+          withoutFactorCount: factors[vcs][code].withoutFactor.length
+        }))
+      })),
+      allFactors: factors,
+      totalPropertiesProcessed: Object.values(factors).reduce((total, vcsFactors) => {
+        return total + Object.values(vcsFactors).reduce((vcsTotal, factor) => {
+          return vcsTotal + factor.withFactor.length;
+        }, 0);
+      }, 0)
     });
 
     setEcoObsFactors(factors);
@@ -2174,16 +2205,29 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }));
   };
 
+  const updateGlobalEcoObsTypeFilter = (typeUse) => {
+    setGlobalEcoObsTypeFilter(typeUse);
+  };
+
   const calculateEcoObsImpact = useCallback((vcs, codes, typeUse = null) => {
     if (!ecoObsFactors[vcs] || !ecoObsFactors[vcs][codes]) return null;
-    
+
     let withFactor = ecoObsFactors[vcs][codes].withFactor;
     let withoutFactor = ecoObsFactors[vcs][codes].withoutFactor;
-    
-    // Filter by type use if specified
-    if (typeUse && typeUse !== 'all') {
-      withFactor = withFactor.filter(p => p.typeUse === typeUse);
-      withoutFactor = withoutFactor.filter(p => p.typeUse === typeUse);
+
+    // Use global filter if no specific type use provided
+    const effectiveTypeUse = typeUse || globalEcoObsTypeFilter;
+
+    // Filter by type use if specified and not 'all'
+    if (effectiveTypeUse && effectiveTypeUse !== 'all') {
+      // Support Single Family umbrella (both '1' and '10')
+      if (effectiveTypeUse === '1') {
+        withFactor = withFactor.filter(p => p.typeUse === '1' || p.typeUse === '10');
+        withoutFactor = withoutFactor.filter(p => p.typeUse === '1' || p.typeUse === '10');
+      } else {
+        withFactor = withFactor.filter(p => p.typeUse === effectiveTypeUse);
+        withoutFactor = withoutFactor.filter(p => p.typeUse === effectiveTypeUse);
+      }
     }
     
     // Filter by traffic level for BS codes
@@ -2200,44 +2244,112 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
     }
     
-    if (withFactor.length === 0 || withoutFactor.length === 0) return null;
+    // Return partial data even if we can't calculate full impact
+    if (withFactor.length === 0 && withoutFactor.length === 0) return null;
+
+    // If we only have one side of the comparison, show what we have
+    if (withFactor.length === 0) {
+      const avgWithoutTime = withoutFactor.reduce((sum, s) => sum + s.normalizedTime, 0) / withoutFactor.length;
+      const avgWithoutYear = Math.round(withoutFactor.reduce((sum, s) => sum + (s.year || 0), 0) / withoutFactor.length);
+      const withoutFactorSFLA = withoutFactor.filter(s => s.sfla && s.sfla > 0);
+      const avgWithoutLivingArea = withoutFactorSFLA.length > 0 ?
+        Math.round(withoutFactorSFLA.reduce((sum, s) => sum + s.sfla, 0) / withoutFactorSFLA.length) : 0;
+
+      return {
+        withCount: 0,
+        withYearBuilt: 0,
+        withLivingArea: 0,
+        withSalePrice: 0,
+        withoutCount: withoutFactor.length,
+        withoutYearBuilt: avgWithoutYear,
+        withoutLivingArea: avgWithoutLivingArea,
+        withoutSalePrice: Math.round(avgWithoutTime),
+        adjustedSaleWith: 0,
+        adjustedSaleWithout: Math.round(avgWithoutTime), // No adjustment possible without "with" data
+        dollarImpact: 0,
+        percentImpact: 'N/A',
+        withNormTime: 0,
+        withoutNormTime: avgWithoutTime,
+        impact: 'N/A'
+      };
+    }
+
+    if (withoutFactor.length === 0) {
+      const avgWithTime = withFactor.reduce((sum, s) => sum + s.normalizedTime, 0) / withFactor.length;
+      const avgWithYear = Math.round(withFactor.reduce((sum, s) => sum + (s.year || 0), 0) / withFactor.length);
+      const withFactorSFLA = withFactor.filter(s => s.sfla && s.sfla > 0);
+      const avgWithLivingArea = withFactorSFLA.length > 0 ?
+        Math.round(withFactorSFLA.reduce((sum, s) => sum + s.sfla, 0) / withFactorSFLA.length) : 0;
+
+      return {
+        withCount: withFactor.length,
+        withYearBuilt: avgWithYear,
+        withLivingArea: avgWithLivingArea,
+        withSalePrice: Math.round(avgWithTime),
+        withoutCount: 0,
+        withoutYearBuilt: 0,
+        withoutLivingArea: 0,
+        withoutSalePrice: 0,
+        adjustedSaleWith: Math.round(avgWithTime), // No adjustment possible without "without" data
+        adjustedSaleWithout: 0,
+        dollarImpact: 0,
+        percentImpact: 'No baseline',
+        withNormTime: avgWithTime,
+        withoutNormTime: 0,
+        impact: 'No baseline'
+      };
+    }
     
-    // Calculate averages
+    // Calculate detailed averages using values_norm_time specifically
     const avgWithTime = withFactor.reduce((sum, s) => sum + s.normalizedTime, 0) / withFactor.length;
-    const avgWithSize = withFactor.reduce((sum, s) => sum + s.normalizedSize, 0) / withFactor.length;
-    const avgWithFinal = (avgWithTime + avgWithSize) / 2; // Jim's formula
     const avgWithYear = Math.round(withFactor.reduce((sum, s) => sum + (s.year || 0), 0) / withFactor.length);
-    
+
+    // Get living area averages (SFLA from property data)
+    const withFactorSFLA = withFactor.filter(s => s.sfla && s.sfla > 0);
+    const avgWithLivingArea = withFactorSFLA.length > 0 ?
+      Math.round(withFactorSFLA.reduce((sum, s) => sum + s.sfla, 0) / withFactorSFLA.length) : 0;
+
     const avgWithoutTime = withoutFactor.reduce((sum, s) => sum + s.normalizedTime, 0) / withoutFactor.length;
-    const avgWithoutSize = withoutFactor.reduce((sum, s) => sum + s.normalizedSize, 0) / withoutFactor.length;
-    const avgWithoutFinal = (avgWithoutTime + avgWithoutSize) / 2;
     const avgWithoutYear = Math.round(withoutFactor.reduce((sum, s) => sum + (s.year || 0), 0) / withoutFactor.length);
-    
-    const impact = ((avgWithFinal - avgWithoutFinal) / avgWithoutFinal) * 100;
-    
-    // NULL out positive impacts for negative factors and vice versa
-    const isNegativeFactor = codes.split('/').some(c => 
-      ['BS', 'CM', 'RR', 'PL', 'ES'].includes(c)
-    );
-    const isPositiveFactor = codes.split('/').some(c => 
-      ['GV', 'GC', 'WV', 'WF'].includes(c)
-    );
-    
-    if (isNegativeFactor && impact > 0) return null;
-    if (isPositiveFactor && impact < 0) return null;
-    
+
+    const withoutFactorSFLA = withoutFactor.filter(s => s.sfla && s.sfla > 0);
+    const avgWithoutLivingArea = withoutFactorSFLA.length > 0 ?
+      Math.round(withoutFactorSFLA.reduce((sum, s) => sum + s.sfla, 0) / withoutFactorSFLA.length) : 0;
+
+    // Calculate size-adjusted sale prices using your magic formula
+    // Average size between "with" and "without" groups
+    const averageSize = (avgWithLivingArea + avgWithoutLivingArea) / 2;
+
+    // Size adjustment formula: adjusted sale = sale price + ((average size - actual size) * (price per sqft) * 0.5)
+    const adjustedSaleWith = avgWithLivingArea > 0 ?
+      Math.round(avgWithTime + ((averageSize - avgWithLivingArea) * (avgWithTime / avgWithLivingArea) * 0.5)) :
+      Math.round(avgWithTime);
+
+    const adjustedSaleWithout = avgWithoutLivingArea > 0 ?
+      Math.round(avgWithoutTime + ((averageSize - avgWithoutLivingArea) * (avgWithoutTime / avgWithoutLivingArea) * 0.5)) :
+      Math.round(avgWithoutTime);
+
+    // Calculate dollar and percent impact using adjusted prices
+    const dollarImpact = adjustedSaleWith - adjustedSaleWithout;
+    const percentImpact = adjustedSaleWithout > 0 ? ((adjustedSaleWith - adjustedSaleWithout) / adjustedSaleWithout) * 100 : 0;
+
     return {
       withCount: withFactor.length,
       withYearBuilt: avgWithYear,
-      withNormTime: Math.round(avgWithTime),
-      withNormSize: Math.round(avgWithSize),
-      withAvg: Math.round(avgWithFinal),
+      withLivingArea: avgWithLivingArea,
+      withSalePrice: Math.round(avgWithTime), // values_norm_time
       withoutCount: withoutFactor.length,
       withoutYearBuilt: avgWithoutYear,
+      withoutLivingArea: avgWithoutLivingArea,
+      withoutSalePrice: Math.round(avgWithoutTime), // values_norm_time
+      adjustedSaleWith: adjustedSaleWith,
+      adjustedSaleWithout: adjustedSaleWithout,
+      dollarImpact: dollarImpact,
+      percentImpact: percentImpact.toFixed(1),
+      // Legacy fields for compatibility
+      withNormTime: Math.round(avgWithTime),
       withoutNormTime: Math.round(avgWithoutTime),
-      withoutNormSize: Math.round(avgWithoutSize),
-      withoutAvg: Math.round(avgWithoutFinal),
-      impact: impact.toFixed(1)
+      impact: percentImpact.toFixed(1)
     };
   }, [ecoObsFactors, trafficLevels]);
 
@@ -2406,14 +2518,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           types: vcsTypes,
           sheet_data: vcsSheetData
         },
-        economic_obsolescence: {
+        eco_obs_applied_adjustments: actualAdjustments,
+        eco_obs_code_config: {
           factors: ecoObsFactors,
           location_codes: locationCodes,
           traffic_levels: trafficLevels,
-          computed_adjustments: computedAdjustments,
-          actual_adjustments: actualAdjustments,
           custom_codes: customLocationCodes
         },
+        eco_obs_compound_overrides: computedAdjustments,
         updated_at: new Date().toISOString()
       };
 
@@ -3965,7 +4077,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           {data.totalSales} sales
                         </span>
-                        {` • Avg $${Math.round(data.avgPrice).toLocaleString()} • ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
+                        {` • Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
                       </span>
                     </div>
                     <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
@@ -5399,7 +5511,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '��') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('yearBuilt')}
@@ -5413,7 +5525,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'yearBuilt' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '��' : '↓') : ''}
+                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '����' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('typeUse')}
@@ -5427,7 +5539,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'typeUse' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '��') : ''}
+                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '����') : ''}
                     </th>
                   </tr>
                 </thead>
@@ -6544,130 +6656,205 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   // ========== RENDER ECONOMIC OBSOLESCENCE TAB ==========
-  const renderEconomicObsolescenceTab = () => (
-    <div style={{ padding: '20px' }}>
-      <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>Economic Obsolescence Analysis</h3>
-        <button
-          onClick={() => exportToExcel('eco-obs')}
-          style={{
-            backgroundColor: '#10B981',
-            color: 'white',
-            padding: '8px 16px',
-            borderRadius: '4px',
-            border: 'none',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px'
-          }}
-        >
-          <Download size={16} /> Export
-        </button>
-      </div>
+  const renderEconomicObsolescenceTab = () => {
+    // Show all factors including 'None' - let user decide what to filter
+    const filteredFactors = ecoObsFactors;
 
-      <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', fontSize: '12px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#F9FAFB' }}>
-                <th style={{ padding: '8px' }}>VCS</th>
-                <th style={{ padding: '8px' }}>Location</th>
-                <th style={{ padding: '8px' }}>Code</th>
-                <th style={{ padding: '8px' }}>Traffic</th>
-                <th style={{ padding: '8px' }}>Type Use</th>
-                <th style={{ padding: '8px' }}>With (Count/YrBlt/Time/Size/Avg)</th>
-                <th style={{ padding: '8px' }}>Without (Count/YrBlt/Time/Size/Avg)</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>Impact</th>
-                <th style={{ padding: '8px', textAlign: 'center' }}>Apply</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.keys(ecoObsFactors).sort().map(vcs => 
-                Object.keys(ecoObsFactors[vcs]).filter(codes => codes !== 'None').map((codes, index) => {
-                  const key = `${vcs}_${codes}`;
-                  const typeUse = typeUseFilter[key] || 'all';
-                  const impact = calculateEcoObsImpact(vcs, codes, typeUse);
-                  
-                  if (!impact) return null;
-                  
-                  return (
-                    <tr key={key} style={{ backgroundColor: index % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                      <td style={{ padding: '8px', fontWeight: 'bold' }}>{vcs}</td>
-                      <td style={{ padding: '8px' }}>{codes}</td>
-                      <td style={{ padding: '8px' }}>{codes}</td>
-                      <td style={{ padding: '8px' }}>
-                        {codes.includes('BS') ? (
-                          <select
-                            value={trafficLevels[key] || ''}
-                            onChange={(e) => updateTrafficLevel(key, e.target.value)}
+    return (
+      <div style={{ padding: '20px' }}>
+        <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>Economic Obsolescence Analysis</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label style={{ fontSize: '14px', fontWeight: '500' }}>Type Use Filter:</label>
+              <select
+                value={globalEcoObsTypeFilter}
+                onChange={(e) => updateGlobalEcoObsTypeFilter(e.target.value)}
+                style={{
+                  padding: '6px 12px',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  minWidth: '140px',
+                  backgroundColor: 'white'
+                }}
+              >
+                <option value="all">All</option>
+                <option value="1">Single Family</option>
+                <option value="2">Two Family</option>
+                <option value="42">Multi-Family</option>
+                <option value="30">Townhouse</option>
+              </select>
+            </div>
+            <button
+              onClick={() => exportToExcel('eco-obs')}
+              style={{
+                backgroundColor: '#10B981',
+                color: 'white',
+                padding: '8px 16px',
+                borderRadius: '4px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <Download size={16} /> Export
+            </button>
+          </div>
+        </div>
+
+        <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#F8F9FA', borderBottom: '2px solid #E5E7EB' }}>
+                  <th style={{ padding: '8px 4px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>VCS</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>Locational Analysis</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>Code</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>With Year Built</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>With Living Area</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>With Sale Price</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>Without Year Built</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>Without Living Area</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>Without Sale Price</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>Adjusted Sale With</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>Adjusted Sale Without</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>Dollar Impact</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>Percent Impact</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>Applied+%</th>
+                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', fontSize: '10px' }}>Applied-%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.keys(filteredFactors).sort().map(vcs => {
+                  return Object.keys(filteredFactors[vcs]).sort().map((locationAnalysis, index) => {
+                    const key = `${vcs}_${locationAnalysis}`;
+                    const impact = calculateEcoObsImpact(vcs, locationAnalysis, globalEcoObsTypeFilter);
+                    const rowIndex = Object.keys(filteredFactors).indexOf(vcs) * Object.keys(filteredFactors[vcs]).length + index;
+
+                    // Check if row should be grayed out (no "with" sales data)
+                    const hasWithData = impact && impact.withCount > 0;
+                    const dataCellStyle = !hasWithData ? { color: '#9CA3AF', opacity: 0.6 } : {};
+
+                    return (
+                      <tr key={key} style={{
+                        backgroundColor: rowIndex % 2 === 0 ? 'white' : '#FAFBFC',
+                        borderBottom: '1px solid #E5E7EB'
+                      }}>
+                        {/* Keep VCS, Description, Code normal regardless of data availability */}
+                        <td style={{ padding: '6px 4px', fontWeight: '600', color: '#1F2937', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>{vcs}</td>
+                        <td style={{ padding: '6px 4px', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px', maxWidth: '150px', wordWrap: 'break-word' }}>
+                          {locationAnalysis}
+                        </td>
+                        <td style={{ padding: '6px 4px', color: '#6B7280', borderRight: '1px solid #E5E7EB', fontSize: '10px', textAlign: 'center' }}>
+                          <input
+                            type="text"
+                            placeholder="TBD"
                             style={{
-                              padding: '2px',
+                              width: '40px',
+                              padding: '2px 4px',
                               border: '1px solid #D1D5DB',
-                              borderRadius: '4px',
-                              fontSize: '11px'
+                              borderRadius: '3px',
+                              fontSize: '10px',
+                              textAlign: 'center',
+                              backgroundColor: 'white'
                             }}
-                          >
-                            <option value="">-</option>
-                            <option value="LT">LT</option>
-                            <option value="MT">MT</option>
-                            <option value="HT">HT</option>
-                          </select>
-                        ) : '-'}
-                      </td>
-                      <td style={{ padding: '8px' }}>
-                        <select
-                          value={typeUse}
-                          onChange={(e) => updateTypeUseFilter(vcs, codes, e.target.value)}
-                          style={{
-                            padding: '2px',
-                            border: '1px solid #D1D5DB',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            width: '100px'
-                          }}
-                        >
-                          <option value="all">All</option>
-                          <option value="10">Single Family</option>
-                          <option value="11">Two Family</option>
-                          <option value="42">Multi-Family</option>
-                        </select>
-                      </td>
-                      <td style={{ padding: '8px', fontSize: '11px' }}>
-                        {`${impact.withCount}/${impact.withYearBuilt}/$${(impact.withNormTime/1000).toFixed(0)}k/$${(impact.withNormSize/1000).toFixed(0)}k/$${(impact.withAvg/1000).toFixed(0)}k`}
-                      </td>
-                      <td style={{ padding: '8px', fontSize: '11px' }}>
-                        {`${impact.withoutCount}/${impact.withoutYearBuilt}/$${(impact.withoutNormTime/1000).toFixed(0)}k/$${(impact.withoutNormSize/1000).toFixed(0)}k/$${(impact.withoutAvg/1000).toFixed(0)}k`}
-                      </td>
-                      <td style={{ padding: '8px', textAlign: 'center', fontWeight: 'bold', color: parseFloat(impact.impact) < 0 ? '#DC2626' : '#10B981' }}>
-                        {impact.impact}%
-                      </td>
-                      <td style={{ padding: '8px' }}>
-                        <input
-                          type="number"
-                          value={actualAdjustments[key] || ''}
-                          onChange={(e) => updateActualAdjustment(vcs, codes, e.target.value)}
-                          placeholder="-"
-                          style={{
-                            width: '50px',
-                            padding: '2px',
-                            border: '1px solid #D1D5DB',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            textAlign: 'center'
-                          }}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                          />
+                        </td>
+                        {/* Data columns - gray out when no data */}
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
+                          {impact && impact.withYearBuilt ? impact.withYearBuilt : '-'}
+                        </td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
+                          {impact && impact.withLivingArea ? impact.withLivingArea.toLocaleString() : '-'}
+                        </td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
+                          {impact && impact.withSalePrice ? `$${impact.withSalePrice.toLocaleString()}` : '-'}
+                        </td>
+
+                        {/* Without Factor columns */}
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
+                          {impact && impact.withoutYearBuilt ? impact.withoutYearBuilt : '-'}
+                        </td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
+                          {impact && impact.withoutLivingArea ? impact.withoutLivingArea.toLocaleString() : '-'}
+                        </td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
+                          {impact && impact.withoutSalePrice ? `$${impact.withoutSalePrice.toLocaleString()}` : '-'}
+                        </td>
+
+                        {/* Adjusted Sales columns */}
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
+                          {impact && impact.adjustedSaleWith ? `$${impact.adjustedSaleWith.toLocaleString()}` : '-'}
+                        </td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
+                          {impact && impact.adjustedSaleWithout ? `$${impact.adjustedSaleWithout.toLocaleString()}` : '-'}
+                        </td>
+
+                        {/* Impact columns */}
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', fontWeight: 'bold', ...dataCellStyle }}>
+                          {impact && impact.dollarImpact ? `$${impact.dollarImpact.toLocaleString()}` : '-'}
+                        </td>
+                        <td style={{
+                          padding: '6px 4px',
+                          textAlign: 'center',
+                          fontWeight: 'bold',
+                          fontSize: '10px',
+                          borderRight: '1px solid #E5E7EB',
+                          ...dataCellStyle,
+                          color: !hasWithData ? '#9CA3AF' : (impact && impact.percentImpact !== 'N/A' ? (parseFloat(impact.percentImpact) < 0 ? '#DC2626' : '#10B981') : '#9CA3AF')
+                        }}>
+                          {impact && impact.percentImpact ? `${impact.percentImpact}%` : 'N/A'}
+                        </td>
+
+                        {/* Applied adjustment columns - Always normal styling regardless of data availability */}
+                        <td style={{ padding: '6px 4px', textAlign: 'center', borderRight: '1px solid #E5E7EB' }}>
+                          <input
+                            type="number"
+                            value={actualAdjustments[`${key}_positive`] || ''}
+                            onChange={(e) => updateActualAdjustment(vcs, `${locationAnalysis}_positive`, e.target.value)}
+                            placeholder="-"
+                            style={{
+                              width: '40px',
+                              padding: '2px 4px',
+                              border: '1px solid #D1D5DB',
+                              borderRadius: '3px',
+                              fontSize: '10px',
+                              textAlign: 'center',
+                              backgroundColor: 'white'
+                            }}
+                          />
+                        </td>
+                        <td style={{ padding: '6px 4px', textAlign: 'center' }}>
+                          <input
+                            type="number"
+                            value={actualAdjustments[`${key}_negative`] || ''}
+                            onChange={(e) => updateActualAdjustment(vcs, `${locationAnalysis}_negative`, e.target.value)}
+                            placeholder="-"
+                            style={{
+                              width: '40px',
+                              padding: '2px 4px',
+                              border: '1px solid #D1D5DB',
+                              borderRadius: '3px',
+                              fontSize: '10px',
+                              textAlign: 'center',
+                              backgroundColor: 'white'
+                            }}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  });
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // ========== MAIN RENDER ==========
   if (isLoading) {
