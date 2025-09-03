@@ -428,41 +428,41 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       // DEBUG: Check initial properties data structure
       console.log(`🚀 Starting time normalization with ${properties.length} total properties`);
       if (properties.length > 0) {
-        console.log('🔍 RAW PROPERTIES SAMPLE (first property COMPLETE):');
-        console.log('🔍 FIRST PROPERTY FULL OBJECT:', properties[0]);
+        console.log('🔍 RAW PROPERTIES SAMPLE (first property):');
 
-        console.log('🔍 AVAILABLE FIELD NAMES IN PROPERTIES:');
-        const allKeys = Object.keys(properties[0]);
-        console.log('📋 ALL KEYS:', allKeys);
-
-        // Look for any field that might contain class, assessed, or sales info
-        const classFields = allKeys.filter(key =>
-          key.toLowerCase().includes('class') ||
-          key.toLowerCase().includes('m4') ||
-          key.toLowerCase().includes('property')
-        );
-        const assessedFields = allKeys.filter(key =>
-          key.toLowerCase().includes('value') ||
-          key.toLowerCase().includes('assess') ||
-          key.toLowerCase().includes('total') ||
-          key.toLowerCase().includes('mod')
-        );
-        const salesFields = allKeys.filter(key =>
-          key.toLowerCase().includes('sales') ||
-          key.toLowerCase().includes('nu') ||
-          key.toLowerCase().includes('instrument')
-        );
-
-        console.log('🏗️ CLASS-RELATED FIELDS:', classFields);
-        console.log('💰 ASSESSED-RELATED FIELDS:', assessedFields);
-        console.log('📋 SALES-RELATED FIELDS:', salesFields);
-
-        // Show values for these fields
         const firstProp = properties[0];
-        console.log('🔍 VALUES FOR FIRST PROPERTY:');
-        classFields.forEach(field => console.log(`  ${field}:`, firstProp[field]));
-        assessedFields.forEach(field => console.log(`  ${field}:`, firstProp[field]));
-        salesFields.forEach(field => console.log(`  ${field}:`, firstProp[field]));
+        console.log('🔍 CRITICAL FIELD CHECK FOR FIRST PROPERTY:');
+        console.log('  🏗️ property_m4_class:', firstProp.property_m4_class, '(should be "2", "1", "3B", etc.)');
+        console.log('  💰 values_mod_total:', firstProp.values_mod_total, '(should be 64900, 109900, etc.)');
+        console.log('  📋 sales_nu:', firstProp.sales_nu, '(should be empty or "1")');
+        console.log('  ✅ sales_price:', firstProp.sales_price, '(working field for comparison)');
+        console.log('  ✅ property_location:', firstProp.property_location, '(working field for comparison)');
+
+        // Check if the problem is that the fields exist but are being overwritten
+        console.log('🔍 FULL PROPERTY OBJECT INSPECTION:');
+        console.log('  property_composite_key:', firstProp.property_composite_key);
+        console.log('  ALL KEYS:', Object.keys(firstProp));
+
+        // If the fields are undefined, let's see what properties DO have values
+        if (!firstProp.property_m4_class) {
+          console.error('❌ property_m4_class is undefined in properties array!');
+          console.log('  🔍 Checking for similar fields...');
+          Object.keys(firstProp).forEach(key => {
+            if (key.includes('class') || key.includes('m4')) {
+              console.log(`    ${key}:`, firstProp[key]);
+            }
+          });
+        }
+
+        if (!firstProp.values_mod_total) {
+          console.error('❌ values_mod_total is undefined in properties array!');
+          console.log('  🔍 Checking for similar fields...');
+          Object.keys(firstProp).forEach(key => {
+            if (key.includes('value') || key.includes('total') || key.includes('assess') || key.includes('mod')) {
+              console.log(`    ${key}:`, firstProp[key]);
+            }
+          });
+        }
       }
 
       // Create a map of existing keep/reject decisions
