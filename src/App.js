@@ -80,16 +80,16 @@ useEffect(() => {
   });
 
   // ==========================================
-  // PERSISTENT CACHE STATE
+  // LIVE DATA STATE - NO CACHING
   // ==========================================
-  const [masterCache, setMasterCache] = useState({
+  const [appData, setAppData] = useState({
     // Core Data
     jobs: [],
     employees: [],
     managers: [],
     planningJobs: [],
     archivedJobs: [],
-    
+
     // Billing Data
     activeJobs: [],
     legacyJobs: [],
@@ -97,13 +97,13 @@ useEffect(() => {
     receivables: [],
     distributions: [],
     billingMetrics: null,
-    
+
     // Computed Data
     jobFreshness: {},
     assignedPropertyCounts: {},
     workflowStats: {},
     globalInspectionAnalytics: null,
-    
+
     // Payroll Data
     archivedPayrollPeriods: [],
     dataRecency: [],
@@ -111,19 +111,14 @@ useEffect(() => {
     // Additional Data for Components
     countyHpiData: [],
     jobResponsibilities: [],
-    
-    // Cache Metadata
-    version: CACHE_VERSION,
-    lastFetched: {},
+
+    // Live State
     isLoading: false,
-    isInitialized: false,
-    loadSource: null, // 'cache' | 'database' | 'hybrid'
-    cacheAge: null
+    isInitialized: false
   });
 
   // UI State
-  const [cacheStatus, setCacheStatus] = useState({
-    isStale: false,
+  const [loadingStatus, setLoadingStatus] = useState({
     isRefreshing: false,
     lastError: null,
     message: ''
