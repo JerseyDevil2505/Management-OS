@@ -1297,6 +1297,47 @@ const loadJobs = async () => {
         .update({ percent_billed: newTotalPercentage })
         .eq('id', billingEvent.job_id);
 
+      // Recalculate remaining_due for all remaining events
+      const { data: jobData } = await supabase
+        .from('jobs')
+        .select(`
+          id,
+          job_contracts(contract_amount),
+          billing_events(
+            id,
+            amount_billed,
+            billing_date
+          )
+        `)
+        .eq('id', billingEvent.job_id)
+        .single();
+
+      if (jobData && jobData.job_contracts?.[0]) {
+        const contractAmount = jobData.job_contracts[0].contract_amount;
+
+        // Sort events by billing date
+        const sortedEvents = jobData.billing_events.sort((a, b) =>
+          new Date(a.billing_date) - new Date(b.billing_date)
+        );
+
+        let runningTotal = 0;
+
+        // Update remaining_due for each event in chronological order
+        for (const event of sortedEvents) {
+          runningTotal += parseFloat(event.amount_billed || 0);
+          const remainingDue = contractAmount - runningTotal;
+
+          const { error } = await supabase
+            .from('billing_events')
+            .update({ remaining_due: remainingDue })
+            .eq('id', event.id);
+
+          if (error) {
+            console.error('Error updating remaining_due for event:', event.id, error);
+          }
+        }
+      }
+
       // Update the job in state without reloading
       setShowEditBilling(false);
       setEditingEvent(null);
