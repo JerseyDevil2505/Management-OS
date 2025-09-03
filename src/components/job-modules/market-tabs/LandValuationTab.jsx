@@ -6731,17 +6731,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         borderBottom: '1px solid #E5E7EB',
                         '&:hover': { backgroundColor: '#F0F9FF' }
                       }}>
-                        <td style={{ padding: '10px 8px', fontWeight: '600', color: '#1F2937', borderRight: '1px solid #E5E7EB' }}>{vcs}</td>
-                        <td style={{ padding: '10px 8px', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>
+                        <td style={{ padding: '6px 4px', fontWeight: '600', color: '#1F2937', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>{vcs}</td>
+                        <td style={{ padding: '6px 4px', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px', maxWidth: '150px', wordWrap: 'break-word' }}>
                           {locationAnalysis}
                         </td>
-                        <td style={{ padding: '10px 8px', color: '#6B7280', borderRight: '1px solid #E5E7EB', fontSize: '12px', textAlign: 'center', fontWeight: '600' }}>
-                          {(() => {
-                            const propsWithThisLocation = properties.filter(p =>
-                              p.new_vcs === vcs && p.location_analysis === locationAnalysis
-                            );
-                            return propsWithThisLocation.length;
-                          })()}
+                        <td style={{ padding: '6px 4px', color: '#6B7280', borderRight: '1px solid #E5E7EB', fontSize: '10px', textAlign: 'center' }}>
+                          TBD
                         </td>
                         <td style={{ padding: '10px 8px', fontSize: '11px', textAlign: 'center', borderRight: '1px solid #E5E7EB', fontFamily: 'monospace' }}>
                           {impact && impact.withCount > 0 ? (
