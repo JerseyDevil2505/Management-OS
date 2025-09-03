@@ -286,7 +286,7 @@ useEffect(() => {
     setTargetAllocation(numericValue);
     console.log('✅ Target allocation set to:', numericValue, typeof numericValue);
   } else {
-    console.log('��️ No target allocation found in database');
+    console.log('ℹ️ No target allocation found in database');
   }
 
 
@@ -2248,42 +2248,52 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // If we only have one side of the comparison, show what we have
     if (withFactor.length === 0) {
       const avgWithoutTime = withoutFactor.reduce((sum, s) => sum + s.normalizedTime, 0) / withoutFactor.length;
-      const avgWithoutSize = withoutFactor.reduce((sum, s) => sum + s.normalizedSize, 0) / withoutFactor.length;
-      const avgWithoutFinal = (avgWithoutTime + avgWithoutSize) / 2;
       const avgWithoutYear = Math.round(withoutFactor.reduce((sum, s) => sum + (s.year || 0), 0) / withoutFactor.length);
+      const withoutFactorSFLA = withoutFactor.filter(s => s.design && parseInt(s.design) > 0);
+      const avgWithoutLivingArea = withoutFactorSFLA.length > 0 ?
+        Math.round(withoutFactorSFLA.reduce((sum, s) => sum + parseInt(s.design || 0), 0) / withoutFactorSFLA.length) : 0;
 
       return {
         withCount: 0,
         withYearBuilt: 0,
-        withNormTime: 0,
-        withNormSize: 0,
-        withAvg: 0,
+        withLivingArea: 0,
+        withSalePrice: 0,
         withoutCount: withoutFactor.length,
         withoutYearBuilt: avgWithoutYear,
+        withoutLivingArea: avgWithoutLivingArea,
+        withoutSalePrice: Math.round(avgWithoutTime),
+        adjustedSaleWith: 0,
+        adjustedSaleWithout: Math.round(avgWithoutTime),
+        dollarImpact: 0,
+        percentImpact: 'N/A',
+        withNormTime: 0,
         withoutNormTime: avgWithoutTime,
-        withoutNormSize: avgWithoutSize,
-        withoutAvg: avgWithoutFinal,
         impact: 'N/A'
       };
     }
 
     if (withoutFactor.length === 0) {
       const avgWithTime = withFactor.reduce((sum, s) => sum + s.normalizedTime, 0) / withFactor.length;
-      const avgWithSize = withFactor.reduce((sum, s) => sum + s.normalizedSize, 0) / withFactor.length;
-      const avgWithFinal = (avgWithTime + avgWithSize) / 2;
       const avgWithYear = Math.round(withFactor.reduce((sum, s) => sum + (s.year || 0), 0) / withFactor.length);
+      const withFactorSFLA = withFactor.filter(s => s.design && parseInt(s.design) > 0);
+      const avgWithLivingArea = withFactorSFLA.length > 0 ?
+        Math.round(withFactorSFLA.reduce((sum, s) => sum + parseInt(s.design || 0), 0) / withFactorSFLA.length) : 0;
 
       return {
         withCount: withFactor.length,
         withYearBuilt: avgWithYear,
-        withNormTime: avgWithTime,
-        withNormSize: avgWithSize,
-        withAvg: avgWithFinal,
+        withLivingArea: avgWithLivingArea,
+        withSalePrice: Math.round(avgWithTime),
         withoutCount: 0,
         withoutYearBuilt: 0,
+        withoutLivingArea: 0,
+        withoutSalePrice: 0,
+        adjustedSaleWith: Math.round(avgWithTime),
+        adjustedSaleWithout: 0,
+        dollarImpact: 0,
+        percentImpact: 'No baseline',
+        withNormTime: avgWithTime,
         withoutNormTime: 0,
-        withoutNormSize: 0,
-        withoutAvg: 0,
         impact: 'No baseline'
       };
     }
@@ -5504,7 +5514,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'yearBuilt' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '��' : '↓') : ''}
+                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '����' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('typeUse')}
