@@ -2345,7 +2345,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }
 
     if (!targetAllocation || targetAllocation === '') {
-      console.log('��� Save target allocation cancelled: No target allocation value');
+      console.log('❌ Save target allocation cancelled: No target allocation value');
       alert('Please enter a target allocation percentage before saving.');
       return;
     }
@@ -6695,9 +6695,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </thead>
               <tbody>
                 {Object.keys(filteredFactors).sort().map(vcs => {
-                  return Object.keys(filteredFactors[vcs]).sort().map((codes, index) => {
-                    const key = `${vcs}_${codes}`;
-                    const impact = calculateEcoObsImpact(vcs, codes, globalEcoObsTypeFilter);
+                  return Object.keys(filteredFactors[vcs]).sort().map((locationAnalysis, index) => {
+                    const key = `${vcs}_${locationAnalysis}`;
+                    const impact = calculateEcoObsImpact(vcs, locationAnalysis, globalEcoObsTypeFilter);
                     const rowIndex = Object.keys(filteredFactors).indexOf(vcs) * Object.keys(filteredFactors[vcs]).length + index;
 
                     return (
