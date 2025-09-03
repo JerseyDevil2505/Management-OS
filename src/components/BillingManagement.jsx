@@ -1266,11 +1266,9 @@ const loadJobs = async () => {
         onDataUpdate('billing_event', editingEvent.id, updateData);
       }
 
-      // Only refresh if onDataUpdate isn't available
-      if (!onDataUpdate && onRefresh) {
-        console.log('🔄 Falling back to full refresh');
-        await onRefresh();
-      }
+      // Always load fresh data after billing updates
+      console.log('🔄 Loading fresh data after billing update');
+      await loadFreshDataFromDB();
     } catch (error) {
       console.error('Error updating billing event:', error);
       alert('Error updating billing event: ' + error.message);
