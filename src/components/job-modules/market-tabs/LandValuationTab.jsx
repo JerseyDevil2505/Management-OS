@@ -2253,7 +2253,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // ========== SAVE TARGET ALLOCATION FUNCTION ==========
   const saveTargetAllocation = async () => {
     if (!jobData?.id) {
-      console.log('�� Save target allocation cancelled: No job ID');
+      console.log('��� Save target allocation cancelled: No job ID');
       alert('Error: No job ID found. Cannot save target allocation.');
       return;
     }
@@ -2406,14 +2406,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           types: vcsTypes,
           sheet_data: vcsSheetData
         },
-        economic_obsolescence: {
+        eco_obs_applied_adjustments: actualAdjustments,
+        eco_obs_code_config: {
           factors: ecoObsFactors,
           location_codes: locationCodes,
           traffic_levels: trafficLevels,
-          computed_adjustments: computedAdjustments,
-          actual_adjustments: actualAdjustments,
           custom_codes: customLocationCodes
         },
+        eco_obs_compound_overrides: computedAdjustments,
         updated_at: new Date().toISOString()
       };
 
