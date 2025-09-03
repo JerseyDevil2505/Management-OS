@@ -1024,6 +1024,12 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
   }, [blockTypeFilter, colorScaleStart, colorScaleIncrement, normalizationStats.sizeNormalized, processBlockAnalysis]);
 
 const handleSalesDecision = async (saleId, decision) => {
+  // CRITICAL FIX: Get the sale's PREVIOUS state before updating
+  const previousSale = timeNormalizedSales.find(s => s.id === saleId);
+  const previousDecision = previousSale?.keep_reject;
+
+  console.log(`🔄 Changing sale ${saleId} from '${previousDecision}' to '${decision}'`);
+
   const updatedSales = timeNormalizedSales.map(sale =>
     sale.id === saleId ? { ...sale, keep_reject: decision } : sale
   );
@@ -1038,50 +1044,59 @@ const handleSalesDecision = async (saleId, decision) => {
   };
   setNormalizationStats(newStats);
 
-  // Save the updated sales list to market_land_valuation to persist decisions
   try {
+    // ALWAYS save the decision to market_land_valuation first for persistence
     await worksheetService.saveTimeNormalizedSales(jobData.id, updatedSales, newStats);
+    console.log(`💾 Saved decision (${decision}) for property ${saleId} to market_land_valuation`);
 
-    //Clear cache after saving individual decision
+    // Handle database cleanup for rejected sales
+    if (decision === 'reject') {
+      // Clear normalized values from property_market_analysis regardless of previous state
+      const { error } = await supabase
+        .from('property_market_analysis')
+        .update({
+          values_norm_time: null,
+          values_norm_size: null
+        })
+        .eq('property_composite_key', previousSale.property_composite_key);
+
+      if (error) {
+        console.error('Error clearing normalized values:', error);
+      } else {
+        console.log(`🗑️ Cleared normalized values for rejected property ${saleId}`);
+      }
+    }
+
+    // Handle database updates for kept sales
+    if (decision === 'keep' && previousSale) {
+      // Save time normalized value to property_market_analysis
+      const { error } = await supabase
+        .from('property_market_analysis')
+        .upsert({
+          property_composite_key: previousSale.property_composite_key,
+          values_norm_time: previousSale.time_normalized_price
+        }, { onConflict: 'property_composite_key' });
+
+      if (error) {
+        console.error('Error saving normalized value:', error);
+      } else {
+        console.log(`💾 Saved normalized value for kept property ${saleId}`);
+      }
+    }
+
+    // CRITICAL: Always clear cache after any decision change
     if (onUpdateJobCache && jobData?.id) {
-      console.log('🗑️ Clearing cache after sales decision');
+      console.log('🗑️ Clearing cache after sales decision change');
       onUpdateJobCache(jobData.id, null);
     }
-    
-    console.log(`💾 Saved decision (${decision}) for property ${saleId} to database`);
-  } catch (error) {
-    console.error('Error persisting decision to market_land_valuation:', error);
-  }
 
-  // Only remove from property_records if this was previously saved as "keep"
-  // (i.e., the values actually exist in the database)
-  if (decision === 'reject') {
-    // Find the sale in the current list
-    const sale = timeNormalizedSales.find(s => s.id === saleId);
-    
-    // Only update database if it was previously marked as 'keep'
-    // (which means values were saved to property_records)
-    if (sale && sale.keep_reject === 'keep') {
-      try {
-        const { error } = await supabase
-          .from('property_market_analysis')
-          .update({
-            values_norm_time: null,
-            values_norm_size: null
-          })
-          .eq('property_composite_key', sale.property_composite_key);
-        
-        if (error) {
-          console.error('Error removing normalized values:', error);
-        } else {
-          console.log(`🗑️ Removed normalized values for previously kept property ${saleId}`);
-        }
-      } catch (error) {
-        console.error('Error updating property_records:', error);
-      }
-    } else {
-      console.log(`📝 Marked ${saleId} as reject (was ${sale?.keep_reject || 'pending'}) - will handle in batch save`);
-    }
+  } catch (error) {
+    console.error('Error handling sales decision:', error);
+    alert(`Error saving decision: ${error.message}`);
+
+    // Revert the UI change if database operation failed
+    setTimeNormalizedSales(timeNormalizedSales);
+    setNormalizationStats(normalizationStats);
   }
 };
      
