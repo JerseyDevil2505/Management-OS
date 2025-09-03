@@ -347,7 +347,7 @@ useEffect(() => {
           property_composite_key: prop.property_composite_key,
           ...parsed,
           property_location: prop.property_location,
-          property_class: prop.property_class || prop.property_m4_class,
+          property_class: prop.property_m4_class,
           property_vcs: prop.property_vcs || prop.current_vcs || '',
           new_vcs: prop.new_vcs || '',
           location_analysis: prop.location_analysis || '',
