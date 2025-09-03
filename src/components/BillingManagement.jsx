@@ -1463,14 +1463,47 @@ const loadJobs = async () => {
       setShowEditBilling(false);
       setEditingEvent(null);
 
-      // Force fresh data refresh for real-time updates
-      console.log('✅ Billing event deleted - forcing fresh data refresh');
-      await fetchFreshData(true);
+      // Sync cache without aggressive refresh
+      console.log('✅ Billing event deleted - syncing cache');
 
-      // Small delay to ensure DB changes are committed before refresh
-      setTimeout(async () => {
-        if (onRefresh) await onRefresh();
-      }, 100);
+      // Optimistically remove from local state
+      if (activeTab === 'legacy') {
+        setLegacyJobs(prevJobs =>
+          prevJobs.map(job => {
+            if (job.id === editingEvent.job_id) {
+              return {
+                ...job,
+                billing_events: job.billing_events?.filter(event => event.id !== editingEvent.id) || []
+              };
+            }
+            return job;
+          })
+        );
+      } else if (activeTab === 'active') {
+        setJobs(prevJobs =>
+          prevJobs.map(job => {
+            if (job.id === editingEvent.job_id) {
+              return {
+                ...job,
+                billing_events: job.billing_events?.filter(event => event.id !== editingEvent.id) || []
+              };
+            }
+            return job;
+          })
+        );
+      }
+
+      // Sync cache
+      if (onDataUpdate) {
+        onDataUpdate('billing_event_delete', editingEvent.id, { deleted: true });
+      }
+
+      // Only refresh if onDataUpdate isn't available
+      if (!onDataUpdate && onRefresh) {
+        setTimeout(async () => {
+          await onRefresh();
+        }, 100);
+      }
     } catch (error) {
       console.error('Error deleting billing event:', error);
     }
