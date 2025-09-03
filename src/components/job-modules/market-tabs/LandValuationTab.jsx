@@ -3631,7 +3631,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             setIncludedSales(prev => {
                               const newSet = new Set(prev);
                               newSet.delete(sale.id);
-                              console.log('��� Removed from included sales, new size:', newSet.size);
+                              console.log('❌ Removed from included sales, new size:', newSet.size);
                               return newSet;
                             });
                           }
@@ -6756,37 +6756,37 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           />
                         </td>
                         {/* With Factor columns */}
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', backgroundColor: '#EEF2FF' }}>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
                           {impact && impact.withYearBuilt ? impact.withYearBuilt : '-'}
                         </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', backgroundColor: '#EEF2FF' }}>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
                           {impact && impact.withLivingArea ? impact.withLivingArea.toLocaleString() : '-'}
                         </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', backgroundColor: '#EEF2FF' }}>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
                           {impact && impact.withSalePrice ? `$${(impact.withSalePrice/1000).toFixed(0)}k` : '-'}
                         </td>
 
                         {/* Without Factor columns */}
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', backgroundColor: '#F0FDF4' }}>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
                           {impact && impact.withoutYearBuilt ? impact.withoutYearBuilt : '-'}
                         </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', backgroundColor: '#F0FDF4' }}>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
                           {impact && impact.withoutLivingArea ? impact.withoutLivingArea.toLocaleString() : '-'}
                         </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', backgroundColor: '#F0FDF4' }}>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
                           {impact && impact.withoutSalePrice ? `$${(impact.withoutSalePrice/1000).toFixed(0)}k` : '-'}
                         </td>
 
                         {/* Adjusted Sales columns */}
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB' }}>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
                           {impact && impact.adjustedSaleWith ? `$${(impact.adjustedSaleWith/1000).toFixed(0)}k` : '-'}
                         </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB' }}>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
                           {impact && impact.adjustedSaleWithout ? `$${(impact.adjustedSaleWithout/1000).toFixed(0)}k` : '-'}
                         </td>
 
                         {/* Impact columns */}
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', fontWeight: 'bold' }}>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', fontWeight: 'bold', ...normalCellStyle }}>
                           {impact && impact.dollarImpact ? `$${(impact.dollarImpact/1000).toFixed(0)}k` : '-'}
                         </td>
                         <td style={{
@@ -6795,7 +6795,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           fontWeight: 'bold',
                           fontSize: '10px',
                           borderRight: '1px solid #E5E7EB',
-                          color: impact && impact.percentImpact !== 'N/A' ? (parseFloat(impact.percentImpact) < 0 ? '#DC2626' : '#10B981') : '#9CA3AF'
+                          color: !hasWithData ? '#9CA3AF' : (impact && impact.percentImpact !== 'N/A' ? (parseFloat(impact.percentImpact) < 0 ? '#DC2626' : '#10B981') : '#9CA3AF')
                         }}>
                           {impact && impact.percentImpact ? `${impact.percentImpact}%` : 'N/A'}
                         </td>
