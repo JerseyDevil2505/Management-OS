@@ -1140,7 +1140,14 @@ const loadJobs = async () => {
 
       setShowEditBilling(false);
       setEditingEvent(null);
-      if (onRefresh) onRefresh();
+
+      // Force fresh data refresh for real-time updates
+      console.log('✅ Billing event updated - forcing fresh data refresh');
+      await fetchFreshData(true);
+
+      if (onRefresh) {
+        await onRefresh();
+      }
     } catch (error) {
       console.error('Error updating billing event:', error);
       alert('Error updating billing event: ' + error.message);
