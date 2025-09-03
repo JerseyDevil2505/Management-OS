@@ -257,7 +257,6 @@ useEffect(() => {
 
   // If user is currently on allocation tab, force immediate recalculation
   if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
-    console.log('🔄 User on allocation tab - forcing immediate recalculation');
     setTimeout(() => {
       loadAllocationStudyData();
     }, 100);
@@ -1555,7 +1554,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
     });
 
-    console.log('🏠 Processed allocation data:', {
+    console.log('�� Processed allocation data:', {
       totalVacantSales: processedVacantSales.length,
       positiveSales: processedVacantSales.filter(s => s.isPositive).length,
       negativeSales: processedVacantSales.filter(s => !s.isPositive).length
