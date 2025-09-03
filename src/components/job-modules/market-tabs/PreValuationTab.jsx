@@ -453,10 +453,23 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         // Parse composite key for card filtering
         const parsed = parseCompositeKey(p.property_composite_key);
         const card = parsed.card?.toUpperCase();
-        
+
         // Card filter based on vendor
         if (vendorType === 'Microsystems') {
-          if (card !== 'M') return false;
+          // For Microsystems: Include M cards, and A cards only if no M card exists for same property
+          if (card === 'M') {
+            return true; // Always include M cards
+          } else if (card === 'A') {
+            // Check if there's an M card for the same block/lot/qualifier
+            const baseKey = `${parsed.block}-${parsed.lot}_${parsed.qualifier}`;
+            const hasMCard = properties.some(other => {
+              const otherParsed = parseCompositeKey(other.property_composite_key);
+              const otherBaseKey = `${otherParsed.block}-${otherParsed.lot}_${otherParsed.qualifier}`;
+              return otherBaseKey === baseKey && otherParsed.card?.toUpperCase() === 'M';
+            });
+            return !hasMCard; // Include A card only if no M card exists
+          }
+          return false; // Exclude all other cards
         } else { // BRT
           if (card !== '1') return false;
         }
@@ -2423,7 +2436,7 @@ const analyzeImportFile = async (file) => {
                     <li>• <strong>Row/Townhouses (3x):</strong> All codes starting with 3</li>
                     <li>• <strong>Multifamily (4x):</strong> All codes starting with 4</li>
                     <li>• <strong>Conversions (5x):</strong> All codes starting with 5</li>
-                    <li>• <strong>Condominiums (6x):</strong> All codes starting with 6</li>
+                    <li>�� <strong>Condominiums (6x):</strong> All codes starting with 6</li>
                   </ul>
                 </div>
 
