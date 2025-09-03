@@ -2285,7 +2285,8 @@ const loadJobs = async () => {
                                   if (error) throw error;
                                   
                                   alert('Legacy job deleted successfully');
-                                  if (onRefresh) onRefresh();   
+                                  // Refresh all data immediately after deleting legacy job
+                                  await loadAllData();   
                                 } catch (error) {
                                   console.error('Error deleting legacy job:', error);
                                   alert('Error deleting job: ' + error.message);
