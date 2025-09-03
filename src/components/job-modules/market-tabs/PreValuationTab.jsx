@@ -519,10 +519,10 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         // Return property with all required display fields
         return {
           ...prop,
-          // Ensure we have all fields needed for table display
-          property_class: prop.property_class || prop.property_m4_class,
-          sales_nu: prop.sales_nu || prop.sales_instrument || prop.nu,
-          values_mod_total: prop.values_mod_total || prop.assessed_value || 0
+          // FIXED: Use correct database field names
+          property_class: prop.property_m4_class,  // Primary field is property_m4_class
+          sales_nu: prop.sales_nu,                 // Direct field
+          values_mod_total: prop.values_mod_total  // Direct field (don't default to 0)
         };
       });      
       
