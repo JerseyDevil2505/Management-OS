@@ -1453,7 +1453,7 @@ Find specific information about this property and sale. Include:
 • Property ownership/seller details
 • Tax assessment and classification details
 • Documented environmental constraints (wetlands, floodplains)
-• Municipality-specific land use characteristics
+��� Municipality-specific land use characteristics
 • Any circumstances of the sale (estate, distressed, etc.)
 
 Provide only verifiable facts with sources. Be specific and actionable for valuation purposes. 2-3 sentences.`;
@@ -6763,38 +6763,38 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             }}
                           />
                         </td>
-                        {/* With Factor columns */}
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
+                        {/* Data columns - gray out when no data */}
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
                           {impact && impact.withYearBuilt ? impact.withYearBuilt : '-'}
                         </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
                           {impact && impact.withLivingArea ? impact.withLivingArea.toLocaleString() : '-'}
                         </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
                           {impact && impact.withSalePrice ? `$${impact.withSalePrice.toLocaleString()}` : '-'}
                         </td>
 
                         {/* Without Factor columns */}
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
                           {impact && impact.withoutYearBuilt ? impact.withoutYearBuilt : '-'}
                         </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
                           {impact && impact.withoutLivingArea ? impact.withoutLivingArea.toLocaleString() : '-'}
                         </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
                           {impact && impact.withoutSalePrice ? `$${impact.withoutSalePrice.toLocaleString()}` : '-'}
                         </td>
 
                         {/* Adjusted Sales columns */}
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
                           {impact && impact.adjustedSaleWith ? `$${impact.adjustedSaleWith.toLocaleString()}` : '-'}
                         </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...normalCellStyle }}>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
                           {impact && impact.adjustedSaleWithout ? `$${impact.adjustedSaleWithout.toLocaleString()}` : '-'}
                         </td>
 
                         {/* Impact columns */}
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', fontWeight: 'bold', ...normalCellStyle }}>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', fontWeight: 'bold', ...dataCellStyle }}>
                           {impact && impact.dollarImpact ? `$${impact.dollarImpact.toLocaleString()}` : '-'}
                         </td>
                         <td style={{
@@ -6803,6 +6803,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           fontWeight: 'bold',
                           fontSize: '10px',
                           borderRight: '1px solid #E5E7EB',
+                          ...dataCellStyle,
                           color: !hasWithData ? '#9CA3AF' : (impact && impact.percentImpact !== 'N/A' ? (parseFloat(impact.percentImpact) < 0 ? '#DC2626' : '#10B981') : '#9CA3AF')
                         }}>
                           {impact && impact.percentImpact ? `${impact.percentImpact}%` : 'N/A'}
