@@ -2687,8 +2687,9 @@ const loadJobs = async () => {
                                       .eq('id', receivable.id);
                                     
                                     if (error) throw error;
-                                    
-                                    if (onRefresh) onRefresh();
+
+                                    // Refresh all data immediately after deleting receivable
+                                    await loadAllData();
                                   } catch (error) {
                                     console.error('Error deleting receivable:', error);
                                     alert('Error deleting receivable');
