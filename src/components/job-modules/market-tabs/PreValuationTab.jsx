@@ -2182,7 +2182,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('card')}
                             >
-                              Card {normSortConfig.field === 'card' && (normSortConfig.direction === 'asc' ? '��' : '↓')}
+                              Card {normSortConfig.field === 'card' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
                             </th>
                             <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-32 cursor-pointer hover:bg-gray-100"
@@ -2348,7 +2348,19 @@ const analyzeImportFile = async (file) => {
                                     })()}
                                   </td>
                                   <td className="px-4 py-3 text-sm text-right">
-                                    ${sale.values_mod_total?.toLocaleString() || '0'}
+                                    {(() => {
+                                      // DEBUG: Check all possible assessed value fields
+                                      const assessedValue = sale.values_mod_total || sale.assessed_value || sale.total_assessed || 0;
+                                      if (sale.id && sale.id.toString().endsWith('0')) { // Log every 10th for debugging
+                                        console.log(`💰 Table render assessed for sale ${sale.id}:`, {
+                                          values_mod_total: sale.values_mod_total,
+                                          assessed_value: sale.assessed_value,
+                                          total_assessed: sale.total_assessed,
+                                          displaying: assessedValue
+                                        });
+                                      }
+                                      return `$${assessedValue?.toLocaleString() || '0'}`;
+                                    })()}
                                   </td>
                                   <td className="px-4 py-3 text-sm">
                                     {sale.sales_date ? new Date(sale.sales_date).toLocaleDateString() : ''}
@@ -2360,7 +2372,20 @@ const analyzeImportFile = async (file) => {
                                     ${sale.time_normalized_price?.toLocaleString()}
                                   </td>
                                   <td className="px-4 py-3 text-sm text-right">
-                                    {sale.sales_nu || ''}
+                                    {(() => {
+                                      // DEBUG: Check all possible sales NU fields
+                                      const salesNU = sale.sales_nu || sale.sales_instrument || sale.nu || sale.sale_nu || '';
+                                      if (sale.id && sale.id.toString().endsWith('0')) { // Log every 10th for debugging
+                                        console.log(`📋 Table render sales_nu for sale ${sale.id}:`, {
+                                          sales_nu: sale.sales_nu,
+                                          sales_instrument: sale.sales_instrument,
+                                          nu: sale.nu,
+                                          sale_nu: sale.sale_nu,
+                                          displaying: salesNU
+                                        });
+                                      }
+                                      return salesNU;
+                                    })()}
                                   </td>
                                   <td className="px-4 py-3 text-sm text-center">
                                     {sale.sales_ratio ? `${(sale.sales_ratio * 100).toFixed(0)}%` : ''}
