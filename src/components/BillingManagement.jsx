@@ -3947,7 +3947,8 @@ const loadJobs = async () => {
                       invoiceNumber: '',
                       amount: ''
                     });
-                    if (onRefresh) onRefresh();
+                    // Refresh all data immediately after saving receivable
+                    await loadAllData();
                   } catch (error) {
                     console.error('Error saving receivable:', error);
                     alert('Error saving receivable');
