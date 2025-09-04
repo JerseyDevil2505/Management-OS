@@ -646,7 +646,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
-      console.log('🔄 Triggering allocation study recalculation...');
+      console.log('���� Triggering allocation study recalculation...');
       loadAllocationStudyData();
     }
   }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, includedSales, specialRegions]);
@@ -6836,23 +6836,51 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     return loc.split(/\s*(?:\/|\||,|\band\b|&)\s*/i).map(p => p.trim()).filter(Boolean);
   };
 
+  // Helper: determine polarity of a location part from mappedLocationCodes and code definitions
+  const getPartPolarity = (part) => {
+    // returns 'positive', 'negative', or null if unknown/mixed
+    const codes = new Set();
+    Object.keys(mappedLocationCodes || {}).forEach(k => {
+      if (k.endsWith(`_${part}`)) {
+        const val = (mappedLocationCodes[k] || '').toString().toUpperCase();
+        val.split('/').map(s => s.trim()).filter(Boolean).forEach(c => codes.add(c));
+      }
+    });
+    if (codes.size === 0) return null;
+    let hasPos = false;
+    let hasNeg = false;
+    codes.forEach(code => {
+      const def = DEFAULT_ECO_OBS_CODES.find(d => d.code === code);
+      const custom = customLocationCodes.find(d => d.code === code);
+      const isPos = def?.isPositive ?? custom?.isPositive ?? null;
+      if (isPos === true) hasPos = true;
+      if (isPos === false) hasNeg = true;
+    });
+    if (hasPos && !hasNeg) return 'positive';
+    if (hasNeg && !hasPos) return 'negative';
+    return null; // mixed or unknown
+  };
+
   // Apply a percent value (positive or negative) from summary into worksheet applied adjustments for all matching VCS rows
-  // This will update exact matches and also per-part matches (so compounds get updated where parts exist)
+  // This will update per-part matches (do not set compound key). Respect code polarity when deciding which applied field to set.
   const applySummaryToWorksheet = (location, value) => {
     if (value === null || value === undefined || isNaN(Number(value))) return;
     const numeric = Number(value);
+    if (!isFinite(numeric)) return;
+    // Skip locations that are tentative (contain 'possible' or '?') unless user explicitly provided inputs
+    if (/\bpossible|possibly\b|\?/i.test(location)) return;
+
     const parts = splitLocationParts(location);
     Object.keys(ecoObsFactors || {}).forEach(vcs => {
-      // update exact compound key if present
-      if (ecoObsFactors[vcs] && ecoObsFactors[vcs][location]) {
-        if (numeric >= 0) updateActualAdjustment(vcs, `${location}_positive`, Math.abs(numeric));
-        else updateActualAdjustment(vcs, `${location}_negative`, Math.abs(numeric));
-      }
-      // update any matching part keys (standalone parts)
       parts.forEach(part => {
-        if (ecoObsFactors[vcs] && ecoObsFactors[vcs][part]) {
-          if (numeric >= 0) updateActualAdjustment(vcs, `${part}_positive`, Math.abs(numeric));
-          else updateActualAdjustment(vcs, `${part}_negative`, Math.abs(numeric));
+        if (!(ecoObsFactors[vcs] && ecoObsFactors[vcs][part])) return;
+        const polarity = getPartPolarity(part);
+        if (numeric >= 0) {
+          // Only apply to positive polarity parts, or unknown
+          if (polarity !== 'negative') updateActualAdjustment(vcs, `${part}_positive`, Math.abs(numeric));
+        } else {
+          // negative numeric -> apply to negative polarity parts, or unknown
+          if (polarity !== 'positive') updateActualAdjustment(vcs, `${part}_negative`, Math.abs(numeric));
         }
       });
     });
@@ -6860,16 +6888,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   // Apply both positive and/or negative values for a location to all matching VCS rows (handles parts)
   const applySummarySet = (location, positive, negative) => {
+    // Skip tentative locations
+    if (/\bpossible|possibly\b|\?/i.test(location)) return;
     const parts = splitLocationParts(location);
     Object.keys(ecoObsFactors || {}).forEach(vcs => {
-      // exact key
-      if (ecoObsFactors[vcs] && ecoObsFactors[vcs][location]) {
-        if (positive !== null && positive !== undefined && !isNaN(Number(positive))) updateActualAdjustment(vcs, `${location}_positive`, Math.abs(Number(positive)));
-        if (negative !== null && negative !== undefined && !isNaN(Number(negative))) updateActualAdjustment(vcs, `${location}_negative`, Math.abs(Number(negative)));
-      }
-      // parts
       parts.forEach(part => {
-        if (ecoObsFactors[vcs] && ecoObsFactors[vcs][part]) {
+        if (!(ecoObsFactors[vcs] && ecoObsFactors[vcs][part])) return;
+        const polarity = getPartPolarity(part);
+        // If polarity is positive, set positive; if negative, set negative; if unknown, set both if provided
+        if (polarity === 'positive') {
+          if (positive !== null && positive !== undefined && !isNaN(Number(positive))) updateActualAdjustment(vcs, `${part}_positive`, Math.abs(Number(positive)));
+        } else if (polarity === 'negative') {
+          if (negative !== null && negative !== undefined && !isNaN(Number(negative))) updateActualAdjustment(vcs, `${part}_negative`, Math.abs(Number(negative)));
+        } else {
+          // unknown/mixed: set both sides if provided
           if (positive !== null && positive !== undefined && !isNaN(Number(positive))) updateActualAdjustment(vcs, `${part}_positive`, Math.abs(Number(positive)));
           if (negative !== null && negative !== undefined && !isNaN(Number(negative))) updateActualAdjustment(vcs, `${part}_negative`, Math.abs(Number(negative)));
         }
