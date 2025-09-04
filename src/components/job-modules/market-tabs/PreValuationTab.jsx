@@ -1286,7 +1286,7 @@ const handleSalesDecision = async (saleId, decision) => {
     // Handle database updates for kept sales
     if (decision === 'keep' && previousSale) {
       // Save time normalized value to property_market_analysis
-      const { error } = await safeUpsertPropertyMarket([{ property_composite_key: previousSale.property_composite_key, values_norm_time: previousSale.time_normalized_price }]);
+      const { error } = await safeUpsertPropertyMarket([{ job_id: jobData.id, property_composite_key: previousSale.property_composite_key, values_norm_time: previousSale.time_normalized_price }]);
       if (error) {
         console.error('Error saving normalized value:', error);
       } else {
