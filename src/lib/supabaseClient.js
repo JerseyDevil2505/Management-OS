@@ -3167,18 +3167,20 @@ export const worksheetService = {
     if (error) throw error;
   },
 
-  // Save time normalized sales results
+  // Save time normalized sales results (use upsert so it persists even if no record exists yet)
   async saveTimeNormalizedSales(jobId, sales, stats) {
+    const payload = {
+      job_id: jobId,
+      time_normalized_sales: sales,
+      normalization_stats: stats,
+      last_normalization_run: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
     const { error } = await supabase
       .from('market_land_valuation')
-      .update({
-        time_normalized_sales: sales,
-        normalization_stats: stats,
-        last_normalization_run: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .eq('job_id', jobId);
-    
+      .upsert(payload, { onConflict: 'job_id' });
+
     if (error) throw error;
   },
 
