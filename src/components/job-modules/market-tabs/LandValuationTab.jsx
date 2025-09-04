@@ -7168,8 +7168,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
         {/* SUMMARY SECTION: Top standalone location recommendations */}
         <div style={{ marginTop: '12px', padding: '12px', background: '#F8FAFC', border: '1px solid #E5E7EB', borderRadius: '8px' }}>
-          <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '8px' }}>Location Recommendations (standalone descriptions)</div>
-          <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '8px' }}>Shows average recommended percent impact across VCS for singular (non-compounded) location analyses. Click "Apply Recommended" to populate the Applied fields in the worksheet for matching rows. For BS (Busy Street) locations, use Traffic to apply Light/Medium/Heavy presets.</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <div style={{ fontSize: '13px', fontWeight: '600' }}>Location Recommendations {includeCompounded ? '(including compounded)' : '(standalone descriptions)'}</div>
+            <label style={{ fontSize: '12px', color: '#374151', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <input type="checkbox" checked={includeCompounded} onChange={(e) => setIncludeCompounded(e.target.checked)} /> Include compounded
+            </label>
+          </div>
+          <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '8px' }}>Shows average recommended percent impact across VCS for singular location analyses. For compounded descriptions we sum the component recommendations and cap at 25% (asterisked). Use the Applied inputs to set values for matching worksheet rows.</div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
               <thead>
