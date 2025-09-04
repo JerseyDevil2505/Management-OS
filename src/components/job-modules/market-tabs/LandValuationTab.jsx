@@ -6,15 +6,19 @@ import {
   Save, FileDown, MapPin,
   Home
 } from 'lucide-react';
-import { supabase, interpretCodes } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, checklistService } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
+
+// Debug shim: replace console.log/debug calls with this noop in production
+const debug = () => {};
 
 const LandValuationTab = ({
   properties,
   jobData,
   vendorType,
   marketLandData,
-  onAnalysisUpdate
+  onAnalysisUpdate,
+  onDataRefresh
 }) => {
   // ========== MAIN TAB STATE ==========
   const [activeSubTab, setActiveSubTab] = useState('land-rates');
@@ -22,6 +26,90 @@ const LandValuationTab = ({
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
+
+  // ========== MARK COMPLETE (Management Checklist) STATE ==========
+  const [isLandRatesComplete, setIsLandRatesComplete] = useState(false);
+  const [isVcsSheetComplete, setIsVcsSheetComplete] = useState(false);
+  const [isEcoObsComplete, setIsEcoObsComplete] = useState(false);
+
+  // Load initial checklist item statuses for this job
+  useEffect(() => {
+    if (!jobData?.id) return;
+    const ids = ['land-value-tables', 'vcs-reviewed', 'economic-obsolescence'];
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('checklist_item_status')
+          .select('item_id, status')
+          .eq('job_id', jobData.id)
+          .in('item_id', ids);
+
+        if (data) {
+          setIsLandRatesComplete(data.find(d => d.item_id === 'land-value-tables')?.status === 'completed');
+          setIsVcsSheetComplete(data.find(d => d.item_id === 'vcs-reviewed')?.status === 'completed');
+          setIsEcoObsComplete(data.find(d => d.item_id === 'economic-obsolescence')?.status === 'completed');
+        }
+      } catch (e) {
+        // Ignore load errors silently
+      }
+    })();
+  }, [jobData?.id]);
+
+  // Toggle helper to upsert checklist_item_status
+  const toggleChecklist = async (itemId, currentState, setter) => {
+    if (!jobData?.id) return;
+    const newStatus = currentState ? 'pending' : 'completed';
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
+      const data = await checklistService.updateItemStatus(jobData.id, itemId, newStatus, completedBy);
+
+      const persistedStatus = data?.status || newStatus;
+      const isNowCompleted = persistedStatus === 'completed';
+      setter(isNowCompleted);
+
+      try {
+        window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId, status: persistedStatus } }));
+      } catch (e) {
+        // ignore dispatch errors
+      }
+
+      try {
+        if (typeof onDataRefresh === 'function') onDataRefresh();
+      } catch (e) {
+        // ignore
+      }
+
+    } catch (error) {
+      // If there's a conflict error, try to fallback to an update path
+      try {
+        if (error && (error.code === '409' || error.message?.includes('duplicate') || error.message?.includes('conflict'))) {
+          // Attempt a direct update via service
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+      const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
+            const updated = await checklistService.updateItemStatus(jobData.id, itemId, newStatus, completedBy);
+            const persistedStatus = updated?.status || newStatus;
+            setter(persistedStatus === 'completed');
+            try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId, status: persistedStatus } })); } catch(e){}
+            try { if (typeof onDataRefresh === 'function') onDataRefresh(); } catch(e){}
+            return;
+          } catch (e) {
+            // fall through to generic error
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // Log and show a concise error message
+      try {
+        console.error('Checklist update failed:', error);
+      } catch (e) {}
+      const msg = error && (error.message || (typeof error === 'string' ? error : JSON.stringify(error))) || 'Unknown error';
+      alert(`Failed to update checklist: ${msg}`);
+    }
+  };
   
   // ========== MODE SELECTION (NEW) ==========
   const [valuationMode, setValuationMode] = useState('acre'); // acre, sf, ff
@@ -31,13 +119,26 @@ const LandValuationTab = ({
   const SPECIAL_REGIONS = [
     'Normal',
     'Pinelands',
-    'Highlands', 
+    'Highlands',
     'Coastal',
     'Wetlands',
     'Conservation',
     'Historic District',
     'Redevelopment Zone',
     'Transit Village'
+  ];
+
+  // Default Economic Obsolescence Codes (editable via UI)
+  const DEFAULT_ECO_OBS_CODES = [
+    { code: 'BS', description: 'Busy Street', isPositive: false },
+    { code: 'CM', description: 'Commercial', isPositive: false },
+    { code: 'PL', description: 'Power Lines', isPositive: false },
+    { code: 'RR', description: 'Railroad', isPositive: false },
+    { code: 'ES', description: 'Easement', isPositive: false },
+    { code: 'FZ', description: 'Flood Zone', isPositive: false },
+    { code: 'GC', description: 'Golf Course', isPositive: true },
+    { code: 'WV', description: 'Water View', isPositive: true },
+    { code: 'WF', description: 'Water Front', isPositive: true }
   ];
 
   // ========== LAND RATES STATE ==========
@@ -130,11 +231,105 @@ const LandValuationTab = ({
   // ========== ECONOMIC OBSOLESCENCE STATE - ENHANCED ==========
   const [ecoObsFactors, setEcoObsFactors] = useState({});
   const [locationCodes, setLocationCodes] = useState({});
+  const [mappedLocationCodes, setMappedLocationCodes] = useState({}); // key: `${vcs}_${location}`, value: code or compound codes
   const [trafficLevels, setTrafficLevels] = useState({});
   const [typeUseFilter, setTypeUseFilter] = useState({});
   const [computedAdjustments, setComputedAdjustments] = useState({});
   const [actualAdjustments, setActualAdjustments] = useState({});
   const [customLocationCodes, setCustomLocationCodes] = useState([]);
+  const [summaryInputs, setSummaryInputs] = useState({});
+  const [includeCompounded, setIncludeCompounded] = useState(false);
+  // Sorting for the worksheet table (vcs, location, code)
+  const [sortField, setSortField] = useState('vcs'); // 'vcs' | 'location' | 'code'
+  const [sortDir, setSortDir] = useState('asc'); // 'asc' | 'desc'
+  const toggleSort = (field) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  // Local inputs for adding new custom eco obs codes
+  const [newEcoCode, setNewEcoCode] = useState('');
+  const [newEcoDesc, setNewEcoDesc] = useState('');
+  const [newEcoIsPositive, setNewEcoIsPositive] = useState(false);
+
+  const handleAddCustomCode = useCallback(() => {
+    const code = (newEcoCode || '').toString().trim().toUpperCase();
+    if (!code) return alert('Enter a code');
+    if (customLocationCodes.some(c => c.code === code) || DEFAULT_ECO_OBS_CODES.some(c => c.code === code)) {
+      return alert('Code already exists');
+    }
+    const added = { code, description: newEcoDesc || code, isPositive: !!newEcoIsPositive };
+    setCustomLocationCodes(prev => [...prev, added]);
+    setNewEcoCode(''); setNewEcoDesc(''); setNewEcoIsPositive(false);
+  }, [newEcoCode, newEcoDesc, newEcoIsPositive, customLocationCodes]);
+
+  const handleRemoveCustomCode = useCallback((code) => {
+    setCustomLocationCodes(prev => prev.filter(c => c.code !== code));
+  }, []);
+
+  // Apply Default Mapping rules - helper (top-level hooks)
+  const keywordMap = useMemo(() => ({
+    CM: ['comm'],
+    PL: ['power lines', 'power line', 'power'],
+    RR: ['railroad', 'rail'],
+    ES: ['easement'],
+    GC: ['golf'],
+    FZ: ['flood'],
+    BS: [' rd', ' rd.', ' ave', ' ave.', ' st', ' st.', ' pl', ' pl.', ' wy', ' wy.', ' terr', ' hwy', ' route', 'road', 'avenue', 'street', 'place', 'way', 'terrace', 'highway', 'route'],
+  }), []);
+
+  const waterWords = useMemo(() => ['creek','bay','pond','ocean','lake','river','stream'], []);
+
+  const mapTokenToCode = useCallback((token) => {
+    const t = token.toLowerCase();
+    // explicit matches
+    if (t.includes('comm')) return 'CM';
+    if (t.includes('power lines') || t.includes('power line') || t.includes('power')) return 'PL';
+    if (t.includes('railroad') || t.includes('rail')) return 'RR';
+    if (t.includes('easement')) return 'ES';
+    if (t.includes('golf')) return 'GC';
+    if (t.includes('flood')) return 'FZ';
+    // road tokens
+    for (const kw of keywordMap.BS) {
+      if (t.includes(kw)) return 'BS';
+    }
+    // water view/front
+    const hasWater = waterWords.some(w => t.includes(w));
+    if (t.includes('front') && hasWater) return 'WF';
+    if (t.includes('view') && hasWater) return 'WV';
+    // fallback: if contains water word with no front/view, prefer WV
+    if (hasWater) return 'WV';
+    return null;
+  }, [keywordMap, waterWords]);
+
+  const applyDefaultMapping = useCallback(() => {
+    const newMap = { ...mappedLocationCodes };
+    Object.keys(ecoObsFactors || {}).forEach(vcs => {
+      Object.keys(ecoObsFactors[vcs] || {}).forEach(locationAnalysis => {
+        const key = `${vcs}_${locationAnalysis}`;
+        // skip if already mapped
+        if (newMap[key] && newMap[key].trim() !== '') return;
+        // split compound tokens
+        const parts = locationAnalysis.split(/\/|\|| and | & |,|\//i).map(p => p.trim()).filter(Boolean);
+        const codes = parts.map(p => mapTokenToCode(p)).filter(Boolean);
+        if (codes.length > 0) {
+          newMap[key] = codes.join('/');
+        } else {
+          // leave undefined to highlight
+        }
+      });
+    });
+    setMappedLocationCodes(newMap);
+
+    // debug log once
+    if (Object.keys(newMap).length > 0) {
+      debug('🧭 Applied default eco-obs mapping for empty codes:', Object.entries(newMap).slice(0,20));
+    }
+  }, [ecoObsFactors, mappedLocationCodes, mapTokenToCode]);
 // ========== INITIALIZE FROM PROPS ==========
 useEffect(() => {
   if (!marketLandData) {
@@ -142,7 +337,7 @@ useEffect(() => {
     return;
   }
 
-  console.log('🔄 Loading market land data:', {
+  debug('🔄 Loading market land data:', {
     hasRawLandConfig: !!marketLandData.raw_land_config,
     hasCascadeRates: !!marketLandData.cascade_rates,
     hasVacantSales: !!marketLandData.vacant_sales_analysis?.sales?.length
@@ -161,7 +356,7 @@ useEffect(() => {
   // Load cascade config from either location (prefer cascade_rates, fallback to raw_land_config)
   const savedConfig = marketLandData.cascade_rates || marketLandData.raw_land_config?.cascade_config;
   if (savedConfig) {
-    console.log('🔧 Loading cascade config:', {
+    debug('🔧 Loading cascade config:', {
       source: marketLandData.cascade_rates ? 'cascade_rates' : 'raw_land_config',
       specialCategories: savedConfig.specialCategories,
       mode: savedConfig.mode
@@ -205,7 +400,7 @@ useEffect(() => {
     const savedIncluded = new Set();
     const manuallyAddedIds = new Set();
 
-    console.log('🔄 Loading saved Method 1 sales data:', {
+    debug('🔄 Loading saved Method 1 sales data:', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
@@ -222,7 +417,7 @@ useEffect(() => {
       if (s.manually_added) manuallyAddedIds.add(s.id);
     });
 
-    console.log('🔄 Restored Method 1 states:', {
+    debug('🔄 Restored Method 1 states:', {
       excludedCount: savedExcluded.size,
       includedCount: savedIncluded.size,
       manuallyAddedCount: manuallyAddedIds.size,
@@ -252,7 +447,7 @@ useEffect(() => {
     setMethod1ExcludedSales(method1Excluded);
     window._method1ExcludedSales = method1Excluded;
 
-    console.log('🔄 Restored Method 1 excluded sales from new field:', {
+    debug('🔄 Restored Method 1 excluded sales from new field:', {
       count: method1Excluded.size,
       ids: Array.from(method1Excluded)
     });
@@ -269,13 +464,13 @@ useEffect(() => {
   // Priority 1: Dedicated column (most recent saves go here)
   if (marketLandData.target_allocation !== null && marketLandData.target_allocation !== undefined) {
     loadedTargetAllocation = marketLandData.target_allocation;
-    console.log('🎯 LOADING TARGET ALLOCATION FROM DEDICATED COLUMN:', loadedTargetAllocation);
+    debug('🎯 LOADING TARGET ALLOCATION FROM DEDICATED COLUMN:', loadedTargetAllocation);
   }
   // Priority 2: Legacy allocation_study structure (fallback)
   else if (marketLandData.allocation_study?.target_allocation !== null &&
            marketLandData.allocation_study?.target_allocation !== undefined) {
     loadedTargetAllocation = marketLandData.allocation_study.target_allocation;
-    console.log('🎯 LOADING TARGET ALLOCATION FROM ALLOCATION STUDY:', loadedTargetAllocation);
+    debug('�� LOADING TARGET ALLOCATION FROM ALLOCATION STUDY:', loadedTargetAllocation);
   }
 
   // Only set if we found a valid value
@@ -284,19 +479,19 @@ useEffect(() => {
     const numericValue = typeof loadedTargetAllocation === 'string' ?
       parseFloat(loadedTargetAllocation) : loadedTargetAllocation;
     setTargetAllocation(numericValue);
-    console.log('✅ Target allocation set to:', numericValue, typeof numericValue);
+    debug('✅ Target allocation set to:', numericValue, typeof numericValue);
   } else {
-    console.log('ℹ️ No target allocation found in database');
+    debug('ℹ️ No target allocation found in database');
   }
 
 
   // Clear any existing allocation data to force fresh calculation
-  console.log('🧹 Clearing cached allocation data to force fresh calculation');
+  debug('🧹 Clearing cached allocation data to force fresh calculation');
   setVacantTestSales([]);
 
   // If user is currently on allocation tab, force immediate recalculation
   if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
-    console.log('🔄 User on allocation tab - forcing immediate recalculation');
+    debug('🔄 User on allocation tab - forcing immediate recalculation');
     setTimeout(() => {
       loadAllocationStudyData();
     }, 100);
@@ -322,8 +517,10 @@ useEffect(() => {
   if (marketLandData.eco_obs_code_config) {
     setEcoObsFactors(marketLandData.eco_obs_code_config.factors || {});
     setLocationCodes(marketLandData.eco_obs_code_config.location_codes || {});
+    setMappedLocationCodes(marketLandData.eco_obs_code_config.location_codes || {});
     setTrafficLevels(marketLandData.eco_obs_code_config.traffic_levels || {});
     setCustomLocationCodes(marketLandData.eco_obs_code_config.custom_codes || []);
+    setSummaryInputs(marketLandData.eco_obs_code_config.summary_inputs || {});
   }
   if (marketLandData.eco_obs_applied_adjustments) {
     setActualAdjustments(marketLandData.eco_obs_applied_adjustments);
@@ -336,7 +533,7 @@ useEffect(() => {
   setIsLoading(false);
   setIsInitialLoadComplete(true);
 
-  console.log('�� Initial load complete');
+  debug('�� Initial load complete');
 }, [marketLandData]);
 
   // ========== CHECK FRONT FOOT AVAILABILITY ==========
@@ -548,7 +745,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
-      console.log('🔄 Triggering allocation study recalculation...');
+      debug('���� Triggering allocation study recalculation...');
       loadAllocationStudyData();
     }
   }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, includedSales, specialRegions]);
@@ -556,17 +753,17 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // Auto-calculate VCS recommended sites when target allocation changes
   useEffect(() => {
-    console.log('🔄 TARGET ALLOCATION USEEFFECT TRIGGERED:', {
+    debug('🔄 TARGET ALLOCATION USEEFFECT TRIGGERED:', {
       targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
       propertiesCount: properties?.length || 0
     });
 
     if (targetAllocation && cascadeConfig.normal.prime && properties?.length > 0) {
-      console.log('✅ CONDITIONS MET - CALLING calculateVCSRecommendedSitesWithTarget');
+      debug('✅ CONDITIONS MET - CALLING calculateVCSRecommendedSitesWithTarget');
       calculateVCSRecommendedSitesWithTarget();
     } else {
-      console.log('❌ CONDITIONS NOT MET FOR VCS CALCULATION:', {
+      debug('❌ CONDITIONS NOT MET FOR VCS CALCULATION:', {
         hasTargetAllocation: !!targetAllocation,
         hasCascadeRates: !!cascadeConfig.normal.prime,
         hasProperties: properties?.length > 0
@@ -584,20 +781,20 @@ const getPricePerUnit = useCallback((price, size) => {
   // Auto-save every 30 seconds - but only after initial load is complete
   useEffect(() => {
     if (!isInitialLoadComplete) {
-      console.log('���️ Auto-save waiting for initial load to complete');
+      debug('���️ Auto-save waiting for initial load to complete');
       return;
     }
 
-    console.log('🔄 Auto-save effect triggered, setting up interval');
+    debug('🔄 Auto-save effect triggered, setting up interval');
     const interval = setInterval(() => {
-      console.log('⏰ Auto-save interval triggered');
+      debug('⏰ Auto-save interval triggered');
       // Use window reference to avoid hoisting issues
       if (window.landValuationSave) {
         window.landValuationSave();
       }
     }, 30000);
     return () => {
-      console.log('🛑 Clearing auto-save interval');
+      debug('🛑 Clearing auto-save interval');
       clearInterval(interval);
     }
   }, [isInitialLoadComplete]);
@@ -606,7 +803,7 @@ const getPricePerUnit = useCallback((price, size) => {
   useEffect(() => {
     if (!isInitialLoadComplete) return;
 
-    console.log('🔄 State change detected, triggering immediate save');
+    debug('🔄 State change detected, triggering immediate save');
     const timeoutId = setTimeout(() => {
       if (window.landValuationSave) {
         window.landValuationSave();
@@ -619,7 +816,7 @@ const getPricePerUnit = useCallback((price, size) => {
   // Clear Method 1 temporary variables after filtering is complete
   useEffect(() => {
     if (isInitialLoadComplete && window._method1ExcludedSales) {
-      console.log('🧹 Clearing Method 1 temporary variables after successful application');
+      debug('🧹 Clearing Method 1 temporary variables after successful application');
       delete window._method1ExcludedSales;
       delete window._method1IncludedSales;
       delete window._method1ManuallyAdded;
@@ -629,7 +826,7 @@ const getPricePerUnit = useCallback((price, size) => {
   const filterVacantSales = useCallback(() => {
     if (!properties) return;
 
-    console.log('🔄 FilterVacantSales called:', {
+    debug('🔄 FilterVacantSales called:', {
       currentVacantSalesCount: vacantSales.length,
       hasMethod1Excluded: !!window._method1ExcludedSales,
       method1ExcludedSize: window._method1ExcludedSales?.size || 0,
@@ -643,7 +840,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
     if (manuallyAddedIds.size > 0) {
       const manuallyAddedProps = properties.filter(prop => manuallyAddedIds.has(prop.id));
-      console.log('🔄 Restoring manually added properties:', {
+      debug('🔄 Restoring manually added properties:', {
         found: manuallyAddedProps.length,
         expected: manuallyAddedIds.size,
         foundIds: manuallyAddedProps.map(p => p.id),
@@ -664,7 +861,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
     // If we already have restored sales, preserve them and only add new ones
     if (false) { // Disable complex caching logic
-      console.log('���� Preserving existing restored sales, checking for new ones only');
+      debug('���� Preserving existing restored sales, checking for new ones only');
 
       // Find any new sales that match criteria but aren't already in vacantSales
       const existingIds = new Set(vacantSales.map(s => s.id));
@@ -702,7 +899,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (newSales.length > 0) {
-        console.log('🔄 Found new sales to add:', newSales.length);
+        debug('🔄 Found new sales to add:', newSales.length);
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
           const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
@@ -877,7 +1074,7 @@ const getPricePerUnit = useCallback((price, size) => {
       const enriched = enrichProperty(prop);
       finalSales.push(enriched);
       if (enriched.autoCategory) {
-        console.log(`🏷️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
+        debug(`🏷️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
         setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
       }
     });
@@ -886,7 +1083,7 @@ const getPricePerUnit = useCallback((price, size) => {
     const activeExcluded = window._method1ExcludedSales || method1ExcludedSales;
     const filteredSales = finalSales.filter(sale => !activeExcluded.has(sale.id));
 
-    console.log('🔄 Applying Method 1 exclusions:', {
+    debug('🔄 Applying Method 1 exclusions:', {
       totalSalesBeforeExclusion: finalSales.length,
       excludedSalesCount: activeExcluded.size,
       totalSalesAfterExclusion: filteredSales.length,
@@ -900,7 +1097,7 @@ const getPricePerUnit = useCallback((price, size) => {
     setIncludedSales(prev => {
       // If initial load isn't complete yet, don't modify included sales
       if (!isInitialLoadComplete) {
-        console.log('⏸��� Skipping checkbox update - waiting for initial load');
+        debug('⏸��� Skipping checkbox update - waiting for initial load');
         return prev;
       }
 
@@ -917,7 +1114,7 @@ const getPricePerUnit = useCallback((price, size) => {
         }
       });
 
-      console.log('✅ Checkbox state management:', {
+      debug('✅ Checkbox state management:', {
         isInitialLoadComplete,
         previousCount: prev.size,
         currentSalesCount: filteredSales.length,
@@ -1424,7 +1621,7 @@ const getPricePerUnit = useCallback((price, size) => {
       }
 
       if (autoCategory) {
-        console.log(`🏗�� Auto-categorizing manually added ${p.property_block}/${p.property_lot} as ${autoCategory}`);
+        debug(`🏗�� Auto-categorizing manually added ${p.property_block}/${p.property_lot} as ${autoCategory}`);
         setSaleCategories(prev => ({...prev, [p.id]: autoCategory}));
       }
     });
@@ -1434,7 +1631,7 @@ const getPricePerUnit = useCallback((price, size) => {
     setSearchResults([]);
 
     // Note: Auto-save will trigger within 30 seconds to persist these changes
-    console.log('💾 Sales added - auto-save will persist these changes:', toAdd.map(p => `${p.property_block}/${p.property_lot}`));
+    debug('💾 Sales added - auto-save will persist these changes:', toAdd.map(p => `${p.property_block}/${p.property_lot}`));
   };
 
   const handlePropertyResearch = async (property) => {
@@ -1450,7 +1647,7 @@ Class: ${property.property_m4_class === '2' ? 'Residential (possible teardown)' 
 
 Find specific information about this property and sale. Include:
 
-• Property ownership/seller details
+��� Property ownership/seller details
 • Tax assessment and classification details
 • Documented environmental constraints (wetlands, floodplains)
 • Municipality-specific land use characteristics
@@ -1496,14 +1693,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return newSet;
     });
 
-    console.log('🗑️ Sale removed and tracked as excluded:', saleId);
+    debug('🗑️ Sale removed and tracked as excluded:', saleId);
   };
 
   // ========== ALLOCATION STUDY FUNCTIONS - REBUILT ==========
   const loadAllocationStudyData = useCallback(() => {
     if (!cascadeConfig.normal.prime) return;
 
-    console.log('🏠 Loading allocation study data - individual sale approach');
+    debug('🏠 Loading allocation study data - individual sale approach');
 
     // Process each individual vacant sale (no grouping)
     const processedVacantSales = [];
@@ -1526,7 +1723,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Log special region usage
       if (region !== 'Normal') {
-        console.log(`🌟 Using special region "${region}" rates for sale ${sale.property_block}/${sale.property_lot}:`, {
+        debug(`🌟 Using special region "${region}" rates for sale ${sale.property_block}/${sale.property_lot}:`, {
           primeRate: cascadeRates.prime?.rate,
           secondaryRate: cascadeRates.secondary?.rate,
           excessRate: cascadeRates.excess?.rate
@@ -1550,11 +1747,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
 
       if (improvedSalesForYear.length === 0) {
-        console.log(`⚠️ No improved sales found for year ${year} (with type_use starting with '1')`);
+        debug(`⚠️ No improved sales found for year ${year} (with type_use starting with '1')`);
         return;
       }
 
-      console.log(`✅ Found ${improvedSalesForYear.length} improved sales for year ${year} with type_use starting with '1'`);
+      debug(`✅ Found ${improvedSalesForYear.length} improved sales for year ${year} with type_use starting with '1'`);
 
       // Calculate averages for this year's improved sales
       const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + p.sales_price, 0) / improvedSalesForYear.length;
@@ -1600,7 +1797,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
     });
 
-    console.log('🏠 Processed allocation data:', {
+    debug('🏠 Processed allocation data:', {
       totalVacantSales: processedVacantSales.length,
       positiveSales: processedVacantSales.filter(s => s.isPositive).length,
       negativeSales: processedVacantSales.filter(s => !s.isPositive).length
@@ -1615,7 +1812,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const totalSalePrice = positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0);
       const overallRecommended = totalSalePrice > 0 ? (totalLandValue / totalSalePrice) * 100 : 0;
 
-      console.log('🎯 Overall recommended allocation:', {
+      debug('🎯 Overall recommended allocation:', {
         positiveSalesCount: positiveSales.length,
         totalLandValue,
         totalSalePrice,
@@ -1656,7 +1853,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       remainingAcres = 0;
     }
 
-    console.log(`🔢 Raw land calculation for ${acres} acres:`, breakdown.join(' + '), `= $${rawLandValue.toFixed(0)}`);
+    debug(`🔢 Raw land calculation for ${acres} acres:`, breakdown.join(' + '), `= $${rawLandValue.toFixed(0)}`);
 
     return rawLandValue;
   };
@@ -1882,8 +2079,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
-    console.log('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
-    console.log('📊 Input validation:', {
+    debug('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
+    debug('📊 Input validation:', {
       hasTargetAllocation: !!targetAllocation,
       targetAllocationValue: targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
@@ -1893,11 +2090,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     if (!targetAllocation || !cascadeConfig.normal.prime || !properties) {
-      console.log('❌ Cannot calculate VCS recommended sites: missing data');
+      debug('❌ Cannot calculate VCS recommended sites: missing data');
       return;
     }
 
-    console.log('🎯 Calculating VCS recommended site values with target allocation:', targetAllocation + '%');
+    debug('🎯 Calculating VCS recommended site values with target allocation:', targetAllocation + '%');
 
     const recommendedSites = {};
     const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
@@ -1949,7 +2146,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
 
       if (relevantSales.length === 0) {
-        console.log(`⚠️ No relevant sales found for VCS ${vcs} in past 3 years`);
+        debug(`⚠️ No relevant sales found for VCS ${vcs} in past 3 years`);
         return;
       }
 
@@ -1965,7 +2162,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       if (isCondo) {
         // For condos: recommended site = target allocation % × average sale price
         siteValue = avgSalePrice * (parseFloat(targetAllocation) / 100);
-        console.log(`🏢 VCS ${vcs} (CONDO):`, {
+        debug(`🏢 VCS ${vcs} (CONDO):`, {
           relevantSalesCount: relevantSales.length,
           avgSalePrice: Math.round(avgSalePrice),
           targetAllocation: targetAllocation + '%',
@@ -1979,7 +2176,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         const rawLandValue = calculateRawLandValue(avgAcres, cascadeConfig.normal);
         siteValue = totalLandValue - rawLandValue;
 
-        console.log(`🏠 VCS ${vcs} DETAILED DEBUG:`, {
+        debug(`🏠 VCS ${vcs} DETAILED DEBUG:`, {
           relevantSalesCount: relevantSales.length,
           avgSalePrice: Math.round(avgSalePrice),
           avgAcres: avgAcres.toFixed(2),
@@ -1997,7 +2194,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     setVcsRecommendedSites(recommendedSites);
-    console.log('✅ VCS recommended site values updated:', Object.keys(recommendedSites).length, 'VCS areas');
+    debug('✅ VCS recommended site values updated:', Object.keys(recommendedSites).length, 'VCS areas');
 
   }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue, vcsTypes]);
 
@@ -2023,7 +2220,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const updateManualSiteValue = (vcs, value) => {
-    console.log(`🔧 Updating manual site value for VCS ${vcs}:`, value);
+    debug(`🔧 Updating manual site value for VCS ${vcs}:`, value);
     setVcsManualSiteValues(prev => ({
       ...prev,
       // Fix: Use nullish coalescing - allow 0 values, only null for empty strings
@@ -2031,7 +2228,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }));
 
     // Immediate save to prevent data loss when navigating away
-    console.log('💾 Triggering immediate save for Act Site change');
+    debug('💾 Triggering immediate save for Act Site change');
     setTimeout(() => {
       if (window.landValuationSave) {
         window.landValuationSave();
@@ -2064,7 +2261,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const analyzeEconomicObsolescence = useCallback(() => {
     if (!properties) return;
 
-    console.log('🔍 Economic Obsolescence Analysis Debug:', {
+    debug('🔍 Economic Obsolescence Analysis Debug:', {
       totalProperties: properties.length,
       withNewVCS: properties.filter(p => p.new_vcs).length,
       withLocationAnalysis: properties.filter(p => p.location_analysis).length,
@@ -2159,7 +2356,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
     });
 
-    console.log('📊 Economic Obsolescence Analysis Complete:', {
+    debug('📊 Economic Obsolescence Analysis Complete:', {
       totalVCSCodes: Object.keys(factors).length,
       vcsCodesWithFactors: Object.keys(factors).map(vcs => ({
         vcs,
@@ -2365,25 +2562,25 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // ========== SAVE TARGET ALLOCATION FUNCTION ==========
   const saveTargetAllocation = async () => {
     if (!jobData?.id) {
-      console.log('�� Save target allocation cancelled: No job ID');
+      debug('��� Save target allocation cancelled: No job ID');
       alert('Error: No job ID found. Cannot save target allocation.');
       return;
     }
 
     if (!targetAllocation || targetAllocation === '') {
-      console.log('❌ Save target allocation cancelled: No target allocation value');
+      debug('❌ Save target allocation cancelled: No target allocation value');
       alert('Please enter a target allocation percentage before saving.');
       return;
     }
 
     const targetValue = parseFloat(targetAllocation);
     if (isNaN(targetValue) || targetValue <= 0 || targetValue > 100) {
-      console.log('❌ Save target allocation cancelled: Invalid value:', targetAllocation);
+      debug('❌ Save target allocation cancelled: Invalid value:', targetAllocation);
       alert('Please enter a valid target allocation percentage between 1 and 100.');
       return;
     }
 
-    console.log('💾 Saving target allocation:', `${targetValue}%`, 'for job:', jobData.id);
+    debug('💾 Saving target allocation:', `${targetValue}%`, 'for job:', jobData.id);
 
     try {
       // Check if record exists first
@@ -2400,7 +2597,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       let result;
       if (existing) {
-        console.log('📝 Updating existing record with target allocation...');
+        debug('📝 Updating existing record with target allocation...');
         result = await supabase
           .from('market_land_valuation')
           .update({
@@ -2409,7 +2606,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           })
           .eq('job_id', jobData.id);
       } else {
-        console.log('➕ Creating new record with target allocation...');
+        debug('➕ Creating new record with target allocation...');
         result = await supabase
           .from('market_land_valuation')
           .insert({
@@ -2424,7 +2621,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         throw result.error;
       }
 
-      console.log('✅ Target allocation saved successfully to database');
+      debug('✅ Target allocation saved successfully to database');
 
       // Update last saved timestamp
       setLastSaved(new Date());
@@ -2433,11 +2630,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       alert(`Target allocation ${targetValue}% saved successfully!`);
 
       // Trigger VCS recommended sites calculation
-      console.log('🔄 Triggering VCS recommended sites calculation...');
+      debug('🔄 Triggering VCS recommended sites calculation...');
       if (cascadeConfig.normal.prime && properties?.length > 0) {
         calculateVCSRecommendedSitesWithTarget();
       } else {
-        console.log('⚠️ Cannot calculate VCS recommended sites: missing cascade config or properties');
+        debug('⚠️ Cannot calculate VCS recommended sites: missing cascade config or properties');
       }
 
     } catch (error) {
@@ -2454,11 +2651,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // ========== SAVE & EXPORT FUNCTIONS ==========
   const saveAnalysis = async () => {
     if (!jobData?.id) {
-      console.log('❌ Save cancelled: No job ID');
+      debug('❌ Save cancelled: No job ID');
       return;
     }
 
-    console.log('💾 Starting save...', {
+    debug('💾 Starting save...', {
       vacantSalesCount: vacantSales.length,
       excludedSalesCount: method2ExcludedSales.size,
       includedSalesCount: includedSales.size,
@@ -2521,16 +2718,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         eco_obs_applied_adjustments: actualAdjustments,
         eco_obs_code_config: {
           factors: ecoObsFactors,
-          location_codes: locationCodes,
+          location_codes: mappedLocationCodes,
           traffic_levels: trafficLevels,
-          custom_codes: customLocationCodes
+          custom_codes: customLocationCodes,
+          summary_inputs: summaryInputs
         },
         eco_obs_compound_overrides: computedAdjustments,
         updated_at: new Date().toISOString()
       };
 
       // Debug: Log the exact data being saved
-      console.log('��� Data structure being saved:', {
+      debug('��� Data structure being saved:', {
         cascadeConfigLocation1: analysisData.raw_land_config.cascade_config.specialCategories,
         cascadeConfigLocation2: analysisData.cascade_rates.specialCategories,
         salesData: analysisData.vacant_sales_analysis.sales.slice(0, 3), // First 3 for brevity
@@ -2550,14 +2748,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
       if (existing) {
-        console.log('📝 Updating existing record...');
+        debug('📝 Updating existing record...');
         const { error } = await supabase
           .from('market_land_valuation')
           .update(analysisData)
           .eq('job_id', jobData.id);
         if (error) throw error;
       } else {
-        console.log('➕ Creating new record...');
+        debug('➕ Creating new record...');
         // Use upsert to handle race conditions
         const { error } = await supabase
           .from('market_land_valuation')
@@ -2568,7 +2766,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         if (error) throw error;
       }
 
-      console.log('✅ Save completed successfully');
+      debug('✅ Save completed successfully');
       setLastSaved(new Date());
 
       // Notify parent component
@@ -2596,12 +2794,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Create new workbook
     const workbook = XLSX.utils.book_new();
 
-    // Create title row
-    const data = [];
-    data.push(['VCS VALUATION SHEET']);
-    data.push([]); // Empty row
-
-    // Build headers array
+    // Build headers array (start first row with headers only)
     const headers = ['VCS', 'Total', 'Type', 'Description', 'Method', 'Typical Lot Size', 'Rec Site Value', 'Act Site Value'];
 
     // Dynamic cascade headers
@@ -2619,6 +2812,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     if (shouldShowKeyColumn) headers.push('Key Pages');
     if (shouldShowMapColumn) headers.push('Map Pages');
 
+    const data = [];
     data.push(headers);
 
     // Add data rows
@@ -2667,6 +2861,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const cleanZoning = (vcsData.zoning || '').replace(/\n/g, ' ').substring(0, 50);
 
       // Start building row
+      const recSiteFmt = recSite !== null && recSite !== undefined && recSite !== '' ? `$${Math.round(recSite).toLocaleString()}` : '';
+      const actSiteFmt = actSite !== null && actSite !== undefined ? `$${Math.round(actSite).toLocaleString()}` : '';
+
       const row = [
         vcs,
         vcsData.counts?.total || 0,
@@ -2674,8 +2871,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         cleanDescription,
         getMethodDisplay(type, description),
         typicalLot,
-        recSite || '',
-        actSite || ''
+        recSiteFmt,
+        actSiteFmt
       ];
 
       // Get cascade rates
@@ -2694,18 +2891,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
       }
 
-      // Add cascade rates
+      // Add cascade rates (formatted as currency where applicable)
       if (isResidential) {
         if (valuationMode === 'ff') {
-          row.push(cascadeRates.standard?.rate || '', cascadeRates.excess?.rate || '');
+          row.push(
+            cascadeRates.standard?.rate != null ? `$${Math.round(cascadeRates.standard.rate).toLocaleString()}` : '',
+            cascadeRates.excess?.rate != null ? `$${Math.round(cascadeRates.excess.rate).toLocaleString()}` : ''
+          );
         } else {
           row.push(
-            cascadeRates.prime?.rate || '',
-            cascadeRates.secondary?.rate || '',
-            cascadeRates.excess?.rate || ''
+            cascadeRates.prime?.rate != null ? `$${Math.round(cascadeRates.prime.rate).toLocaleString()}` : '',
+            cascadeRates.secondary?.rate != null ? `$${Math.round(cascadeRates.secondary.rate).toLocaleString()}` : '',
+            cascadeRates.excess?.rate != null ? `$${Math.round(cascadeRates.excess.rate).toLocaleString()}` : ''
           );
           if (shouldShowResidualColumn) {
-            row.push(cascadeRates.residual?.rate || '');
+            row.push(cascadeRates.residual?.rate != null ? `$${Math.round(cascadeRates.residual.rate).toLocaleString()}` : '');
           }
         }
       } else {
@@ -2720,17 +2920,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
       }
 
-      // Special category rates
+      // Special category rates (formatted)
       row.push(
-        vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands ? cascadeConfig.specialCategories.wetlands : '',
-        vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked ? cascadeConfig.specialCategories.landlocked : '',
-        vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation ? cascadeConfig.specialCategories.conservation : ''
+        vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands != null ? `$${Math.round(cascadeConfig.specialCategories.wetlands).toLocaleString()}` : '',
+        vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked != null ? `$${Math.round(cascadeConfig.specialCategories.landlocked).toLocaleString()}` : '',
+        vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation != null ? `$${Math.round(cascadeConfig.specialCategories.conservation).toLocaleString()}` : ''
       );
 
-      // Price columns
+      // Price columns (formatted)
       row.push(
-        vcsData.avgNormTime || '',
-        vcsData.avgPrice || ''
+        vcsData.avgNormTime != null ? `$${Math.round(vcsData.avgNormTime).toLocaleString()}` : '',
+        vcsData.avgPrice != null ? `$${Math.round(vcsData.avgPrice).toLocaleString()}` : ''
       );
 
       // CME bracket
@@ -2746,16 +2946,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       data.push(row);
     });
-
-    // Add summary section
-    data.push([]);
-    data.push(['SUMMARY INFORMATION']);
-    data.push([]);
-    data.push(['Municipality:', jobData?.municipality || '']);
-    data.push(['County:', jobData?.county || '']);
-    data.push(['Analysis Date:', new Date().toLocaleDateString()]);
-    data.push(['Valuation Method:', valuationMode.toUpperCase()]);
-    data.push(['Target Allocation:', targetAllocation ? `${targetAllocation}%` : 'Not Set']);
 
     // Create worksheet
     const worksheet = XLSX.utils.aoa_to_sheet(data);
@@ -2797,6 +2987,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     if (shouldShowMapColumn) colWidths.push({ wch: 15 });
 
     worksheet['!cols'] = colWidths;
+
+    // Header styling for VCS Sheet
+    try {
+      const headerCols = headers.length;
+      for (let c = 0; c < headerCols; c++) {
+        const ref = XLSX.utils.encode_cell({ r: 0, c });
+        if (worksheet[ref]) {
+          worksheet[ref].s = worksheet[ref].s || {};
+          worksheet[ref].s.font = { ...(worksheet[ref].s.font || {}), bold: true };
+          worksheet[ref].s.alignment = { horizontal: 'center' };
+        }
+      }
+    } catch (e) {
+      debug('VCS header styling skipped', e);
+    }
 
     // Add worksheet to workbook
     XLSX.utils.book_append_sheet(workbook, worksheet, 'VCS Sheet');
@@ -2865,6 +3070,294 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     return csv;
   };
 
+  // Allocation export -> Excel workbook
+  const exportAllocationExcel = () => {
+    const rows = [];
+    const headers = ['VCS','Year','Region','Block/Lot','Vacant Price','$ Vacant Price','Acres','Raw Land','Site Value','Improved Sales Count','Avg Improved Price','Avg Improved Acres','Improved Raw Land Value','Total Land Value','Current %','Recommended %','Status'];
+    rows.push(headers);
+
+    (vacantTestSales || []).forEach(sale => {
+      const status = sale.isPositive ? 'Included' : 'Excluded';
+      const vacantPrice = sale.vacantPrice != null ? sale.vacantPrice : '';
+      const vacPriceFmt = vacantPrice !== '' ? `$${Math.round(vacantPrice).toLocaleString()}` : '';
+      const rawLandFmt = sale.rawLandValue != null ? `$${Math.round(sale.rawLandValue).toLocaleString()}` : '';
+      const siteValueFmt = sale.siteValue != null ? `$${Math.round(sale.siteValue).toLocaleString()}` : '';
+      const improvedRawFmt = sale.improvedRawLandValue != null ? `$${Math.round(sale.improvedRawLandValue).toLocaleString()}` : '';
+      const totalLandFmt = sale.totalLandValue != null ? `$${Math.round(sale.totalLandValue).toLocaleString()}` : '';
+      const currentPct = sale.currentAllocation != null ? `${(sale.currentAllocation * 100).toFixed(1)}%` : '';
+      const recPct = sale.recommendedAllocation != null ? `${(sale.recommendedAllocation * 100).toFixed(1)}%` : '';
+
+      rows.push([
+        sale.vcs || '',
+        sale.year || '',
+        sale.region || '',
+        `${sale.block || ''}/${sale.lot || ''}`,
+        vacantPrice,
+        vacPriceFmt,
+        sale.acres != null ? Number(sale.acres.toFixed(2)) : '',
+        rawLandFmt,
+        siteValueFmt,
+        sale.improvedSalesCount || '',
+        sale.avgImprovedPrice || '',
+        sale.avgImprovedAcres || '',
+        improvedRawFmt,
+        totalLandFmt,
+        currentPct,
+        recPct,
+        status
+      ]);
+    });
+
+    // Add summary section
+    rows.push([]);
+    rows.push(['SUMMARY']);
+    rows.push(['Current Overall Allocation', `${currentOverallAllocation}%`]);
+    rows.push(['Recommended Allocation', `${calculateAllocationStats()?.averageAllocation || ''}%`]);
+    rows.push(['Target Allocation', `${targetAllocation || 'Not Set'}%`]);
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    // basic formatting for header
+    const headerCols = headers.length;
+    for (let c = 0; c < headerCols; c++) {
+      const ref = XLSX.utils.encode_cell({ r: 0, c });
+      if (ws[ref]) ws[ref].s = { font: { bold: true }, alignment: { horizontal: 'center' } };
+    }
+
+    // Column widths for Allocation sheet
+    ws['!cols'] = [
+      { wch: 8 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 8 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 10 }
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Allocation');
+    return wb;
+  };
+
+  // Land rates export (two sheets) - improved: full Method 1 with UI columns and expanded Method 2
+  const exportLandRatesExcel = () => {
+    const wb = XLSX.utils.book_new();
+
+    // Sheet 1: Vacant Land Sales (Method 1) - include UI columns
+    const salesHeaders = ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Special Region','Category','Sale Date','$ Sale Price','Acres','$ / Acre','Package','Notes'];
+    const salesRows = [salesHeaders];
+
+    (vacantSales || []).forEach(sale => {
+      const category = saleCategories[sale.id] || 'Uncategorized';
+      const region = specialRegions[sale.id] || 'Normal';
+      const qual = sale.sales_nu || '';
+      const isPackage = sale.packageData ? `Y (${sale.packageData.package_count})` : 'N';
+      const included = includedSales.has(sale.id) ? 'Y' : 'N';
+      const notes = landNotes[sale.id] || '';
+
+      const acres = sale.totalAcres != null ? Number(sale.totalAcres.toFixed(2)) : '';
+      const salePrice = sale.sales_price != null ? Number(sale.sales_price) : '';
+      const pricePerAcre = sale.pricePerAcre != null ? Number(sale.pricePerAcre) : '';
+
+      salesRows.push([
+        included,
+        sale.property_block || '',
+        sale.property_lot || '',
+        qual,
+        sale.property_location || '',
+        sale.property_m4_class || '',
+        sale.asset_building_class || '',
+        sale.asset_type_use || '',
+        sale.asset_design_style || '',
+        sale.new_vcs || '',
+        sale.asset_zoning || '',
+        region,
+        category,
+        sale.sales_date || '',
+        salePrice ? `$${salePrice.toLocaleString()}` : '',
+        acres,
+        pricePerAcre ? `$${Number(pricePerAcre).toLocaleString()}` : '',
+        isPackage,
+        notes
+      ]);
+    });
+
+    const ws1 = XLSX.utils.aoa_to_sheet(salesRows);
+    // header formatting and column widths
+    const salesCols = salesRows[0].length;
+    for (let c = 0; c < salesCols; c++) {
+      const ref = XLSX.utils.encode_cell({ r: 0, c });
+      if (ws1[ref]) ws1[ref].s = { font: { bold: true }, alignment: { horizontal: 'center' } };
+    }
+    ws1['!cols'] = [
+      { wch: 8 }, // Include
+      { wch: 8 }, // Block
+      { wch: 8 }, // Lot
+      { wch: 8 }, // Qual
+      { wch: 30 }, // Address
+      { wch: 6 }, // Class
+      { wch: 6 }, // Bldg
+      { wch: 6 }, // Type
+      { wch: 8 }, // Design
+      { wch: 10 }, // VCS
+      { wch: 12 }, // Zoning
+      { wch: 12 }, // Special Region
+      { wch: 12 }, // Category
+      { wch: 12 }, // Sale Date
+      { wch: 14 }, // $ Sale Price (formatted)
+      { wch: 8 }, // Acres
+      { wch: 12 }, // $ / Acre
+      { wch: 10 }, // Package
+      { wch: 30 } // Notes
+    ];
+
+    // Append summary for Method 1 (category summary matching UI)
+    try {
+      const ca = categoryAnalysis || {};
+      const raw = ca.rawLand || { avg: 0, count: 0, avgLotSize: '' };
+      const building = ca.buildingLot || { avg: 0, count: 0, avgLotSize: '' };
+      const wetlands = ca.wetlands || { avg: 0, count: 0, avgLotSize: '' };
+      const landlocked = ca.landlocked || { avg: 0, count: 0, avgLotSize: '' };
+      const conservation = ca.conservation || { avg: 0, count: 0, avgLotSize: '' };
+
+      const fmt = (v) => {
+        if (v === null || v === undefined || v === '') return '$0';
+        // If valuationMode is sf, avg may already be a string/number representing $/SF
+        if (valuationMode === 'sf') return `$${v}`;
+        return `$${Number(v).toLocaleString()}`;
+      };
+
+      salesRows.push([]);
+      salesRows.push(['SUMMARY']);
+      salesRows.push(['Raw Land', fmt(raw.avg), `${raw.count} sales`, raw.avgLotSize || '']);
+      salesRows.push(['Building Lot', fmt(building.avg), `${building.count} sales`, building.avgLotSize || '']);
+      salesRows.push(['Wetlands', fmt(wetlands.avg), `${wetlands.count} sales`, wetlands.avgLotSize || '']);
+      salesRows.push(['Landlocked', fmt(landlocked.avg), `${landlocked.count} sales`, landlocked.avgLotSize || '']);
+      salesRows.push(['Conservation', fmt(conservation.avg), `${conservation.count} sales`, conservation.avgLotSize || '']);
+    } catch (e) {
+      // fallback: simple counts
+      salesRows.push([]);
+      salesRows.push(['SUMMARY']);
+      salesRows.push(['Total Sales', (vacantSales || []).length]);
+    }
+
+    // recreate ws1 to include summary formatting
+    const ws1b = XLSX.utils.aoa_to_sheet(salesRows);
+    for (let c = 0; c < salesCols; c++) {
+      const ref = XLSX.utils.encode_cell({ r: 0, c });
+      if (ws1b[ref]) ws1b[ref].s = { font: { bold: true }, alignment: { horizontal: 'center' } };
+    }
+    ws1b['!cols'] = ws1['!cols'];
+    XLSX.utils.book_append_sheet(wb, ws1b, 'Vacant Sales');
+
+    // Sheet 2: Method 2 expanded (per VCS, expanded view)
+    const method2Rows = [];
+
+    Object.entries(bracketAnalysis || {}).sort(([a],[b]) => a.localeCompare(b)).forEach(([vcs, data]) => {
+      // VCS header row
+      const vcsSummary = `${data.totalSales || 0} sales • Avg $${Math.round(data.avgPrice || 0).toLocaleString()} • ${data.avgAcres != null ? Number(data.avgAcres.toFixed(2)) : ''} acres • $${Math.round(data.avgAdjusted || 0).toLocaleString()}`;
+      method2Rows.push([`${vcs} - ${vcsSummary}`]);
+      method2Rows.push([]);
+
+      // Bracket headers
+      const bracketHeaders = ['Bracket','Count','Avg Lot Size (acres)','Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','ADJUSTED','$ ADJUSTED','DELTA','$ DELTA','LOT DELTA','PER ACRE','$ PER ACRE','PER SQ FT'];
+      method2Rows.push(bracketHeaders);
+
+      const bracketList = [
+        { key: 'small', label: '<1.00', bracket: data.brackets.small },
+        { key: 'medium', label: '1.00-5.00', bracket: data.brackets.medium },
+        { key: 'large', label: '5.00-10.00', bracket: data.brackets.large },
+        { key: 'xlarge', label: '>10.00', bracket: data.brackets.xlarge }
+      ];
+
+      bracketList.forEach((row, rowIndex) => {
+        if (!row.bracket || row.bracket.count === 0) return;
+        const prevBracket = rowIndex > 0 ? bracketList[rowIndex - 1].bracket : null;
+        const adjustedDelta = prevBracket && prevBracket.avgAdjusted && row.bracket.avgAdjusted ? row.bracket.avgAdjusted - prevBracket.avgAdjusted : null;
+        const lotDelta = prevBracket && prevBracket.avgAcres && row.bracket.avgAcres ? row.bracket.avgAcres - prevBracket.avgAcres : null;
+        const perAcre = adjustedDelta && lotDelta && lotDelta > 0 && adjustedDelta > 0 ? adjustedDelta / lotDelta : null;
+        const perSqFt = perAcre ? perAcre / 43560 : null;
+
+        method2Rows.push([
+          row.label,
+          row.bracket.count || 0,
+          row.bracket.avgAcres != null ? Number(row.bracket.avgAcres.toFixed(2)) : '',
+          row.bracket.avgSalePrice != null ? row.bracket.avgSalePrice : '',
+          row.bracket.avgSalePrice != null ? `$${Math.round(row.bracket.avgSalePrice).toLocaleString()}` : '',
+          row.bracket.avgSFLA != null ? Math.round(row.bracket.avgSFLA).toLocaleString() : '',
+          row.bracket.avgAdjusted != null ? row.bracket.avgAdjusted : '',
+          row.bracket.avgAdjusted != null ? `$${Math.round(row.bracket.avgAdjusted).toLocaleString()}` : '',
+          adjustedDelta != null ? adjustedDelta : '',
+          adjustedDelta != null ? `$${Math.round(adjustedDelta).toLocaleString()}` : '',
+          lotDelta != null ? Number(lotDelta.toFixed(2)) : '',
+          perAcre != null ? `$${Math.round(perAcre).toLocaleString()}` : (adjustedDelta !== null && adjustedDelta <= 0 ? 'N/A' : ''),
+          perAcre != null ? `$${perAcre.toFixed(2)}` : (adjustedDelta !== null && adjustedDelta <= 0 ? 'N/A' : ''),
+          perSqFt != null ? `$${perSqFt.toFixed(2)}` : ''
+        ]);
+      });
+
+      method2Rows.push([]);
+    });
+
+    // Method 2 Summary (similar to UI)
+    method2Rows.push(['Implied Acreage Summary']);
+    if (method2Summary) {
+      const mid = method2Summary.mediumRange || {};
+      const lg = method2Summary.largeRange || {};
+      const xl = method2Summary.xlargeRange || {};
+      method2Rows.push(['1.00-4.99 perAcre', mid.perAcre && mid.perAcre !== 'N/A' ? `$${mid.perAcre.toLocaleString()}` : 'N/A']);
+      method2Rows.push(['5.00-9.99 perAcre', lg.perAcre && lg.perAcre !== 'N/A' ? `$${lg.perAcre.toLocaleString()}` : 'N/A']);
+      method2Rows.push(['10.00+ perAcre', xl.perAcre && xl.perAcre !== 'N/A' ? `$${xl.perAcre.toLocaleString()}` : 'N/A']);
+      method2Rows.push(['All Positive Deltas Avg', (() => {
+        const allRates = [];
+        if (mid.perAcre && mid.perAcre !== 'N/A') allRates.push(mid.perAcre);
+        if (lg.perAcre && lg.perAcre !== 'N/A') allRates.push(lg.perAcre);
+        if (xl.perAcre && xl.perAcre !== 'N/A') allRates.push(xl.perAcre);
+        if (allRates.length === 0) return 'N/A';
+        const avgRate = Math.round(allRates.reduce((s, r) => s + r, 0) / allRates.length);
+        return `$${avgRate.toLocaleString()}`;
+      })()]);
+    }
+
+    const ws2 = XLSX.utils.aoa_to_sheet(method2Rows);
+
+    // Column widths for Method 2 to ensure content fits
+    ws2['!cols'] = [
+      { wch: 12 }, // Bracket
+      { wch: 8 },  // Count
+      { wch: 18 }, // Avg Lot Size
+      { wch: 12 }, // Avg Sale Price (t)
+      { wch: 14 }, // $ Avg Sale Price
+      { wch: 12 }, // Avg SFLA
+      { wch: 12 }, // ADJUSTED
+      { wch: 14 }, // $ ADJUSTED
+      { wch: 10 }, // DELTA
+      { wch: 12 }, // $ DELTA
+      { wch: 10 }, // LOT DELTA
+      { wch: 12 }, // PER ACRE
+      { wch: 12 }, // $ PER ACRE
+      { wch: 12 }  // PER SQ FT
+    ];
+
+    // Apply bold + centered styling to header-like cells (detect by label)
+    const headerLabels = ['Bracket','Count','Avg Lot Size (acres)','Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','ADJUSTED','$ ADJUSTED','DELTA','$ DELTA','LOT DELTA','PER ACRE','$ PER ACRE','PER SQ FT','Implied Acreage Summary'];
+    try {
+      const range = XLSX.utils.decode_range(ws2['!ref']);
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const ref = XLSX.utils.encode_cell({ r: R, c: C });
+          const cell = ws2[ref];
+          if (!cell || typeof cell.v !== 'string') continue;
+          if (headerLabels.includes(cell.v) || headerLabels.some(lbl => cell.v.startsWith(lbl))) {
+            cell.s = cell.s || {};
+            cell.s.font = { ...(cell.s.font || {}), bold: true };
+            cell.s.alignment = { horizontal: 'center' };
+          }
+        }
+      }
+    } catch (e) {
+      debug('Method2 header styling skipped', e);
+    }
+
+    XLSX.utils.book_append_sheet(wb, ws2, 'Implied Acreage');
+
+    return wb;
+  };
+
   const exportToExcel = (type) => {
     const timestamp = new Date().toISOString().split('T')[0];
     const municipality = (jobData?.municipality || 'export').replace(/[^a-zA-Z0-9]/g, '_');
@@ -2873,6 +3366,44 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     let workbook;
     if (type === 'vcs-sheet') {
       workbook = exportVCSSheetExcel();
+    } else if (type === 'eco-obs') {
+      workbook = exportEcoObsWorksheetExcel();
+    } else if (type === 'allocation') {
+      workbook = exportAllocationExcel();
+    } else if (type === 'land-rates') {
+      workbook = exportLandRatesExcel();
+    } else if (type === 'complete') {
+      // Combine individual workbooks into one comprehensive workbook
+      const combined = XLSX.utils.book_new();
+      const exporters = [
+        exportVCSSheetExcel,
+        exportLandRatesExcel,
+        // Note: exportLandRatesExcel already includes both Vacant Sales and Method 2 sheets
+        exportAllocationExcel,
+        exportEcoObsWorksheetExcel
+      ];
+
+      exporters.forEach(fn => {
+        try {
+          const wbPart = fn();
+          if (wbPart && wbPart.SheetNames) {
+            wbPart.SheetNames.forEach(name => {
+              // Avoid duplicate sheet names by appending suffix if necessary
+              let sheetName = name;
+              let idx = 1;
+              while (combined.SheetNames && combined.SheetNames.includes(sheetName)) {
+                sheetName = `${name}_${idx}`;
+                idx++;
+              }
+              XLSX.utils.book_append_sheet(combined, wbPart.Sheets[name], sheetName);
+            });
+          }
+        } catch (e) {
+          console.error('Error combining workbook part:', e);
+        }
+      });
+
+      workbook = combined;
     } else {
       // For other types, create a simple workbook for now
       workbook = XLSX.utils.book_new();
@@ -2916,7 +3447,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
     
     // Method 2 Analysis
-    csv += '\n\nMETHOD 2: IMPROVED SALE LOT SIZE ANALYSIS\n';
+    csv += '\n\nIMPLIED ACREAGE: IMPROVED SALE LOT SIZE ANALYSIS\n';
     csv += 'VCS,Total Sales,<1 Acre,1-5 Acres,5-10 Acres,>10 Acres,Implied Rate\n';
     
     Object.entries(bracketAnalysis).sort(([a], [b]) => a.localeCompare(b)).forEach(([vcs, data]) => {
@@ -2926,7 +3457,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     
     // Method 2 Summary
     if (method2Summary.average) {
-      csv += '\n\nMETHOD 2 SUMMARY\n';
+      csv += '\n\nIMPLIED ACREAGE SUMMARY\n';
       csv += `Average Implied Rate,${method2Summary.average}\n`;
       csv += `Median Implied Rate,${method2Summary.median}\n`;
       csv += `Coverage,${method2Summary.coverage}\n`;
@@ -3003,6 +3534,124 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }
     
     return csv;
+  };
+
+  const exportEcoObsWorksheetExcel = () => {
+    const rows = [];
+    const headers = ['VCS','Locational Analysis','Code','With Year Built','With Living Area','With Sale Price','Without Year Built','Without Living Area','Without Sale Price','Adjusted Sale With','Adjusted Sale Without','Dollar Impact','Percent Impact','Applied+%','Applied-%'];
+    rows.push(headers);
+
+    const filteredFactors = ecoObsFactors || {};
+    Object.keys(filteredFactors).sort().forEach(vcs => {
+      Object.keys(filteredFactors[vcs] || {}).forEach(locationAnalysis => {
+        if (locationAnalysis === 'None') return;
+        const impact = calculateEcoObsImpact(vcs, locationAnalysis, globalEcoObsTypeFilter) || {};
+        const key = `${vcs}_${locationAnalysis}`;
+        const code = mappedLocationCodes[key] || '';
+
+        const withYearBuilt = impact.withYearBuilt ?? '';
+        const withLivingArea = impact.withLivingArea ? impact.withLivingArea : '';
+        const withSalePrice = impact.withSalePrice ? impact.withSalePrice : '';
+
+        const withoutYearBuilt = impact.withoutYearBuilt ?? '';
+        const withoutLivingArea = impact.withoutLivingArea ? impact.withoutLivingArea : '';
+        const withoutSalePrice = impact.withoutSalePrice ? impact.withoutSalePrice : '';
+
+        const adjustedSaleWith = impact.adjustedSaleWith ? impact.adjustedSaleWith : '';
+        const adjustedSaleWithout = impact.adjustedSaleWithout ? impact.adjustedSaleWithout : '';
+
+        const dollarImpact = impact.dollarImpact ? impact.dollarImpact : '';
+        const percentImpact = impact.percentImpact ? impact.percentImpact : '';
+
+        const appliedPos = actualAdjustments[`${key}_positive`] != null ? actualAdjustments[`${key}_positive`] : '';
+        const appliedNeg = actualAdjustments[`${key}_negative`] != null ? actualAdjustments[`${key}_negative`] : '';
+
+        rows.push([
+          vcs,
+          locationAnalysis,
+          code,
+          withYearBuilt,
+          withLivingArea,
+          withSalePrice,
+          withoutYearBuilt,
+          withoutLivingArea,
+          withoutSalePrice,
+          adjustedSaleWith,
+          adjustedSaleWithout,
+          dollarImpact,
+          percentImpact,
+          appliedPos,
+          appliedNeg
+        ]);
+      });
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Format header row as bold + center and apply thin borders where supported
+    const cols = rows[0].length;
+    const getCell = (r, c) => {
+      const colLetter = XLSX.utils.encode_col(c);
+      return `${colLetter}${r}`;
+    };
+
+    for (let c = 0; c < cols; c++) {
+      const cellRef = getCell(1, c);
+      if (!ws[cellRef]) continue;
+      try {
+        ws[cellRef].s = ws[cellRef].s || {};
+        ws[cellRef].s.font = { ...(ws[cellRef].s.font || {}), bold: true };
+        ws[cellRef].s.alignment = { horizontal: 'center' };
+        ws[cellRef].s.border = {
+          top: { style: 'thin', color: { rgb: 'FF000000' } },
+          bottom: { style: 'thin', color: { rgb: 'FF000000' } },
+          left: { style: 'thin', color: { rgb: 'FF000000' } },
+          right: { style: 'thin', color: { rgb: 'FF000000' } }
+        };
+      } catch (e) {
+        // styling may not be supported in some environments; ignore
+        debug('Header styling not applied', e);
+      }
+    }
+
+    // For columns that are numeric/currency, ensure values include commas and $ where appropriate (as strings)
+    // Columns mapping (0-based): 4=With Living Area,5=With Sale Price,7=Without Living Area,8=Without Sale Price,9=Adjusted Sale With,10=Adjusted Sale Without,11=Dollar Impact,12=Percent Impact,13=Applied+,14=Applied-
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r];
+      // format living area
+      if (row[4] !== '' && !isNaN(Number(row[4]))) row[4] = Number(row[4]).toLocaleString();
+      if (row[7] !== '' && !isNaN(Number(row[7]))) row[7] = Number(row[7]).toLocaleString();
+
+      // format currency fields
+      [5,8,9,10,11].forEach(ci => {
+        if (row[ci] !== '' && !isNaN(Number(row[ci]))) {
+          row[ci] = `$${Number(row[ci]).toLocaleString()}`;
+        }
+      });
+
+      // percent impact
+      if (row[12] !== '' && !String(row[12]).includes('%')) row[12] = `${row[12]}%`;
+
+      // applied percents
+      if (row[13] !== '' && !String(row[13]).includes('%')) row[13] = `${row[13]}%`;
+      if (row[14] !== '' && !String(row[14]).includes('%')) row[14] = `${row[14]}%`;
+    }
+
+    // Recreate worksheet with formatted strings
+    const ws2 = XLSX.utils.aoa_to_sheet(rows);
+    // Try to copy styles for header if possible
+    try {
+      for (let c = 0; c < cols; c++) {
+        const ref = getCell(1, c);
+        if (ws[ref] && ws2[ref]) ws2[ref].s = ws[ref].s;
+      }
+    } catch (e) {
+      debug('Failed to copy header styles to new sheet', e);
+    }
+
+    XLSX.utils.book_append_sheet(wb, ws2, 'Eco Obs Study');
+    return wb;
   };
 
   const exportEconomicObsolescence = () => {
@@ -3122,7 +3771,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const updateSpecialCategory = (category, rate) => {
-    console.log(`🔧 Updating special category: ${category} = ${rate}`);
+    debug(`🔧 Updating special category: ${category} = ${rate}`);
     setCascadeConfig(prev => {
       const newConfig = {
         ...prev,
@@ -3131,7 +3780,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           [category]: rate ? parseFloat(rate) : null
         }
       };
-      console.log('🔧 New cascade config special categories:', newConfig.specialCategories);
+      debug('🔧 New cascade config special categories:', newConfig.specialCategories);
       return newConfig;
     });
   };
@@ -3170,13 +3819,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Calculate average rate for checked items by category
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
-    console.log('🔄 Recalculating category analysis');
-    console.log('��� Total vacant sales:', vacantSales.length);
-    console.log('📊 Checked sales count:', checkedSales.length);
-    console.log('📋 Included sales IDs:', Array.from(includedSales));
-    console.log('📋 Sale categories state:', saleCategories);
-    console.log('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
-    console.log('📋 Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
+    debug('🔄 Recalculating category analysis');
+    debug('��� Total vacant sales:', vacantSales.length);
+    debug('📊 Checked sales count:', checkedSales.length);
+    debug('📋 Included sales IDs:', Array.from(includedSales));
+    debug('📋 Sale categories state:', saleCategories);
+    debug('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
+    debug('📋 Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
 
     // Helper function to calculate average for a category
     const getCategoryAverage = (filterFn, categoryType) => {
@@ -3256,7 +3905,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             (rates[rates.length / 2 - 1] + rates[rates.length / 2]) / 2 :
             rates[Math.floor(rates.length / 2)];
 
-          console.log(`��� ${categoryType} paired analysis:`, {
+          debug(`��� ${categoryType} paired analysis:`, {
             totalProperties: filtered.length,
             possiblePairs: (filtered.length * (filtered.length - 1)) / 2,
             validPairs: pairedRates.length,
@@ -3323,7 +3972,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Debug teardown sales to see if they're incorrectly going to raw land
       if (saleCategories[s.id] === 'teardown' || (s.property_block === '5' && s.property_lot === '12.12')) {
-        console.log('🌱 Raw Land check for teardown/5.12.12:', {
+        debug('🌱 Raw Land check for teardown/5.12.12:', {
           block: s.property_block,
           lot: s.property_lot,
           id: s.id,
@@ -3346,7 +3995,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Debug all teardown sales
       if (saleCategories[s.id] === 'teardown') {
-        console.log('🏗️ Teardown sale details:', {
+        debug('🏗️ Teardown sale details:', {
           block: s.property_block,
           lot: s.property_lot,
           id: s.id,
@@ -3361,7 +4010,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Keep the 47/2 debug for reference
       if (s.property_block === '47' && s.property_lot === '2') {
-        console.log('🏠 Property 47/2 details:', {
+        debug('🏠 Property 47/2 details:', {
           id: s.id,
           category: saleCategories[s.id],
           isInBuildingLot: isInCategory,
@@ -3376,7 +4025,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
     const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
 
-    console.log('🏗️ Building Lot Analysis Result:', {
+    debug('🏗️ Building Lot Analysis Result:', {
       avg: buildingLot.avg,
       count: buildingLot.count,
       method: buildingLot.method,
@@ -3630,7 +4279,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         type="checkbox"
                         checked={includedSales.has(sale.id)}
                         onChange={(e) => {
-                          console.log(`📋 Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
+                          debug(`��� Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
                             checked: e.target.checked,
                             saleId: sale.id
                           });
@@ -3640,7 +4289,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             setIncludedSales(prev => {
                               const newSet = new Set(prev);
                               newSet.delete(sale.id);
-                              console.log('❌ Removed from included sales, new size:', newSet.size);
+                              debug('❌ Removed from included sales, new size:', newSet.size);
                               return newSet;
                             });
                           }
@@ -3965,7 +4614,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       <div style={{ marginBottom: '30px', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
         <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Method 2: Improved Sale Lot Size Analysis</h3>
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Implied Acreage: Improved Sale Lot Size Analysis</h3>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
               <label style={{ fontSize: '12px', color: '#6B7280' }}>Type and Use:</label>
               <select
@@ -4169,7 +4818,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           <div style={{ borderTop: '2px solid #E5E7EB', backgroundColor: '#F8FAFC' }}>
             <div style={{ padding: '20px' }}>
               <h4 style={{ margin: '0 0 15px 0', fontSize: '16px', fontWeight: 'bold', color: '#1F2937' }}>
-                Method 2 Summary - Implied $/Acre Rates
+                Implied Acreage Summary - Implied $/Acre Rates
               </h4>
 
               <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
@@ -5370,7 +6019,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>
-                Method 2 Sales - VCS {method2ModalVCS}
+                Implied Acreage Sales - VCS {method2ModalVCS}
               </h3>
               <button
                 onClick={() => setShowMethod2Modal(false)}
@@ -5455,7 +6104,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '�����') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
@@ -5525,7 +6174,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'yearBuilt' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '����' : '↓') : ''}
+                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '������' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('typeUse')}
@@ -5665,7 +6314,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       value={targetAllocation || ''}
                       onChange={(e) => {
                         const value = e.target.value;
-                        console.log('🎯 Target allocation input changed:', value);
+                        debug('🎯 Target allocation input changed:', value);
                         // Fix: Parse as number to prevent caching issues
                         setTargetAllocation(value === '' ? null : parseFloat(value));
                       }}
@@ -5682,7 +6331,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <span style={{ fontSize: '16px', fontWeight: 'bold' }}>%</span>
                     <button
                       onClick={() => {
-                        console.log('💾 Save button clicked for target allocation:', targetAllocation);
+                        debug('💾 Save button clicked for target allocation:', targetAllocation);
                         saveTargetAllocation();
                       }}
                       disabled={!targetAllocation || targetAllocation === ''}
@@ -6161,34 +6810,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>VCS Valuation Sheet</h3>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
-              onClick={() => {
-                console.log('🔧 FORCE VCS CALC BUTTON CLICKED');
-                console.log('Target allocation before:', targetAllocation);
-                if (!targetAllocation) {
-                  console.log('Setting target allocation to 27%');
-                  setTargetAllocation(27);
-                }
-                setTimeout(() => {
-                  console.log('Calling calculateVCSRecommendedSitesWithTarget...');
-                  calculateVCSRecommendedSitesWithTarget();
-                }, 100);
-              }}
-              style={{
-                backgroundColor: '#8B5CF6',
-                color: 'white',
-                padding: '8px 16px',
-                borderRadius: '4px',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontSize: '14px'
-              }}
-            >
-              🎯 Force VCS Calc
-            </button>
-            <button
               onClick={() => exportToExcel('vcs-sheet')}
               style={{
                 backgroundColor: '#10B981',
@@ -6660,10 +7281,299 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Show all factors including 'None' - let user decide what to filter
     const filteredFactors = ecoObsFactors;
 
-    return (
-      <div style={{ padding: '20px' }}>
-        <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>Economic Obsolescence Analysis</h3>
+    // Combined codes for dropdown (defaults + custom)
+  const combinedLocationCodes = [
+    ...DEFAULT_ECO_OBS_CODES.map(c => ({ code: c.code, description: c.description, isPositive: c.isPositive, isDefault: true })),
+    ...customLocationCodes.map(c => ({ ...c, isDefault: false }))
+  ];
+
+  // Build summary for standalone location analyses (non-compounded)
+  const standaloneLocations = {};
+  Object.keys(ecoObsFactors || {}).forEach(vcs => {
+    Object.keys(ecoObsFactors[vcs] || {}).forEach(loc => {
+      // Skip empty/none and compounded descriptions
+      if (!loc || /\bnone\b|\bno analysis\b/i.test(loc)) return;
+      if (/[\/\|,]|\band\b|&/.test(loc)) return; // compound separators
+      if (!standaloneLocations[loc]) standaloneLocations[loc] = { vcsList: new Set(), impacts: [] };
+      standaloneLocations[loc].vcsList.add(vcs);
+      const impact = calculateEcoObsImpact(vcs, loc, globalEcoObsTypeFilter);
+      if (impact && impact.percentImpact && impact.percentImpact !== 'N/A') {
+        const num = parseFloat(String(impact.percentImpact));
+        if (!isNaN(num)) standaloneLocations[loc].impacts.push(num);
+      }
+    });
+  });
+
+  // Compute standalone averages
+  const standaloneAvg = {};
+  Object.entries(standaloneLocations).forEach(([loc, data]) => {
+    const avg = data.impacts.length ? (data.impacts.reduce((a, b) => a + b, 0) / data.impacts.length) : null;
+    standaloneAvg[loc] = { avg, count: data.vcsList.size, impacts: data.impacts };
+  });
+
+  // Find compound locations and compute summed averages from parts (cap at 25% absolute)
+  const compoundLocations = {};
+  Object.keys(ecoObsFactors || {}).forEach(vcs => {
+    Object.keys(ecoObsFactors[vcs] || {}).forEach(loc => {
+      if (!loc) return;
+      // detect compound
+      if (/[\/\|,]|\band\b|&/.test(loc)) {
+        // Keep original compound key
+        if (!compoundLocations[loc]) compoundLocations[loc] = { vcsList: new Set(), parts: [], summedAvg: 0 };
+        compoundLocations[loc].vcsList.add(vcs);
+        // split into parts using same splitter as mapping
+        const parts = loc.split(/\/|\|| and | & |,|\//i).map(p => p.trim()).filter(Boolean);
+        compoundLocations[loc].parts = Array.from(new Set([...(compoundLocations[loc].parts || []), ...parts]));
+      }
+    });
+  });
+
+  Object.keys(compoundLocations).forEach(loc => {
+    const parts = compoundLocations[loc].parts || [];
+    // sum available standalone averages for parts
+    let sum = 0;
+    parts.forEach(part => {
+      const p = standaloneAvg[part];
+      if (p && p.avg !== null && !isNaN(p.avg)) {
+        sum += p.avg;
+      }
+    });
+    // cap at 25% (by absolute value)
+    const capped = Math.sign(sum) * Math.min(Math.abs(sum), 25);
+    compoundLocations[loc].summedAvg = capped;
+  });
+
+  // Build combined summary list based on includeCompounded toggle
+  let combined = Object.entries(standaloneAvg).map(([loc, d]) => ({ location: loc, avgPercent: d.avg, count: d.count, impacts: d.impacts, isCompound: false }));
+  if (includeCompounded) {
+    combined = combined.concat(Object.keys(compoundLocations).map(loc => ({ location: loc, avgPercent: compoundLocations[loc].summedAvg || null, count: compoundLocations[loc].vcsList.size, impacts: [], isCompound: true })));
+  }
+
+  const summaryList = combined.sort((a, b) => (b.count - a.count) || ((b.avgPercent || 0) - (a.avgPercent || 0))).slice(0, 50);
+
+  // Helper to split a location into parts (handles /, |, ',', ' and ', '&')
+  const splitLocationParts = (loc) => {
+    if (!loc) return [];
+    // split on '/', '|', ',', ' and ', '&' (case-insensitive), trimming whitespace
+    return loc.split(/\s*(?:\/|\||,|\band\b|&)\s*/i).map(p => p.trim()).filter(Boolean);
+  };
+
+  // Helper: determine polarity of a location part from mappedLocationCodes and code definitions
+  const getPartPolarity = (part) => {
+    // returns 'positive', 'negative', or null if unknown/mixed
+    const codes = new Set();
+    Object.keys(mappedLocationCodes || {}).forEach(k => {
+      if (k.endsWith(`_${part}`)) {
+        const val = (mappedLocationCodes[k] || '').toString().toUpperCase();
+        val.split('/').map(s => s.trim()).filter(Boolean).forEach(c => codes.add(c));
+      }
+    });
+    if (codes.size === 0) return null;
+    let hasPos = false;
+    let hasNeg = false;
+    codes.forEach(code => {
+      const def = DEFAULT_ECO_OBS_CODES.find(d => d.code === code);
+      const custom = customLocationCodes.find(d => d.code === code);
+      const isPos = def?.isPositive ?? custom?.isPositive ?? null;
+      if (isPos === true) hasPos = true;
+      if (isPos === false) hasNeg = true;
+    });
+    if (hasPos && !hasNeg) return 'positive';
+    if (hasNeg && !hasPos) return 'negative';
+    return null; // mixed or unknown
+  };
+
+  // Apply a percent value (positive or negative) from summary into worksheet applied adjustments for all matching VCS rows
+  // Update per-part matches and populate the compound row with aggregated values (max of part values per side)
+  const applySummaryToWorksheet = (location, value) => {
+    if (value === null || value === undefined || isNaN(Number(value))) return;
+    const numeric = Number(value);
+    if (!isFinite(numeric)) return;
+    // Skip locations that are tentative (contain 'possible' or '?') unless user explicitly provided inputs
+    if (/\bpossible|possibly\b|\?/i.test(location)) return;
+
+    const parts = splitLocationParts(location);
+
+    Object.keys(ecoObsFactors || {}).forEach(vcs => {
+      const partPosVals = [];
+      const partNegVals = [];
+
+      parts.forEach(part => {
+        if (ecoObsFactors[vcs] && ecoObsFactors[vcs][part]) {
+          const polarity = getPartPolarity(part);
+          if (numeric >= 0) {
+            if (polarity !== 'negative') {
+              updateActualAdjustment(vcs, `${part}_positive`, Math.abs(numeric));
+              partPosVals.push(Math.abs(numeric));
+            }
+          } else {
+            if (polarity !== 'positive') {
+              updateActualAdjustment(vcs, `${part}_negative`, Math.abs(numeric));
+              partNegVals.push(Math.abs(numeric));
+            }
+          }
+        } else if (standaloneAvg[part] && standaloneAvg[part].avg !== null && !isNaN(Number(standaloneAvg[part].avg))) {
+          const pAvg = Number(standaloneAvg[part].avg);
+          if (pAvg > 0) partPosVals.push(Math.abs(pAvg));
+          if (pAvg < 0) partNegVals.push(Math.abs(pAvg));
+        }
+      });
+
+      // After updating parts (or collecting part averages), set compound row values
+      const compoundKey = `${vcs}_${location}`;
+      if (partPosVals.length > 0) {
+        const maxPos = Math.max(...partPosVals);
+        setActualAdjustments(prev => ({ ...prev, [`${compoundKey}_positive`]: maxPos }));
+      }
+      if (partNegVals.length > 0) {
+        const maxNeg = Math.max(...partNegVals);
+        setActualAdjustments(prev => ({ ...prev, [`${compoundKey}_negative`]: maxNeg }));
+      }
+    });
+  };
+
+  // Apply both positive and/or negative values for a location to all matching VCS rows (handles parts)
+  // When explicit positive/negative provided, set parts accordingly and aggregate to compound row
+  const applySummarySet = (location, positive, negative) => {
+    // Skip tentative locations
+    if (/\bpossible|possibly\b|\?/i.test(location)) {
+      debug(`applySummarySet skipped tentative location: ${location}`);
+      return;
+    }
+    const parts = splitLocationParts(location);
+    debug(`applySummarySet called for location: ${location} parts: ${parts.join(' | ')} positive: ${positive} negative: ${negative}`);
+
+    Object.keys(ecoObsFactors || {}).forEach(vcs => {
+      const partPosVals = [];
+      const partNegVals = [];
+
+      // First, update parts where they exist in this VCS
+      parts.forEach(part => {
+        if (ecoObsFactors[vcs] && ecoObsFactors[vcs][part]) {
+          const polarity = getPartPolarity(part);
+
+          if (polarity === 'positive') {
+            if (positive !== null && positive !== undefined && !isNaN(Number(positive))) {
+              const val = Math.abs(Number(positive));
+              updateActualAdjustment(vcs, `${part}_positive`, val);
+              partPosVals.push(val);
+            }
+          } else if (polarity === 'negative') {
+            if (negative !== null && negative !== undefined && !isNaN(Number(negative))) {
+              const val = Math.abs(Number(negative));
+              updateActualAdjustment(vcs, `${part}_negative`, val);
+              partNegVals.push(val);
+            }
+          } else {
+            if (positive !== null && positive !== undefined && !isNaN(Number(positive))) {
+              const val = Math.abs(Number(positive));
+              updateActualAdjustment(vcs, `${part}_positive`, val);
+              partPosVals.push(val);
+            }
+            if (negative !== null && negative !== undefined && !isNaN(Number(negative))) {
+              const val = Math.abs(Number(negative));
+              updateActualAdjustment(vcs, `${part}_negative`, val);
+              partNegVals.push(val);
+            }
+          }
+        }
+        // If the part does not exist for this VCS but we have a standaloneAvg for the part, use that to influence compound aggregation
+        else if (standaloneAvg[part] && standaloneAvg[part].avg !== null && !isNaN(Number(standaloneAvg[part].avg))) {
+          const pAvg = Number(standaloneAvg[part].avg);
+          if (pAvg > 0) partPosVals.push(Math.abs(pAvg));
+          if (pAvg < 0) partNegVals.push(Math.abs(pAvg));
+        }
+      });
+
+      // Aggregate to compound row (even if parts weren't present in this VCS)
+      const compoundKey = `${vcs}_${location}`;
+      if (partPosVals.length > 0) {
+        const maxPos = Math.max(...partPosVals);
+        setActualAdjustments(prev => ({ ...prev, [`${compoundKey}_positive`]: maxPos }));
+      }
+      if (partNegVals.length > 0) {
+        const maxNeg = Math.max(...partNegVals);
+        setActualAdjustments(prev => ({ ...prev, [`${compoundKey}_negative`]: maxNeg }));
+      }
+    });
+  };
+
+  // Special helper for BS traffic levels - apply to compound and part keys
+  const applyBSTraffic = (location, levelKey) => {
+    const levelMap = { light: -5, medium: -10, heavy: -15 };
+    const val = levelMap[levelKey];
+    if (val === undefined) return;
+    const parts = splitLocationParts(location);
+    Object.keys(ecoObsFactors || {}).forEach(vcs => {
+      if (ecoObsFactors[vcs] && ecoObsFactors[vcs][location]) updateActualAdjustment(vcs, `${location}_negative`, Math.abs(val));
+      parts.forEach(part => {
+        if (ecoObsFactors[vcs] && ecoObsFactors[vcs][part]) updateActualAdjustment(vcs, `${part}_negative`, Math.abs(val));
+      });
+    });
+  };
+
+  // Helper to check if any mapped code for this location includes a particular code (e.g., BS)
+  const locationHasCode = (location, code) => {
+    // check exact mapped keys
+    const exact = Object.keys(mappedLocationCodes || {}).some(k => k.endsWith(`_${location}`) && (mappedLocationCodes[k] || '').toString().toUpperCase().split('/').map(s => s.trim()).includes(code));
+    if (exact) return true;
+    // also check parts
+    const parts = splitLocationParts(location);
+    return parts.some(part => Object.keys(mappedLocationCodes || {}).some(k => k.endsWith(`_${part}`) && (mappedLocationCodes[k] || '').toString().toUpperCase().split('/').map(s => s.trim()).includes(code)));
+  };
+
+  // Use component-level inputs/handlers for adding custom codes
+
+  return (
+    <div style={{ padding: '20px' }}>
+        <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div style={{ fontSize: '14px', fontWeight: '600' }}>Eco Obs Code Config</div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <select
+                style={{ padding: '6px 10px', border: '1px solid #D1D5DB', borderRadius: '6px', minWidth: '220px' }}
+                value=""
+                onChange={() => { /* Selection handled in grid below - this dropdown is informational */ }}
+              >
+                <option value="">-- Standard Codes (editable) --</option>
+                {combinedLocationCodes.map(c => (
+                  <option key={c.code} value={c.code}>{`${c.code} - ${c.description} ${c.isPositive ? '(+)' : '(-)'}`}</option>
+                ))}
+              </select>
+
+              <div style={{ fontSize: '12px', color: '#6B7280' }}>Add custom codes:</div>
+              <input
+                placeholder="Code"
+                value={newEcoCode}
+                onChange={(e) => setNewEcoCode(e.target.value)}
+                style={{ width: '60px', padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+              />
+              <input
+                placeholder="Description"
+                value={newEcoDesc}
+                onChange={(e) => setNewEcoDesc(e.target.value)}
+                style={{ padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+              />
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+                <input type="checkbox" checked={newEcoIsPositive} onChange={(e) => setNewEcoIsPositive(e.target.checked)} /> Positive
+              </label>
+              <button onClick={handleAddCustomCode} style={{ padding: '6px 10px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px' }}>Add</button>
+            </div>
+
+            {customLocationCodes.length > 0 && (
+              <div style={{ marginTop: '6px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {customLocationCodes.map(c => (
+                  <div key={c.code} style={{ padding: '6px 8px', borderRadius: '6px', background: '#F3F4F6', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <strong style={{ fontSize: '12px' }}>{c.code}</strong>
+                    <span style={{ fontSize: '12px', color: '#374151' }}>{c.description}</span>
+                    <span style={{ fontSize: '12px', color: c.isPositive ? '#10B981' : '#DC2626' }}>{c.isPositive ? '+' : '-'}</span>
+                    <button onClick={() => handleRemoveCustomCode(c.code)} style={{ marginLeft: '6px', border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer' }}>Remove</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <label style={{ fontSize: '14px', fontWeight: '500' }}>Type Use Filter:</label>
@@ -6686,22 +7596,44 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <option value="30">Townhouse</option>
               </select>
             </div>
-            <button
-              onClick={() => exportToExcel('eco-obs')}
-              style={{
-                backgroundColor: '#10B981',
-                color: 'white',
-                padding: '8px 16px',
-                borderRadius: '4px',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}
-            >
-              <Download size={16} /> Export
-            </button>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button
+                onClick={() => exportToExcel('eco-obs')}
+                style={{
+                  backgroundColor: '#10B981',
+                  color: 'white',
+                  padding: '8px 16px',
+                  borderRadius: '4px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <Download size={16} /> Export
+              </button>
+
+              <button
+                onClick={() => {
+                  applyDefaultMapping();
+                  alert('Applied default mappings to empty code fields. Review highlighted entries.');
+                }}
+                style={{
+                  backgroundColor: '#3B82F6',
+                  color: 'white',
+                  padding: '8px 12px',
+                  borderRadius: '4px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                Apply Defaults
+              </button>
+            </div>
           </div>
         </div>
 
@@ -6710,9 +7642,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ backgroundColor: '#F8F9FA', borderBottom: '2px solid #E5E7EB' }}>
-                  <th style={{ padding: '8px 4px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>VCS</th>
-                  <th style={{ padding: '8px 4px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>Locational Analysis</th>
-                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>Code</th>
+                  <th onClick={() => toggleSort('vcs')} style={{ padding: '8px 4px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px', cursor: 'pointer' }}>VCS{sortField === 'vcs' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                  <th onClick={() => toggleSort('location')} style={{ padding: '8px 4px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px', cursor: 'pointer' }}>Locational Analysis{sortField === 'location' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                  <th onClick={() => toggleSort('code')} style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px', cursor: 'pointer' }}>Code{sortField === 'code' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                   <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>With Year Built</th>
                   <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>With Living Area</th>
                   <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>With Sale Price</th>
@@ -6728,128 +7660,222 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </tr>
               </thead>
               <tbody>
-                {Object.keys(filteredFactors).sort().map(vcs => {
-                  return Object.keys(filteredFactors[vcs]).sort().map((locationAnalysis, index) => {
-                    const key = `${vcs}_${locationAnalysis}`;
-                    const impact = calculateEcoObsImpact(vcs, locationAnalysis, globalEcoObsTypeFilter);
-                    const rowIndex = Object.keys(filteredFactors).indexOf(vcs) * Object.keys(filteredFactors[vcs]).length + index;
+                {(() => {
+                  // Build flat rows array for sorting
+                  const rows = [];
+                  Object.keys(filteredFactors).forEach(vcsKey => {
+                    Object.keys(filteredFactors[vcsKey]).forEach(locationAnalysis => {
+                      rows.push({ vcs: vcsKey, locationAnalysis, key: `${vcsKey}_${locationAnalysis}` });
+                    });
+                  });
 
-                    // Check if row should be grayed out (no "with" sales data)
+                  // sort helper
+                  rows.sort((a, b) => {
+                    const dir = sortDir === 'asc' ? 1 : -1;
+                    if (sortField === 'vcs') {
+                      if (a.vcs === b.vcs) return a.locationAnalysis.localeCompare(b.locationAnalysis) * dir;
+                      return a.vcs.localeCompare(b.vcs) * dir;
+                    }
+                    if (sortField === 'location') {
+                      if (a.locationAnalysis === b.locationAnalysis) return a.vcs.localeCompare(b.vcs) * dir;
+                      return a.locationAnalysis.localeCompare(b.locationAnalysis) * dir;
+                    }
+                    // code
+                    const aCode = (mappedLocationCodes[`${a.vcs}_${a.locationAnalysis}`] || '').toUpperCase();
+                    const bCode = (mappedLocationCodes[`${b.vcs}_${b.locationAnalysis}`] || '').toUpperCase();
+                    if (aCode === bCode) return a.vcs.localeCompare(b.vcs) * dir;
+                    return aCode.localeCompare(bCode) * dir;
+                  });
+
+                  return rows.map((r, rowIndex) => {
+                    const { vcs, locationAnalysis, key } = r;
+                    const impact = calculateEcoObsImpact(vcs, locationAnalysis, globalEcoObsTypeFilter);
                     const hasWithData = impact && impact.withCount > 0;
                     const dataCellStyle = !hasWithData ? { color: '#9CA3AF', opacity: 0.6 } : {};
 
                     return (
-                      <tr key={key} style={{
-                        backgroundColor: rowIndex % 2 === 0 ? 'white' : '#FAFBFC',
-                        borderBottom: '1px solid #E5E7EB'
-                      }}>
-                        {/* Keep VCS, Description, Code normal regardless of data availability */}
+                      <tr key={key} style={{ backgroundColor: rowIndex % 2 === 0 ? 'white' : '#FAFBFC', borderBottom: '1px solid #E5E7EB' }}>
                         <td style={{ padding: '6px 4px', fontWeight: '600', color: '#1F2937', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>{vcs}</td>
-                        <td style={{ padding: '6px 4px', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px', maxWidth: '150px', wordWrap: 'break-word' }}>
-                          {locationAnalysis}
-                        </td>
+                        <td style={{ padding: '6px 4px', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px', maxWidth: '150px', wordWrap: 'break-word' }}>{locationAnalysis}</td>
                         <td style={{ padding: '6px 4px', color: '#6B7280', borderRight: '1px solid #E5E7EB', fontSize: '10px', textAlign: 'center' }}>
                           <input
                             type="text"
                             placeholder="TBD"
-                            style={{
-                              width: '40px',
-                              padding: '2px 4px',
-                              border: '1px solid #D1D5DB',
-                              borderRadius: '3px',
-                              fontSize: '10px',
-                              textAlign: 'center',
-                              backgroundColor: 'white'
+                            value={mappedLocationCodes[`${vcs}_${locationAnalysis}`] || ''}
+                            onChange={(e) => {
+                              const key = `${vcs}_${locationAnalysis}`;
+                              const val = e.target.value.toUpperCase();
+                              setMappedLocationCodes(prev => ({ ...prev, [key]: val }));
                             }}
+                            style={{ width: '80px', padding: '2px 4px', border: '1px solid #D1D5DB', borderRadius: '3px', fontSize: '10px', textAlign: 'center', backgroundColor: (!mappedLocationCodes[`${vcs}_${locationAnalysis}`] || mappedLocationCodes[`${vcs}_${locationAnalysis}`] === '') ? '#FEF9C3' : 'white' }}
                           />
                         </td>
-                        {/* Data columns - gray out when no data */}
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
-                          {impact && impact.withYearBuilt ? impact.withYearBuilt : '-'}
-                        </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
-                          {impact && impact.withLivingArea ? impact.withLivingArea.toLocaleString() : '-'}
-                        </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
-                          {impact && impact.withSalePrice ? `$${impact.withSalePrice.toLocaleString()}` : '-'}
-                        </td>
 
-                        {/* Without Factor columns */}
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
-                          {impact && impact.withoutYearBuilt ? impact.withoutYearBuilt : '-'}
-                        </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
-                          {impact && impact.withoutLivingArea ? impact.withoutLivingArea.toLocaleString() : '-'}
-                        </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
-                          {impact && impact.withoutSalePrice ? `$${impact.withoutSalePrice.toLocaleString()}` : '-'}
-                        </td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>{impact && impact.withYearBuilt ? impact.withYearBuilt : '-'}</td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>{impact && impact.withLivingArea ? impact.withLivingArea.toLocaleString() : '-'}</td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>{impact && impact.withSalePrice ? `$${impact.withSalePrice.toLocaleString()}` : '-'}</td>
 
-                        {/* Adjusted Sales columns */}
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
-                          {impact && impact.adjustedSaleWith ? `$${impact.adjustedSaleWith.toLocaleString()}` : '-'}
-                        </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
-                          {impact && impact.adjustedSaleWithout ? `$${impact.adjustedSaleWithout.toLocaleString()}` : '-'}
-                        </td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>{impact && impact.withoutYearBuilt ? impact.withoutYearBuilt : '-'}</td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>{impact && impact.withoutLivingArea ? impact.withoutLivingArea.toLocaleString() : '-'}</td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>{impact && impact.withoutSalePrice ? `$${impact.withoutSalePrice.toLocaleString()}` : '-'}</td>
 
-                        {/* Impact columns */}
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', fontWeight: 'bold', ...dataCellStyle }}>
-                          {impact && impact.dollarImpact ? `$${impact.dollarImpact.toLocaleString()}` : '-'}
-                        </td>
-                        <td style={{
-                          padding: '6px 4px',
-                          textAlign: 'center',
-                          fontWeight: 'bold',
-                          fontSize: '10px',
-                          borderRight: '1px solid #E5E7EB',
-                          ...dataCellStyle,
-                          color: !hasWithData ? '#9CA3AF' : (impact && impact.percentImpact !== 'N/A' ? (parseFloat(impact.percentImpact) < 0 ? '#DC2626' : '#10B981') : '#9CA3AF')
-                        }}>
-                          {impact && impact.percentImpact ? `${impact.percentImpact}%` : 'N/A'}
-                        </td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>{impact && impact.adjustedSaleWith ? `$${impact.adjustedSaleWith.toLocaleString()}` : '-'}</td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>{impact && impact.adjustedSaleWithout ? `$${impact.adjustedSaleWithout.toLocaleString()}` : '-'}</td>
 
-                        {/* Applied adjustment columns - Always normal styling regardless of data availability */}
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', fontWeight: 'bold', ...dataCellStyle }}>{impact && impact.dollarImpact ? `$${impact.dollarImpact.toLocaleString()}` : '-'}</td>
+                        <td style={{ padding: '6px 4px', textAlign: 'center', fontWeight: 'bold', fontSize: '10px', borderRight: '1px solid #E5E7EB', ...dataCellStyle, color: !hasWithData ? '#9CA3AF' : (impact && impact.percentImpact !== 'N/A' ? (parseFloat(impact.percentImpact) < 0 ? '#DC2626' : '#10B981') : '#9CA3AF') }}>{impact && impact.percentImpact ? `${impact.percentImpact}%` : 'N/A'}</td>
+
                         <td style={{ padding: '6px 4px', textAlign: 'center', borderRight: '1px solid #E5E7EB' }}>
-                          <input
-                            type="number"
-                            value={actualAdjustments[`${key}_positive`] || ''}
-                            onChange={(e) => updateActualAdjustment(vcs, `${locationAnalysis}_positive`, e.target.value)}
-                            placeholder="-"
-                            style={{
-                              width: '40px',
-                              padding: '2px 4px',
-                              border: '1px solid #D1D5DB',
-                              borderRadius: '3px',
-                              fontSize: '10px',
-                              textAlign: 'center',
-                              backgroundColor: 'white'
-                            }}
-                          />
+                          {(() => {
+                            const mapVal = mappedLocationCodes[`${vcs}_${locationAnalysis}`] || '';
+                            const codes = mapVal ? mapVal.split('/').map(c => c.trim()) : [];
+                            const hasPositive = codes.some(c => (DEFAULT_ECO_OBS_CODES.find(d => d.code === c)?.isPositive) || (customLocationCodes.find(d => d.code === c)?.isPositive));
+                            const hasNegative = codes.some(c => !(DEFAULT_ECO_OBS_CODES.find(d => d.code === c)?.isPositive) && !(customLocationCodes.find(d => d.code === c)?.isPositive));
+
+                            return (
+                              <input
+                                type="number"
+                                min={0}
+                                step="0.1"
+                                onKeyDown={(e) => { if (e.key === '-' || e.key === 'e') e.preventDefault(); }}
+                                onWheel={(e) => e.currentTarget.blur()}
+                                value={actualAdjustments[`${key}_positive`] || ''}
+                                onChange={(e) => updateActualAdjustment(vcs, `${locationAnalysis}_positive`, e.target.value)}
+                                placeholder="-"
+                                disabled={!hasPositive}
+                                style={{ width: '40px', padding: '2px 4px', border: '1px solid #D1D5DB', borderRadius: '3px', fontSize: '10px', textAlign: 'center', backgroundColor: hasPositive ? 'white' : '#F3F4F6', WebkitAppearance: 'none', MozAppearance: 'textfield', appearance: 'textfield' }}
+                              />
+                            );
+                          })()}
                         </td>
                         <td style={{ padding: '6px 4px', textAlign: 'center' }}>
-                          <input
-                            type="number"
-                            value={actualAdjustments[`${key}_negative`] || ''}
-                            onChange={(e) => updateActualAdjustment(vcs, `${locationAnalysis}_negative`, e.target.value)}
-                            placeholder="-"
-                            style={{
-                              width: '40px',
-                              padding: '2px 4px',
-                              border: '1px solid #D1D5DB',
-                              borderRadius: '3px',
-                              fontSize: '10px',
-                              textAlign: 'center',
-                              backgroundColor: 'white'
-                            }}
-                          />
+                          {(() => {
+                            const mapVal = mappedLocationCodes[`${vcs}_${locationAnalysis}`] || '';
+                            const codes = mapVal ? mapVal.split('/').map(c => c.trim()) : [];
+                            const hasPositive = codes.some(c => (DEFAULT_ECO_OBS_CODES.find(d => d.code === c)?.isPositive) || (customLocationCodes.find(d => d.code === c)?.isPositive));
+                            const hasNegative = codes.some(c => !(DEFAULT_ECO_OBS_CODES.find(d => d.code === c)?.isPositive) && !(customLocationCodes.find(d => d.code === c)?.isPositive));
+
+                            return (
+                              <input
+                                type="number"
+                                min={0}
+                                step="0.1"
+                                onKeyDown={(e) => { if (e.key === '-' || e.key === 'e') e.preventDefault(); }}
+                                onWheel={(e) => e.currentTarget.blur()}
+                                value={actualAdjustments[`${key}_negative`] || ''}
+                                onChange={(e) => updateActualAdjustment(vcs, `${locationAnalysis}_negative`, e.target.value)}
+                                placeholder="-"
+                                disabled={!hasNegative}
+                                style={{ width: '40px', padding: '2px 4px', border: '1px solid #D1D5DB', borderRadius: '3px', fontSize: '10px', textAlign: 'center', backgroundColor: hasNegative ? 'white' : '#F3F4F6', WebkitAppearance: 'none', MozAppearance: 'textfield', appearance: 'textfield' }}
+                              />
+                            );
+                          })()}
                         </td>
                       </tr>
                     );
                   });
-                })}
+                })()}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {/* SUMMARY SECTION: Top standalone location recommendations */}
+        <div style={{ marginTop: '12px', padding: '12px', background: '#F8FAFC', border: '1px solid #E5E7EB', borderRadius: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <div style={{ fontSize: '13px', fontWeight: '600' }}>Location Recommendations {includeCompounded ? '(including compounded)' : '(standalone descriptions)'}</div>
+            <label style={{ fontSize: '12px', color: '#374151', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <input type="checkbox" checked={includeCompounded} onChange={(e) => setIncludeCompounded(e.target.checked)} /> Include compounded
+            </label>
+          </div>
+          <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '8px' }}>Shows average recommended percent impact across VCS for singular location analyses. For compounded descriptions we sum the component recommendations and cap at 25% (asterisked). Use the Applied inputs to set values for matching worksheet rows.</div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#FFFFFF' }}>
+                  <th style={{ textAlign: 'left', padding: '6px 8px', fontWeight: '600' }}>Location</th>
+                  <th style={{ textAlign: 'center', padding: '6px 8px', fontWeight: '600' }}>VCS Count</th>
+                  <th style={{ textAlign: 'center', padding: '6px 8px', fontWeight: '600' }}>Recommended %</th>
+                  <th style={{ textAlign: 'center', padding: '6px 8px', fontWeight: '600' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summaryList.map(item => (
+                  <tr key={item.location} style={{ borderTop: '1px solid #E5E7EB' }}>
+                    <td style={{ padding: '8px' }}>{item.location}</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>{item.count}</td>
+                    <td style={{ padding: '8px', textAlign: 'center', fontWeight: '600' }}>{item.avgPercent !== null ? `${item.avgPercent.toFixed(1)}%` : 'N/A'}</td>
+                    <td style={{ padding: '8px', textAlign: 'center', display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.1"
+                        placeholder="+"
+                        value={summaryInputs[item.location]?.positive || ''}
+                        onKeyDown={(e) => { if (e.key === '-' || e.key === 'e') e.preventDefault(); }}
+                        onWheel={(e) => e.currentTarget.blur()}
+                        onChange={(e) => setSummaryInputs(prev => ({ ...prev, [item.location]: { ...(prev[item.location] || {}), positive: e.target.value } }))}
+                        style={{ width: '60px', padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: '4px', textAlign: 'center', WebkitAppearance: 'none', MozAppearance: 'textfield', appearance: 'textfield' }}
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.1"
+                        placeholder="-"
+                        value={summaryInputs[item.location]?.negative || ''}
+                        onKeyDown={(e) => { if (e.key === '-' || e.key === 'e') e.preventDefault(); }}
+                        onWheel={(e) => e.currentTarget.blur()}
+                        onChange={(e) => setSummaryInputs(prev => ({ ...prev, [item.location]: { ...(prev[item.location] || {}), negative: e.target.value } }))}
+                        style={{ width: '60px', padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: '4px', textAlign: 'center', WebkitAppearance: 'none', MozAppearance: 'textfield', appearance: 'textfield' }}
+                      />
+                      <button onClick={() => {
+                        const entry = summaryInputs[item.location] || {};
+                        const pos = entry.positive !== undefined && entry.positive !== '' ? parseFloat(entry.positive) : null;
+                        const neg = entry.negative !== undefined && entry.negative !== '' ? parseFloat(entry.negative) : null;
+                        // Apply both if provided; positive applies to positive field, negative to negative field
+                        if (pos === null && neg === null) return alert('Enter a value in Applied+ or Applied-');
+                        applySummarySet(item.location, pos, neg);
+                        alert('Applied values to matching worksheet rows');
+                      }} style={{ padding: '6px 10px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: '4px' }}>Set</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+            <button onClick={() => {
+              // Apply inputs for all summary rows; if no input for an item, apply avgPercent if available
+              const tentativeRegex = /\bpossible|possibly\b|\?/i;
+              summaryList.forEach(item => {
+                const entry = summaryInputs[item.location] || {};
+                const pos = entry.positive !== undefined && entry.positive !== '' ? parseFloat(entry.positive) : null;
+                const neg = entry.negative !== undefined && entry.negative !== '' ? parseFloat(entry.negative) : null;
+
+                // Skip tentative locations or tentative parts inside a compound
+                const parts = splitLocationParts(item.location || '');
+                if (tentativeRegex.test(item.location) || parts.some(p => tentativeRegex.test(p))) {
+                  debug(`Skipping tentative summary item in Set All: ${item.location}`);
+                  return;
+                }
+
+                if (pos !== null || neg !== null) {
+                  debug(`Set All applying explicit values for ${item.location}: +${pos || 0} -${neg || 0}`);
+                  applySummarySet(item.location, pos, neg);
+                } else if (item.avgPercent !== null && item.avgPercent !== undefined && !isNaN(Number(item.avgPercent))) {
+                  // Use avgPercent to populate appropriate side(s)
+                  const avg = Number(item.avgPercent);
+                  const posVal = avg > 0 ? Math.abs(avg) : null;
+                  const negVal = avg < 0 ? Math.abs(avg) : null;
+                  if (posVal !== null || negVal !== null) {
+                    debug(`Set All applying avgPercent for ${item.location}: ${avg}`);
+                    applySummarySet(item.location, posVal, negVal);
+                  }
+                }
+              });
+              alert('Set applied for all visible summary rows (skipped tentative locations)');
+            }} style={{ padding: '8px 12px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px' }}>Set All</button>
           </div>
         </div>
       </div>
@@ -6940,86 +7966,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           >
             <Save size={16} /> {isSaving ? 'Saving...' : 'Save'}
           </button>
-          <button
-            onClick={() => {
-              console.log('��� MANUAL DEBUG SAVE TRIGGERED');
-              console.log('Current state snapshot:', {
-                includedSales: Array.from(includedSales),
-                specialCategories: cascadeConfig.specialCategories,
-                saleCategories,
-                vacantSalesCount: vacantSales.length,
-                isInitialLoadComplete
-              });
-              saveAnalysis();
-            }}
-            style={{
-              backgroundColor: '#8B5CF6',
-              color: 'white',
-              padding: '4px 8px',
-              borderRadius: '4px',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '12px'
-            }}
-          >
-            🔧 Debug
-          </button>
-          <button
-            onClick={() => {
-              console.log('🔧 MANUAL DEBUG SAVE TRIGGERED');
-              console.log('Current state snapshot:', {
-                includedSales: Array.from(includedSales),
-                specialCategories: cascadeConfig.specialCategories,
-                saleCategories,
-                vacantSalesCount: vacantSales.length
-              });
-              saveAnalysis();
-            }}
-            style={{
-              backgroundColor: '#8B5CF6',
-              color: 'white',
-              padding: '4px 8px',
-              borderRadius: '4px',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '12px'
-            }}
-          >
-            🔧 Debug Save
-          </button>
-          <button
-            onClick={() => {
-              console.log('���� MANUAL VCS RECALCULATION TRIGGERED');
-              console.log('Current state:', {
-                targetAllocation,
-                hasCascadeRates: !!cascadeConfig.normal.prime,
-                propertiesCount: properties?.length || 0,
-                cascadeRates: cascadeConfig.normal,
-                vcsRecommendedSites: Object.keys(vcsRecommendedSites).length
-              });
 
-              // Force target allocation to 27 if it's not set
-              if (!targetAllocation) {
-                console.log('�� FORCING TARGET ALLOCATION TO 27%');
-                setTargetAllocation(27);
-              }
-
-              // Force recalculation
-              console.log('🔧 CALLING calculateVCSRecommendedSitesWithTarget MANUALLY');
-              calculateVCSRecommendedSitesWithTarget();
-            }}
-            style={{
-              backgroundColor: '#DC2626',
-              color: 'white',
-              padding: '4px 8px',
-              borderRadius: '4px',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '12px'
-            }}
-          >
-            🎯 Force VCS Calc
-          </button>
           {lastSaved && (
             <span style={{ fontSize: '12px', color: '#6B7280' }}>
               Last saved: {lastSaved.toLocaleTimeString()}
@@ -7033,6 +7980,63 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       {activeSubTab === 'allocation' && renderAllocationStudyTab()}
       {activeSubTab === 'vcs-sheet' && renderVCSSheetTab()}
       {activeSubTab === 'eco-obs' && renderEconomicObsolescenceTab()}
+
+      {/* Mark Complete footer for selected subtab (updates Management Checklist) */}
+      <div style={{ marginTop: '18px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+        {activeSubTab === 'land-rates' && (
+          <button
+            onClick={() => toggleChecklist('land-value-tables', isLandRatesComplete, setIsLandRatesComplete)}
+            style={{
+              padding: '8px 14px',
+              backgroundColor: isLandRatesComplete ? '#10B981' : '#E5E7EB',
+              color: isLandRatesComplete ? 'white' : '#374151',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: 600
+            }}
+            title={isLandRatesComplete ? 'Click to reopen' : 'Mark Land Value Tables Built complete'}
+          >
+            {isLandRatesComplete ? '✓ Mark Complete' : 'Mark Complete'}
+          </button>
+        )}
+
+        {activeSubTab === 'vcs-sheet' && (
+          <button
+            onClick={() => toggleChecklist('vcs-reviewed', isVcsSheetComplete, setIsVcsSheetComplete)}
+            style={{
+              padding: '8px 14px',
+              backgroundColor: isVcsSheetComplete ? '#10B981' : '#E5E7EB',
+              color: isVcsSheetComplete ? 'white' : '#374151',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: 600
+            }}
+            title={isVcsSheetComplete ? 'Click to reopen' : 'Mark VCS Reviewed/Reset complete'}
+          >
+            {isVcsSheetComplete ? '✓ Mark Complete' : 'Mark Complete'}
+          </button>
+        )}
+
+        {activeSubTab === 'eco-obs' && (
+          <button
+            onClick={() => toggleChecklist('economic-obsolescence', isEcoObsComplete, setIsEcoObsComplete)}
+            style={{
+              padding: '8px 14px',
+              backgroundColor: isEcoObsComplete ? '#10B981' : '#E5E7EB',
+              color: isEcoObsComplete ? 'white' : '#374151',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: 600
+            }}
+            title={isEcoObsComplete ? 'Click to reopen' : 'Mark Economic Obsolescence Study complete'}
+          >
+            {isEcoObsComplete ? '✓ Mark Complete' : 'Mark Complete'}
+          </button>
+        )}
+      </div>
     </div>
   );
 };

@@ -1863,53 +1863,106 @@ export const checklistService = {
     }
   },
 
-  // Update item status (completed, pending, etc.)
-  async updateItemStatus(itemId, status, completedBy) {
+  // Update item status (completed, pending, etc.) for a specific job
+  // Note: this upserts into checklist_item_status (per-job status table)
+  async updateItemStatus(jobId, itemId, status, completedBy) {
     try {
-      const updates = {
+      // Validate completedBy exists in employees (or users) table to avoid FK violations
+      let validatedCompletedBy = null;
+      if (status === 'completed' && completedBy) {
+        try {
+          const { data: emp } = await supabase.from('employees').select('id').eq('id', completedBy).maybeSingle();
+          if (emp && emp.id) {
+            validatedCompletedBy = completedBy;
+          } else {
+            // Try auth.users-like table (if present)
+            try {
+              const { data: usr } = await supabase.from('users').select('id').eq('id', completedBy).maybeSingle();
+              if (usr && usr.id) validatedCompletedBy = completedBy;
+            } catch (e) {
+              // ignore
+            }
+          }
+        } catch (e) {
+          // ignore lookup errors and fall back to null
+        }
+      }
+
+      const payload = {
+        job_id: jobId,
+        item_id: itemId,
         status: status,
         completed_at: status === 'completed' ? new Date().toISOString() : null,
-        completed_by: status === 'completed' ? completedBy : null,
+        completed_by: validatedCompletedBy,
         updated_at: new Date().toISOString()
       };
 
-      const { data, error } = await supabase
-        .from('checklist_items')
-        .update(updates)
-        .eq('id', itemId)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      // First try an update for existing row
+      try {
+        const { data: updatedData, error: updateError } = await supabase
+          .from('checklist_item_status')
+          .update(payload)
+          .match({ job_id: jobId, item_id: itemId })
+          .select();
+
+        if (!updateError && updatedData && updatedData.length > 0) {
+          return updatedData[0];
+        }
+      } catch (e) {
+        // ignore and try insert
+      }
+
+      // If update didn't find a row, insert a new one
+      const { data: insertData, error: insertError } = await supabase
+        .from('checklist_item_status')
+        .insert(payload)
+        .select();
+
+      if (insertError) throw insertError;
+      return Array.isArray(insertData) ? insertData[0] : insertData;
     } catch (error) {
-      console.error('Checklist status update error:', error);
-      throw error;
+      const msg = getErrorMessage(error);
+      console.error('Checklist status update error:', msg, error);
+      throw new Error(msg);
     }
   },
 
-  // Update client approval
-  async updateClientApproval(itemId, approved, approvedBy) {
+  // Update client approval for a checklist item (per-job)
+  async updateClientApproval(jobId, itemId, approved, approvedBy) {
     try {
-      const updates = {
+      const payload = {
+        job_id: jobId,
+        item_id: itemId,
         client_approved: approved,
         client_approved_date: approved ? new Date().toISOString() : null,
         client_approved_by: approved ? approvedBy : null,
         updated_at: new Date().toISOString()
       };
 
-      const { data, error } = await supabase
-        .from('checklist_items')
-        .update(updates)
-        .eq('id', itemId)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      // Try update first
+      try {
+        const { data: updatedData, error: updateError } = await supabase
+          .from('checklist_item_status')
+          .update(payload)
+          .match({ job_id: jobId, item_id: itemId })
+          .select();
+        if (!updateError && updatedData && updatedData.length > 0) return updatedData[0];
+      } catch (e) {
+        // ignore
+      }
+
+      // Insert as fallback
+      const { data: insertData, error: insertError } = await supabase
+        .from('checklist_item_status')
+        .insert(payload)
+        .select();
+
+      if (insertError) throw insertError;
+      return Array.isArray(insertData) ? insertData[0] : insertData;
     } catch (error) {
-      console.error('Client approval update error:', error);
-      throw error;
+      const msg = getErrorMessage(error);
+      console.error('Client approval update error:', msg, error);
+      throw new Error(msg);
     }
   },
 
@@ -3152,33 +3205,52 @@ export const worksheetService = {
     return data;
   },
 
-  // Save normalization configuration
+  // Save normalization configuration (merge with existing config to avoid overwrites)
   async saveNormalizationConfig(jobId, config) {
     await this.initializeMarketLandRecord(jobId);
-    
+
+    // Load existing config
+    const { data: existingRecord, error: loadError } = await supabase
+      .from('market_land_valuation')
+      .select('normalization_config')
+      .eq('job_id', jobId)
+      .single();
+
+    if (loadError && loadError.code !== 'PGRST116') throw loadError;
+
+    const existingConfig = existingRecord?.normalization_config || {};
+
+    // Merge existing config with incoming partial config
+    const mergedConfig = {
+      ...existingConfig,
+      ...config
+    };
+
     const { error } = await supabase
       .from('market_land_valuation')
       .update({
-        normalization_config: config,
+        normalization_config: mergedConfig,
         updated_at: new Date().toISOString()
       })
       .eq('job_id', jobId);
-    
+
     if (error) throw error;
   },
 
-  // Save time normalized sales results
+  // Save time normalized sales results (use upsert so it persists even if no record exists yet)
   async saveTimeNormalizedSales(jobId, sales, stats) {
+    const payload = {
+      job_id: jobId,
+      time_normalized_sales: sales,
+      normalization_stats: stats,
+      last_normalization_run: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
     const { error } = await supabase
       .from('market_land_valuation')
-      .update({
-        time_normalized_sales: sales,
-        normalization_stats: stats,
-        last_normalization_run: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .eq('job_id', jobId);
-    
+      .upsert(payload, { onConflict: 'job_id' });
+
     if (error) throw error;
   },
 
