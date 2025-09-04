@@ -148,6 +148,26 @@ const LandValuationTab = ({
   const [computedAdjustments, setComputedAdjustments] = useState({});
   const [actualAdjustments, setActualAdjustments] = useState({});
   const [customLocationCodes, setCustomLocationCodes] = useState([]);
+
+  // Local inputs for adding new custom eco obs codes
+  const [newEcoCode, setNewEcoCode] = useState('');
+  const [newEcoDesc, setNewEcoDesc] = useState('');
+  const [newEcoIsPositive, setNewEcoIsPositive] = useState(false);
+
+  const handleAddCustomCode = useCallback(() => {
+    const code = (newEcoCode || '').toString().trim().toUpperCase();
+    if (!code) return alert('Enter a code');
+    if (customLocationCodes.some(c => c.code === code) || DEFAULT_ECO_OBS_CODES.some(c => c.code === code)) {
+      return alert('Code already exists');
+    }
+    const added = { code, description: newEcoDesc || code, isPositive: !!newEcoIsPositive };
+    setCustomLocationCodes(prev => [...prev, added]);
+    setNewEcoCode(''); setNewEcoDesc(''); setNewEcoIsPositive(false);
+  }, [newEcoCode, newEcoDesc, newEcoIsPositive, customLocationCodes]);
+
+  const handleRemoveCustomCode = useCallback((code) => {
+    setCustomLocationCodes(prev => prev.filter(c => c.code !== code));
+  }, []);
 // ========== INITIALIZE FROM PROPS ==========
 useEffect(() => {
   if (!marketLandData) {
@@ -3185,7 +3205,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     console.log('🔄 Recalculating category analysis');
     console.log('��� Total vacant sales:', vacantSales.length);
-    console.log('📊 Checked sales count:', checkedSales.length);
+    console.log('���� Checked sales count:', checkedSales.length);
     console.log('📋 Included sales IDs:', Array.from(includedSales));
     console.log('📋 Sale categories state:', saleCategories);
     console.log('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
@@ -3374,7 +3394,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Keep the 47/2 debug for reference
       if (s.property_block === '47' && s.property_lot === '2') {
-        console.log('🏠 Property 47/2 details:', {
+        console.log('��� Property 47/2 details:', {
           id: s.id,
           category: saleCategories[s.id],
           isInBuildingLot: isInCategory,
@@ -5426,7 +5446,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'block' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('lot')}
