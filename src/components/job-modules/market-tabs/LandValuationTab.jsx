@@ -6780,10 +6780,52 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
   });
 
-  const summaryList = Object.entries(standaloneLocations).map(([loc, data]) => {
+  // Compute standalone averages
+  const standaloneAvg = {};
+  Object.entries(standaloneLocations).forEach(([loc, data]) => {
     const avg = data.impacts.length ? (data.impacts.reduce((a, b) => a + b, 0) / data.impacts.length) : null;
-    return { location: loc, avgPercent: avg, count: data.vcsList.size, impacts: data.impacts };
-  }).sort((a, b) => (b.count - a.count) || ((b.avgPercent || 0) - (a.avgPercent || 0))).slice(0, 50);
+    standaloneAvg[loc] = { avg, count: data.vcsList.size, impacts: data.impacts };
+  });
+
+  // Find compound locations and compute summed averages from parts (cap at 25% absolute)
+  const compoundLocations = {};
+  Object.keys(ecoObsFactors || {}).forEach(vcs => {
+    Object.keys(ecoObsFactors[vcs] || {}).forEach(loc => {
+      if (!loc) return;
+      // detect compound
+      if (/[\/\|,]|\band\b|&/.test(loc)) {
+        // Keep original compound key
+        if (!compoundLocations[loc]) compoundLocations[loc] = { vcsList: new Set(), parts: [], summedAvg: 0 };
+        compoundLocations[loc].vcsList.add(vcs);
+        // split into parts using same splitter as mapping
+        const parts = loc.split(/\/|\|| and | & |,|\//i).map(p => p.trim()).filter(Boolean);
+        compoundLocations[loc].parts = Array.from(new Set([...(compoundLocations[loc].parts || []), ...parts]));
+      }
+    });
+  });
+
+  Object.keys(compoundLocations).forEach(loc => {
+    const parts = compoundLocations[loc].parts || [];
+    // sum available standalone averages for parts
+    let sum = 0;
+    parts.forEach(part => {
+      const p = standaloneAvg[part];
+      if (p && p.avg !== null && !isNaN(p.avg)) {
+        sum += p.avg;
+      }
+    });
+    // cap at 25% (by absolute value)
+    const capped = Math.sign(sum) * Math.min(Math.abs(sum), 25);
+    compoundLocations[loc].summedAvg = capped;
+  });
+
+  // Build combined summary list based on includeCompounded toggle
+  let combined = Object.entries(standaloneAvg).map(([loc, d]) => ({ location: loc, avgPercent: d.avg, count: d.count, impacts: d.impacts, isCompound: false }));
+  if (includeCompounded) {
+    combined = combined.concat(Object.keys(compoundLocations).map(loc => ({ location: loc, avgPercent: compoundLocations[loc].summedAvg || null, count: compoundLocations[loc].vcsList.size, impacts: [], isCompound: true })));
+  }
+
+  const summaryList = combined.sort((a, b) => (b.count - a.count) || ((b.avgPercent || 0) - (a.avgPercent || 0))).slice(0, 50);
 
   // Apply a percent value (positive or negative) from summary into worksheet applied adjustments for all matching VCS rows
   const applySummaryToWorksheet = (location, value) => {
