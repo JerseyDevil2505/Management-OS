@@ -3369,7 +3369,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     
     // Method 2 Summary
     if (method2Summary.average) {
-      csv += '\n\nMETHOD 2 SUMMARY\n';
+      csv += '\n\nIMPLIED ACREAGE SUMMARY\n';
       csv += `Average Implied Rate,${method2Summary.average}\n`;
       csv += `Median Implied Rate,${method2Summary.median}\n`;
       csv += `Coverage,${method2Summary.coverage}\n`;
