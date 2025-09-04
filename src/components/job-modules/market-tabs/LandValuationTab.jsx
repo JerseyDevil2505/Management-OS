@@ -5931,7 +5931,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>
-                Method 2 Sales - VCS {method2ModalVCS}
+                Implied Acreage Sales - VCS {method2ModalVCS}
               </h3>
               <button
                 onClick={() => setShowMethod2Modal(false)}
