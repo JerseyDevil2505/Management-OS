@@ -3456,7 +3456,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Debug all teardown sales
       if (saleCategories[s.id] === 'teardown') {
-        console.log('����️ Teardown sale details:', {
+        console.log('🏗️ Teardown sale details:', {
           block: s.property_block,
           lot: s.property_lot,
           id: s.id,
@@ -7149,28 +7149,44 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </tr>
               </thead>
               <tbody>
-                {Object.keys(filteredFactors).sort().map(vcs => {
-                  return Object.keys(filteredFactors[vcs]).sort().map((locationAnalysis, index) => {
-                    const key = `${vcs}_${locationAnalysis}`;
-                    const impact = calculateEcoObsImpact(vcs, locationAnalysis, globalEcoObsTypeFilter);
-                    const rowIndex = Object.keys(filteredFactors).indexOf(vcs) * Object.keys(filteredFactors[vcs]).length + index;
+                {(() => {
+                  // Build flat rows array for sorting
+                  const rows = [];
+                  Object.keys(filteredFactors).forEach(vcsKey => {
+                    Object.keys(filteredFactors[vcsKey]).forEach(locationAnalysis => {
+                      rows.push({ vcs: vcsKey, locationAnalysis, key: `${vcsKey}_${locationAnalysis}` });
+                    });
+                  });
 
-                    // Check if row should be grayed out (no "with" sales data)
+                  // sort helper
+                  rows.sort((a, b) => {
+                    const dir = sortDir === 'asc' ? 1 : -1;
+                    if (sortField === 'vcs') {
+                      if (a.vcs === b.vcs) return a.locationAnalysis.localeCompare(b.locationAnalysis) * dir;
+                      return a.vcs.localeCompare(b.vcs) * dir;
+                    }
+                    if (sortField === 'location') {
+                      if (a.locationAnalysis === b.locationAnalysis) return a.vcs.localeCompare(b.vcs) * dir;
+                      return a.locationAnalysis.localeCompare(b.locationAnalysis) * dir;
+                    }
+                    // code
+                    const aCode = (mappedLocationCodes[`${a.vcs}_${a.locationAnalysis}`] || '').toUpperCase();
+                    const bCode = (mappedLocationCodes[`${b.vcs}_${b.locationAnalysis}`] || '').toUpperCase();
+                    if (aCode === bCode) return a.vcs.localeCompare(b.vcs) * dir;
+                    return aCode.localeCompare(bCode) * dir;
+                  });
+
+                  return rows.map((r, rowIndex) => {
+                    const { vcs, locationAnalysis, key } = r;
+                    const impact = calculateEcoObsImpact(vcs, locationAnalysis, globalEcoObsTypeFilter);
                     const hasWithData = impact && impact.withCount > 0;
                     const dataCellStyle = !hasWithData ? { color: '#9CA3AF', opacity: 0.6 } : {};
 
                     return (
-                      <tr key={key} style={{
-                        backgroundColor: rowIndex % 2 === 0 ? 'white' : '#FAFBFC',
-                        borderBottom: '1px solid #E5E7EB'
-                      }}>
-                        {/* Keep VCS, Description, Code normal regardless of data availability */}
+                      <tr key={key} style={{ backgroundColor: rowIndex % 2 === 0 ? 'white' : '#FAFBFC', borderBottom: '1px solid #E5E7EB' }}>
                         <td style={{ padding: '6px 4px', fontWeight: '600', color: '#1F2937', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>{vcs}</td>
-                        <td style={{ padding: '6px 4px', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px', maxWidth: '150px', wordWrap: 'break-word' }}>
-                          {locationAnalysis}
-                        </td>
+                        <td style={{ padding: '6px 4px', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px', maxWidth: '150px', wordWrap: 'break-word' }}>{locationAnalysis}</td>
                         <td style={{ padding: '6px 4px', color: '#6B7280', borderRight: '1px solid #E5E7EB', fontSize: '10px', textAlign: 'center' }}>
-                          {/* Code input: editable; value comes from mappedLocationCodes or empty */}
                           <input
                             type="text"
                             placeholder="TBD"
@@ -7180,65 +7196,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                               const val = e.target.value.toUpperCase();
                               setMappedLocationCodes(prev => ({ ...prev, [key]: val }));
                             }}
-                            style={{
-                              width: '80px',
-                              padding: '2px 4px',
-                              border: '1px solid #D1D5DB',
-                              borderRadius: '3px',
-                              fontSize: '10px',
-                              textAlign: 'center',
-                              backgroundColor: (!mappedLocationCodes[`${vcs}_${locationAnalysis}`] || mappedLocationCodes[`${vcs}_${locationAnalysis}`] === '') ? '#FEF9C3' : 'white'
-                            }}
+                            style={{ width: '80px', padding: '2px 4px', border: '1px solid #D1D5DB', borderRadius: '3px', fontSize: '10px', textAlign: 'center', backgroundColor: (!mappedLocationCodes[`${vcs}_${locationAnalysis}`] || mappedLocationCodes[`${vcs}_${locationAnalysis}`] === '') ? '#FEF9C3' : 'white' }}
                           />
                         </td>
-                        {/* Data columns - gray out when no data */}
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
-                          {impact && impact.withYearBuilt ? impact.withYearBuilt : '-'}
-                        </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
-                          {impact && impact.withLivingArea ? impact.withLivingArea.toLocaleString() : '-'}
-                        </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
-                          {impact && impact.withSalePrice ? `$${impact.withSalePrice.toLocaleString()}` : '-'}
-                        </td>
 
-                        {/* Without Factor columns */}
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
-                          {impact && impact.withoutYearBuilt ? impact.withoutYearBuilt : '-'}
-                        </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
-                          {impact && impact.withoutLivingArea ? impact.withoutLivingArea.toLocaleString() : '-'}
-                        </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
-                          {impact && impact.withoutSalePrice ? `$${impact.withoutSalePrice.toLocaleString()}` : '-'}
-                        </td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>{impact && impact.withYearBuilt ? impact.withYearBuilt : '-'}</td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>{impact && impact.withLivingArea ? impact.withLivingArea.toLocaleString() : '-'}</td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>{impact && impact.withSalePrice ? `$${impact.withSalePrice.toLocaleString()}` : '-'}</td>
 
-                        {/* Adjusted Sales columns */}
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
-                          {impact && impact.adjustedSaleWith ? `$${impact.adjustedSaleWith.toLocaleString()}` : '-'}
-                        </td>
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>
-                          {impact && impact.adjustedSaleWithout ? `$${impact.adjustedSaleWithout.toLocaleString()}` : '-'}
-                        </td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>{impact && impact.withoutYearBuilt ? impact.withoutYearBuilt : '-'}</td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>{impact && impact.withoutLivingArea ? impact.withoutLivingArea.toLocaleString() : '-'}</td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>{impact && impact.withoutSalePrice ? `$${impact.withoutSalePrice.toLocaleString()}` : '-'}</td>
 
-                        {/* Impact columns */}
-                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', fontWeight: 'bold', ...dataCellStyle }}>
-                          {impact && impact.dollarImpact ? `$${impact.dollarImpact.toLocaleString()}` : '-'}
-                        </td>
-                        <td style={{
-                          padding: '6px 4px',
-                          textAlign: 'center',
-                          fontWeight: 'bold',
-                          fontSize: '10px',
-                          borderRight: '1px solid #E5E7EB',
-                          ...dataCellStyle,
-                          color: !hasWithData ? '#9CA3AF' : (impact && impact.percentImpact !== 'N/A' ? (parseFloat(impact.percentImpact) < 0 ? '#DC2626' : '#10B981') : '#9CA3AF')
-                        }}>
-                          {impact && impact.percentImpact ? `${impact.percentImpact}%` : 'N/A'}
-                        </td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>{impact && impact.adjustedSaleWith ? `$${impact.adjustedSaleWith.toLocaleString()}` : '-'}</td>
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', ...dataCellStyle }}>{impact && impact.adjustedSaleWithout ? `$${impact.adjustedSaleWithout.toLocaleString()}` : '-'}</td>
 
-                        {/* Applied adjustment columns - Always normal styling regardless of data availability */}
-                        {/* Applied+ input */}
+                        <td style={{ padding: '6px 4px', fontSize: '10px', textAlign: 'center', borderRight: '1px solid #E5E7EB', fontWeight: 'bold', ...dataCellStyle }}>{impact && impact.dollarImpact ? `$${impact.dollarImpact.toLocaleString()}` : '-'}</td>
+                        <td style={{ padding: '6px 4px', textAlign: 'center', fontWeight: 'bold', fontSize: '10px', borderRight: '1px solid #E5E7EB', ...dataCellStyle, color: !hasWithData ? '#9CA3AF' : (impact && impact.percentImpact !== 'N/A' ? (parseFloat(impact.percentImpact) < 0 ? '#DC2626' : '#10B981') : '#9CA3AF') }}>{impact && impact.percentImpact ? `${impact.percentImpact}%` : 'N/A'}</td>
+
                         <td style={{ padding: '6px 4px', textAlign: 'center', borderRight: '1px solid #E5E7EB' }}>
                           {(() => {
                             const mapVal = mappedLocationCodes[`${vcs}_${locationAnalysis}`] || '';
@@ -7249,24 +7224,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             return (
                               <input
                                 type="number"
+                                min={0}
+                                step="0.1"
+                                onKeyDown={(e) => { if (e.key === '-' || e.key === 'e') e.preventDefault(); }}
+                                onWheel={(e) => e.currentTarget.blur()}
                                 value={actualAdjustments[`${key}_positive`] || ''}
                                 onChange={(e) => updateActualAdjustment(vcs, `${locationAnalysis}_positive`, e.target.value)}
                                 placeholder="-"
                                 disabled={!hasPositive}
-                                style={{
-                                  width: '40px',
-                                  padding: '2px 4px',
-                                  border: '1px solid #D1D5DB',
-                                  borderRadius: '3px',
-                                  fontSize: '10px',
-                                  textAlign: 'center',
-                                  backgroundColor: hasPositive ? 'white' : '#F3F4F6'
-                                }}
+                                style={{ width: '40px', padding: '2px 4px', border: '1px solid #D1D5DB', borderRadius: '3px', fontSize: '10px', textAlign: 'center', backgroundColor: hasPositive ? 'white' : '#F3F4F6', WebkitAppearance: 'none', MozAppearance: 'textfield', appearance: 'textfield' }}
                               />
                             );
                           })()}
                         </td>
-                        {/* Applied- input */}
                         <td style={{ padding: '6px 4px', textAlign: 'center' }}>
                           {(() => {
                             const mapVal = mappedLocationCodes[`${vcs}_${locationAnalysis}`] || '';
@@ -7277,19 +7247,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             return (
                               <input
                                 type="number"
+                                min={0}
+                                step="0.1"
+                                onKeyDown={(e) => { if (e.key === '-' || e.key === 'e') e.preventDefault(); }}
+                                onWheel={(e) => e.currentTarget.blur()}
                                 value={actualAdjustments[`${key}_negative`] || ''}
                                 onChange={(e) => updateActualAdjustment(vcs, `${locationAnalysis}_negative`, e.target.value)}
                                 placeholder="-"
                                 disabled={!hasNegative}
-                                style={{
-                                  width: '40px',
-                                  padding: '2px 4px',
-                                  border: '1px solid #D1D5DB',
-                                  borderRadius: '3px',
-                                  fontSize: '10px',
-                                  textAlign: 'center',
-                                  backgroundColor: hasNegative ? 'white' : '#F3F4F6'
-                                }}
+                                style={{ width: '40px', padding: '2px 4px', border: '1px solid #D1D5DB', borderRadius: '3px', fontSize: '10px', textAlign: 'center', backgroundColor: hasNegative ? 'white' : '#F3F4F6', WebkitAppearance: 'none', MozAppearance: 'textfield', appearance: 'textfield' }}
                               />
                             );
                           })()}
@@ -7297,7 +7263,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       </tr>
                     );
                   });
-                })}
+                })()}
               </tbody>
             </table>
           </div>
