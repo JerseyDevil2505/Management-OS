@@ -1567,7 +1567,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         return;
       }
 
-      console.log(`�� Found ${improvedSalesForYear.length} improved sales for year ${year} with type_use starting with '1'`);
+      console.log(`✅ Found ${improvedSalesForYear.length} improved sales for year ${year} with type_use starting with '1'`);
 
       // Calculate averages for this year's improved sales
       const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + p.sales_price, 0) / improvedSalesForYear.length;
@@ -6673,10 +6673,82 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Show all factors including 'None' - let user decide what to filter
     const filteredFactors = ecoObsFactors;
 
+    // Combined codes for dropdown (defaults + custom)
+    const combinedLocationCodes = [
+      ...DEFAULT_ECO_OBS_CODES.map(c => ({ code: c.code, description: c.description, isPositive: c.isPositive, isDefault: true })),
+      ...customLocationCodes.map(c => ({ ...c, isDefault: false }))
+    ];
+
+    // Local state for add-code inputs (rendered inline)
+    const [newCode, setNewCode] = useState('');
+    const [newDesc, setNewDesc] = useState('');
+    const [newIsPositive, setNewIsPositive] = useState(false);
+
+    const handleAddCustomCode = () => {
+      const code = (newCode || '').toString().trim().toUpperCase();
+      if (!code) return alert('Enter a code');
+      if (customLocationCodes.some(c => c.code === code) || DEFAULT_ECO_OBS_CODES.some(c => c.code === code)) {
+        return alert('Code already exists');
+      }
+      const added = { code, description: newDesc || code, isPositive: !!newIsPositive };
+      setCustomLocationCodes(prev => [...prev, added]);
+      setNewCode(''); setNewDesc(''); setNewIsPositive(false);
+    };
+
+    const handleRemoveCustomCode = (code) => {
+      setCustomLocationCodes(prev => prev.filter(c => c.code !== code));
+    };
+
     return (
       <div style={{ padding: '20px' }}>
-        <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>Economic Obsolescence Analysis</h3>
+        <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div style={{ fontSize: '14px', fontWeight: '600' }}>Eco Obs Code Config</div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <select
+                style={{ padding: '6px 10px', border: '1px solid #D1D5DB', borderRadius: '6px', minWidth: '220px' }}
+                value=""
+                onChange={() => { /* Selection handled in grid below - this dropdown is informational */ }}
+              >
+                <option value="">-- Standard Codes (editable) --</option>
+                {combinedLocationCodes.map(c => (
+                  <option key={c.code} value={c.code}>{`${c.code} - ${c.description} ${c.isPositive ? '(+)' : '(-)'}`}</option>
+                ))}
+              </select>
+
+              <div style={{ fontSize: '12px', color: '#6B7280' }}>Add custom codes:</div>
+              <input
+                placeholder="Code"
+                value={newCode}
+                onChange={(e) => setNewCode(e.target.value)}
+                style={{ width: '60px', padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+              />
+              <input
+                placeholder="Description"
+                value={newDesc}
+                onChange={(e) => setNewDesc(e.target.value)}
+                style={{ padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+              />
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+                <input type="checkbox" checked={newIsPositive} onChange={(e) => setNewIsPositive(e.target.checked)} /> Positive
+              </label>
+              <button onClick={handleAddCustomCode} style={{ padding: '6px 10px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px' }}>Add</button>
+            </div>
+
+            {customLocationCodes.length > 0 && (
+              <div style={{ marginTop: '6px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {customLocationCodes.map(c => (
+                  <div key={c.code} style={{ padding: '6px 8px', borderRadius: '6px', background: '#F3F4F6', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <strong style={{ fontSize: '12px' }}>{c.code}</strong>
+                    <span style={{ fontSize: '12px', color: '#374151' }}>{c.description}</span>
+                    <span style={{ fontSize: '12px', color: c.isPositive ? '#10B981' : '#DC2626' }}>{c.isPositive ? '+' : '-'}</span>
+                    <button onClick={() => handleRemoveCustomCode(c.code)} style={{ marginLeft: '6px', border: 'none', background: 'transparent', color: '#EF4444', cursor: 'pointer' }}>Remove</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <label style={{ fontSize: '14px', fontWeight: '500' }}>Type Use Filter:</label>
