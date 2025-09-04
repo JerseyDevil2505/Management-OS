@@ -7107,6 +7107,66 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             </table>
           </div>
         </div>
+
+        {/* SUMMARY SECTION: Top standalone location recommendations */}
+        <div style={{ marginTop: '12px', padding: '12px', background: '#F8FAFC', border: '1px solid #E5E7EB', borderRadius: '8px' }}>
+          <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '8px' }}>Location Recommendations (standalone descriptions)</div>
+          <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '8px' }}>Shows average recommended percent impact across VCS for singular (non-compounded) location analyses. Click "Apply Recommended" to populate the Applied fields in the worksheet for matching rows. For BS (Busy Street) locations, use Traffic to apply Light/Medium/Heavy presets.</div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#FFFFFF' }}>
+                  <th style={{ textAlign: 'left', padding: '6px 8px', fontWeight: '600' }}>Location</th>
+                  <th style={{ textAlign: 'center', padding: '6px 8px', fontWeight: '600' }}>VCS Count</th>
+                  <th style={{ textAlign: 'center', padding: '6px 8px', fontWeight: '600' }}>Recommended %</th>
+                  <th style={{ textAlign: 'center', padding: '6px 8px', fontWeight: '600' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summaryList.map(item => (
+                  <tr key={item.location} style={{ borderTop: '1px solid #E5E7EB' }}>
+                    <td style={{ padding: '8px' }}>{item.location}</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>{item.count}</td>
+                    <td style={{ padding: '8px', textAlign: 'center', fontWeight: '600' }}>{item.avgPercent !== null ? `${item.avgPercent.toFixed(1)}%` : 'N/A'}</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>
+                      <button onClick={() => {
+                        if (item.avgPercent === null) return alert('No recommended value available');
+                        applySummaryToWorksheet(item.location, Number(item.avgPercent.toFixed(1)));
+                        alert(`Applied recommended ${Number(item.avgPercent.toFixed(1))}% to matching worksheet rows`);
+                      }} style={{ marginRight: '8px', padding: '6px 8px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: '4px' }}>Apply Recommended</button>
+
+                      <button onClick={() => {
+                        const input = prompt('Enter custom percent to apply (use negative for reductions, e.g. -5):');
+                        if (input === null) return;
+                        const v = parseFloat(input);
+                        if (isNaN(v)) return alert('Invalid percent');
+                        applySummaryToWorksheet(item.location, v);
+                        alert(`Applied ${v}% to matching worksheet rows`);
+                      }} style={{ marginRight: '8px', padding: '6px 8px', background: '#10B981', color: 'white', border: 'none', borderRadius: '4px' }}>Apply Custom</button>
+
+                      {locationHasCode(item.location, 'BS') && (
+                        <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                          <select id={`traffic_select_${item.location}`} style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid #D1D5DB' }}>
+                            <option value="light">Light Traffic (-5%)</option>
+                            <option value="medium">Medium Traffic (-10%)</option>
+                            <option value="heavy">Heavy Traffic (-15%)</option>
+                          </select>
+                          <button onClick={(e) => {
+                            const sel = document.getElementById(`traffic_select_${item.location}`);
+                            if (!sel) return;
+                            const val = sel.value;
+                            applyBSTraffic(item.location, val);
+                            alert(`Applied ${val} traffic preset to matching BS rows for ${item.location}`);
+                          }} style={{ padding: '6px 8px', background: '#F97316', color: 'white', border: 'none', borderRadius: '4px' }}>Apply Traffic</button>
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     );
   };
