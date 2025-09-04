@@ -2114,29 +2114,6 @@ const editCustomCheck = (check) => {
               <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Properties</div>
               <div className="text-2xl font-bold text-gray-800">{properties.length.toLocaleString()}</div>
 
-              <button
-                onClick={async () => {
-                  if (!jobData?.id) return;
-                  const newStatus = isDataQualityComplete ? 'pending' : 'completed';
-                  try {
-                    const { data: { user } } = await supabase.auth.getUser();
-                    const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
-                    const updated = await checklistService.updateItemStatus(jobData.id, 'data-quality-analysis', newStatus, completedBy);
-                    const persistedStatus = updated?.status || newStatus;
-                    setIsDataQualityComplete(persistedStatus === 'completed');
-                    try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'data-quality-analysis', status: persistedStatus } })); } catch(e){}
-                    try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
-                  } catch (error) {
-                    console.error('Data Quality checklist update failed:', error);
-                    alert('Failed to update checklist. Please try again.');
-                  }
-                }}
-                className="mt-3 w-full px-3 py-2 rounded-full text-sm font-semibold inline-flex items-center justify-center"
-                style={{ backgroundColor: isDataQualityComplete ? '#10B981' : '#E5E7EB', color: isDataQualityComplete ? 'white' : '#374151' }}
-                title={isDataQualityComplete ? 'Click to reopen' : 'Mark Data Quality Analysis complete'}
-              >
-                {isDataQualityComplete ? '✓ Completed' : 'Mark Complete'}
-              </button>
             </div>
             
             <div className="bg-white border border-gray-200 rounded-lg p-4">
