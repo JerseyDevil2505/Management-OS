@@ -6829,51 +6829,75 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   const summaryList = combined.sort((a, b) => (b.count - a.count) || ((b.avgPercent || 0) - (a.avgPercent || 0))).slice(0, 50);
 
+  // Helper to split a location into parts (handles /, |, ',', ' and ', '&')
+  const splitLocationParts = (loc) => {
+    if (!loc) return [];
+    return loc.split(/\/|\|| and | & |,|\\//i).map(p => p.trim()).filter(Boolean);
+  };
+
   // Apply a percent value (positive or negative) from summary into worksheet applied adjustments for all matching VCS rows
+  // This will update exact matches and also per-part matches (so compounds get updated where parts exist)
   const applySummaryToWorksheet = (location, value) => {
     if (value === null || value === undefined || isNaN(Number(value))) return;
     const numeric = Number(value);
+    const parts = splitLocationParts(location);
     Object.keys(ecoObsFactors || {}).forEach(vcs => {
+      // update exact compound key if present
       if (ecoObsFactors[vcs] && ecoObsFactors[vcs][location]) {
-        if (numeric >= 0) {
-          updateActualAdjustment(vcs, `${location}_positive`, Math.abs(numeric));
-        } else {
-          updateActualAdjustment(vcs, `${location}_negative`, Math.abs(numeric));
-        }
+        if (numeric >= 0) updateActualAdjustment(vcs, `${location}_positive`, Math.abs(numeric));
+        else updateActualAdjustment(vcs, `${location}_negative`, Math.abs(numeric));
       }
+      // update any matching part keys (standalone parts)
+      parts.forEach(part => {
+        if (ecoObsFactors[vcs] && ecoObsFactors[vcs][part]) {
+          if (numeric >= 0) updateActualAdjustment(vcs, `${part}_positive`, Math.abs(numeric));
+          else updateActualAdjustment(vcs, `${part}_negative`, Math.abs(numeric));
+        }
+      });
     });
   };
 
-  // Apply both positive and/or negative values for a location to all matching VCS rows
+  // Apply both positive and/or negative values for a location to all matching VCS rows (handles parts)
   const applySummarySet = (location, positive, negative) => {
+    const parts = splitLocationParts(location);
     Object.keys(ecoObsFactors || {}).forEach(vcs => {
+      // exact key
       if (ecoObsFactors[vcs] && ecoObsFactors[vcs][location]) {
-        if (positive !== null && positive !== undefined && !isNaN(Number(positive))) {
-          updateActualAdjustment(vcs, `${location}_positive`, Math.abs(Number(positive)));
-        }
-        if (negative !== null && negative !== undefined && !isNaN(Number(negative))) {
-          updateActualAdjustment(vcs, `${location}_negative`, Math.abs(Number(negative)));
-        }
+        if (positive !== null && positive !== undefined && !isNaN(Number(positive))) updateActualAdjustment(vcs, `${location}_positive`, Math.abs(Number(positive)));
+        if (negative !== null && negative !== undefined && !isNaN(Number(negative))) updateActualAdjustment(vcs, `${location}_negative`, Math.abs(Number(negative)));
       }
+      // parts
+      parts.forEach(part => {
+        if (ecoObsFactors[vcs] && ecoObsFactors[vcs][part]) {
+          if (positive !== null && positive !== undefined && !isNaN(Number(positive))) updateActualAdjustment(vcs, `${part}_positive`, Math.abs(Number(positive)));
+          if (negative !== null && negative !== undefined && !isNaN(Number(negative))) updateActualAdjustment(vcs, `${part}_negative`, Math.abs(Number(negative)));
+        }
+      });
     });
   };
 
-  // Special helper for BS traffic levels
+  // Special helper for BS traffic levels - apply to compound and part keys
   const applyBSTraffic = (location, levelKey) => {
     const levelMap = { light: -5, medium: -10, heavy: -15 };
     const val = levelMap[levelKey];
     if (val === undefined) return;
+    const parts = splitLocationParts(location);
     Object.keys(ecoObsFactors || {}).forEach(vcs => {
-      if (ecoObsFactors[vcs] && ecoObsFactors[vcs][location]) {
-        // For traffic we always set a negative applied adjustment
-        updateActualAdjustment(vcs, `${location}_negative`, Math.abs(val));
-      }
+      if (ecoObsFactors[vcs] && ecoObsFactors[vcs][location]) updateActualAdjustment(vcs, `${location}_negative`, Math.abs(val));
+      parts.forEach(part => {
+        if (ecoObsFactors[vcs] && ecoObsFactors[vcs][part]) updateActualAdjustment(vcs, `${part}_negative`, Math.abs(val));
+      });
     });
   };
 
   // Helper to check if any mapped code for this location includes a particular code (e.g., BS)
   const locationHasCode = (location, code) => {
-    return Object.keys(mappedLocationCodes || {}).some(k => k.endsWith(`_${location}`) && (mappedLocationCodes[k] || '').toString().toUpperCase().split('/').map(s => s.trim()).includes(code));
+    // check exact mapped keys
+    const exact = Object.keys(mappedLocationCodes || {}).some(k => k.endsWith(`_${location}`) && (mappedLocationCodes[k] || '').toString().toUpperCase().split('/').map(s => s.trim()).includes(code));
+    if (exact) return true;
+    // also check parts
+    const parts = splitLocationParts(location);
+    return parts.some(part => Object.keys(mappedLocationCodes || {}).some(k => k.endsWith(`_${part}`) && (mappedLocationCodes[k] || '').toString().toUpperCase().split('/').map(s => s.trim()).includes(code)));
   };
 
   // Use component-level inputs/handlers for adding custom codes
