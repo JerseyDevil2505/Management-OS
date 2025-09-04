@@ -1917,14 +1917,26 @@ export const checklistService = {
         updated_at: new Date().toISOString()
       };
 
-      const { data, error } = await supabase
-        .from('checklist_item_status')
-        .upsert(payload, { onConflict: 'job_id,item_id' })
-        .select()
-        .single();
+      // Try update first
+      try {
+        const { data: updatedData, error: updateError } = await supabase
+          .from('checklist_item_status')
+          .update(payload)
+          .match({ job_id: jobId, item_id: itemId })
+          .select();
+        if (!updateError && updatedData && updatedData.length > 0) return updatedData[0];
+      } catch (e) {
+        // ignore
+      }
 
-      if (error) throw error;
-      return data;
+      // Insert as fallback
+      const { data: insertData, error: insertError } = await supabase
+        .from('checklist_item_status')
+        .insert(payload)
+        .select();
+
+      if (insertError) throw insertError;
+      return Array.isArray(insertData) ? insertData[0] : insertData;
     } catch (error) {
       console.error('Client approval update error:', error);
       throw error;
