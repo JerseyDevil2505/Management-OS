@@ -2113,8 +2113,7 @@ const editCustomCheck = (check) => {
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Properties</div>
               <div className="text-2xl font-bold text-gray-800">{properties.length.toLocaleString()}</div>
-            </div>
-            <div className="p-0">
+
               <button
                 onClick={async () => {
                   if (!jobData?.id) return;
@@ -2132,11 +2131,11 @@ const editCustomCheck = (check) => {
                     alert('Failed to update checklist. Please try again.');
                   }
                 }}
-                className="mt-3 w-full px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                className="mt-3 w-full px-3 py-2 rounded-full text-sm font-semibold inline-flex items-center justify-center"
                 style={{ backgroundColor: isDataQualityComplete ? '#10B981' : '#E5E7EB', color: isDataQualityComplete ? 'white' : '#374151' }}
                 title={isDataQualityComplete ? 'Click to reopen' : 'Mark Data Quality Analysis complete'}
               >
-                {isDataQualityComplete ? '✓ Mark Complete' : 'Mark Complete'}
+                {isDataQualityComplete ? '✓ Completed' : 'Mark Complete'}
               </button>
             </div>
             
