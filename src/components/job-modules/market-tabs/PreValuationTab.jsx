@@ -1568,6 +1568,7 @@ const processSelectedProperties = async () => {
         
         // Build update array for batch upsert to property_market_analysis table
         const updates = batch.map(prop => ({
+          job_id: jobData.id,
           property_composite_key: prop.property_composite_key,
           new_vcs: prop.new_vcs,
           location_analysis: prop.location_analysis,
