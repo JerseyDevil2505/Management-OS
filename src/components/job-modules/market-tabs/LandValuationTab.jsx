@@ -6862,7 +6862,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   // Apply a percent value (positive or negative) from summary into worksheet applied adjustments for all matching VCS rows
-  // This will update per-part matches (do not set compound key). Respect code polarity when deciding which applied field to set.
+  // Update per-part matches and populate the compound row with aggregated values (max of part values per side)
   const applySummaryToWorksheet = (location, value) => {
     if (value === null || value === undefined || isNaN(Number(value))) return;
     const numeric = Number(value);
@@ -6871,41 +6871,92 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     if (/\bpossible|possibly\b|\?/i.test(location)) return;
 
     const parts = splitLocationParts(location);
+
     Object.keys(ecoObsFactors || {}).forEach(vcs => {
+      const partPosVals = [];
+      const partNegVals = [];
+
       parts.forEach(part => {
         if (!(ecoObsFactors[vcs] && ecoObsFactors[vcs][part])) return;
         const polarity = getPartPolarity(part);
         if (numeric >= 0) {
-          // Only apply to positive polarity parts, or unknown
-          if (polarity !== 'negative') updateActualAdjustment(vcs, `${part}_positive`, Math.abs(numeric));
+          if (polarity !== 'negative') {
+            updateActualAdjustment(vcs, `${part}_positive`, Math.abs(numeric));
+            partPosVals.push(Math.abs(numeric));
+          }
         } else {
-          // negative numeric -> apply to negative polarity parts, or unknown
-          if (polarity !== 'positive') updateActualAdjustment(vcs, `${part}_negative`, Math.abs(numeric));
+          if (polarity !== 'positive') {
+            updateActualAdjustment(vcs, `${part}_negative`, Math.abs(numeric));
+            partNegVals.push(Math.abs(numeric));
+          }
         }
       });
+
+      // After updating parts, set compound row values if the job has that compound key
+      const compoundKey = `${vcs}_${location}`;
+      // If parts produced any positive/negative values, set the compound inputs to the max of those
+      if (partPosVals.length > 0) {
+        const maxPos = Math.max(...partPosVals);
+        setActualAdjustments(prev => ({ ...prev, [`${compoundKey}_positive`]: maxPos }));
+      }
+      if (partNegVals.length > 0) {
+        const maxNeg = Math.max(...partNegVals);
+        setActualAdjustments(prev => ({ ...prev, [`${compoundKey}_negative`]: maxNeg }));
+      }
     });
   };
 
   // Apply both positive and/or negative values for a location to all matching VCS rows (handles parts)
+  // When explicit positive/negative provided, set parts accordingly and aggregate to compound row
   const applySummarySet = (location, positive, negative) => {
     // Skip tentative locations
     if (/\bpossible|possibly\b|\?/i.test(location)) return;
     const parts = splitLocationParts(location);
+
     Object.keys(ecoObsFactors || {}).forEach(vcs => {
+      const partPosVals = [];
+      const partNegVals = [];
+
       parts.forEach(part => {
         if (!(ecoObsFactors[vcs] && ecoObsFactors[vcs][part])) return;
         const polarity = getPartPolarity(part);
-        // If polarity is positive, set positive; if negative, set negative; if unknown, set both if provided
+
         if (polarity === 'positive') {
-          if (positive !== null && positive !== undefined && !isNaN(Number(positive))) updateActualAdjustment(vcs, `${part}_positive`, Math.abs(Number(positive)));
+          if (positive !== null && positive !== undefined && !isNaN(Number(positive))) {
+            const val = Math.abs(Number(positive));
+            updateActualAdjustment(vcs, `${part}_positive`, val);
+            partPosVals.push(val);
+          }
         } else if (polarity === 'negative') {
-          if (negative !== null && negative !== undefined && !isNaN(Number(negative))) updateActualAdjustment(vcs, `${part}_negative`, Math.abs(Number(negative)));
+          if (negative !== null && negative !== undefined && !isNaN(Number(negative))) {
+            const val = Math.abs(Number(negative));
+            updateActualAdjustment(vcs, `${part}_negative`, val);
+            partNegVals.push(val);
+          }
         } else {
-          // unknown/mixed: set both sides if provided
-          if (positive !== null && positive !== undefined && !isNaN(Number(positive))) updateActualAdjustment(vcs, `${part}_positive`, Math.abs(Number(positive)));
-          if (negative !== null && negative !== undefined && !isNaN(Number(negative))) updateActualAdjustment(vcs, `${part}_negative`, Math.abs(Number(negative)));
+          if (positive !== null && positive !== undefined && !isNaN(Number(positive))) {
+            const val = Math.abs(Number(positive));
+            updateActualAdjustment(vcs, `${part}_positive`, val);
+            partPosVals.push(val);
+          }
+          if (negative !== null && negative !== undefined && !isNaN(Number(negative))) {
+            const val = Math.abs(Number(negative));
+            updateActualAdjustment(vcs, `${part}_negative`, val);
+            partNegVals.push(val);
+          }
         }
       });
+
+      // Aggregate to compound row
+      const compoundKey = `${vcs}_${location}`;
+      if (partPosVals.length > 0) {
+        const maxPos = Math.max(...partPosVals);
+        setActualAdjustments(prev => ({ ...prev, [`${compoundKey}_positive`]: maxPos }));
+      }
+      if (partNegVals.length > 0) {
+        const maxNeg = Math.max(...partNegVals);
+        setActualAdjustments(prev => ({ ...prev, [`${compoundKey}_negative`]: maxNeg }));
+      }
     });
   };
 
