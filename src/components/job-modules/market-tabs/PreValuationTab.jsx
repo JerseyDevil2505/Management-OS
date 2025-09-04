@@ -28,7 +28,7 @@ const PreValuationTab = ({
   onDataChange,
   onUpdateJobCache 
 }) => {
-    console.log('PreValuationTab MOUNTED/UPDATED:', {
+    if (false) console.log('PreValuationTab MOUNTED/UPDATED:', {
     jobId: jobData?.id,
     vendorType,
     hasMarketLandData: !!marketLandData,
@@ -174,7 +174,7 @@ const PreValuationTab = ({
 
 // ==================== FILTER HPI DATA ====================
   // Check what HPI data we received
-  console.log('🔍 HPI Data Check:', {
+  if (false) console.log('🔍 HPI Data Check:', {
     hpiDataReceived: !!hpiData,
     hpiDataLength: hpiData?.length || 0,
     selectedCounty: selectedCounty,
@@ -186,7 +186,7 @@ const PreValuationTab = ({
     if (!hpiData || !selectedCounty) return [];
     
     const filtered = hpiData.filter(item => item.county_name === selectedCounty);
-    console.log(`📈 Filtered ${filtered.length} HPI records for ${selectedCounty} County`);
+    if (false) console.log(`📈 Filtered ${filtered.length} HPI records for ${selectedCounty} County`);
     return filtered;
   }, [hpiData, selectedCounty]);
 
@@ -266,7 +266,7 @@ useEffect(() => {
         setSelectedCounty(jobData?.county || uniqueCounties[0]);
       }
       
-      console.log(`📍 Found ${uniqueCounties.length} counties with HPI data:`, uniqueCounties);
+      if (false) console.log(`📍 Found ${uniqueCounties.length} counties with HPI data:`, uniqueCounties);
     } catch (error) {
       console.error('Error loading counties:', error);
     }
@@ -278,11 +278,11 @@ useEffect(() => {
 // ==================== USE SAVED NORMALIZATION DATA FROM PROPS ====================
 useEffect(() => {
   if (!marketLandData) {
-    console.log('❌ No marketLandData available to restore from');
+    if (false) console.log('❌ No marketLandData available to restore from');
     return;
   }
 
-  console.log('🔄 Restoring data from marketLandData...', {
+  if (false) console.log('🔄 Restoring data from marketLandData...', {
     hasNormalizationConfig: !!marketLandData.normalization_config,
     configKeys: marketLandData.normalization_config ? Object.keys(marketLandData.normalization_config) : [],
     hasTimeNormalizedSales: !!marketLandData.time_normalized_sales,
@@ -292,14 +292,14 @@ useEffect(() => {
   // Always restore everything when we have marketLandData
   if (marketLandData.normalization_config) {
     const config = marketLandData.normalization_config;
-    console.log('📋 Found normalization config:', config);
+    if (false) console.log('📋 Found normalization config:', config);
 
     // Set configuration values with explicit logging
     const eqRatio = config.equalizationRatio || '';
     const outThreshold = config.outlierThreshold || '';
 
-    console.log(`🔧 Setting equalizationRatio: "${eqRatio}" (was: "${equalizationRatio}")`);
-    console.log(`🔧 Setting outlierThreshold: "${outThreshold}" (was: "${outlierThreshold}")`);
+    if (false) console.log(`🔧 Setting equalizationRatio: "${eqRatio}" (was: "${equalizationRatio}")`);
+    if (false) console.log(`🔧 Setting outlierThreshold: "${outThreshold}" (was: "${outlierThreshold}")`);
 
     setEqualizationRatio(eqRatio);
     setOutlierThreshold(outThreshold);
@@ -310,16 +310,16 @@ useEffect(() => {
     setLastTimeNormalizationRun(config.lastTimeNormalizationRun || null);
     setLastSizeNormalizationRun(config.lastSizeNormalizationRun || null);
   } else {
-    console.log('⚠️ No normalization_config found in marketLandData');
+    if (false) console.log('⚠️ No normalization_config found in marketLandData');
   }
   
   if (marketLandData.time_normalized_sales && marketLandData.time_normalized_sales.length > 0) {
-    console.log(`✅ Restoring ${marketLandData.time_normalized_sales.length} normalized sales`);
+    if (false) console.log(`✅ Restoring ${marketLandData.time_normalized_sales.length} normalized sales`);
     setTimeNormalizedSales(marketLandData.time_normalized_sales);
   }
   
   if (marketLandData.normalization_stats) {
-    console.log('📊 Restoring normalization stats:', marketLandData.normalization_stats);
+    if (false) console.log('📊 Restoring normalization stats:', marketLandData.normalization_stats);
     setNormalizationStats(marketLandData.normalization_stats);
   }
   
@@ -426,40 +426,40 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
 
     try {
       // DEBUG: Check initial properties data structure
-      console.log(`🚀 Starting time normalization with ${properties.length} total properties`);
+      if (false) console.log(`🚀 Starting time normalization with ${properties.length} total properties`);
       if (properties.length > 0) {
-        console.log('🔍 RAW PROPERTIES SAMPLE (first property):');
+        if (false) console.log('🔍 RAW PROPERTIES SAMPLE (first property):');
 
         const firstProp = properties[0];
-        console.log('🔍 CRITICAL FIELD CHECK FOR FIRST PROPERTY:');
-        console.log('  🏗️ property_m4_class:', firstProp.property_m4_class, '(should be "2", "1", "3B", etc.)');
-        console.log('  💰 values_mod_total:', firstProp.values_mod_total, '(should be 64900, 109900, etc.)');
-        console.log('  📋 sales_nu:', firstProp.sales_nu, '(should be empty or "1")');
-        console.log('  ✅ sales_price:', firstProp.sales_price, '(working field for comparison)');
-        console.log('  ✅ property_location:', firstProp.property_location, '(working field for comparison)');
+        if (false) console.log('🔍 CRITICAL FIELD CHECK FOR FIRST PROPERTY:');
+        if (false) console.log('  🏗️ property_m4_class:', firstProp.property_m4_class, '(should be "2", "1", "3B", etc.)');
+        if (false) console.log('  💰 values_mod_total:', firstProp.values_mod_total, '(should be 64900, 109900, etc.)');
+        if (false) console.log('  📋 sales_nu:', firstProp.sales_nu, '(should be empty or "1")');
+        if (false) console.log('  ✅ sales_price:', firstProp.sales_price, '(working field for comparison)');
+        if (false) console.log('  ✅ property_location:', firstProp.property_location, '(working field for comparison)');
 
         // Check if the problem is that the fields exist but are being overwritten
-        console.log('🔍 FULL PROPERTY OBJECT INSPECTION:');
-        console.log('  property_composite_key:', firstProp.property_composite_key);
-        console.log('  ALL KEYS:', Object.keys(firstProp));
+        if (false) console.log('🔍 FULL PROPERTY OBJECT INSPECTION:');
+        if (false) console.log('  property_composite_key:', firstProp.property_composite_key);
+        if (false) console.log('  ALL KEYS:', Object.keys(firstProp));
 
         // If the fields are undefined, let's see what properties DO have values
         if (!firstProp.property_m4_class) {
           console.error('❌ property_m4_class is undefined in properties array!');
-          console.log('  🔍 Checking for similar fields...');
+          if (false) console.log('  🔍 Checking for similar fields...');
           Object.keys(firstProp).forEach(key => {
             if (key.includes('class') || key.includes('m4')) {
-              console.log(`    ${key}:`, firstProp[key]);
+              if (false) console.log(`    ${key}:`, firstProp[key]);
             }
           });
         }
 
         if (!firstProp.values_mod_total) {
           console.error('❌ values_mod_total is undefined in properties array!');
-          console.log('  🔍 Checking for similar fields...');
+          if (false) console.log('  🔍 Checking for similar fields...');
           Object.keys(firstProp).forEach(key => {
             if (key.includes('value') || key.includes('total') || key.includes('assess') || key.includes('mod')) {
-              console.log(`    ${key}:`, firstProp[key]);
+              if (false) console.log(`    ${key}:`, firstProp[key]);
             }
           });
         }
@@ -595,8 +595,8 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
 
         // DEBUG: Log first few sales to check data and available fields
         if (index < 3) {
-          console.log(`🔍 Sale ${index + 1} FULL PROPERTY DATA:`, prop);
-          console.log(`🔍 Sale ${index + 1} SPECIFIC FIELDS:`, {
+          if (false) console.log(`🔍 Sale ${index + 1} FULL PROPERTY DATA:`, prop);
+          if (false) console.log(`🔍 Sale ${index + 1} SPECIFIC FIELDS:`, {
             id: prop.id,
             // Check all possible class field names
             property_class: prop.property_class,
@@ -619,7 +619,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           });
 
           // Also log all property keys to see what's available
-          console.log(`🔍 Sale ${index + 1} ALL AVAILABLE KEYS:`, Object.keys(prop));
+          if (false) console.log(`🔍 Sale ${index + 1} ALL AVAILABLE KEYS:`, Object.keys(prop));
         }
         
         // Determine if outlier based on equalization ratio
@@ -645,8 +645,8 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       setTimeNormalizedSales(normalized);
 
       // DEBUG: Final data check
-      console.log(`✅ Time normalization complete: ${normalized.length} sales processed`);
-      console.log('🔍 Sample normalized sales data:', normalized.slice(0, 2).map(s => ({
+      if (false) console.log(`✅ Time normalization complete: ${normalized.length} sales processed`);
+      if (false) console.log('🔍 Sample normalized sales data:', normalized.slice(0, 2).map(s => ({
         id: s.id,
         property_m4_class: s.property_m4_class,
         sales_nu: s.sales_nu,
@@ -709,14 +709,14 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
 
       //Clear cache after saving normalization data
       if (onUpdateJobCache && jobData?.id) {
-        console.log('🗑️ Clearing cache after time normalization');
+        if (false) console.log('🗑️ Clearing cache after time normalization');
         onUpdateJobCache(jobData.id, null);
       }
       
       setLastTimeNormalizationRun(new Date().toISOString());
 
-      console.log(`✅ Time normalization complete - preserved ${Object.keys(existingDecisions).length} keep/reject decisions`);
-      console.log('✅ Normalized sales saved to database for persistence');
+      if (false) console.log(`✅ Time normalization complete - preserved ${Object.keys(existingDecisions).length} keep/reject decisions`);
+      if (false) console.log('✅ Normalized sales saved to database for persistence');
     } catch (error) {
       console.error('Error during time normalization:', error);
       alert('Error during time normalization. Please check the console.');
@@ -739,7 +739,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
             }, { onConflict: 'property_composite_key' });
         }
       }
-      console.log('✅ Size normalized values saved to database');
+      if (false) console.log('✅ Size normalized values saved to database');
       
     } catch (error) {
       console.error('Error saving size normalized values:', error);
@@ -877,7 +877,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
 
       //Clear cache after size normalization
       if (onUpdateJobCache && jobData?.id) {
-        console.log('🗑️ Clearing cache after size normalization');
+        if (false) console.log('🗑️ Clearing cache after size normalization');
         onUpdateJobCache(jobData.id, null);
       }
 
@@ -890,7 +890,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         lastSizeNormalizationRun: runDate
       });
       
-      console.log(`✅ Size normalization complete - preserved ${preservedCount} existing calculations`);
+      if (false) console.log(`✅ Size normalization complete - preserved ${preservedCount} existing calculations`);
       
       if (preservedCount > 0) {
         alert(`✅ Size Normalization Applied!\n\nProcessed ${totalSizeNormalized} sales (${preservedCount} preserved from previous run)\n\nAverage adjustment: $${Math.round(totalAdjustment / totalSizeNormalized).toLocaleString()}`);
@@ -1155,7 +1155,7 @@ const handleSalesDecision = async (saleId, decision) => {
   const previousSale = timeNormalizedSales.find(s => s.id === saleId);
   const previousDecision = previousSale?.keep_reject;
 
-  console.log(`🔄 Changing sale ${saleId} from '${previousDecision}' to '${decision}'`);
+  if (false) console.log(`🔄 Changing sale ${saleId} from '${previousDecision}' to '${decision}'`);
 
   const updatedSales = timeNormalizedSales.map(sale =>
     sale.id === saleId ? { ...sale, keep_reject: decision } : sale
@@ -1176,7 +1176,7 @@ const handleSalesDecision = async (saleId, decision) => {
   try {
     // ALWAYS save the decision to market_land_valuation first for persistence
     await worksheetService.saveTimeNormalizedSales(jobData.id, updatedSales, newStats);
-    console.log(`💾 Saved decision (${decision}) for property ${saleId} to market_land_valuation`);
+    if (false) console.log(`💾 Saved decision (${decision}) for property ${saleId} to market_land_valuation`);
 
     // Handle database cleanup for rejected sales
     if (decision === 'reject') {
@@ -1192,7 +1192,7 @@ const handleSalesDecision = async (saleId, decision) => {
       if (error) {
         console.error('Error clearing normalized values:', error);
       } else {
-        console.log(`🗑️ Cleared normalized values for rejected property ${saleId}`);
+        if (false) console.log(`🗑️ Cleared normalized values for rejected property ${saleId}`);
       }
     }
 
@@ -1209,13 +1209,13 @@ const handleSalesDecision = async (saleId, decision) => {
       if (error) {
         console.error('Error saving normalized value:', error);
       } else {
-        console.log(`💾 Saved normalized value for kept property ${saleId}`);
+        if (false) console.log(`💾 Saved normalized value for kept property ${saleId}`);
       }
     }
 
     // CRITICAL: Always clear cache after any decision change
     if (onUpdateJobCache && jobData?.id) {
-      console.log('🗑️ Clearing cache after sales decision change');
+      if (false) console.log('🗑️ Clearing cache after sales decision change');
       onUpdateJobCache(jobData.id, null);
     }
 
@@ -1232,32 +1232,32 @@ const handleSalesDecision = async (saleId, decision) => {
   const saveBatchDecisions = async () => {
     const keeps = timeNormalizedSales.filter(s => s.keep_reject === 'keep');
     const rejects = timeNormalizedSales.filter(s => s.keep_reject === 'reject');
-    console.log('🔍 Sample keep values:', keeps.slice(0, 3).map(k => ({
+    if (false) console.log('🔍 Sample keep values:', keeps.slice(0, 3).map(k => ({
       id: k.id,
       time_normalized_price: k.time_normalized_price,
       has_value: !!k.time_normalized_price
     })));
-    console.log('🔍 Reject count:', rejects.length);
+    if (false) console.log('🔍 Reject count:', rejects.length);
 
     setIsSavingDecisions(true);
     setSaveProgress({ current: 0, total: keeps.length + rejects.length, message: 'Preparing to save...' });
 
     try {
-      console.log(`💾 Batch saving ${keeps.length} keeps and ${rejects.length} rejects...`);
+      if (false) console.log(`💾 Batch saving ${keeps.length} keeps and ${rejects.length} rejects...`);
 
       // FIRST: Save all decisions to market_land_valuation for persistence
       await worksheetService.saveTimeNormalizedSales(jobData.id, timeNormalizedSales, normalizationStats);
-      console.log('✅ Saved all decisions to market_land_valuation');
+      if (false) console.log('✅ Saved all decisions to market_land_valuation');
 
       // SECOND: Batch update keeps in chunks of 500
       if (keeps.length > 0) {
         setSaveProgress({ current: 0, total: keeps.length + rejects.length, message: `Saving ${keeps.length} keeps to property_market_analysis...` });
-        console.log(`📝 Preparing to save ${keeps.length} kept sales to property_market_analysis`);
+        if (false) console.log(`📝 Preparing to save ${keeps.length} kept sales to property_market_analysis`);
 
         for (let i = 0; i < keeps.length; i += 500) {
           const batch = keeps.slice(i, i + 500);
 
-          console.log(`💾 Keep batch ${Math.floor(i/500) + 1}: Saving ${batch.length} properties...`);
+          if (false) console.log(`💾 Keep batch ${Math.floor(i/500) + 1}: Saving ${batch.length} properties...`);
 
           // Use Promise.all for parallel updates within batch
           await Promise.all(batch.map(sale =>
@@ -1269,7 +1269,7 @@ const handleSalesDecision = async (saleId, decision) => {
               }, { onConflict: 'property_composite_key' })
           ));
 
-          console.log(`✅ Saved keep batch ${Math.floor(i/500) + 1} of ${Math.ceil(keeps.length/500)}`);
+          if (false) console.log(`✅ Saved keep batch ${Math.floor(i/500) + 1} of ${Math.ceil(keeps.length/500)}`);
           setSaveProgress({
             current: Math.min(i + 500, keeps.length),
             total: keeps.length + rejects.length,
@@ -1285,13 +1285,13 @@ const handleSalesDecision = async (saleId, decision) => {
           total: keeps.length + rejects.length,
           message: `Clearing ${rejects.length} rejects from property_market_analysis...`
         });
-        console.log(`📝 Preparing to clear ${rejects.length} rejected sales from property_market_analysis`);
+        if (false) console.log(`📝 Preparing to clear ${rejects.length} rejected sales from property_market_analysis`);
 
         for (let i = 0; i < rejects.length; i += 500) {
           const batch = rejects.slice(i, i + 500);
           const rejectCompositeKeys = batch.map(s => s.property_composite_key);
 
-          console.log(`🗑️ Reject batch ${Math.floor(i/500) + 1}: Clearing ${batch.length} properties...`);
+          if (false) console.log(`🗑️ Reject batch ${Math.floor(i/500) + 1}: Clearing ${batch.length} properties...`);
 
           // CRITICAL: Clear BOTH time and size normalized values for rejected sales
           await supabase
@@ -1302,7 +1302,7 @@ const handleSalesDecision = async (saleId, decision) => {
             })
             .in('property_composite_key', rejectCompositeKeys);
 
-          console.log(`✅ Cleared reject batch ${Math.floor(i/500) + 1} of ${Math.ceil(rejects.length/500)}`);
+          if (false) console.log(`✅ Cleared reject batch ${Math.floor(i/500) + 1} of ${Math.ceil(rejects.length/500)}`);
           setSaveProgress({
             current: keeps.length + Math.min(i + 500, rejects.length),
             total: keeps.length + rejects.length,
@@ -1313,11 +1313,11 @@ const handleSalesDecision = async (saleId, decision) => {
 
       // FOURTH: Clear cache to prevent stale data issues
       if (onUpdateJobCache && jobData?.id) {
-        console.log('🗑️ Clearing cache after batch save to prevent stale data');
+        if (false) console.log('🗑️ Clearing cache after batch save to prevent stale data');
         onUpdateJobCache(jobData.id, null);
       }
 
-      console.log(`✅ Batch save complete: ${keeps.length} keeps saved, ${rejects.length} rejects cleared`);
+      if (false) console.log(`✅ Batch save complete: ${keeps.length} keeps saved, ${rejects.length} rejects cleared`);
       alert(`✅ Successfully saved ${keeps.length} keeps and cleared ${rejects.length} rejects from database`);
 
     } catch (error) {
@@ -1449,13 +1449,13 @@ const handleSalesDecision = async (saleId, decision) => {
 
       //Clear cache after auto-save
       if (onUpdateJobCache && jobData?.id) {
-        console.log('🗑️ Clearing cache after auto-save worksheet');
+        if (false) console.log('🗑️ Clearing cache after auto-save worksheet');
         onUpdateJobCache(jobData.id, null);
       }
       
       setLastAutoSave(new Date());
       setUnsavedChanges(false);
-      console.log('✅ Auto-saved worksheet progress');
+      if (false) console.log('✅ Auto-saved worksheet progress');
     } catch (error) {
       console.error('Auto-save failed:', error);
     }
@@ -1505,7 +1505,7 @@ const processSelectedProperties = async () => {
 
         // Clear cache after updating property records
         if (onUpdateJobCache && jobData?.id) {
-          console.log('🗑️ Clearing cache after processing worksheet properties');
+          if (false) console.log('🗑️ Clearing cache after processing worksheet properties');
           onUpdateJobCache(jobData.id, null);
         }
       }
@@ -1660,7 +1660,7 @@ const analyzeImportFile = async (file) => {
         
         // Debug for specific blocks
         if (parseInt(block) >= 7 && parseInt(block) <= 10) {
-          console.log(`���� Import row ${block}-${lot}: compositeKey = ${compositeKey}`);
+          if (false) console.log(`���� Import row ${block}-${lot}: compositeKey = ${compositeKey}`);
         }
         
         // Find matching property in worksheet
@@ -1685,13 +1685,13 @@ const analyzeImportFile = async (file) => {
         } else {
           // Debug unmatched
           if (parseInt(block) >= 7 && parseInt(block) <= 10) {
-            console.log(`❌ No match found for: ${compositeKey}`);
+            if (false) console.log(`❌ No match found for: ${compositeKey}`);
             // Find close matches for debugging
             const closeMatches = worksheetProperties.filter(p => 
               p.property_composite_key.includes(`-${block}-${lot}`)
             );
             if (closeMatches.length > 0) {
-              console.log(`   Close matches:`, closeMatches.map(p => p.property_composite_key));
+              if (false) console.log(`   Close matches:`, closeMatches.map(p => p.property_composite_key));
             }
           }
           
@@ -1739,7 +1739,7 @@ const analyzeImportFile = async (file) => {
       
       setImportPreview(analysis);
       setShowImportModal(true);
-      console.log(`Import analysis complete: ${analysis.matched.length} exact, ${analysis.fuzzyMatched.length} fuzzy, ${analysis.unmatched.length} unmatched`);
+      if (false) console.log(`Import analysis complete: ${analysis.matched.length} exact, ${analysis.fuzzyMatched.length} fuzzy, ${analysis.unmatched.length} unmatched`);
     } catch (error) {
       console.error('Error analyzing import file:', error);
       alert('Error analyzing file. Please check the format.');
@@ -2308,7 +2308,7 @@ const analyzeImportFile = async (file) => {
                                       // DEBUG: Log what we're trying to display for class
                                       const classValue = sale.property_m4_class || sale.property_class || sale.asset_building_class || 'No class found';
                                       if (sale.id && sale.id.toString().endsWith('0')) { // Log every 10th for debugging
-                                        console.log(`🎯 Table render class for sale ${sale.id}:`, {
+                                        if (false) console.log(`🎯 Table render class for sale ${sale.id}:`, {
                                           property_m4_class: sale.property_m4_class,
                                           property_class: sale.property_class,
                                           asset_building_class: sale.asset_building_class,
@@ -2328,7 +2328,7 @@ const analyzeImportFile = async (file) => {
 
                                       // DEBUG: Log package detection for 3A properties
                                       if (sale.property_m4_class === '3A') {
-                                        console.log(`🏡 3A Property package detection:`, {
+                                        if (false) console.log(`🏡 3A Property package detection:`, {
                                           composite_key: sale.property_composite_key,
                                           class: sale.property_m4_class,
                                           sales_date: sale.sales_date,
@@ -2373,7 +2373,7 @@ const analyzeImportFile = async (file) => {
                                       // DEBUG: Check all possible assessed value fields
                                       const assessedValue = sale.values_mod_total || sale.assessed_value || sale.total_assessed || 0;
                                       if (sale.id && sale.id.toString().endsWith('0')) { // Log every 10th for debugging
-                                        console.log(`💰 Table render assessed for sale ${sale.id}:`, {
+                                        if (false) console.log(`💰 Table render assessed for sale ${sale.id}:`, {
                                           values_mod_total: sale.values_mod_total,
                                           assessed_value: sale.assessed_value,
                                           total_assessed: sale.total_assessed,
@@ -2397,7 +2397,7 @@ const analyzeImportFile = async (file) => {
                                       // DEBUG: Check all possible sales NU fields
                                       const salesNU = sale.sales_nu || sale.sales_instrument || sale.nu || sale.sale_nu || '';
                                       if (sale.id && sale.id.toString().endsWith('0')) { // Log every 10th for debugging
-                                        console.log(`📋 Table render sales_nu for sale ${sale.id}:`, {
+                                        if (false) console.log(`📋 Table render sales_nu for sale ${sale.id}:`, {
                                           sales_nu: sale.sales_nu,
                                           sales_instrument: sale.sales_instrument,
                                           nu: sale.nu,
@@ -3181,7 +3181,7 @@ const analyzeImportFile = async (file) => {
                                 
                                 if (parentCard && parentCard.new_vcs) {
                                   handleWorksheetChange(prop.property_composite_key, 'new_vcs', parentCard.new_vcs);
-                                  console.log(`✅ Copied VCS "${parentCard.new_vcs}" from parent card to ${prop.card}`);
+                                  if (false) console.log(`✅ Copied VCS "${parentCard.new_vcs}" from parent card to ${prop.card}`);
                                 } else if (parentCard) {
                                   alert('Parent card does not have a New VCS value to copy');
                                 } else {
@@ -3336,7 +3336,7 @@ const analyzeImportFile = async (file) => {
                  onClick={() => {
                    if (window.confirm('Mark Page by Page Worksheet as complete in Management Checklist?')) {
                      checklistService.updateChecklistItem(jobData.id, 'page_by_page', true);
-                     alert('✅ Page by Page Worksheet marked complete in checklist');
+                     alert('�� Page by Page Worksheet marked complete in checklist');
                    }
                  }}
                  className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700"
@@ -3501,7 +3501,7 @@ const analyzeImportFile = async (file) => {
               <button
                onClick={async () => {
                  // Process the import - actually apply the updates
-                 console.log('Processing import with options:', importOptions);
+                 if (false) console.log('Processing import with options:', importOptions);
                  
                  // Show processing modal
                  setShowImportModal(false);
@@ -3689,7 +3689,7 @@ const analyzeImportFile = async (file) => {
 
                       //Clear cache after saving zoning
                       if (onUpdateJobCache && jobData?.id) { 
-                        console.log('🗑️ Clearing cache after saving zoning');
+                        if (false) console.log('🗑️ Clearing cache after saving zoning');
                         onUpdateJobCache(jobData.id, null);
                       }
                         
