@@ -1456,11 +1456,16 @@ const loadJobs = async () => {
         await supabase.from('job_contracts').insert(contractData);
       }
 
-      // Archive the planning job
-      await supabase
+      // Archive the planning job and clear any manual parcel override
+      const { error: archiveError } = await supabase
         .from('planning_jobs')
-        .update({ is_archived: true })
+        .update({ is_archived: true, manual_parcel_count: null })
         .eq('id', planningJob.id);
+
+      if (archiveError) {
+        console.error('Error archiving planning job or clearing manual parcels:', archiveError);
+        throw archiveError;
+      }
 
       alert(`Successfully rolled over "${planningJob.job_name || planningJob.municipality}" to active jobs!`);
       setActiveTab('active');
