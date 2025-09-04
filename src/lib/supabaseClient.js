@@ -1867,12 +1867,33 @@ export const checklistService = {
   // Note: this upserts into checklist_item_status (per-job status table)
   async updateItemStatus(jobId, itemId, status, completedBy) {
     try {
+      // Validate completedBy exists in employees (or users) table to avoid FK violations
+      let validatedCompletedBy = null;
+      if (status === 'completed' && completedBy) {
+        try {
+          const { data: emp } = await supabase.from('employees').select('id').eq('id', completedBy).maybeSingle();
+          if (emp && emp.id) {
+            validatedCompletedBy = completedBy;
+          } else {
+            // Try auth.users-like table (if present)
+            try {
+              const { data: usr } = await supabase.from('users').select('id').eq('id', completedBy).maybeSingle();
+              if (usr && usr.id) validatedCompletedBy = completedBy;
+            } catch (e) {
+              // ignore
+            }
+          }
+        } catch (e) {
+          // ignore lookup errors and fall back to null
+        }
+      }
+
       const payload = {
         job_id: jobId,
         item_id: itemId,
         status: status,
         completed_at: status === 'completed' ? new Date().toISOString() : null,
-        completed_by: status === 'completed' ? completedBy : null,
+        completed_by: validatedCompletedBy,
         updated_at: new Date().toISOString()
       };
 
