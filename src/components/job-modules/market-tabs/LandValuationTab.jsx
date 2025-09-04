@@ -3117,17 +3117,34 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       { wch: 30 } // Notes
     ];
 
-    // Append summary for Method 1 (positive sales)
-    const positiveSales = (vacantSales || []).filter(s => s.isPositive);
-    if (positiveSales.length > 0) {
+    // Append summary for Method 1 (category summary matching UI)
+    try {
+      const ca = categoryAnalysis || {};
+      const raw = ca.rawLand || { avg: 0, count: 0, avgLotSize: '' };
+      const building = ca.buildingLot || { avg: 0, count: 0, avgLotSize: '' };
+      const wetlands = ca.wetlands || { avg: 0, count: 0, avgLotSize: '' };
+      const landlocked = ca.landlocked || { avg: 0, count: 0, avgLotSize: '' };
+      const conservation = ca.conservation || { avg: 0, count: 0, avgLotSize: '' };
+
+      const fmt = (v) => {
+        if (v === null || v === undefined || v === '') return '$0';
+        // If valuationMode is sf, avg may already be a string/number representing $/SF
+        if (valuationMode === 'sf') return `$${v}`;
+        return `$${Number(v).toLocaleString()}`;
+      };
+
       salesRows.push([]);
-      salesRows.push(['SUMMARY (Positive Sales Only)']);
-      salesRows.push(['Total Sales Included', positiveSales.length]);
-      salesRows.push(['Total Sales Excluded', (vacantSales || []).length - positiveSales.length]);
-      salesRows.push(['Sum of Total Land Values', `$${positiveSales.reduce((sum, s) => sum + (s.totalLandValue || 0), 0).toLocaleString()}`]);
-      salesRows.push(['Sum of Improved Sale Prices', `$${positiveSales.reduce((sum, s) => sum + (s.avgImprovedPrice || 0), 0).toLocaleString()}`]);
-      const overallRecommended = positiveSales.reduce((sum, s) => sum + (s.avgImprovedPrice || 0), 0) > 0 ? (positiveSales.reduce((sum, s) => sum + (s.totalLandValue || 0), 0) / positiveSales.reduce((sum, s) => sum + (s.avgImprovedPrice || 0), 0)) * 100 : 0;
-      salesRows.push(['Overall Recommended Allocation', `${overallRecommended.toFixed(1)}%`]);
+      salesRows.push(['SUMMARY']);
+      salesRows.push(['Raw Land', fmt(raw.avg), `${raw.count} sales`, raw.avgLotSize || '']);
+      salesRows.push(['Building Lot', fmt(building.avg), `${building.count} sales`, building.avgLotSize || '']);
+      salesRows.push(['Wetlands', fmt(wetlands.avg), `${wetlands.count} sales`, wetlands.avgLotSize || '']);
+      salesRows.push(['Landlocked', fmt(landlocked.avg), `${landlocked.count} sales`, landlocked.avgLotSize || '']);
+      salesRows.push(['Conservation', fmt(conservation.avg), `${conservation.count} sales`, conservation.avgLotSize || '']);
+    } catch (e) {
+      // fallback: simple counts
+      salesRows.push([]);
+      salesRows.push(['SUMMARY']);
+      salesRows.push(['Total Sales', (vacantSales || []).length]);
     }
 
     // recreate ws1 to include summary formatting
