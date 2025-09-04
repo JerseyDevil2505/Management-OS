@@ -3246,7 +3246,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     ];
 
     // Apply bold + centered styling to header-like cells (detect by label)
-    const headerLabels = ['Bracket','Count','Avg Lot Size (acres)','Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','ADJUSTED','$ ADJUSTED','DELTA','$ DELTA','LOT DELTA','PER ACRE','$ PER ACRE','PER SQ FT','Method 2 Summary'];
+    const headerLabels = ['Bracket','Count','Avg Lot Size (acres)','Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','ADJUSTED','$ ADJUSTED','DELTA','$ DELTA','LOT DELTA','PER ACRE','$ PER ACRE','PER SQ FT','Implied Acreage Summary'];
     try {
       const range = XLSX.utils.decode_range(ws2['!ref']);
       for (let R = range.s.r; R <= range.e.r; ++R) {
