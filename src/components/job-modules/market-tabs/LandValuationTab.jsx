@@ -3206,7 +3206,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     // Method 2 Summary (similar to UI)
-    method2Rows.push(['Method 2 Summary']);
+    method2Rows.push(['Implied Acreage Summary']);
     if (method2Summary) {
       const mid = method2Summary.mediumRange || {};
       const lg = method2Summary.largeRange || {};
