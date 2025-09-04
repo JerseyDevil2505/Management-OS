@@ -1863,10 +1863,13 @@ export const checklistService = {
     }
   },
 
-  // Update item status (completed, pending, etc.)
-  async updateItemStatus(itemId, status, completedBy) {
+  // Update item status (completed, pending, etc.) for a specific job
+  // Note: this upserts into checklist_item_status (per-job status table)
+  async updateItemStatus(jobId, itemId, status, completedBy) {
     try {
-      const updates = {
+      const payload = {
+        job_id: jobId,
+        item_id: itemId,
         status: status,
         completed_at: status === 'completed' ? new Date().toISOString() : null,
         completed_by: status === 'completed' ? completedBy : null,
@@ -1874,12 +1877,11 @@ export const checklistService = {
       };
 
       const { data, error } = await supabase
-        .from('checklist_items')
-        .update(updates)
-        .eq('id', itemId)
+        .from('checklist_item_status')
+        .upsert(payload, { onConflict: 'job_id,item_id' })
         .select()
         .single();
-      
+
       if (error) throw error;
       return data;
     } catch (error) {
@@ -1888,10 +1890,12 @@ export const checklistService = {
     }
   },
 
-  // Update client approval
-  async updateClientApproval(itemId, approved, approvedBy) {
+  // Update client approval for a checklist item (per-job)
+  async updateClientApproval(jobId, itemId, approved, approvedBy) {
     try {
-      const updates = {
+      const payload = {
+        job_id: jobId,
+        item_id: itemId,
         client_approved: approved,
         client_approved_date: approved ? new Date().toISOString() : null,
         client_approved_by: approved ? approvedBy : null,
@@ -1899,12 +1903,11 @@ export const checklistService = {
       };
 
       const { data, error } = await supabase
-        .from('checklist_items')
-        .update(updates)
-        .eq('id', itemId)
+        .from('checklist_item_status')
+        .upsert(payload, { onConflict: 'job_id,item_id' })
         .select()
         .single();
-      
+
       if (error) throw error;
       return data;
     } catch (error) {
