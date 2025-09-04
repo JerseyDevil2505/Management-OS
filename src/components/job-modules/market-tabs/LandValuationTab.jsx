@@ -2983,6 +2983,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     let workbook;
     if (type === 'vcs-sheet') {
       workbook = exportVCSSheetExcel();
+    } else if (type === 'eco-obs') {
+      workbook = exportEcoObsWorksheetExcel();
     } else {
       // For other types, create a simple workbook for now
       workbook = XLSX.utils.book_new();
