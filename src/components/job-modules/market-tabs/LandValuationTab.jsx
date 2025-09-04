@@ -6756,15 +6756,70 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const filteredFactors = ecoObsFactors;
 
     // Combined codes for dropdown (defaults + custom)
-    const combinedLocationCodes = [
-      ...DEFAULT_ECO_OBS_CODES.map(c => ({ code: c.code, description: c.description, isPositive: c.isPositive, isDefault: true })),
-      ...customLocationCodes.map(c => ({ ...c, isDefault: false }))
-    ];
+  const combinedLocationCodes = [
+    ...DEFAULT_ECO_OBS_CODES.map(c => ({ code: c.code, description: c.description, isPositive: c.isPositive, isDefault: true })),
+    ...customLocationCodes.map(c => ({ ...c, isDefault: false }))
+  ];
 
-    // Use component-level inputs/handlers for adding custom codes
+  // Build summary for standalone location analyses (non-compounded)
+  const standaloneLocations = {};
+  Object.keys(ecoObsFactors || {}).forEach(vcs => {
+    Object.keys(ecoObsFactors[vcs] || {}).forEach(loc => {
+      // Skip empty/none and compounded descriptions
+      if (!loc || /\bnone\b|\bno analysis\b/i.test(loc)) return;
+      if (/[\/\|,]|\band\b|&/.test(loc)) return; // compound separators
+      if (!standaloneLocations[loc]) standaloneLocations[loc] = { vcsList: new Set(), impacts: [] };
+      standaloneLocations[loc].vcsList.add(vcs);
+      const impact = calculateEcoObsImpact(vcs, loc, globalEcoObsTypeFilter);
+      if (impact && impact.percentImpact && impact.percentImpact !== 'N/A') {
+        const num = parseFloat(String(impact.percentImpact));
+        if (!isNaN(num)) standaloneLocations[loc].impacts.push(num);
+      }
+    });
+  });
 
-    return (
-      <div style={{ padding: '20px' }}>
+  const summaryList = Object.entries(standaloneLocations).map(([loc, data]) => {
+    const avg = data.impacts.length ? (data.impacts.reduce((a, b) => a + b, 0) / data.impacts.length) : null;
+    return { location: loc, avgPercent: avg, count: data.vcsList.size, impacts: data.impacts };
+  }).sort((a, b) => (b.count - a.count) || ((b.avgPercent || 0) - (a.avgPercent || 0))).slice(0, 50);
+
+  // Apply a percent value (positive or negative) from summary into worksheet applied adjustments for all matching VCS rows
+  const applySummaryToWorksheet = (location, value) => {
+    if (value === null || value === undefined || isNaN(Number(value))) return;
+    const numeric = Number(value);
+    Object.keys(ecoObsFactors || {}).forEach(vcs => {
+      if (ecoObsFactors[vcs] && ecoObsFactors[vcs][location]) {
+        if (numeric >= 0) {
+          updateActualAdjustment(vcs, `${location}_positive`, Math.abs(numeric));
+        } else {
+          updateActualAdjustment(vcs, `${location}_negative`, Math.abs(numeric));
+        }
+      }
+    });
+  };
+
+  // Special helper for BS traffic levels
+  const applyBSTraffic = (location, levelKey) => {
+    const levelMap = { light: -5, medium: -10, heavy: -15 };
+    const val = levelMap[levelKey];
+    if (val === undefined) return;
+    Object.keys(ecoObsFactors || {}).forEach(vcs => {
+      if (ecoObsFactors[vcs] && ecoObsFactors[vcs][location]) {
+        // For traffic we always set a negative applied adjustment
+        updateActualAdjustment(vcs, `${location}_negative`, Math.abs(val));
+      }
+    });
+  };
+
+  // Helper to check if any mapped code for this location includes a particular code (e.g., BS)
+  const locationHasCode = (location, code) => {
+    return Object.keys(mappedLocationCodes || {}).some(k => k.endsWith(`_${location}`) && (mappedLocationCodes[k] || '').toString().toUpperCase().split('/').map(s => s.trim()).includes(code));
+  };
+
+  // Use component-level inputs/handlers for adding custom codes
+
+  return (
+    <div style={{ padding: '20px' }}>
         <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <div style={{ fontSize: '14px', fontWeight: '600' }}>Eco Obs Code Config</div>
