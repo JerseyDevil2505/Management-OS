@@ -382,7 +382,7 @@ useEffect(() => {
   else if (marketLandData.allocation_study?.target_allocation !== null &&
            marketLandData.allocation_study?.target_allocation !== undefined) {
     loadedTargetAllocation = marketLandData.allocation_study.target_allocation;
-    console.log('🎯 LOADING TARGET ALLOCATION FROM ALLOCATION STUDY:', loadedTargetAllocation);
+    console.log('�� LOADING TARGET ALLOCATION FROM ALLOCATION STUDY:', loadedTargetAllocation);
   }
 
   // Only set if we found a valid value
@@ -3562,7 +3562,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       console.debug('Failed to copy header styles to new sheet', e);
     }
 
-    XLSX.utils.book_append_sheet(wb, ws2, 'Worksheet');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Eco Obs Study');
     return wb;
   };
 
