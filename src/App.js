@@ -435,13 +435,26 @@ const App = () => {
     } catch (error) {
       console.error('❌ Error loading live data:', error);
       setAppData(prev => ({ ...prev, isLoading: false }));
+      let errMsg = '';
+      try {
+        if (!error) errMsg = 'Unknown error';
+        else if (typeof error === 'string') errMsg = error;
+        else if (error.message) errMsg = error.message;
+        else if (error.error) errMsg = error.error;
+        else errMsg = JSON.stringify(error);
+      } catch (e) {
+        errMsg = String(error);
+      }
+
+      const message = typeof errMsg === 'string' && errMsg.toLowerCase().includes('timeout')
+        ? 'Database timeout - system may be busy. Please try again.'
+        : 'Failed to load data';
+
       setCacheStatus({
         isStale: false,
         isRefreshing: false,
-        lastError: error.message,
-        message: error.message.includes('timeout') ?
-          'Database timeout - system may be busy. Please try again.' :
-          'Failed to load data'
+        lastError: errMsg,
+        message
       });
       throw error;
     }
