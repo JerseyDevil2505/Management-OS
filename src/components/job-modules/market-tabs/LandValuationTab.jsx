@@ -7221,6 +7221,23 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </tbody>
             </table>
           </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+            <button onClick={() => {
+              // Apply inputs for all summary rows; if no input for an item, apply avgPercent if available
+              summaryList.forEach(item => {
+                const entry = summaryInputs[item.location] || {};
+                const pos = entry.positive !== undefined && entry.positive !== '' ? parseFloat(entry.positive) : null;
+                const neg = entry.negative !== undefined && entry.negative !== '' ? parseFloat(entry.negative) : null;
+                if (pos !== null || neg !== null) {
+                  applySummarySet(item.location, pos, neg);
+                } else if (item.avgPercent !== null && item.avgPercent !== undefined) {
+                  applySummaryToWorksheet(item.location, item.avgPercent);
+                }
+              });
+              alert('Set applied for all visible summary rows');
+            }} style={{ padding: '8px 12px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px' }}>Set All</button>
+          </div>
         </div>
       </div>
     );
