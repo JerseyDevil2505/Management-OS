@@ -35,6 +35,7 @@ const DataQualityTab = ({
     conditions: [{ logic: 'IF', field: '', operator: '=', value: '' }]
   });
   const [runHistory, setRunHistory] = useState([]);
+  const [isDataQualityComplete, setIsDataQualityComplete] = useState(false);
   const [dataQualityActiveSubTab, setDataQualityActiveSubTab] = useState('overview');
   const [expandedCategories, setExpandedCategories] = useState(['mod_iv']);
   const [isRunningChecks, setIsRunningChecks] = useState(false);
