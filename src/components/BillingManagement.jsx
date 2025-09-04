@@ -1858,7 +1858,7 @@ const loadJobs = async () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="w-full p-6">
       <div className="mb-8">
         <div className="flex justify-between items-center">
           <div>
