@@ -1340,15 +1340,14 @@ const handleSalesDecision = async (saleId, decision) => {
 
           if (false) console.log(`💾 Keep batch ${Math.floor(i/500) + 1}: Saving ${batch.length} properties...`);
 
-          // Use Promise.all for parallel updates within batch
-          await Promise.all(batch.map(sale =>
-            supabase
-              .from('property_market_analysis')
-              .upsert({
-                property_composite_key: sale.property_composite_key,
-                values_norm_time: sale.time_normalized_price
-              }, { onConflict: 'property_composite_key' })
-          ));
+          // Use safeUpsert for batch of keeps (includes job_id)
+          const keepRecords = batch.map(sale => ({
+            job_id: jobData.id,
+            property_composite_key: sale.property_composite_key,
+            values_norm_time: sale.time_normalized_price
+          }));
+          const { error: keepError } = await safeUpsertPropertyMarket(keepRecords);
+          if (keepError) throw keepError;
 
           if (false) console.log(`✅ Saved keep batch ${Math.floor(i/500) + 1} of ${Math.ceil(keeps.length/500)}`);
           setSaveProgress({
@@ -3041,7 +3040,7 @@ const analyzeImportFile = async (file) => {
                       setFilteredWorksheetProps(updated);
                       updateWorksheetStats(updated);
                       setUnsavedChanges(true);
-                      alert(`✅ Copied current VCS values for ${worksheetProperties.length} properties`);
+                      alert(`�� Copied current VCS values for ${worksheetProperties.length} properties`);
                     }
                   }}
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
