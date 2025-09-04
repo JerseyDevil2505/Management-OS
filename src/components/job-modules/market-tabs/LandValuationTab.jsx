@@ -4279,7 +4279,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         type="checkbox"
                         checked={includedSales.has(sale.id)}
                         onChange={(e) => {
-                          debug(`📋 Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
+                          debug(`��� Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
                             checked: e.target.checked,
                             saleId: sale.id
                           });
@@ -6809,30 +6809,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>VCS Valuation Sheet</h3>
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button
-              onClick={() => {
-                if (!targetAllocation) {
-                  setTargetAllocation(27);
-                }
-                setTimeout(() => {
-                  calculateVCSRecommendedSitesWithTarget();
-                }, 100);
-              }}
-              style={{
-                backgroundColor: '#8B5CF6',
-                color: 'white',
-                padding: '8px 16px',
-                borderRadius: '4px',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontSize: '14px'
-              }}
-            >
-              🎯 Force VCS Calc
-            </button>
             <button
               onClick={() => exportToExcel('vcs-sheet')}
               style={{
