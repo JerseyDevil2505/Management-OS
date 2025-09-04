@@ -59,7 +59,7 @@ const LandValuationTab = ({
     if (!jobData?.id) return;
     const newStatus = currentState ? 'pending' : 'completed';
     try {
-      await supabase
+      const { data, error } = await supabase
         .from('checklist_item_status')
         .upsert({
           job_id: jobData.id,
@@ -68,14 +68,20 @@ const LandValuationTab = ({
           completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
           completed_by: newStatus === 'completed' ? (jobData?.assignedManagers?.[0]?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad') : null,
           updated_at: new Date().toISOString()
-        }, { onConflict: 'job_id,item_id' });
+        }, { onConflict: 'job_id,item_id' })
+        .select()
+        .single();
 
-      // update local state to reflect change
-      setter(!currentState);
+      if (error) throw error;
+
+      // Use returned persisted status to set UI state (defensive)
+      const persistedStatus = data?.status || newStatus;
+      const isNowCompleted = persistedStatus === 'completed';
+      setter(isNowCompleted);
 
       // Notify other components to refresh checklist state (ManagementChecklist listens for this)
       try {
-        window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId, status: newStatus } }));
+        window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId, status: persistedStatus } }));
       } catch (e) {
         // ignore dispatch errors
       }
