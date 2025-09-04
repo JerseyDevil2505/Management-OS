@@ -1273,7 +1273,7 @@ const loadJobs = async () => {
 
       // Call onDataUpdate for cache synchronization without forcing full refresh
       if (onDataUpdate) {
-        console.log('🔄 Updating cache without full refresh');
+        console.log('���� Updating cache without full refresh');
         onDataUpdate('billing_event', editingEvent.id, updateData);
       }
 
@@ -2673,7 +2673,7 @@ const loadJobs = async () => {
                   <p className="text-sm text-gray-500">Click "Import Excel" to upload your expense file.</p>
                 </div>
               ) : (
-                <div className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="bg-white rounded-lg shadow overflow-hidden expenses-full-bleed-container">
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead>
