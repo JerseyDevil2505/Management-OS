@@ -536,9 +536,9 @@ const calculateDistributionMetrics = async () => {
       if (planningJobsData && planningJobsData.length > 0) {
         planningJobsData.forEach(job => {
           if (job.contract_amount > 0) {
-            const parcels = job.total_properties || 
-                           ((job.residential_properties || 0) + (job.commercial_properties || 0)) || 
-                           0;
+            const parcels = (job.manual_parcel_count !== undefined && job.manual_parcel_count !== null && job.manual_parcel_count !== '')
+                           ? parseInt(job.manual_parcel_count, 10)
+                           : (job.total_properties || ((job.residential_properties || 0) + (job.commercial_properties || 0)) || 0);
             
             // Fix timezone issue for planning jobs too
             const dueYear = job.end_date ? parseInt(job.end_date.substring(0, 4)) : new Date().getFullYear() + 1;
