@@ -171,6 +171,12 @@ const PreValuationTab = ({
     { hex: "#6633FF", name: "Electric Purple", row: 4, col: 8 }
   ];
   const [isResultsCollapsed, setIsResultsCollapsed] = useState(false);
+  const [preValChecklist, setPreValChecklist] = useState({
+    market_analysis: false,
+    page_by_page: false,
+    zoning_config: false
+  });
+  const [isProcessingPageByPage, setIsProcessingPageByPage] = useState(false);
 
 // ==================== FILTER HPI DATA ====================
   // Check what HPI data we received
@@ -254,25 +260,51 @@ useEffect(() => {
         .from('county_hpi_data')
         .select('county_name')
         .order('county_name');
-      
+
       if (error) throw error;
-      
+
       // Get unique counties
       const uniqueCounties = [...new Set(data.map(item => item.county_name))];
       setAvailableCounties(uniqueCounties);
-      
+
       // Set default to job's county or first available
       if (uniqueCounties.length > 0 && !selectedCounty) {
         setSelectedCounty(jobData?.county || uniqueCounties[0]);
       }
-      
+
       if (false) console.log(`📍 Found ${uniqueCounties.length} counties with HPI data:`, uniqueCounties);
     } catch (error) {
       console.error('Error loading counties:', error);
     }
   };
-  
+
   loadAvailableCounties();
+
+  // Load checklist statuses for pre-valuation items
+  const loadChecklistStatuses = async () => {
+    try {
+      if (!jobData?.id) return;
+      const ids = ['market-analysis','page-by-page','zoning-config','market_analysis','page_by_page','zoning_config'];
+      const { data } = await supabase
+        .from('checklist_item_status')
+        .select('item_id,status')
+        .eq('job_id', jobData.id)
+        .in('item_id', ids);
+      if (data) {
+        const state = { market_analysis: false, page_by_page: false, zoning_config: false };
+        data.forEach(d => {
+          if (d.item_id === 'market-analysis' || d.item_id === 'market_analysis') state.market_analysis = d.status === 'completed';
+          if (d.item_id === 'page-by-page' || d.item_id === 'page_by_page') state.page_by_page = d.status === 'completed';
+          if (d.item_id === 'zoning-config' || d.item_id === 'zoning_config') state.zoning_config = d.status === 'completed';
+        });
+        setPreValChecklist(state);
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  loadChecklistStatuses();
 }, []);  
 
 // ==================== USE SAVED NORMALIZATION DATA FROM PROPS ====================
@@ -729,21 +761,73 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     }
   }, [properties, salesFromYear, minSalePrice, normalizeToYear, equalizationRatio, outlierThreshold, getHPIMultiplier, timeNormalizedSales, normalizationStats, vendorType, parseCompositeKey, jobData.id, selectedCounty, worksheetService]);
 
+  // Helper: Safe upsert into property_market_analysis with fallback to update/insert when ON CONFLICT key is missing
+  const safeUpsertPropertyMarket = async (records) => {
+    if (!records || records.length === 0) return { data: [], error: null };
+    try {
+      // Try batch upsert using property_composite_key as conflict target
+      const { data, error } = await supabase
+        .from('property_market_analysis')
+        .upsert(records, { onConflict: 'job_id,property_composite_key' });
+      if (!error) return { data, error: null };
+
+      // If error indicates missing unique constraint for ON CONFLICT, fall back to update/insert per record
+      if (error && (error.code === '42P10' || (error.message && error.message.includes('no unique or exclusion constraint')))) {
+        const results = [];
+        for (const rec of records) {
+          try {
+            // Try update first
+            const { data: updated, error: updateError } = await supabase
+              .from('property_market_analysis')
+              .update(rec)
+              .match({ property_composite_key: rec.property_composite_key })
+              .select();
+
+            if (updateError) throw updateError;
+            if (updated && updated.length > 0) {
+              results.push(updated[0]);
+              continue;
+            }
+
+            // If no rows updated, insert new row
+            const { data: inserted, error: insertError } = await supabase
+              .from('property_market_analysis')
+              .insert(rec)
+              .select();
+
+            if (insertError) throw insertError;
+            results.push(Array.isArray(inserted) ? inserted[0] : inserted);
+
+          } catch (e) {
+            return { data: null, error: e };
+          }
+        }
+        return { data: results, error: null };
+      }
+
+      // Other errors: return as-is
+      return { data: null, error };
+
+    } catch (err) {
+      return { data: null, error: err };
+    }
+  };
+
   const saveSizeNormalizedValues = async (normalizedSales) => {
     try {
       // Save size normalized values to database
       for (const sale of normalizedSales) {
         if (sale.size_normalized_price) {
-          await supabase
-            .from('property_market_analysis')
-            .upsert({
-              property_composite_key: sale.property_composite_key,
-              values_norm_size: sale.size_normalized_price
-            }, { onConflict: 'property_composite_key' });
+          const { error } = await safeUpsertPropertyMarket([{
+            job_id: jobData.id,
+            property_composite_key: sale.property_composite_key,
+            values_norm_size: sale.size_normalized_price
+          }]);
+          if (error) throw error;
         }
       }
       if (false) console.log('✅ Size normalized values saved to database');
-      
+
     } catch (error) {
       console.error('Error saving size normalized values:', error);
     }
@@ -1202,13 +1286,7 @@ const handleSalesDecision = async (saleId, decision) => {
     // Handle database updates for kept sales
     if (decision === 'keep' && previousSale) {
       // Save time normalized value to property_market_analysis
-      const { error } = await supabase
-        .from('property_market_analysis')
-        .upsert({
-          property_composite_key: previousSale.property_composite_key,
-          values_norm_time: previousSale.time_normalized_price
-        }, { onConflict: 'property_composite_key' });
-
+      const { error } = await safeUpsertPropertyMarket([{ job_id: jobData.id, property_composite_key: previousSale.property_composite_key, values_norm_time: previousSale.time_normalized_price }]);
       if (error) {
         console.error('Error saving normalized value:', error);
       } else {
@@ -1262,15 +1340,14 @@ const handleSalesDecision = async (saleId, decision) => {
 
           if (false) console.log(`💾 Keep batch ${Math.floor(i/500) + 1}: Saving ${batch.length} properties...`);
 
-          // Use Promise.all for parallel updates within batch
-          await Promise.all(batch.map(sale =>
-            supabase
-              .from('property_market_analysis')
-              .upsert({
-                property_composite_key: sale.property_composite_key,
-                values_norm_time: sale.time_normalized_price
-              }, { onConflict: 'property_composite_key' })
-          ));
+          // Use safeUpsert for batch of keeps (includes job_id)
+          const keepRecords = batch.map(sale => ({
+            job_id: jobData.id,
+            property_composite_key: sale.property_composite_key,
+            values_norm_time: sale.time_normalized_price
+          }));
+          const { error: keepError } = await safeUpsertPropertyMarket(keepRecords);
+          if (keepError) throw keepError;
 
           if (false) console.log(`✅ Saved keep batch ${Math.floor(i/500) + 1} of ${Math.ceil(keeps.length/500)}`);
           setSaveProgress({
@@ -1491,6 +1568,7 @@ const processSelectedProperties = async () => {
         
         // Build update array for batch upsert to property_market_analysis table
         const updates = batch.map(prop => ({
+          job_id: jobData.id,
           property_composite_key: prop.property_composite_key,
           new_vcs: prop.new_vcs,
           location_analysis: prop.location_analysis,
@@ -1499,11 +1577,8 @@ const processSelectedProperties = async () => {
           asset_key_page: prop.asset_key_page
         }));
 
-        // Use upsert for batch processing
-        const { error } = await supabase
-          .from('property_market_analysis')
-          .upsert(updates, { onConflict: 'property_composite_key' });
-          
+        // Use safe upsert for batch processing
+        const { error } = await safeUpsertPropertyMarket(updates);
         if (error) throw error;
 
         // Clear cache after updating property records
@@ -2224,7 +2299,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-20 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('asset_type_use')}
                             >
-                              Type {normSortConfig.field === 'asset_type_use' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                              Type {normSortConfig.field === 'asset_type_use' && (normSortConfig.direction === 'asc' ? '���' : '↓')}
                             </th>
                             <th 
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
@@ -2331,7 +2406,7 @@ const analyzeImportFile = async (file) => {
 
                                       // DEBUG: Log package detection for 3A properties
                                       if (sale.property_m4_class === '3A') {
-                                        if (false) console.log(`🏡 3A Property package detection:`, {
+                                        if (false) console.log(`��� 3A Property package detection:`, {
                                           composite_key: sale.property_composite_key,
                                           class: sale.property_m4_class,
                                           sales_date: sale.sales_date,
@@ -2400,7 +2475,7 @@ const analyzeImportFile = async (file) => {
                                       // DEBUG: Check all possible sales NU fields
                                       const salesNU = sale.sales_nu || sale.sales_instrument || sale.nu || sale.sale_nu || '';
                                       if (sale.id && sale.id.toString().endsWith('0')) { // Log every 10th for debugging
-                                        if (false) console.log(`📋 Table render sales_nu for sale ${sale.id}:`, {
+                                        if (false) console.log(`���� Table render sales_nu for sale ${sale.id}:`, {
                                           sales_nu: sale.sales_nu,
                                           sales_instrument: sale.sales_instrument,
                                           nu: sale.nu,
@@ -2641,24 +2716,18 @@ const analyzeImportFile = async (file) => {
 
       {/* Block Analysis Tab Content */}
       {activeSubTab === 'marketAnalysis' && (
-        <div className="space-y-6">
+        <div className="space-y-6" style={{ position: 'relative' }}>
           {/* Configuration Section */}
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Block Market Analysis</h3>
               <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    // Mark complete in checklist
-                    if (window.confirm('Mark Market Analysis as complete in Management Checklist?')) {
-                      checklistService.updateChecklistItem(jobData.id, 'market_analysis', true);
-                      alert('✅ Market Analysis marked complete in checklist');
-                    }
-                  }}
-                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                >
-                  Mark Complete
-                </button>
+                {preValChecklist.market_analysis ? (
+                  <span className="px-3 py-1 bg-green-50 text-green-700 rounded-full text-sm font-semibold inline-flex items-center gap-2">
+                    <Check className="w-4 h-4" />
+                    Completed
+                  </span>
+                ) : null}
                 <button
                   onClick={() => {
                     // Export to CSV
@@ -2682,6 +2751,32 @@ const analyzeImportFile = async (file) => {
                 >
                   Export to CSV
                 </button>
+
+                {/* Mark Complete for Market Analysis (next to Export) */}
+                <button
+                  onClick={async () => {
+                    if (!jobData?.id) return;
+                    const newStatus = preValChecklist.market_analysis ? 'pending' : 'completed';
+                    try {
+                      const { data: { user } } = await supabase.auth.getUser();
+                      const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
+                      const updated = await checklistService.updateItemStatus(jobData.id, 'market-analysis', newStatus, completedBy);
+                      const persistedStatus = updated?.status || newStatus;
+                      setPreValChecklist(prev => ({ ...prev, market_analysis: persistedStatus === 'completed' }));
+                      try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'market-analysis', status: persistedStatus } })); } catch(e){}
+                      try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
+                    } catch (error) {
+                      console.error('Market Analysis checklist update failed:', error);
+                      alert('Failed to update checklist. Please try again.');
+                    }
+                  }}
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-medium"
+                  style={{ backgroundColor: preValChecklist.market_analysis ? '#10B981' : '#E5E7EB', color: preValChecklist.market_analysis ? 'white' : '#374151' }}
+                  title={preValChecklist.market_analysis ? 'Click to reopen' : 'Mark Market Analysis complete'}
+                >
+                  {preValChecklist.market_analysis ? '✓ Mark Complete' : 'Mark Complete'}
+                </button>
+
               </div>
             </div>
             
@@ -2904,26 +2999,7 @@ const analyzeImportFile = async (file) => {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Property Worksheet Configuration</h3>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    if (window.confirm(`Copy current VCS to new VCS for ALL ${worksheetProperties.length} properties? This will OVERWRITE any existing new VCS values!`)) {
-                      const updated = worksheetProperties.map(prop => ({
-                        ...prop,
-                        new_vcs: prop.property_vcs || ''
-                      }));
-                      setWorksheetProperties(updated);
-                      setFilteredWorksheetProps(updated);
-                      updateWorksheetStats(updated);
-                      setUnsavedChanges(true);
-                      alert(`✅ Copied current VCS values for ${worksheetProperties.length} properties`);
-                    }
-                  }}
-                  className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
-                  title="Copy all current VCS values to new VCS field"
-                >
-                  Copy All Current VCS
-                </button>
+              <div className="flex gap-2 flex-nowrap items-center">
                 <input
                   type="file"
                   id="import-file"
@@ -2931,6 +3007,7 @@ const analyzeImportFile = async (file) => {
                   onChange={(e) => e.target.files[0] && analyzeImportFile(e.target.files[0])}
                   className="hidden"
                 />
+
                 <button
                   onClick={() => document.getElementById('import-file').click()}
                   disabled={isAnalyzingImport}
@@ -2945,11 +3022,60 @@ const analyzeImportFile = async (file) => {
                     'Import Updates from Excel'
                   )}
                 </button>
+
                 <button
                   onClick={exportWorksheetToExcel}
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
                   Export to Excel
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (window.confirm(`Copy current VCS to new VCS for ALL ${worksheetProperties.length} properties? This will OVERWRITE any existing new VCS values!`)) {
+                      const updated = worksheetProperties.map(prop => ({
+                        ...prop,
+                        new_vcs: prop.property_vcs || ''
+                      }));
+                      setWorksheetProperties(updated);
+                      setFilteredWorksheetProps(updated);
+                      updateWorksheetStats(updated);
+                      setUnsavedChanges(true);
+                      alert(`�� Copied current VCS values for ${worksheetProperties.length} properties`);
+                    }
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  title="Copy all current VCS values to new VCS field"
+                >
+                  Copy All Current VCS
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (!worksheetProperties || worksheetProperties.length === 0) return;
+                    const allKeys = worksheetProperties.map(p => p.property_composite_key);
+                    const isAllSelected = allKeys.length > 0 && allKeys.every(k => readyProperties.has(k));
+                    if (isAllSelected) {
+                      // Clear all
+                      setReadyProperties(new Set());
+                      updateWorksheetStats(worksheetProperties);
+                    } else {
+                      // Select all
+                      setReadyProperties(new Set(allKeys));
+                      const stats = {
+                        totalProperties: worksheetProperties.length,
+                        vcsAssigned: worksheetProperties.filter(p => p.new_vcs).length,
+                        zoningEntered: worksheetProperties.filter(p => p.asset_zoning).length,
+                        locationAnalysis: worksheetProperties.filter(p => p.location_analysis).length,
+                        readyToProcess: allKeys.length
+                      };
+                      setWorksheetStats(stats);
+                    }
+                  }}
+                  className={readyProperties && worksheetProperties && worksheetProperties.length > 0 && worksheetProperties.every(p => readyProperties.has(p.property_composite_key)) ? 'px-4 py-2 border rounded font-medium bg-gray-200 text-gray-800' : 'px-4 py-2 border rounded font-medium bg-green-600 text-white hover:bg-green-700'}
+                  title="Select or clear all Ready checkboxes"
+                >
+                  {worksheetProperties && worksheetProperties.length > 0 && worksheetProperties.every(p => readyProperties.has(p.property_composite_key)) ? 'Clear All' : 'Select All'}
                 </button>
               </div>
             </div>
@@ -2965,25 +3091,6 @@ const analyzeImportFile = async (file) => {
                 </div>
                 <div className="text-sm text-gray-600 flex items-center justify-center gap-1">
                   VCS Assigned
-                  <button
-                    onClick={() => {
-                      if (window.confirm(`Copy current VCS to new VCS for ALL ${worksheetProperties.length} properties? This will OVERWRITE any existing new VCS values!`)) {
-                        const updated = worksheetProperties.map(prop => ({
-                          ...prop,
-                          new_vcs: prop.property_vcs || ''
-                        }));
-                        setWorksheetProperties(updated);
-                        setFilteredWorksheetProps(updated);
-                        updateWorksheetStats(updated);
-                        setUnsavedChanges(true);
-                        alert(`✅ Copied current VCS values for ${worksheetProperties.length} properties`);
-                      }
-                    }}
-                    className="px-1 py-0.5 bg-orange-500 text-white rounded hover:bg-orange-600 text-xs"
-                    title="Copy all current VCS values to new VCS field"
-                  >
-                    »
-                  </button>
                 </div>
               </div>
               <div className="text-center">
@@ -3092,7 +3199,7 @@ const analyzeImportFile = async (file) => {
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('building_class_display')}
                         >
-                          Building Class {sortConfig.field === 'building_class_display' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          Building Class {sortConfig.field === 'building_class_display' && (sortConfig.direction === 'asc' ? '↑' : '��')}
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
@@ -3129,7 +3236,7 @@ const analyzeImportFile = async (file) => {
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 bg-blue-50 cursor-pointer hover:bg-blue-100"
                           onClick={() => handleSort('asset_zoning')}
                         >
-                          Zoning {sortConfig.field === 'asset_zoning' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          Zoning {sortConfig.field === 'asset_zoning' && (sortConfig.direction === 'asc' ? '���' : '↓')}
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 bg-blue-50 cursor-pointer hover:bg-blue-100"
@@ -3336,16 +3443,32 @@ const analyzeImportFile = async (file) => {
                  Process Selected Properties
                </button>
                <button
-                 onClick={() => {
-                   if (window.confirm('Mark Page by Page Worksheet as complete in Management Checklist?')) {
-                     checklistService.updateChecklistItem(jobData.id, 'page_by_page', true);
-                     alert('�� Page by Page Worksheet marked complete in checklist');
-                   }
-                 }}
-                 className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-               >
-                 Mark Complete
-               </button>
+                onClick={async () => {
+                  if (!jobData?.id) return;
+                  setIsProcessingPageByPage(true);
+                  const newStatus = preValChecklist.page_by_page ? 'pending' : 'completed';
+                  try {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
+                    const updated = await checklistService.updateItemStatus(jobData.id, 'page-by-page', newStatus, completedBy);
+                    const persistedStatus = updated?.status || newStatus;
+                    setPreValChecklist(prev => ({ ...prev, page_by_page: persistedStatus === 'completed' }));
+                    try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'page-by-page', status: persistedStatus } })); } catch(e){}
+                    try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
+                  } catch (error) {
+                    console.error('Page by Page checklist update failed:', error);
+                    alert('Failed to update checklist. Please try again.');
+                  } finally {
+                    setIsProcessingPageByPage(false);
+                  }
+                }}
+                disabled={isProcessingPageByPage}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-medium"
+                style={{ backgroundColor: preValChecklist.page_by_page ? '#10B981' : '#E5E7EB', color: preValChecklist.page_by_page ? 'white' : '#374151' }}
+                title={preValChecklist.page_by_page ? 'Click to reopen' : 'Mark Page by Page Worksheet complete'}
+              >
+                {isProcessingPageByPage ? 'Processing...' : (preValChecklist.page_by_page ? '✓ Mark Complete' : 'Mark Complete')}
+              </button>
              </div>
            </div>
          </div>
@@ -3707,10 +3830,20 @@ const analyzeImportFile = async (file) => {
                   Save All
                 </button>
                 <button
-                  onClick={() => {
-                    if (window.confirm('Mark Zoning Configuration as complete in Management Checklist?')) {
-                      checklistService.updateChecklistItem(jobData.id, 'zoning_config', true);
-                      alert('✅ Zoning Configuration marked complete in checklist');
+                  onClick={async () => {
+                    if (!jobData?.id) return;
+                    const newStatus = preValChecklist.zoning_config ? 'pending' : 'completed';
+                    try {
+                      const { data: { user } } = await supabase.auth.getUser();
+                      const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
+                      const updated = await checklistService.updateItemStatus(jobData.id, 'zoning-config', newStatus, completedBy);
+                      const persistedStatus = updated?.status || newStatus;
+                      setPreValChecklist(prev => ({ ...prev, zoning_config: persistedStatus === 'completed' }));
+                      try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'zoning-config', status: persistedStatus } })); } catch(e){}
+                      try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
+                    } catch (error) {
+                      console.error('Zoning checklist update failed:', error);
+                      alert('Failed to update checklist. Please try again.');
                     }
                   }}
                   className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"

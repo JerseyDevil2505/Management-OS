@@ -261,8 +261,19 @@ Thank you for your immediate attention to this matter.`;
       setLoadingStatus(prev => ({ ...prev, isRefreshing: false, message: 'Fresh data loaded' }));
 
     } catch (error) {
+      // Log detailed error for debugging
       console.error('❌ Error loading fresh data:', error);
-      setLoadingStatus(prev => ({ ...prev, isRefreshing: false, lastError: error.message }));
+      let errMsg = '';
+      try {
+        if (!error) errMsg = 'Unknown error';
+        else if (typeof error === 'string') errMsg = error;
+        else if (error.message) errMsg = error.message;
+        else if (error.error) errMsg = error.error;
+        else errMsg = JSON.stringify(error);
+      } catch (e) {
+        errMsg = String(error);
+      }
+      setLoadingStatus(prev => ({ ...prev, isRefreshing: false, lastError: errMsg }));
     }
   }, [activeTab]);
 
@@ -525,9 +536,9 @@ const calculateDistributionMetrics = async () => {
       if (planningJobsData && planningJobsData.length > 0) {
         planningJobsData.forEach(job => {
           if (job.contract_amount > 0) {
-            const parcels = job.total_properties || 
-                           ((job.residential_properties || 0) + (job.commercial_properties || 0)) || 
-                           0;
+            const parcels = (job.manual_parcel_count !== undefined && job.manual_parcel_count !== null && job.manual_parcel_count !== '')
+                           ? parseInt(job.manual_parcel_count, 10)
+                           : (job.total_properties || ((job.residential_properties || 0) + (job.commercial_properties || 0)) || 0);
             
             // Fix timezone issue for planning jobs too
             const dueYear = job.end_date ? parseInt(job.end_date.substring(0, 4)) : new Date().getFullYear() + 1;
@@ -1273,7 +1284,7 @@ const loadJobs = async () => {
 
       // Call onDataUpdate for cache synchronization without forcing full refresh
       if (onDataUpdate) {
-        console.log('🔄 Updating cache without full refresh');
+        console.log('���� Updating cache without full refresh');
         onDataUpdate('billing_event', editingEvent.id, updateData);
       }
 
@@ -1296,10 +1307,30 @@ const loadJobs = async () => {
         .eq('id', planningJobId);
 
       if (error) throw error;
-      
+
       if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error updating planned contract:', error);
+    }
+  };
+
+  // Persist a manually-entered parcel count for planning jobs. If present this value
+  // will be used when rolling the job to active; otherwise the job's existing
+  // total_properties will be used. Requires a database column `manual_parcel_count` on planning_jobs.
+  const handleUpdatePlannedParcels = async (planningJobId, parcelCount) => {
+    try {
+      const parsed = parcelCount === '' || parcelCount == null ? null : parseInt(String(parcelCount).replace(/[^0-9]/g, ''), 10);
+      const { error } = await supabase
+        .from('planning_jobs')
+        .update({ manual_parcel_count: parsed })
+        .eq('id', planningJobId);
+
+      if (error) throw error;
+
+      // Optionally refresh parent data
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      console.error('Error updating planned parcel count:', error);
     }
   };
 
@@ -1396,7 +1427,7 @@ const loadJobs = async () => {
           job_type: 'standard',
           billing_setup_complete: true,
           percent_billed: 0,
-          total_properties: planningJob.total_properties || 0,
+          total_properties: planningJob.manual_parcel_count ? parseInt(planningJob.manual_parcel_count, 10) : (planningJob.total_properties || 0),
           totalresidential: planningJob.residential_properties || 0,
           totalcommercial: planningJob.commercial_properties || 0
         })
@@ -1425,11 +1456,16 @@ const loadJobs = async () => {
         await supabase.from('job_contracts').insert(contractData);
       }
 
-      // Archive the planning job
-      await supabase
+      // Archive the planning job and clear any manual parcel override
+      const { error: archiveError } = await supabase
         .from('planning_jobs')
-        .update({ is_archived: true })
+        .update({ is_archived: true, manual_parcel_count: null })
         .eq('id', planningJob.id);
+
+      if (archiveError) {
+        console.error('Error archiving planning job or clearing manual parcels:', archiveError);
+        throw archiveError;
+      }
 
       alert(`Successfully rolled over "${planningJob.job_name || planningJob.municipality}" to active jobs!`);
       setActiveTab('active');
@@ -1985,27 +2021,6 @@ const loadJobs = async () => {
       {/* Bond Letter Generation Section */}
       <div className="flex justify-end mb-6 space-x-4">
         <button
-          onClick={loadFreshDataFromDB}
-          className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md shadow hover:bg-green-700 transition-colors duration-200 flex items-center space-x-2"
-          title="Load fresh data directly from database (bypasses all caching)"
-          disabled={loadingStatus.isRefreshing}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          <span>{loadingStatus.isRefreshing ? 'LOADING...' : 'REFRESH LIVE DATA'}</span>
-        </button>
-        <button
-          onClick={fixAllRemainingDue}
-          className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md shadow hover:bg-red-700 transition-colors duration-200 flex items-center space-x-2"
-          title="ADMIN: Fix remaining_due values for all billing events"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          <span>FIX REMAINING VALUES</span>
-        </button>
-        <button
           onClick={generateBondLetter}
           className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-md shadow hover:bg-purple-700 transition-colors duration-200 flex items-center space-x-2"
         >
@@ -2333,7 +2348,7 @@ const loadJobs = async () => {
                       Municipality
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      CCDD
+                      Parcels (Manual)
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Contract Amount
@@ -2366,9 +2381,25 @@ const loadJobs = async () => {
                           {job.municipality || job.job_name || 'Unnamed Job'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          <span className="px-2 py-1 text-xs rounded-full bg-gray-200 text-gray-700">
-                            {job.ccdd_code || '-'}
-                          </span>
+                          <div className="flex items-center">
+                            <input
+                              type="text"
+                              value={job.manual_parcel_count ?? job.total_properties ?? ''}
+                              onChange={(e) => {
+                                const numeric = e.target.value.replace(/[^0-9]/g, '');
+                                setPlanningJobs(prev => prev.map(j => j.id === job.id ? { ...j, manual_parcel_count: numeric } : j));
+                              }}
+                              onKeyPress={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleUpdatePlannedParcels(job.id, job.manual_parcel_count);
+                                }
+                              }}
+                              onBlur={() => handleUpdatePlannedParcels(job.id, job.manual_parcel_count)}
+                              className="pr-3 py-1 w-24 border border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="auto"
+                            />
+                            <span className="ml-2 text-xs text-gray-400">(auto)</span>
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           <div className="flex items-center space-x-2">
@@ -2380,7 +2411,7 @@ const loadJobs = async () => {
                                 onChange={(e) => {
                                   // Remove commas and non-numeric characters
                                   const numericValue = e.target.value.replace(/[^0-9]/g, '');
-                                  setPlanningJobs(prev => 
+                                  setPlanningJobs(prev =>
                                     prev.map(j => j.id === job.id ? {...j, contract_amount: numericValue} : j)
                                   );
                                 }}
@@ -2673,7 +2704,7 @@ const loadJobs = async () => {
                   <p className="text-sm text-gray-500">Click "Import Excel" to upload your expense file.</p>
                 </div>
               ) : (
-                <div className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="bg-white rounded-lg shadow overflow-hidden expenses-full-bleed-container">
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead>
@@ -2698,10 +2729,6 @@ const loadJobs = async () => {
                             <td key={idx} className="px-6 py-2 text-center text-xs font-semibold text-blue-700">
                               {days}
                             </td>
-                          ))}
-                          <td className="px-6 py-2 text-center text-xs font-bold text-blue-700 bg-blue-100">
-                            {Object.values(workingDays).reduce((sum, days) => sum + days, 0)}
-                          </td>
                           ))}
                           <td className="px-6 py-2 text-center text-xs font-bold text-blue-700 bg-blue-100">
                             {Object.values(workingDays).reduce((sum, days) => sum + days, 0)}
