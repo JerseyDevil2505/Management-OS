@@ -1559,7 +1559,7 @@ Class: ${property.property_m4_class === '2' ? 'Residential (possible teardown)' 
 
 Find specific information about this property and sale. Include:
 
-• Property ownership/seller details
+��� Property ownership/seller details
 • Tax assessment and classification details
 • Documented environmental constraints (wetlands, floodplains)
 • Municipality-specific land use characteristics
@@ -3115,6 +3115,61 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }
     
     return csv;
+  };
+
+  const exportEcoObsWorksheetExcel = () => {
+    const rows = [];
+    const headers = ['VCS','Locational Analysis','Code','With Year Built','With Living Area','With Sale Price','Without Year Built','Without Living Area','Without Sale Price','Adjusted Sale With','Adjusted Sale Without','Dollar Impact','Percent Impact','Applied+%','Applied-%'];
+    rows.push(headers);
+
+    Object.keys(filteredFactors || {}).sort().forEach(vcs => {
+      Object.keys(filteredFactors[vcs] || {}).forEach(locationAnalysis => {
+        if (locationAnalysis === 'None') return;
+        const impact = calculateEcoObsImpact(vcs, locationAnalysis, globalEcoObsTypeFilter) || {};
+        const key = `${vcs}_${locationAnalysis}`;
+        const code = mappedLocationCodes[key] || '';
+
+        const withYearBuilt = impact.withYearBuilt ?? '';
+        const withLivingArea = impact.withLivingArea ? impact.withLivingArea : '';
+        const withSalePrice = impact.withSalePrice ? impact.withSalePrice : '';
+
+        const withoutYearBuilt = impact.withoutYearBuilt ?? '';
+        const withoutLivingArea = impact.withoutLivingArea ? impact.withoutLivingArea : '';
+        const withoutSalePrice = impact.withoutSalePrice ? impact.withoutSalePrice : '';
+
+        const adjustedSaleWith = impact.adjustedSaleWith ? impact.adjustedSaleWith : '';
+        const adjustedSaleWithout = impact.adjustedSaleWithout ? impact.adjustedSaleWithout : '';
+
+        const dollarImpact = impact.dollarImpact ? impact.dollarImpact : '';
+        const percentImpact = impact.percentImpact ? impact.percentImpact : '';
+
+        const appliedPos = actualAdjustments[`${key}_positive`] != null ? actualAdjustments[`${key}_positive`] : '';
+        const appliedNeg = actualAdjustments[`${key}_negative`] != null ? actualAdjustments[`${key}_negative`] : '';
+
+        rows.push([
+          vcs,
+          locationAnalysis,
+          code,
+          withYearBuilt,
+          withLivingArea,
+          withSalePrice,
+          withoutYearBuilt,
+          withoutLivingArea,
+          withoutSalePrice,
+          adjustedSaleWith,
+          adjustedSaleWithout,
+          dollarImpact,
+          percentImpact,
+          appliedPos,
+          appliedNeg
+        ]);
+      });
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, 'Worksheet');
+    return wb;
   };
 
   const exportEconomicObsolescence = () => {
