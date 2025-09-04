@@ -348,7 +348,7 @@ useEffect(() => {
           item_id: itemId,
           status: newStatus,
           completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
-          completed_by: newStatus === 'completed' ? (currentUser?.id || null) : null,
+          completed_by: newStatus === 'completed' ? (currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad') : null,
           updated_at: new Date().toISOString()
         }, {
           onConflict: 'job_id,item_id'
@@ -387,7 +387,7 @@ useEffect(() => {
           item_id: itemId,
           client_approved: approved,
           client_approved_date: approved ? new Date().toISOString() : null,
-          client_approved_by: approved ? (currentUser?.id || null) : null,
+          client_approved_by: approved ? (currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad') : null,
           updated_at: new Date().toISOString()
         }, {
           onConflict: 'job_id,item_id'
@@ -466,7 +466,7 @@ useEffect(() => {
                 checklist_item_id: itemId,
                 file_path: filePath,
                 file_name: file.name,
-                uploaded_by: currentUser?.id || null,
+                uploaded_by: currentUser?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad',
                 uploaded_at: new Date().toISOString()
               });
           }
