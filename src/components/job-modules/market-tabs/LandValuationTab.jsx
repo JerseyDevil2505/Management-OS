@@ -2706,12 +2706,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Create new workbook
     const workbook = XLSX.utils.book_new();
 
-    // Create title row
-    const data = [];
-    data.push(['VCS VALUATION SHEET']);
-    data.push([]); // Empty row
-
-    // Build headers array
+    // Build headers array (start first row with headers only)
     const headers = ['VCS', 'Total', 'Type', 'Description', 'Method', 'Typical Lot Size', 'Rec Site Value', 'Act Site Value'];
 
     // Dynamic cascade headers
@@ -2729,6 +2724,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     if (shouldShowKeyColumn) headers.push('Key Pages');
     if (shouldShowMapColumn) headers.push('Map Pages');
 
+    const data = [];
     data.push(headers);
 
     // Add data rows
@@ -2856,16 +2852,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       data.push(row);
     });
-
-    // Add summary section
-    data.push([]);
-    data.push(['SUMMARY INFORMATION']);
-    data.push([]);
-    data.push(['Municipality:', jobData?.municipality || '']);
-    data.push(['County:', jobData?.county || '']);
-    data.push(['Analysis Date:', new Date().toLocaleDateString()]);
-    data.push(['Valuation Method:', valuationMode.toUpperCase()]);
-    data.push(['Target Allocation:', targetAllocation ? `${targetAllocation}%` : 'Not Set']);
 
     // Create worksheet
     const worksheet = XLSX.utils.aoa_to_sheet(data);
