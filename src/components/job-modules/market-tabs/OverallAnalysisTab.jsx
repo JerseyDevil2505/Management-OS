@@ -966,15 +966,17 @@ const OverallAnalysisTab = ({
     condos.forEach(p => {
       // Look for floor info in story height or design - use only synchronous decoding
       const storyHeight = p.asset_story_height || '';
+      const storyStr = String(storyHeight).toUpperCase();
       const designName = vendorType === 'Microsystems' && codeDefinitions
         ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || ''
         : p.asset_design_style || '';
+      const designStr = String(designName).toUpperCase();
       let floor = 'Unknown';
-      
-      if (storyHeight.includes('1ST') || designName.includes('1ST FLOOR')) floor = '1ST FLOOR';
-      else if (storyHeight.includes('2ND') || designName.includes('2ND FLOOR')) floor = '2ND FLOOR';
-      else if (storyHeight.includes('3RD') || designName.includes('3RD FLOOR')) floor = '3RD FLOOR';
-      else if (storyHeight.includes('TOP') || designName.includes('TOP FLOOR')) floor = 'TOP FLOOR';
+
+      if (storyStr.includes('1ST') || designStr.includes('1ST FLOOR')) floor = '1ST FLOOR';
+      else if (storyStr.includes('2ND') || designStr.includes('2ND FLOOR')) floor = '2ND FLOOR';
+      else if (storyStr.includes('3RD') || designStr.includes('3RD FLOOR')) floor = '3RD FLOOR';
+      else if (storyStr.includes('TOP') || designStr.includes('TOP FLOOR')) floor = 'TOP FLOOR';
       
       if (!floorGroups[floor]) {
         floorGroups[floor] = {
