@@ -3766,10 +3766,20 @@ const analyzeImportFile = async (file) => {
                   Save All
                 </button>
                 <button
-                  onClick={() => {
-                    if (window.confirm('Mark Zoning Configuration as complete in Management Checklist?')) {
-                      checklistService.updateChecklistItem(jobData.id, 'zoning_config', true);
-                      alert('✅ Zoning Configuration marked complete in checklist');
+                  onClick={async () => {
+                    if (!jobData?.id) return;
+                    const newStatus = preValChecklist.zoning_config ? 'pending' : 'completed';
+                    try {
+                      const { data: { user } } = await supabase.auth.getUser();
+                      const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
+                      const updated = await checklistService.updateItemStatus(jobData.id, 'zoning_config', newStatus, completedBy);
+                      const persistedStatus = updated?.status || newStatus;
+                      setPreValChecklist(prev => ({ ...prev, zoning_config: persistedStatus === 'completed' }));
+                      try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'zoning_config', status: persistedStatus } })); } catch(e){}
+                      try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
+                    } catch (error) {
+                      console.error('Zoning checklist update failed:', error);
+                      alert('Failed to update checklist. Please try again.');
                     }
                   }}
                   className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
