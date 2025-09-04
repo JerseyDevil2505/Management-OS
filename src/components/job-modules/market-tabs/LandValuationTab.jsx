@@ -2773,6 +2773,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const cleanZoning = (vcsData.zoning || '').replace(/\n/g, ' ').substring(0, 50);
 
       // Start building row
+      const recSiteFmt = recSite !== null && recSite !== undefined && recSite !== '' ? `$${Math.round(recSite).toLocaleString()}` : '';
+      const actSiteFmt = actSite !== null && actSite !== undefined ? `$${Math.round(actSite).toLocaleString()}` : '';
+
       const row = [
         vcs,
         vcsData.counts?.total || 0,
@@ -2780,8 +2783,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         cleanDescription,
         getMethodDisplay(type, description),
         typicalLot,
-        recSite || '',
-        actSite || ''
+        recSiteFmt,
+        actSiteFmt
       ];
 
       // Get cascade rates
@@ -2800,18 +2803,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
       }
 
-      // Add cascade rates
+      // Add cascade rates (formatted as currency where applicable)
       if (isResidential) {
         if (valuationMode === 'ff') {
-          row.push(cascadeRates.standard?.rate || '', cascadeRates.excess?.rate || '');
+          row.push(
+            cascadeRates.standard?.rate != null ? `$${Math.round(cascadeRates.standard.rate).toLocaleString()}` : '',
+            cascadeRates.excess?.rate != null ? `$${Math.round(cascadeRates.excess.rate).toLocaleString()}` : ''
+          );
         } else {
           row.push(
-            cascadeRates.prime?.rate || '',
-            cascadeRates.secondary?.rate || '',
-            cascadeRates.excess?.rate || ''
+            cascadeRates.prime?.rate != null ? `$${Math.round(cascadeRates.prime.rate).toLocaleString()}` : '',
+            cascadeRates.secondary?.rate != null ? `$${Math.round(cascadeRates.secondary.rate).toLocaleString()}` : '',
+            cascadeRates.excess?.rate != null ? `$${Math.round(cascadeRates.excess.rate).toLocaleString()}` : ''
           );
           if (shouldShowResidualColumn) {
-            row.push(cascadeRates.residual?.rate || '');
+            row.push(cascadeRates.residual?.rate != null ? `$${Math.round(cascadeRates.residual.rate).toLocaleString()}` : '');
           }
         }
       } else {
@@ -2826,17 +2832,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
       }
 
-      // Special category rates
+      // Special category rates (formatted)
       row.push(
-        vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands ? cascadeConfig.specialCategories.wetlands : '',
-        vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked ? cascadeConfig.specialCategories.landlocked : '',
-        vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation ? cascadeConfig.specialCategories.conservation : ''
+        vcsSpecialCategories.wetlands && cascadeConfig.specialCategories.wetlands != null ? `$${Math.round(cascadeConfig.specialCategories.wetlands).toLocaleString()}` : '',
+        vcsSpecialCategories.landlocked && cascadeConfig.specialCategories.landlocked != null ? `$${Math.round(cascadeConfig.specialCategories.landlocked).toLocaleString()}` : '',
+        vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation != null ? `$${Math.round(cascadeConfig.specialCategories.conservation).toLocaleString()}` : ''
       );
 
-      // Price columns
+      // Price columns (formatted)
       row.push(
-        vcsData.avgNormTime || '',
-        vcsData.avgPrice || ''
+        vcsData.avgNormTime != null ? `$${Math.round(vcsData.avgNormTime).toLocaleString()}` : '',
+        vcsData.avgPrice != null ? `$${Math.round(vcsData.avgPrice).toLocaleString()}` : ''
       );
 
       // CME bracket
@@ -2893,6 +2899,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     if (shouldShowMapColumn) colWidths.push({ wch: 15 });
 
     worksheet['!cols'] = colWidths;
+
+    // Header styling for VCS Sheet
+    try {
+      const headerCols = headers.length;
+      for (let c = 0; c < headerCols; c++) {
+        const ref = XLSX.utils.encode_cell({ r: 0, c });
+        if (worksheet[ref]) {
+          worksheet[ref].s = worksheet[ref].s || {};
+          worksheet[ref].s.font = { ...(worksheet[ref].s.font || {}), bold: true };
+          worksheet[ref].s.alignment = { horizontal: 'center' };
+        }
+      }
+    } catch (e) {
+      console.debug('VCS header styling skipped', e);
+    }
 
     // Add worksheet to workbook
     XLSX.utils.book_append_sheet(workbook, worksheet, 'VCS Sheet');
@@ -2969,35 +2990,57 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     (vacantTestSales || []).forEach(sale => {
       const status = sale.isPositive ? 'Included' : 'Excluded';
+      const vacantPrice = sale.vacantPrice != null ? sale.vacantPrice : '';
+      const vacPriceFmt = vacantPrice !== '' ? `$${Math.round(vacantPrice).toLocaleString()}` : '';
+      const rawLandFmt = sale.rawLandValue != null ? `$${Math.round(sale.rawLandValue).toLocaleString()}` : '';
+      const siteValueFmt = sale.siteValue != null ? `$${Math.round(sale.siteValue).toLocaleString()}` : '';
+      const improvedRawFmt = sale.improvedRawLandValue != null ? `$${Math.round(sale.improvedRawLandValue).toLocaleString()}` : '';
+      const totalLandFmt = sale.totalLandValue != null ? `$${Math.round(sale.totalLandValue).toLocaleString()}` : '';
+      const currentPct = sale.currentAllocation != null ? `${(sale.currentAllocation * 100).toFixed(1)}%` : '';
+      const recPct = sale.recommendedAllocation != null ? `${(sale.recommendedAllocation * 100).toFixed(1)}%` : '';
+
       rows.push([
         sale.vcs || '',
         sale.year || '',
         sale.region || '',
         `${sale.block || ''}/${sale.lot || ''}`,
-        sale.vacantPrice || '',
-        sale.vacantPrice || '',
+        vacantPrice,
+        vacPriceFmt,
         sale.acres != null ? Number(sale.acres.toFixed(2)) : '',
-        sale.rawLandValue || '',
-        sale.siteValue || '',
+        rawLandFmt,
+        siteValueFmt,
         sale.improvedSalesCount || '',
         sale.avgImprovedPrice || '',
         sale.avgImprovedAcres || '',
-        sale.improvedRawLandValue || '',
-        sale.totalLandValue || '',
-        sale.currentAllocation != null ? (sale.currentAllocation * 100).toFixed(1) : '',
-        sale.recommendedAllocation != null ? (sale.recommendedAllocation * 100).toFixed(1) : '',
+        improvedRawFmt,
+        totalLandFmt,
+        currentPct,
+        recPct,
         status
       ]);
     });
 
+    // Add summary section
+    rows.push([]);
+    rows.push(['SUMMARY']);
+    rows.push(['Current Overall Allocation', `${currentOverallAllocation}%`]);
+    rows.push(['Recommended Allocation', `${calculateAllocationStats()?.averageAllocation || ''}%`]);
+    rows.push(['Target Allocation', `${targetAllocation || 'Not Set'}%`]);
+
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(rows);
     // basic formatting for header
-    const headerCols = rows[0].length;
+    const headerCols = headers.length;
     for (let c = 0; c < headerCols; c++) {
       const ref = XLSX.utils.encode_cell({ r: 0, c });
       if (ws[ref]) ws[ref].s = { font: { bold: true }, alignment: { horizontal: 'center' } };
     }
+
+    // Column widths for Allocation sheet
+    ws['!cols'] = [
+      { wch: 8 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 8 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 10 }
+    ];
+
     XLSX.utils.book_append_sheet(wb, ws, 'Allocation');
     return wb;
   };
@@ -3007,7 +3050,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const wb = XLSX.utils.book_new();
 
     // Sheet 1: Vacant Land Sales (Method 1) - include UI columns
-    const salesHeaders = ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Special Region','Category','Sale Date','Sale Price','$ Sale Price','Acres','$ / Acre','Package','Notes'];
+    const salesHeaders = ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Special Region','Category','Sale Date','$ Sale Price','Acres','$ / Acre','Package','Notes'];
     const salesRows = [salesHeaders];
 
     (vacantSales || []).forEach(sale => {
@@ -3037,7 +3080,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         region,
         category,
         sale.sales_date || '',
-        salePrice,
         salePrice ? `$${salePrice.toLocaleString()}` : '',
         acres,
         pricePerAcre ? `$${Number(pricePerAcre).toLocaleString()}` : '',
@@ -3068,7 +3110,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       { wch: 12 }, // Special Region
       { wch: 12 }, // Category
       { wch: 12 }, // Sale Date
-      { wch: 12 }, // Sale Price (raw)
       { wch: 14 }, // $ Sale Price (formatted)
       { wch: 8 }, // Acres
       { wch: 12 }, // $ / Acre
@@ -3168,10 +3209,43 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }
 
     const ws2 = XLSX.utils.aoa_to_sheet(method2Rows);
-    // header formatting where applicable
-    for (let c = 0; c < 10; c++) {
-      const ref = XLSX.utils.encode_cell({ r: 0, c });
-      if (ws2[ref]) ws2[ref].s = { font: { bold: true }, alignment: { horizontal: 'center' } };
+
+    // Column widths for Method 2 to ensure content fits
+    ws2['!cols'] = [
+      { wch: 12 }, // Bracket
+      { wch: 8 },  // Count
+      { wch: 18 }, // Avg Lot Size
+      { wch: 12 }, // Avg Sale Price (t)
+      { wch: 14 }, // $ Avg Sale Price
+      { wch: 12 }, // Avg SFLA
+      { wch: 12 }, // ADJUSTED
+      { wch: 14 }, // $ ADJUSTED
+      { wch: 10 }, // DELTA
+      { wch: 12 }, // $ DELTA
+      { wch: 10 }, // LOT DELTA
+      { wch: 12 }, // PER ACRE
+      { wch: 12 }, // $ PER ACRE
+      { wch: 12 }  // PER SQ FT
+    ];
+
+    // Apply bold + centered styling to header-like cells (detect by label)
+    const headerLabels = ['Bracket','Count','Avg Lot Size (acres)','Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','ADJUSTED','$ ADJUSTED','DELTA','$ DELTA','LOT DELTA','PER ACRE','$ PER ACRE','PER SQ FT','Method 2 Summary'];
+    try {
+      const range = XLSX.utils.decode_range(ws2['!ref']);
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const ref = XLSX.utils.encode_cell({ r: R, c: C });
+          const cell = ws2[ref];
+          if (!cell || typeof cell.v !== 'string') continue;
+          if (headerLabels.includes(cell.v) || headerLabels.some(lbl => cell.v.startsWith(lbl))) {
+            cell.s = cell.s || {};
+            cell.s.font = { ...(cell.s.font || {}), bold: true };
+            cell.s.alignment = { horizontal: 'center' };
+          }
+        }
+      }
+    } catch (e) {
+      console.debug('Method2 header styling skipped', e);
     }
 
     XLSX.utils.book_append_sheet(wb, ws2, 'Method 2');
