@@ -3205,7 +3205,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     console.log('🔄 Recalculating category analysis');
     console.log('��� Total vacant sales:', vacantSales.length);
-    console.log('���� Checked sales count:', checkedSales.length);
+    console.log('📊 Checked sales count:', checkedSales.length);
     console.log('📋 Included sales IDs:', Array.from(includedSales));
     console.log('📋 Sale categories state:', saleCategories);
     console.log('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
@@ -3394,7 +3394,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Keep the 47/2 debug for reference
       if (s.property_block === '47' && s.property_lot === '2') {
-        console.log('��� Property 47/2 details:', {
+        console.log('🏠 Property 47/2 details:', {
           id: s.id,
           category: saleCategories[s.id],
           isInBuildingLot: isInCategory,
@@ -5446,7 +5446,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'block' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
+                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('lot')}
@@ -6699,25 +6699,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ...customLocationCodes.map(c => ({ ...c, isDefault: false }))
     ];
 
-    // Local state for add-code inputs (rendered inline)
-    const [newCode, setNewCode] = useState('');
-    const [newDesc, setNewDesc] = useState('');
-    const [newIsPositive, setNewIsPositive] = useState(false);
-
-    const handleAddCustomCode = () => {
-      const code = (newCode || '').toString().trim().toUpperCase();
-      if (!code) return alert('Enter a code');
-      if (customLocationCodes.some(c => c.code === code) || DEFAULT_ECO_OBS_CODES.some(c => c.code === code)) {
-        return alert('Code already exists');
-      }
-      const added = { code, description: newDesc || code, isPositive: !!newIsPositive };
-      setCustomLocationCodes(prev => [...prev, added]);
-      setNewCode(''); setNewDesc(''); setNewIsPositive(false);
-    };
-
-    const handleRemoveCustomCode = (code) => {
-      setCustomLocationCodes(prev => prev.filter(c => c.code !== code));
-    };
+    // Use component-level inputs/handlers for adding custom codes
 
     return (
       <div style={{ padding: '20px' }}>
