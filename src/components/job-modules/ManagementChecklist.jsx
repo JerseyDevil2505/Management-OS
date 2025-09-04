@@ -925,7 +925,7 @@ useEffect(() => {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        console.log('✅ Download triggered via signed URL');
+        console.log('�� Download triggered via signed URL');
         return;
       }
       
@@ -1362,21 +1362,21 @@ useEffect(() => {
                   ) : (
                     <>
                   {/* Don't show Mark Complete button for analysis items that sync from other components */}
-                  {!item.is_analysis_item && (
-                    item.status === 'completed' ? (
-                      <span className="inline-flex items-center px-3 py-1 rounded-full bg-green-50 text-green-800 text-sm font-medium">
-                        <CheckSquare className="w-4 h-4 mr-2" />
-                        Completed
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => handleItemStatusChange(item.id, 'completed')}
-                        className="px-3 py-1 rounded-md text-sm font-medium transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300"
-                      >
-                        Mark Complete
-                      </button>
-                    )
-                  )}
+                  {item.status === 'completed' ? (
+    <span className="inline-flex items-center px-3 py-1 rounded-full bg-green-50 text-green-800 text-sm font-medium">
+      <CheckSquare className="w-4 h-4 mr-2" />
+      Completed
+    </span>
+  ) : (
+    !item.is_analysis_item && (
+      <button
+        onClick={() => handleItemStatusChange(item.id, 'completed')}
+        className="px-3 py-1 rounded-md text-sm font-medium transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300"
+      >
+        Mark Complete
+      </button>
+    )
+  )}
                   
                   {/* Show Go to Section button for analysis items */}
                   {item.is_analysis_item && (
