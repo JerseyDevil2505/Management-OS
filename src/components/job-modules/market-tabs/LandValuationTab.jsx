@@ -25,6 +25,57 @@ const LandValuationTab = ({
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
+
+  // ========== MARK COMPLETE (Management Checklist) STATE ==========
+  const [isLandRatesComplete, setIsLandRatesComplete] = useState(false);
+  const [isVcsSheetComplete, setIsVcsSheetComplete] = useState(false);
+  const [isEcoObsComplete, setIsEcoObsComplete] = useState(false);
+
+  // Load initial checklist item statuses for this job
+  useEffect(() => {
+    if (!jobData?.id) return;
+    const ids = ['land-value-tables', 'vcs-reviewed', 'economic-obsolescence'];
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('checklist_item_status')
+          .select('item_id, status')
+          .eq('job_id', jobData.id)
+          .in('item_id', ids);
+
+        if (data) {
+          setIsLandRatesComplete(data.find(d => d.item_id === 'land-value-tables')?.status === 'completed');
+          setIsVcsSheetComplete(data.find(d => d.item_id === 'vcs-reviewed')?.status === 'completed');
+          setIsEcoObsComplete(data.find(d => d.item_id === 'economic-obsolescence')?.status === 'completed');
+        }
+      } catch (e) {
+        // Ignore load errors silently
+      }
+    })();
+  }, [jobData?.id]);
+
+  // Toggle helper to upsert checklist_item_status
+  const toggleChecklist = async (itemId, currentState, setter) => {
+    if (!jobData?.id) return;
+    const newStatus = currentState ? 'pending' : 'completed';
+    try {
+      await supabase
+        .from('checklist_item_status')
+        .upsert({
+          job_id: jobData.id,
+          item_id: itemId,
+          status: newStatus,
+          completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
+          completed_by: newStatus === 'completed' ? (jobData?.assignedManagers?.[0]?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad') : null,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'job_id,item_id' });
+
+      // update local state to reflect change
+      setter(!currentState);
+    } catch (error) {
+      alert('Failed to update checklist. Please try again.');
+    }
+  };
   
   // ========== MODE SELECTION (NEW) ==========
   const [valuationMode, setValuationMode] = useState('acre'); // acre, sf, ff
@@ -6089,7 +6140,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'yearBuilt' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '����' : '↓') : ''}
+                      Year Built {modalSortField === 'yearBuilt' ? (modalSortDirection === 'asc' ? '������' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('typeUse')}
@@ -7919,6 +7970,63 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       {activeSubTab === 'allocation' && renderAllocationStudyTab()}
       {activeSubTab === 'vcs-sheet' && renderVCSSheetTab()}
       {activeSubTab === 'eco-obs' && renderEconomicObsolescenceTab()}
+
+      {/* Mark Complete footer for selected subtab (updates Management Checklist) */}
+      <div style={{ marginTop: '18px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+        {activeSubTab === 'land-rates' && (
+          <button
+            onClick={() => toggleChecklist('land-value-tables', isLandRatesComplete, setIsLandRatesComplete)}
+            style={{
+              padding: '8px 14px',
+              backgroundColor: isLandRatesComplete ? '#10B981' : '#E5E7EB',
+              color: isLandRatesComplete ? 'white' : '#374151',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: 600
+            }}
+            title={isLandRatesComplete ? 'Click to reopen' : 'Mark Land Value Tables Built complete'}
+          >
+            {isLandRatesComplete ? '✓ Mark Complete' : 'Mark Complete'}
+          </button>
+        )}
+
+        {activeSubTab === 'vcs-sheet' && (
+          <button
+            onClick={() => toggleChecklist('vcs-reviewed', isVcsSheetComplete, setIsVcsSheetComplete)}
+            style={{
+              padding: '8px 14px',
+              backgroundColor: isVcsSheetComplete ? '#10B981' : '#E5E7EB',
+              color: isVcsSheetComplete ? 'white' : '#374151',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: 600
+            }}
+            title={isVcsSheetComplete ? 'Click to reopen' : 'Mark VCS Reviewed/Reset complete'}
+          >
+            {isVcsSheetComplete ? '✓ Mark Complete' : 'Mark Complete'}
+          </button>
+        )}
+
+        {activeSubTab === 'eco-obs' && (
+          <button
+            onClick={() => toggleChecklist('economic-obsolescence', isEcoObsComplete, setIsEcoObsComplete)}
+            style={{
+              padding: '8px 14px',
+              backgroundColor: isEcoObsComplete ? '#10B981' : '#E5E7EB',
+              color: isEcoObsComplete ? 'white' : '#374151',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: 600
+            }}
+            title={isEcoObsComplete ? 'Click to reopen' : 'Mark Economic Obsolescence Study complete'}
+          >
+            {isEcoObsComplete ? '✓ Mark Complete' : 'Mark Complete'}
+          </button>
+        )}
+      </div>
     </div>
   );
 };
