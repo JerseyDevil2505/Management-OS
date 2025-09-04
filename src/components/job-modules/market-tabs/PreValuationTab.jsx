@@ -3387,38 +3387,33 @@ const analyzeImportFile = async (file) => {
                >
                  Process Selected Properties
                </button>
-               {preValChecklist.page_by_page ? (
-                <span className="px-3 py-1 bg-green-50 text-green-700 rounded-full text-sm font-semibold inline-flex items-center gap-2">
-                  <Check className="w-4 h-4" />
-                  Completed
-                </span>
-              ) : (
-                <button
-                  onClick={async () => {
-                    if (!jobData?.id) return;
-                    setIsProcessingPageByPage(true);
-                    const newStatus = preValChecklist.page_by_page ? 'pending' : 'completed';
-                    try {
-                      const { data: { user } } = await supabase.auth.getUser();
-                      const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
-                      const updated = await checklistService.updateItemStatus(jobData.id, 'page-by-page', newStatus, completedBy);
-                      const persistedStatus = updated?.status || newStatus;
-                      setPreValChecklist(prev => ({ ...prev, page_by_page: persistedStatus === 'completed' }));
-                      try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'page-by-page', status: persistedStatus } })); } catch(e){}
-                      try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
-                    } catch (error) {
-                      console.error('Page by Page checklist update failed:', error);
-                      alert('Failed to update checklist. Please try again.');
-                    } finally {
-                      setIsProcessingPageByPage(false);
-                    }
-                  }}
-                  disabled={isProcessingPageByPage}
-                  className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-                >
-                  {isProcessingPageByPage ? 'Processing...' : 'Mark Complete'}
-                </button>
-              )}
+               <button
+                onClick={async () => {
+                  if (!jobData?.id) return;
+                  setIsProcessingPageByPage(true);
+                  const newStatus = preValChecklist.page_by_page ? 'pending' : 'completed';
+                  try {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
+                    const updated = await checklistService.updateItemStatus(jobData.id, 'page-by-page', newStatus, completedBy);
+                    const persistedStatus = updated?.status || newStatus;
+                    setPreValChecklist(prev => ({ ...prev, page_by_page: persistedStatus === 'completed' }));
+                    try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'page-by-page', status: persistedStatus } })); } catch(e){}
+                    try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
+                  } catch (error) {
+                    console.error('Page by Page checklist update failed:', error);
+                    alert('Failed to update checklist. Please try again.');
+                  } finally {
+                    setIsProcessingPageByPage(false);
+                  }
+                }}
+                disabled={isProcessingPageByPage}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-medium"
+                style={{ backgroundColor: preValChecklist.page_by_page ? '#10B981' : '#E5E7EB', color: preValChecklist.page_by_page ? 'white' : '#374151' }}
+                title={preValChecklist.page_by_page ? 'Click to reopen' : 'Mark Page by Page Worksheet complete'}
+              >
+                {isProcessingPageByPage ? 'Processing...' : (preValChecklist.page_by_page ? '✓ Mark Complete' : 'Mark Complete')}
+              </button>
              </div>
            </div>
          </div>
