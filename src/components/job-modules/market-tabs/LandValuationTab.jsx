@@ -3284,6 +3284,38 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       workbook = exportAllocationExcel();
     } else if (type === 'land-rates') {
       workbook = exportLandRatesExcel();
+    } else if (type === 'complete') {
+      // Combine individual workbooks into one comprehensive workbook
+      const combined = XLSX.utils.book_new();
+      const exporters = [
+        exportVCSSheetExcel,
+        exportLandRatesExcel,
+        // Note: exportLandRatesExcel already includes both Vacant Sales and Method 2 sheets
+        exportAllocationExcel,
+        exportEcoObsWorksheetExcel
+      ];
+
+      exporters.forEach(fn => {
+        try {
+          const wbPart = fn();
+          if (wbPart && wbPart.SheetNames) {
+            wbPart.SheetNames.forEach(name => {
+              // Avoid duplicate sheet names by appending suffix if necessary
+              let sheetName = name;
+              let idx = 1;
+              while (combined.SheetNames && combined.SheetNames.includes(sheetName)) {
+                sheetName = `${name}_${idx}`;
+                idx++;
+              }
+              XLSX.utils.book_append_sheet(combined, wbPart.Sheets[name], sheetName);
+            });
+          }
+        } catch (e) {
+          console.error('Error combining workbook part:', e);
+        }
+      });
+
+      workbook = combined;
     } else {
       // For other types, create a simple workbook for now
       workbook = XLSX.utils.book_new();
