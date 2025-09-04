@@ -150,6 +150,7 @@ const LandValuationTab = ({
   const [actualAdjustments, setActualAdjustments] = useState({});
   const [customLocationCodes, setCustomLocationCodes] = useState([]);
   const [summaryInputs, setSummaryInputs] = useState({});
+  const [includeCompounded, setIncludeCompounded] = useState(false);
 
   // Local inputs for adding new custom eco obs codes
   const [newEcoCode, setNewEcoCode] = useState('');
@@ -2461,7 +2462,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // ========== SAVE TARGET ALLOCATION FUNCTION ==========
   const saveTargetAllocation = async () => {
     if (!jobData?.id) {
-      console.log('�� Save target allocation cancelled: No job ID');
+      console.log('��� Save target allocation cancelled: No job ID');
       alert('Error: No job ID found. Cannot save target allocation.');
       return;
     }
