@@ -176,6 +176,7 @@ const PreValuationTab = ({
     page_by_page: false,
     zoning_config: false
   });
+  const [isProcessingPageByPage, setIsProcessingPageByPage] = useState(false);
 
 // ==================== FILTER HPI DATA ====================
   // Check what HPI data we received
@@ -2293,7 +2294,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('sales_ratio')}
                             >
-                              Ratio {normSortConfig.field === 'sales_ratio' && (normSortConfig.direction === 'asc' ? '���' : '↓')}
+                              Ratio {normSortConfig.field === 'sales_ratio' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
                             </th>
                             <th 
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-20 cursor-pointer hover:bg-gray-100"
@@ -2427,7 +2428,7 @@ const analyzeImportFile = async (file) => {
                                       // DEBUG: Check all possible sales NU fields
                                       const salesNU = sale.sales_nu || sale.sales_instrument || sale.nu || sale.sale_nu || '';
                                       if (sale.id && sale.id.toString().endsWith('0')) { // Log every 10th for debugging
-                                        if (false) console.log(`📋 Table render sales_nu for sale ${sale.id}:`, {
+                                        if (false) console.log(`���� Table render sales_nu for sale ${sale.id}:`, {
                                           sales_nu: sale.sales_nu,
                                           sales_instrument: sale.sales_instrument,
                                           nu: sale.nu,
