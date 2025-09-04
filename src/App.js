@@ -997,7 +997,7 @@ const App = () => {
       </div>
 
       {/* Main Content */}
-      <main className={activeView === 'job-modules' ? 'py-6 px-4' : 'w-full py-6 px-4 sm:px-6 lg:px-8'}>
+      <main className={activeView === 'job-modules' ? 'py-6 px-4' : 'max-w-7xl mx-auto py-6 sm:px-6 lg:px-8'}>
         {/* Show loading overlay for initial load only */}
         {!appData.isInitialized && appData.isLoading && (
           <div className="fixed inset-0 bg-white bg-opacity-75 z-50 flex items-center justify-center">
