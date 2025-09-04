@@ -4129,7 +4129,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales • Avg $${Math.round(data.avgPrice).toLocaleString()} • ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ��� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales • Avg $${Math.round(data.avgPrice).toLocaleString()} • ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{ marginBottom: '8px', border: '1px solid #E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
@@ -7129,38 +7129,30 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <td style={{ padding: '8px' }}>{item.location}</td>
                     <td style={{ padding: '8px', textAlign: 'center' }}>{item.count}</td>
                     <td style={{ padding: '8px', textAlign: 'center', fontWeight: '600' }}>{item.avgPercent !== null ? `${item.avgPercent.toFixed(1)}%` : 'N/A'}</td>
-                    <td style={{ padding: '8px', textAlign: 'center' }}>
+                    <td style={{ padding: '8px', textAlign: 'center', display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
+                      <input
+                        type="number"
+                        placeholder="+"
+                        value={summaryInputs[item.location]?.positive || ''}
+                        onChange={(e) => setSummaryInputs(prev => ({ ...prev, [item.location]: { ...(prev[item.location] || {}), positive: e.target.value } }))}
+                        style={{ width: '60px', padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: '4px', textAlign: 'center' }}
+                      />
+                      <input
+                        type="number"
+                        placeholder="-"
+                        value={summaryInputs[item.location]?.negative || ''}
+                        onChange={(e) => setSummaryInputs(prev => ({ ...prev, [item.location]: { ...(prev[item.location] || {}), negative: e.target.value } }))}
+                        style={{ width: '60px', padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: '4px', textAlign: 'center' }}
+                      />
                       <button onClick={() => {
-                        if (item.avgPercent === null) return alert('No recommended value available');
-                        applySummaryToWorksheet(item.location, Number(item.avgPercent.toFixed(1)));
-                        alert(`Applied recommended ${Number(item.avgPercent.toFixed(1))}% to matching worksheet rows`);
-                      }} style={{ marginRight: '8px', padding: '6px 8px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: '4px' }}>Apply Recommended</button>
-
-                      <button onClick={() => {
-                        const input = prompt('Enter custom percent to apply (use negative for reductions, e.g. -5):');
-                        if (input === null) return;
-                        const v = parseFloat(input);
-                        if (isNaN(v)) return alert('Invalid percent');
-                        applySummaryToWorksheet(item.location, v);
-                        alert(`Applied ${v}% to matching worksheet rows`);
-                      }} style={{ marginRight: '8px', padding: '6px 8px', background: '#10B981', color: 'white', border: 'none', borderRadius: '4px' }}>Apply Custom</button>
-
-                      {locationHasCode(item.location, 'BS') && (
-                        <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
-                          <select id={`traffic_select_${item.location.replace(/[^a-zA-Z0-9_-]/g,'_')}`} style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid #D1D5DB' }}>
-                            <option value="light">Light Traffic (-5%)</option>
-                            <option value="medium">Medium Traffic (-10%)</option>
-                            <option value="heavy">Heavy Traffic (-15%)</option>
-                          </select>
-                          <button onClick={(e) => {
-                            const sel = document.getElementById(`traffic_select_${item.location.replace(/[^a-zA-Z0-9_-]/g,'_')}`);
-                            if (!sel) return;
-                            const val = sel.value;
-                            applyBSTraffic(item.location, val);
-                            alert(`Applied ${val} traffic preset to matching BS rows for ${item.location}`);
-                          }} style={{ padding: '6px 8px', background: '#F97316', color: 'white', border: 'none', borderRadius: '4px' }}>Apply Traffic</button>
-                        </span>
-                      )}
+                        const entry = summaryInputs[item.location] || {};
+                        const pos = entry.positive !== undefined && entry.positive !== '' ? parseFloat(entry.positive) : null;
+                        const neg = entry.negative !== undefined && entry.negative !== '' ? parseFloat(entry.negative) : null;
+                        // Apply both if provided; positive applies to positive field, negative to negative field
+                        if (pos === null && neg === null) return alert('Enter a value in Applied+ or Applied-');
+                        applySummarySet(item.location, pos, neg);
+                        alert('Applied values to matching worksheet rows');
+                      }} style={{ padding: '6px 10px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: '4px' }}>Set</button>
                     </td>
                   </tr>
                 ))}
