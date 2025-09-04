@@ -284,7 +284,7 @@ useEffect(() => {
   const loadChecklistStatuses = async () => {
     try {
       if (!jobData?.id) return;
-      const ids = ['market_analysis','page_by_page','zoning_config'];
+      const ids = ['market-analysis','page-by-page','zoning-config','market_analysis','page_by_page','zoning_config'];
       const { data } = await supabase
         .from('checklist_item_status')
         .select('item_id,status')
@@ -292,7 +292,11 @@ useEffect(() => {
         .in('item_id', ids);
       if (data) {
         const state = { market_analysis: false, page_by_page: false, zoning_config: false };
-        data.forEach(d => { state[d.item_id] = d.status === 'completed'; });
+        data.forEach(d => {
+          if (d.item_id === 'market-analysis' || d.item_id === 'market_analysis') state.market_analysis = d.status === 'completed';
+          if (d.item_id === 'page-by-page' || d.item_id === 'page_by_page') state.page_by_page = d.status === 'completed';
+          if (d.item_id === 'zoning-config' || d.item_id === 'zoning_config') state.zoning_config = d.status === 'completed';
+        });
         setPreValChecklist(state);
       }
     } catch (e) {
@@ -2713,10 +2717,10 @@ const analyzeImportFile = async (file) => {
                     try {
                       const { data: { user } } = await supabase.auth.getUser();
                       const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
-                      const updated = await checklistService.updateItemStatus(jobData.id, 'market_analysis', newStatus, completedBy);
+                      const updated = await checklistService.updateItemStatus(jobData.id, 'market-analysis', newStatus, completedBy);
                       const persistedStatus = updated?.status || newStatus;
                       setPreValChecklist(prev => ({ ...prev, market_analysis: persistedStatus === 'completed' }));
-                      try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'market_analysis', status: persistedStatus } })); } catch(e){}
+                      try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'market-analysis', status: persistedStatus } })); } catch(e){}
                       try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
                     } catch (error) {
                       console.error('Market Analysis checklist update failed:', error);
@@ -3397,10 +3401,10 @@ const analyzeImportFile = async (file) => {
                     try {
                       const { data: { user } } = await supabase.auth.getUser();
                       const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
-                      const updated = await checklistService.updateItemStatus(jobData.id, 'page_by_page', newStatus, completedBy);
+                      const updated = await checklistService.updateItemStatus(jobData.id, 'page-by-page', newStatus, completedBy);
                       const persistedStatus = updated?.status || newStatus;
                       setPreValChecklist(prev => ({ ...prev, page_by_page: persistedStatus === 'completed' }));
-                      try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'page_by_page', status: persistedStatus } })); } catch(e){}
+                      try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'page-by-page', status: persistedStatus } })); } catch(e){}
                       try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
                     } catch (error) {
                       console.error('Page by Page checklist update failed:', error);
@@ -3782,10 +3786,10 @@ const analyzeImportFile = async (file) => {
                     try {
                       const { data: { user } } = await supabase.auth.getUser();
                       const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
-                      const updated = await checklistService.updateItemStatus(jobData.id, 'zoning_config', newStatus, completedBy);
+                      const updated = await checklistService.updateItemStatus(jobData.id, 'zoning-config', newStatus, completedBy);
                       const persistedStatus = updated?.status || newStatus;
                       setPreValChecklist(prev => ({ ...prev, zoning_config: persistedStatus === 'completed' }));
-                      try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'zoning_config', status: persistedStatus } })); } catch(e){}
+                      try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'zoning-config', status: persistedStatus } })); } catch(e){}
                       try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
                     } catch (error) {
                       console.error('Zoning checklist update failed:', error);
