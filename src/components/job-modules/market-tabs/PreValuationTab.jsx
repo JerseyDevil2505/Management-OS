@@ -3385,12 +3385,22 @@ const analyzeImportFile = async (file) => {
                  Process Selected Properties
                </button>
                <button
-                 onClick={() => {
-                   if (window.confirm('Mark Page by Page Worksheet as complete in Management Checklist?')) {
-                     checklistService.updateChecklistItem(jobData.id, 'page_by_page', true);
-                     alert('�� Page by Page Worksheet marked complete in checklist');
-                   }
-                 }}
+                 onClick={async () => {
+                  if (!jobData?.id) return;
+                  const newStatus = preValChecklist.page_by_page ? 'pending' : 'completed';
+                  try {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
+                    const updated = await checklistService.updateItemStatus(jobData.id, 'page_by_page', newStatus, completedBy);
+                    const persistedStatus = updated?.status || newStatus;
+                    setPreValChecklist(prev => ({ ...prev, page_by_page: persistedStatus === 'completed' }));
+                    try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'page_by_page', status: persistedStatus } })); } catch(e){}
+                    try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
+                  } catch (error) {
+                    console.error('Page by Page checklist update failed:', error);
+                    alert('Failed to update checklist. Please try again.');
+                  }
+                }}
                  className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700"
                >
                  Mark Complete
