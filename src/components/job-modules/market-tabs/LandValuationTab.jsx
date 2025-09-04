@@ -5550,7 +5550,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '�����') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
@@ -7146,13 +7146,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
                       {locationHasCode(item.location, 'BS') && (
                         <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
-                          <select id={`traffic_select_${item.location}`} style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid #D1D5DB' }}>
+                          <select id={`traffic_select_${item.location.replace(/[^a-zA-Z0-9_-]/g,'_')}`} style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid #D1D5DB' }}>
                             <option value="light">Light Traffic (-5%)</option>
                             <option value="medium">Medium Traffic (-10%)</option>
                             <option value="heavy">Heavy Traffic (-15%)</option>
                           </select>
                           <button onClick={(e) => {
-                            const sel = document.getElementById(`traffic_select_${item.location}`);
+                            const sel = document.getElementById(`traffic_select_${item.location.replace(/[^a-zA-Z0-9_-]/g,'_')}`);
                             if (!sel) return;
                             const val = sel.value;
                             applyBSTraffic(item.location, val);
