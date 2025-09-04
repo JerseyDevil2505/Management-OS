@@ -9,6 +9,9 @@ import {
 import { supabase, interpretCodes } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
+// Debug shim: replace console.log/debug calls with this noop in production
+const debug = () => {};
+
 const LandValuationTab = ({
   properties,
   jobData,
@@ -239,7 +242,7 @@ const LandValuationTab = ({
 
     // debug log once
     if (Object.keys(newMap).length > 0) {
-      console.log('🧭 Applied default eco-obs mapping for empty codes:', Object.entries(newMap).slice(0,20));
+      debug('🧭 Applied default eco-obs mapping for empty codes:', Object.entries(newMap).slice(0,20));
     }
   }, [ecoObsFactors, mappedLocationCodes, mapTokenToCode]);
 // ========== INITIALIZE FROM PROPS ==========
@@ -249,7 +252,7 @@ useEffect(() => {
     return;
   }
 
-  console.log('🔄 Loading market land data:', {
+  debug('🔄 Loading market land data:', {
     hasRawLandConfig: !!marketLandData.raw_land_config,
     hasCascadeRates: !!marketLandData.cascade_rates,
     hasVacantSales: !!marketLandData.vacant_sales_analysis?.sales?.length
@@ -268,7 +271,7 @@ useEffect(() => {
   // Load cascade config from either location (prefer cascade_rates, fallback to raw_land_config)
   const savedConfig = marketLandData.cascade_rates || marketLandData.raw_land_config?.cascade_config;
   if (savedConfig) {
-    console.log('🔧 Loading cascade config:', {
+    debug('🔧 Loading cascade config:', {
       source: marketLandData.cascade_rates ? 'cascade_rates' : 'raw_land_config',
       specialCategories: savedConfig.specialCategories,
       mode: savedConfig.mode
@@ -312,7 +315,7 @@ useEffect(() => {
     const savedIncluded = new Set();
     const manuallyAddedIds = new Set();
 
-    console.log('🔄 Loading saved Method 1 sales data:', {
+    debug('🔄 Loading saved Method 1 sales data:', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
@@ -329,7 +332,7 @@ useEffect(() => {
       if (s.manually_added) manuallyAddedIds.add(s.id);
     });
 
-    console.log('🔄 Restored Method 1 states:', {
+    debug('🔄 Restored Method 1 states:', {
       excludedCount: savedExcluded.size,
       includedCount: savedIncluded.size,
       manuallyAddedCount: manuallyAddedIds.size,
@@ -359,7 +362,7 @@ useEffect(() => {
     setMethod1ExcludedSales(method1Excluded);
     window._method1ExcludedSales = method1Excluded;
 
-    console.log('🔄 Restored Method 1 excluded sales from new field:', {
+    debug('🔄 Restored Method 1 excluded sales from new field:', {
       count: method1Excluded.size,
       ids: Array.from(method1Excluded)
     });
@@ -376,13 +379,13 @@ useEffect(() => {
   // Priority 1: Dedicated column (most recent saves go here)
   if (marketLandData.target_allocation !== null && marketLandData.target_allocation !== undefined) {
     loadedTargetAllocation = marketLandData.target_allocation;
-    console.log('🎯 LOADING TARGET ALLOCATION FROM DEDICATED COLUMN:', loadedTargetAllocation);
+    debug('🎯 LOADING TARGET ALLOCATION FROM DEDICATED COLUMN:', loadedTargetAllocation);
   }
   // Priority 2: Legacy allocation_study structure (fallback)
   else if (marketLandData.allocation_study?.target_allocation !== null &&
            marketLandData.allocation_study?.target_allocation !== undefined) {
     loadedTargetAllocation = marketLandData.allocation_study.target_allocation;
-    console.log('�� LOADING TARGET ALLOCATION FROM ALLOCATION STUDY:', loadedTargetAllocation);
+    debug('�� LOADING TARGET ALLOCATION FROM ALLOCATION STUDY:', loadedTargetAllocation);
   }
 
   // Only set if we found a valid value
@@ -391,19 +394,19 @@ useEffect(() => {
     const numericValue = typeof loadedTargetAllocation === 'string' ?
       parseFloat(loadedTargetAllocation) : loadedTargetAllocation;
     setTargetAllocation(numericValue);
-    console.log('✅ Target allocation set to:', numericValue, typeof numericValue);
+    debug('✅ Target allocation set to:', numericValue, typeof numericValue);
   } else {
-    console.log('ℹ️ No target allocation found in database');
+    debug('ℹ️ No target allocation found in database');
   }
 
 
   // Clear any existing allocation data to force fresh calculation
-  console.log('🧹 Clearing cached allocation data to force fresh calculation');
+  debug('🧹 Clearing cached allocation data to force fresh calculation');
   setVacantTestSales([]);
 
   // If user is currently on allocation tab, force immediate recalculation
   if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
-    console.log('🔄 User on allocation tab - forcing immediate recalculation');
+    debug('🔄 User on allocation tab - forcing immediate recalculation');
     setTimeout(() => {
       loadAllocationStudyData();
     }, 100);
@@ -445,7 +448,7 @@ useEffect(() => {
   setIsLoading(false);
   setIsInitialLoadComplete(true);
 
-  console.log('�� Initial load complete');
+  debug('�� Initial load complete');
 }, [marketLandData]);
 
   // ========== CHECK FRONT FOOT AVAILABILITY ==========
@@ -657,7 +660,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
-      console.log('���� Triggering allocation study recalculation...');
+      debug('���� Triggering allocation study recalculation...');
       loadAllocationStudyData();
     }
   }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, includedSales, specialRegions]);
@@ -665,17 +668,17 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // Auto-calculate VCS recommended sites when target allocation changes
   useEffect(() => {
-    console.log('🔄 TARGET ALLOCATION USEEFFECT TRIGGERED:', {
+    debug('🔄 TARGET ALLOCATION USEEFFECT TRIGGERED:', {
       targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
       propertiesCount: properties?.length || 0
     });
 
     if (targetAllocation && cascadeConfig.normal.prime && properties?.length > 0) {
-      console.log('✅ CONDITIONS MET - CALLING calculateVCSRecommendedSitesWithTarget');
+      debug('✅ CONDITIONS MET - CALLING calculateVCSRecommendedSitesWithTarget');
       calculateVCSRecommendedSitesWithTarget();
     } else {
-      console.log('❌ CONDITIONS NOT MET FOR VCS CALCULATION:', {
+      debug('❌ CONDITIONS NOT MET FOR VCS CALCULATION:', {
         hasTargetAllocation: !!targetAllocation,
         hasCascadeRates: !!cascadeConfig.normal.prime,
         hasProperties: properties?.length > 0
@@ -693,20 +696,20 @@ const getPricePerUnit = useCallback((price, size) => {
   // Auto-save every 30 seconds - but only after initial load is complete
   useEffect(() => {
     if (!isInitialLoadComplete) {
-      console.log('���️ Auto-save waiting for initial load to complete');
+      debug('���️ Auto-save waiting for initial load to complete');
       return;
     }
 
-    console.log('🔄 Auto-save effect triggered, setting up interval');
+    debug('🔄 Auto-save effect triggered, setting up interval');
     const interval = setInterval(() => {
-      console.log('⏰ Auto-save interval triggered');
+      debug('⏰ Auto-save interval triggered');
       // Use window reference to avoid hoisting issues
       if (window.landValuationSave) {
         window.landValuationSave();
       }
     }, 30000);
     return () => {
-      console.log('🛑 Clearing auto-save interval');
+      debug('🛑 Clearing auto-save interval');
       clearInterval(interval);
     }
   }, [isInitialLoadComplete]);
@@ -715,7 +718,7 @@ const getPricePerUnit = useCallback((price, size) => {
   useEffect(() => {
     if (!isInitialLoadComplete) return;
 
-    console.log('🔄 State change detected, triggering immediate save');
+    debug('🔄 State change detected, triggering immediate save');
     const timeoutId = setTimeout(() => {
       if (window.landValuationSave) {
         window.landValuationSave();
@@ -728,7 +731,7 @@ const getPricePerUnit = useCallback((price, size) => {
   // Clear Method 1 temporary variables after filtering is complete
   useEffect(() => {
     if (isInitialLoadComplete && window._method1ExcludedSales) {
-      console.log('🧹 Clearing Method 1 temporary variables after successful application');
+      debug('🧹 Clearing Method 1 temporary variables after successful application');
       delete window._method1ExcludedSales;
       delete window._method1IncludedSales;
       delete window._method1ManuallyAdded;
@@ -738,7 +741,7 @@ const getPricePerUnit = useCallback((price, size) => {
   const filterVacantSales = useCallback(() => {
     if (!properties) return;
 
-    console.log('🔄 FilterVacantSales called:', {
+    debug('🔄 FilterVacantSales called:', {
       currentVacantSalesCount: vacantSales.length,
       hasMethod1Excluded: !!window._method1ExcludedSales,
       method1ExcludedSize: window._method1ExcludedSales?.size || 0,
@@ -752,7 +755,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
     if (manuallyAddedIds.size > 0) {
       const manuallyAddedProps = properties.filter(prop => manuallyAddedIds.has(prop.id));
-      console.log('🔄 Restoring manually added properties:', {
+      debug('🔄 Restoring manually added properties:', {
         found: manuallyAddedProps.length,
         expected: manuallyAddedIds.size,
         foundIds: manuallyAddedProps.map(p => p.id),
@@ -773,7 +776,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
     // If we already have restored sales, preserve them and only add new ones
     if (false) { // Disable complex caching logic
-      console.log('���� Preserving existing restored sales, checking for new ones only');
+      debug('���� Preserving existing restored sales, checking for new ones only');
 
       // Find any new sales that match criteria but aren't already in vacantSales
       const existingIds = new Set(vacantSales.map(s => s.id));
@@ -811,7 +814,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (newSales.length > 0) {
-        console.log('🔄 Found new sales to add:', newSales.length);
+        debug('🔄 Found new sales to add:', newSales.length);
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
           const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
@@ -986,7 +989,7 @@ const getPricePerUnit = useCallback((price, size) => {
       const enriched = enrichProperty(prop);
       finalSales.push(enriched);
       if (enriched.autoCategory) {
-        console.log(`🏷️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
+        debug(`🏷️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
         setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
       }
     });
@@ -995,7 +998,7 @@ const getPricePerUnit = useCallback((price, size) => {
     const activeExcluded = window._method1ExcludedSales || method1ExcludedSales;
     const filteredSales = finalSales.filter(sale => !activeExcluded.has(sale.id));
 
-    console.log('🔄 Applying Method 1 exclusions:', {
+    debug('🔄 Applying Method 1 exclusions:', {
       totalSalesBeforeExclusion: finalSales.length,
       excludedSalesCount: activeExcluded.size,
       totalSalesAfterExclusion: filteredSales.length,
@@ -1009,7 +1012,7 @@ const getPricePerUnit = useCallback((price, size) => {
     setIncludedSales(prev => {
       // If initial load isn't complete yet, don't modify included sales
       if (!isInitialLoadComplete) {
-        console.log('⏸��� Skipping checkbox update - waiting for initial load');
+        debug('⏸��� Skipping checkbox update - waiting for initial load');
         return prev;
       }
 
@@ -1026,7 +1029,7 @@ const getPricePerUnit = useCallback((price, size) => {
         }
       });
 
-      console.log('✅ Checkbox state management:', {
+      debug('✅ Checkbox state management:', {
         isInitialLoadComplete,
         previousCount: prev.size,
         currentSalesCount: filteredSales.length,
@@ -1533,7 +1536,7 @@ const getPricePerUnit = useCallback((price, size) => {
       }
 
       if (autoCategory) {
-        console.log(`🏗�� Auto-categorizing manually added ${p.property_block}/${p.property_lot} as ${autoCategory}`);
+        debug(`🏗�� Auto-categorizing manually added ${p.property_block}/${p.property_lot} as ${autoCategory}`);
         setSaleCategories(prev => ({...prev, [p.id]: autoCategory}));
       }
     });
@@ -1543,7 +1546,7 @@ const getPricePerUnit = useCallback((price, size) => {
     setSearchResults([]);
 
     // Note: Auto-save will trigger within 30 seconds to persist these changes
-    console.log('💾 Sales added - auto-save will persist these changes:', toAdd.map(p => `${p.property_block}/${p.property_lot}`));
+    debug('💾 Sales added - auto-save will persist these changes:', toAdd.map(p => `${p.property_block}/${p.property_lot}`));
   };
 
   const handlePropertyResearch = async (property) => {
@@ -1605,14 +1608,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return newSet;
     });
 
-    console.log('🗑️ Sale removed and tracked as excluded:', saleId);
+    debug('🗑️ Sale removed and tracked as excluded:', saleId);
   };
 
   // ========== ALLOCATION STUDY FUNCTIONS - REBUILT ==========
   const loadAllocationStudyData = useCallback(() => {
     if (!cascadeConfig.normal.prime) return;
 
-    console.log('🏠 Loading allocation study data - individual sale approach');
+    debug('🏠 Loading allocation study data - individual sale approach');
 
     // Process each individual vacant sale (no grouping)
     const processedVacantSales = [];
@@ -1635,7 +1638,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Log special region usage
       if (region !== 'Normal') {
-        console.log(`🌟 Using special region "${region}" rates for sale ${sale.property_block}/${sale.property_lot}:`, {
+        debug(`🌟 Using special region "${region}" rates for sale ${sale.property_block}/${sale.property_lot}:`, {
           primeRate: cascadeRates.prime?.rate,
           secondaryRate: cascadeRates.secondary?.rate,
           excessRate: cascadeRates.excess?.rate
@@ -1659,11 +1662,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
 
       if (improvedSalesForYear.length === 0) {
-        console.log(`⚠️ No improved sales found for year ${year} (with type_use starting with '1')`);
+        debug(`⚠️ No improved sales found for year ${year} (with type_use starting with '1')`);
         return;
       }
 
-      console.log(`✅ Found ${improvedSalesForYear.length} improved sales for year ${year} with type_use starting with '1'`);
+      debug(`✅ Found ${improvedSalesForYear.length} improved sales for year ${year} with type_use starting with '1'`);
 
       // Calculate averages for this year's improved sales
       const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + p.sales_price, 0) / improvedSalesForYear.length;
@@ -1709,7 +1712,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
     });
 
-    console.log('🏠 Processed allocation data:', {
+    debug('🏠 Processed allocation data:', {
       totalVacantSales: processedVacantSales.length,
       positiveSales: processedVacantSales.filter(s => s.isPositive).length,
       negativeSales: processedVacantSales.filter(s => !s.isPositive).length
@@ -1724,7 +1727,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const totalSalePrice = positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0);
       const overallRecommended = totalSalePrice > 0 ? (totalLandValue / totalSalePrice) * 100 : 0;
 
-      console.log('🎯 Overall recommended allocation:', {
+      debug('🎯 Overall recommended allocation:', {
         positiveSalesCount: positiveSales.length,
         totalLandValue,
         totalSalePrice,
@@ -1765,7 +1768,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       remainingAcres = 0;
     }
 
-    console.log(`🔢 Raw land calculation for ${acres} acres:`, breakdown.join(' + '), `= $${rawLandValue.toFixed(0)}`);
+    debug(`🔢 Raw land calculation for ${acres} acres:`, breakdown.join(' + '), `= $${rawLandValue.toFixed(0)}`);
 
     return rawLandValue;
   };
@@ -1991,8 +1994,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
-    console.log('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
-    console.log('📊 Input validation:', {
+    debug('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
+    debug('📊 Input validation:', {
       hasTargetAllocation: !!targetAllocation,
       targetAllocationValue: targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
@@ -2002,11 +2005,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     if (!targetAllocation || !cascadeConfig.normal.prime || !properties) {
-      console.log('❌ Cannot calculate VCS recommended sites: missing data');
+      debug('❌ Cannot calculate VCS recommended sites: missing data');
       return;
     }
 
-    console.log('🎯 Calculating VCS recommended site values with target allocation:', targetAllocation + '%');
+    debug('🎯 Calculating VCS recommended site values with target allocation:', targetAllocation + '%');
 
     const recommendedSites = {};
     const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
@@ -2058,7 +2061,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
 
       if (relevantSales.length === 0) {
-        console.log(`⚠️ No relevant sales found for VCS ${vcs} in past 3 years`);
+        debug(`⚠️ No relevant sales found for VCS ${vcs} in past 3 years`);
         return;
       }
 
@@ -2074,7 +2077,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       if (isCondo) {
         // For condos: recommended site = target allocation % × average sale price
         siteValue = avgSalePrice * (parseFloat(targetAllocation) / 100);
-        console.log(`🏢 VCS ${vcs} (CONDO):`, {
+        debug(`🏢 VCS ${vcs} (CONDO):`, {
           relevantSalesCount: relevantSales.length,
           avgSalePrice: Math.round(avgSalePrice),
           targetAllocation: targetAllocation + '%',
@@ -2088,7 +2091,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         const rawLandValue = calculateRawLandValue(avgAcres, cascadeConfig.normal);
         siteValue = totalLandValue - rawLandValue;
 
-        console.log(`🏠 VCS ${vcs} DETAILED DEBUG:`, {
+        debug(`🏠 VCS ${vcs} DETAILED DEBUG:`, {
           relevantSalesCount: relevantSales.length,
           avgSalePrice: Math.round(avgSalePrice),
           avgAcres: avgAcres.toFixed(2),
@@ -2106,7 +2109,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     setVcsRecommendedSites(recommendedSites);
-    console.log('✅ VCS recommended site values updated:', Object.keys(recommendedSites).length, 'VCS areas');
+    debug('✅ VCS recommended site values updated:', Object.keys(recommendedSites).length, 'VCS areas');
 
   }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue, vcsTypes]);
 
@@ -2132,7 +2135,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const updateManualSiteValue = (vcs, value) => {
-    console.log(`🔧 Updating manual site value for VCS ${vcs}:`, value);
+    debug(`🔧 Updating manual site value for VCS ${vcs}:`, value);
     setVcsManualSiteValues(prev => ({
       ...prev,
       // Fix: Use nullish coalescing - allow 0 values, only null for empty strings
@@ -2140,7 +2143,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }));
 
     // Immediate save to prevent data loss when navigating away
-    console.log('💾 Triggering immediate save for Act Site change');
+    debug('💾 Triggering immediate save for Act Site change');
     setTimeout(() => {
       if (window.landValuationSave) {
         window.landValuationSave();
@@ -2173,7 +2176,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const analyzeEconomicObsolescence = useCallback(() => {
     if (!properties) return;
 
-    console.log('🔍 Economic Obsolescence Analysis Debug:', {
+    debug('🔍 Economic Obsolescence Analysis Debug:', {
       totalProperties: properties.length,
       withNewVCS: properties.filter(p => p.new_vcs).length,
       withLocationAnalysis: properties.filter(p => p.location_analysis).length,
@@ -2268,7 +2271,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
     });
 
-    console.log('📊 Economic Obsolescence Analysis Complete:', {
+    debug('📊 Economic Obsolescence Analysis Complete:', {
       totalVCSCodes: Object.keys(factors).length,
       vcsCodesWithFactors: Object.keys(factors).map(vcs => ({
         vcs,
@@ -2474,25 +2477,25 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // ========== SAVE TARGET ALLOCATION FUNCTION ==========
   const saveTargetAllocation = async () => {
     if (!jobData?.id) {
-      console.log('��� Save target allocation cancelled: No job ID');
+      debug('��� Save target allocation cancelled: No job ID');
       alert('Error: No job ID found. Cannot save target allocation.');
       return;
     }
 
     if (!targetAllocation || targetAllocation === '') {
-      console.log('❌ Save target allocation cancelled: No target allocation value');
+      debug('❌ Save target allocation cancelled: No target allocation value');
       alert('Please enter a target allocation percentage before saving.');
       return;
     }
 
     const targetValue = parseFloat(targetAllocation);
     if (isNaN(targetValue) || targetValue <= 0 || targetValue > 100) {
-      console.log('❌ Save target allocation cancelled: Invalid value:', targetAllocation);
+      debug('❌ Save target allocation cancelled: Invalid value:', targetAllocation);
       alert('Please enter a valid target allocation percentage between 1 and 100.');
       return;
     }
 
-    console.log('💾 Saving target allocation:', `${targetValue}%`, 'for job:', jobData.id);
+    debug('💾 Saving target allocation:', `${targetValue}%`, 'for job:', jobData.id);
 
     try {
       // Check if record exists first
@@ -2509,7 +2512,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       let result;
       if (existing) {
-        console.log('📝 Updating existing record with target allocation...');
+        debug('📝 Updating existing record with target allocation...');
         result = await supabase
           .from('market_land_valuation')
           .update({
@@ -2518,7 +2521,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           })
           .eq('job_id', jobData.id);
       } else {
-        console.log('➕ Creating new record with target allocation...');
+        debug('➕ Creating new record with target allocation...');
         result = await supabase
           .from('market_land_valuation')
           .insert({
@@ -2533,7 +2536,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         throw result.error;
       }
 
-      console.log('✅ Target allocation saved successfully to database');
+      debug('✅ Target allocation saved successfully to database');
 
       // Update last saved timestamp
       setLastSaved(new Date());
@@ -2542,11 +2545,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       alert(`Target allocation ${targetValue}% saved successfully!`);
 
       // Trigger VCS recommended sites calculation
-      console.log('🔄 Triggering VCS recommended sites calculation...');
+      debug('🔄 Triggering VCS recommended sites calculation...');
       if (cascadeConfig.normal.prime && properties?.length > 0) {
         calculateVCSRecommendedSitesWithTarget();
       } else {
-        console.log('⚠️ Cannot calculate VCS recommended sites: missing cascade config or properties');
+        debug('⚠️ Cannot calculate VCS recommended sites: missing cascade config or properties');
       }
 
     } catch (error) {
@@ -2563,11 +2566,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // ========== SAVE & EXPORT FUNCTIONS ==========
   const saveAnalysis = async () => {
     if (!jobData?.id) {
-      console.log('❌ Save cancelled: No job ID');
+      debug('❌ Save cancelled: No job ID');
       return;
     }
 
-    console.log('💾 Starting save...', {
+    debug('💾 Starting save...', {
       vacantSalesCount: vacantSales.length,
       excludedSalesCount: method2ExcludedSales.size,
       includedSalesCount: includedSales.size,
@@ -2640,7 +2643,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       };
 
       // Debug: Log the exact data being saved
-      console.log('��� Data structure being saved:', {
+      debug('��� Data structure being saved:', {
         cascadeConfigLocation1: analysisData.raw_land_config.cascade_config.specialCategories,
         cascadeConfigLocation2: analysisData.cascade_rates.specialCategories,
         salesData: analysisData.vacant_sales_analysis.sales.slice(0, 3), // First 3 for brevity
@@ -2660,14 +2663,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
       if (existing) {
-        console.log('📝 Updating existing record...');
+        debug('📝 Updating existing record...');
         const { error } = await supabase
           .from('market_land_valuation')
           .update(analysisData)
           .eq('job_id', jobData.id);
         if (error) throw error;
       } else {
-        console.log('➕ Creating new record...');
+        debug('➕ Creating new record...');
         // Use upsert to handle race conditions
         const { error } = await supabase
           .from('market_land_valuation')
@@ -2678,7 +2681,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         if (error) throw error;
       }
 
-      console.log('✅ Save completed successfully');
+      debug('✅ Save completed successfully');
       setLastSaved(new Date());
 
       // Notify parent component
@@ -2912,7 +2915,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
       }
     } catch (e) {
-      console.debug('VCS header styling skipped', e);
+      debug('VCS header styling skipped', e);
     }
 
     // Add worksheet to workbook
@@ -3262,7 +3265,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
       }
     } catch (e) {
-      console.debug('Method2 header styling skipped', e);
+      debug('Method2 header styling skipped', e);
     }
 
     XLSX.utils.book_append_sheet(wb, ws2, 'Implied Acreage');
@@ -3523,7 +3526,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         };
       } catch (e) {
         // styling may not be supported in some environments; ignore
-        console.debug('Header styling not applied', e);
+        debug('Header styling not applied', e);
       }
     }
 
@@ -3559,7 +3562,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         if (ws[ref] && ws2[ref]) ws2[ref].s = ws[ref].s;
       }
     } catch (e) {
-      console.debug('Failed to copy header styles to new sheet', e);
+      debug('Failed to copy header styles to new sheet', e);
     }
 
     XLSX.utils.book_append_sheet(wb, ws2, 'Eco Obs Study');
@@ -3683,7 +3686,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const updateSpecialCategory = (category, rate) => {
-    console.log(`🔧 Updating special category: ${category} = ${rate}`);
+    debug(`🔧 Updating special category: ${category} = ${rate}`);
     setCascadeConfig(prev => {
       const newConfig = {
         ...prev,
@@ -3692,7 +3695,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           [category]: rate ? parseFloat(rate) : null
         }
       };
-      console.log('🔧 New cascade config special categories:', newConfig.specialCategories);
+      debug('🔧 New cascade config special categories:', newConfig.specialCategories);
       return newConfig;
     });
   };
@@ -3731,13 +3734,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Calculate average rate for checked items by category
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
-    console.log('🔄 Recalculating category analysis');
-    console.log('��� Total vacant sales:', vacantSales.length);
-    console.log('📊 Checked sales count:', checkedSales.length);
-    console.log('📋 Included sales IDs:', Array.from(includedSales));
-    console.log('📋 Sale categories state:', saleCategories);
-    console.log('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
-    console.log('📋 Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
+    debug('🔄 Recalculating category analysis');
+    debug('��� Total vacant sales:', vacantSales.length);
+    debug('📊 Checked sales count:', checkedSales.length);
+    debug('📋 Included sales IDs:', Array.from(includedSales));
+    debug('📋 Sale categories state:', saleCategories);
+    debug('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
+    debug('📋 Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
 
     // Helper function to calculate average for a category
     const getCategoryAverage = (filterFn, categoryType) => {
@@ -3817,7 +3820,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             (rates[rates.length / 2 - 1] + rates[rates.length / 2]) / 2 :
             rates[Math.floor(rates.length / 2)];
 
-          console.log(`��� ${categoryType} paired analysis:`, {
+          debug(`��� ${categoryType} paired analysis:`, {
             totalProperties: filtered.length,
             possiblePairs: (filtered.length * (filtered.length - 1)) / 2,
             validPairs: pairedRates.length,
@@ -3884,7 +3887,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Debug teardown sales to see if they're incorrectly going to raw land
       if (saleCategories[s.id] === 'teardown' || (s.property_block === '5' && s.property_lot === '12.12')) {
-        console.log('🌱 Raw Land check for teardown/5.12.12:', {
+        debug('🌱 Raw Land check for teardown/5.12.12:', {
           block: s.property_block,
           lot: s.property_lot,
           id: s.id,
@@ -3907,7 +3910,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Debug all teardown sales
       if (saleCategories[s.id] === 'teardown') {
-        console.log('🏗️ Teardown sale details:', {
+        debug('🏗️ Teardown sale details:', {
           block: s.property_block,
           lot: s.property_lot,
           id: s.id,
@@ -3922,7 +3925,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Keep the 47/2 debug for reference
       if (s.property_block === '47' && s.property_lot === '2') {
-        console.log('🏠 Property 47/2 details:', {
+        debug('🏠 Property 47/2 details:', {
           id: s.id,
           category: saleCategories[s.id],
           isInBuildingLot: isInCategory,
@@ -3937,7 +3940,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
     const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
 
-    console.log('🏗️ Building Lot Analysis Result:', {
+    debug('🏗️ Building Lot Analysis Result:', {
       avg: buildingLot.avg,
       count: buildingLot.count,
       method: buildingLot.method,
@@ -4191,7 +4194,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         type="checkbox"
                         checked={includedSales.has(sale.id)}
                         onChange={(e) => {
-                          console.log(`📋 Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
+                          debug(`📋 Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
                             checked: e.target.checked,
                             saleId: sale.id
                           });
@@ -4201,7 +4204,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             setIncludedSales(prev => {
                               const newSet = new Set(prev);
                               newSet.delete(sale.id);
-                              console.log('❌ Removed from included sales, new size:', newSet.size);
+                              debug('❌ Removed from included sales, new size:', newSet.size);
                               return newSet;
                             });
                           }
@@ -6226,7 +6229,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       value={targetAllocation || ''}
                       onChange={(e) => {
                         const value = e.target.value;
-                        console.log('🎯 Target allocation input changed:', value);
+                        debug('🎯 Target allocation input changed:', value);
                         // Fix: Parse as number to prevent caching issues
                         setTargetAllocation(value === '' ? null : parseFloat(value));
                       }}
@@ -6243,7 +6246,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <span style={{ fontSize: '16px', fontWeight: 'bold' }}>%</span>
                     <button
                       onClick={() => {
-                        console.log('💾 Save button clicked for target allocation:', targetAllocation);
+                        debug('💾 Save button clicked for target allocation:', targetAllocation);
                         saveTargetAllocation();
                       }}
                       disabled={!targetAllocation || targetAllocation === ''}
@@ -7373,11 +7376,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const applySummarySet = (location, positive, negative) => {
     // Skip tentative locations
     if (/\bpossible|possibly\b|\?/i.test(location)) {
-      console.debug(`applySummarySet skipped tentative location: ${location}`);
+      debug(`applySummarySet skipped tentative location: ${location}`);
       return;
     }
     const parts = splitLocationParts(location);
-    console.debug(`applySummarySet called for location: ${location} parts: ${parts.join(' | ')} positive: ${positive} negative: ${negative}`);
+    debug(`applySummarySet called for location: ${location} parts: ${parts.join(' | ')} positive: ${positive} negative: ${negative}`);
 
     Object.keys(ecoObsFactors || {}).forEach(vcs => {
       const partPosVals = [];
@@ -7792,12 +7795,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 // Skip tentative locations or tentative parts inside a compound
                 const parts = splitLocationParts(item.location || '');
                 if (tentativeRegex.test(item.location) || parts.some(p => tentativeRegex.test(p))) {
-                  console.debug(`Skipping tentative summary item in Set All: ${item.location}`);
+                  debug(`Skipping tentative summary item in Set All: ${item.location}`);
                   return;
                 }
 
                 if (pos !== null || neg !== null) {
-                  console.debug(`Set All applying explicit values for ${item.location}: +${pos || 0} -${neg || 0}`);
+                  debug(`Set All applying explicit values for ${item.location}: +${pos || 0} -${neg || 0}`);
                   applySummarySet(item.location, pos, neg);
                 } else if (item.avgPercent !== null && item.avgPercent !== undefined && !isNaN(Number(item.avgPercent))) {
                   // Use avgPercent to populate appropriate side(s)
@@ -7805,7 +7808,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   const posVal = avg > 0 ? Math.abs(avg) : null;
                   const negVal = avg < 0 ? Math.abs(avg) : null;
                   if (posVal !== null || negVal !== null) {
-                    console.debug(`Set All applying avgPercent for ${item.location}: ${avg}`);
+                    debug(`Set All applying avgPercent for ${item.location}: ${avg}`);
                     applySummarySet(item.location, posVal, negVal);
                   }
                 }
