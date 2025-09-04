@@ -2616,7 +2616,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         eco_obs_applied_adjustments: actualAdjustments,
         eco_obs_code_config: {
           factors: ecoObsFactors,
-          location_codes: locationCodes,
+          location_codes: mappedLocationCodes,
           traffic_levels: trafficLevels,
           custom_codes: customLocationCodes
         },
@@ -3269,7 +3269,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     console.log('��� Total vacant sales:', vacantSales.length);
     console.log('📊 Checked sales count:', checkedSales.length);
     console.log('📋 Included sales IDs:', Array.from(includedSales));
-    console.log('��� Sale categories state:', saleCategories);
+    console.log('📋 Sale categories state:', saleCategories);
     console.log('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
     console.log('📋 Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
 
