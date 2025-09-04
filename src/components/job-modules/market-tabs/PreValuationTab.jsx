@@ -819,6 +819,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       for (const sale of normalizedSales) {
         if (sale.size_normalized_price) {
           const { error } = await safeUpsertPropertyMarket([{
+            job_id: jobData.id,
             property_composite_key: sale.property_composite_key,
             values_norm_size: sale.size_normalized_price
           }]);
