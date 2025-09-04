@@ -87,6 +87,13 @@ const LandValuationTab = ({
         // ignore dispatch errors
       }
 
+      // Also request parent to refresh and re-pull checklist tables so ManagementChecklist receives updated props
+      try {
+        if (typeof onDataRefresh === 'function') onDataRefresh();
+      } catch (e) {
+        // ignore
+      }
+
     } catch (error) {
       alert('Failed to update checklist. Please try again.');
     }
@@ -1823,7 +1830,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const tier2Value = tier2Acres * (cascadeRates.secondary.rate || 0);
       rawLandValue += tier2Value;
       remainingAcres -= tier2Acres;
-      breakdown.push(`Tier 2 (1-5 acres): ${tier2Acres.toFixed(2)} × $${cascadeRates.secondary.rate || 0} = $${tier2Value.toFixed(0)}`);
+      breakdown.push(`Tier 2 (1-5 acres): ${tier2Acres.toFixed(2)} �� $${cascadeRates.secondary.rate || 0} = $${tier2Value.toFixed(0)}`);
     }
 
     // TIER 3: All remaining acres above 5 at excess rate ($5,000)
