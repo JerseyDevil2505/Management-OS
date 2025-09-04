@@ -1296,10 +1296,30 @@ const loadJobs = async () => {
         .eq('id', planningJobId);
 
       if (error) throw error;
-      
+
       if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error updating planned contract:', error);
+    }
+  };
+
+  // Persist a manually-entered parcel count for planning jobs. If present this value
+  // will be used when rolling the job to active; otherwise the job's existing
+  // total_properties will be used. Requires a database column `manual_parcel_count` on planning_jobs.
+  const handleUpdatePlannedParcels = async (planningJobId, parcelCount) => {
+    try {
+      const parsed = parcelCount === '' || parcelCount == null ? null : parseInt(String(parcelCount).replace(/[^0-9]/g, ''), 10);
+      const { error } = await supabase
+        .from('planning_jobs')
+        .update({ manual_parcel_count: parsed })
+        .eq('id', planningJobId);
+
+      if (error) throw error;
+
+      // Optionally refresh parent data
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      console.error('Error updating planned parcel count:', error);
     }
   };
 
