@@ -149,6 +149,7 @@ const LandValuationTab = ({
   const [computedAdjustments, setComputedAdjustments] = useState({});
   const [actualAdjustments, setActualAdjustments] = useState({});
   const [customLocationCodes, setCustomLocationCodes] = useState([]);
+  const [summaryInputs, setSummaryInputs] = useState({});
 
   // Local inputs for adding new custom eco obs codes
   const [newEcoCode, setNewEcoCode] = useState('');
@@ -4128,7 +4129,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales • Avg $${Math.round(data.avgPrice).toLocaleString()} • ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales • Avg $${Math.round(data.avgPrice).toLocaleString()} • ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ��� $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{ marginBottom: '8px', border: '1px solid #E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
