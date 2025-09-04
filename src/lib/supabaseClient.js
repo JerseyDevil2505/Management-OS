@@ -1939,8 +1939,9 @@ export const checklistService = {
       if (insertError) throw insertError;
       return Array.isArray(insertData) ? insertData[0] : insertData;
     } catch (error) {
-      console.error('Client approval update error:', error);
-      throw error;
+      const msg = getErrorMessage(error);
+      console.error('Client approval update error:', msg, error);
+      throw new Error(msg);
     }
   },
 
