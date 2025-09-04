@@ -768,7 +768,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       // Try batch upsert using property_composite_key as conflict target
       const { data, error } = await supabase
         .from('property_market_analysis')
-        .upsert(records, { onConflict: 'property_composite_key' });
+        .upsert(records, { onConflict: 'job_id,property_composite_key' });
       if (!error) return { data, error: null };
 
       // If error indicates missing unique constraint for ON CONFLICT, fall back to update/insert per record
