@@ -13,7 +13,7 @@ const BillingManagement = ({
   onDataUpdate,
   onRefresh 
 }) => {
-  const [activeTab, setActiveTab] = useState('active');
+  const [activeTab, setActiveTab] = useState('expenses');
   const [jobs, setJobs] = useState([]);
   const [legacyJobsState, setLegacyJobs] = useState([]);
   const [planningJobsState, setPlanningJobs] = useState([]);
