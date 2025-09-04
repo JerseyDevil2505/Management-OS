@@ -6723,14 +6723,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
               onClick={() => {
-                console.log('🔧 FORCE VCS CALC BUTTON CLICKED');
-                console.log('Target allocation before:', targetAllocation);
                 if (!targetAllocation) {
-                  console.log('Setting target allocation to 27%');
                   setTargetAllocation(27);
                 }
                 setTimeout(() => {
-                  console.log('Calling calculateVCSRecommendedSitesWithTarget...');
                   calculateVCSRecommendedSitesWithTarget();
                 }, 100);
               }}
