@@ -31,13 +31,26 @@ const LandValuationTab = ({
   const SPECIAL_REGIONS = [
     'Normal',
     'Pinelands',
-    'Highlands', 
+    'Highlands',
     'Coastal',
     'Wetlands',
     'Conservation',
     'Historic District',
     'Redevelopment Zone',
     'Transit Village'
+  ];
+
+  // Default Economic Obsolescence Codes (editable via UI)
+  const DEFAULT_ECO_OBS_CODES = [
+    { code: 'BS', description: 'Busy Street', isPositive: false },
+    { code: 'CM', description: 'Commercial', isPositive: false },
+    { code: 'PL', description: 'Power Lines', isPositive: false },
+    { code: 'RR', description: 'Railroad', isPositive: false },
+    { code: 'ES', description: 'Easement', isPositive: false },
+    { code: 'FZ', description: 'Flood Zone', isPositive: false },
+    { code: 'GC', description: 'Golf Course', isPositive: true },
+    { code: 'WV', description: 'Water View', isPositive: true },
+    { code: 'WF', description: 'Water Front', isPositive: true }
   ];
 
   // ========== LAND RATES STATE ==========
@@ -1554,7 +1567,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         return;
       }
 
-      console.log(`✅ Found ${improvedSalesForYear.length} improved sales for year ${year} with type_use starting with '1'`);
+      console.log(`�� Found ${improvedSalesForYear.length} improved sales for year ${year} with type_use starting with '1'`);
 
       // Calculate averages for this year's improved sales
       const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + p.sales_price, 0) / improvedSalesForYear.length;
