@@ -77,7 +77,7 @@ const DataQualityTab = ({
   useEffect(() => {
     if (marketLandData && marketLandData.quality_check_results?.history?.length > 0) {
       const lastRun = marketLandData.quality_check_results.history[0];
-      
+
       // Restore stats from last run
       setIssueStats({
         critical: lastRun.criticalCount || 0,
@@ -85,15 +85,33 @@ const DataQualityTab = ({
         info: lastRun.infoCount || 0,
         total: lastRun.totalIssues || 0
       });
-      
+
       // Set the quality score from last run
       if (lastRun.qualityScore) {
         setQualityScore(lastRun.qualityScore);
       }
-      
+
       console.log(`📊 Restored stats from last run: ${new Date(lastRun.date).toLocaleDateString()}`);
     }
-  }, [marketLandData]);
+
+    // Load checklist status for Data Quality Analysis
+    const loadChecklistStatus = async () => {
+      try {
+        if (!jobData?.id) return;
+        const { data } = await supabase
+          .from('checklist_item_status')
+          .select('status')
+          .eq('job_id', jobData.id)
+          .eq('item_id', 'data-quality-analysis')
+          .maybeSingle();
+        setIsDataQualityComplete(data?.status === 'completed');
+      } catch (e) {
+        // ignore
+      }
+    };
+
+    loadChecklistStatus();
+  }, [marketLandData, jobData?.id]);
 
   // ESC key handler for modal
   useEffect(() => {
