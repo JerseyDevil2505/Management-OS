@@ -1416,7 +1416,7 @@ const loadJobs = async () => {
           job_type: 'standard',
           billing_setup_complete: true,
           percent_billed: 0,
-          total_properties: planningJob.total_properties || 0,
+          total_properties: planningJob.manual_parcel_count ? parseInt(planningJob.manual_parcel_count, 10) : (planningJob.total_properties || 0),
           totalresidential: planningJob.residential_properties || 0,
           totalcommercial: planningJob.commercial_properties || 0
         })
