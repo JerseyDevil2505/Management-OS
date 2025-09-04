@@ -6,7 +6,7 @@ import {
   Save, FileDown, MapPin,
   Home
 } from 'lucide-react';
-import { supabase, interpretCodes } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, checklistService } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
 // Debug shim: replace console.log/debug calls with this noop in production
@@ -1830,7 +1830,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const tier2Value = tier2Acres * (cascadeRates.secondary.rate || 0);
       rawLandValue += tier2Value;
       remainingAcres -= tier2Acres;
-      breakdown.push(`Tier 2 (1-5 acres): ${tier2Acres.toFixed(2)} �� $${cascadeRates.secondary.rate || 0} = $${tier2Value.toFixed(0)}`);
+      breakdown.push(`Tier 2 (1-5 acres): ${tier2Acres.toFixed(2)} × $${cascadeRates.secondary.rate || 0} = $${tier2Value.toFixed(0)}`);
     }
 
     // TIER 3: All remaining acres above 5 at excess rate ($5,000)
