@@ -60,34 +60,19 @@ const LandValuationTab = ({
     if (!jobData?.id) return;
     const newStatus = currentState ? 'pending' : 'completed';
     try {
-      const { data, error } = await supabase
-        .from('checklist_item_status')
-        .upsert({
-          job_id: jobData.id,
-          item_id: itemId,
-          status: newStatus,
-          completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
-          completed_by: newStatus === 'completed' ? (jobData?.assignedManagers?.[0]?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad') : null,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'job_id,item_id' })
-        .select()
-        .single();
+      const completedBy = newStatus === 'completed' ? (jobData?.assignedManagers?.[0]?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad') : null;
+      const data = await checklistService.updateItemStatus(jobData.id, itemId, newStatus, completedBy);
 
-      if (error) throw error;
-
-      // Use returned persisted status to set UI state (defensive)
       const persistedStatus = data?.status || newStatus;
       const isNowCompleted = persistedStatus === 'completed';
       setter(isNowCompleted);
 
-      // Notify other components to refresh checklist state (ManagementChecklist listens for this)
       try {
         window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId, status: persistedStatus } }));
       } catch (e) {
         // ignore dispatch errors
       }
 
-      // Also request parent to refresh and re-pull checklist tables so ManagementChecklist receives updated props
       try {
         if (typeof onDataRefresh === 'function') onDataRefresh();
       } catch (e) {
@@ -95,6 +80,26 @@ const LandValuationTab = ({
       }
 
     } catch (error) {
+      // If there's a conflict error, try to fallback to an update path
+      try {
+        if (error && error.code === '409') {
+          // Attempt a direct update via service (updateItemStatus handles upsert, but try again with update semantics)
+          try {
+            const completedBy = newStatus === 'completed' ? (jobData?.assignedManagers?.[0]?.id || null) : null;
+            const updated = await checklistService.updateItemStatus(jobData.id, itemId, newStatus, completedBy);
+            const persistedStatus = updated?.status || newStatus;
+            setter(persistedStatus === 'completed');
+            try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId, status: persistedStatus } })); } catch(e){}
+            try { if (typeof onDataRefresh === 'function') onDataRefresh(); } catch(e){}
+            return;
+          } catch (e) {
+            // fall through to generic error
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+
       alert('Failed to update checklist. Please try again.');
     }
   };
