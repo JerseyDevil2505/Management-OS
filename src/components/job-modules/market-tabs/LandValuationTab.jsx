@@ -2961,6 +2961,110 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     return csv;
   };
 
+  // Allocation export -> Excel workbook
+  const exportAllocationExcel = () => {
+    const rows = [];
+    const headers = ['VCS','Year','Region','Block/Lot','Vacant Price','$ Vacant Price','Acres','Raw Land','Site Value','Improved Sales Count','Avg Improved Price','Avg Improved Acres','Improved Raw Land Value','Total Land Value','Current %','Recommended %','Status'];
+    rows.push(headers);
+
+    (vacantTestSales || []).forEach(sale => {
+      const status = sale.isPositive ? 'Included' : 'Excluded';
+      rows.push([
+        sale.vcs || '',
+        sale.year || '',
+        sale.region || '',
+        `${sale.block || ''}/${sale.lot || ''}`,
+        sale.vacantPrice || '',
+        sale.vacantPrice || '',
+        sale.acres != null ? Number(sale.acres.toFixed(2)) : '',
+        sale.rawLandValue || '',
+        sale.siteValue || '',
+        sale.improvedSalesCount || '',
+        sale.avgImprovedPrice || '',
+        sale.avgImprovedAcres || '',
+        sale.improvedRawLandValue || '',
+        sale.totalLandValue || '',
+        sale.currentAllocation != null ? (sale.currentAllocation * 100).toFixed(1) : '',
+        sale.recommendedAllocation != null ? (sale.recommendedAllocation * 100).toFixed(1) : '',
+        status
+      ]);
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    // basic formatting for header
+    const headerCols = rows[0].length;
+    for (let c = 0; c < headerCols; c++) {
+      const ref = XLSX.utils.encode_cell({ r: 0, c });
+      if (ws[ref]) ws[ref].s = { font: { bold: true }, alignment: { horizontal: 'center' } };
+    }
+    XLSX.utils.book_append_sheet(wb, ws, 'Allocation');
+    return wb;
+  };
+
+  // Land rates export (two sheets)
+  const exportLandRatesExcel = () => {
+    const wb = XLSX.utils.book_new();
+
+    // Sheet 1: Vacant Land Sales (Method 1)
+    const salesHeaders = ['Block','Lot','Address','VCS','Special Region','Category','Sale Date','Sale Price','$ Sale Price','Size','Price/Unit','Package','Included','Notes'];
+    const salesRows = [salesHeaders];
+    (vacantSales || []).forEach(sale => {
+      const category = saleCategories[sale.id] || 'Uncategorized';
+      const region = specialRegions[sale.id] || 'Normal';
+      const isPackage = sale.packageData ? `Y (${sale.packageData.package_count})` : 'N';
+      const included = includedSales.has(sale.id) ? 'Y' : 'N';
+      const notes = landNotes[sale.id] || '';
+      const sizeLabel = valuationMode === 'acre' ? (sale.totalAcres != null ? Number(sale.totalAcres.toFixed(2)) : '') : valuationMode === 'sf' ? (sale.totalAcres != null ? Math.round(sale.totalAcres * 43560) : '') : sale.totalAcres;
+      salesRows.push([
+        sale.property_block || '',
+        sale.property_lot || '',
+        sale.property_location || '',
+        sale.new_vcs || '',
+        region,
+        category,
+        sale.sales_date || '',
+        sale.sales_price || '',
+        sale.sales_price || '',
+        sizeLabel,
+        sale.pricePerAcre || '',
+        isPackage,
+        included,
+        notes
+      ]);
+    });
+    const ws1 = XLSX.utils.aoa_to_sheet(salesRows);
+    // header formatting
+    for (let c = 0; c < salesRows[0].length; c++) {
+      const ref = XLSX.utils.encode_cell({ r: 0, c });
+      if (ws1[ref]) ws1[ref].s = { font: { bold: true }, alignment: { horizontal: 'center' } };
+    }
+    XLSX.utils.book_append_sheet(wb, ws1, 'Vacant Sales');
+
+    // Sheet 2: Method 2 summary
+    const method2Headers = ['VCS','Total Sales','<1 Acre','1-5 Acres','5-10 Acres','>10 Acres','Implied Rate'];
+    const method2Rows = [method2Headers];
+    Object.entries(bracketAnalysis || {}).sort((a,b) => a[0].localeCompare(b[0])).forEach(([vcs, data]) => {
+      method2Rows.push([
+        vcs,
+        data.totalSales || '',
+        data.brackets?.small?.count || 0,
+        data.brackets?.medium?.count || 0,
+        data.brackets?.large?.count || 0,
+        data.brackets?.xlarge?.count || 0,
+        data.impliedRate != null ? data.impliedRate : ''
+      ]);
+    });
+    const ws2 = XLSX.utils.aoa_to_sheet(method2Rows);
+    for (let c = 0; c < method2Rows[0].length; c++) {
+      const ref = XLSX.utils.encode_cell({ r: 0, c });
+      if (ws2[ref]) ws2[ref].s = { font: { bold: true }, alignment: { horizontal: 'center' } };
+    }
+    XLSX.utils.book_append_sheet(wb, ws2, 'Method 2');
+
+    return wb;
+  };
+
   const exportToExcel = (type) => {
     const timestamp = new Date().toISOString().split('T')[0];
     const municipality = (jobData?.municipality || 'export').replace(/[^a-zA-Z0-9]/g, '_');
@@ -2971,6 +3075,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       workbook = exportVCSSheetExcel();
     } else if (type === 'eco-obs') {
       workbook = exportEcoObsWorksheetExcel();
+    } else if (type === 'allocation') {
+      workbook = exportAllocationExcel();
+    } else if (type === 'land-rates') {
+      workbook = exportLandRatesExcel();
     } else {
       // For other types, create a simple workbook for now
       workbook = XLSX.utils.book_new();
