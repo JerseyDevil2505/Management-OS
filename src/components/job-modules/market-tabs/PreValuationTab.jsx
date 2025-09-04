@@ -3006,6 +3006,34 @@ const analyzeImportFile = async (file) => {
                 >
                   Copy All Current VCS
                 </button>
+
+                <button
+                  onClick={() => {
+                    if (!worksheetProperties || worksheetProperties.length === 0) return;
+                    const allKeys = worksheetProperties.map(p => p.property_composite_key);
+                    const isAllSelected = allKeys.length > 0 && allKeys.every(k => readyProperties.has(k));
+                    if (isAllSelected) {
+                      // Clear all
+                      setReadyProperties(new Set());
+                      updateWorksheetStats(worksheetProperties);
+                    } else {
+                      // Select all
+                      setReadyProperties(new Set(allKeys));
+                      const stats = {
+                        totalProperties: worksheetProperties.length,
+                        vcsAssigned: worksheetProperties.filter(p => p.new_vcs).length,
+                        zoningEntered: worksheetProperties.filter(p => p.asset_zoning).length,
+                        locationAnalysis: worksheetProperties.filter(p => p.location_analysis).length,
+                        readyToProcess: allKeys.length
+                      };
+                      setWorksheetStats(stats);
+                    }
+                  }}
+                  className={readyProperties && worksheetProperties && worksheetProperties.length > 0 && worksheetProperties.every(p => readyProperties.has(p.property_composite_key)) ? 'px-4 py-2 border rounded font-medium bg-gray-200 text-gray-800' : 'px-4 py-2 border rounded font-medium bg-green-600 text-white hover:bg-green-700'}
+                  title="Select or clear all Ready checkboxes"
+                >
+                  {worksheetProperties && worksheetProperties.length > 0 && worksheetProperties.every(p => readyProperties.has(p.property_composite_key)) ? 'Clear All' : 'Select All'}
+                </button>
               </div>
             </div>
             
