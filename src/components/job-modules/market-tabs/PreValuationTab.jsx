@@ -538,47 +538,50 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       // Enhance valid sales with combined SFLA from additional cards
       const enhancedSales = validSales.map(prop => {
         const parsed = parseCompositeKey(prop.property_composite_key);
-        
-        // If this is a main card, check for additional cards
-        if ((vendorType === 'Microsystems' && parsed.card === 'M') || 
+
+        // Start with a shallow copy of the incoming property to preserve all existing fields
+        let enhancedProp = { ...prop };
+
+        // If this is a main card, check for additional cards and aggregate SFLA
+        if ((vendorType === 'Microsystems' && parsed.card === 'M') ||
             (vendorType === 'BRT' && parsed.card === '1')) {
-          
+
           // Find additional cards for this property
           const additionalCards = properties.filter(p => {
             const pParsed = parseCompositeKey(p.property_composite_key);
-            return pParsed.block === parsed.block && 
+            return pParsed.block === parsed.block &&
                    pParsed.lot === parsed.lot &&
                    pParsed.qualifier === parsed.qualifier &&
                    pParsed.card !== parsed.card &&
                    p.asset_sfla && p.asset_sfla > 0; // Only cards with living area
           });
-          
+
           // Sum additional SFLA
           const additionalSFLA = additionalCards.reduce((sum, card) => sum + (card.asset_sfla || 0), 0);
-          
-          // Return property with combined SFLA and all required display fields
-        return {
-          ...prop,
-          original_sfla: prop.asset_sfla,
-          asset_sfla: prop.asset_sfla + additionalSFLA,
-          has_additional_cards: additionalCards.length > 0,
-          // CONFIRMED: These are the correct database field names from SQL query
-          property_class: prop.property_m4_class,  // ✅ Confirmed exists: "2", "1", "3B"
-          sales_nu: prop.sales_nu,                 // ✅ Confirmed exists: mostly empty, some "1"
-          values_mod_total: prop.values_mod_total, // ✅ Confirmed exists: 64900, 109900, etc.
-          property_m4_class: prop.property_m4_class // ✅ Keep original field too
-        };
+
+          // Only augment the SFLA fields; do NOT overwrite other existing fields with possibly undefined values
+          enhancedProp = {
+            ...enhancedProp,
+            original_sfla: enhancedProp.asset_sfla,
+            asset_sfla: (enhancedProp.asset_sfla || 0) + additionalSFLA,
+            has_additional_cards: additionalCards.length > 0
+          };
         }
 
-        // Return property with all required display fields
-        return {
-          ...prop,
-          // CONFIRMED: These are the correct database field names from SQL query
-          property_class: prop.property_m4_class,  // ✅ Confirmed exists: "2", "1", "3B"
-          sales_nu: prop.sales_nu,                 // ✅ Confirmed exists: mostly empty, some "1"
-          values_mod_total: prop.values_mod_total, // ✅ Confirmed exists: 64900, 109900, etc.
-          property_m4_class: prop.property_m4_class // ✅ Keep original field too
-        };
+        // Ensure property_class is present but do not overwrite if already set
+        if (!enhancedProp.property_class && prop.property_m4_class) {
+          enhancedProp.property_class = prop.property_m4_class;
+        }
+
+        // Ensure key sales/assessment fields exist without overwriting existing values
+        if (!enhancedProp.sales_nu && prop.sales_nu) {
+          enhancedProp.sales_nu = prop.sales_nu;
+        }
+        if ((enhancedProp.values_mod_total === undefined || enhancedProp.values_mod_total === null) && (prop.values_mod_total !== undefined && prop.values_mod_total !== null)) {
+          enhancedProp.values_mod_total = prop.values_mod_total;
+        }
+
+        return enhancedProp;
       });      
       
       // Process each valid sale
