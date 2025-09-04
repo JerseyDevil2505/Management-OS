@@ -6877,24 +6877,28 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const partNegVals = [];
 
       parts.forEach(part => {
-        if (!(ecoObsFactors[vcs] && ecoObsFactors[vcs][part])) return;
-        const polarity = getPartPolarity(part);
-        if (numeric >= 0) {
-          if (polarity !== 'negative') {
-            updateActualAdjustment(vcs, `${part}_positive`, Math.abs(numeric));
-            partPosVals.push(Math.abs(numeric));
+        if (ecoObsFactors[vcs] && ecoObsFactors[vcs][part]) {
+          const polarity = getPartPolarity(part);
+          if (numeric >= 0) {
+            if (polarity !== 'negative') {
+              updateActualAdjustment(vcs, `${part}_positive`, Math.abs(numeric));
+              partPosVals.push(Math.abs(numeric));
+            }
+          } else {
+            if (polarity !== 'positive') {
+              updateActualAdjustment(vcs, `${part}_negative`, Math.abs(numeric));
+              partNegVals.push(Math.abs(numeric));
+            }
           }
-        } else {
-          if (polarity !== 'positive') {
-            updateActualAdjustment(vcs, `${part}_negative`, Math.abs(numeric));
-            partNegVals.push(Math.abs(numeric));
-          }
+        } else if (standaloneAvg[part] && standaloneAvg[part].avg !== null && !isNaN(Number(standaloneAvg[part].avg))) {
+          const pAvg = Number(standaloneAvg[part].avg);
+          if (pAvg > 0) partPosVals.push(Math.abs(pAvg));
+          if (pAvg < 0) partNegVals.push(Math.abs(pAvg));
         }
       });
 
-      // After updating parts, set compound row values if the job has that compound key
+      // After updating parts (or collecting part averages), set compound row values
       const compoundKey = `${vcs}_${location}`;
-      // If parts produced any positive/negative values, set the compound inputs to the max of those
       if (partPosVals.length > 0) {
         const maxPos = Math.max(...partPosVals);
         setActualAdjustments(prev => ({ ...prev, [`${compoundKey}_positive`]: maxPos }));
