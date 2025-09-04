@@ -82,8 +82,8 @@ const LandValuationTab = ({
     } catch (error) {
       // If there's a conflict error, try to fallback to an update path
       try {
-        if (error && error.code === '409') {
-          // Attempt a direct update via service (updateItemStatus handles upsert, but try again with update semantics)
+        if (error && (error.code === '409' || error.message?.includes('duplicate') || error.message?.includes('conflict'))) {
+          // Attempt a direct update via service
           try {
             const completedBy = newStatus === 'completed' ? (jobData?.assignedManagers?.[0]?.id || null) : null;
             const updated = await checklistService.updateItemStatus(jobData.id, itemId, newStatus, completedBy);
@@ -100,7 +100,12 @@ const LandValuationTab = ({
         // ignore
       }
 
-      alert('Failed to update checklist. Please try again.');
+      // Log and show a concise error message
+      try {
+        console.error('Checklist update failed:', error);
+      } catch (e) {}
+      const msg = error && (error.message || (typeof error === 'string' ? error : JSON.stringify(error))) || 'Unknown error';
+      alert(`Failed to update checklist: ${msg}`);
     }
   };
   
