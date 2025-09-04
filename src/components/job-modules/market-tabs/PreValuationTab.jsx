@@ -2668,7 +2668,7 @@ const analyzeImportFile = async (file) => {
 
       {/* Block Analysis Tab Content */}
       {activeSubTab === 'marketAnalysis' && (
-        <div className="space-y-6">
+        <div className="space-y-6" style={{ position: 'relative' }}>
           {/* Configuration Section */}
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
