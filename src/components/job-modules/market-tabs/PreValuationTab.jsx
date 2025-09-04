@@ -171,6 +171,11 @@ const PreValuationTab = ({
     { hex: "#6633FF", name: "Electric Purple", row: 4, col: 8 }
   ];
   const [isResultsCollapsed, setIsResultsCollapsed] = useState(false);
+  const [preValChecklist, setPreValChecklist] = useState({
+    market_analysis: false,
+    page_by_page: false,
+    zoning_config: false
+  });
 
 // ==================== FILTER HPI DATA ====================
   // Check what HPI data we received
