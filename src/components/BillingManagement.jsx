@@ -261,8 +261,19 @@ Thank you for your immediate attention to this matter.`;
       setLoadingStatus(prev => ({ ...prev, isRefreshing: false, message: 'Fresh data loaded' }));
 
     } catch (error) {
+      // Log detailed error for debugging
       console.error('❌ Error loading fresh data:', error);
-      setLoadingStatus(prev => ({ ...prev, isRefreshing: false, lastError: error.message }));
+      let errMsg = '';
+      try {
+        if (!error) errMsg = 'Unknown error';
+        else if (typeof error === 'string') errMsg = error;
+        else if (error.message) errMsg = error.message;
+        else if (error.error) errMsg = error.error;
+        else errMsg = JSON.stringify(error);
+      } catch (e) {
+        errMsg = String(error);
+      }
+      setLoadingStatus(prev => ({ ...prev, isRefreshing: false, lastError: errMsg }));
     }
   }, [activeTab]);
 
