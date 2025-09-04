@@ -6721,18 +6721,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               <div style={{ fontSize: '12px', color: '#6B7280' }}>Add custom codes:</div>
               <input
                 placeholder="Code"
-                value={newCode}
-                onChange={(e) => setNewCode(e.target.value)}
+                value={newEcoCode}
+                onChange={(e) => setNewEcoCode(e.target.value)}
                 style={{ width: '60px', padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
               />
               <input
                 placeholder="Description"
-                value={newDesc}
-                onChange={(e) => setNewDesc(e.target.value)}
+                value={newEcoDesc}
+                onChange={(e) => setNewEcoDesc(e.target.value)}
                 style={{ padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
               />
               <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
-                <input type="checkbox" checked={newIsPositive} onChange={(e) => setNewIsPositive(e.target.checked)} /> Positive
+                <input type="checkbox" checked={newEcoIsPositive} onChange={(e) => setNewEcoIsPositive(e.target.checked)} /> Positive
               </label>
               <button onClick={handleAddCustomCode} style={{ padding: '6px 10px', background: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px' }}>Add</button>
             </div>
