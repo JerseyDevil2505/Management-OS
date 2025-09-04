@@ -7288,10 +7288,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 const entry = summaryInputs[item.location] || {};
                 const pos = entry.positive !== undefined && entry.positive !== '' ? parseFloat(entry.positive) : null;
                 const neg = entry.negative !== undefined && entry.negative !== '' ? parseFloat(entry.negative) : null;
+                // Skip tentative locations
+                if (/\bpossible|possibly\b|\?/i.test(item.location)) return;
+
                 if (pos !== null || neg !== null) {
                   applySummarySet(item.location, pos, neg);
-                } else if (item.avgPercent !== null && item.avgPercent !== undefined) {
-                  applySummaryToWorksheet(item.location, item.avgPercent);
+                } else if (item.avgPercent !== null && item.avgPercent !== undefined && !isNaN(Number(item.avgPercent))) {
+                  // Use avgPercent to populate appropriate side(s)
+                  const avg = Number(item.avgPercent);
+                  const posVal = avg > 0 ? Math.abs(avg) : null;
+                  const negVal = avg < 0 ? Math.abs(avg) : null;
+                  if (posVal !== null || negVal !== null) applySummarySet(item.location, posVal, negVal);
                 }
               });
               alert('Set applied for all visible summary rows');
