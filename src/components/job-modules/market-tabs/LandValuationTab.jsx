@@ -3169,7 +3169,69 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb, ws, 'Worksheet');
+
+    // Format header row as bold + center and apply thin borders where supported
+    const cols = rows[0].length;
+    const getCell = (r, c) => {
+      const colLetter = XLSX.utils.encode_col(c);
+      return `${colLetter}${r}`;
+    };
+
+    for (let c = 0; c < cols; c++) {
+      const cellRef = getCell(1, c);
+      if (!ws[cellRef]) continue;
+      try {
+        ws[cellRef].s = ws[cellRef].s || {};
+        ws[cellRef].s.font = { ...(ws[cellRef].s.font || {}), bold: true };
+        ws[cellRef].s.alignment = { horizontal: 'center' };
+        ws[cellRef].s.border = {
+          top: { style: 'thin', color: { rgb: 'FF000000' } },
+          bottom: { style: 'thin', color: { rgb: 'FF000000' } },
+          left: { style: 'thin', color: { rgb: 'FF000000' } },
+          right: { style: 'thin', color: { rgb: 'FF000000' } }
+        };
+      } catch (e) {
+        // styling may not be supported in some environments; ignore
+        console.debug('Header styling not applied', e);
+      }
+    }
+
+    // For columns that are numeric/currency, ensure values include commas and $ where appropriate (as strings)
+    // Columns mapping (0-based): 4=With Living Area,5=With Sale Price,7=Without Living Area,8=Without Sale Price,9=Adjusted Sale With,10=Adjusted Sale Without,11=Dollar Impact,12=Percent Impact,13=Applied+,14=Applied-
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r];
+      // format living area
+      if (row[4] !== '' && !isNaN(Number(row[4]))) row[4] = Number(row[4]).toLocaleString();
+      if (row[7] !== '' && !isNaN(Number(row[7]))) row[7] = Number(row[7]).toLocaleString();
+
+      // format currency fields
+      [5,8,9,10,11].forEach(ci => {
+        if (row[ci] !== '' && !isNaN(Number(row[ci]))) {
+          row[ci] = `$${Number(row[ci]).toLocaleString()}`;
+        }
+      });
+
+      // percent impact
+      if (row[12] !== '' && !String(row[12]).includes('%')) row[12] = `${row[12]}%`;
+
+      // applied percents
+      if (row[13] !== '' && !String(row[13]).includes('%')) row[13] = `${row[13]}%`;
+      if (row[14] !== '' && !String(row[14]).includes('%')) row[14] = `${row[14]}%`;
+    }
+
+    // Recreate worksheet with formatted strings
+    const ws2 = XLSX.utils.aoa_to_sheet(rows);
+    // Try to copy styles for header if possible
+    try {
+      for (let c = 0; c < cols; c++) {
+        const ref = getCell(1, c);
+        if (ws[ref] && ws2[ref]) ws2[ref].s = ws[ref].s;
+      }
+    } catch (e) {
+      console.debug('Failed to copy header styles to new sheet', e);
+    }
+
+    XLSX.utils.book_append_sheet(wb, ws2, 'Worksheet');
     return wb;
   };
 
