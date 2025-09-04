@@ -6832,7 +6832,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // Helper to split a location into parts (handles /, |, ',', ' and ', '&')
   const splitLocationParts = (loc) => {
     if (!loc) return [];
-    return loc.split(/\/|\|| and | & |,|\\//i).map(p => p.trim()).filter(Boolean);
+    // split on '/', '|', ',', ' and ', '&' (case-insensitive), trimming whitespace
+    return loc.split(/\s*(?:\/|\||,|\band\b|&)\s*/i).map(p => p.trim()).filter(Boolean);
   };
 
   // Apply a percent value (positive or negative) from summary into worksheet applied adjustments for all matching VCS rows
