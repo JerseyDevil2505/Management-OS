@@ -60,7 +60,8 @@ const LandValuationTab = ({
     if (!jobData?.id) return;
     const newStatus = currentState ? 'pending' : 'completed';
     try {
-      const completedBy = newStatus === 'completed' ? (jobData?.assignedManagers?.[0]?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad') : null;
+      const { data: { user } } = await supabase.auth.getUser();
+      const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
       const data = await checklistService.updateItemStatus(jobData.id, itemId, newStatus, completedBy);
 
       const persistedStatus = data?.status || newStatus;
@@ -85,7 +86,8 @@ const LandValuationTab = ({
         if (error && (error.code === '409' || error.message?.includes('duplicate') || error.message?.includes('conflict'))) {
           // Attempt a direct update via service
           try {
-            const completedBy = newStatus === 'completed' ? (jobData?.assignedManagers?.[0]?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad') : null;
+            const { data: { user } } = await supabase.auth.getUser();
+      const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
             const updated = await checklistService.updateItemStatus(jobData.id, itemId, newStatus, completedBy);
             const persistedStatus = updated?.status || newStatus;
             setter(persistedStatus === 'completed');
