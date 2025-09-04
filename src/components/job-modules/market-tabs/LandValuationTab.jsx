@@ -151,6 +151,17 @@ const LandValuationTab = ({
   const [customLocationCodes, setCustomLocationCodes] = useState([]);
   const [summaryInputs, setSummaryInputs] = useState({});
   const [includeCompounded, setIncludeCompounded] = useState(false);
+  // Sorting for the worksheet table (vcs, location, code)
+  const [sortField, setSortField] = useState('vcs'); // 'vcs' | 'location' | 'code'
+  const [sortDir, setSortDir] = useState('asc'); // 'asc' | 'desc'
+  const toggleSort = (field) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
 
   // Local inputs for adding new custom eco obs codes
   const [newEcoCode, setNewEcoCode] = useState('');
@@ -3445,7 +3456,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Debug all teardown sales
       if (saleCategories[s.id] === 'teardown') {
-        console.log('🏗️ Teardown sale details:', {
+        console.log('����️ Teardown sale details:', {
           block: s.property_block,
           lot: s.property_lot,
           id: s.id,
