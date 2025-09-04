@@ -3471,7 +3471,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
     const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
 
-    console.log('🏗��� Building Lot Analysis Result:', {
+    console.log('🏗️ Building Lot Analysis Result:', {
       avg: buildingLot.avg,
       count: buildingLot.count,
       method: buildingLot.method,
@@ -6966,39 +6966,61 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         </td>
 
                         {/* Applied adjustment columns - Always normal styling regardless of data availability */}
+                        {/* Applied+ input */}
                         <td style={{ padding: '6px 4px', textAlign: 'center', borderRight: '1px solid #E5E7EB' }}>
-                          <input
-                            type="number"
-                            value={actualAdjustments[`${key}_positive`] || ''}
-                            onChange={(e) => updateActualAdjustment(vcs, `${locationAnalysis}_positive`, e.target.value)}
-                            placeholder="-"
-                            style={{
-                              width: '40px',
-                              padding: '2px 4px',
-                              border: '1px solid #D1D5DB',
-                              borderRadius: '3px',
-                              fontSize: '10px',
-                              textAlign: 'center',
-                              backgroundColor: 'white'
-                            }}
-                          />
+                          {(() => {
+                            const mapVal = mappedLocationCodes[`${vcs}_${locationAnalysis}`] || '';
+                            const codes = mapVal ? mapVal.split('/').map(c => c.trim()) : [];
+                            const hasPositive = codes.some(c => (DEFAULT_ECO_OBS_CODES.find(d => d.code === c)?.isPositive) || (customLocationCodes.find(d => d.code === c)?.isPositive));
+                            const hasNegative = codes.some(c => !(DEFAULT_ECO_OBS_CODES.find(d => d.code === c)?.isPositive) && !(customLocationCodes.find(d => d.code === c)?.isPositive));
+
+                            return (
+                              <input
+                                type="number"
+                                value={actualAdjustments[`${key}_positive`] || ''}
+                                onChange={(e) => updateActualAdjustment(vcs, `${locationAnalysis}_positive`, e.target.value)}
+                                placeholder="-"
+                                disabled={!hasPositive}
+                                style={{
+                                  width: '40px',
+                                  padding: '2px 4px',
+                                  border: '1px solid #D1D5DB',
+                                  borderRadius: '3px',
+                                  fontSize: '10px',
+                                  textAlign: 'center',
+                                  backgroundColor: hasPositive ? 'white' : '#F3F4F6'
+                                }}
+                              />
+                            );
+                          })()}
                         </td>
+                        {/* Applied- input */}
                         <td style={{ padding: '6px 4px', textAlign: 'center' }}>
-                          <input
-                            type="number"
-                            value={actualAdjustments[`${key}_negative`] || ''}
-                            onChange={(e) => updateActualAdjustment(vcs, `${locationAnalysis}_negative`, e.target.value)}
-                            placeholder="-"
-                            style={{
-                              width: '40px',
-                              padding: '2px 4px',
-                              border: '1px solid #D1D5DB',
-                              borderRadius: '3px',
-                              fontSize: '10px',
-                              textAlign: 'center',
-                              backgroundColor: 'white'
-                            }}
-                          />
+                          {(() => {
+                            const mapVal = mappedLocationCodes[`${vcs}_${locationAnalysis}`] || '';
+                            const codes = mapVal ? mapVal.split('/').map(c => c.trim()) : [];
+                            const hasPositive = codes.some(c => (DEFAULT_ECO_OBS_CODES.find(d => d.code === c)?.isPositive) || (customLocationCodes.find(d => d.code === c)?.isPositive));
+                            const hasNegative = codes.some(c => !(DEFAULT_ECO_OBS_CODES.find(d => d.code === c)?.isPositive) && !(customLocationCodes.find(d => d.code === c)?.isPositive));
+
+                            return (
+                              <input
+                                type="number"
+                                value={actualAdjustments[`${key}_negative`] || ''}
+                                onChange={(e) => updateActualAdjustment(vcs, `${locationAnalysis}_negative`, e.target.value)}
+                                placeholder="-"
+                                disabled={!hasNegative}
+                                style={{
+                                  width: '40px',
+                                  padding: '2px 4px',
+                                  border: '1px solid #D1D5DB',
+                                  borderRadius: '3px',
+                                  fontSize: '10px',
+                                  textAlign: 'center',
+                                  backgroundColor: hasNegative ? 'white' : '#F3F4F6'
+                                }}
+                              />
+                            );
+                          })()}
                         </td>
                       </tr>
                     );
