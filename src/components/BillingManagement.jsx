@@ -2351,7 +2351,7 @@ const loadJobs = async () => {
                       CCDD
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Parcels
+                      Parcels (Manual)
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Contract Amount
