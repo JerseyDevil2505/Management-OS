@@ -4526,7 +4526,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       <div style={{ marginBottom: '30px', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
         <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Method 2: Improved Sale Lot Size Analysis</h3>
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Implied Acreage: Improved Sale Lot Size Analysis</h3>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
               <label style={{ fontSize: '12px', color: '#6B7280' }}>Type and Use:</label>
               <select
