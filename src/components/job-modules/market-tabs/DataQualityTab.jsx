@@ -2763,7 +2763,7 @@ const editCustomCheck = (check) => {
       )}
 
       {dataQualityActiveSubTab === 'overview' && (
-        <div style={{ position: 'fixed', left: 20, bottom: 20, zIndex: 60 }}>
+        <div style={{ position: 'fixed', right: 20, bottom: 20, zIndex: 60 }}>
           <button
             onClick={async () => {
               if (!jobData?.id) return;
@@ -2781,11 +2781,11 @@ const editCustomCheck = (check) => {
                 alert('Failed to update checklist. Please try again.');
               }
             }}
-            className="px-4 py-2 rounded-full text-sm font-semibold inline-flex items-center justify-center"
-            style={{ backgroundColor: isDataQualityComplete ? '#10B981' : '#E5E7EB', color: isDataQualityComplete ? 'white' : '#374151', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+            className="px-3 py-1 rounded-md text-sm font-medium"
+            style={{ backgroundColor: isDataQualityComplete ? '#10B981' : '#E5E7EB', color: isDataQualityComplete ? 'white' : '#374151' , padding: '8px 14px', borderRadius: '6px', fontWeight: 600 }}
             title={isDataQualityComplete ? 'Click to reopen' : 'Mark Data Quality Analysis complete'}
           >
-            {isDataQualityComplete ? '✓ Completed' : 'Mark Complete'}
+            {isDataQualityComplete ? '✓ Mark Complete' : 'Mark Complete'}
           </button>
         </div>
       )}
