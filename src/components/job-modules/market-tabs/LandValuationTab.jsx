@@ -3471,7 +3471,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
     const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
 
-    console.log('🏗️ Building Lot Analysis Result:', {
+    console.log('🏗��� Building Lot Analysis Result:', {
       avg: buildingLot.avg,
       count: buildingLot.count,
       method: buildingLot.method,
@@ -6898,17 +6898,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           {locationAnalysis}
                         </td>
                         <td style={{ padding: '6px 4px', color: '#6B7280', borderRight: '1px solid #E5E7EB', fontSize: '10px', textAlign: 'center' }}>
+                          {/* Code input: editable; value comes from mappedLocationCodes or empty */}
                           <input
                             type="text"
                             placeholder="TBD"
+                            value={mappedLocationCodes[`${vcs}_${locationAnalysis}`] || ''}
+                            onChange={(e) => {
+                              const key = `${vcs}_${locationAnalysis}`;
+                              const val = e.target.value.toUpperCase();
+                              setMappedLocationCodes(prev => ({ ...prev, [key]: val }));
+                            }}
                             style={{
-                              width: '40px',
+                              width: '80px',
                               padding: '2px 4px',
                               border: '1px solid #D1D5DB',
                               borderRadius: '3px',
                               fontSize: '10px',
                               textAlign: 'center',
-                              backgroundColor: 'white'
+                              backgroundColor: (!mappedLocationCodes[`${vcs}_${locationAnalysis}`] || mappedLocationCodes[`${vcs}_${locationAnalysis}`] === '') ? '#FEF9C3' : 'white'
                             }}
                           />
                         </td>
