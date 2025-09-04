@@ -6799,6 +6799,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
   };
 
+  // Apply both positive and/or negative values for a location to all matching VCS rows
+  const applySummarySet = (location, positive, negative) => {
+    Object.keys(ecoObsFactors || {}).forEach(vcs => {
+      if (ecoObsFactors[vcs] && ecoObsFactors[vcs][location]) {
+        if (positive !== null && positive !== undefined && !isNaN(Number(positive))) {
+          updateActualAdjustment(vcs, `${location}_positive`, Math.abs(Number(positive)));
+        }
+        if (negative !== null && negative !== undefined && !isNaN(Number(negative))) {
+          updateActualAdjustment(vcs, `${location}_negative`, Math.abs(Number(negative)));
+        }
+      }
+    });
+  };
+
   // Special helper for BS traffic levels
   const applyBSTraffic = (location, levelKey) => {
     const levelMap = { light: -5, medium: -10, heavy: -15 };
