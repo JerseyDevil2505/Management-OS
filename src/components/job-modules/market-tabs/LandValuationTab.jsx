@@ -3122,7 +3122,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const headers = ['VCS','Locational Analysis','Code','With Year Built','With Living Area','With Sale Price','Without Year Built','Without Living Area','Without Sale Price','Adjusted Sale With','Adjusted Sale Without','Dollar Impact','Percent Impact','Applied+%','Applied-%'];
     rows.push(headers);
 
-    Object.keys(filteredFactors || {}).sort().forEach(vcs => {
+    const filteredFactors = ecoObsFactors || {};
+    Object.keys(filteredFactors).sort().forEach(vcs => {
       Object.keys(filteredFactors[vcs] || {}).forEach(locationAnalysis => {
         if (locationAnalysis === 'None') return;
         const impact = calculateEcoObsImpact(vcs, locationAnalysis, globalEcoObsTypeFilter) || {};
