@@ -972,7 +972,7 @@ const getPricePerUnit = useCallback((price, size) => {
       const enriched = enrichProperty(prop);
       finalSales.push(enriched);
       if (enriched.autoCategory) {
-        console.log(`🏷�� Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
+        console.log(`🏷️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
         setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
       }
     });
@@ -6835,22 +6835,44 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <option value="30">Townhouse</option>
               </select>
             </div>
-            <button
-              onClick={() => exportToExcel('eco-obs')}
-              style={{
-                backgroundColor: '#10B981',
-                color: 'white',
-                padding: '8px 16px',
-                borderRadius: '4px',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}
-            >
-              <Download size={16} /> Export
-            </button>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button
+                onClick={() => exportToExcel('eco-obs')}
+                style={{
+                  backgroundColor: '#10B981',
+                  color: 'white',
+                  padding: '8px 16px',
+                  borderRadius: '4px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <Download size={16} /> Export
+              </button>
+
+              <button
+                onClick={() => {
+                  applyDefaultMapping();
+                  alert('Applied default mappings to empty code fields. Review highlighted entries.');
+                }}
+                style={{
+                  backgroundColor: '#3B82F6',
+                  color: 'white',
+                  padding: '8px 12px',
+                  borderRadius: '4px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                Apply Defaults
+              </button>
+            </div>
           </div>
         </div>
 
