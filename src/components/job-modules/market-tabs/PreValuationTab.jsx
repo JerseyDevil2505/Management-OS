@@ -2408,7 +2408,7 @@ const analyzeImportFile = async (file) => {
                                       // DEBUG: Check all possible assessed value fields
                                       const assessedValue = sale.values_mod_total || sale.assessed_value || sale.total_assessed || 0;
                                       if (sale.id && sale.id.toString().endsWith('0')) { // Log every 10th for debugging
-                                        if (false) console.log(`💰 Table render assessed for sale ${sale.id}:`, {
+                                        if (false) console.log(`���� Table render assessed for sale ${sale.id}:`, {
                                           values_mod_total: sale.values_mod_total,
                                           assessed_value: sale.assessed_value,
                                           total_assessed: sale.total_assessed,
@@ -2957,6 +2957,36 @@ const analyzeImportFile = async (file) => {
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Property Worksheet Configuration</h3>
               <div className="flex gap-2">
+                <input
+                  type="file"
+                  id="import-file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={(e) => e.target.files[0] && analyzeImportFile(e.target.files[0])}
+                  className="hidden"
+                />
+
+                <button
+                  onClick={() => document.getElementById('import-file').click()}
+                  disabled={isAnalyzingImport}
+                  className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  {isAnalyzingImport ? (
+                    <>
+                      <RefreshCw className="inline-block animate-spin mr-2" size={16} />
+                      Analyzing...
+                    </>
+                  ) : (
+                    'Import Updates from Excel'
+                  )}
+                </button>
+
+                <button
+                  onClick={exportWorksheetToExcel}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Export to Excel
+                </button>
+
                 <button
                   onClick={() => {
                     if (window.confirm(`Copy current VCS to new VCS for ALL ${worksheetProperties.length} properties? This will OVERWRITE any existing new VCS values!`)) {
@@ -2976,33 +3006,6 @@ const analyzeImportFile = async (file) => {
                 >
                   Copy All Current VCS
                 </button>
-                <input
-                  type="file"
-                  id="import-file"
-                  accept=".xlsx,.xls,.csv"
-                  onChange={(e) => e.target.files[0] && analyzeImportFile(e.target.files[0])}
-                  className="hidden"
-                />
-                <button
-                  onClick={() => document.getElementById('import-file').click()}
-                  disabled={isAnalyzingImport}
-                  className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
-                >
-                  {isAnalyzingImport ? (
-                    <>
-                      <RefreshCw className="inline-block animate-spin mr-2" size={16} />
-                      Analyzing...
-                    </>
-                  ) : (
-                    'Import Updates from Excel'
-                  )}
-                </button>
-                <button
-                  onClick={exportWorksheetToExcel}
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                >
-                  Export to Excel
-                </button>
               </div>
             </div>
             
@@ -3017,25 +3020,6 @@ const analyzeImportFile = async (file) => {
                 </div>
                 <div className="text-sm text-gray-600 flex items-center justify-center gap-1">
                   VCS Assigned
-                  <button
-                    onClick={() => {
-                      if (window.confirm(`Copy current VCS to new VCS for ALL ${worksheetProperties.length} properties? This will OVERWRITE any existing new VCS values!`)) {
-                        const updated = worksheetProperties.map(prop => ({
-                          ...prop,
-                          new_vcs: prop.property_vcs || ''
-                        }));
-                        setWorksheetProperties(updated);
-                        setFilteredWorksheetProps(updated);
-                        updateWorksheetStats(updated);
-                        setUnsavedChanges(true);
-                        alert(`✅ Copied current VCS values for ${worksheetProperties.length} properties`);
-                      }
-                    }}
-                    className="px-1 py-0.5 bg-orange-500 text-white rounded hover:bg-orange-600 text-xs"
-                    title="Copy all current VCS values to new VCS field"
-                  >
-                    »
-                  </button>
                 </div>
               </div>
               <div className="text-center">
