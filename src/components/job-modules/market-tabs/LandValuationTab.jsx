@@ -3002,64 +3002,178 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     return wb;
   };
 
-  // Land rates export (two sheets)
+  // Land rates export (two sheets) - improved: full Method 1 with UI columns and expanded Method 2
   const exportLandRatesExcel = () => {
     const wb = XLSX.utils.book_new();
 
-    // Sheet 1: Vacant Land Sales (Method 1)
-    const salesHeaders = ['Block','Lot','Address','VCS','Special Region','Category','Sale Date','Sale Price','$ Sale Price','Size','Price/Unit','Package','Included','Notes'];
+    // Sheet 1: Vacant Land Sales (Method 1) - include UI columns
+    const salesHeaders = ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Special Region','Category','Sale Date','Sale Price','$ Sale Price','Acres','$ / Acre','Package','Notes'];
     const salesRows = [salesHeaders];
+
     (vacantSales || []).forEach(sale => {
       const category = saleCategories[sale.id] || 'Uncategorized';
       const region = specialRegions[sale.id] || 'Normal';
+      const qual = sale.sales_nu || '';
       const isPackage = sale.packageData ? `Y (${sale.packageData.package_count})` : 'N';
       const included = includedSales.has(sale.id) ? 'Y' : 'N';
       const notes = landNotes[sale.id] || '';
-      const sizeLabel = valuationMode === 'acre' ? (sale.totalAcres != null ? Number(sale.totalAcres.toFixed(2)) : '') : valuationMode === 'sf' ? (sale.totalAcres != null ? Math.round(sale.totalAcres * 43560) : '') : sale.totalAcres;
+
+      const acres = sale.totalAcres != null ? Number(sale.totalAcres.toFixed(2)) : '';
+      const salePrice = sale.sales_price != null ? Number(sale.sales_price) : '';
+      const pricePerAcre = sale.pricePerAcre != null ? Number(sale.pricePerAcre) : '';
+
       salesRows.push([
+        included,
         sale.property_block || '',
         sale.property_lot || '',
+        qual,
         sale.property_location || '',
+        sale.property_m4_class || '',
+        sale.asset_building_class || '',
+        sale.asset_type_use || '',
+        sale.asset_design_style || '',
         sale.new_vcs || '',
+        sale.asset_zoning || '',
         region,
         category,
         sale.sales_date || '',
-        sale.sales_price || '',
-        sale.sales_price || '',
-        sizeLabel,
-        sale.pricePerAcre || '',
+        salePrice,
+        salePrice ? `$${salePrice.toLocaleString()}` : '',
+        acres,
+        pricePerAcre ? `$${Number(pricePerAcre).toLocaleString()}` : '',
         isPackage,
-        included,
         notes
       ]);
     });
+
     const ws1 = XLSX.utils.aoa_to_sheet(salesRows);
-    // header formatting
-    for (let c = 0; c < salesRows[0].length; c++) {
+    // header formatting and column widths
+    const salesCols = salesRows[0].length;
+    for (let c = 0; c < salesCols; c++) {
       const ref = XLSX.utils.encode_cell({ r: 0, c });
       if (ws1[ref]) ws1[ref].s = { font: { bold: true }, alignment: { horizontal: 'center' } };
     }
-    XLSX.utils.book_append_sheet(wb, ws1, 'Vacant Sales');
+    ws1['!cols'] = [
+      { wch: 8 }, // Include
+      { wch: 8 }, // Block
+      { wch: 8 }, // Lot
+      { wch: 8 }, // Qual
+      { wch: 30 }, // Address
+      { wch: 6 }, // Class
+      { wch: 6 }, // Bldg
+      { wch: 6 }, // Type
+      { wch: 8 }, // Design
+      { wch: 10 }, // VCS
+      { wch: 12 }, // Zoning
+      { wch: 12 }, // Special Region
+      { wch: 12 }, // Category
+      { wch: 12 }, // Sale Date
+      { wch: 12 }, // Sale Price (raw)
+      { wch: 14 }, // $ Sale Price (formatted)
+      { wch: 8 }, // Acres
+      { wch: 12 }, // $ / Acre
+      { wch: 10 }, // Package
+      { wch: 30 } // Notes
+    ];
 
-    // Sheet 2: Method 2 summary
-    const method2Headers = ['VCS','Total Sales','<1 Acre','1-5 Acres','5-10 Acres','>10 Acres','Implied Rate'];
-    const method2Rows = [method2Headers];
-    Object.entries(bracketAnalysis || {}).sort((a,b) => a[0].localeCompare(b[0])).forEach(([vcs, data]) => {
-      method2Rows.push([
-        vcs,
-        data.totalSales || '',
-        data.brackets?.small?.count || 0,
-        data.brackets?.medium?.count || 0,
-        data.brackets?.large?.count || 0,
-        data.brackets?.xlarge?.count || 0,
-        data.impliedRate != null ? data.impliedRate : ''
-      ]);
+    // Append summary for Method 1 (positive sales)
+    const positiveSales = (vacantSales || []).filter(s => s.isPositive);
+    if (positiveSales.length > 0) {
+      salesRows.push([]);
+      salesRows.push(['SUMMARY (Positive Sales Only)']);
+      salesRows.push(['Total Sales Included', positiveSales.length]);
+      salesRows.push(['Total Sales Excluded', (vacantSales || []).length - positiveSales.length]);
+      salesRows.push(['Sum of Total Land Values', `$${positiveSales.reduce((sum, s) => sum + (s.totalLandValue || 0), 0).toLocaleString()}`]);
+      salesRows.push(['Sum of Improved Sale Prices', `$${positiveSales.reduce((sum, s) => sum + (s.avgImprovedPrice || 0), 0).toLocaleString()}`]);
+      const overallRecommended = positiveSales.reduce((sum, s) => sum + (s.avgImprovedPrice || 0), 0) > 0 ? (positiveSales.reduce((sum, s) => sum + (s.totalLandValue || 0), 0) / positiveSales.reduce((sum, s) => sum + (s.avgImprovedPrice || 0), 0)) * 100 : 0;
+      salesRows.push(['Overall Recommended Allocation', `${overallRecommended.toFixed(1)}%`]);
+    }
+
+    // recreate ws1 to include summary formatting
+    const ws1b = XLSX.utils.aoa_to_sheet(salesRows);
+    for (let c = 0; c < salesCols; c++) {
+      const ref = XLSX.utils.encode_cell({ r: 0, c });
+      if (ws1b[ref]) ws1b[ref].s = { font: { bold: true }, alignment: { horizontal: 'center' } };
+    }
+    ws1b['!cols'] = ws1['!cols'];
+    XLSX.utils.book_append_sheet(wb, ws1b, 'Vacant Sales');
+
+    // Sheet 2: Method 2 expanded (per VCS, expanded view)
+    const method2Rows = [];
+
+    Object.entries(bracketAnalysis || {}).sort(([a],[b]) => a.localeCompare(b)).forEach(([vcs, data]) => {
+      // VCS header row
+      const vcsSummary = `${data.totalSales || 0} sales • Avg $${Math.round(data.avgPrice || 0).toLocaleString()} • ${data.avgAcres != null ? Number(data.avgAcres.toFixed(2)) : ''} acres • $${Math.round(data.avgAdjusted || 0).toLocaleString()}`;
+      method2Rows.push([`${vcs} - ${vcsSummary}`]);
+      method2Rows.push([]);
+
+      // Bracket headers
+      const bracketHeaders = ['Bracket','Count','Avg Lot Size (acres)','Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','ADJUSTED','$ ADJUSTED','DELTA','$ DELTA','LOT DELTA','PER ACRE','$ PER ACRE','PER SQ FT'];
+      method2Rows.push(bracketHeaders);
+
+      const bracketList = [
+        { key: 'small', label: '<1.00', bracket: data.brackets.small },
+        { key: 'medium', label: '1.00-5.00', bracket: data.brackets.medium },
+        { key: 'large', label: '5.00-10.00', bracket: data.brackets.large },
+        { key: 'xlarge', label: '>10.00', bracket: data.brackets.xlarge }
+      ];
+
+      bracketList.forEach((row, rowIndex) => {
+        if (!row.bracket || row.bracket.count === 0) return;
+        const prevBracket = rowIndex > 0 ? bracketList[rowIndex - 1].bracket : null;
+        const adjustedDelta = prevBracket && prevBracket.avgAdjusted && row.bracket.avgAdjusted ? row.bracket.avgAdjusted - prevBracket.avgAdjusted : null;
+        const lotDelta = prevBracket && prevBracket.avgAcres && row.bracket.avgAcres ? row.bracket.avgAcres - prevBracket.avgAcres : null;
+        const perAcre = adjustedDelta && lotDelta && lotDelta > 0 && adjustedDelta > 0 ? adjustedDelta / lotDelta : null;
+        const perSqFt = perAcre ? perAcre / 43560 : null;
+
+        method2Rows.push([
+          row.label,
+          row.bracket.count || 0,
+          row.bracket.avgAcres != null ? Number(row.bracket.avgAcres.toFixed(2)) : '',
+          row.bracket.avgSalePrice != null ? row.bracket.avgSalePrice : '',
+          row.bracket.avgSalePrice != null ? `$${Math.round(row.bracket.avgSalePrice).toLocaleString()}` : '',
+          row.bracket.avgSFLA != null ? Math.round(row.bracket.avgSFLA).toLocaleString() : '',
+          row.bracket.avgAdjusted != null ? row.bracket.avgAdjusted : '',
+          row.bracket.avgAdjusted != null ? `$${Math.round(row.bracket.avgAdjusted).toLocaleString()}` : '',
+          adjustedDelta != null ? adjustedDelta : '',
+          adjustedDelta != null ? `$${Math.round(adjustedDelta).toLocaleString()}` : '',
+          lotDelta != null ? Number(lotDelta.toFixed(2)) : '',
+          perAcre != null ? `$${Math.round(perAcre).toLocaleString()}` : (adjustedDelta !== null && adjustedDelta <= 0 ? 'N/A' : ''),
+          perAcre != null ? `$${perAcre.toFixed(2)}` : (adjustedDelta !== null && adjustedDelta <= 0 ? 'N/A' : ''),
+          perSqFt != null ? `$${perSqFt.toFixed(2)}` : ''
+        ]);
+      });
+
+      method2Rows.push([]);
     });
+
+    // Method 2 Summary (similar to UI)
+    method2Rows.push(['Method 2 Summary']);
+    if (method2Summary) {
+      const mid = method2Summary.mediumRange || {};
+      const lg = method2Summary.largeRange || {};
+      const xl = method2Summary.xlargeRange || {};
+      method2Rows.push(['1.00-4.99 perAcre', mid.perAcre && mid.perAcre !== 'N/A' ? `$${mid.perAcre.toLocaleString()}` : 'N/A']);
+      method2Rows.push(['5.00-9.99 perAcre', lg.perAcre && lg.perAcre !== 'N/A' ? `$${lg.perAcre.toLocaleString()}` : 'N/A']);
+      method2Rows.push(['10.00+ perAcre', xl.perAcre && xl.perAcre !== 'N/A' ? `$${xl.perAcre.toLocaleString()}` : 'N/A']);
+      method2Rows.push(['All Positive Deltas Avg', (() => {
+        const allRates = [];
+        if (mid.perAcre && mid.perAcre !== 'N/A') allRates.push(mid.perAcre);
+        if (lg.perAcre && lg.perAcre !== 'N/A') allRates.push(lg.perAcre);
+        if (xl.perAcre && xl.perAcre !== 'N/A') allRates.push(xl.perAcre);
+        if (allRates.length === 0) return 'N/A';
+        const avgRate = Math.round(allRates.reduce((s, r) => s + r, 0) / allRates.length);
+        return `$${avgRate.toLocaleString()}`;
+      })()]);
+    }
+
     const ws2 = XLSX.utils.aoa_to_sheet(method2Rows);
-    for (let c = 0; c < method2Rows[0].length; c++) {
+    // header formatting where applicable
+    for (let c = 0; c < 10; c++) {
       const ref = XLSX.utils.encode_cell({ r: 0, c });
       if (ws2[ref]) ws2[ref].s = { font: { bold: true }, alignment: { horizontal: 'center' } };
     }
+
     XLSX.utils.book_append_sheet(wb, ws2, 'Method 2');
 
     return wb;
