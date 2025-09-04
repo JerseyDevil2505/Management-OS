@@ -72,6 +72,14 @@ const LandValuationTab = ({
 
       // update local state to reflect change
       setter(!currentState);
+
+      // Notify other components to refresh checklist state (ManagementChecklist listens for this)
+      try {
+        window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId, status: newStatus } }));
+      } catch (e) {
+        // ignore dispatch errors
+      }
+
     } catch (error) {
       alert('Failed to update checklist. Please try again.');
     }
