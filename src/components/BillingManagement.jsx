@@ -2368,9 +2368,25 @@ const loadJobs = async () => {
                           {job.municipality || job.job_name || 'Unnamed Job'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          <span className="px-2 py-1 text-xs rounded-full bg-gray-200 text-gray-700">
-                            {job.ccdd_code || '-'}
-                          </span>
+                          <div className="flex items-center">
+                            <input
+                              type="text"
+                              value={job.manual_parcel_count ?? job.total_properties ?? ''}
+                              onChange={(e) => {
+                                const numeric = e.target.value.replace(/[^0-9]/g, '');
+                                setPlanningJobs(prev => prev.map(j => j.id === job.id ? { ...j, manual_parcel_count: numeric } : j));
+                              }}
+                              onKeyPress={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleUpdatePlannedParcels(job.id, job.manual_parcel_count);
+                                }
+                              }}
+                              onBlur={() => handleUpdatePlannedParcels(job.id, job.manual_parcel_count)}
+                              className="pr-3 py-1 w-24 border border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="auto"
+                            />
+                            <span className="ml-2 text-xs text-gray-400">(auto)</span>
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           <div className="flex items-center space-x-2">
@@ -2382,7 +2398,7 @@ const loadJobs = async () => {
                                 onChange={(e) => {
                                   // Remove commas and non-numeric characters
                                   const numericValue = e.target.value.replace(/[^0-9]/g, '');
-                                  setPlanningJobs(prev => 
+                                  setPlanningJobs(prev =>
                                     prev.map(j => j.id === job.id ? {...j, contract_amount: numericValue} : j)
                                   );
                                 }}
