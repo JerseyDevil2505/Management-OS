@@ -421,6 +421,7 @@ useEffect(() => {
     setMappedLocationCodes(marketLandData.eco_obs_code_config.location_codes || {});
     setTrafficLevels(marketLandData.eco_obs_code_config.traffic_levels || {});
     setCustomLocationCodes(marketLandData.eco_obs_code_config.custom_codes || []);
+    setSummaryInputs(marketLandData.eco_obs_code_config.summary_inputs || {});
   }
   if (marketLandData.eco_obs_applied_adjustments) {
     setActualAdjustments(marketLandData.eco_obs_applied_adjustments);
@@ -2620,7 +2621,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           factors: ecoObsFactors,
           location_codes: mappedLocationCodes,
           traffic_levels: trafficLevels,
-          custom_codes: customLocationCodes
+          custom_codes: customLocationCodes,
+          summary_inputs: summaryInputs
         },
         eco_obs_compound_overrides: computedAdjustments,
         updated_at: new Date().toISOString()
