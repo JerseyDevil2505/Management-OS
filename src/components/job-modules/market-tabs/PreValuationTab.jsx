@@ -2408,7 +2408,7 @@ const analyzeImportFile = async (file) => {
                                       // DEBUG: Check all possible assessed value fields
                                       const assessedValue = sale.values_mod_total || sale.assessed_value || sale.total_assessed || 0;
                                       if (sale.id && sale.id.toString().endsWith('0')) { // Log every 10th for debugging
-                                        if (false) console.log(`���� Table render assessed for sale ${sale.id}:`, {
+                                        if (false) console.log(`💰 Table render assessed for sale ${sale.id}:`, {
                                           values_mod_total: sale.values_mod_total,
                                           assessed_value: sale.assessed_value,
                                           total_assessed: sale.total_assessed,
@@ -2956,7 +2956,7 @@ const analyzeImportFile = async (file) => {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Property Worksheet Configuration</h3>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-nowrap items-center">
                 <input
                   type="file"
                   id="import-file"
@@ -3001,7 +3001,7 @@ const analyzeImportFile = async (file) => {
                       alert(`✅ Copied current VCS values for ${worksheetProperties.length} properties`);
                     }
                   }}
-                  className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                   title="Copy all current VCS values to new VCS field"
                 >
                   Copy All Current VCS
@@ -3128,7 +3128,7 @@ const analyzeImportFile = async (file) => {
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('building_class_display')}
                         >
-                          Building Class {sortConfig.field === 'building_class_display' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          Building Class {sortConfig.field === 'building_class_display' && (sortConfig.direction === 'asc' ? '↑' : '��')}
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
