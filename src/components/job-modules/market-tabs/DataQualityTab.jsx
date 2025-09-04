@@ -2781,8 +2781,8 @@ const editCustomCheck = (check) => {
                 alert('Failed to update checklist. Please try again.');
               }
             }}
-            className="px-3 py-1 rounded-md text-sm font-medium"
-            style={{ backgroundColor: isDataQualityComplete ? '#10B981' : '#E5E7EB', color: isDataQualityComplete ? 'white' : '#374151' , padding: '8px 14px', borderRadius: '6px', fontWeight: 600 }}
+            className="px-4 py-2 rounded-lg font-medium"
+            style={{ backgroundColor: isDataQualityComplete ? '#10B981' : '#E5E7EB', color: isDataQualityComplete ? 'white' : '#374151' }}
             title={isDataQualityComplete ? 'Click to reopen' : 'Mark Data Quality Analysis complete'}
           >
             {isDataQualityComplete ? '✓ Mark Complete' : 'Mark Complete'}
