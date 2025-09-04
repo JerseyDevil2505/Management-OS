@@ -17,7 +17,8 @@ const LandValuationTab = ({
   jobData,
   vendorType,
   marketLandData,
-  onAnalysisUpdate
+  onAnalysisUpdate,
+  onDataRefresh
 }) => {
   // ========== MAIN TAB STATE ==========
   const [activeSubTab, setActiveSubTab] = useState('land-rates');
