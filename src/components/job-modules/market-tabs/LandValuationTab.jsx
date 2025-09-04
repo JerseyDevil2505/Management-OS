@@ -143,6 +143,7 @@ const LandValuationTab = ({
   // ========== ECONOMIC OBSOLESCENCE STATE - ENHANCED ==========
   const [ecoObsFactors, setEcoObsFactors] = useState({});
   const [locationCodes, setLocationCodes] = useState({});
+  const [mappedLocationCodes, setMappedLocationCodes] = useState({}); // key: `${vcs}_${location}`, value: code or compound codes
   const [trafficLevels, setTrafficLevels] = useState({});
   const [typeUseFilter, setTypeUseFilter] = useState({});
   const [computedAdjustments, setComputedAdjustments] = useState({});
