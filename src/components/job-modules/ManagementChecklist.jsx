@@ -63,6 +63,21 @@ useEffect(() => {
       window.scrollTo(0, 0);
       loadChecklistItems();
     }
+
+    // Listen for external checklist updates (e.g., from components that mark items complete)
+    const handler = (e) => {
+      try {
+        if (!e?.detail) return;
+        if (e.detail.jobId && e.detail.jobId === jobData?.id) {
+          loadChecklistItems();
+        }
+      } catch (err) {
+        // ignore
+      }
+    };
+    window.addEventListener('checklist_status_changed', handler);
+
+    return () => window.removeEventListener('checklist_status_changed', handler);
   }, [jobData, checklistType]);
 
   // Check if files actually exist in storage
