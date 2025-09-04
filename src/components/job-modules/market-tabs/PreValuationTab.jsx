@@ -2703,6 +2703,34 @@ const analyzeImportFile = async (file) => {
                 >
                   Export to CSV
                 </button>
+
+                {/* Bottom-right Mark Complete for Market Analysis (section-relative) */}
+                <div style={{ position: 'absolute', right: 16, bottom: 16 }}>
+                  <button
+                    onClick={async () => {
+                      if (!jobData?.id) return;
+                      const newStatus = preValChecklist.market_analysis ? 'pending' : 'completed';
+                      try {
+                        const { data: { user } } = await supabase.auth.getUser();
+                        const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
+                        const updated = await checklistService.updateItemStatus(jobData.id, 'market_analysis', newStatus, completedBy);
+                        const persistedStatus = updated?.status || newStatus;
+                        setPreValChecklist(prev => ({ ...prev, market_analysis: persistedStatus === 'completed' }));
+                        try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'market_analysis', status: persistedStatus } })); } catch(e){}
+                        try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
+                      } catch (error) {
+                        console.error('Market Analysis checklist update failed:', error);
+                        alert('Failed to update checklist. Please try again.');
+                      }
+                    }}
+                    className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-medium"
+                    style={{ backgroundColor: preValChecklist.market_analysis ? '#10B981' : '#E5E7EB', color: preValChecklist.market_analysis ? 'white' : '#374151' }}
+                    title={preValChecklist.market_analysis ? 'Click to reopen' : 'Mark Market Analysis complete'}
+                  >
+                    {preValChecklist.market_analysis ? '✓ Mark Complete' : 'Mark Complete'}
+                  </button>
+                </div>
+
               </div>
             </div>
             
