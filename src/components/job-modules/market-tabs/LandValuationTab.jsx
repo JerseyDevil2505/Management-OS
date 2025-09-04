@@ -367,66 +367,6 @@ useEffect(() => {
     setComputedAdjustments(marketLandData.eco_obs_compound_overrides);
   }
 
-  // Apply Default Mapping rules - helper
-  const keywordMap = useMemo(() => ({
-    CM: ['comm'],
-    PL: ['power lines', 'power line', 'power'],
-    RR: ['railroad', 'rail'],
-    ES: ['easement'],
-    GC: ['golf'],
-    FZ: ['flood'],
-    BS: [' rd', ' rd.', ' ave', ' ave.', ' st', ' st.', ' pl', ' pl.', ' wy', ' wy.', ' terr', ' hwy', ' route', 'road', 'avenue', 'street', 'place', 'way', 'terrace', 'highway', 'route'],
-  }), []);
-
-  const waterWords = useMemo(() => ['creek','bay','pond','ocean','lake','river','stream'], []);
-
-  const mapTokenToCode = useCallback((token) => {
-    const t = token.toLowerCase();
-    // explicit matches
-    if (t.includes('comm')) return 'CM';
-    if (t.includes('power lines') || t.includes('power line') || t.includes('power')) return 'PL';
-    if (t.includes('railroad') || t.includes('rail')) return 'RR';
-    if (t.includes('easement')) return 'ES';
-    if (t.includes('golf')) return 'GC';
-    if (t.includes('flood')) return 'FZ';
-    // road tokens
-    for (const kw of keywordMap.BS) {
-      if (t.includes(kw)) return 'BS';
-    }
-    // water view/front
-    const hasWater = waterWords.some(w => t.includes(w));
-    if (t.includes('front') && hasWater) return 'WF';
-    if (t.includes('view') && hasWater) return 'WV';
-    // fallback: if contains water word with no front/view, prefer WV
-    if (hasWater) return 'WV';
-    return null;
-  }, [keywordMap, waterWords]);
-
-  const applyDefaultMapping = useCallback(() => {
-    const newMap = { ...mappedLocationCodes };
-    Object.keys(ecoObsFactors || {}).forEach(vcs => {
-      Object.keys(ecoObsFactors[vcs] || {}).forEach(locationAnalysis => {
-        const key = `${vcs}_${locationAnalysis}`;
-        // skip if already mapped
-        if (newMap[key] && newMap[key].trim() !== '') return;
-        // split compound tokens
-        const parts = locationAnalysis.split(/\/|\/|\|| and | & |,|\//i).map(p => p.trim()).filter(Boolean);
-        const codes = parts.map(p => mapTokenToCode(p)).filter(Boolean);
-        if (codes.length > 0) {
-          newMap[key] = codes.join('/');
-        } else {
-          // leave undefined to highlight
-        }
-      });
-    });
-    setMappedLocationCodes(newMap);
-
-    // debug log once
-    if (Object.keys(newMap).length > 0) {
-      console.log('🧭 Applied default eco-obs mapping for empty codes:', Object.entries(newMap).slice(0,20));
-    }
-  }, [ecoObsFactors, mappedLocationCodes, mapTokenToCode]);
-
   setLastSaved(marketLandData.updated_at ? new Date(marketLandData.updated_at) : null);
   setIsLoading(false);
   setIsInitialLoadComplete(true);
