@@ -2674,18 +2674,12 @@ const analyzeImportFile = async (file) => {
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Block Market Analysis</h3>
               <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    // Mark complete in checklist
-                    if (window.confirm('Mark Market Analysis as complete in Management Checklist?')) {
-                      checklistService.updateChecklistItem(jobData.id, 'market_analysis', true);
-                      alert('✅ Market Analysis marked complete in checklist');
-                    }
-                  }}
-                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                >
-                  Mark Complete
-                </button>
+                {preValChecklist.market_analysis ? (
+                  <span className="px-3 py-1 bg-green-50 text-green-700 rounded-full text-sm font-semibold inline-flex items-center gap-2">
+                    <Check className="w-4 h-4" />
+                    Completed
+                  </span>
+                ) : null}
                 <button
                   onClick={() => {
                     // Export to CSV
