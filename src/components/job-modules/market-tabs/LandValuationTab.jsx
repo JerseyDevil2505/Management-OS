@@ -7131,9 +7131,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ backgroundColor: '#F8F9FA', borderBottom: '2px solid #E5E7EB' }}>
-                  <th style={{ padding: '8px 4px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>VCS</th>
-                  <th style={{ padding: '8px 4px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>Locational Analysis</th>
-                  <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px' }}>Code</th>
+                  <th onClick={() => toggleSort('vcs')} style={{ padding: '8px 4px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px', cursor: 'pointer' }}>VCS{sortField === 'vcs' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                  <th onClick={() => toggleSort('location')} style={{ padding: '8px 4px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px', cursor: 'pointer' }}>Locational Analysis{sortField === 'location' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                  <th onClick={() => toggleSort('code')} style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px', cursor: 'pointer' }}>Code{sortField === 'code' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                   <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>With Year Built</th>
                   <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>With Living Area</th>
                   <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>With Sale Price</th>
