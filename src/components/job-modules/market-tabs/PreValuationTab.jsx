@@ -761,21 +761,72 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     }
   }, [properties, salesFromYear, minSalePrice, normalizeToYear, equalizationRatio, outlierThreshold, getHPIMultiplier, timeNormalizedSales, normalizationStats, vendorType, parseCompositeKey, jobData.id, selectedCounty, worksheetService]);
 
+  // Helper: Safe upsert into property_market_analysis with fallback to update/insert when ON CONFLICT key is missing
+  const safeUpsertPropertyMarket = async (records) => {
+    if (!records || records.length === 0) return { data: [], error: null };
+    try {
+      // Try batch upsert using property_composite_key as conflict target
+      const { data, error } = await supabase
+        .from('property_market_analysis')
+        .upsert(records, { onConflict: 'property_composite_key' });
+      if (!error) return { data, error: null };
+
+      // If error indicates missing unique constraint for ON CONFLICT, fall back to update/insert per record
+      if (error && (error.code === '42P10' || (error.message && error.message.includes('no unique or exclusion constraint')))) {
+        const results = [];
+        for (const rec of records) {
+          try {
+            // Try update first
+            const { data: updated, error: updateError } = await supabase
+              .from('property_market_analysis')
+              .update(rec)
+              .match({ property_composite_key: rec.property_composite_key })
+              .select();
+
+            if (updateError) throw updateError;
+            if (updated && updated.length > 0) {
+              results.push(updated[0]);
+              continue;
+            }
+
+            // If no rows updated, insert new row
+            const { data: inserted, error: insertError } = await supabase
+              .from('property_market_analysis')
+              .insert(rec)
+              .select();
+
+            if (insertError) throw insertError;
+            results.push(Array.isArray(inserted) ? inserted[0] : inserted);
+
+          } catch (e) {
+            return { data: null, error: e };
+          }
+        }
+        return { data: results, error: null };
+      }
+
+      // Other errors: return as-is
+      return { data: null, error };
+
+    } catch (err) {
+      return { data: null, error: err };
+    }
+  };
+
   const saveSizeNormalizedValues = async (normalizedSales) => {
     try {
       // Save size normalized values to database
       for (const sale of normalizedSales) {
         if (sale.size_normalized_price) {
-          await supabase
-            .from('property_market_analysis')
-            .upsert({
-              property_composite_key: sale.property_composite_key,
-              values_norm_size: sale.size_normalized_price
-            }, { onConflict: 'property_composite_key' });
+          const { error } = await safeUpsertPropertyMarket([{
+            property_composite_key: sale.property_composite_key,
+            values_norm_size: sale.size_normalized_price
+          }]);
+          if (error) throw error;
         }
       }
       if (false) console.log('✅ Size normalized values saved to database');
-      
+
     } catch (error) {
       console.error('Error saving size normalized values:', error);
     }
@@ -1234,13 +1285,7 @@ const handleSalesDecision = async (saleId, decision) => {
     // Handle database updates for kept sales
     if (decision === 'keep' && previousSale) {
       // Save time normalized value to property_market_analysis
-      const { error } = await supabase
-        .from('property_market_analysis')
-        .upsert({
-          property_composite_key: previousSale.property_composite_key,
-          values_norm_time: previousSale.time_normalized_price
-        }, { onConflict: 'property_composite_key' });
-
+      const { error } = await safeUpsertPropertyMarket([{ property_composite_key: previousSale.property_composite_key, values_norm_time: previousSale.time_normalized_price }]);
       if (error) {
         console.error('Error saving normalized value:', error);
       } else {
@@ -1531,11 +1576,8 @@ const processSelectedProperties = async () => {
           asset_key_page: prop.asset_key_page
         }));
 
-        // Use upsert for batch processing
-        const { error } = await supabase
-          .from('property_market_analysis')
-          .upsert(updates, { onConflict: 'property_composite_key' });
-          
+        // Use safe upsert for batch processing
+        const { error } = await safeUpsertPropertyMarket(updates);
         if (error) throw error;
 
         // Clear cache after updating property records
@@ -2256,7 +2298,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-20 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('asset_type_use')}
                             >
-                              Type {normSortConfig.field === 'asset_type_use' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                              Type {normSortConfig.field === 'asset_type_use' && (normSortConfig.direction === 'asc' ? '���' : '↓')}
                             </th>
                             <th 
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
@@ -2363,7 +2405,7 @@ const analyzeImportFile = async (file) => {
 
                                       // DEBUG: Log package detection for 3A properties
                                       if (sale.property_m4_class === '3A') {
-                                        if (false) console.log(`🏡 3A Property package detection:`, {
+                                        if (false) console.log(`��� 3A Property package detection:`, {
                                           composite_key: sale.property_composite_key,
                                           class: sale.property_m4_class,
                                           sales_date: sale.sales_date,
@@ -3193,7 +3235,7 @@ const analyzeImportFile = async (file) => {
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 bg-blue-50 cursor-pointer hover:bg-blue-100"
                           onClick={() => handleSort('asset_zoning')}
                         >
-                          Zoning {sortConfig.field === 'asset_zoning' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          Zoning {sortConfig.field === 'asset_zoning' && (sortConfig.direction === 'asc' ? '���' : '↓')}
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 bg-blue-50 cursor-pointer hover:bg-blue-100"
