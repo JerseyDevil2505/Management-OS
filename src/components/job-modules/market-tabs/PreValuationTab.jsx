@@ -259,25 +259,47 @@ useEffect(() => {
         .from('county_hpi_data')
         .select('county_name')
         .order('county_name');
-      
+
       if (error) throw error;
-      
+
       // Get unique counties
       const uniqueCounties = [...new Set(data.map(item => item.county_name))];
       setAvailableCounties(uniqueCounties);
-      
+
       // Set default to job's county or first available
       if (uniqueCounties.length > 0 && !selectedCounty) {
         setSelectedCounty(jobData?.county || uniqueCounties[0]);
       }
-      
+
       if (false) console.log(`📍 Found ${uniqueCounties.length} counties with HPI data:`, uniqueCounties);
     } catch (error) {
       console.error('Error loading counties:', error);
     }
   };
-  
+
   loadAvailableCounties();
+
+  // Load checklist statuses for pre-valuation items
+  const loadChecklistStatuses = async () => {
+    try {
+      if (!jobData?.id) return;
+      const ids = ['market_analysis','page_by_page','zoning_config'];
+      const { data } = await supabase
+        .from('checklist_item_status')
+        .select('item_id,status')
+        .eq('job_id', jobData.id)
+        .in('item_id', ids);
+      if (data) {
+        const state = { market_analysis: false, page_by_page: false, zoning_config: false };
+        data.forEach(d => { state[d.item_id] = d.status === 'completed'; });
+        setPreValChecklist(state);
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  loadChecklistStatuses();
 }, []);  
 
 // ==================== USE SAVED NORMALIZATION DATA FROM PROPS ====================
