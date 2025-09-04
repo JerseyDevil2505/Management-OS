@@ -3152,18 +3152,35 @@ export const worksheetService = {
     return data;
   },
 
-  // Save normalization configuration
+  // Save normalization configuration (merge with existing config to avoid overwrites)
   async saveNormalizationConfig(jobId, config) {
     await this.initializeMarketLandRecord(jobId);
-    
+
+    // Load existing config
+    const { data: existingRecord, error: loadError } = await supabase
+      .from('market_land_valuation')
+      .select('normalization_config')
+      .eq('job_id', jobId)
+      .single();
+
+    if (loadError && loadError.code !== 'PGRST116') throw loadError;
+
+    const existingConfig = existingRecord?.normalization_config || {};
+
+    // Merge existing config with incoming partial config
+    const mergedConfig = {
+      ...existingConfig,
+      ...config
+    };
+
     const { error } = await supabase
       .from('market_land_valuation')
       .update({
-        normalization_config: config,
+        normalization_config: mergedConfig,
         updated_at: new Date().toISOString()
       })
       .eq('job_id', jobId);
-    
+
     if (error) throw error;
   },
 
