@@ -6914,8 +6914,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // When explicit positive/negative provided, set parts accordingly and aggregate to compound row
   const applySummarySet = (location, positive, negative) => {
     // Skip tentative locations
-    if (/\bpossible|possibly\b|\?/i.test(location)) return;
+    if (/\bpossible|possibly\b|\?/i.test(location)) {
+      console.debug(`applySummarySet skipped tentative location: ${location}`);
+      return;
+    }
     const parts = splitLocationParts(location);
+    console.debug(`applySummarySet called for location: ${location} parts: ${parts.join(' | ')} positive: ${positive} negative: ${negative}`);
 
     Object.keys(ecoObsFactors || {}).forEach(vcs => {
       const partPosVals = [];
