@@ -6917,37 +6917,45 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const partPosVals = [];
       const partNegVals = [];
 
+      // First, update parts where they exist in this VCS
       parts.forEach(part => {
-        if (!(ecoObsFactors[vcs] && ecoObsFactors[vcs][part])) return;
-        const polarity = getPartPolarity(part);
+        if (ecoObsFactors[vcs] && ecoObsFactors[vcs][part]) {
+          const polarity = getPartPolarity(part);
 
-        if (polarity === 'positive') {
-          if (positive !== null && positive !== undefined && !isNaN(Number(positive))) {
-            const val = Math.abs(Number(positive));
-            updateActualAdjustment(vcs, `${part}_positive`, val);
-            partPosVals.push(val);
+          if (polarity === 'positive') {
+            if (positive !== null && positive !== undefined && !isNaN(Number(positive))) {
+              const val = Math.abs(Number(positive));
+              updateActualAdjustment(vcs, `${part}_positive`, val);
+              partPosVals.push(val);
+            }
+          } else if (polarity === 'negative') {
+            if (negative !== null && negative !== undefined && !isNaN(Number(negative))) {
+              const val = Math.abs(Number(negative));
+              updateActualAdjustment(vcs, `${part}_negative`, val);
+              partNegVals.push(val);
+            }
+          } else {
+            if (positive !== null && positive !== undefined && !isNaN(Number(positive))) {
+              const val = Math.abs(Number(positive));
+              updateActualAdjustment(vcs, `${part}_positive`, val);
+              partPosVals.push(val);
+            }
+            if (negative !== null && negative !== undefined && !isNaN(Number(negative))) {
+              const val = Math.abs(Number(negative));
+              updateActualAdjustment(vcs, `${part}_negative`, val);
+              partNegVals.push(val);
+            }
           }
-        } else if (polarity === 'negative') {
-          if (negative !== null && negative !== undefined && !isNaN(Number(negative))) {
-            const val = Math.abs(Number(negative));
-            updateActualAdjustment(vcs, `${part}_negative`, val);
-            partNegVals.push(val);
-          }
-        } else {
-          if (positive !== null && positive !== undefined && !isNaN(Number(positive))) {
-            const val = Math.abs(Number(positive));
-            updateActualAdjustment(vcs, `${part}_positive`, val);
-            partPosVals.push(val);
-          }
-          if (negative !== null && negative !== undefined && !isNaN(Number(negative))) {
-            const val = Math.abs(Number(negative));
-            updateActualAdjustment(vcs, `${part}_negative`, val);
-            partNegVals.push(val);
-          }
+        }
+        // If the part does not exist for this VCS but we have a standaloneAvg for the part, use that to influence compound aggregation
+        else if (standaloneAvg[part] && standaloneAvg[part].avg !== null && !isNaN(Number(standaloneAvg[part].avg))) {
+          const pAvg = Number(standaloneAvg[part].avg);
+          if (pAvg > 0) partPosVals.push(Math.abs(pAvg));
+          if (pAvg < 0) partNegVals.push(Math.abs(pAvg));
         }
       });
 
-      // Aggregate to compound row
+      // Aggregate to compound row (even if parts weren't present in this VCS)
       const compoundKey = `${vcs}_${location}`;
       if (partPosVals.length > 0) {
         const maxPos = Math.max(...partPosVals);
