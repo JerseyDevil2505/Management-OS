@@ -7297,17 +7297,25 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <td style={{ padding: '8px', textAlign: 'center', display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
                       <input
                         type="number"
+                        min={0}
+                        step="0.1"
                         placeholder="+"
                         value={summaryInputs[item.location]?.positive || ''}
+                        onKeyDown={(e) => { if (e.key === '-' || e.key === 'e') e.preventDefault(); }}
+                        onWheel={(e) => e.currentTarget.blur()}
                         onChange={(e) => setSummaryInputs(prev => ({ ...prev, [item.location]: { ...(prev[item.location] || {}), positive: e.target.value } }))}
-                        style={{ width: '60px', padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: '4px', textAlign: 'center' }}
+                        style={{ width: '60px', padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: '4px', textAlign: 'center', WebkitAppearance: 'none', MozAppearance: 'textfield', appearance: 'textfield' }}
                       />
                       <input
                         type="number"
+                        min={0}
+                        step="0.1"
                         placeholder="-"
                         value={summaryInputs[item.location]?.negative || ''}
+                        onKeyDown={(e) => { if (e.key === '-' || e.key === 'e') e.preventDefault(); }}
+                        onWheel={(e) => e.currentTarget.blur()}
                         onChange={(e) => setSummaryInputs(prev => ({ ...prev, [item.location]: { ...(prev[item.location] || {}), negative: e.target.value } }))}
-                        style={{ width: '60px', padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: '4px', textAlign: 'center' }}
+                        style={{ width: '60px', padding: '6px 8px', border: '1px solid #D1D5DB', borderRadius: '4px', textAlign: 'center', WebkitAppearance: 'none', MozAppearance: 'textfield', appearance: 'textfield' }}
                       />
                       <button onClick={() => {
                         const entry = summaryInputs[item.location] || {};
