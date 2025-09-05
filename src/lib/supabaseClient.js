@@ -3236,6 +3236,23 @@ export const worksheetService = {
       ...config
     };
 
+    // If selectedCounty is not provided, fall back to the job's county from the jobs table
+    try {
+      if (!mergedConfig.selectedCounty) {
+        const { data: jobRecord, error: jobError } = await supabase
+          .from('jobs')
+          .select('county')
+          .eq('id', jobId)
+          .single();
+        if (!jobError && jobRecord?.county) {
+          mergedConfig.selectedCounty = jobRecord.county;
+        }
+      }
+    } catch (e) {
+      // Ignore job lookup failure and proceed with whatever mergedConfig contains
+      console.warn('Could not fetch job county for normalization config fallback:', e);
+    }
+
     const { error } = await supabase
       .from('market_land_valuation')
       .update({
