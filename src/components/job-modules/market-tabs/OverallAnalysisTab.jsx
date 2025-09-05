@@ -173,9 +173,7 @@ const OverallAnalysisTab = ({
       
       const category = getTypeCategory(typeCode);
       // Use only synchronous Microsystems decoding to avoid async rendering issues
-      const typeName = vendorType === 'Microsystems' && codeDefinitions
-        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_type_use') || category
-        : category;
+      const typeName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_type_use') || category : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_type_use') || category : category)) : category;
       
       // Also skip if the name comes back as Unknown or Other
       if (typeName === 'Unknown' || typeName === 'Other' || !typeName || typeName.trim() === '') {
