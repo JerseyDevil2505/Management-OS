@@ -912,7 +912,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
     if (manuallyAddedIds.size > 0) {
       const manuallyAddedProps = properties.filter(prop => manuallyAddedIds.has(prop.id));
-      debug('���� Restoring manually added properties:', {
+      debug('🔄 Restoring manually added properties:', {
         found: manuallyAddedProps.length,
         expected: manuallyAddedIds.size,
         foundIds: manuallyAddedProps.map(p => p.id),
@@ -6187,7 +6187,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>
-                Implied Acreage Sales - VCS {method2ModalVCS}
+                Method 2 Sales - VCS {method2ModalVCS}
               </h3>
               <button
                 onClick={() => setShowMethod2Modal(false)}
