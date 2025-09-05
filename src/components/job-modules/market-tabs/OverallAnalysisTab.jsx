@@ -63,14 +63,17 @@ const OverallAnalysisTab = ({
 
   // ==================== HELPER FUNCTIONS ====================
   
-  // Jim's 50% size adjustment formula
+  // Jim's 50% size adjustment formula (explicitly: ((AVG-CUR) * ((SALE/CUR) * 50%)) + SALE)
   const calculateAdjustedPrice = (salePrice, propertySize, baselineSize) => {
+    // Ensure we have valid numeric inputs
     if (!salePrice || !propertySize || propertySize === 0) return salePrice;
-    if (!baselineSize || baselineSize === propertySize) return salePrice;
-    
+    if (!baselineSize) return salePrice;
+
+    // Apply formula exactly as outlined: ((AVG - CURRENT) * ((SALE / CURRENT) * 0.5)) + SALE
     const sizeDiff = baselineSize - propertySize;
     const pricePerSF = salePrice / propertySize;
-    const adjustment = sizeDiff * (pricePerSF * 0.50);
+    const adjustment = sizeDiff * (pricePerSF * 0.5);
+
     return salePrice + adjustment;
   };
 
