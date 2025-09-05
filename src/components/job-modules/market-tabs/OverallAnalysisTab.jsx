@@ -562,9 +562,7 @@ const OverallAnalysisTab = ({
       const vcsDesc = vcs;
       const typeCode = p.asset_type_use || 'Unknown';
       // Use only synchronous Microsystems decoding to avoid async rendering issues
-      const typeName = vendorType === 'Microsystems' && codeDefinitions
-        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_type_use') || getTypeCategory(typeCode)
-        : getTypeCategory(typeCode);
+      const typeName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_type_use') || getTypeCategory(typeCode) : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_type_use') || getTypeCategory(typeCode) : getTypeCategory(typeCode))) : getTypeCategory(typeCode);
       const designCode = p.asset_design_style || 'Unknown';
       const designName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_design_style') || designCode : designCode)) : designCode;
       
