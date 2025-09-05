@@ -445,16 +445,6 @@ getBRTValue: function(property, codeDefinitions, fieldName) {
   
   return code; // Return original if no match found
 },
-  
-  // Look through the MAP for matching code
-  for (const [key, value] of Object.entries(section.MAP)) {
-    if (value.KEY === code || value.DATA?.KEY === code) {
-      return value.DATA?.VALUE || value.VALUE || code;
-    }
-  }
-  
-  return code; // Return original if no match found
-},
 
   // REPLACE the existing getDesignName with this:
   getDesignName: function(property, codeDefinitions, vendorType) {
