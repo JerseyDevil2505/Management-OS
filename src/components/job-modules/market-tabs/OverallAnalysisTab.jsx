@@ -878,12 +878,29 @@ const OverallAnalysisTab = ({
       // Look for bedroom info in design description - use only synchronous decoding
       const designName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || '' : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || '' : p.asset_design_style || '')) : p.asset_design_style || '';
       let bedrooms = 'Unknown';
-      
-      if (designName.includes('1BED') || designName.includes('1 BED')) bedrooms = '1BED';
-      else if (designName.includes('2BED') || designName.includes('2 BED')) bedrooms = '2BED';
-      else if (designName.includes('3BED') || designName.includes('3 BED')) bedrooms = '3BED';
-      else if (designName.includes('STUDIO')) bedrooms = 'STUDIO';
-      
+
+      // 1) Try design-name hints
+      const designUpper = String(designName).toUpperCase();
+      if (designUpper.includes('1BED') || designUpper.includes('1 BED')) bedrooms = '1BED';
+      else if (designUpper.includes('2BED') || designUpper.includes('2 BED')) bedrooms = '2BED';
+      else if (designUpper.includes('3BED') || designUpper.includes('3 BED')) bedrooms = '3BED';
+      else if (designUpper.includes('STUDIO')) bedrooms = 'STUDIO';
+
+      // 2) Synchronous property field fallbacks (common fields)
+      if (bedrooms === 'Unknown') {
+        const candidate = p.asset_bedrooms || p.asset_bedroom_count || p.bedrooms || p.bedrm || p.bed_total || p.BEDTOT || null;
+        const n = parseInt(candidate);
+        if (!isNaN(n)) {
+          if (n === 0) bedrooms = 'STUDIO';
+          else bedrooms = `${n}BED`;
+        }
+      }
+
+      // 3) Check inferred cache (populated by async BEDTOT lookup for BRT)
+      if (bedrooms === 'Unknown' && inferredBedroomsRef.current && inferredBedroomsRef.current[p.id]) {
+        bedrooms = inferredBedroomsRef.current[p.id];
+      }
+
       if (!vcsBedroomGroups[vcs]) {
         vcsBedroomGroups[vcs] = {
           code: vcs,
