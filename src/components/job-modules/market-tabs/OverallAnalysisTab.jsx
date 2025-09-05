@@ -112,6 +112,9 @@ const OverallAnalysisTab = ({
     return 'Historic';
   };
 
+  // Inferred bedrooms cache for async enrichment (BRT fallback to BEDTOT)
+  const inferredBedroomsRef = React.useRef({});
+
   // Get all unique VCS codes
   const allVCSCodes = useMemo(() => {
     const vcsSet = new Set();
