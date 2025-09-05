@@ -1721,7 +1721,7 @@ Find specific information about this property and sale. Include:
 
 ��� Property ownership/seller details
 • Tax assessment and classification details
-• Documented environmental constraints (wetlands, floodplains)
+��� Documented environmental constraints (wetlands, floodplains)
 • Municipality-specific land use characteristics
 • Any circumstances of the sale (estate, distressed, etc.)
 
@@ -3366,7 +3366,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     // Method 2 Summary (similar to UI)
-    method2Rows.push(['Implied Acreage Summary']);
+    method2Rows.push(['Method 2 Summary']);
     if (method2Summary) {
       const mid = method2Summary.mediumRange || {};
       const lg = method2Summary.largeRange || {};
@@ -4097,7 +4097,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
     const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
 
-    debug('🏗️ Building Lot Analysis Result:', {
+    debug('����️ Building Lot Analysis Result:', {
       avg: buildingLot.avg,
       count: buildingLot.count,
       method: buildingLot.method,
