@@ -926,12 +926,28 @@ const OverallAnalysisTab = ({
       bedroomGroup.totalSize += p.asset_sfla || 0;
     });
 
+    // Ensure standard bedroom types exist (show 0 sales when missing)
+    const standardBeds = ['STUDIO','1BED','2BED','3BED','4BED'];
+    Object.values(vcsBedroomGroups).forEach(vcsGroup => {
+      standardBeds.forEach(lbl => {
+        if (!vcsGroup.bedrooms[lbl]) {
+          vcsGroup.bedrooms[lbl] = {
+            label: lbl,
+            properties: [],
+            totalPrice: 0,
+            totalSize: 0,
+            count: 0
+          };
+        }
+      });
+    });
+
     // Calculate bedroom averages
     Object.values(vcsBedroomGroups).forEach(vcsGroup => {
       Object.values(vcsGroup.bedrooms).forEach(bedroomGroup => {
         bedroomGroup.avgPrice = bedroomGroup.count > 0 ? bedroomGroup.totalPrice / bedroomGroup.count : 0;
         bedroomGroup.avgSize = bedroomGroup.count > 0 ? bedroomGroup.totalSize / bedroomGroup.count : 0;
-        
+
         // Calculate adjusted prices
         let totalAdjusted = 0;
         bedroomGroup.properties.forEach(p => {
@@ -942,24 +958,45 @@ const OverallAnalysisTab = ({
           );
           totalAdjusted += adjusted;
         });
-        
+
         bedroomGroup.avgAdjustedPrice = bedroomGroup.count > 0 ? totalAdjusted / bedroomGroup.count : 0;
       });
 
-      // Find baseline for this VCS
-      let maxPrice = 0;
-      let baseline = null;
-      Object.values(vcsGroup.bedrooms).forEach(group => {
-        if (group.avgAdjustedPrice > maxPrice) {
-          maxPrice = group.avgAdjustedPrice;
-          baseline = group;
-        }
-      });
+      // Prefer baseline as the lowest-bedroom type that has data; fall back to max if none
+      const bedOrderValue = (label) => {
+        if (!label) return 999;
+        if (label === 'STUDIO') return 0;
+        const m = label.match(/^(\d+)BED$/);
+        if (m) return parseInt(m[1], 10);
+        return 999;
+      };
 
-      // Calculate deltas
+      // Find lowest bed label with avgAdjustedPrice > 0
+      let baseline = null;
+      const sortedLabels = Object.keys(vcsGroup.bedrooms).sort((a, b) => bedOrderValue(a) - bedOrderValue(b));
+      for (const lbl of sortedLabels) {
+        const g = vcsGroup.bedrooms[lbl];
+        if (g && g.avgAdjustedPrice > 0) {
+          baseline = g;
+          break;
+        }
+      }
+
+      // If no low-bed baseline found, fallback to the group with max price
+      if (!baseline) {
+        let maxPrice = 0;
+        Object.values(vcsGroup.bedrooms).forEach(group => {
+          if (group.avgAdjustedPrice > maxPrice) {
+            maxPrice = group.avgAdjustedPrice;
+            baseline = group;
+          }
+        });
+      }
+
+      // Calculate deltas relative to baseline
       Object.values(vcsGroup.bedrooms).forEach(group => {
         if (baseline && group !== baseline) {
-          group.deltaPercent = baseline.avgAdjustedPrice > 0 ? 
+          group.deltaPercent = baseline.avgAdjustedPrice > 0 ?
             ((group.avgAdjustedPrice - baseline.avgAdjustedPrice) / baseline.avgAdjustedPrice * 100) : 0;
         } else {
           group.deltaPercent = 0;
