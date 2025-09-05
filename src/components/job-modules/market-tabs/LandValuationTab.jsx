@@ -183,6 +183,78 @@ const LandValuationTab = ({
     },
     customCategories: []
   });
+
+  // Bracket editor UI state (allows per-job overrides of bracket boundaries)
+  const [showBracketEditor, setShowBracketEditor] = useState(false);
+  const [bracketInputs, setBracketInputs] = useState(() => ({
+    primeMax: cascadeConfig.normal?.prime?.max ?? 1,
+    secondaryMax: cascadeConfig.normal?.secondary?.max ?? 5,
+    excessMax: cascadeConfig.normal?.excess?.max ?? 10,
+    residualMax: cascadeConfig.normal?.residual?.max ?? null
+  }));
+
+  useEffect(() => {
+    // Keep bracket inputs in sync when cascadeConfig loads from saved data
+    setBracketInputs({
+      primeMax: cascadeConfig.normal?.prime?.max ?? 1,
+      secondaryMax: cascadeConfig.normal?.secondary?.max ?? 5,
+      excessMax: cascadeConfig.normal?.excess?.max ?? 10,
+      residualMax: cascadeConfig.normal?.residual?.max ?? null
+    });
+  }, [cascadeConfig]);
+
+  const validateAndApplyBrackets = (opts = { recalc: true }) => {
+    // Parse numeric values
+    const p = parseFloat(bracketInputs.primeMax);
+    const s = parseFloat(bracketInputs.secondaryMax);
+    const e = parseFloat(bracketInputs.excessMax);
+    const r = bracketInputs.residualMax === null || bracketInputs.residualMax === '' ? null : parseFloat(bracketInputs.residualMax);
+
+    if (isNaN(p) || isNaN(s) || isNaN(e) || (r !== null && isNaN(r))) {
+      return alert('Please enter valid numeric bracket maximums. Use decimals for fractions (e.g. 0.25).');
+    }
+    if (!(p > 0 && s > p && e > s && (r === null || r > e))) {
+      return alert('Brackets must increase: prime < secondary < excess < residual (residual may be empty).');
+    }
+
+    setCascadeConfig(prev => ({
+      ...prev,
+      normal: {
+        ...prev.normal,
+        prime: { ...prev.normal.prime, max: p },
+        secondary: { ...prev.normal.secondary, max: s },
+        excess: { ...prev.normal.excess, max: e },
+        residual: { ...prev.normal.residual, max: r }
+      }
+    }));
+
+    // Optionally re-run the bracket analysis immediately
+    if (opts.recalc) {
+      try {
+        performBracketAnalysis();
+      } catch (e) {
+        // ignore errors from recalculation
+      }
+    }
+  };
+
+  const applyDefaultQuartileBrackets = () => {
+    // Example quartile defaults for built-up towns (in acres)
+    const defaults = { primeMax: 0.25, secondaryMax: 0.5, excessMax: 0.75, residualMax: 1 };
+    setBracketInputs(defaults);
+    setCascadeConfig(prev => ({
+      ...prev,
+      normal: {
+        ...prev.normal,
+        prime: { ...prev.normal.prime, max: defaults.primeMax },
+        secondary: { ...prev.normal.secondary, max: defaults.secondaryMax },
+        excess: { ...prev.normal.excess, max: defaults.excessMax },
+        residual: { ...prev.normal.residual, max: defaults.residualMax }
+      }
+    }));
+    // Recompute
+    try { performBracketAnalysis(); } catch (e) {}
+  };
   
   // VCS Analysis
   const [bracketAnalysis, setBracketAnalysis] = useState({});
