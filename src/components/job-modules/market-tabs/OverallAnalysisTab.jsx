@@ -1929,8 +1929,14 @@ const OverallAnalysisTab = ({
                             <tbody className="bg-white divide-y divide-gray-200">
                               {Object.values(vcsData.bedrooms)
                                 .sort((a, b) => {
-                                  const order = ['STUDIO', '1BED', '2BED', '3BED', 'Unknown'];
-                                  return order.indexOf(a.label) - order.indexOf(b.label);
+                                  const bedOrderValue = (label) => {
+                                    if (!label) return 999;
+                                    if (label === 'STUDIO') return 0;
+                                    const m = label.match(/^(\d+)BED$/);
+                                    if (m) return parseInt(m[1], 10);
+                                    return 999;
+                                  };
+                                  return bedOrderValue(a.label) - bedOrderValue(b.label);
                                 })
                                 .map((bedroom) => (
                                 <tr key={bedroom.label} className={bedroom === vcsData.baseline ? 'bg-yellow-50' : ''}>
