@@ -3425,7 +3425,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       debug('Method2 header styling skipped', e);
     }
 
-    XLSX.utils.book_append_sheet(wb, ws2, 'Implied Acreage');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Method 2');
 
     return wb;
   };
