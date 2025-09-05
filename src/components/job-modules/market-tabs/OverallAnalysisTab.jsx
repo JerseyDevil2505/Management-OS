@@ -954,21 +954,23 @@ const OverallAnalysisTab = ({
     // Calculate bedroom averages
     Object.values(vcsBedroomGroups).forEach(vcsGroup => {
       Object.values(vcsGroup.bedrooms).forEach(bedroomGroup => {
-        bedroomGroup.avgPrice = bedroomGroup.count > 0 ? bedroomGroup.totalPrice / bedroomGroup.count : 0;
-        bedroomGroup.avgSize = bedroomGroup.count > 0 ? bedroomGroup.totalSize / bedroomGroup.count : 0;
+        // Avg price based only on sales
+        bedroomGroup.avgPrice = bedroomGroup.salesCount > 0 ? bedroomGroup.totalPrice / bedroomGroup.salesCount : 0;
+        // Avg size based on inventory (properties)
+        bedroomGroup.avgSize = bedroomGroup.propertiesCount > 0 ? bedroomGroup.totalSize / bedroomGroup.propertiesCount : 0;
 
-        // Calculate adjusted prices
+        // Calculate adjusted prices using only salesProperties
         let totalAdjusted = 0;
-        bedroomGroup.properties.forEach(p => {
+        bedroomGroup.salesProperties.forEach(p => {
           const adjusted = calculateAdjustedPrice(
             p.values_norm_time || 0,
             p.asset_sfla || 0,
-            bedroomGroup.avgSize
+            bedroomGroup.totalSizeSales > 0 && bedroomGroup.salesCount > 0 ? (bedroomGroup.totalSizeSales / bedroomGroup.salesCount) : bedroomGroup.avgSize
           );
           totalAdjusted += adjusted;
         });
 
-        bedroomGroup.avgAdjustedPrice = bedroomGroup.count > 0 ? totalAdjusted / bedroomGroup.count : 0;
+        bedroomGroup.avgAdjustedPrice = bedroomGroup.salesCount > 0 ? totalAdjusted / bedroomGroup.salesCount : 0;
       });
 
       // Prefer baseline as the lowest-bedroom type that has data; fall back to max if none
