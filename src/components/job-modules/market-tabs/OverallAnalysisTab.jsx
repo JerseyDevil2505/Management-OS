@@ -1803,7 +1803,10 @@ const OverallAnalysisTab = ({
                   onClick={() => toggleSection('condoDesign')}
                   className="flex justify-between items-center mb-4 cursor-pointer hover:bg-gray-50 -m-2 p-2 rounded"
                 >
-                  <h3 className="text-lg font-semibold">Condo Design Analysis</h3>
+                  <div>
+                    <h3 className="text-lg font-semibold">Condo Design Analysis</h3>
+                    <div className="text-xs text-gray-500 mt-1">Type Use: 6 (Microsystems) / 60 (BRT)</div>
+                  </div>
                   {expandedSections.condoDesign ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                 </div>
                 
