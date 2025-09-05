@@ -1939,6 +1939,7 @@ const OverallAnalysisTab = ({
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                               {Object.values(vcsData.bedrooms)
+                                .filter(b => b.propertiesCount && b.propertiesCount > 0) // show only bed types present in this VCS
                                 .sort((a, b) => {
                                   const bedOrderValue = (label) => {
                                     if (!label) return 999;
@@ -1952,7 +1953,7 @@ const OverallAnalysisTab = ({
                                 .map((bedroom) => (
                                 <tr key={bedroom.label} className={bedroom === vcsData.baseline ? 'bg-yellow-50' : ''}>
                                   <td className="px-3 py-2 text-sm font-medium">{bedroom.label}</td>
-                                  <td className="px-3 py-2 text-sm text-center">{bedroom.count}</td>
+                                  <td className="px-3 py-2 text-sm text-center">{bedroom.salesCount}</td>
                                   <td className="px-3 py-2 text-sm text-center">
                                     {bedroom.avgSize > 0 ? formatNumber(bedroom.avgSize) : '—'}
                                   </td>
@@ -1963,8 +1964,8 @@ const OverallAnalysisTab = ({
                                     {bedroom.avgAdjustedPrice > 0 ? formatCurrency(bedroom.avgAdjustedPrice) : <span className="text-gray-500 text-xs">NO DATA</span>}
                                   </td>
                                   <td className="px-3 py-2 text-sm text-center">
-                                    {bedroom.avgAdjustedPrice > 0 && vcsData.baseline ? 
-                                      formatCurrency(bedroom.avgAdjustedPrice - vcsData.baseline.avgAdjustedPrice) : 
+                                    {bedroom.avgAdjustedPrice > 0 && vcsData.baseline ?
+                                      formatCurrency(bedroom.avgAdjustedPrice - vcsData.baseline.avgAdjustedPrice) :
                                       '—'
                                     }
                                   </td>
