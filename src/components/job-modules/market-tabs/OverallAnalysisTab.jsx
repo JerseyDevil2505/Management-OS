@@ -943,9 +943,12 @@ const OverallAnalysisTab = ({
           vcsGroup.bedrooms[lbl] = {
             label: lbl,
             properties: [],
+            salesProperties: [],
             totalPrice: 0,
             totalSize: 0,
-            count: 0
+            totalSizeSales: 0,
+            propertiesCount: 0,
+            salesCount: 0
           };
         }
       });
