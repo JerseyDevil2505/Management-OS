@@ -3892,7 +3892,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
     debug('🔄 Recalculating category analysis');
-    debug('��� Total vacant sales:', vacantSales.length);
+    debug('���� Total vacant sales:', vacantSales.length);
     debug('📊 Checked sales count:', checkedSales.length);
     debug('📋 Included sales IDs:', Array.from(includedSales));
     debug('📋 Sale categories state:', saleCategories);
@@ -4767,18 +4767,33 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         </div>
       </div>
       <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
-        <button
-          onClick={() => { applyDefaultQuartileBrackets(); setShowBracketEditor(true); }}
-          style={{
-            padding: '8px 12px',
-            backgroundColor: '#F9FAFB',
-            border: '1px solid #E5E7EB',
-            borderRadius: '6px',
-            cursor: 'pointer'
-          }}
-        >
-          Apply Quartile Defaults
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={() => setShowBracketEditor(prev => !prev)}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: showBracketEditor ? '#F3F4F6' : 'white',
+              border: '1px solid #E5E7EB',
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            {showBracketEditor ? 'Hide Bracket Settings' : 'Edit Brackets'}
+          </button>
+
+          <button
+            onClick={() => { applyDefaultQuartileBrackets(); setShowBracketEditor(true); }}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: '#F9FAFB',
+              border: '1px solid #E5E7EB',
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            Apply Quartile Defaults
+          </button>
+        </div>
       </div>
       {/* Method 2: Improved Sale Lot Size Analysis */}
       <div style={{ marginBottom: '30px', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
