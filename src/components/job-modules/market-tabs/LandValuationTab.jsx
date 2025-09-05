@@ -1146,7 +1146,7 @@ const getPricePerUnit = useCallback((price, size) => {
       const enriched = enrichProperty(prop);
       finalSales.push(enriched);
       if (enriched.autoCategory) {
-        debug(`🏷️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
+        debug(`���️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
         setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
       }
     });
@@ -4313,18 +4313,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           >
             {showBracketEditor ? 'Hide Bracket Settings' : 'Edit Brackets'}
           </button>
-          <button
-            onClick={() => { applyDefaultQuartileBrackets(); setShowBracketEditor(true); }}
-            style={{
-              padding: '8px 12px',
-              backgroundColor: '#F9FAFB',
-              border: '1px solid #E5E7EB',
-              borderRadius: '6px',
-              cursor: 'pointer'
-            }}
-          >
-            Apply Quartile Defaults
-          </button>
         </div>
 
         {showBracketEditor && (
@@ -4777,6 +4765,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             )}
           </div>
         </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
+        <button
+          onClick={() => { applyDefaultQuartileBrackets(); setShowBracketEditor(true); }}
+          style={{
+            padding: '8px 12px',
+            backgroundColor: '#F9FAFB',
+            border: '1px solid #E5E7EB',
+            borderRadius: '6px',
+            cursor: 'pointer'
+          }}
+        >
+          Apply Quartile Defaults
+        </button>
       </div>
       {/* Method 2: Improved Sale Lot Size Analysis */}
       <div style={{ marginBottom: '30px', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
@@ -6230,7 +6232,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'block' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('lot')}
