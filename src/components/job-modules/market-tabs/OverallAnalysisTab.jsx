@@ -873,9 +873,7 @@ const OverallAnalysisTab = ({
       const vcsDesc = vcs;
 
       // Look for bedroom info in design description - use only synchronous decoding
-      const designName = vendorType === 'Microsystems' && codeDefinitions
-        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || ''
-        : p.asset_design_style || '';
+      const designName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || '' : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || '' : p.asset_design_style || '')) : p.asset_design_style || '';
       let bedrooms = 'Unknown';
       
       if (designName.includes('1BED') || designName.includes('1 BED')) bedrooms = '1BED';
@@ -957,9 +955,7 @@ const OverallAnalysisTab = ({
       // Look for floor info in story height or design - use only synchronous decoding
       const storyHeight = p.asset_story_height || '';
       const storyStr = String(storyHeight).toUpperCase();
-      const designName = vendorType === 'Microsystems' && codeDefinitions
-        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || ''
-        : p.asset_design_style || '';
+      const designName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || '' : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || '' : p.asset_design_style || '')) : p.asset_design_style || '';
       const designStr = String(designName).toUpperCase();
       let floor = 'Unknown';
 
