@@ -1825,7 +1825,10 @@ const OverallAnalysisTab = ({
                           .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
                           .map((group) => (
                           <tr key={group.code} className={group === analysis.condo.baselineDesign ? 'bg-yellow-50' : ''}>
-                            <td className="px-4 py-3 text-sm font-medium">{group.name}</td>
+                            <td className="px-4 py-3 text-sm font-medium">
+                              <div>{group.name}</div>
+                              <div className="text-xs text-gray-500 mt-1">{group.code}</div>
+                            </td>
                             <td className="px-4 py-3 text-sm text-center">{group.count}</td>
                             <td className="px-4 py-3 text-sm text-center">{formatNumber(group.avgSize)}</td>
                             <td className="px-4 py-3 text-sm text-center">
