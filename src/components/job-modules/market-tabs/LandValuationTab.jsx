@@ -3519,7 +3519,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
     
     // Method 2 Analysis
-    csv += '\n\nIMPLIED ACREAGE: IMPROVED SALE LOT SIZE ANALYSIS\n';
+    csv += '\n\nMETHOD 2: IMPROVED SALE LOT SIZE ANALYSIS\n';
     csv += 'VCS,Total Sales,<1 Acre,1-5 Acres,5-10 Acres,>10 Acres,Implied Rate\n';
     
     Object.entries(bracketAnalysis).sort(([a], [b]) => a.localeCompare(b)).forEach(([vcs, data]) => {
@@ -4097,7 +4097,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
     const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
 
-    debug('🏗️ Building Lot Analysis Result:', {
+    debug('����️ Building Lot Analysis Result:', {
       avg: buildingLot.avg,
       count: buildingLot.count,
       method: buildingLot.method,
