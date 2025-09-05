@@ -1003,12 +1003,49 @@ const OverallAnalysisTab = ({
       // Compute VCS average adjusted price (used as the comparison baseline for deltas)
       vcsGroup.avgAdjustedPrice = vcsTotalSalesForAdjusted > 0 ? (vcsTotalAdjusted / vcsTotalSalesForAdjusted) : 0;
 
-      // Calculate deltas relative to VCS avgAdjustedPrice (drop per-bedroom baseline highlighting)
-      Object.values(vcsGroup.bedrooms).forEach(group => {
-        if (vcsGroup.avgAdjustedPrice > 0 && group.salesCount > 0) {
-          group.deltaPercent = ((group.avgAdjustedPrice - vcsGroup.avgAdjustedPrice) / vcsGroup.avgAdjustedPrice * 100);
-        } else {
+      // Calculate deltas between adjacent bedroom groups that have sales (ascending bed count)
+      const bedOrderValue = (label) => {
+        if (!label) return 999;
+        if (label === 'STUDIO') return 0;
+        const m = label.match(/^(\d+)BED$/);
+        if (m) return parseInt(m[1], 10);
+        return 999;
+      };
+
+      const sortedLabels = Object.keys(vcsGroup.bedrooms).sort((a, b) => bedOrderValue(a) - bedOrderValue(b));
+      const sortedGroups = sortedLabels.map(lbl => vcsGroup.bedrooms[lbl]);
+
+      // Filter groups with valid sales and adjusted price
+      const soldGroups = sortedGroups.filter(g => g.salesCount > 0 && g.avgAdjustedPrice > 0);
+
+      // Assign deltas: lowest sold group has no delta, subsequent sold groups compare to previous sold group
+      for (let i = 0; i < sortedGroups.length; i++) {
+        const group = sortedGroups[i];
+        // Default
+        group.delta = 0;
+        group.deltaPercent = 0;
+      }
+
+      for (let i = 0; i < soldGroups.length; i++) {
+        const group = soldGroups[i];
+        if (i === 0) {
+          // Lowest bed with sales — no delta
+          group.delta = 0;
           group.deltaPercent = 0;
+        } else {
+          const prev = soldGroups[i - 1];
+          const deltaVal = group.avgAdjustedPrice - prev.avgAdjustedPrice;
+          const deltaPct = prev.avgAdjustedPrice > 0 ? (deltaVal / prev.avgAdjustedPrice * 100) : 0;
+          group.delta = deltaVal;
+          group.deltaPercent = deltaPct;
+        }
+      }
+
+      // Ensure groups with no sales keep delta as 0
+      sortedGroups.forEach(g => {
+        if (!g.salesCount || g.salesCount === 0) {
+          g.delta = 0;
+          g.deltaPercent = 0;
         }
       });
 
