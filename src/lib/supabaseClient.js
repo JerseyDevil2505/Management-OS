@@ -403,6 +403,7 @@ getBRTValue: function(property, codeDefinitions, fieldName) {
     return code;
   }
 
+
   // Get the ORIGINAL BRT section number for this field
   const originalSectionMap = {
     'asset_design_style': '23',
@@ -413,15 +414,17 @@ getBRTValue: function(property, codeDefinitions, fieldName) {
     'asset_int_cond': '60',
     'inspection_info_by': '53'
   };
-
+  
   const targetSectionNumber = originalSectionMap[fieldName];
   if (!targetSectionNumber) {
+    console.warn(`No BRT section mapping for field: ${fieldName}`);
     return code;
   }
-
+  
   // Find the section that has KEY matching our target section number
   const residentialSections = codeDefinitions.sections.Residential;
   let targetSection = null;
+  
 
   for (const [sectionKey, sectionData] of Object.entries(residentialSections)) {
     if (sectionData.KEY === targetSectionNumber) {
@@ -429,6 +432,7 @@ getBRTValue: function(property, codeDefinitions, fieldName) {
       break;
     }
   }
+
 
   if (!targetSection || !targetSection.MAP) {
     return code;
