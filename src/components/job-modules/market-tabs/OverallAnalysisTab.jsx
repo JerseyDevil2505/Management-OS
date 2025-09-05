@@ -286,9 +286,7 @@ const OverallAnalysisTab = ({
     filteredProperties.forEach(p => {
       const designCode = p.asset_design_style || 'Unknown';
       // Use only synchronous Microsystems decoding to avoid async rendering issues
-      const designName = vendorType === 'Microsystems' && codeDefinitions
-        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode
-        : designCode;
+      const designName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_design_style') || designCode : designCode)) : designCode;
       
       // FILTER FIX: Skip unknown/empty designs - including "00" and whitespace
       if (!designCode || designCode === 'Unknown' || designCode === '' || 
@@ -568,9 +566,7 @@ const OverallAnalysisTab = ({
         ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_type_use') || getTypeCategory(typeCode)
         : getTypeCategory(typeCode);
       const designCode = p.asset_design_style || 'Unknown';
-      const designName = vendorType === 'Microsystems' && codeDefinitions
-        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode
-        : designCode;
+      const designName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_design_style') || designCode : designCode)) : designCode;
       
       // Initialize VCS level
       if (!vcsGroups[vcs]) {
@@ -805,9 +801,7 @@ const OverallAnalysisTab = ({
     condos.forEach(p => {
       const designCode = p.asset_design_style || 'Unknown';
       // Use only synchronous Microsystems decoding to avoid async rendering issues
-      const designName = vendorType === 'Microsystems' && codeDefinitions
-        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode
-        : designCode;
+      const designName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_design_style') || designCode : designCode)) : designCode;
       
       // Skip unknown/empty designs
       if (!designCode || designCode === 'Unknown' || designCode === '' || 
