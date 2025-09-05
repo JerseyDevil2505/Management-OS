@@ -247,6 +247,36 @@ const JobContainer = ({
             }
 
             if (batchData && batchData.length > 0) {
+              // SIMPLIFIED DEBUG: Find actual column names in database
+              if (batch === 0) { // Only log first batch
+                const firstProp = batchData[0];
+                console.log(`🔍 ALL DATABASE COLUMNS:`, Object.keys(firstProp).sort());
+
+                // Look for class-related columns
+                const classColumns = Object.keys(firstProp).filter(key =>
+                  key.toLowerCase().includes('class') ||
+                  key.toLowerCase().includes('m4')
+                );
+                console.log(`🏗️ CLASS-RELATED COLUMNS:`, classColumns);
+
+                // Look for assessed value columns
+                const valueColumns = Object.keys(firstProp).filter(key =>
+                  key.toLowerCase().includes('value') ||
+                  key.toLowerCase().includes('assess') ||
+                  key.toLowerCase().includes('mod') ||
+                  key.toLowerCase().includes('total')
+                );
+                console.log(`💰 VALUE-RELATED COLUMNS:`, valueColumns);
+
+                // Look for sales NU columns
+                const salesColumns = Object.keys(firstProp).filter(key =>
+                  key.toLowerCase().includes('sales') ||
+                  key.toLowerCase().includes('nu') ||
+                  key.toLowerCase().includes('instrument')
+                );
+                console.log(`📋 SALES-RELATED COLUMNS:`, salesColumns);
+              }
+
               // Flatten market analysis fields into property objects
               const processedData = batchData.map(property => {
                 const marketAnalysis = property.property_market_analysis?.[0] || {};

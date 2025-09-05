@@ -9,7 +9,7 @@ import {
   ChevronLeft
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { supabase, interpretCodes, propertyService } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, propertyService, checklistService } from '../../../lib/supabaseClient';
 
 const DataQualityTab = ({ 
   // Props from parent
@@ -35,6 +35,7 @@ const DataQualityTab = ({
     conditions: [{ logic: 'IF', field: '', operator: '=', value: '' }]
   });
   const [runHistory, setRunHistory] = useState([]);
+  const [isDataQualityComplete, setIsDataQualityComplete] = useState(false);
   const [dataQualityActiveSubTab, setDataQualityActiveSubTab] = useState('overview');
   const [expandedCategories, setExpandedCategories] = useState(['mod_iv']);
   const [isRunningChecks, setIsRunningChecks] = useState(false);
@@ -76,7 +77,7 @@ const DataQualityTab = ({
   useEffect(() => {
     if (marketLandData && marketLandData.quality_check_results?.history?.length > 0) {
       const lastRun = marketLandData.quality_check_results.history[0];
-      
+
       // Restore stats from last run
       setIssueStats({
         critical: lastRun.criticalCount || 0,
@@ -84,15 +85,33 @@ const DataQualityTab = ({
         info: lastRun.infoCount || 0,
         total: lastRun.totalIssues || 0
       });
-      
+
       // Set the quality score from last run
       if (lastRun.qualityScore) {
         setQualityScore(lastRun.qualityScore);
       }
-      
+
       console.log(`📊 Restored stats from last run: ${new Date(lastRun.date).toLocaleDateString()}`);
     }
-  }, [marketLandData]);
+
+    // Load checklist status for Data Quality Analysis
+    const loadChecklistStatus = async () => {
+      try {
+        if (!jobData?.id) return;
+        const { data } = await supabase
+          .from('checklist_item_status')
+          .select('status')
+          .eq('job_id', jobData.id)
+          .eq('item_id', 'data-quality-analysis')
+          .maybeSingle();
+        setIsDataQualityComplete(data?.status === 'completed');
+      } catch (e) {
+        // ignore
+      }
+    };
+
+    loadChecklistStatus();
+  }, [marketLandData, jobData?.id]);
 
   // ESC key handler for modal
   useEffect(() => {
@@ -2042,7 +2061,7 @@ const editCustomCheck = (check) => {
               </div>
             )}
             
-            <button 
+            <button
               onClick={exportToExcel}
               disabled={Object.keys(checkResults).length === 0}
               className={`px-4 py-2 bg-white border-2 border-blue-600 text-blue-600 rounded-lg font-medium hover:bg-blue-50 transition-all flex items-center gap-2 ${
@@ -2052,6 +2071,7 @@ const editCustomCheck = (check) => {
               <Download size={16} />
               Export to Excel
             </button>
+
 
             {ignoredIssues.size > 0 && (
               <button 
@@ -2093,6 +2113,7 @@ const editCustomCheck = (check) => {
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Properties</div>
               <div className="text-2xl font-bold text-gray-800">{properties.length.toLocaleString()}</div>
+
             </div>
             
             <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -2738,6 +2759,34 @@ const editCustomCheck = (check) => {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {dataQualityActiveSubTab === 'overview' && (
+        <div style={{ position: 'fixed', right: 20, bottom: 20, zIndex: 60 }}>
+          <button
+            onClick={async () => {
+              if (!jobData?.id) return;
+              const newStatus = isDataQualityComplete ? 'pending' : 'completed';
+              try {
+                const { data: { user } } = await supabase.auth.getUser();
+                const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
+                const updated = await checklistService.updateItemStatus(jobData.id, 'data-quality-analysis', newStatus, completedBy);
+                const persistedStatus = updated?.status || newStatus;
+                setIsDataQualityComplete(persistedStatus === 'completed');
+                try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'data-quality-analysis', status: persistedStatus } })); } catch(e){}
+                try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
+              } catch (error) {
+                console.error('Data Quality checklist update failed:', error);
+                alert('Failed to update checklist. Please try again.');
+              }
+            }}
+            className="px-4 py-2 rounded-lg font-medium"
+            style={{ backgroundColor: isDataQualityComplete ? '#10B981' : '#E5E7EB', color: isDataQualityComplete ? 'white' : '#374151' }}
+            title={isDataQualityComplete ? 'Click to reopen' : 'Mark Data Quality Analysis complete'}
+          >
+            {isDataQualityComplete ? '✓ Mark Complete' : 'Mark Complete'}
+          </button>
         </div>
       )}
     </div>

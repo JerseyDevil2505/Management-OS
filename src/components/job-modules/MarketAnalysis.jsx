@@ -188,13 +188,18 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
             )}      
             
             {activeTab === 'land-valuation' && (
-              <LandValuationTab 
-                jobData={jobData} 
+              <LandValuationTab
+                jobData={jobData}
                 properties={properties}
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
-                onUpdateJobCache={onUpdateJobCache}
+                onAnalysisUpdate={(data) => {
+                  // Invalidate cache when land valuation data changes
+                  if (onUpdateJobCache) {
+                    onUpdateJobCache(jobData.id, null);
+                  }
+                }}
               />
             )}
             

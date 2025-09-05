@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
@@ -191,6 +191,12 @@ Thank you for your immediate attention to this matter.`;
   const [bulkBillingText, setBulkBillingText] = useState('');
   const [showEditBilling, setShowEditBilling] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
+  const [isUpdatingBilling, setIsUpdatingBilling] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState({
+    isRefreshing: false,
+    lastError: null,
+    message: ''
+  });
   const [showLegacyJobForm, setShowLegacyJobForm] = useState(false);
   const [legacyJobForm, setLegacyJobForm] = useState({
     jobName: '',
@@ -219,6 +225,58 @@ Thank you for your immediate attention to this matter.`;
     projectedProfitLossPercent: 0  
   });
 
+  // Load fresh data directly from database - BYPASSES ALL CACHING
+  const loadFreshDataFromDB = useCallback(async () => {
+    console.log('🔄 Loading fresh data directly from database...');
+
+    try {
+      setLoadingStatus(prev => ({ ...prev, isRefreshing: true, message: 'Loading fresh data...' }));
+
+      // Load jobs with billing events directly from DB
+      const { data: jobsData, error: jobsError } = await supabase
+        .from('jobs')
+        .select(`
+          *,
+          job_contracts(*),
+          billing_events(*)
+        `)
+        .in('job_type', ['standard', 'legacy_billing']);
+
+      if (jobsError) throw jobsError;
+
+      if (jobsData) {
+        const activeJobs = jobsData.filter(j => j.job_type === 'standard');
+        const legacyJobs = jobsData.filter(j => j.job_type === 'legacy_billing');
+
+        // Update local state immediately with fresh data
+        if (activeTab === 'active') {
+          setJobs(activeJobs);
+        } else if (activeTab === 'legacy') {
+          setLegacyJobs(legacyJobs);
+        }
+
+        console.log('✅ Fresh data loaded:', { activeJobs: activeJobs.length, legacyJobs: legacyJobs.length });
+      }
+
+      setLoadingStatus(prev => ({ ...prev, isRefreshing: false, message: 'Fresh data loaded' }));
+
+    } catch (error) {
+      // Log detailed error for debugging
+      console.error('❌ Error loading fresh data:', error);
+      let errMsg = '';
+      try {
+        if (!error) errMsg = 'Unknown error';
+        else if (typeof error === 'string') errMsg = error;
+        else if (error.message) errMsg = error.message;
+        else if (error.error) errMsg = error.error;
+        else errMsg = JSON.stringify(error);
+      } catch (e) {
+        errMsg = String(error);
+      }
+      setLoadingStatus(prev => ({ ...prev, isRefreshing: false, lastError: errMsg }));
+    }
+  }, [activeTab]);
+
   useEffect(() => {
     // Set initial data from props
     loadJobCounts();
@@ -226,7 +284,46 @@ Thank you for your immediate attention to this matter.`;
       setGlobalMetrics(billingMetrics);
     }
   }, [activeJobs, legacyJobs, planningJobs, billingMetrics]);
-  
+
+  // Load fresh data on component mount and tab changes
+  useEffect(() => {
+    console.log('🔄 BillingManagement mounted or tab changed, loading fresh data');
+    loadFreshDataFromDB();
+  }, [activeTab, loadFreshDataFromDB]);
+
+  // Update displayed lists when props change, but avoid overwriting during edit operations
+  useEffect(() => {
+    // Don't update local state if we're in the middle of editing or updating
+    if (showEditBilling || isUpdatingBilling) return;
+
+    if (activeTab === 'active') {
+      setJobs(activeJobs);
+    } else if (activeTab === 'legacy') {
+      setLegacyJobs(legacyJobs);
+    } else if (activeTab === 'planned') {
+      setPlanningJobs(planningJobs);
+    }
+  }, [activeJobs, legacyJobs, planningJobs, activeTab, showEditBilling, isUpdatingBilling]);
+
+  // Update other data when props change
+  useEffect(() => {
+    if (activeTab === 'expenses') {
+      setExpenses(expenses);
+    }
+  }, [expenses, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'receivables') {
+      setOfficeReceivables(receivables);
+    }
+  }, [receivables, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'distributions') {
+      setDistributions(distributions);
+    }
+  }, [distributions, activeTab]);
+
   useEffect(() => {
     // Load specific data when tab changes
     loadJobs();
@@ -268,6 +365,25 @@ Thank you for your immediate attention to this matter.`;
     // Just use the distributions from props
     setDistributions(distributions);
   };
+
+  // Function to sync cache without forcing full refresh
+  const syncCacheItem = (type, id, data) => {
+    if (onDataUpdate) {
+      console.log(`🔄 Syncing cache item: ${type} ${id}`);
+      onDataUpdate(type, id, data);
+    }
+  };
+
+  // Override the onRefresh prop with our fresh data loader
+  const handleRefresh = useCallback(async () => {
+    console.log('🔄 Refresh requested - loading fresh data');
+    await loadFreshDataFromDB();
+
+    // Also call the original onRefresh if available
+    if (onRefresh) {
+      await onRefresh();
+    }
+  }, [loadFreshDataFromDB, onRefresh]);
   
 const calculateDistributionMetrics = async () => {
     try {
@@ -420,9 +536,9 @@ const calculateDistributionMetrics = async () => {
       if (planningJobsData && planningJobsData.length > 0) {
         planningJobsData.forEach(job => {
           if (job.contract_amount > 0) {
-            const parcels = job.total_properties || 
-                           ((job.residential_properties || 0) + (job.commercial_properties || 0)) || 
-                           0;
+            const parcels = (job.manual_parcel_count !== undefined && job.manual_parcel_count !== null && job.manual_parcel_count !== '')
+                           ? parseInt(job.manual_parcel_count, 10)
+                           : (job.total_properties || ((job.residential_properties || 0) + (job.commercial_properties || 0)) || 0);
             
             // Fix timezone issue for planning jobs too
             const dueYear = job.end_date ? parseInt(job.end_date.substring(0, 4)) : new Date().getFullYear() + 1;
@@ -607,17 +723,17 @@ const calculateDistributionMetrics = async () => {
 const loadJobs = async () => {
     try {
       setLoading(true);
-      
+
       if (activeTab === 'active') {
-        // Use cached activeJobs from props
+        // Use activeJobs from props but ensure fresh data
         setJobs(activeJobs);
         setJobCounts(prev => ({ ...prev, active: activeJobs.length }));
       } else if (activeTab === 'planned') {
-        // Use cached planningJobs from props
+        // Use planningJobs from props but ensure fresh data
         setPlanningJobs(planningJobs);
         setJobCounts(prev => ({ ...prev, planned: planningJobs.length }));
       } else if (activeTab === 'legacy') {
-        // Use cached legacyJobs from props
+        // Use legacyJobs from props but ensure fresh data
         setLegacyJobs(legacyJobs);
         setJobCounts(prev => ({ ...prev, legacy: legacyJobs.length }));
       }
@@ -797,7 +913,7 @@ const loadJobs = async () => {
         secondYearAppealsPercentage: 0.02,
         thirdYearAppealsPercentage: 0.00
       });
-      if (onRefresh) onRefresh();
+      await loadFreshDataFromDB();
     } catch (error) {
       console.error('Error setting up contract:', error);
     }
@@ -905,24 +1021,41 @@ const loadJobs = async () => {
 
         if (error) throw error;
 
-        // CRITICAL FIX: Update jobs table with new percent_billed
-        const newTotalPercent = (selectedJob.percent_billed || 0) + percentageDecimal;
-        const { error: jobUpdateError } = await supabase
-          .from('jobs')
-          .update({ percent_billed: newTotalPercent })
-          .eq('id', selectedJob.id);
+        // FIXED: Recalculate total percent_billed from all billing events
+        const { data: allBillingEvents, error: eventsError } = await supabase
+          .from('billing_events')
+          .select('percentage_billed')
+          .eq('job_id', selectedJob.id);
 
-        if (jobUpdateError) {
-          console.error('Error updating job percent_billed:', jobUpdateError);
+        if (eventsError) {
+          console.error('Error fetching billing events:', eventsError);
         } else {
-          console.log(`✅ Updated job ${selectedJob.id} percent_billed to ${(newTotalPercent * 100).toFixed(2)}%`);
+          // Calculate the actual total from all billing events
+          const actualTotalPercent = allBillingEvents.reduce((sum, event) =>
+            sum + parseFloat(event.percentage_billed || 0), 0);
 
-          // Notify parent components that data has changed
-          if (onDataUpdate) {
-            onDataUpdate();
-          }
-          if (onRefresh) {
-            onRefresh();
+          const { error: jobUpdateError } = await supabase
+            .from('jobs')
+            .update({ percent_billed: actualTotalPercent })
+            .eq('id', selectedJob.id);
+
+          if (jobUpdateError) {
+            console.error('Error updating job percent_billed:', jobUpdateError);
+          } else {
+            console.log(`✅ Updated job ${selectedJob.id} percent_billed to ${(actualTotalPercent * 100).toFixed(4)}% (recalculated from ${allBillingEvents.length} events)`);
+
+            // Sync cache without forcing full refresh
+            console.log('✅ Billing event added - syncing cache');
+
+            // Notify parent components that data has changed
+            if (onDataUpdate) {
+              onDataUpdate('billing_event', selectedJob.id, { billing_events: 'updated' });
+            }
+
+            // Only refresh if onDataUpdate isn't available
+            if (!onDataUpdate && onRefresh) {
+              await onRefresh();
+            }
           }
         }
        
@@ -946,10 +1079,14 @@ const loadJobs = async () => {
                   billing_type: billingForm.billingType
                 };
                 
+                const updatedEvents = [...(job.billing_events || []), newEvent];
+                const recalculatedPercent = updatedEvents.reduce((sum, event) =>
+                  sum + parseFloat(event.percentage_billed || 0), 0);
+
                 return {
                   ...job,
-                  billing_events: [...(job.billing_events || []), newEvent],
-                  percent_billed: (job.percent_billed || 0) + percentageDecimal
+                  billing_events: updatedEvents,
+                  percent_billed: recalculatedPercent
                 };
               }
               return job;
@@ -977,10 +1114,14 @@ const loadJobs = async () => {
                 billing_type: billingForm.billingType
               };
               
+              const updatedEvents = [...(job.billing_events || []), newEvent];
+              const recalculatedPercent = updatedEvents.reduce((sum, event) =>
+                sum + parseFloat(event.percentage_billed || 0), 0);
+
               return {
                 ...job,
-                billing_events: [...(job.billing_events || []), newEvent],
-                percent_billed: (job.percent_billed || 0) + percentageDecimal
+                billing_events: updatedEvents,
+                percent_billed: recalculatedPercent
               };
             }
             return job;
@@ -1016,8 +1157,18 @@ const loadJobs = async () => {
 
   const handleUpdateBillingEvent = async () => {
     if (!editingEvent) return;
-    
+
     try {
+      setIsUpdatingBilling(true);
+      console.log('🔧 Updating billing event:', editingEvent);
+
+      // Check if job_id is available
+      if (!editingEvent.job_id) {
+        console.error('❌ Missing job_id in editingEvent:', editingEvent);
+        alert('Error: Missing job ID. Please refresh the page and try again.');
+        return;
+      }
+
       // Prepare update data
       const updateData = {
         status: editingEvent.status || '',
@@ -1025,6 +1176,8 @@ const loadJobs = async () => {
         billing_type: editingEvent.billing_type || null,
         invoice_number: editingEvent.invoice_number || ''
       };
+
+      console.log('📝 Update data:', updateData);
 
       // First update the billing event
       const { error: updateError } = await supabase
@@ -1036,23 +1189,31 @@ const loadJobs = async () => {
 
       // Call the cache update for status changes
       if (onDataUpdate) {
+        console.log('🔄 Calling onDataUpdate for cache update');
         onDataUpdate('billing_event_status', editingEvent.id, { status: editingEvent.status });
       }
 
+      console.log('📊 Fetching job data for job_id:', editingEvent.job_id);
+
       // Get all billing events for this job ordered by date
-      const { data: jobData } = await supabase
+      const { data: jobData, error: jobFetchError } = await supabase
         .from('jobs')
         .select(`
           id,
           job_contracts(contract_amount),
           billing_events(
-            id, 
+            id,
             amount_billed,
             billing_date
           )
         `)
         .eq('id', editingEvent.job_id)
         .single();
+
+      if (jobFetchError) {
+        console.error('❌ Error fetching job data:', jobFetchError);
+        throw jobFetchError;
+      }
 
       if (jobData && jobData.job_contracts?.[0]) {
         const contractAmount = jobData.job_contracts[0].contract_amount;
@@ -1080,12 +1241,61 @@ const loadJobs = async () => {
         }
       }
 
+      // Optimistically update local state first
+      console.log('✅ Billing event updated - applying optimistic update');
+
+      // Update the local state immediately for responsive UI
+      if (activeTab === 'legacy') {
+        setLegacyJobs(prevJobs =>
+          prevJobs.map(job => {
+            if (job.id === editingEvent.job_id) {
+              return {
+                ...job,
+                billing_events: job.billing_events?.map(event =>
+                  event.id === editingEvent.id
+                    ? { ...event, status: editingEvent.status, invoice_number: editingEvent.invoice_number, billing_type: editingEvent.billing_type, amount_billed: editingEvent.amount_billed }
+                    : event
+                ) || []
+              };
+            }
+            return job;
+          })
+        );
+      } else if (activeTab === 'active') {
+        setJobs(prevJobs =>
+          prevJobs.map(job => {
+            if (job.id === editingEvent.job_id) {
+              return {
+                ...job,
+                billing_events: job.billing_events?.map(event =>
+                  event.id === editingEvent.id
+                    ? { ...event, status: editingEvent.status, invoice_number: editingEvent.invoice_number, billing_type: editingEvent.billing_type, amount_billed: editingEvent.amount_billed }
+                    : event
+                ) || []
+              };
+            }
+            return job;
+          })
+        );
+      }
+
       setShowEditBilling(false);
       setEditingEvent(null);
-      if (onRefresh) onRefresh();
+
+      // Call onDataUpdate for cache synchronization without forcing full refresh
+      if (onDataUpdate) {
+        console.log('���� Updating cache without full refresh');
+        onDataUpdate('billing_event', editingEvent.id, updateData);
+      }
+
+      // Always load fresh data after billing updates
+      console.log('🔄 Loading fresh data after billing update');
+      await loadFreshDataFromDB();
     } catch (error) {
       console.error('Error updating billing event:', error);
       alert('Error updating billing event: ' + error.message);
+    } finally {
+      setIsUpdatingBilling(false);
     }
   };
 
@@ -1097,10 +1307,30 @@ const loadJobs = async () => {
         .eq('id', planningJobId);
 
       if (error) throw error;
-      
+
       if (onRefresh) onRefresh();
     } catch (error) {
       console.error('Error updating planned contract:', error);
+    }
+  };
+
+  // Persist a manually-entered parcel count for planning jobs. If present this value
+  // will be used when rolling the job to active; otherwise the job's existing
+  // total_properties will be used. Requires a database column `manual_parcel_count` on planning_jobs.
+  const handleUpdatePlannedParcels = async (planningJobId, parcelCount) => {
+    try {
+      const parsed = parcelCount === '' || parcelCount == null ? null : parseInt(String(parcelCount).replace(/[^0-9]/g, ''), 10);
+      const { error } = await supabase
+        .from('planning_jobs')
+        .update({ manual_parcel_count: parsed })
+        .eq('id', planningJobId);
+
+      if (error) throw error;
+
+      // Optionally refresh parent data
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      console.error('Error updating planned parcel count:', error);
     }
   };
 
@@ -1197,7 +1427,7 @@ const loadJobs = async () => {
           job_type: 'standard',
           billing_setup_complete: true,
           percent_billed: 0,
-          total_properties: planningJob.total_properties || 0,
+          total_properties: planningJob.manual_parcel_count ? parseInt(planningJob.manual_parcel_count, 10) : (planningJob.total_properties || 0),
           totalresidential: planningJob.residential_properties || 0,
           totalcommercial: planningJob.commercial_properties || 0
         })
@@ -1226,11 +1456,16 @@ const loadJobs = async () => {
         await supabase.from('job_contracts').insert(contractData);
       }
 
-      // Archive the planning job
-      await supabase
+      // Archive the planning job and clear any manual parcel override
+      const { error: archiveError } = await supabase
         .from('planning_jobs')
-        .update({ is_archived: true })
+        .update({ is_archived: true, manual_parcel_count: null })
         .eq('id', planningJob.id);
+
+      if (archiveError) {
+        console.error('Error archiving planning job or clearing manual parcels:', archiveError);
+        throw archiveError;
+      }
 
       alert(`Successfully rolled over "${planningJob.job_name || planningJob.municipality}" to active jobs!`);
       setActiveTab('active');
@@ -1277,18 +1512,177 @@ const loadJobs = async () => {
         .update({ percent_billed: newTotalPercentage })
         .eq('id', billingEvent.job_id);
 
+      // Recalculate remaining_due for all remaining events
+      const { data: jobData } = await supabase
+        .from('jobs')
+        .select(`
+          id,
+          job_contracts(contract_amount),
+          billing_events(
+            id,
+            amount_billed,
+            billing_date
+          )
+        `)
+        .eq('id', billingEvent.job_id)
+        .single();
+
+      if (jobData && jobData.job_contracts?.[0]) {
+        const contractAmount = jobData.job_contracts[0].contract_amount;
+
+        // Sort events by billing date
+        const sortedEvents = jobData.billing_events.sort((a, b) =>
+          new Date(a.billing_date) - new Date(b.billing_date)
+        );
+
+        let runningTotal = 0;
+
+        // Update remaining_due for each event in chronological order
+        const updatePromises = [];
+        for (const event of sortedEvents) {
+          runningTotal += parseFloat(event.amount_billed || 0);
+          const remainingDue = contractAmount - runningTotal;
+
+          updatePromises.push(
+            supabase
+              .from('billing_events')
+              .update({ remaining_due: remainingDue })
+              .eq('id', event.id)
+          );
+        }
+
+        // Wait for all updates to complete
+        const results = await Promise.allSettled(updatePromises);
+        results.forEach((result, index) => {
+          if (result.status === 'rejected') {
+            console.error('Error updating remaining_due for event:', sortedEvents[index].id, result.reason);
+          }
+        });
+      }
+
       // Update the job in state without reloading
       setShowEditBilling(false);
       setEditingEvent(null);
-      if (onRefresh) onRefresh();
+
+      // Sync cache without aggressive refresh
+      console.log('✅ Billing event deleted - syncing cache');
+
+      // Optimistically remove from local state
+      if (activeTab === 'legacy') {
+        setLegacyJobs(prevJobs =>
+          prevJobs.map(job => {
+            if (job.id === editingEvent.job_id) {
+              return {
+                ...job,
+                billing_events: job.billing_events?.filter(event => event.id !== editingEvent.id) || []
+              };
+            }
+            return job;
+          })
+        );
+      } else if (activeTab === 'active') {
+        setJobs(prevJobs =>
+          prevJobs.map(job => {
+            if (job.id === editingEvent.job_id) {
+              return {
+                ...job,
+                billing_events: job.billing_events?.filter(event => event.id !== editingEvent.id) || []
+              };
+            }
+            return job;
+          })
+        );
+      }
+
+      // Sync cache
+      if (onDataUpdate) {
+        onDataUpdate('billing_event_delete', editingEvent.id, { deleted: true });
+      }
+
+      // Always load fresh data after delete operations
+      setTimeout(async () => {
+        await loadFreshDataFromDB();
+      }, 100);
     } catch (error) {
       console.error('Error deleting billing event:', error);
     }
   };
 
+  // TEMPORARY ADMIN FIX - Recalculate all remaining_due values
+  const fixAllRemainingDue = async () => {
+    if (!window.confirm('This will recalculate ALL remaining_due values for ALL jobs. Continue?')) {
+      return;
+    }
+
+    try {
+      console.log('Starting remaining_due recalculation...');
+
+      // Get all jobs with contracts and billing events
+      const { data: allJobs } = await supabase
+        .from('jobs')
+        .select(`
+          id,
+          job_name,
+          job_contracts(contract_amount),
+          billing_events(
+            id,
+            amount_billed,
+            billing_date
+          )
+        `)
+        .not('job_contracts', 'is', null);
+
+      if (!allJobs) return;
+
+      let fixedJobsCount = 0;
+      let fixedEventsCount = 0;
+
+      for (const job of allJobs) {
+        if (!job.job_contracts?.[0] || !job.billing_events?.length) continue;
+
+        const contractAmount = job.job_contracts[0].contract_amount;
+
+        // Sort events by billing date
+        const sortedEvents = job.billing_events.sort((a, b) =>
+          new Date(a.billing_date) - new Date(b.billing_date)
+        );
+
+        let runningTotal = 0;
+
+        // Update remaining_due for each event
+        for (const event of sortedEvents) {
+          runningTotal += parseFloat(event.amount_billed || 0);
+          const remainingDue = contractAmount - runningTotal;
+
+          const { error } = await supabase
+            .from('billing_events')
+            .update({ remaining_due: remainingDue })
+            .eq('id', event.id);
+
+          if (error) {
+            console.error('Error updating event:', event.id, error);
+          } else {
+            fixedEventsCount++;
+          }
+        }
+
+        fixedJobsCount++;
+        console.log(`Fixed job: ${job.job_name} (${sortedEvents.length} events)`);
+      }
+
+      console.log(`Recalculation complete! Fixed ${fixedEventsCount} events across ${fixedJobsCount} jobs.`);
+      alert(`Recalculation complete! Fixed ${fixedEventsCount} events across ${fixedJobsCount} jobs.`);
+
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      console.error('Error in remaining_due recalculation:', error);
+      alert('Error during recalculation: ' + error.message);
+    }
+  };
+
   const handleCreateLegacyJob = async () => {
     if (!legacyJobForm.jobName || !legacyJobForm.contractAmount) return;
-    
+
     try {
       // Create the legacy job
       const { data: newJob, error: jobError } = await supabase
@@ -1502,8 +1896,23 @@ const loadJobs = async () => {
   return (
     <div className="max-w-7xl mx-auto p-6">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Billing Management</h1>
-        <p className="text-gray-600">Track contracts, billing events, and payment status</p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Billing Management</h1>
+            <p className="text-gray-600">Track contracts, billing events, and payment status</p>
+          </div>
+          {loadingStatus.isRefreshing && (
+            <div className="flex items-center space-x-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-md">
+              <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+              <span className="text-blue-700 font-medium">Loading fresh data...</span>
+            </div>
+          )}
+          {loadingStatus.lastError && (
+            <div className="flex items-center space-x-2 px-4 py-2 bg-red-50 border border-red-200 rounded-md">
+              <span className="text-red-700 font-medium">Error: {loadingStatus.lastError}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Global Metrics Dashboard */}
@@ -1610,7 +2019,7 @@ const loadJobs = async () => {
         </div>
       </div>
       {/* Bond Letter Generation Section */}
-      <div className="flex justify-end mb-6">
+      <div className="flex justify-end mb-6 space-x-4">
         <button
           onClick={generateBondLetter}
           className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-md shadow hover:bg-purple-700 transition-colors duration-200 flex items-center space-x-2"
@@ -1754,128 +2163,129 @@ const loadJobs = async () => {
                                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                               >
                                 Add Billing Event
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setSelectedJob(job);
-                                  // Pre-fill contract form with existing values
-                                  const contract = job.job_contracts[0];
-                                  setContractSetup({
-                                    contractAmount: contract.contract_amount.toString(),
-                                    templateType: 'custom',
-                                    retainerPercentage: contract.retainer_percentage,
-                                    endOfJobPercentage: contract.end_of_job_percentage,
-                                    firstYearAppealsPercentage: contract.first_year_appeals_percentage,
-                                    secondYearAppealsPercentage: contract.second_year_appeals_percentage,
-                                    thirdYearAppealsPercentage: contract.third_year_appeals_percentage || 0
-                                  });
-                                  setShowContractSetup(true);
-                                }}
-                                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
-                              >
-                                Edit Contract
-                              </button>
-                            </>
-                          )}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedJob(job);
+                                // Pre-fill contract form with existing values
+                                const contract = job.job_contracts[0];
+                                setContractSetup({
+                                  contractAmount: contract.contract_amount.toString(),
+                                  templateType: 'custom',
+                                  retainerPercentage: contract.retainer_percentage,
+                                  endOfJobPercentage: contract.end_of_job_percentage,
+                                  firstYearAppealsPercentage: contract.first_year_appeals_percentage,
+                                  secondYearAppealsPercentage: contract.second_year_appeals_percentage,
+                                  thirdYearAppealsPercentage: contract.third_year_appeals_percentage || 0
+                                });
+                                setShowContractSetup(true);
+                              }}
+                              className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                            >
+                              Edit Contract
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {totals && (
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+                        <div className="bg-white p-3 rounded-md">
+                          <p className="text-sm text-gray-600">Contract Amount</p>
+                          <p className="text-lg font-semibold">{formatCurrency(totals.contractAmount)}</p>
+                        </div>
+                        <div className="bg-white p-3 rounded-md">
+                          <p className="text-sm text-gray-600">Percentage Billed</p>
+                          <p className="text-lg font-semibold">{totals.totalPercentageBilled.toFixed(2)}%</p>
+                        </div>
+                        <div className="bg-white p-3 rounded-md">
+                          <p className="text-sm text-gray-600">Amount Billed</p>
+                          <p className="text-lg font-semibold">{formatCurrency(totals.totalAmountBilled)}</p>
+                        </div>
+                        <div className="bg-white p-3 rounded-md">
+                          <p className="text-sm text-gray-600">Remaining Due</p>
+                          <p className="text-lg font-semibold">{formatCurrency(totals.remainingDue)}</p>
+                        </div>
+                        <div className="bg-white p-3 rounded-md border-2 border-blue-400">
+                          <p className="text-sm text-gray-600">Remaining (No Retainer)</p>
+                          <p className="text-lg font-semibold text-blue-600">
+                            {(() => {
+                              const remainingNoRet = (totals.contractAmount - job.job_contracts[0].retainer_amount) - totals.totalAmountBilled;
+                              return formatCurrency(remainingNoRet < 0 ? 0 : remainingNoRet);
+                            })()}
+                          </p>
                         </div>
                       </div>
+                    )}
 
-                      {totals && (
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
-                          <div className="bg-white p-3 rounded-md">
-                            <p className="text-sm text-gray-600">Contract Amount</p>
-                            <p className="text-lg font-semibold">{formatCurrency(totals.contractAmount)}</p>
+                    {/* Contract Breakdown */}
+                    {job.job_contracts?.[0] && (
+                      <div className="bg-white p-4 rounded-md border border-gray-200 mb-4">
+                        <p className="text-sm font-medium text-gray-700 mb-3">CONTRACT BREAKDOWN</p>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                          <div>
+                            <p className="text-gray-600">Total Contract</p>
+                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].contract_amount)}</p>
                           </div>
-                          <div className="bg-white p-3 rounded-md">
-                            <p className="text-sm text-gray-600">Percentage Billed</p>
-                            <p className="text-lg font-semibold">{totals.totalPercentageBilled.toFixed(2)}%</p>
+                          <div>
+                            <p className="text-gray-600">Retainer ({(job.job_contracts[0].retainer_percentage * 100).toFixed(0)}%)</p>
+                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].retainer_amount)}</p>
                           </div>
-                          <div className="bg-white p-3 rounded-md">
-                            <p className="text-sm text-gray-600">Amount Billed</p>
-                            <p className="text-lg font-semibold">{formatCurrency(totals.totalAmountBilled)}</p>
+                          <div>
+                            <p className="text-gray-600">End of Job ({(job.job_contracts[0].end_of_job_percentage * 100).toFixed(0)}%)</p>
+                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].end_of_job_amount)}</p>
                           </div>
-                          <div className="bg-white p-3 rounded-md">
-                            <p className="text-sm text-gray-600">Remaining Due</p>
-                            <p className="text-lg font-semibold">{formatCurrency(totals.remainingDue)}</p>
+                          <div>
+                            <p className="text-gray-600">1st Yr Appeals ({(job.job_contracts[0].first_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].first_year_appeals_amount)}</p>
                           </div>
-                          <div className="bg-white p-3 rounded-md border-2 border-blue-400">
-                            <p className="text-sm text-gray-600">Remaining (No Retainer)</p>
-                            <p className="text-lg font-semibold text-blue-600">
-                              {(() => {
-                                const remainingNoRet = (totals.contractAmount - job.job_contracts[0].retainer_amount) - totals.totalAmountBilled;
-                                return formatCurrency(remainingNoRet < 0 ? 0 : remainingNoRet);
-                              })()}
-                            </p>
+                          <div>
+                            <p className="text-gray-600">2nd Yr Appeals ({(job.job_contracts[0].second_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].second_year_appeals_amount)}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-600">3rd Yr Appeals ({(job.job_contracts[0].third_year_appeals_percentage * 100).toFixed(0)}%)</p>
+                            <p className="font-semibold">{formatCurrency(job.job_contracts[0].third_year_appeals_amount || 0)}</p>
                           </div>
                         </div>
-                      )}
+                      </div>
+                    )}
 
-                      {/* Contract Breakdown */}
-                      {job.job_contracts?.[0] && (
-                        <div className="bg-white p-4 rounded-md border border-gray-200 mb-4">
-                          <p className="text-sm font-medium text-gray-700 mb-3">CONTRACT BREAKDOWN</p>
-                          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
-                            <div>
-                              <p className="text-gray-600">Total Contract</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].contract_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">Retainer ({(job.job_contracts[0].retainer_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].retainer_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">End of Job ({(job.job_contracts[0].end_of_job_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].end_of_job_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">1st Yr Appeals ({(job.job_contracts[0].first_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].first_year_appeals_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">2nd Yr Appeals ({(job.job_contracts[0].second_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].second_year_appeals_amount)}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">3rd Yr Appeals ({(job.job_contracts[0].third_year_appeals_percentage * 100).toFixed(0)}%)</p>
-                              <p className="font-semibold">{formatCurrency(job.job_contracts[0].third_year_appeals_amount || 0)}</p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                    {/* Billing Events Table */}
+                    {job.billing_events && job.billing_events.length > 0 && (
+                      <div className="bg-white rounded-md overflow-hidden">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">%</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Invoice</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Billed</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remaining</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remaining (No Ret)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {job.billing_events
+                              .sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date))
+                              .map((event, index) => {
+                                // Simple calculation: (Contract - Total Retainer) - Amount Billed So Far
+                                const contractMinusRetainer = job.job_contracts[0].contract_amount - job.job_contracts[0].retainer_amount;
+                                const amountBilledSoFar = job.job_contracts[0].contract_amount - event.remaining_due;
+                                const remainingNoRetainer = contractMinusRetainer - amountBilledSoFar;
 
-                      {/* Billing Events Table */}
-                      {job.billing_events && job.billing_events.length > 0 && (
-                        <div className="bg-white rounded-md overflow-hidden">
-                          <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">%</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Invoice</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Billed</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remaining</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remaining (No Ret)</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200">
-                              {job.billing_events
-                                .sort((a, b) => new Date(a.billing_date) - new Date(b.billing_date))
-                                .map((event, index) => {
-                                  // Simple calculation: (Contract - Total Retainer) - Amount Billed So Far
-                                  const contractMinusRetainer = job.job_contracts[0].contract_amount - job.job_contracts[0].retainer_amount;
-                                  const amountBilledSoFar = job.job_contracts[0].contract_amount - event.remaining_due;
-                                  const remainingNoRetainer = contractMinusRetainer - amountBilledSoFar;
-                                  
-                                  return (
-                                    <tr 
-                                      key={event.id}
-                                      className="hover:bg-gray-50 cursor-pointer"
-                                      onClick={() => {
-                                        setEditingEvent(event);
-                                        setShowEditBilling(true);
-                                      }}
+                                return (
+                                  <tr
+                                    key={event.id}
+                                    className="hover:bg-gray-50 cursor-pointer"
+                                    onClick={() => {
+                                      // Ensure job_id is included in editingEvent for active jobs
+                                      setEditingEvent({ ...event, job_id: job.id });
+                                      setShowEditBilling(true);
+                                    }}
                                     >
                                       <td className="px-4 py-2 text-sm text-gray-900">
                                         {new Date(event.billing_date).toLocaleDateString()}
@@ -1938,7 +2348,7 @@ const loadJobs = async () => {
                       Municipality
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      CCDD
+                      Parcels (Manual)
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Contract Amount
@@ -1971,9 +2381,25 @@ const loadJobs = async () => {
                           {job.municipality || job.job_name || 'Unnamed Job'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          <span className="px-2 py-1 text-xs rounded-full bg-gray-200 text-gray-700">
-                            {job.ccdd_code || '-'}
-                          </span>
+                          <div className="flex items-center">
+                            <input
+                              type="text"
+                              value={job.manual_parcel_count ?? job.total_properties ?? ''}
+                              onChange={(e) => {
+                                const numeric = e.target.value.replace(/[^0-9]/g, '');
+                                setPlanningJobs(prev => prev.map(j => j.id === job.id ? { ...j, manual_parcel_count: numeric } : j));
+                              }}
+                              onKeyPress={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleUpdatePlannedParcels(job.id, job.manual_parcel_count);
+                                }
+                              }}
+                              onBlur={() => handleUpdatePlannedParcels(job.id, job.manual_parcel_count)}
+                              className="pr-3 py-1 w-24 border border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="auto"
+                            />
+                            <span className="ml-2 text-xs text-gray-400">(auto)</span>
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           <div className="flex items-center space-x-2">
@@ -1985,7 +2411,7 @@ const loadJobs = async () => {
                                 onChange={(e) => {
                                   // Remove commas and non-numeric characters
                                   const numericValue = e.target.value.replace(/[^0-9]/g, '');
-                                  setPlanningJobs(prev => 
+                                  setPlanningJobs(prev =>
                                     prev.map(j => j.id === job.id ? {...j, contract_amount: numericValue} : j)
                                   );
                                 }}
@@ -2098,11 +2524,11 @@ const loadJobs = async () => {
                                     .from('jobs')
                                     .delete()
                                     .eq('id', job.id);
-                                  
+
                                   if (error) throw error;
-                                  
+
                                   alert('Legacy job deleted successfully');
-                                  if (onRefresh) onRefresh();   
+                                  if (onRefresh) onRefresh();
                                 } catch (error) {
                                   console.error('Error deleting legacy job:', error);
                                   alert('Error deleting job: ' + error.message);
@@ -2203,13 +2629,14 @@ const loadJobs = async () => {
                                   const contractMinusRetainer = job.job_contracts[0].contract_amount - job.job_contracts[0].retainer_amount;
                                   const amountBilledSoFar = job.job_contracts[0].contract_amount - event.remaining_due;
                                   const remainingNoRetainer = contractMinusRetainer - amountBilledSoFar;
-                                  
+
                                   return (
-                                    <tr 
+                                    <tr
                                       key={event.id}
                                       className="hover:bg-gray-50 cursor-pointer"
                                       onClick={() => {
-                                        setEditingEvent(event);
+                                        // Ensure job_id is included in editingEvent for legacy jobs
+                                        setEditingEvent({ ...event, job_id: job.id });
                                         setShowEditBilling(true);
                                       }}
                                     >
@@ -2277,7 +2704,7 @@ const loadJobs = async () => {
                   <p className="text-sm text-gray-500">Click "Import Excel" to upload your expense file.</p>
                 </div>
               ) : (
-                <div className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="bg-white rounded-lg shadow overflow-hidden expenses-full-bleed-container">
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead>
@@ -2302,10 +2729,6 @@ const loadJobs = async () => {
                             <td key={idx} className="px-6 py-2 text-center text-xs font-semibold text-blue-700">
                               {days}
                             </td>
-                          ))}
-                          <td className="px-6 py-2 text-center text-xs font-bold text-blue-700 bg-blue-100">
-                            {Object.values(workingDays).reduce((sum, days) => sum + days, 0)}
-                          </td>
                           ))}
                           <td className="px-6 py-2 text-center text-xs font-bold text-blue-700 bg-blue-100">
                             {Object.values(workingDays).reduce((sum, days) => sum + days, 0)}
@@ -2648,6 +3071,10 @@ const loadJobs = async () => {
                   <div className="flex justify-between">
                     <span className="text-gray-600">Cash Reserve:</span>
                     <span className="font-medium text-orange-600">-{formatCurrency(distributionMetrics.cashReserve)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">YTD Distributions:</span>
+                    <span className="font-medium text-blue-600">-{formatCurrency(distributionMetrics.ytdDistributions)}</span>
                   </div>
                   <div className="flex justify-between border-t pt-2">
                     <span className="text-gray-600 font-semibold">Available for Distribution:</span>
