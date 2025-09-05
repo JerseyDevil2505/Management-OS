@@ -4298,6 +4298,102 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             </button>
           </div>
         </div>
+
+        {/* Bracket editor toggle and controls */}
+        <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <button
+            onClick={() => setShowBracketEditor(prev => !prev)}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: showBracketEditor ? '#F3F4F6' : 'white',
+              border: '1px solid #E5E7EB',
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            {showBracketEditor ? 'Hide Bracket Settings' : 'Edit Brackets'}
+          </button>
+          <button
+            onClick={() => { applyDefaultQuartileBrackets(); setShowBracketEditor(true); }}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: '#F9FAFB',
+              border: '1px solid #E5E7EB',
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            Apply Quartile Defaults
+          </button>
+        </div>
+
+        {showBracketEditor && (
+          <div style={{ marginTop: '12px', padding: '12px', borderRadius: '6px', backgroundColor: 'white', border: '1px solid #E5E7EB' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: '#6B7280' }}>Prime max (acres)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={bracketInputs.primeMax ?? ''}
+                  onChange={(e) => setBracketInputs(prev => ({ ...prev, primeMax: e.target.value }))}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: '#6B7280' }}>Secondary max (acres)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={bracketInputs.secondaryMax ?? ''}
+                  onChange={(e) => setBracketInputs(prev => ({ ...prev, secondaryMax: e.target.value }))}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: '#6B7280' }}>Excess max (acres)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={bracketInputs.excessMax ?? ''}
+                  onChange={(e) => setBracketInputs(prev => ({ ...prev, excessMax: e.target.value }))}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: '#6B7280' }}>Residual max (acres)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={bracketInputs.residualMax ?? ''}
+                  onChange={(e) => setBracketInputs(prev => ({ ...prev, residualMax: e.target.value }))}
+                  placeholder="leave empty for open-ended"
+                  style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                />
+              </div>
+            </div>
+            <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button
+                onClick={() => { validateAndApplyBrackets({ recalc: true }); setShowBracketEditor(false); }}
+                style={{ padding: '8px 12px', backgroundColor: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+              >
+                Apply
+              </button>
+              <button
+                onClick={() => setShowBracketEditor(false)}
+                style={{ padding: '8px 12px', backgroundColor: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: '6px', cursor: 'pointer' }}
+              >
+                Close
+              </button>
+              <button
+                onClick={() => { saveAnalysis(); }}
+                style={{ padding: '8px 12px', backgroundColor: '#10B981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+              >
+                Save Brackets
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Method 1: Vacant Land Sales */}
