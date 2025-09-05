@@ -913,17 +913,26 @@ const OverallAnalysisTab = ({
         vcsBedroomGroups[vcs].bedrooms[bedrooms] = {
           label: bedrooms,
           properties: [],
+          salesProperties: [],
           totalPrice: 0,
           totalSize: 0,
-          count: 0
+          totalSizeSales: 0,
+          propertiesCount: 0,
+          salesCount: 0
         };
       }
-      
+
       const bedroomGroup = vcsBedroomGroups[vcs].bedrooms[bedrooms];
       bedroomGroup.properties.push(p);
-      bedroomGroup.count++;
-      bedroomGroup.totalPrice += p.values_norm_time || 0;
+      bedroomGroup.propertiesCount++;
       bedroomGroup.totalSize += p.asset_sfla || 0;
+      // If this property has a normalized sale, count it as a sale
+      if (p.values_norm_time && p.values_norm_time > 0) {
+        bedroomGroup.salesProperties.push(p);
+        bedroomGroup.salesCount++;
+        bedroomGroup.totalPrice += p.values_norm_time || 0;
+        bedroomGroup.totalSizeSales += p.asset_sfla || 0;
+      }
     });
 
     // Ensure standard bedroom types exist (show 0 sales when missing)
