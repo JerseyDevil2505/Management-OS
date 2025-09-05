@@ -1042,9 +1042,9 @@ const OverallAnalysisTab = ({
   // ==================== MAIN ANALYSIS ====================
   const [analysis, setAnalysis] = useState(null);
 
-  const runAnalysis = useCallback(() => {
+  const runAnalysis = useCallback(async (options = { skipBedroomEnrichment: false }) => {
     setIsProcessing(true);
-    
+
     try {
       const typeUseAnalysis = analyzeTypeUse();
       const designAnalysis = analyzeDesign();
@@ -1063,16 +1063,70 @@ const OverallAnalysisTab = ({
 
       setAnalysis(results);
       setLastProcessed(new Date());
-      
+
       // Notify parent of changes
       onDataChange();
-      
+
+      // If BRT, attempt async BEDTOT enrichment for Unknown bedrooms (once)
+      try {
+        if (!options.skipBedroomEnrichment && vendorType === 'BRT' && filteredProperties.length > 0) {
+          // Find condo properties that are 'Unknown' by current logic
+          const condosList = filteredProperties.filter(p => (p.asset_type_use || '').toString().startsWith('6'));
+          const needsLookup = [];
+          condosList.forEach(p => {
+            // Re-run small sync detection to see if still unknown
+            const designName = codeDefinitions ? (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || '' : p.asset_design_style || '') : p.asset_design_style || '';
+            let bedrooms = 'Unknown';
+            const designUpper = String(designName).toUpperCase();
+            if (designUpper.includes('1BED') || designUpper.includes('1 BED')) bedrooms = '1BED';
+            else if (designUpper.includes('2BED') || designUpper.includes('2 BED')) bedrooms = '2BED';
+            else if (designUpper.includes('3BED') || designUpper.includes('3 BED')) bedrooms = '3BED';
+            else if (designUpper.includes('STUDIO')) bedrooms = 'STUDIO';
+
+            const candidate = p.asset_bedrooms || p.asset_bedroom_count || p.bedrooms || p.bedrm || p.bed_total || p.BEDTOT || null;
+            const n = parseInt(candidate);
+            if (!isNaN(n)) {
+              bedrooms = n === 0 ? 'STUDIO' : `${n}BED`;
+            }
+
+            if (bedrooms === 'Unknown' && !inferredBedroomsRef.current[p.id]) {
+              needsLookup.push(p);
+            }
+          });
+
+          if (needsLookup.length > 0) {
+            let changed = false;
+            // Batch lookups sequentially to avoid DB overload
+            for (const prop of needsLookup) {
+              try {
+                const raw = await interpretCodes.getRawDataValue?.(prop, 'bedrooms', vendorType);
+                const n = parseInt(raw);
+                if (!isNaN(n)) {
+                  const label = n === 0 ? 'STUDIO' : `${n}BED`;
+                  inferredBedroomsRef.current[prop.id] = label;
+                  changed = true;
+                }
+              } catch (e) {
+                // ignore individual failures
+              }
+            }
+
+            if (changed) {
+              // Re-run analysis once with enrichment applied, skip further enrichment to avoid loops
+              await runAnalysis({ skipBedroomEnrichment: true });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Bedroom enrichment failed:', e);
+      }
+
     } catch (error) {
       console.error('Analysis error:', error);
     } finally {
       setIsProcessing(false);
     }
-  }, [analyzeTypeUse, analyzeDesign, analyzeYearBuilt, analyzeVCSByType, analyzeCondos, onDataChange]);
+  }, [analyzeTypeUse, analyzeDesign, analyzeYearBuilt, analyzeVCSByType, analyzeCondos, onDataChange, filteredProperties, vendorType, codeDefinitions]);
 
   // Run analysis on mount and when properties change
   useEffect(() => {
