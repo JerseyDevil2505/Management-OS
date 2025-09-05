@@ -957,70 +957,63 @@ const OverallAnalysisTab = ({
       });
     });
 
-    // Calculate bedroom averages
+    // Calculate bedroom averages using VCS-level sales average size for adjustments (drop per-bedroom baseline)
     Object.values(vcsBedroomGroups).forEach(vcsGroup => {
+      // Compute VCS-level sales avg size (ignore zero sizes)
+      const vcsSalesCount = vcsGroup.salesCount || 0;
+      const vcsAvgSizeSales = (vcsSalesCount > 0 && vcsGroup.totalSizeSales > 0) ? (vcsGroup.totalSizeSales / vcsSalesCount) : 0;
+
+      // Track totals to compute VCS avg adjusted price
+      let vcsTotalAdjusted = 0;
+      let vcsTotalSalesForAdjusted = 0;
+
       Object.values(vcsGroup.bedrooms).forEach(bedroomGroup => {
         // Avg price based only on sales
         bedroomGroup.avgPrice = bedroomGroup.salesCount > 0 ? bedroomGroup.totalPrice / bedroomGroup.salesCount : 0;
         // Avg size based on inventory (properties)
         bedroomGroup.avgSize = bedroomGroup.propertiesCount > 0 ? bedroomGroup.totalSize / bedroomGroup.propertiesCount : 0;
 
+        // Determine baseline size to use for adjustments: prefer VCS-level sales avg (if valid), otherwise bedroom-level avgSize
+        const baselineSizeToUse = (vcsAvgSizeSales > 0) ? vcsAvgSizeSales : bedroomGroup.avgSize || 0;
+
         // Calculate adjusted prices using only salesProperties
         let totalAdjusted = 0;
         bedroomGroup.salesProperties.forEach(p => {
+          // Skip sales with invalid size
+          const propSize = p.asset_sfla || 0;
+          if (!propSize) return;
+
           const adjusted = calculateAdjustedPrice(
             p.values_norm_time || 0,
-            p.asset_sfla || 0,
-            bedroomGroup.totalSizeSales > 0 && bedroomGroup.salesCount > 0 ? (bedroomGroup.totalSizeSales / bedroomGroup.salesCount) : bedroomGroup.avgSize
+            propSize,
+            baselineSizeToUse
           );
           totalAdjusted += adjusted;
         });
 
-        bedroomGroup.avgAdjustedPrice = bedroomGroup.salesCount > 0 ? totalAdjusted / bedroomGroup.salesCount : 0;
+        bedroomGroup.avgAdjustedPrice = bedroomGroup.salesCount > 0 ? (totalAdjusted / bedroomGroup.salesCount) : 0;
+
+        // Accumulate for VCS-level average (only include bedrooms with sales)
+        if (bedroomGroup.salesCount > 0) {
+          vcsTotalAdjusted += totalAdjusted;
+          vcsTotalSalesForAdjusted += bedroomGroup.salesCount;
+        }
       });
 
-      // Prefer baseline as the lowest-bedroom type that has data; fall back to max if none
-      const bedOrderValue = (label) => {
-        if (!label) return 999;
-        if (label === 'STUDIO') return 0;
-        const m = label.match(/^(\d+)BED$/);
-        if (m) return parseInt(m[1], 10);
-        return 999;
-      };
+      // Compute VCS average adjusted price (used as the comparison baseline for deltas)
+      vcsGroup.avgAdjustedPrice = vcsTotalSalesForAdjusted > 0 ? (vcsTotalAdjusted / vcsTotalSalesForAdjusted) : 0;
 
-      // Find lowest bed label with avgAdjustedPrice > 0
-      let baseline = null;
-      const sortedLabels = Object.keys(vcsGroup.bedrooms).sort((a, b) => bedOrderValue(a) - bedOrderValue(b));
-      for (const lbl of sortedLabels) {
-        const g = vcsGroup.bedrooms[lbl];
-        if (g && g.avgAdjustedPrice > 0) {
-          baseline = g;
-          break;
-        }
-      }
-
-      // If no low-bed baseline found, fallback to the group with max price
-      if (!baseline) {
-        let maxPrice = 0;
-        Object.values(vcsGroup.bedrooms).forEach(group => {
-          if (group.avgAdjustedPrice > maxPrice) {
-            maxPrice = group.avgAdjustedPrice;
-            baseline = group;
-          }
-        });
-      }
-
-      // Calculate deltas relative to baseline
+      // Calculate deltas relative to VCS avgAdjustedPrice (drop per-bedroom baseline highlighting)
       Object.values(vcsGroup.bedrooms).forEach(group => {
-        if (baseline && group !== baseline) {
-          group.deltaPercent = baseline.avgAdjustedPrice > 0 ?
-            ((group.avgAdjustedPrice - baseline.avgAdjustedPrice) / baseline.avgAdjustedPrice * 100) : 0;
+        if (vcsGroup.avgAdjustedPrice > 0 && group.salesCount > 0) {
+          group.deltaPercent = ((group.avgAdjustedPrice - vcsGroup.avgAdjustedPrice) / vcsGroup.avgAdjustedPrice * 100);
         } else {
           group.deltaPercent = 0;
         }
       });
 
-      vcsGroup.baseline = baseline;
+      // Explicitly clear baseline to avoid UI highlighting confusion
+      vcsGroup.baseline = null;
     });
 
     // Floor Analysis
