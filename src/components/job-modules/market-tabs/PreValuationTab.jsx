@@ -338,7 +338,7 @@ useEffect(() => {
     setNormalizeToYear(config.normalizeToYear || 2025);
     setSalesFromYear(config.salesFromYear || 2012);
     setMinSalePrice(config.minSalePrice || 100);
-    setSelectedCounty(config.selectedCounty || 'Bergen');
+    setSelectedCounty(jobData?.county || config.selectedCounty || 'Bergen');
     setLastTimeNormalizationRun(config.lastTimeNormalizationRun || null);
     setLastSizeNormalizationRun(config.lastSizeNormalizationRun || null);
   } else {
@@ -733,7 +733,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         normalizeToYear,
         salesFromYear,
         minSalePrice,
-        selectedCounty,
+        selectedCounty: jobData?.county || selectedCounty,
         lastTimeNormalizationRun: new Date().toISOString()
       };
       

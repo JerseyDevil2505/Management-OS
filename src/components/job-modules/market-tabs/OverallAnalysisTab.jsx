@@ -63,14 +63,17 @@ const OverallAnalysisTab = ({
 
   // ==================== HELPER FUNCTIONS ====================
   
-  // Jim's 50% size adjustment formula
+  // Jim's 50% size adjustment formula (explicitly: ((AVG-CUR) * ((SALE/CUR) * 50%)) + SALE)
   const calculateAdjustedPrice = (salePrice, propertySize, baselineSize) => {
+    // Ensure we have valid numeric inputs
     if (!salePrice || !propertySize || propertySize === 0) return salePrice;
-    if (!baselineSize || baselineSize === propertySize) return salePrice;
-    
+    if (!baselineSize) return salePrice;
+
+    // Apply formula exactly as outlined: ((AVG - CURRENT) * ((SALE / CURRENT) * 0.5)) + SALE
     const sizeDiff = baselineSize - propertySize;
     const pricePerSF = salePrice / propertySize;
-    const adjustment = sizeDiff * (pricePerSF * 0.50);
+    const adjustment = sizeDiff * (pricePerSF * 0.5);
+
     return salePrice + adjustment;
   };
 
@@ -111,6 +114,9 @@ const OverallAnalysisTab = ({
     if (age <= 50) return 'Older';
     return 'Historic';
   };
+
+  // Inferred bedrooms cache for async enrichment (BRT fallback to BEDTOT)
+  const inferredBedroomsRef = React.useRef({});
 
   // Get all unique VCS codes
   const allVCSCodes = useMemo(() => {
@@ -173,9 +179,7 @@ const OverallAnalysisTab = ({
       
       const category = getTypeCategory(typeCode);
       // Use only synchronous Microsystems decoding to avoid async rendering issues
-      const typeName = vendorType === 'Microsystems' && codeDefinitions
-        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_type_use') || category
-        : category;
+      const typeName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_type_use') || category : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_type_use') || category : category)) : category;
       
       // Also skip if the name comes back as Unknown or Other
       if (typeName === 'Unknown' || typeName === 'Other' || !typeName || typeName.trim() === '') {
@@ -288,9 +292,7 @@ const OverallAnalysisTab = ({
     filteredProperties.forEach(p => {
       const designCode = p.asset_design_style || 'Unknown';
       // Use only synchronous Microsystems decoding to avoid async rendering issues
-      const designName = vendorType === 'Microsystems' && codeDefinitions
-        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode
-        : designCode;
+      const designName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_design_style') || designCode : designCode)) : designCode;
       
       // FILTER FIX: Skip unknown/empty designs - including "00" and whitespace
       if (!designCode || designCode === 'Unknown' || designCode === '' || 
@@ -566,13 +568,9 @@ const OverallAnalysisTab = ({
       const vcsDesc = vcs;
       const typeCode = p.asset_type_use || 'Unknown';
       // Use only synchronous Microsystems decoding to avoid async rendering issues
-      const typeName = vendorType === 'Microsystems' && codeDefinitions
-        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_type_use') || getTypeCategory(typeCode)
-        : getTypeCategory(typeCode);
+      const typeName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_type_use') || getTypeCategory(typeCode) : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_type_use') || getTypeCategory(typeCode) : getTypeCategory(typeCode))) : getTypeCategory(typeCode);
       const designCode = p.asset_design_style || 'Unknown';
-      const designName = vendorType === 'Microsystems' && codeDefinitions
-        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode
-        : designCode;
+      const designName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_design_style') || designCode : designCode)) : designCode;
       
       // Initialize VCS level
       if (!vcsGroups[vcs]) {
@@ -807,9 +805,7 @@ const OverallAnalysisTab = ({
     condos.forEach(p => {
       const designCode = p.asset_design_style || 'Unknown';
       // Use only synchronous Microsystems decoding to avoid async rendering issues
-      const designName = vendorType === 'Microsystems' && codeDefinitions
-        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode
-        : designCode;
+      const designName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_design_style') || designCode : designCode)) : designCode;
       
       // Skip unknown/empty designs
       if (!designCode || designCode === 'Unknown' || designCode === '' || 
@@ -883,16 +879,31 @@ const OverallAnalysisTab = ({
       const vcsDesc = vcs;
 
       // Look for bedroom info in design description - use only synchronous decoding
-      const designName = vendorType === 'Microsystems' && codeDefinitions
-        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || ''
-        : p.asset_design_style || '';
+      const designName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || '' : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || '' : p.asset_design_style || '')) : p.asset_design_style || '';
       let bedrooms = 'Unknown';
-      
-      if (designName.includes('1BED') || designName.includes('1 BED')) bedrooms = '1BED';
-      else if (designName.includes('2BED') || designName.includes('2 BED')) bedrooms = '2BED';
-      else if (designName.includes('3BED') || designName.includes('3 BED')) bedrooms = '3BED';
-      else if (designName.includes('STUDIO')) bedrooms = 'STUDIO';
-      
+
+      // 1) Try design-name hints
+      const designUpper = String(designName).toUpperCase();
+      if (designUpper.includes('1BED') || designUpper.includes('1 BED')) bedrooms = '1BED';
+      else if (designUpper.includes('2BED') || designUpper.includes('2 BED')) bedrooms = '2BED';
+      else if (designUpper.includes('3BED') || designUpper.includes('3 BED')) bedrooms = '3BED';
+      else if (designUpper.includes('STUDIO')) bedrooms = 'STUDIO';
+
+      // 2) Synchronous property field fallbacks (common fields)
+      if (bedrooms === 'Unknown') {
+        const candidate = p.asset_bedrooms || p.asset_bedroom_count || p.bedrooms || p.bedrm || p.bed_total || p.BEDTOT || null;
+        const n = parseInt(candidate);
+        if (!isNaN(n)) {
+          if (n === 0) bedrooms = 'STUDIO';
+          else bedrooms = `${n}BED`;
+        }
+      }
+
+      // 3) Check inferred cache (populated by async BEDTOT lookup for BRT)
+      if (bedrooms === 'Unknown' && inferredBedroomsRef.current && inferredBedroomsRef.current[p.id]) {
+        bedrooms = inferredBedroomsRef.current[p.id];
+      }
+
       if (!vcsBedroomGroups[vcs]) {
         vcsBedroomGroups[vcs] = {
           code: vcs,
@@ -905,60 +916,141 @@ const OverallAnalysisTab = ({
         vcsBedroomGroups[vcs].bedrooms[bedrooms] = {
           label: bedrooms,
           properties: [],
+          salesProperties: [],
           totalPrice: 0,
           totalSize: 0,
-          count: 0
+          totalSizeSales: 0,
+          propertiesCount: 0,
+          salesCount: 0
         };
       }
-      
+
       const bedroomGroup = vcsBedroomGroups[vcs].bedrooms[bedrooms];
       bedroomGroup.properties.push(p);
-      bedroomGroup.count++;
-      bedroomGroup.totalPrice += p.values_norm_time || 0;
+      bedroomGroup.propertiesCount++;
       bedroomGroup.totalSize += p.asset_sfla || 0;
+      // If this property has a normalized sale, count it as a sale
+      if (p.values_norm_time && p.values_norm_time > 0) {
+        bedroomGroup.salesProperties.push(p);
+        bedroomGroup.salesCount++;
+        bedroomGroup.totalPrice += p.values_norm_time || 0;
+        bedroomGroup.totalSizeSales += p.asset_sfla || 0;
+      }
     });
 
-    // Calculate bedroom averages
+    // Ensure standard bedroom types exist (show 0 sales when missing)
+    const standardBeds = ['STUDIO','1BED','2BED','3BED','4BED'];
     Object.values(vcsBedroomGroups).forEach(vcsGroup => {
+      standardBeds.forEach(lbl => {
+        if (!vcsGroup.bedrooms[lbl]) {
+          vcsGroup.bedrooms[lbl] = {
+            label: lbl,
+            properties: [],
+            salesProperties: [],
+            totalPrice: 0,
+            totalSize: 0,
+            totalSizeSales: 0,
+            propertiesCount: 0,
+            salesCount: 0
+          };
+        }
+      });
+    });
+
+    // Calculate bedroom averages using VCS-level sales average size for adjustments (drop per-bedroom baseline)
+    Object.values(vcsBedroomGroups).forEach(vcsGroup => {
+      // Compute VCS-level sales avg size (ignore zero sizes)
+      const vcsSalesCount = vcsGroup.salesCount || 0;
+      const vcsAvgSizeSales = (vcsSalesCount > 0 && vcsGroup.totalSizeSales > 0) ? (vcsGroup.totalSizeSales / vcsSalesCount) : 0;
+
+      // Track totals to compute VCS avg adjusted price
+      let vcsTotalAdjusted = 0;
+      let vcsTotalSalesForAdjusted = 0;
+
       Object.values(vcsGroup.bedrooms).forEach(bedroomGroup => {
-        bedroomGroup.avgPrice = bedroomGroup.count > 0 ? bedroomGroup.totalPrice / bedroomGroup.count : 0;
-        bedroomGroup.avgSize = bedroomGroup.count > 0 ? bedroomGroup.totalSize / bedroomGroup.count : 0;
-        
-        // Calculate adjusted prices
+        // Avg price based only on sales
+        bedroomGroup.avgPrice = bedroomGroup.salesCount > 0 ? bedroomGroup.totalPrice / bedroomGroup.salesCount : 0;
+        // Avg size based on inventory (properties)
+        bedroomGroup.avgSize = bedroomGroup.propertiesCount > 0 ? bedroomGroup.totalSize / bedroomGroup.propertiesCount : 0;
+
+        // Determine baseline size to use for adjustments: prefer VCS-level sales avg (if valid), otherwise bedroom-level avgSize
+        const baselineSizeToUse = (vcsAvgSizeSales > 0) ? vcsAvgSizeSales : bedroomGroup.avgSize || 0;
+
+        // Calculate adjusted prices using only salesProperties
         let totalAdjusted = 0;
-        bedroomGroup.properties.forEach(p => {
+        bedroomGroup.salesProperties.forEach(p => {
+          // Skip sales with invalid size
+          const propSize = p.asset_sfla || 0;
+          if (!propSize) return;
+
           const adjusted = calculateAdjustedPrice(
             p.values_norm_time || 0,
-            p.asset_sfla || 0,
-            bedroomGroup.avgSize
+            propSize,
+            baselineSizeToUse
           );
           totalAdjusted += adjusted;
         });
-        
-        bedroomGroup.avgAdjustedPrice = bedroomGroup.count > 0 ? totalAdjusted / bedroomGroup.count : 0;
-      });
 
-      // Find baseline for this VCS
-      let maxPrice = 0;
-      let baseline = null;
-      Object.values(vcsGroup.bedrooms).forEach(group => {
-        if (group.avgAdjustedPrice > maxPrice) {
-          maxPrice = group.avgAdjustedPrice;
-          baseline = group;
+        bedroomGroup.avgAdjustedPrice = bedroomGroup.salesCount > 0 ? (totalAdjusted / bedroomGroup.salesCount) : 0;
+
+        // Accumulate for VCS-level average (only include bedrooms with sales)
+        if (bedroomGroup.salesCount > 0) {
+          vcsTotalAdjusted += totalAdjusted;
+          vcsTotalSalesForAdjusted += bedroomGroup.salesCount;
         }
       });
 
-      // Calculate deltas
-      Object.values(vcsGroup.bedrooms).forEach(group => {
-        if (baseline && group !== baseline) {
-          group.deltaPercent = baseline.avgAdjustedPrice > 0 ? 
-            ((group.avgAdjustedPrice - baseline.avgAdjustedPrice) / baseline.avgAdjustedPrice * 100) : 0;
-        } else {
+      // Compute VCS average adjusted price (used as the comparison baseline for deltas)
+      vcsGroup.avgAdjustedPrice = vcsTotalSalesForAdjusted > 0 ? (vcsTotalAdjusted / vcsTotalSalesForAdjusted) : 0;
+
+      // Calculate deltas between adjacent bedroom groups that have sales (ascending bed count)
+      const bedOrderValue = (label) => {
+        if (!label) return 999;
+        if (label === 'STUDIO') return 0;
+        const m = label.match(/^(\d+)BED$/);
+        if (m) return parseInt(m[1], 10);
+        return 999;
+      };
+
+      const sortedLabels = Object.keys(vcsGroup.bedrooms).sort((a, b) => bedOrderValue(a) - bedOrderValue(b));
+      const sortedGroups = sortedLabels.map(lbl => vcsGroup.bedrooms[lbl]);
+
+      // Filter groups with valid sales and adjusted price
+      const soldGroups = sortedGroups.filter(g => g.salesCount > 0 && g.avgAdjustedPrice > 0);
+
+      // Assign deltas: lowest sold group has no delta, subsequent sold groups compare to previous sold group
+      for (let i = 0; i < sortedGroups.length; i++) {
+        const group = sortedGroups[i];
+        // Default
+        group.delta = 0;
+        group.deltaPercent = 0;
+      }
+
+      for (let i = 0; i < soldGroups.length; i++) {
+        const group = soldGroups[i];
+        if (i === 0) {
+          // Lowest bed with sales — no delta
+          group.delta = 0;
           group.deltaPercent = 0;
+        } else {
+          const prev = soldGroups[i - 1];
+          const deltaVal = group.avgAdjustedPrice - prev.avgAdjustedPrice;
+          const deltaPct = prev.avgAdjustedPrice > 0 ? (deltaVal / prev.avgAdjustedPrice * 100) : 0;
+          group.delta = deltaVal;
+          group.deltaPercent = deltaPct;
+        }
+      }
+
+      // Ensure groups with no sales keep delta as 0
+      sortedGroups.forEach(g => {
+        if (!g.salesCount || g.salesCount === 0) {
+          g.delta = 0;
+          g.deltaPercent = 0;
         }
       });
 
-      vcsGroup.baseline = baseline;
+      // Explicitly clear baseline to avoid UI highlighting confusion
+      vcsGroup.baseline = null;
     });
 
     // Floor Analysis
@@ -967,9 +1059,7 @@ const OverallAnalysisTab = ({
       // Look for floor info in story height or design - use only synchronous decoding
       const storyHeight = p.asset_story_height || '';
       const storyStr = String(storyHeight).toUpperCase();
-      const designName = vendorType === 'Microsystems' && codeDefinitions
-        ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || ''
-        : p.asset_design_style || '';
+      const designName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || '' : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || '' : p.asset_design_style || '')) : p.asset_design_style || '';
       const designStr = String(designName).toUpperCase();
       let floor = 'Unknown';
 
@@ -1036,9 +1126,9 @@ const OverallAnalysisTab = ({
   // ==================== MAIN ANALYSIS ====================
   const [analysis, setAnalysis] = useState(null);
 
-  const runAnalysis = useCallback(() => {
+  const runAnalysis = useCallback(async (options = { skipBedroomEnrichment: false }) => {
     setIsProcessing(true);
-    
+
     try {
       const typeUseAnalysis = analyzeTypeUse();
       const designAnalysis = analyzeDesign();
@@ -1057,16 +1147,70 @@ const OverallAnalysisTab = ({
 
       setAnalysis(results);
       setLastProcessed(new Date());
-      
+
       // Notify parent of changes
       onDataChange();
-      
+
+      // If BRT, attempt async BEDTOT enrichment for Unknown bedrooms (once)
+      try {
+        if (!options.skipBedroomEnrichment && vendorType === 'BRT' && filteredProperties.length > 0) {
+          // Find condo properties that are 'Unknown' by current logic
+          const condosList = filteredProperties.filter(p => (p.asset_type_use || '').toString().startsWith('6'));
+          const needsLookup = [];
+          condosList.forEach(p => {
+            // Re-run small sync detection to see if still unknown
+            const designName = codeDefinitions ? (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || '' : p.asset_design_style || '') : p.asset_design_style || '';
+            let bedrooms = 'Unknown';
+            const designUpper = String(designName).toUpperCase();
+            if (designUpper.includes('1BED') || designUpper.includes('1 BED')) bedrooms = '1BED';
+            else if (designUpper.includes('2BED') || designUpper.includes('2 BED')) bedrooms = '2BED';
+            else if (designUpper.includes('3BED') || designUpper.includes('3 BED')) bedrooms = '3BED';
+            else if (designUpper.includes('STUDIO')) bedrooms = 'STUDIO';
+
+            const candidate = p.asset_bedrooms || p.asset_bedroom_count || p.bedrooms || p.bedrm || p.bed_total || p.BEDTOT || null;
+            const n = parseInt(candidate);
+            if (!isNaN(n)) {
+              bedrooms = n === 0 ? 'STUDIO' : `${n}BED`;
+            }
+
+            if (bedrooms === 'Unknown' && !inferredBedroomsRef.current[p.id]) {
+              needsLookup.push(p);
+            }
+          });
+
+          if (needsLookup.length > 0) {
+            let changed = false;
+            // Batch lookups sequentially to avoid DB overload
+            for (const prop of needsLookup) {
+              try {
+                const raw = await interpretCodes.getRawDataValue?.(prop, 'bedrooms', vendorType);
+                const n = parseInt(raw);
+                if (!isNaN(n)) {
+                  const label = n === 0 ? 'STUDIO' : `${n}BED`;
+                  inferredBedroomsRef.current[prop.id] = label;
+                  changed = true;
+                }
+              } catch (e) {
+                // ignore individual failures
+              }
+            }
+
+            if (changed) {
+              // Re-run analysis once with enrichment applied, skip further enrichment to avoid loops
+              await runAnalysis({ skipBedroomEnrichment: true });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Bedroom enrichment failed:', e);
+      }
+
     } catch (error) {
       console.error('Analysis error:', error);
     } finally {
       setIsProcessing(false);
     }
-  }, [analyzeTypeUse, analyzeDesign, analyzeYearBuilt, analyzeVCSByType, analyzeCondos, onDataChange]);
+  }, [analyzeTypeUse, analyzeDesign, analyzeYearBuilt, analyzeVCSByType, analyzeCondos, onDataChange, filteredProperties, vendorType, codeDefinitions]);
 
   // Run analysis on mount and when properties change
   useEffect(() => {
@@ -1743,7 +1887,10 @@ const OverallAnalysisTab = ({
                   onClick={() => toggleSection('condoDesign')}
                   className="flex justify-between items-center mb-4 cursor-pointer hover:bg-gray-50 -m-2 p-2 rounded"
                 >
-                  <h3 className="text-lg font-semibold">Condo Design Analysis</h3>
+                  <div>
+                    <h3 className="text-lg font-semibold">Condo Design Analysis</h3>
+                    <div className="text-xs text-gray-500 mt-1">Type Use: 6 (Microsystems) / 60 (BRT)</div>
+                  </div>
                   {expandedSections.condoDesign ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                 </div>
                 
@@ -1765,7 +1912,10 @@ const OverallAnalysisTab = ({
                           .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
                           .map((group) => (
                           <tr key={group.code} className={group === analysis.condo.baselineDesign ? 'bg-yellow-50' : ''}>
-                            <td className="px-4 py-3 text-sm font-medium">{group.name}</td>
+                            <td className="px-4 py-3 text-sm font-medium">
+                              <div>{group.name}</div>
+                              <div className="text-xs text-gray-500 mt-1">{group.code}</div>
+                            </td>
                             <td className="px-4 py-3 text-sm text-center">{group.count}</td>
                             <td className="px-4 py-3 text-sm text-center">{formatNumber(group.avgSize)}</td>
                             <td className="px-4 py-3 text-sm text-center">
@@ -1825,14 +1975,21 @@ const OverallAnalysisTab = ({
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                               {Object.values(vcsData.bedrooms)
+                                .filter(b => b.propertiesCount && b.propertiesCount > 0) // show only bed types present in this VCS
                                 .sort((a, b) => {
-                                  const order = ['STUDIO', '1BED', '2BED', '3BED', 'Unknown'];
-                                  return order.indexOf(a.label) - order.indexOf(b.label);
+                                  const bedOrderValue = (label) => {
+                                    if (!label) return 999;
+                                    if (label === 'STUDIO') return 0;
+                                    const m = label.match(/^(\d+)BED$/);
+                                    if (m) return parseInt(m[1], 10);
+                                    return 999;
+                                  };
+                                  return bedOrderValue(a.label) - bedOrderValue(b.label);
                                 })
                                 .map((bedroom) => (
                                 <tr key={bedroom.label} className={bedroom === vcsData.baseline ? 'bg-yellow-50' : ''}>
                                   <td className="px-3 py-2 text-sm font-medium">{bedroom.label}</td>
-                                  <td className="px-3 py-2 text-sm text-center">{bedroom.count}</td>
+                                  <td className="px-3 py-2 text-sm text-center">{bedroom.salesCount}</td>
                                   <td className="px-3 py-2 text-sm text-center">
                                     {bedroom.avgSize > 0 ? formatNumber(bedroom.avgSize) : '—'}
                                   </td>
@@ -1843,8 +2000,8 @@ const OverallAnalysisTab = ({
                                     {bedroom.avgAdjustedPrice > 0 ? formatCurrency(bedroom.avgAdjustedPrice) : <span className="text-gray-500 text-xs">NO DATA</span>}
                                   </td>
                                   <td className="px-3 py-2 text-sm text-center">
-                                    {bedroom.avgAdjustedPrice > 0 && vcsData.baseline ? 
-                                      formatCurrency(bedroom.avgAdjustedPrice - vcsData.baseline.avgAdjustedPrice) : 
+                                    {bedroom.avgAdjustedPrice > 0 && vcsData.baseline ?
+                                      formatCurrency(bedroom.avgAdjustedPrice - vcsData.baseline.avgAdjustedPrice) :
                                       '—'
                                     }
                                   </td>

@@ -397,16 +397,17 @@ getBRTValue: function(property, codeDefinitions, fieldName) {
   // Get the code from the property
   let code = property[fieldName];
   if (!code || code.trim() === '') return null;
-  
+
   // Check if we have sections (BRT structure)
   if (!codeDefinitions.sections?.Residential) {
     return code;
   }
-  
+
+
   // Get the ORIGINAL BRT section number for this field
   const originalSectionMap = {
     'asset_design_style': '23',
-    'asset_building_class': '20', 
+    'asset_building_class': '20',
     'asset_type_use': '21',
     'asset_stories': '22',
     'asset_ext_cond': '60',
@@ -424,25 +425,26 @@ getBRTValue: function(property, codeDefinitions, fieldName) {
   const residentialSections = codeDefinitions.sections.Residential;
   let targetSection = null;
   
+
   for (const [sectionKey, sectionData] of Object.entries(residentialSections)) {
     if (sectionData.KEY === targetSectionNumber) {
       targetSection = sectionData;
       break;
     }
   }
-  
+
+
   if (!targetSection || !targetSection.MAP) {
-    console.warn(`Section ${targetSectionNumber} not found or has no MAP`);
     return code;
   }
-  
+
   // Now look through the MAP for our code
   for (const [mapKey, mapValue] of Object.entries(targetSection.MAP)) {
     if (mapValue.KEY === code || mapValue.DATA?.KEY === code) {
       return mapValue.DATA?.VALUE || mapValue.VALUE || code;
     }
   }
-  
+
   return code; // Return original if no match found
 },
 
@@ -2651,7 +2653,7 @@ export const propertyService = {
       console.error('  Stack:', error.stack);
 
       // Fallback: use client-side parsing
-      console.log('🔄 Attempting client-side fallback...');
+      console.log('���� Attempting client-side fallback...');
       try {
         return await this.getRawDataForPropertyClientSide(jobId, propertyCompositeKey);
       } catch (fallbackError) {
@@ -3237,6 +3239,23 @@ export const worksheetService = {
       ...existingConfig,
       ...config
     };
+
+    // If selectedCounty is not provided, fall back to the job's county from the jobs table
+    try {
+      if (!mergedConfig.selectedCounty) {
+        const { data: jobRecord, error: jobError } = await supabase
+          .from('jobs')
+          .select('county')
+          .eq('id', jobId)
+          .single();
+        if (!jobError && jobRecord?.county) {
+          mergedConfig.selectedCounty = jobRecord.county;
+        }
+      }
+    } catch (e) {
+      // Ignore job lookup failure and proceed with whatever mergedConfig contains
+      console.warn('Could not fetch job county for normalization config fallback:', e);
+    }
 
     const { error } = await supabase
       .from('market_land_valuation')

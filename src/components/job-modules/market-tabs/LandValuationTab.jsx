@@ -183,6 +183,78 @@ const LandValuationTab = ({
     },
     customCategories: []
   });
+
+  // Bracket editor UI state (allows per-job overrides of bracket boundaries)
+  const [showBracketEditor, setShowBracketEditor] = useState(false);
+  const [bracketInputs, setBracketInputs] = useState(() => ({
+    primeMax: cascadeConfig.normal?.prime?.max ?? 1,
+    secondaryMax: cascadeConfig.normal?.secondary?.max ?? 5,
+    excessMax: cascadeConfig.normal?.excess?.max ?? 10,
+    residualMax: cascadeConfig.normal?.residual?.max ?? null
+  }));
+
+  useEffect(() => {
+    // Keep bracket inputs in sync when cascadeConfig loads from saved data
+    setBracketInputs({
+      primeMax: cascadeConfig.normal?.prime?.max ?? 1,
+      secondaryMax: cascadeConfig.normal?.secondary?.max ?? 5,
+      excessMax: cascadeConfig.normal?.excess?.max ?? 10,
+      residualMax: cascadeConfig.normal?.residual?.max ?? null
+    });
+  }, [cascadeConfig]);
+
+  const validateAndApplyBrackets = (opts = { recalc: true }) => {
+    // Parse numeric values
+    const p = parseFloat(bracketInputs.primeMax);
+    const s = parseFloat(bracketInputs.secondaryMax);
+    const e = parseFloat(bracketInputs.excessMax);
+    const r = bracketInputs.residualMax === null || bracketInputs.residualMax === '' ? null : parseFloat(bracketInputs.residualMax);
+
+    if (isNaN(p) || isNaN(s) || isNaN(e) || (r !== null && isNaN(r))) {
+      return alert('Please enter valid numeric bracket maximums. Use decimals for fractions (e.g. 0.25).');
+    }
+    if (!(p > 0 && s > p && e > s && (r === null || r > e))) {
+      return alert('Brackets must increase: prime < secondary < excess < residual (residual may be empty).');
+    }
+
+    setCascadeConfig(prev => ({
+      ...prev,
+      normal: {
+        ...prev.normal,
+        prime: { ...prev.normal.prime, max: p },
+        secondary: { ...prev.normal.secondary, max: s },
+        excess: { ...prev.normal.excess, max: e },
+        residual: { ...prev.normal.residual, max: r }
+      }
+    }));
+
+    // Optionally re-run the bracket analysis immediately
+    if (opts.recalc) {
+      try {
+        performBracketAnalysis();
+      } catch (e) {
+        // ignore errors from recalculation
+      }
+    }
+  };
+
+  const applyDefaultQuartileBrackets = () => {
+    // Example quartile defaults for built-up towns (in acres)
+    const defaults = { primeMax: 0.25, secondaryMax: 0.5, excessMax: 0.75, residualMax: 1 };
+    setBracketInputs(defaults);
+    setCascadeConfig(prev => ({
+      ...prev,
+      normal: {
+        ...prev.normal,
+        prime: { ...prev.normal.prime, max: defaults.primeMax },
+        secondary: { ...prev.normal.secondary, max: defaults.secondaryMax },
+        excess: { ...prev.normal.excess, max: defaults.excessMax },
+        residual: { ...prev.normal.residual, max: defaults.residualMax }
+      }
+    }));
+    // Recompute
+    try { performBracketAnalysis(); } catch (e) {}
+  };
   
   // VCS Analysis
   const [bracketAnalysis, setBracketAnalysis] = useState({});
@@ -1074,7 +1146,7 @@ const getPricePerUnit = useCallback((price, size) => {
       const enriched = enrichProperty(prop);
       finalSales.push(enriched);
       if (enriched.autoCategory) {
-        debug(`🏷️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
+        debug(`���️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
         setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
       }
     });
@@ -3294,7 +3366,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     // Method 2 Summary (similar to UI)
-    method2Rows.push(['Implied Acreage Summary']);
+    method2Rows.push(['Method 2 Summary']);
     if (method2Summary) {
       const mid = method2Summary.mediumRange || {};
       const lg = method2Summary.largeRange || {};
@@ -3334,7 +3406,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     ];
 
     // Apply bold + centered styling to header-like cells (detect by label)
-    const headerLabels = ['Bracket','Count','Avg Lot Size (acres)','Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','ADJUSTED','$ ADJUSTED','DELTA','$ DELTA','LOT DELTA','PER ACRE','$ PER ACRE','PER SQ FT','Implied Acreage Summary'];
+    const headerLabels = ['Bracket','Count','Avg Lot Size (acres)','Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','ADJUSTED','$ ADJUSTED','DELTA','$ DELTA','LOT DELTA','PER ACRE','$ PER ACRE','PER SQ FT','Method 2 Summary'];
     try {
       const range = XLSX.utils.decode_range(ws2['!ref']);
       for (let R = range.s.r; R <= range.e.r; ++R) {
@@ -3353,7 +3425,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       debug('Method2 header styling skipped', e);
     }
 
-    XLSX.utils.book_append_sheet(wb, ws2, 'Implied Acreage');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Method 2');
 
     return wb;
   };
@@ -3447,7 +3519,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
     
     // Method 2 Analysis
-    csv += '\n\nIMPLIED ACREAGE: IMPROVED SALE LOT SIZE ANALYSIS\n';
+    csv += '\n\nMETHOD 2: IMPROVED SALE LOT SIZE ANALYSIS\n';
     csv += 'VCS,Total Sales,<1 Acre,1-5 Acres,5-10 Acres,>10 Acres,Implied Rate\n';
     
     Object.entries(bracketAnalysis).sort(([a], [b]) => a.localeCompare(b)).forEach(([vcs, data]) => {
@@ -3457,7 +3529,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     
     // Method 2 Summary
     if (method2Summary.average) {
-      csv += '\n\nIMPLIED ACREAGE SUMMARY\n';
+      csv += '\n\nMETHOD 2 SUMMARY\n';
       csv += `Average Implied Rate,${method2Summary.average}\n`;
       csv += `Median Implied Rate,${method2Summary.median}\n`;
       csv += `Coverage,${method2Summary.coverage}\n`;
@@ -3820,7 +3892,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
     debug('🔄 Recalculating category analysis');
-    debug('��� Total vacant sales:', vacantSales.length);
+    debug('���� Total vacant sales:', vacantSales.length);
     debug('📊 Checked sales count:', checkedSales.length);
     debug('📋 Included sales IDs:', Array.from(includedSales));
     debug('📋 Sale categories state:', saleCategories);
@@ -4226,6 +4298,90 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             </button>
           </div>
         </div>
+
+        {/* Bracket editor toggle and controls */}
+        <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <button
+            onClick={() => setShowBracketEditor(prev => !prev)}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: showBracketEditor ? '#F3F4F6' : 'white',
+              border: '1px solid #E5E7EB',
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            {showBracketEditor ? 'Hide Bracket Settings' : 'Edit Brackets'}
+          </button>
+        </div>
+
+        {showBracketEditor && (
+          <div style={{ marginTop: '12px', padding: '12px', borderRadius: '6px', backgroundColor: 'white', border: '1px solid #E5E7EB' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: '#6B7280' }}>Prime max (acres)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={bracketInputs.primeMax ?? ''}
+                  onChange={(e) => setBracketInputs(prev => ({ ...prev, primeMax: e.target.value }))}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: '#6B7280' }}>Secondary max (acres)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={bracketInputs.secondaryMax ?? ''}
+                  onChange={(e) => setBracketInputs(prev => ({ ...prev, secondaryMax: e.target.value }))}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: '#6B7280' }}>Excess max (acres)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={bracketInputs.excessMax ?? ''}
+                  onChange={(e) => setBracketInputs(prev => ({ ...prev, excessMax: e.target.value }))}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: '#6B7280' }}>Residual max (acres)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={bracketInputs.residualMax ?? ''}
+                  onChange={(e) => setBracketInputs(prev => ({ ...prev, residualMax: e.target.value }))}
+                  placeholder="leave empty for open-ended"
+                  style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                />
+              </div>
+            </div>
+            <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button
+                onClick={() => { validateAndApplyBrackets({ recalc: true }); setShowBracketEditor(false); }}
+                style={{ padding: '8px 12px', backgroundColor: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+              >
+                Apply
+              </button>
+              <button
+                onClick={() => setShowBracketEditor(false)}
+                style={{ padding: '8px 12px', backgroundColor: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: '6px', cursor: 'pointer' }}
+              >
+                Close
+              </button>
+              <button
+                onClick={() => { saveAnalysis(); }}
+                style={{ padding: '8px 12px', backgroundColor: '#10B981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+              >
+                Save Brackets
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Method 1: Vacant Land Sales */}
@@ -4610,11 +4766,40 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           </div>
         </div>
       </div>
+      <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={() => setShowBracketEditor(prev => !prev)}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: showBracketEditor ? '#F3F4F6' : 'white',
+              border: '1px solid #E5E7EB',
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            {showBracketEditor ? 'Hide Bracket Settings' : 'Edit Brackets'}
+          </button>
+
+          <button
+            onClick={() => { applyDefaultQuartileBrackets(); setShowBracketEditor(true); }}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: '#F9FAFB',
+              border: '1px solid #E5E7EB',
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            Apply Quartile Defaults
+          </button>
+        </div>
+      </div>
       {/* Method 2: Improved Sale Lot Size Analysis */}
       <div style={{ marginBottom: '30px', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
         <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Implied Acreage: Improved Sale Lot Size Analysis</h3>
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Method 2: Improved Sale Lot Size Analysis</h3>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
               <label style={{ fontSize: '12px', color: '#6B7280' }}>Type and Use:</label>
               <select
@@ -4818,7 +5003,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           <div style={{ borderTop: '2px solid #E5E7EB', backgroundColor: '#F8FAFC' }}>
             <div style={{ padding: '20px' }}>
               <h4 style={{ margin: '0 0 15px 0', fontSize: '16px', fontWeight: 'bold', color: '#1F2937' }}>
-                Implied Acreage Summary - Implied $/Acre Rates
+                Method 2 Summary - Implied $/Acre Rates
               </h4>
 
               <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
@@ -6019,7 +6204,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>
-                Implied Acreage Sales - VCS {method2ModalVCS}
+                Method 2 Sales - VCS {method2ModalVCS}
               </h3>
               <button
                 onClick={() => setShowMethod2Modal(false)}
@@ -6062,7 +6247,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'block' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('lot')}
