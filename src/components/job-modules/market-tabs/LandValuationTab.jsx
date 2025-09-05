@@ -1721,7 +1721,7 @@ Find specific information about this property and sale. Include:
 
 ��� Property ownership/seller details
 • Tax assessment and classification details
-��� Documented environmental constraints (wetlands, floodplains)
+• Documented environmental constraints (wetlands, floodplains)
 • Municipality-specific land use characteristics
 • Any circumstances of the sale (estate, distressed, etc.)
 
@@ -3406,7 +3406,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     ];
 
     // Apply bold + centered styling to header-like cells (detect by label)
-    const headerLabels = ['Bracket','Count','Avg Lot Size (acres)','Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','ADJUSTED','$ ADJUSTED','DELTA','$ DELTA','LOT DELTA','PER ACRE','$ PER ACRE','PER SQ FT','Implied Acreage Summary'];
+    const headerLabels = ['Bracket','Count','Avg Lot Size (acres)','Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','ADJUSTED','$ ADJUSTED','DELTA','$ DELTA','LOT DELTA','PER ACRE','$ PER ACRE','PER SQ FT','Method 2 Summary'];
     try {
       const range = XLSX.utils.decode_range(ws2['!ref']);
       for (let R = range.s.r; R <= range.e.r; ++R) {
@@ -4097,7 +4097,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
     const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
 
-    debug('����️ Building Lot Analysis Result:', {
+    debug('🏗️ Building Lot Analysis Result:', {
       avg: buildingLot.avg,
       count: buildingLot.count,
       method: buildingLot.method,
