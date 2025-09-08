@@ -5006,53 +5006,81 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </h4>
 
               <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-                {/* 1.00-4.99 Range */}
-                <div style={{ textAlign: 'center', minWidth: '150px' }}>
-                  <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>1.00-4.99 Acres</div>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>
-                    {method2Summary.mediumRange?.perAcre !== 'N/A' ?
-                      `$${method2Summary.mediumRange?.perAcre?.toLocaleString()}` : 'N/A'}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                    {method2Summary.mediumRange?.perSqFt !== 'N/A' ?
-                      `$${method2Summary.mediumRange?.perSqFt}/SF` : 'N/A'}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
-                    ({method2Summary.mediumRange?.count || 0} VCS)
-                  </div>
-                </div>
+                {/* dynamic bracket labels based on cascadeConfig */}
+                {(() => {
+                  const p = cascadeConfig.normal?.prime?.max ?? 1;
+                  const s = cascadeConfig.normal?.secondary?.max ?? 5;
+                  const e = cascadeConfig.normal?.excess?.max ?? 10;
+                  const r = cascadeConfig.normal?.residual?.max ?? null;
 
-                {/* 5.00-9.99 Range */}
-                <div style={{ textAlign: 'center', minWidth: '150px' }}>
-                  <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>5.00-9.99 Acres</div>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0D9488' }}>
-                    {method2Summary.largeRange?.perAcre !== 'N/A' ?
-                      `$${method2Summary.largeRange?.perAcre?.toLocaleString()}` : 'N/A'}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                    {method2Summary.largeRange?.perSqFt !== 'N/A' ?
-                      `$${method2Summary.largeRange?.perSqFt}/SF` : 'N/A'}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
-                    ({method2Summary.largeRange?.count || 0} VCS)
-                  </div>
-                </div>
+                  const labelMedium = `${p.toFixed(2)}-${s.toFixed(2)}`;
+                  const labelLarge = `${s.toFixed(2)}-${e.toFixed(2)}`;
+                  const labelXlarge = r ? `${e.toFixed(2)}-${r.toFixed(2)}` : `>${e.toFixed(2)}`;
 
-                {/* 10.00+ Range */}
-                <div style={{ textAlign: 'center', minWidth: '150px' }}>
-                  <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>10.00+ Acres</div>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#7C3AED' }}>
-                    {method2Summary.xlargeRange?.perAcre !== 'N/A' ?
-                      `$${method2Summary.xlargeRange?.perAcre?.toLocaleString()}` : 'N/A'}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                    {method2Summary.xlargeRange?.perSqFt !== 'N/A' ?
-                      `$${method2Summary.xlargeRange?.perSqFt}/SF` : 'N/A'}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
-                    ({method2Summary.xlargeRange?.count || 0} VCS)
-                  </div>
-                </div>
+                  return (
+                    <>
+                      {/* medium */}
+                      <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                        <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>{labelMedium} Acres</div>
+                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>
+                          {valuationMode === 'sf' ?
+                            (method2Summary.mediumRange?.perSqFt !== 'N/A' ? `$${method2Summary.mediumRange?.perSqFt}/SF` : 'N/A') :
+                            (method2Summary.mediumRange?.perAcre !== 'N/A' ? `$${method2Summary.mediumRange?.perAcre?.toLocaleString()}` : 'N/A')
+                          }
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                          {valuationMode === 'sf' ?
+                            (method2Summary.mediumRange?.perAcre !== 'N/A' ? `$${method2Summary.mediumRange?.perAcre?.toLocaleString()}/AC` : 'N/A') :
+                            (method2Summary.mediumRange?.perSqFt !== 'N/A' ? `$${method2Summary.mediumRange?.perSqFt}/SF` : 'N/A')
+                          }
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                          ({method2Summary.mediumRange?.count || 0} VCS)
+                        </div>
+                      </div>
+
+                      {/* large */}
+                      <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                        <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>{labelLarge} Acres</div>
+                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0D9488' }}>
+                          {valuationMode === 'sf' ?
+                            (method2Summary.largeRange?.perSqFt !== 'N/A' ? `$${method2Summary.largeRange?.perSqFt}/SF` : 'N/A') :
+                            (method2Summary.largeRange?.perAcre !== 'N/A' ? `$${method2Summary.largeRange?.perAcre?.toLocaleString()}` : 'N/A')
+                          }
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                          {valuationMode === 'sf' ?
+                            (method2Summary.largeRange?.perAcre !== 'N/A' ? `$${method2Summary.largeRange?.perAcre?.toLocaleString()}/AC` : 'N/A') :
+                            (method2Summary.largeRange?.perSqFt !== 'N/A' ? `$${method2Summary.largeRange?.perSqFt}/SF` : 'N/A')
+                          }
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                          ({method2Summary.largeRange?.count || 0} VCS)
+                        </div>
+                      </div>
+
+                      {/* xlarge */}
+                      <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                        <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>{labelXlarge}</div>
+                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#7C3AED' }}>
+                          {valuationMode === 'sf' ?
+                            (method2Summary.xlargeRange?.perSqFt !== 'N/A' ? `$${method2Summary.xlargeRange?.perSqFt}/SF` : 'N/A') :
+                            (method2Summary.xlargeRange?.perAcre !== 'N/A' ? `$${method2Summary.xlargeRange?.perAcre?.toLocaleString()}` : 'N/A')
+                          }
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                          {valuationMode === 'sf' ?
+                            (method2Summary.xlargeRange?.perAcre !== 'N/A' ? `$${method2Summary.xlargeRange?.perAcre?.toLocaleString()}/AC` : 'N/A') :
+                            (method2Summary.xlargeRange?.perSqFt !== 'N/A' ? `$${method2Summary.xlargeRange?.perSqFt}/SF` : 'N/A')
+                          }
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                          ({method2Summary.xlargeRange?.count || 0} VCS)
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
 
                 {/* Average Across All Positive Deltas */}
                 <div style={{ textAlign: 'center', minWidth: '150px' }}>
