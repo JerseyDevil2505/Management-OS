@@ -3389,9 +3389,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const mid = method2Summary.mediumRange || {};
       const lg = method2Summary.largeRange || {};
       const xl = method2Summary.xlargeRange || {};
-      method2Rows.push(['1.00-4.99 perAcre', mid.perAcre && mid.perAcre !== 'N/A' ? `$${mid.perAcre.toLocaleString()}` : 'N/A']);
-      method2Rows.push(['5.00-9.99 perAcre', lg.perAcre && lg.perAcre !== 'N/A' ? `$${lg.perAcre.toLocaleString()}` : 'N/A']);
-      method2Rows.push(['10.00+ perAcre', xl.perAcre && xl.perAcre !== 'N/A' ? `$${xl.perAcre.toLocaleString()}` : 'N/A']);
+      const p = cascadeConfig.normal?.prime?.max ?? 1;
+      const s = cascadeConfig.normal?.secondary?.max ?? 5;
+      const e = cascadeConfig.normal?.excess?.max ?? 10;
+
+      method2Rows.push([`${p.toFixed(2)}-${s.toFixed(2)} perAcre`, mid.perAcre && mid.perAcre !== 'N/A' ? `$${mid.perAcre.toLocaleString()}` : 'N/A']);
+      method2Rows.push([`${s.toFixed(2)}-${e.toFixed(2)} perAcre`, lg.perAcre && lg.perAcre !== 'N/A' ? `$${lg.perAcre.toLocaleString()}` : 'N/A']);
+      method2Rows.push([`${e.toFixed(2)}+ perAcre`, xl.perAcre && xl.perAcre !== 'N/A' ? `$${xl.perAcre.toLocaleString()}` : 'N/A']);
       method2Rows.push(['All Positive Deltas Avg', (() => {
         const allRates = [];
         if (mid.perAcre && mid.perAcre !== 'N/A') allRates.push(mid.perAcre);
