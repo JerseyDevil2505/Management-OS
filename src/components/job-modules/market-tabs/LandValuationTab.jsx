@@ -1294,11 +1294,18 @@ const getPricePerUnit = useCallback((price, size) => {
         // Sort by acreage for bracketing
         sales.sort((a, b) => a.acres - b.acres);
 
+        // Use configured cascade boundaries (in acres) for bracketing
+        const pMax = cascadeConfig.normal?.prime?.max ?? 1;
+        const sMax = cascadeConfig.normal?.secondary?.max ?? 5;
+        const eMax = cascadeConfig.normal?.excess?.max ?? 10;
+        const rMax = cascadeConfig.normal?.residual?.max ?? null;
+
         const brackets = {
-          small: sales.filter(s => s.acres < 1),              // 0 to 0.99
-          medium: sales.filter(s => s.acres >= 1 && s.acres < 5),  // 1.00-4.99
-          large: sales.filter(s => s.acres >= 5 && s.acres < 10),  // 5.00-9.99
-          xlarge: sales.filter(s => s.acres >= 10)            // 10.00 and greater
+          small: sales.filter(s => s.acres < pMax),
+          medium: sales.filter(s => s.acres >= pMax && s.acres < sMax),
+          large: sales.filter(s => s.acres >= sMax && s.acres < eMax),
+          xlarge: rMax ? sales.filter(s => s.acres >= eMax && s.acres < rMax) : sales.filter(s => s.acres >= eMax),
+          residual: rMax ? sales.filter(s => s.acres >= rMax) : []
         };
 
         // Calculate overall VCS average SFLA for size adjustment
@@ -3329,11 +3336,22 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const bracketHeaders = ['Bracket','Count','Avg Lot Size (acres)','Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','ADJUSTED','$ ADJUSTED','DELTA','$ DELTA','LOT DELTA','PER ACRE','$ PER ACRE','PER SQ FT'];
       method2Rows.push(bracketHeaders);
 
+      // Build bracket labels dynamically from cascadeConfig
+      const p = cascadeConfig.normal?.prime?.max ?? 1;
+      const s = cascadeConfig.normal?.secondary?.max ?? 5;
+      const e = cascadeConfig.normal?.excess?.max ?? 10;
+      const r = cascadeConfig.normal?.residual?.max ?? null;
+
+      const labelSmall = `<${p.toFixed(2)}`;
+      const labelMedium = `${p.toFixed(2)}-${s.toFixed(2)}`;
+      const labelLarge = `${s.toFixed(2)}-${e.toFixed(2)}`;
+      const labelXlarge = r ? `${e.toFixed(2)}-${r.toFixed(2)}` : `>${e.toFixed(2)}`;
+
       const bracketList = [
-        { key: 'small', label: '<1.00', bracket: data.brackets.small },
-        { key: 'medium', label: '1.00-5.00', bracket: data.brackets.medium },
-        { key: 'large', label: '5.00-10.00', bracket: data.brackets.large },
-        { key: 'xlarge', label: '>10.00', bracket: data.brackets.xlarge }
+        { key: 'small', label: labelSmall, bracket: data.brackets.small },
+        { key: 'medium', label: labelMedium, bracket: data.brackets.medium },
+        { key: 'large', label: labelLarge, bracket: data.brackets.large },
+        { key: 'xlarge', label: labelXlarge, bracket: data.brackets.xlarge }
       ];
 
       bracketList.forEach((row, rowIndex) => {
@@ -4760,6 +4778,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </div>
               <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                 <button
+                  onClick={() => { applyDefaultQuartileBrackets(); /* keep editor open to show changes */ }}
+                  style={{ padding: '8px 12px', backgroundColor: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: '6px', cursor: 'pointer' }}
+                >
+                  Apply Quartile Defaults
+                </button>
+                <button
                   onClick={() => { validateAndApplyBrackets({ recalc: true }); setShowBracketEditor(false); }}
                   style={{ padding: '8px 12px', backgroundColor: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
                 >
@@ -4772,7 +4796,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   Close
                 </button>
                 <button
-                  onClick={() => { saveAnalysis(); }}
+                  onClick={() => { validateAndApplyBrackets({ recalc: true }); saveRates(); }}
                   style={{ padding: '8px 12px', backgroundColor: '#10B981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
                 >
                   Save Brackets
