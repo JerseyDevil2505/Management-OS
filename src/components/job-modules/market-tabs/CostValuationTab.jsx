@@ -152,6 +152,27 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   };
 
 
+  // Save state recommended factor to market_land_valuation
+  const saveStateRecommendedFactor = async (factor) => {
+    if (!jobData?.id) return alert('Missing job id');
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('market_land_valuation')
+        .update({ cost_conv_recommendation: factor, updated_at: new Date().toISOString() })
+        .eq('job_id', jobData.id);
+      if (error) throw error;
+      setStateRecommendedFactor(factor);
+      if (onUpdateJobCache && jobData?.id) onUpdateJobCache(jobData.id, null);
+      alert('Saved state recommended factor');
+    } catch (e) {
+      console.error('Error saving state recommended factor:', e);
+      alert('Failed to save state recommended factor. See console.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // Save job-level cost_conv_factor to market_land_valuation
   const saveCostConvFactor = async (factor) => {
     if (!jobData?.id) return alert('Missing job id');
