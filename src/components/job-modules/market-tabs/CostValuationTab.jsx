@@ -63,7 +63,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
       return true;
     });
-  }, [properties, fromYear, toYear, typeGroup, useGroup, constructionAge]);
+  }, [properties, fromYear, toYear, typeGroup]);
 
   // Compute recommended factor based on available replacement/base cost and normalized sale price
   const computeRecommendedFactor = () => {
