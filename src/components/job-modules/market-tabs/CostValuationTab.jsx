@@ -376,20 +376,58 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                       setIncludedMap(prev => ({ ...prev, [key]: e.target.checked }));
                     }} />
                   </td>
+
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.property_block || ''}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.property_lot || ''}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_qualifier || p.qualifier || '—'}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.property_card || ''}</td>
+
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.property_location || ''}</td>
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_year_built || '—'}</td>
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_building_class || '—'}</td>
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{saleYear || ''}</td>
+
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.sales_date ? new Date(p.sales_date).toLocaleDateString() : '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.sales_price ? Number(p.sales_price).toLocaleString() : '—'}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.sales_nu || '—'}</td>
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{salePrice ? salePrice.toLocaleString() : '—'}</td>
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_norm_time ? p.values_norm_time.toLocaleString() : '—'}</td>
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{repl ? repl.toLocaleString() : '—'}</td>
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_base_cost ? p.values_base_cost.toLocaleString() : '—'}</td>
-                  <td className="px-3 py-2 text-sm border-b border-gray-100">{p.values_cama_land ? p.values_cama_land.toLocaleString() : '���'}</td>
-                  <td className="px-3 py-2 text-sm border-b border-gray-100">{factor ? Number(factor).toFixed(2) : '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_norm_time ? Number(p.values_norm_time).toLocaleString() : '—'}</td>
+
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_year_built || '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(p.asset_year_built ? (1 - ((currentYear - parseInt(p.asset_year_built, 10)) / 100)).toFixed(2) : '—')}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_building_class || '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_living_area || p.living_area || '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_cama_land ? Number(p.values_cama_land).toLocaleString() : '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_det_items ? Number(p.values_det_items).toLocaleString() : '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_base_cost ? Number(p.values_base_cost).toLocaleString() : '—'}</td>
+
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
+                    const replVal = p.values_repl_cost || 0;
+                    const baseVal = p.values_base_cost || 0;
+                    const depr = p.asset_year_built ? (1 - ((currentYear - parseInt(p.asset_year_built, 10)) / 100)) : 1;
+                    const val = (replVal + baseVal) * depr;
+                    return isFinite(val) ? Number(val).toFixed(2) : '—';
+                  })()}</td>
+
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
+                    const timeNorm = p.values_norm_time || 0;
+                    const cama = p.values_cama_land || 0;
+                    const replVal = p.values_repl_cost || 0;
+                    const val = timeNorm - cama - replVal;
+                    return isFinite(val) ? Number(val).toFixed(2) : '—';
+                  })()}</td>
+
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
+                    const replVal = p.values_repl_cost || 0;
+                    const salePrice = p.sales_price || 0;
+                    const val = (salePrice && replVal) ? (replVal / salePrice) : null;
+                    return val ? Number(val).toFixed(2) : '—';
+                  })()}</td>
+
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
+                    const salePrice = p.sales_price || 0;
+                    const replVal = p.values_repl_cost || 0;
+                    const ccf = (salePrice && replVal) ? (replVal / salePrice) : null;
+                    const baseRef = costConvFactor || recommendedMedian || recommendedFactor || 1;
+                    const ratio = (ccf && baseRef) ? (ccf / baseRef) : null;
+                    return ratio ? Number(ratio).toFixed(2) : '—';
+                  })()}</td>
                 </tr>
               );
             })}
