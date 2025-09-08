@@ -46,10 +46,10 @@ const DataQualityTab = ({
   const [modalData, setModalData] = useState({ title: '', properties: [] });
 
   // Helper: filter out ignored issues from results for display
-  const filterIgnoredResults = (results) => {
+  const filterIgnoredResults = (results, ignoredSet = ignoredIssues) => {
     const out = {};
     Object.entries(results).forEach(([cat, arr]) => {
-      out[cat] = (arr || []).filter(issue => !ignoredIssues.has(`${issue.property_key}-${issue.check}`));
+      out[cat] = (arr || []).filter(issue => !ignoredSet.has(`${issue.property_key}-${issue.check}`));
     });
     return out;
   };
@@ -68,8 +68,8 @@ const DataQualityTab = ({
   };
 
   // Apply ignored filter and update UI state (scores + stats + results)
-  const applyAndSetResults = (results) => {
-    const filtered = filterIgnoredResults(results);
+  const applyAndSetResults = (results, ignoredSet = ignoredIssues) => {
+    const filtered = filterIgnoredResults(results, ignoredSet);
     setCheckResults(filtered);
     const score = calculateQualityScore(filtered);
     setQualityScore(score);
@@ -2707,7 +2707,7 @@ const editCustomCheck = (check) => {
                                 }
 
                                 // Update displayed results/stats after toggling ignored
-                                applyAndSetResults(checkResults);
+                                applyAndSetResults(checkResults, newIgnored);
                               } catch (error) {
                                 console.error('Error saving ignored issues:', error);
                               }
