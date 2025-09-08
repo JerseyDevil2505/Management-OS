@@ -8,8 +8,10 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   // Filters
   const [fromYear, setFromYear] = useState(currentYear - 3);
   const [toYear, setToYear] = useState(currentYear);
-  const [typePrefix, setTypePrefix] = useState('1');
-  const [usePrefix, setUsePrefix] = useState('1');
+  // Replace prefix inputs with dropdown groupings
+  const [typeGroup, setTypeGroup] = useState('single_family'); // default codes beginning with '1'
+  const [useGroup, setUseGroup] = useState('single_family');
+  const [constructionAge, setConstructionAge] = useState('all'); // 'all' | 'new' (<=10) | 'newer' (<=20)
 
   // Factor state (job-level)
   const [costConvFactor, setCostConvFactor] = useState(marketLandData?.cost_conv_factor ?? null);
