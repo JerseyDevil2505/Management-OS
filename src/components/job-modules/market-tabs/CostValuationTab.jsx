@@ -32,12 +32,15 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     }
   };
 
-  // Filter properties by year and type/use prefixes
+  // Filter properties by year, normalized price, and type/use prefixes
   const filtered = useMemo(() => {
     return properties.filter(p => {
       const year = safeSaleYear(p);
       if (!year) return false;
       if (year < fromYear || year > toYear) return false;
+
+      // Require a valid time-normalized price (vetting step)
+      if (!(p.values_norm_time && p.values_norm_time > 0)) return false;
 
       // asset_type_use exists on property_records
       const typeVal = p.asset_type_use ? p.asset_type_use.toString().trim() : '';
@@ -58,7 +61,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       // Only include new/newer construction (<= 20 years). Exclude if missing year built.
       const yearBuilt = p.asset_year_built || null;
       if (!yearBuilt) return false;
-      const age = currentYear - parseInt(yearBuilt);
+      const age = currentYear - parseInt(yearBuilt, 10);
       if (age > 20) return false;
 
       return true;
@@ -74,6 +77,77 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     });
     setIncludedMap(map);
   }, [filtered]);
+
+  // Recommended mean (average) based on included comparables
+  const recommendedFactor = useMemo(() => {
+    const rows = filtered
+      .map(p => {
+        const salePrice = p.values_norm_time; // we require this earlier
+        const repl = p.values_repl_cost || p.values_base_cost || null;
+        if (!repl || !salePrice || salePrice === 0) return null;
+        const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
+        const included = includedMap[key] !== undefined ? includedMap[key] : true;
+        return included ? (repl / salePrice) : null;
+      })
+      .filter(v => v && isFinite(v));
+
+    if (rows.length === 0) return null;
+    const sum = rows.reduce((a, b) => a + b, 0);
+    return sum / rows.length;
+  }, [filtered, includedMap]);
+
+  // Recommended median for robustness
+  const recommendedMedian = useMemo(() => {
+    const rows = filtered
+      .map(p => {
+        const salePrice = p.values_norm_time;
+        const repl = p.values_repl_cost || p.values_base_cost || null;
+        if (!repl || !salePrice || salePrice === 0) return null;
+        const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
+        const included = includedMap[key] !== undefined ? includedMap[key] : true;
+        return included ? (repl / salePrice) : null;
+      })
+      .filter(v => v && isFinite(v))
+      .sort((a, b) => a - b);
+
+    if (rows.length === 0) return null;
+    const mid = Math.floor(rows.length / 2);
+    return rows.length % 2 !== 0 ? rows[mid] : (rows[mid - 1] + rows[mid]) / 2;
+  }, [filtered, includedMap]);
+
+  // Export CSV of current filtered results
+  const exportCsv = () => {
+    if (!filtered || filtered.length === 0) return alert('No data to export');
+    const headers = [
+      'Include','Block','Lot','Card','Location','Year Built','Building Class','Sale Year','Sale NU','Sale Price','Time Norm Price','Replacement Cost','Base Cost','CAMA Land','CCF'
+    ];
+    const rows = filtered.map(p => {
+      const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
+      const included = includedMap[key] !== false;
+      const saleYear = safeSaleYear(p);
+      const salePrice = p.sales_price || '';
+      const timeNorm = p.values_norm_time || '';
+      const repl = p.values_repl_cost || p.values_base_cost || '';
+      const base = p.values_base_cost || '';
+      const cama = p.values_cama_land || '';
+      const ccf = (repl && timeNorm) ? (repl / timeNorm) : '';
+      return [included ? '1' : '0', p.property_block || '', p.property_lot || '', p.property_card || '', p.property_location || '', p.asset_year_built || '', p.asset_building_class || '', saleYear || '', p.sales_nu || '', salePrice, timeNorm, repl, base, cama, ccf ? ccf.toFixed(2) : ''];
+    });
+
+    const csvContent = [headers, ...rows].map(r => r.map(cell => {
+      if (cell === null || cell === undefined) return '';
+      const str = String(cell).replace(/"/g, '""');
+      return `"${str}"`;
+    }).join(',')).join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cost_valuation_export_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   // Compute recommended factor (mean) based on included comparables
   const recommendedFactor = useMemo(() => {
@@ -193,6 +267,12 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
           >
             Reset
           </button>
+          <button
+            className="px-3 py-2 bg-indigo-600 text-white rounded text-sm"
+            onClick={() => exportCsv()}
+          >
+            Export CSV
+          </button>
         </div>
       </div>
 
@@ -230,19 +310,21 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         <table className="min-w-full text-left">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-3 py-2 text-xs text-gray-600">Include</th>
-              <th className="px-3 py-2 text-xs text-gray-600">Block</th>
-              <th className="px-3 py-2 text-xs text-gray-600">Lot</th>
-              <th className="px-3 py-2 text-xs text-gray-600">Card</th>
-              <th className="px-3 py-2 text-xs text-gray-600">Location</th>
-              <th className="px-3 py-2 text-xs text-gray-600">Year Built</th>
-              <th className="px-3 py-2 text-xs text-gray-600">Building Class</th>
-              <th className="px-3 py-2 text-xs text-gray-600">Sale Year</th>
-              <th className="px-3 py-2 text-xs text-gray-600">Sale #</th>
-              <th className="px-3 py-2 text-xs text-gray-600">Sale Price</th>
-              <th className="px-3 py-2 text-xs text-gray-600">Time Norm Price</th>
-              <th className="px-3 py-2 text-xs text-gray-600">Replacement Cost</th>
-              <th className="px-3 py-2 text-xs text-gray-600">CCF</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Include</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Block</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Lot</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Card</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Location</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Year Built</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Building Class</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Sale Year</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Sale NU</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Sale Price</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Time Norm Price</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Replacement Cost</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-gray-200">Base Cost</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-gray-200">CAMA Land</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-gray-200">CCF</th>
             </tr>
           </thead>
           <tbody>
@@ -253,25 +335,27 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
               const factor = (repl && salePrice) ? (repl / salePrice) : null;
 
               return (
-                <tr key={p.property_composite_key || i} className="border-t border-gray-100 hover:bg-gray-50">
-                  <td className="px-3 py-2 text-sm">
+                <tr key={p.property_composite_key || i} className="hover:bg-gray-50">
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">
                     <input type="checkbox" checked={includedMap[p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`] !== false} onChange={(e) => {
                       const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
                       setIncludedMap(prev => ({ ...prev, [key]: e.target.checked }));
                     }} />
                   </td>
-                  <td className="px-3 py-2 text-sm">{p.property_block || ''}</td>
-                  <td className="px-3 py-2 text-sm">{p.property_lot || ''}</td>
-                  <td className="px-3 py-2 text-sm">{p.property_card || ''}</td>
-                  <td className="px-3 py-2 text-sm">{p.property_location || ''}</td>
-                  <td className="px-3 py-2 text-sm">{p.asset_year_built || '—'}</td>
-                  <td className="px-3 py-2 text-sm">{p.asset_building_class || '—'}</td>
-                  <td className="px-3 py-2 text-sm">{saleYear || ''}</td>
-                  <td className="px-3 py-2 text-sm">{p.sales_nu || '—'}</td>
-                  <td className="px-3 py-2 text-sm">{salePrice ? salePrice.toLocaleString() : '—'}</td>
-                  <td className="px-3 py-2 text-sm">{p.values_norm_time ? p.values_norm_time.toLocaleString() : '—'}</td>
-                  <td className="px-3 py-2 text-sm">{repl ? repl.toLocaleString() : '—'}</td>
-                  <td className="px-3 py-2 text-sm">{factor ? Number(factor).toFixed(2) : '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.property_block || ''}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.property_lot || ''}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.property_card || ''}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.property_location || ''}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_year_built || '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_building_class || '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{saleYear || ''}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.sales_nu || '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{salePrice ? salePrice.toLocaleString() : '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_norm_time ? p.values_norm_time.toLocaleString() : '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{repl ? repl.toLocaleString() : '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_base_cost ? p.values_base_cost.toLocaleString() : '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-gray-100">{p.values_cama_land ? p.values_cama_land.toLocaleString() : '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-gray-100">{factor ? Number(factor).toFixed(2) : '—'}</td>
                 </tr>
               );
             })}
