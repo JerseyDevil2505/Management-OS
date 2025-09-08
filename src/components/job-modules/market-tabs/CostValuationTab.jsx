@@ -181,36 +181,10 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
           </select>
         </div>
 
-        <div>
-          <label className="text-sm text-gray-600 block">Use/Building Class</label>
-          <select
-            value={useGroup}
-            onChange={(e) => setUseGroup(e.target.value)}
-            className="px-3 py-2 border rounded w-48"
-          >
-            <option value="single_family">Single Family Classes (1x)</option>
-            <option value="multi_family">Multi/Other Classes</option>
-            <option value="all">All Classes</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="text-sm text-gray-600 block">Construction Age</label>
-          <select
-            value={constructionAge}
-            onChange={(e) => setConstructionAge(e.target.value)}
-            className="px-3 py-2 border rounded w-40"
-          >
-            <option value="all">All Ages</option>
-            <option value="new">New (&le; 10 years)</option>
-            <option value="newer">Newer (&le; 20 years)</option>
-          </select>
-        </div>
-
         <div className="ml-auto flex items-center gap-2">
           <button
             className="px-3 py-2 bg-gray-100 rounded text-sm"
-            onClick={() => { setFromYear(currentYear - 3); setToYear(currentYear); setTypeGroup('single_family'); setUseGroup('single_family'); setConstructionAge('all'); }}
+            onClick={() => { setFromYear(currentYear - 3); setToYear(currentYear); setTypeGroup('single_family'); }}
           >
             Reset
           </button>
