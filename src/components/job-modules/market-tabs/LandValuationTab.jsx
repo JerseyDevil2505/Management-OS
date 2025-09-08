@@ -5110,8 +5110,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
                       if (allRates.length === 0) return 'N/A';
 
-                      const avgRate = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
-                      return `$${avgRate.toLocaleString()}`;
+                      const avgAcre = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
+                      if (valuationMode === 'sf') {
+                        const avgSf = (avgAcre / 43560).toFixed(2);
+                        return `$${avgSf}/SF`;
+                      }
+
+                      return `$${avgAcre.toLocaleString()}`;
                     })()}
                   </div>
                   <div style={{ fontSize: '12px', color: '#6B7280' }}>
@@ -5123,9 +5128,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
                       if (allRates.length === 0) return 'N/A';
 
-                      const avgRate = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
-                      const perSqFt = (avgRate / 43560).toFixed(2);
-                      return `$${perSqFt}/SF`;
+                      const avgAcre = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
+                      const perSqFt = (avgAcre / 43560).toFixed(2);
+
+                      // show secondary value (opposite of primary)
+                      return valuationMode === 'sf' ? `$${avgAcre.toLocaleString()}/AC` : `$${perSqFt}/SF`;
                     })()}
                   </div>
                   <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
