@@ -2287,13 +2287,8 @@ const analyzeImportFile = async (file) => {
                             setTimeNormalizedSales(updated);
                             setNormalizationStats(newStats);
 
-                            try {
-                              await worksheetService.saveTimeNormalizedSales(jobData.id, updated, newStats);
-                              setTimeout(() => { saveBatchDecisions(); }, 200);
-                            } catch (e) {
-                              console.error('Error saving keep decisions:', e);
-                              alert('Error saving decisions. See console.');
-                            }
+                            // NOTE: Do NOT auto-save here. User should manually click "Save All Keep/Reject Decisions" to persist changes.
+                            alert(`${willKeep} sales marked as Keep. Click 'Save All Keep/Reject Decisions' to persist changes.`);
 
                           }}
                           className="px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700"
@@ -2335,13 +2330,8 @@ const analyzeImportFile = async (file) => {
                             setTimeNormalizedSales(updated);
                             setNormalizationStats(newStats);
 
-                            try {
-                              await worksheetService.saveTimeNormalizedSales(jobData.id, updated, newStats);
-                              setTimeout(() => { saveBatchDecisions(); }, 200);
-                            } catch (e) {
-                              console.error('Error saving reject decisions:', e);
-                              alert('Error saving decisions. See console.');
-                            }
+                            // NOTE: Do NOT auto-save here. User should manually click "Save All Keep/Reject Decisions" to persist changes.
+                            alert(`${toReject} outlier sales marked as Rejected. Click 'Save All Keep/Reject Decisions' to persist changes.`);
 
                           }}
                           className="px-3 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700"
