@@ -336,21 +336,29 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         <table className="min-w-full text-left">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Include</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Incl</th>
               <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Block</th>
               <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Lot</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Qualifier</th>
               <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Card</th>
               <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Location</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Year Built</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Building Class</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Sale Year</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Sale NU</th>
+
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Sales Date</th>
               <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Sale Price</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Time Norm Price</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Replacement Cost</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-gray-200">Base Cost</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-gray-200">CAMA Land</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-gray-200">CCF</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Sale NU</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Price Time</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Year Built</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Depr</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Building Class</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Living Area</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Current Land</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Det Item</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Base Cost</th>
+
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Repl w/Depr</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Improv</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">CCF</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-gray-200">Adjusted Ratio</th>
             </tr>
           </thead>
           <tbody>
@@ -380,7 +388,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_norm_time ? p.values_norm_time.toLocaleString() : '—'}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{repl ? repl.toLocaleString() : '—'}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_base_cost ? p.values_base_cost.toLocaleString() : '—'}</td>
-                  <td className="px-3 py-2 text-sm border-b border-gray-100">{p.values_cama_land ? p.values_cama_land.toLocaleString() : '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-gray-100">{p.values_cama_land ? p.values_cama_land.toLocaleString() : '���'}</td>
                   <td className="px-3 py-2 text-sm border-b border-gray-100">{factor ? Number(factor).toFixed(2) : '—'}</td>
                 </tr>
               );
