@@ -154,31 +154,54 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         </div>
 
         <div>
-          <label className="text-sm text-gray-600 block">Type Prefix</label>
-          <input
-            type="text"
-            value={typePrefix}
-            onChange={(e) => setTypePrefix(e.target.value)}
-            className="px-3 py-2 border rounded w-24"
-            placeholder="1"
-          />
+          <label className="text-sm text-gray-600 block">Property Type</label>
+          <select
+            value={typeGroup}
+            onChange={(e) => setTypeGroup(e.target.value)}
+            className="px-3 py-2 border rounded w-48"
+          >
+            <option value="single_family">Single Family (1x)</option>
+            <option value="semi_detached">Semi-Detached (2x)</option>
+            <option value="townhouses">Row/Townhouses (3x)</option>
+            <option value="multifamily">Multifamily (4x)</option>
+            <option value="conversions">Conversions (5x)</option>
+            <option value="condominiums">Condominiums (6x)</option>
+            <option value="all_residential">All Residential</option>
+            <option value="commercial">Commercial</option>
+            <option value="all">All Properties</option>
+          </select>
         </div>
 
         <div>
-          <label className="text-sm text-gray-600 block">Use/Class Prefix</label>
-          <input
-            type="text"
-            value={usePrefix}
-            onChange={(e) => setUsePrefix(e.target.value)}
-            className="px-3 py-2 border rounded w-24"
-            placeholder="1"
-          />
+          <label className="text-sm text-gray-600 block">Use/Building Class</label>
+          <select
+            value={useGroup}
+            onChange={(e) => setUseGroup(e.target.value)}
+            className="px-3 py-2 border rounded w-48"
+          >
+            <option value="single_family">Single Family Classes (1x)</option>
+            <option value="multi_family">Multi/Other Classes</option>
+            <option value="all">All Classes</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="text-sm text-gray-600 block">Construction Age</label>
+          <select
+            value={constructionAge}
+            onChange={(e) => setConstructionAge(e.target.value)}
+            className="px-3 py-2 border rounded w-40"
+          >
+            <option value="all">All Ages</option>
+            <option value="new">New (&le; 10 years)</option>
+            <option value="newer">Newer (&le; 20 years)</option>
+          </select>
         </div>
 
         <div className="ml-auto flex items-center gap-2">
           <button
             className="px-3 py-2 bg-gray-100 rounded text-sm"
-            onClick={() => { setFromYear(currentYear - 3); setToYear(currentYear); setTypePrefix('1'); setUsePrefix('1'); }}
+            onClick={() => { setFromYear(currentYear - 3); setToYear(currentYear); setTypeGroup('single_family'); setUseGroup('single_family'); setConstructionAge('all'); }}
           >
             Reset
           </button>
