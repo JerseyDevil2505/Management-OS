@@ -45,16 +45,37 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       const typeVal = p.asset_type_use ? p.asset_type_use.toString().trim() : '';
       const useVal = p.asset_building_class ? p.asset_building_class.toString().trim() : '';
 
-      if (typePrefix && typePrefix !== 'all') {
-        if (!typeVal.startsWith(typePrefix)) return false;
+      // Apply typeGroup filter
+      if (typeGroup && typeGroup !== 'all') {
+        if (typeGroup === 'single_family' && !typeVal.startsWith('1')) return false;
+        if (typeGroup === 'semi_detached' && !typeVal.startsWith('2')) return false;
+        if (typeGroup === 'townhouses' && !typeVal.startsWith('3')) return false;
+        if (typeGroup === 'multifamily' && !typeVal.startsWith('4')) return false;
+        if (typeGroup === 'conversions' && !typeVal.startsWith('5')) return false;
+        if (typeGroup === 'condominiums' && !typeVal.startsWith('6')) return false;
+        if (typeGroup === 'commercial' && !typeVal.startsWith('4') && !typeVal.startsWith('5') && !typeVal.startsWith('6') && !typeVal.startsWith('7')) {
+          // coarse commercial check - leave as-is for non-residential
+        }
       }
-      if (usePrefix && usePrefix !== 'all') {
-        if (!useVal.startsWith(usePrefix)) return false;
+
+      // Apply useGroup filter (uses building class when available)
+      if (useGroup && useGroup !== 'all') {
+        if (useGroup === 'single_family' && !useVal.startsWith('1')) return false;
+        if (useGroup === 'multi_family' && !(useVal.startsWith('4') || useVal.startsWith('3'))) return false;
+      }
+
+      // Apply construction age
+      if (constructionAge !== 'all') {
+        const yearBuilt = p.asset_year_built || null;
+        if (!yearBuilt) return false; // if missing, exclude when filtering by age
+        const age = currentYear - parseInt(yearBuilt);
+        if (constructionAge === 'new' && !(age <= 10)) return false;
+        if (constructionAge === 'newer' && !(age <= 20)) return false;
       }
 
       return true;
     });
-  }, [properties, fromYear, toYear, typePrefix, usePrefix]);
+  }, [properties, fromYear, toYear, typeGroup, useGroup, constructionAge]);
 
   // Compute recommended factor based on available replacement/base cost and normalized sale price
   const computeRecommendedFactor = () => {
