@@ -222,6 +222,34 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
             </button>
           </div>
           <div className="text-xs text-gray-500 mt-1">Stored on market_land_valuation for this job</div>
+          <div className="mt-3 w-full">
+            <div className="text-sm text-gray-600">State Recommended Factor</div>
+            <div className="flex items-center gap-2 mt-1">
+              <input
+                type="number"
+                step="0.01"
+                value={stateRecommendedFactor ?? ''}
+                onChange={(e) => setStateRecommendedFactor(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                className="px-3 py-2 border rounded-md w-36"
+                placeholder="e.g. 1.25"
+              />
+              <button
+                className="px-3 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-sm"
+                onClick={() => { if (stateRecommendedFactor !== null && stateRecommendedFactor !== '') setCostConvFactor(Number(stateRecommendedFactor)); }}
+                disabled={stateRecommendedFactor === null || stateRecommendedFactor === ''}
+              >
+                Apply State Recommendation
+              </button>
+              <button
+                className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                onClick={() => saveStateRecommendedFactor(stateRecommendedFactor)}
+                disabled={isSaving || stateRecommendedFactor === null || stateRecommendedFactor === ''}
+              >
+                {isSaving ? 'Saving...' : 'Save State Recommendation'}
+              </button>
+            </div>
+            <div className="text-xs text-gray-500 mt-1">Stored on market_land_valuation as cost_conv_recommendation</div>
+          </div>
         </div>
       </div>
 
