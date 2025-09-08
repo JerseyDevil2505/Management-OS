@@ -4937,12 +4937,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           </tr>
                         </thead>
                         <tbody>
-                          {[
-                            { key: 'small', label: '<1.00', bracket: data.brackets.small },
-                            { key: 'medium', label: '1.00-5.00', bracket: data.brackets.medium },
-                            { key: 'large', label: '5.00-10.00', bracket: data.brackets.large },
-                            { key: 'xlarge', label: '>10.00', bracket: data.brackets.xlarge }
-                          ].map((row, rowIndex) => {
+                          {(() => {
+                            const pMax = cascadeConfig.normal?.prime?.max ?? 1;
+                            const sMax = cascadeConfig.normal?.secondary?.max ?? 5;
+                            const eMax = cascadeConfig.normal?.excess?.max ?? 10;
+                            const rMax = cascadeConfig.normal?.residual?.max ?? null;
+
+                            return [
+                              { key: 'small', label: `<${pMax.toFixed(2)}`, bracket: data.brackets.small },
+                              { key: 'medium', label: `${pMax.toFixed(2)}-${sMax.toFixed(2)}`, bracket: data.brackets.medium },
+                              { key: 'large', label: `${sMax.toFixed(2)}-${eMax.toFixed(2)}`, bracket: data.brackets.large },
+                              { key: 'xlarge', label: rMax ? `${eMax.toFixed(2)}-${rMax.toFixed(2)}` : `>${eMax.toFixed(2)}`, bracket: data.brackets.xlarge }
+                            ];
+                          })().map((row, rowIndex) => {
                             if (row.bracket.count === 0) return null;
 
                             // Calculate deltas from previous bracket
