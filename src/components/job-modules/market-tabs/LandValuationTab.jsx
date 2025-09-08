@@ -3397,12 +3397,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       method2Rows.push([`${s.toFixed(2)}-${e.toFixed(2)} perAcre`, lg.perAcre && lg.perAcre !== 'N/A' ? `$${lg.perAcre.toLocaleString()}` : 'N/A']);
       method2Rows.push([`${e.toFixed(2)}+ perAcre`, xl.perAcre && xl.perAcre !== 'N/A' ? `$${xl.perAcre.toLocaleString()}` : 'N/A']);
       method2Rows.push(['All Positive Deltas Avg', (() => {
-        const allRates = [];
-        if (mid.perAcre && mid.perAcre !== 'N/A') allRates.push(mid.perAcre);
-        if (lg.perAcre && lg.perAcre !== 'N/A') allRates.push(lg.perAcre);
-        if (xl.perAcre && xl.perAcre !== 'N/A') allRates.push(xl.perAcre);
-        if (allRates.length === 0) return 'N/A';
-        const avgRate = Math.round(allRates.reduce((s, r) => s + r, 0) / allRates.length);
+        const allRatesAcre = [];
+        if (mid.perAcre && mid.perAcre !== 'N/A') allRatesAcre.push(mid.perAcre);
+        if (lg.perAcre && lg.perAcre !== 'N/A') allRatesAcre.push(lg.perAcre);
+        if (xl.perAcre && xl.perAcre !== 'N/A') allRatesAcre.push(xl.perAcre);
+        if (allRatesAcre.length === 0) return 'N/A';
+        if (valuationMode === 'sf') {
+          const allRatesSf = allRatesAcre.map(r => r / 43560);
+          const avgSf = allRatesSf.reduce((s, r) => s + r, 0) / allRatesSf.length;
+          return `$${avgSf.toFixed(2)}/SF`;
+        }
+        const avgRate = Math.round(allRatesAcre.reduce((s, r) => s + r, 0) / allRatesAcre.length);
         return `$${avgRate.toLocaleString()}`;
       })()]);
     }
