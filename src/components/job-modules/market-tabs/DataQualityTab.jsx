@@ -45,6 +45,38 @@ const DataQualityTab = ({
   const [ignoredIssues, setIgnoredIssues] = useState(new Set());
   const [modalData, setModalData] = useState({ title: '', properties: [] });
 
+  // Helper: filter out ignored issues from results for display
+  const filterIgnoredResults = (results) => {
+    const out = {};
+    Object.entries(results).forEach(([cat, arr]) => {
+      out[cat] = (arr || []).filter(issue => !ignoredIssues.has(`${issue.property_key}-${issue.check}`));
+    });
+    return out;
+  };
+
+  const computeStatsFromResults = (results) => {
+    let critical = 0, warning = 0, info = 0;
+    Object.values(results).forEach(category => {
+      (category || []).forEach(issue => {
+        if (issue.severity === 'critical') critical++;
+        else if (issue.severity === 'warning') warning++;
+        else if (issue.severity === 'info') info++;
+      });
+    });
+    const total = critical + warning + info;
+    return { critical, warning, info, total };
+  };
+
+  // Apply ignored filter and update UI state (scores + stats + results)
+  const applyAndSetResults = (results) => {
+    const filtered = filterIgnoredResults(results);
+    setCheckResults(filtered);
+    const score = calculateQualityScore(filtered);
+    setQualityScore(score);
+    const stats = computeStatsFromResults(filtered);
+    setIssueStats(stats);
+  };
+
   // Refs for uncontrolled inputs
   const customCheckNameInputRef = useRef(null);
   const customCheckSeveritySelectRef = useRef(null);
@@ -629,30 +661,15 @@ const generateQCFormPDF = () => {
       }
       
       await saveQualityResults(results);
-      
-      const score = calculateQualityScore(results);
+
+      // Apply ignored filter for display
+      const filteredResults = filterIgnoredResults(results);
+      const score = calculateQualityScore(filteredResults);
       setQualityScore(score);
-      setCheckResults(results);
+      setCheckResults(filteredResults);
 
-      // Calculate and update stats from actual results
-      let criticalCount = 0;
-      let warningCount = 0;
-      let infoCount = 0;
-
-      Object.values(results).forEach(category => {
-        category.forEach(issue => {
-          if (issue.severity === 'critical') criticalCount++;
-          else if (issue.severity === 'warning') warningCount++;
-          else if (issue.severity === 'info') infoCount++;
-        });
-      });
-
-      setIssueStats({
-        critical: criticalCount,
-        warning: warningCount,
-        info: infoCount,
-        total: criticalCount + warningCount + infoCount
-      });
+      const { critical, warning, info, total } = computeStatsFromResults(filteredResults);
+      setIssueStats({ critical, warning, info, total });
 
       console.log('Quality check complete!');
     } catch (error) {
@@ -1454,27 +1471,30 @@ const generateQCFormPDF = () => {
 
   const saveQualityResults = async (results) => {
     try {
+      // Use filtered results (exclude ignored) for saved summary/stats
+      const displayResults = filterIgnoredResults(results);
+
       let criticalCount = 0;
       let warningCount = 0;
       let infoCount = 0;
-      
-      Object.values(results).forEach(category => {
-        category.forEach(issue => {
+
+      Object.values(displayResults).forEach(category => {
+        (category || []).forEach(issue => {
           if (issue.severity === 'critical') criticalCount++;
           else if (issue.severity === 'warning') warningCount++;
           else if (issue.severity === 'info') infoCount++;
         });
       });
-      
+
       const totalIssues = criticalCount + warningCount + infoCount;
-      const score = calculateQualityScore(results);
-      
+      const score = calculateQualityScore(displayResults);
+
       const { data: existing } = await supabase
         .from('market_land_valuation')
         .select('id, quality_check_results')
         .eq('job_id', jobData.id)
         .single();
-      
+
       const newRun = {
         date: new Date().toISOString(),
         propertyCount: properties.length,
@@ -1484,24 +1504,24 @@ const generateQCFormPDF = () => {
         totalIssues,
         qualityScore: score
       };
-      
+
       const existingResults = existing?.quality_check_results || {};
       const existingHistory = existingResults.history || [];
       const updatedHistory = [newRun, ...existingHistory].slice(0, 50);
-      
+
       const qualityCheckResults = {
         summary: {
-          mod_iv: results.mod_iv?.length || 0,
-          cama: results.cama?.length || 0,
-          characteristics: results.characteristics?.length || 0,
-          special: results.special?.length || 0,
-          rooms: results.rooms?.length || 0,
-          custom: results.custom?.length || 0,
+          mod_iv: (results.mod_iv || []).length,
+          cama: (results.cama || []).length,
+          characteristics: (results.characteristics || []).length,
+          special: (results.special || []).length,
+          rooms: (results.rooms || []).length,
+          custom: (results.custom || []).length,
           timestamp: new Date().toISOString()
         },
         history: updatedHistory
       };
-      
+
       const saveData = {
         job_id: jobData.id,
         quality_check_last_run: new Date().toISOString(),
@@ -1514,7 +1534,7 @@ const generateQCFormPDF = () => {
         quality_check_results: qualityCheckResults,
         ignored_issues: Array.from(ignoredIssues)
       };
-      
+
       if (existing) {
         const { error } = await supabase
           .from('market_land_valuation')
@@ -1533,22 +1553,13 @@ const generateQCFormPDF = () => {
         console.log('🗑️ Clearing cache after saving quality check results');
         onUpdateJobCache(jobData.id, null);
       }
-      
+
       setRunHistory(updatedHistory);
-      
-      setCheckResults(results);
-      setIssueStats({
-        critical: criticalCount,
-        warning: warningCount,
-        info: infoCount,
-        total: totalIssues
-      });
-      
-      console.log(`�� Saved: ${totalIssues} issues found`);
-      
+
+      console.log(`✅ Saved: ${totalIssues} issues found (displayed, ignoring ${ignoredIssues.size} ignored)`);
+
     } catch (error) {
       console.error('Error saving:', error);
-      setCheckResults(results);
     }
   };
 
@@ -1796,25 +1807,15 @@ const editCustomCheck = (check) => {
       }
     }
     
-    setCheckResults(prev => ({
-      ...prev,
-      custom: [...(prev.custom || []), ...results.custom]
-    }));
-    
-    const newStats = {
-      critical: results.custom.filter(i => i.severity === 'critical').length,
-      warning: results.custom.filter(i => i.severity === 'warning').length,
-      info: results.custom.filter(i => i.severity === 'info').length,
-      total: results.custom.length
+    // Merge into existing checkResults and update display while respecting ignored issues
+    const updatedResults = {
+      ...checkResults,
+      custom: [...(checkResults.custom || []), ...results.custom]
     };
-    
-    setIssueStats(prev => ({
-      critical: prev.critical + newStats.critical,
-      warning: prev.warning + newStats.warning,
-      info: prev.info + newStats.info,
-      total: prev.total + newStats.total
-    }));
-    
+
+    setCheckResults(updatedResults);
+    applyAndSetResults(updatedResults);
+
     console.log(`✅ Custom check "${check.name}" found ${results.custom.length} issues`);
   };
   
@@ -1921,40 +1922,15 @@ const editCustomCheck = (check) => {
       updatedResults.custom.push(...customResults);
     }
     
-    // Update state with complete results
+    // Update state with complete results and update display (apply ignored filter)
     setCheckResults(updatedResults);
-    
-    // Calculate stats
-    let criticalCount = 0;
-    let warningCount = 0;
-    let infoCount = 0;
-    
-    Object.values(updatedResults).forEach(category => {
-      category.forEach(issue => {
-        if (issue.severity === 'critical') criticalCount++;
-        else if (issue.severity === 'warning') warningCount++;
-        else if (issue.severity === 'info') infoCount++;
-      });
-    });
-    
-    const totalIssues = criticalCount + warningCount + infoCount;
-    const score = calculateQualityScore(updatedResults);
-    
-    // Update issue stats
-    setIssueStats({
-      critical: criticalCount,
-      warning: warningCount,
-      info: infoCount,
-      total: totalIssues
-    });
-    
-    setQualityScore(score);
-    
-    // Save to database with complete results
+    applyAndSetResults(updatedResults);
+
+    // Save to database with complete results (saves displayed counts and ignored list)
     await saveQualityResults(updatedResults);
-    
+
     console.log(`✅ Custom checks complete: ${updatedResults.custom.length} issues found`);
-    
+
     // Jump back to overview
     setDataQualityActiveSubTab('overview');
   };
@@ -2074,31 +2050,32 @@ const editCustomCheck = (check) => {
 
 
             {ignoredIssues.size > 0 && (
-              <button 
-                onClick={async () => {
-                  setIgnoredIssues(new Set());
-                  try {
-                    await supabase
-                      .from('market_land_valuation')
-                      .update({ 
-                        ignored_issues: [],
-                        updated_at: new Date().toISOString()
-                      })
-                      .eq('job_id', jobData.id);
-                    
-                    // Clear cache
-                    if (onUpdateJobCache && jobData?.id) {
-                      onUpdateJobCache(jobData.id, null);
-                    }
-                  } catch (error) {
-                    console.error('Error clearing ignored issues:', error);
+              <button
+              onClick={async () => {
+                if (!window.confirm(`Clear ${ignoredIssues.size} ignored issues? This will restore them to the issue lists.`)) return;
+                setIgnoredIssues(new Set());
+                try {
+                  await supabase
+                    .from('market_land_valuation')
+                    .update({
+                      ignored_issues: [],
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('job_id', jobData.id);
+
+                  // Clear cache
+                  if (onUpdateJobCache && jobData?.id) {
+                    onUpdateJobCache(jobData.id, null);
                   }
-                }}
-                className="px-4 py-2 bg-yellow-600 text-white rounded-lg font-medium hover:bg-yellow-700 transition-all flex items-center gap-2"
-              >
-                <X size={16} />
-                Clear {ignoredIssues.size} Ignored
-              </button>
+                } catch (error) {
+                  console.error('Error clearing ignored issues:', error);
+                }
+              }}
+              className="px-4 py-2 bg-yellow-600 text-white rounded-lg font-medium hover:bg-yellow-700 transition-all flex items-center gap-2"
+            >
+              <X size={16} />
+              Clear {ignoredIssues.size} Ignored
+            </button>
             )}
             
             <button 
@@ -2700,6 +2677,12 @@ const editCustomCheck = (check) => {
                         <td className="py-3 px-4">
                           <button
                             onClick={async () => {
+                              // Confirm before ignoring to prevent accidental clicks
+                              if (!isIgnored) {
+                                const ok = window.confirm('Are you sure you want to IGNORE this issue? It will be removed from the displayed counts but can be restored later.');
+                                if (!ok) return;
+                              }
+
                               const newIgnored = new Set(ignoredIssues);
                               if (isIgnored) {
                                 newIgnored.delete(issueKey);
@@ -2707,28 +2690,31 @@ const editCustomCheck = (check) => {
                                 newIgnored.add(issueKey);
                               }
                               setIgnoredIssues(newIgnored);
-                              
+
                               // Save to database immediately
                               try {
                                 await supabase
                                   .from('market_land_valuation')
-                                  .update({ 
+                                  .update({
                                     ignored_issues: Array.from(newIgnored),
                                     updated_at: new Date().toISOString()
                                   })
                                   .eq('job_id', jobData.id);
-                                
+
                                 // Clear cache after update
                                 if (onUpdateJobCache && jobData?.id) {
                                   onUpdateJobCache(jobData.id, null);
                                 }
+
+                                // Update displayed results/stats after toggling ignored
+                                applyAndSetResults(checkResults);
                               } catch (error) {
                                 console.error('Error saving ignored issues:', error);
                               }
                             }}
                             className={`px-2 py-1 text-xs rounded transition-colors ${
-                              isIgnored 
-                                ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                              isIgnored
+                                ? 'bg-green-100 text-green-700 hover:bg-green-200'
                                 : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
                             }`}
                           >
