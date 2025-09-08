@@ -13,12 +13,14 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
   // Factor state (job-level)
   const [costConvFactor, setCostConvFactor] = useState(marketLandData?.cost_conv_factor ?? null);
+  const [stateRecommendedFactor, setStateRecommendedFactor] = useState(marketLandData?.cost_conv_recommendation ?? null);
   const [isSaving, setIsSaving] = useState(false);
   const [includedMap, setIncludedMap] = useState({});
 
   useEffect(() => {
     setCostConvFactor(marketLandData?.cost_conv_factor ?? null);
-  }, [marketLandData?.cost_conv_factor]);
+    setStateRecommendedFactor(marketLandData?.cost_conv_recommendation ?? null);
+  }, [marketLandData]);
 
   // Derive sale year safely
   const safeSaleYear = (p) => {
