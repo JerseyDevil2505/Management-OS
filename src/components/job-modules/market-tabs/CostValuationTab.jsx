@@ -149,24 +149,6 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     URL.revokeObjectURL(url);
   };
 
-  // Compute recommended factor (mean) based on included comparables
-  const recommendedFactor = useMemo(() => {
-    const rows = filtered
-      .map(p => {
-        const salePrice = (p.values_norm_time && p.values_norm_time > 0) ? p.values_norm_time : (p.sales_price || 0);
-        const repl = p.values_repl_cost || p.values_base_cost || null;
-        if (!repl || !salePrice || salePrice === 0) return null;
-        const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
-        const included = includedMap[key] !== undefined ? includedMap[key] : true;
-        return included ? (repl / salePrice) : null;
-      })
-      .filter(v => v && isFinite(v));
-
-    if (rows.length === 0) return null;
-    // mean
-    const sum = rows.reduce((a, b) => a + b, 0);
-    return sum / rows.length;
-  }, [filtered, includedMap]);
 
   // Save job-level cost_conv_factor to market_land_valuation
   const saveCostConvFactor = async (factor) => {
