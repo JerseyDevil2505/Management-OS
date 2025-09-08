@@ -234,13 +234,6 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                 placeholder="e.g. 1.25"
               />
               <button
-                className="px-3 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-sm"
-                onClick={() => { if (stateRecommendedFactor !== null && stateRecommendedFactor !== '') setCostConvFactor(Number(stateRecommendedFactor)); }}
-                disabled={stateRecommendedFactor === null || stateRecommendedFactor === ''}
-              >
-                Apply State Recommendation
-              </button>
-              <button
                 className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
                 onClick={() => saveStateRecommendedFactor(stateRecommendedFactor)}
                 disabled={isSaving || stateRecommendedFactor === null || stateRecommendedFactor === ''}
