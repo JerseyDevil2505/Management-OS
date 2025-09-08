@@ -41,7 +41,6 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
       // asset_type_use exists on property_records
       const typeVal = p.asset_type_use ? p.asset_type_use.toString().trim() : '';
-      const useVal = p.asset_building_class ? p.asset_building_class.toString().trim() : '';
 
       // Apply typeGroup filter
       if (typeGroup && typeGroup !== 'all') {
@@ -56,20 +55,11 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         }
       }
 
-      // Apply useGroup filter (uses building class when available)
-      if (useGroup && useGroup !== 'all') {
-        if (useGroup === 'single_family' && !useVal.startsWith('1')) return false;
-        if (useGroup === 'multi_family' && !(useVal.startsWith('4') || useVal.startsWith('3'))) return false;
-      }
-
-      // Apply construction age
-      if (constructionAge !== 'all') {
-        const yearBuilt = p.asset_year_built || null;
-        if (!yearBuilt) return false; // if missing, exclude when filtering by age
-        const age = currentYear - parseInt(yearBuilt);
-        if (constructionAge === 'new' && !(age <= 10)) return false;
-        if (constructionAge === 'newer' && !(age <= 20)) return false;
-      }
+      // Only include new/newer construction (<= 20 years). Exclude if missing year built.
+      const yearBuilt = p.asset_year_built || null;
+      if (!yearBuilt) return false;
+      const age = currentYear - parseInt(yearBuilt);
+      if (age > 20) return false;
 
       return true;
     });
