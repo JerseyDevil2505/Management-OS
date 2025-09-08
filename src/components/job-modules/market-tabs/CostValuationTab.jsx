@@ -13,8 +13,8 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
   // Factor state (job-level)
   const [costConvFactor, setCostConvFactor] = useState(marketLandData?.cost_conv_factor ?? null);
-  const [recommendedFactor, setRecommendedFactor] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [includedMap, setIncludedMap] = useState({});
 
   useEffect(() => {
     setCostConvFactor(marketLandData?.cost_conv_factor ?? null);
@@ -65,29 +65,34 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     });
   }, [properties, fromYear, toYear, typeGroup]);
 
-  // Compute recommended factor based on available replacement/base cost and normalized sale price
-  const computeRecommendedFactor = () => {
+  // Initialize include map when filtered results change
+  useEffect(() => {
+    const map = {};
+    filtered.forEach(p => {
+      const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
+      map[key] = true;
+    });
+    setIncludedMap(map);
+  }, [filtered]);
+
+  // Compute recommended factor (mean) based on included comparables
+  const recommendedFactor = useMemo(() => {
     const rows = filtered
       .map(p => {
         const salePrice = (p.values_norm_time && p.values_norm_time > 0) ? p.values_norm_time : (p.sales_price || 0);
         const repl = p.values_repl_cost || p.values_base_cost || null;
         if (!repl || !salePrice || salePrice === 0) return null;
-        return repl / salePrice; // how many dollars of replacement cost per normalized sale dollar
+        const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
+        const included = includedMap[key] !== undefined ? includedMap[key] : true;
+        return included ? (repl / salePrice) : null;
       })
       .filter(v => v && isFinite(v));
 
-    if (rows.length === 0) {
-      setRecommendedFactor(null);
-      return null;
-    }
-
-    // Use median for robustness
-    const sorted = rows.sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    const median = sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-    setRecommendedFactor(median);
-    return median;
-  };
+    if (rows.length === 0) return null;
+    // mean
+    const sum = rows.reduce((a, b) => a + b, 0);
+    return sum / rows.length;
+  }, [filtered, includedMap]);
 
   // Save job-level cost_conv_factor to market_land_valuation
   const saveCostConvFactor = async (factor) => {
@@ -188,32 +193,31 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
           >
             Reset
           </button>
-          <button
-            className="px-3 py-2 bg-green-600 text-white rounded text-sm"
-            onClick={() => computeRecommendedFactor()}
-          >
-            Compute Recommended Factor
-          </button>
         </div>
       </div>
 
       {recommendedFactor !== null && (
         <div className="mb-4 p-3 border border-gray-200 rounded bg-green-50 flex items-center justify-between">
           <div>
-            <div className="text-sm text-gray-700 font-medium">Recommended Factor (median)</div>
-            <div className="text-lg font-semibold">{Number(recommendedFactor).toFixed(3)}</div>
-            <div className="text-xs text-gray-500">Based on {filtered.filter(p => (p.values_repl_cost || p.values_base_cost) && (p.values_norm_time || p.sales_price)).length} comparable properties</div>
+            <div className="text-sm text-gray-700 font-medium">Recommended Factor (mean)</div>
+            <div className="text-lg font-semibold">{Number(recommendedFactor).toFixed(2)}</div>
+            <div className="text-xs text-gray-500">Based on {filtered.filter(p => {
+              const has = (p.values_repl_cost || p.values_base_cost) && (p.values_norm_time || p.sales_price);
+              const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
+              const included = includedMap[key] !== undefined ? includedMap[key] : true;
+              return has && included;
+            }).length} comparable properties</div>
           </div>
           <div className="flex items-center gap-2">
             <button
               className="px-3 py-2 bg-yellow-600 text-white rounded text-sm"
-              onClick={() => setCostConvFactor(Number(recommendedFactor.toFixed(3)))}
+              onClick={() => setCostConvFactor(Number(recommendedFactor.toFixed(2)))}
             >
               Use Recommendation
             </button>
             <button
               className="px-3 py-2 bg-blue-600 text-white rounded text-sm"
-              onClick={() => saveCostConvFactor(Number(recommendedFactor.toFixed(3)))}
+              onClick={() => saveCostConvFactor(Number(recommendedFactor.toFixed(2)))}
             >
               Save Recommendation
             </button>
@@ -226,15 +230,19 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         <table className="min-w-full text-left">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-3 py-2 text-xs text-gray-600">Include</th>
               <th className="px-3 py-2 text-xs text-gray-600">Block</th>
               <th className="px-3 py-2 text-xs text-gray-600">Lot</th>
               <th className="px-3 py-2 text-xs text-gray-600">Card</th>
               <th className="px-3 py-2 text-xs text-gray-600">Location</th>
+              <th className="px-3 py-2 text-xs text-gray-600">Year Built</th>
+              <th className="px-3 py-2 text-xs text-gray-600">Building Class</th>
               <th className="px-3 py-2 text-xs text-gray-600">Sale Year</th>
+              <th className="px-3 py-2 text-xs text-gray-600">Sale #</th>
               <th className="px-3 py-2 text-xs text-gray-600">Sale Price</th>
               <th className="px-3 py-2 text-xs text-gray-600">Time Norm Price</th>
               <th className="px-3 py-2 text-xs text-gray-600">Replacement Cost</th>
-              <th className="px-3 py-2 text-xs text-gray-600">Factor (repl / sale)</th>
+              <th className="px-3 py-2 text-xs text-gray-600">CCF</th>
             </tr>
           </thead>
           <tbody>
@@ -246,15 +254,24 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
               return (
                 <tr key={p.property_composite_key || i} className="border-t border-gray-100 hover:bg-gray-50">
+                  <td className="px-3 py-2 text-sm">
+                    <input type="checkbox" checked={includedMap[p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`] !== false} onChange={(e) => {
+                      const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
+                      setIncludedMap(prev => ({ ...prev, [key]: e.target.checked }));
+                    }} />
+                  </td>
                   <td className="px-3 py-2 text-sm">{p.property_block || ''}</td>
                   <td className="px-3 py-2 text-sm">{p.property_lot || ''}</td>
                   <td className="px-3 py-2 text-sm">{p.property_card || ''}</td>
                   <td className="px-3 py-2 text-sm">{p.property_location || ''}</td>
+                  <td className="px-3 py-2 text-sm">{p.asset_year_built || '—'}</td>
+                  <td className="px-3 py-2 text-sm">{p.asset_building_class || '—'}</td>
                   <td className="px-3 py-2 text-sm">{saleYear || ''}</td>
+                  <td className="px-3 py-2 text-sm">{p.sales_nu || '—'}</td>
                   <td className="px-3 py-2 text-sm">{salePrice ? salePrice.toLocaleString() : '—'}</td>
                   <td className="px-3 py-2 text-sm">{p.values_norm_time ? p.values_norm_time.toLocaleString() : '—'}</td>
                   <td className="px-3 py-2 text-sm">{repl ? repl.toLocaleString() : '—'}</td>
-                  <td className="px-3 py-2 text-sm">{factor ? Number(factor).toFixed(3) : '—'}</td>
+                  <td className="px-3 py-2 text-sm">{factor ? Number(factor).toFixed(2) : '—'}</td>
                 </tr>
               );
             })}
