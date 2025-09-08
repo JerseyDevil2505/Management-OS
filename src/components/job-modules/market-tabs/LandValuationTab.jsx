@@ -5013,7 +5013,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           <div style={{ borderTop: '2px solid #E5E7EB', backgroundColor: '#F8FAFC' }}>
             <div style={{ padding: '20px' }}>
               <h4 style={{ margin: '0 0 15px 0', fontSize: '16px', fontWeight: 'bold', color: '#1F2937' }}>
-                Method 2 Summary - Implied $/Acre Rates
+                Method 2 Summary - Implied {valuationMode === 'sf' ? '$/Square Foot Rates' : '$/Acre Rates'}
               </h4>
 
               <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
