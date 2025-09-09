@@ -1237,13 +1237,8 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     }
   }, [blockTypeFilter, colorScaleStart, colorScaleIncrement, normalizationStats.sizeNormalized, processBlockAnalysis]);
 
-const handleSalesDecision = async (saleId, decision) => {
-  // CRITICAL FIX: Get the sale's PREVIOUS state before updating
-  const previousSale = timeNormalizedSales.find(s => s.id === saleId);
-  const previousDecision = previousSale?.keep_reject;
-
-  if (false) console.log(`🔄 Changing sale ${saleId} from '${previousDecision}' to '${decision}'`);
-
+const handleSalesDecision = (saleId, decision) => {
+  // Update local UI state only. Persisting to DB happens in Save All (saveBatchDecisions).
   const updatedSales = timeNormalizedSales.map(sale =>
     sale.id === saleId ? { ...sale, keep_reject: decision } : sale
   );
@@ -1255,59 +1250,12 @@ const handleSalesDecision = async (saleId, decision) => {
     pendingReview: updatedSales.filter(s => s.keep_reject === 'pending').length,
     keptCount: updatedSales.filter(s => s.keep_reject === 'keep').length,
     rejectedCount: updatedSales.filter(s => s.keep_reject === 'reject').length,
-    // CRITICAL: Update acceptedSales for the banner count display
     acceptedSales: updatedSales.filter(s => s.keep_reject === 'keep').length
   };
   setNormalizationStats(newStats);
 
-  try {
-    // ALWAYS save the decision to market_land_valuation first for persistence
-    await worksheetService.saveTimeNormalizedSales(jobData.id, updatedSales, newStats);
-    if (false) console.log(`💾 Saved decision (${decision}) for property ${saleId} to market_land_valuation`);
-
-    // Handle database cleanup for rejected sales
-    if (decision === 'reject') {
-      // Clear normalized values from property_market_analysis regardless of previous state
-      const { error } = await supabase
-        .from('property_market_analysis')
-        .update({
-          values_norm_time: null,
-          values_norm_size: null
-        })
-        .eq('property_composite_key', previousSale.property_composite_key);
-
-      if (error) {
-        console.error('Error clearing normalized values:', error);
-      } else {
-        if (false) console.log(`🗑️ Cleared normalized values for rejected property ${saleId}`);
-      }
-    }
-
-    // Handle database updates for kept sales
-    if (decision === 'keep' && previousSale) {
-      // Save time normalized value to property_market_analysis
-      const { error } = await safeUpsertPropertyMarket([{ job_id: jobData.id, property_composite_key: previousSale.property_composite_key, values_norm_time: previousSale.time_normalized_price }]);
-      if (error) {
-        console.error('Error saving normalized value:', error);
-      } else {
-        if (false) console.log(`💾 Saved normalized value for kept property ${saleId}`);
-      }
-    }
-
-    // CRITICAL: Always clear cache after any decision change
-    if (onUpdateJobCache && jobData?.id) {
-      if (false) console.log('🗑️ Clearing cache after sales decision change');
-      onUpdateJobCache(jobData.id, null);
-    }
-
-  } catch (error) {
-    console.error('Error handling sales decision:', error);
-    alert(`Error saving decision: ${error.message}`);
-
-    // Revert the UI change if database operation failed
-    setTimeNormalizedSales(timeNormalizedSales);
-    setNormalizationStats(normalizationStats);
-  }
+  // Mark there are unsaved changes so user knows to save
+  setUnsavedChanges(true);
 };
      
   const saveBatchDecisions = async () => {
@@ -1371,7 +1319,7 @@ const handleSalesDecision = async (saleId, decision) => {
           const batch = rejects.slice(i, i + 500);
           const rejectCompositeKeys = batch.map(s => s.property_composite_key);
 
-          if (false) console.log(`🗑️ Reject batch ${Math.floor(i/500) + 1}: Clearing ${batch.length} properties...`);
+          if (false) console.log(`���️ Reject batch ${Math.floor(i/500) + 1}: Clearing ${batch.length} properties...`);
 
           // CRITICAL: Clear BOTH time and size normalized values for rejected sales
           await supabase
@@ -2252,6 +2200,93 @@ const analyzeImportFile = async (file) => {
                           <option value="100">100 per page</option>
                           <option value="200">200 per page</option>
                         </select>
+
+                        {/* Bulk actions: Keep All Valid / Reject All Outlier */}
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const isNUKeepable = (nu) => {
+                              const s = (nu === undefined || nu === null) ? '' : nu.toString().trim();
+                              return s === '' || s === '00' || s === '7' || s === '07';
+                            };
+
+                            const pending = timeNormalizedSales.filter(s => s.keep_reject === 'pending');
+                            const willKeep = pending.filter(s => isNUKeepable(s.sales_nu)).length;
+                            if (willKeep === 0) {
+                              alert('No pending sales match the "sales_nu blank/00/07" rule.');
+                              return;
+                            }
+
+                            if (!window.confirm(`Keep ${willKeep} pending sales where sales_nu is blank, 00 or 07? This will mark them as Kept and save decisions to the database.`)) return;
+
+                            const updated = timeNormalizedSales.map(s => {
+                              if (s.keep_reject === 'pending' && isNUKeepable(s.sales_nu)) return { ...s, keep_reject: 'keep' };
+                              return s;
+                            });
+
+                            const newStats = {
+                              ...normalizationStats,
+                              pendingReview: updated.filter(s => s.keep_reject === 'pending').length,
+                              keptCount: updated.filter(s => s.keep_reject === 'keep').length,
+                              rejectedCount: updated.filter(s => s.keep_reject === 'reject').length,
+                              acceptedSales: updated.filter(s => s.keep_reject === 'keep').length
+                            };
+
+                            setTimeNormalizedSales(updated);
+                            setNormalizationStats(newStats);
+
+                            // NOTE: Do NOT auto-save here. User should manually click "Save All Keep/Reject Decisions" to persist changes.
+                            alert(`${willKeep} sales marked as Keep. Click 'Save All Keep/Reject Decisions' to persist changes.`);
+
+                          }}
+                          className="px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+                        >
+                          Keep All Valid
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const isNUSkip = (nu) => {
+                              const s = (nu === undefined || nu === null) ? '' : nu.toString().trim();
+                              return s === '' || s === '00' || s === '7' || s === '07';
+                            };
+
+                            const outliers = timeNormalizedSales.filter(s => s.is_outlier && s.keep_reject !== 'reject');
+                            const toReject = outliers.filter(s => !isNUSkip(s.sales_nu)).length;
+
+                            if (toReject === 0) {
+                              alert('No outlier sales qualify for rejection under the rule (skipping sales_nu blank/00/07).');
+                              return;
+                            }
+
+                            if (!window.confirm(`Reject ${toReject} outlier sales (skipping sales_nu blank/00/07)? This will mark them as Rejected and clear normalized values in the database.`)) return;
+
+                            const updated = timeNormalizedSales.map(s => {
+                              if (s.is_outlier && !isNUSkip(s.sales_nu)) return { ...s, keep_reject: 'reject' };
+                              return s;
+                            });
+
+                            const newStats = {
+                              ...normalizationStats,
+                              pendingReview: updated.filter(s => s.keep_reject === 'pending').length,
+                              keptCount: updated.filter(s => s.keep_reject === 'keep').length,
+                              rejectedCount: updated.filter(s => s.keep_reject === 'reject').length,
+                              acceptedSales: updated.filter(s => s.keep_reject === 'keep').length
+                            };
+
+                            setTimeNormalizedSales(updated);
+                            setNormalizationStats(newStats);
+
+                            // NOTE: Do NOT auto-save here. User should manually click "Save All Keep/Reject Decisions" to persist changes.
+                            alert(`${toReject} outlier sales marked as Rejected. Click 'Save All Keep/Reject Decisions' to persist changes.`);
+
+                          }}
+                          className="px-3 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+                        >
+                          Reject All Outlier
+                        </button>
+
                       </div>
                     </div>
 

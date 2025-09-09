@@ -118,6 +118,20 @@ const OverallAnalysisTab = ({
   // Inferred bedrooms cache for async enrichment (BRT fallback to BEDTOT)
   const inferredBedroomsRef = React.useRef({});
 
+  // Build lookup of job-scoped time normalized sales (if available)
+  const timeNormalizedLookup = useMemo(() => {
+    const map = new Map();
+    if (marketLandData && Array.isArray(marketLandData.time_normalized_sales)) {
+      marketLandData.time_normalized_sales.forEach(s => {
+        // normalized sales may be stored with different keys depending on process
+        const key = s.property_composite_key || s.property_key || s.property_composite || null;
+        const time = s.values_norm_time || s.time_normalized_price || s.normalizedTime || s.time_normalized || s.values_norm_time;
+        if (key && time) map.set(key, Number(time));
+      });
+    }
+    return map;
+  }, [marketLandData]);
+
   // Get all unique VCS codes
   const allVCSCodes = useMemo(() => {
     const vcsSet = new Set();
@@ -164,9 +178,15 @@ const OverallAnalysisTab = ({
   const analyzeTypeUse = useCallback(() => {
     const groups = {};
     
-    // First, separate all properties from valid sales
-    const validSales = filteredProperties.filter(p => p.values_norm_time && p.values_norm_time > 0);
-    
+    // First, separate all properties from valid sales using job-scoped normalized values when available
+    const validSales = filteredProperties.filter(p => {
+      const key = p.property_composite_key;
+      const timeNormFromPMA = timeNormalizedLookup.get(key);
+      if (timeNormFromPMA && timeNormFromPMA > 0) return true;
+      // fallback to property-level values_norm_time if present
+      return p.values_norm_time && p.values_norm_time > 0;
+    });
+
     // Count ALL properties for inventory
     filteredProperties.forEach(p => {
       const typeCode = p.asset_type_use || 'Unknown';
@@ -213,11 +233,14 @@ const OverallAnalysisTab = ({
       groups[key].totalSizeAll += p.asset_sfla || 0;
       groups[key].totalYearAll += p.asset_year_built || 0;
       
-      // Only add to sales if it has valid price
-      if (p.values_norm_time && p.values_norm_time > 0) {
-        groups[key].salesProperties.push(p);
+      // Only add to sales if it has valid price (prefer job-scoped normalized value)
+      const keyForLookup = p.property_composite_key;
+      const timeNormFromPMA = timeNormalizedLookup.get(keyForLookup);
+      const timePrice = (timeNormFromPMA && timeNormFromPMA > 0) ? timeNormFromPMA : (p.values_norm_time && p.values_norm_time > 0 ? p.values_norm_time : null);
+      if (timePrice) {
+        groups[key].salesProperties.push({ ...p, _time_normalized_price: timePrice });
         groups[key].salesCount++;
-        groups[key].totalPrice += p.values_norm_time;
+        groups[key].totalPrice += timePrice;
         groups[key].totalSizeSales += p.asset_sfla || 0;
         groups[key].totalYearSales += p.asset_year_built || 0;
       }
@@ -242,7 +265,7 @@ const OverallAnalysisTab = ({
       if (group.salesCount > 0) {
         group.salesProperties.forEach(p => {
           const adjusted = calculateAdjustedPrice(
-            p.values_norm_time || 0,
+            (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
             p.asset_sfla || 0,
             group.avgSizeSales  // Use sales average for normalization
           );
@@ -328,11 +351,14 @@ const OverallAnalysisTab = ({
       groups[key].totalSizeAll += p.asset_sfla || 0;
       groups[key].totalYearAll += p.asset_year_built || 0;
       
-      // Only add to sales if it has valid price
-      if (p.values_norm_time && p.values_norm_time > 0) {
-        groups[key].salesProperties.push(p);
+      // Only add to sales if it has valid price (prefer job-scoped normalized value)
+      const keyForLookup = p.property_composite_key;
+      const timeNormFromPMA = timeNormalizedLookup.get(keyForLookup);
+      const timePrice = (timeNormFromPMA && timeNormFromPMA > 0) ? timeNormFromPMA : (p.values_norm_time && p.values_norm_time > 0 ? p.values_norm_time : null);
+      if (timePrice) {
+        groups[key].salesProperties.push({ ...p, _time_normalized_price: timePrice });
         groups[key].salesCount++;
-        groups[key].totalPrice += p.values_norm_time;
+        groups[key].totalPrice += timePrice;
         groups[key].totalSizeSales += p.asset_sfla || 0;
         groups[key].totalYearSales += p.asset_year_built || 0;
       }
@@ -357,7 +383,7 @@ const OverallAnalysisTab = ({
       if (group.salesCount > 0) {
         group.salesProperties.forEach(p => {
           const adjusted = calculateAdjustedPrice(
-            p.values_norm_time || 0,
+            (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
             p.asset_sfla || 0,
             group.avgSizeSales  // Use sales average for normalization
           );
@@ -521,7 +547,7 @@ const OverallAnalysisTab = ({
       if (group.salesCount > 0) {
         group.salesProperties.forEach(p => {
           const adjusted = calculateAdjustedPrice(
-            p.values_norm_time || 0,
+            (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
             p.asset_sfla || 0,
             group.avgSizeSales
           );
@@ -684,7 +710,7 @@ const OverallAnalysisTab = ({
       if (vcsGroup.salesCount > 0) {
         vcsGroup.salesProperties.forEach(p => {
           const adjusted = calculateAdjustedPrice(
-            p.values_norm_time || 0,
+            (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
             p.asset_sfla || 0,
             vcsGroup.avgSizeSales
           );
@@ -713,7 +739,7 @@ const OverallAnalysisTab = ({
         if (typeGroup.salesCount > 0) {
           typeGroup.salesProperties.forEach(p => {
             const adjusted = calculateAdjustedPrice(
-              p.values_norm_time || 0,
+              (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
               p.asset_sfla || 0,
               typeGroup.avgSizeSales
             );
@@ -746,7 +772,7 @@ const OverallAnalysisTab = ({
           if (designGroup.salesCount > 0) {
             designGroup.salesProperties.forEach(p => {
               const adjusted = calculateAdjustedPrice(
-                p.values_norm_time || 0,
+                (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
                 p.asset_sfla || 0,
                 designGroup.avgSizeSales
               );
@@ -828,7 +854,7 @@ const OverallAnalysisTab = ({
       
       designGroups[key].properties.push(p);
       designGroups[key].count++;
-      designGroups[key].totalPrice += p.values_norm_time || 0;
+      designGroups[key].totalPrice += (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0));
       designGroups[key].totalSize += p.asset_sfla || 0;
     });
 
@@ -841,7 +867,7 @@ const OverallAnalysisTab = ({
       let totalAdjusted = 0;
       group.properties.forEach(p => {
         const adjusted = calculateAdjustedPrice(
-          p.values_norm_time || 0,
+          (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
           p.asset_sfla || 0,
           group.avgSize
         );
@@ -933,7 +959,7 @@ const OverallAnalysisTab = ({
       if (p.values_norm_time && p.values_norm_time > 0) {
         bedroomGroup.salesProperties.push(p);
         bedroomGroup.salesCount++;
-        bedroomGroup.totalPrice += p.values_norm_time || 0;
+        bedroomGroup.totalPrice += (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0));
         bedroomGroup.totalSizeSales += p.asset_sfla || 0;
       }
     });
@@ -984,7 +1010,7 @@ const OverallAnalysisTab = ({
           if (!propSize) return;
 
           const adjusted = calculateAdjustedPrice(
-            p.values_norm_time || 0,
+            (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
             propSize,
             baselineSizeToUse
           );
@@ -1080,7 +1106,7 @@ const OverallAnalysisTab = ({
       
       floorGroups[floor].properties.push(p);
       floorGroups[floor].count++;
-      floorGroups[floor].totalPrice += p.values_norm_time || 0;
+      floorGroups[floor].totalPrice += (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0));
       floorGroups[floor].totalSize += p.asset_sfla || 0;
     });
 
@@ -1093,7 +1119,7 @@ const OverallAnalysisTab = ({
       let totalAdjusted = 0;
       group.properties.forEach(p => {
         const adjusted = calculateAdjustedPrice(
-          p.values_norm_time || 0,
+          (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
           p.asset_sfla || 0,
           group.avgSize
         );
@@ -1823,7 +1849,7 @@ const OverallAnalysisTab = ({
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearAll > 0 ? designGroup.avgYearAll : '—'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeAll > 0 ? formatNumber(designGroup.avgSizeAll) : '—'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearSales > 0 ? designGroup.avgYearSales : '—'}</div>
-                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeSales > 0 ? formatNumber(designGroup.avgSizeSales) : '���'}</div>
+                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeSales > 0 ? formatNumber(designGroup.avgSizeSales) : '�����'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">
                                         {designGroup.salesCount > 0 ? formatCurrency(designGroup.avgPrice) : '—'}
                                       </div>
