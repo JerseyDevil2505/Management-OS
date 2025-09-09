@@ -133,7 +133,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     if (rows.length === 0) return null;
     const mid = Math.floor(rows.length / 2);
     return rows.length % 2 !== 0 ? rows[mid] : (rows[mid - 1] + rows[mid]) / 2;
-  }, [filtered, includedMap]);
+  }, [filtered, includedMap, editedLandMap]);
 
   // Export CSV of current filtered results
   const exportCsv = () => {
