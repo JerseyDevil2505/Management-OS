@@ -508,7 +508,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                     if (!replWithDeprRow) return '—';
                     const ccf = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : 0;
                     const adjustedValue = (camaRow + ((baseVal * (deprRow !== '' ? deprRow : 0)) * ccf) + detItemsRow);
-                    return isFinite(adjustedValue) ? formatCurrency(Number(Number(adjustedValue).toFixed(2))) : '—';
+                    return isFinite(adjustedValue) ? formatCurrencyNoCents(Math.round(adjustedValue)) : '—';
                   })()}</td>
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
