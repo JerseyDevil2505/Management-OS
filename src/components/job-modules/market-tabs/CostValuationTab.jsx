@@ -45,6 +45,22 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       // Require a valid time-normalized price
       if (!(p.values_norm_time && p.values_norm_time > 0)) return false;
 
+      // asset_type_use exists on property_records
+      const typeVal = p.asset_type_use ? p.asset_type_use.toString().trim() : '';
+
+      // Apply typeGroup filter
+      if (typeGroup && typeGroup !== 'all') {
+        if (typeGroup === 'single_family' && !typeVal.startsWith('1')) return false;
+        if (typeGroup === 'semi_detached' && !typeVal.startsWith('2')) return false;
+        if (typeGroup === 'townhouses' && !typeVal.startsWith('3')) return false;
+        if (typeGroup === 'multifamily' && !typeVal.startsWith('4')) return false;
+        if (typeGroup === 'conversions' && !typeVal.startsWith('5')) return false;
+        if (typeGroup === 'condominiums' && !typeVal.startsWith('6')) return false;
+        if (typeGroup === 'commercial' && !typeVal.startsWith('4') && !typeVal.startsWith('5') && !typeVal.startsWith('6') && !typeVal.startsWith('7')) {
+          // coarse commercial check - leave as-is for non-residential
+        }
+      }
+
       // Require year built and be new or newer (<= 20 years)
       const yearBuilt = p.asset_year_built || null;
       if (!yearBuilt) return false;
@@ -53,7 +69,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
       return true;
     });
-  }, [properties, fromYear, toYear]);
+  }, [properties, fromYear, toYear, typeGroup]);
 
   // Initialize include map and edited land map when filtered results change
   useEffect(() => {
