@@ -99,17 +99,28 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   };
 
   // Recommended mean (average) based on included comparables
+  // Use CCF = Improv / ReplWithDepr so a single comparable with CCF 2.88 yields recommendedFactor 2.88
   const recommendedFactor = useMemo(() => {
     const rows = filtered
       .map(p => {
-        const salePrice = (p.values_norm_time && p.values_norm_time > 0) ? p.values_norm_time : (p.sales_price || 0);
-        const repl = p.values_repl_cost || p.values_base_cost || null;
-        if (!repl || !salePrice || salePrice === 0) return null;
         const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
         const included = includedMap[key] !== undefined ? includedMap[key] : true;
-        return included ? (repl / salePrice) : null;
+        if (!included) return null;
+        const salePrice = (p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
+        const detItems = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
+        const baseCost = (p.values_base_cost !== undefined && p.values_base_cost !== null) ? Number(p.values_base_cost) : 0;
+        const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
+        const yearBuilt = p.asset_year_built || '';
+        const depr = yearBuilt ? (1 - ((currentYear - parseInt(yearBuilt, 10)) / 100)) : '';
+        if (!depr) return null;
+        const replWithDepr = (detItems + baseCost) * depr;
+        if (!replWithDepr || replWithDepr === 0) return null;
+        const improv = salePrice - cama - detItems;
+        if (!isFinite(improv)) return null;
+        const ccf = improv / replWithDepr;
+        return isFinite(ccf) ? ccf : null;
       })
-      .filter(v => v && isFinite(v));
+      .filter(v => v !== null && v !== undefined && isFinite(v));
 
     if (rows.length === 0) return null;
     const sum = rows.reduce((a, b) => a + b, 0);
