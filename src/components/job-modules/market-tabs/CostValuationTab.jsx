@@ -435,12 +435,11 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                   })()}</td>
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
-                    const timeNorm = (p.values_norm_time !== undefined && p.values_norm_time !== null) ? Number(p.values_norm_time) : null;
-                    if (timeNorm === null) return '—';
                     const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
-                    const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
-                    const replVal = (p.values_repl_cost !== undefined && p.values_repl_cost !== null) ? Number(p.values_repl_cost) : 0;
-                    const val = Math.round(timeNorm - cama - replVal);
+                    const salePriceRow = (p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
+                    const camaRow = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
+                    const detItemsRow = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
+                    const val = Math.round(salePriceRow - camaRow - detItemsRow);
                     return isFinite(val) ? val.toLocaleString() : '—';
                   })()}</td>
 
