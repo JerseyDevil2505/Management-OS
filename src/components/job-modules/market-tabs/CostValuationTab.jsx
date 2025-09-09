@@ -125,19 +125,26 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   const exportCsv = () => {
     if (!filtered || filtered.length === 0) return alert('No data to export');
     const headers = [
-      'Include','Block','Lot','Card','Location','Year Built','Building Class','Sale Year','Sale NU','Sale Price','Time Norm Price','Replacement Cost','Base Cost','CAMA Land','CCF'
+      'Incl','Block','Lot','Qualifier','Card','Location','Sales Date','Sale Price','Sale NU','Price Time','Year Built','Depr','Building Class','Living Area','Current Land','Det Item','Base Cost','Repl w/Depr','Improv','CCF','Adjusted Ratio'
     ];
     const rows = filtered.map(p => {
       const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
       const included = includedMap[key] !== false;
-      const saleYear = safeSaleYear(p);
+      const saleDate = p.sales_date ? new Date(p.sales_date).toISOString().slice(0,10) : '';
       const salePrice = p.sales_price || '';
       const timeNorm = p.values_norm_time || '';
-      const repl = p.values_repl_cost || p.values_base_cost || '';
-      const base = p.values_base_cost || '';
-      const cama = p.values_cama_land || '';
-      const ccf = (repl && timeNorm) ? (repl / timeNorm) : '';
-      return [included ? '1' : '0', p.property_block || '', p.property_lot || '', p.property_card || '', p.property_location || '', p.asset_year_built || '', p.asset_building_class || '', saleYear || '', p.sales_nu || '', salePrice, timeNorm, repl, base, cama, ccf ? ccf.toFixed(2) : ''];
+      const repl = p.values_repl_cost || p.values_base_cost || 0;
+      const base = p.values_base_cost || 0;
+      const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? editedLandMap[key] : (p.values_cama_land || '');
+      const yearBuilt = p.asset_year_built || '';
+      const depr = yearBuilt ? (1 - ((currentYear - parseInt(yearBuilt, 10)) / 100)) : '';
+      const replWithDepr = (repl && depr) ? ((repl + base) * depr) : '';
+      const improv = (timeNorm !== '' ? (timeNorm - (cama || 0) - (p.values_repl_cost || 0)) : '');
+      const ccf = (p.values_repl_cost && salePrice) ? (p.values_repl_cost / salePrice) : '';
+      const baseRef = costConvFactor || recommendedMedian || recommendedFactor || 1;
+      const adjustedRatio = (ccf && baseRef) ? (ccf / baseRef) : '';
+
+      return [included ? '1' : '0', p.property_block || '', p.property_lot || '', p.asset_qualifier || p.qualifier || '', p.property_card || '', p.property_location || '', saleDate, salePrice, p.sales_nu || '', timeNorm, yearBuilt, depr !== '' ? Number(depr).toFixed(3) : '', p.asset_building_class || '', p.asset_living_area || p.living_area || '', cama, p.values_det_items || '', base || '', replWithDepr !== '' ? Number(replWithDepr).toFixed(2) : '', improv !== '' ? Number(improv).toFixed(2) : '', ccf ? Number(ccf).toFixed(2) : '', adjustedRatio ? Number(adjustedRatio).toFixed(2) : ''];
     });
 
     const csvContent = [headers, ...rows].map(r => r.map(cell => {
