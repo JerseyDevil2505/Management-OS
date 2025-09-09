@@ -397,7 +397,25 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(p.asset_year_built ? (1 - ((currentYear - parseInt(p.asset_year_built, 10)) / 100)).toFixed(2) : '—')}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_building_class || '—'}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_living_area || p.living_area || '—'}</td>
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_cama_land ? Number(p.values_cama_land).toLocaleString() : '—'}</td>
+                  {/* Current Land editable */}
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">
+                    {(() => {
+                      const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
+                      const val = editedLandMap && editedLandMap[key] !== undefined ? editedLandMap[key] : (p.values_cama_land !== undefined && p.values_cama_land !== null ? p.values_cama_land : '');
+                      return (
+                        <input
+                          type="number"
+                          step="1"
+                          value={val}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            setEditedLandMap(prev => ({ ...prev, [key]: raw === '' ? '' : parseFloat(raw) }));
+                          }}
+                          className="px-2 py-1 border rounded w-28"
+                        />
+                      );
+                    })()}
+                  </td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_det_items ? Number(p.values_det_items).toLocaleString() : '—'}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_base_cost ? Number(p.values_base_cost).toLocaleString() : '—'}</td>
 
