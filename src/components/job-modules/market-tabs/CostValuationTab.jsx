@@ -88,7 +88,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   const recommendedFactor = useMemo(() => {
     const rows = filtered
       .map(p => {
-        const salePrice = p.values_norm_time; // we require this earlier
+        const salePrice = (p.values_norm_time && p.values_norm_time > 0) ? p.values_norm_time : (p.sales_price || 0);
         const repl = p.values_repl_cost || p.values_base_cost || null;
         if (!repl || !salePrice || salePrice === 0) return null;
         const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
