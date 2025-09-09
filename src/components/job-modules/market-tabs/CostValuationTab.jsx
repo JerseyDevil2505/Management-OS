@@ -84,6 +84,20 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     setEditedLandMap(landMap);
   }, [filtered]);
 
+  // formatting helpers
+  const formatCurrency = (v) => {
+    if (v === '' || v === null || v === undefined || !isFinite(Number(v))) return '—';
+    return Number(v).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+  const formatCurrencyNoCents = (v) => {
+    if (v === '' || v === null || v === undefined || !isFinite(Number(v))) return '—';
+    return Number(v).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  };
+  const formatPercentNoDecimals = (v) => {
+    if (v === '' || v === null || v === undefined || !isFinite(Number(v))) return '—';
+    return `${Math.round(Number(v) * 100)}%`;
+  };
+
   // Recommended mean (average) based on included comparables
   const recommendedFactor = useMemo(() => {
     const rows = filtered
@@ -100,7 +114,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     if (rows.length === 0) return null;
     const sum = rows.reduce((a, b) => a + b, 0);
     return sum / rows.length;
-  }, [filtered, includedMap]);
+  }, [filtered, includedMap, editedLandMap]);
 
   // Recommended median for robustness
   const recommendedMedian = useMemo(() => {
