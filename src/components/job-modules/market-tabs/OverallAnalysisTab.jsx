@@ -118,6 +118,20 @@ const OverallAnalysisTab = ({
   // Inferred bedrooms cache for async enrichment (BRT fallback to BEDTOT)
   const inferredBedroomsRef = React.useRef({});
 
+  // Build lookup of job-scoped time normalized sales (if available)
+  const timeNormalizedLookup = useMemo(() => {
+    const map = new Map();
+    if (marketLandData && Array.isArray(marketLandData.time_normalized_sales)) {
+      marketLandData.time_normalized_sales.forEach(s => {
+        // normalized sales may be stored with different keys depending on process
+        const key = s.property_composite_key || s.property_key || s.property_composite || null;
+        const time = s.values_norm_time || s.time_normalized_price || s.normalizedTime || s.time_normalized || s.values_norm_time;
+        if (key && time) map.set(key, Number(time));
+      });
+    }
+    return map;
+  }, [marketLandData]);
+
   // Get all unique VCS codes
   const allVCSCodes = useMemo(() => {
     const vcsSet = new Set();
