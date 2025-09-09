@@ -456,7 +456,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                     const camaRow = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
                     const detItemsRow = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
                     const val = Math.round(salePriceRow - camaRow - detItemsRow);
-                    return isFinite(val) ? val.toLocaleString() : '—';
+                    return isFinite(val) ? formatCurrencyNoCents(val) : '—';
                   })()}</td>
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
