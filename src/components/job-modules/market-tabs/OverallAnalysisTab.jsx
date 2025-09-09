@@ -265,7 +265,7 @@ const OverallAnalysisTab = ({
       if (group.salesCount > 0) {
         group.salesProperties.forEach(p => {
           const adjusted = calculateAdjustedPrice(
-            p.values_norm_time || 0,
+            (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
             p.asset_sfla || 0,
             group.avgSizeSales  // Use sales average for normalization
           );
@@ -383,7 +383,7 @@ const OverallAnalysisTab = ({
       if (group.salesCount > 0) {
         group.salesProperties.forEach(p => {
           const adjusted = calculateAdjustedPrice(
-            p.values_norm_time || 0,
+            (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
             p.asset_sfla || 0,
             group.avgSizeSales  // Use sales average for normalization
           );
@@ -547,7 +547,7 @@ const OverallAnalysisTab = ({
       if (group.salesCount > 0) {
         group.salesProperties.forEach(p => {
           const adjusted = calculateAdjustedPrice(
-            p.values_norm_time || 0,
+            (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
             p.asset_sfla || 0,
             group.avgSizeSales
           );
@@ -710,7 +710,7 @@ const OverallAnalysisTab = ({
       if (vcsGroup.salesCount > 0) {
         vcsGroup.salesProperties.forEach(p => {
           const adjusted = calculateAdjustedPrice(
-            p.values_norm_time || 0,
+            (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
             p.asset_sfla || 0,
             vcsGroup.avgSizeSales
           );
@@ -739,7 +739,7 @@ const OverallAnalysisTab = ({
         if (typeGroup.salesCount > 0) {
           typeGroup.salesProperties.forEach(p => {
             const adjusted = calculateAdjustedPrice(
-              p.values_norm_time || 0,
+              (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
               p.asset_sfla || 0,
               typeGroup.avgSizeSales
             );
@@ -772,7 +772,7 @@ const OverallAnalysisTab = ({
           if (designGroup.salesCount > 0) {
             designGroup.salesProperties.forEach(p => {
               const adjusted = calculateAdjustedPrice(
-                p.values_norm_time || 0,
+                (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
                 p.asset_sfla || 0,
                 designGroup.avgSizeSales
               );
@@ -854,7 +854,7 @@ const OverallAnalysisTab = ({
       
       designGroups[key].properties.push(p);
       designGroups[key].count++;
-      designGroups[key].totalPrice += p.values_norm_time || 0;
+      designGroups[key].totalPrice += (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0));
       designGroups[key].totalSize += p.asset_sfla || 0;
     });
 
@@ -867,7 +867,7 @@ const OverallAnalysisTab = ({
       let totalAdjusted = 0;
       group.properties.forEach(p => {
         const adjusted = calculateAdjustedPrice(
-          p.values_norm_time || 0,
+          (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
           p.asset_sfla || 0,
           group.avgSize
         );
@@ -959,7 +959,7 @@ const OverallAnalysisTab = ({
       if (p.values_norm_time && p.values_norm_time > 0) {
         bedroomGroup.salesProperties.push(p);
         bedroomGroup.salesCount++;
-        bedroomGroup.totalPrice += p.values_norm_time || 0;
+        bedroomGroup.totalPrice += (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0));
         bedroomGroup.totalSizeSales += p.asset_sfla || 0;
       }
     });
@@ -1010,7 +1010,7 @@ const OverallAnalysisTab = ({
           if (!propSize) return;
 
           const adjusted = calculateAdjustedPrice(
-            p.values_norm_time || 0,
+            (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
             propSize,
             baselineSizeToUse
           );
@@ -1106,7 +1106,7 @@ const OverallAnalysisTab = ({
       
       floorGroups[floor].properties.push(p);
       floorGroups[floor].count++;
-      floorGroups[floor].totalPrice += p.values_norm_time || 0;
+      floorGroups[floor].totalPrice += (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0));
       floorGroups[floor].totalSize += p.asset_sfla || 0;
     });
 
@@ -1119,7 +1119,7 @@ const OverallAnalysisTab = ({
       let totalAdjusted = 0;
       group.properties.forEach(p => {
         const adjusted = calculateAdjustedPrice(
-          p.values_norm_time || 0,
+          (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
           p.asset_sfla || 0,
           group.avgSize
         );
