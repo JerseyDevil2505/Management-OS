@@ -131,18 +131,19 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
       const included = includedMap[key] !== false;
       const saleDate = p.sales_date ? new Date(p.sales_date).toISOString().slice(0,10) : '';
-      const salePrice = p.sales_price || '';
-      const timeNorm = p.values_norm_time || '';
+      const salePrice = (p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
+      const timeNorm = (p.values_norm_time !== undefined && p.values_norm_time !== null) ? Number(p.values_norm_time) : '';
       const detItems = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
       const baseCost = (p.values_base_cost !== undefined && p.values_base_cost !== null) ? Number(p.values_base_cost) : 0;
       const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
       const yearBuilt = p.asset_year_built || '';
       const depr = yearBuilt ? (1 - ((currentYear - parseInt(yearBuilt, 10)) / 100)) : '';
       const replWithDepr = (depr !== '' ? Math.round((detItems + baseCost) * depr) : '');
-      const improv = (timeNorm !== '' ? Math.round(timeNorm - cama - ((p.values_repl_cost !== undefined && p.values_repl_cost !== null) ? Number(p.values_repl_cost) : 0)) : '');
-      const ccf = (p.values_repl_cost && salePrice) ? (p.values_repl_cost / salePrice) : '';
+      const improv = (salePrice !== '' ? Math.round(salePrice - cama - detItems) : '');
+      const ccf = (replWithDepr && replWithDepr !== '' && replWithDepr !== 0) ? (improv / replWithDepr) : '';
       const baseRef = costConvFactor || recommendedMedian || recommendedFactor || 1;
       const adjustedRatio = (ccf && baseRef) ? (ccf / baseRef) : '';
+      const adjustedValue = (salePrice && adjustedRatio) ? Math.round(salePrice * adjustedRatio) : '';
 
       return [included ? '1' : '0', p.property_block || '', p.property_lot || '', p.asset_qualifier || p.qualifier || '', p.property_card || '', p.property_location || '', saleDate, salePrice, p.sales_nu || '', timeNorm, yearBuilt, depr !== '' ? Number(depr).toFixed(3) : '', p.asset_building_class || '', p.asset_living_area || p.living_area || '', cama, p.values_det_items || '', baseCost || '', replWithDepr !== '' ? Number(replWithDepr).toFixed(0) : '', improv !== '' ? Number(improv).toFixed(0) : '', ccf ? Number(ccf).toFixed(2) : '', adjustedRatio ? Number(adjustedRatio).toFixed(2) : ''];
     });
