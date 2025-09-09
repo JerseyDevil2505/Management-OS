@@ -484,11 +484,11 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                     const salePriceRow = (p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
                     const camaRow = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
                     const improvRow = Math.round(salePriceRow - camaRow - detItemsRow);
+                    // compute adjusted value here: Current Land + ((Base Cost * Depr) * CCF) + Det Item
                     if (!replWithDeprRow) return '—';
-                    const ccf = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : null;
-                    const baseRef = costConvFactor || recommendedMedian || recommendedFactor || 1;
-                    const ratio = (ccf && baseRef) ? (ccf / baseRef) : null;
-                    return ratio ? Number(ratio).toFixed(2) : '—';
+                    const ccf = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : 0;
+                    const adjustedValue = (camaRow + ((baseVal * (deprRow !== '' ? deprRow : 0)) * ccf) + detItemsRow);
+                    return isFinite(adjustedValue) ? formatCurrency(Number(Number(adjustedValue).toFixed(2))) : '—';
                   })()}</td>
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
