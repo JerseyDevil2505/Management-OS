@@ -183,6 +183,78 @@ const LandValuationTab = ({
     },
     customCategories: []
   });
+
+  // Bracket editor UI state (allows per-job overrides of bracket boundaries)
+  const [showBracketEditor, setShowBracketEditor] = useState(false);
+  const [bracketInputs, setBracketInputs] = useState(() => ({
+    primeMax: cascadeConfig.normal?.prime?.max ?? 1,
+    secondaryMax: cascadeConfig.normal?.secondary?.max ?? 5,
+    excessMax: cascadeConfig.normal?.excess?.max ?? 10,
+    residualMax: cascadeConfig.normal?.residual?.max ?? null
+  }));
+
+  useEffect(() => {
+    // Keep bracket inputs in sync when cascadeConfig loads from saved data
+    setBracketInputs({
+      primeMax: cascadeConfig.normal?.prime?.max ?? 1,
+      secondaryMax: cascadeConfig.normal?.secondary?.max ?? 5,
+      excessMax: cascadeConfig.normal?.excess?.max ?? 10,
+      residualMax: cascadeConfig.normal?.residual?.max ?? null
+    });
+  }, [cascadeConfig]);
+
+  const validateAndApplyBrackets = (opts = { recalc: true }) => {
+    // Parse numeric values
+    const p = parseFloat(bracketInputs.primeMax);
+    const s = parseFloat(bracketInputs.secondaryMax);
+    const e = parseFloat(bracketInputs.excessMax);
+    const r = bracketInputs.residualMax === null || bracketInputs.residualMax === '' ? null : parseFloat(bracketInputs.residualMax);
+
+    if (isNaN(p) || isNaN(s) || isNaN(e) || (r !== null && isNaN(r))) {
+      return alert('Please enter valid numeric bracket maximums. Use decimals for fractions (e.g. 0.25).');
+    }
+    if (!(p > 0 && s > p && e > s && (r === null || r > e))) {
+      return alert('Brackets must increase: prime < secondary < excess < residual (residual may be empty).');
+    }
+
+    setCascadeConfig(prev => ({
+      ...prev,
+      normal: {
+        ...prev.normal,
+        prime: { ...prev.normal.prime, max: p },
+        secondary: { ...prev.normal.secondary, max: s },
+        excess: { ...prev.normal.excess, max: e },
+        residual: { ...prev.normal.residual, max: r }
+      }
+    }));
+
+    // Optionally re-run the bracket analysis immediately
+    if (opts.recalc) {
+      try {
+        performBracketAnalysis();
+      } catch (e) {
+        // ignore errors from recalculation
+      }
+    }
+  };
+
+  const applyDefaultQuartileBrackets = () => {
+    // Example quartile defaults for built-up towns (in acres)
+    const defaults = { primeMax: 0.25, secondaryMax: 0.5, excessMax: 0.75, residualMax: 1 };
+    setBracketInputs(defaults);
+    setCascadeConfig(prev => ({
+      ...prev,
+      normal: {
+        ...prev.normal,
+        prime: { ...prev.normal.prime, max: defaults.primeMax },
+        secondary: { ...prev.normal.secondary, max: defaults.secondaryMax },
+        excess: { ...prev.normal.excess, max: defaults.excessMax },
+        residual: { ...prev.normal.residual, max: defaults.residualMax }
+      }
+    }));
+    // Recompute
+    try { performBracketAnalysis(); } catch (e) {}
+  };
   
   // VCS Analysis
   const [bracketAnalysis, setBracketAnalysis] = useState({});
@@ -1074,7 +1146,7 @@ const getPricePerUnit = useCallback((price, size) => {
       const enriched = enrichProperty(prop);
       finalSales.push(enriched);
       if (enriched.autoCategory) {
-        debug(`🏷️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
+        debug(`���️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
         setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
       }
     });
@@ -1222,11 +1294,18 @@ const getPricePerUnit = useCallback((price, size) => {
         // Sort by acreage for bracketing
         sales.sort((a, b) => a.acres - b.acres);
 
+        // Use configured cascade boundaries (in acres) for bracketing
+        const pMax = cascadeConfig.normal?.prime?.max ?? 1;
+        const sMax = cascadeConfig.normal?.secondary?.max ?? 5;
+        const eMax = cascadeConfig.normal?.excess?.max ?? 10;
+        const rMax = cascadeConfig.normal?.residual?.max ?? null;
+
         const brackets = {
-          small: sales.filter(s => s.acres < 1),              // 0 to 0.99
-          medium: sales.filter(s => s.acres >= 1 && s.acres < 5),  // 1.00-4.99
-          large: sales.filter(s => s.acres >= 5 && s.acres < 10),  // 5.00-9.99
-          xlarge: sales.filter(s => s.acres >= 10)            // 10.00 and greater
+          small: sales.filter(s => s.acres < pMax),
+          medium: sales.filter(s => s.acres >= pMax && s.acres < sMax),
+          large: sales.filter(s => s.acres >= sMax && s.acres < eMax),
+          xlarge: rMax ? sales.filter(s => s.acres >= eMax && s.acres < rMax) : sales.filter(s => s.acres >= eMax),
+          residual: rMax ? sales.filter(s => s.acres >= rMax) : []
         };
 
         // Calculate overall VCS average SFLA for size adjustment
@@ -3257,11 +3336,22 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const bracketHeaders = ['Bracket','Count','Avg Lot Size (acres)','Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','ADJUSTED','$ ADJUSTED','DELTA','$ DELTA','LOT DELTA','PER ACRE','$ PER ACRE','PER SQ FT'];
       method2Rows.push(bracketHeaders);
 
+      // Build bracket labels dynamically from cascadeConfig
+      const p = cascadeConfig.normal?.prime?.max ?? 1;
+      const s = cascadeConfig.normal?.secondary?.max ?? 5;
+      const e = cascadeConfig.normal?.excess?.max ?? 10;
+      const r = cascadeConfig.normal?.residual?.max ?? null;
+
+      const labelSmall = `<${p.toFixed(2)}`;
+      const labelMedium = `${p.toFixed(2)}-${s.toFixed(2)}`;
+      const labelLarge = `${s.toFixed(2)}-${e.toFixed(2)}`;
+      const labelXlarge = r ? `${e.toFixed(2)}-${r.toFixed(2)}` : `>${e.toFixed(2)}`;
+
       const bracketList = [
-        { key: 'small', label: '<1.00', bracket: data.brackets.small },
-        { key: 'medium', label: '1.00-5.00', bracket: data.brackets.medium },
-        { key: 'large', label: '5.00-10.00', bracket: data.brackets.large },
-        { key: 'xlarge', label: '>10.00', bracket: data.brackets.xlarge }
+        { key: 'small', label: labelSmall, bracket: data.brackets.small },
+        { key: 'medium', label: labelMedium, bracket: data.brackets.medium },
+        { key: 'large', label: labelLarge, bracket: data.brackets.large },
+        { key: 'xlarge', label: labelXlarge, bracket: data.brackets.xlarge }
       ];
 
       bracketList.forEach((row, rowIndex) => {
@@ -3294,21 +3384,30 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     // Method 2 Summary (similar to UI)
-    method2Rows.push(['Implied Acreage Summary']);
+    method2Rows.push(['Method 2 Summary']);
     if (method2Summary) {
       const mid = method2Summary.mediumRange || {};
       const lg = method2Summary.largeRange || {};
       const xl = method2Summary.xlargeRange || {};
-      method2Rows.push(['1.00-4.99 perAcre', mid.perAcre && mid.perAcre !== 'N/A' ? `$${mid.perAcre.toLocaleString()}` : 'N/A']);
-      method2Rows.push(['5.00-9.99 perAcre', lg.perAcre && lg.perAcre !== 'N/A' ? `$${lg.perAcre.toLocaleString()}` : 'N/A']);
-      method2Rows.push(['10.00+ perAcre', xl.perAcre && xl.perAcre !== 'N/A' ? `$${xl.perAcre.toLocaleString()}` : 'N/A']);
+      const p = cascadeConfig.normal?.prime?.max ?? 1;
+      const s = cascadeConfig.normal?.secondary?.max ?? 5;
+      const e = cascadeConfig.normal?.excess?.max ?? 10;
+
+      method2Rows.push([`${p.toFixed(2)}-${s.toFixed(2)} perAcre`, mid.perAcre && mid.perAcre !== 'N/A' ? `$${mid.perAcre.toLocaleString()}` : 'N/A']);
+      method2Rows.push([`${s.toFixed(2)}-${e.toFixed(2)} perAcre`, lg.perAcre && lg.perAcre !== 'N/A' ? `$${lg.perAcre.toLocaleString()}` : 'N/A']);
+      method2Rows.push([`${e.toFixed(2)}+ perAcre`, xl.perAcre && xl.perAcre !== 'N/A' ? `$${xl.perAcre.toLocaleString()}` : 'N/A']);
       method2Rows.push(['All Positive Deltas Avg', (() => {
-        const allRates = [];
-        if (mid.perAcre && mid.perAcre !== 'N/A') allRates.push(mid.perAcre);
-        if (lg.perAcre && lg.perAcre !== 'N/A') allRates.push(lg.perAcre);
-        if (xl.perAcre && xl.perAcre !== 'N/A') allRates.push(xl.perAcre);
-        if (allRates.length === 0) return 'N/A';
-        const avgRate = Math.round(allRates.reduce((s, r) => s + r, 0) / allRates.length);
+        const allRatesAcre = [];
+        if (mid.perAcre && mid.perAcre !== 'N/A') allRatesAcre.push(mid.perAcre);
+        if (lg.perAcre && lg.perAcre !== 'N/A') allRatesAcre.push(lg.perAcre);
+        if (xl.perAcre && xl.perAcre !== 'N/A') allRatesAcre.push(xl.perAcre);
+        if (allRatesAcre.length === 0) return 'N/A';
+        if (valuationMode === 'sf') {
+          const allRatesSf = allRatesAcre.map(r => r / 43560);
+          const avgSf = allRatesSf.reduce((s, r) => s + r, 0) / allRatesSf.length;
+          return `$${avgSf.toFixed(2)}/SF`;
+        }
+        const avgRate = Math.round(allRatesAcre.reduce((s, r) => s + r, 0) / allRatesAcre.length);
         return `$${avgRate.toLocaleString()}`;
       })()]);
     }
@@ -3334,7 +3433,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     ];
 
     // Apply bold + centered styling to header-like cells (detect by label)
-    const headerLabels = ['Bracket','Count','Avg Lot Size (acres)','Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','ADJUSTED','$ ADJUSTED','DELTA','$ DELTA','LOT DELTA','PER ACRE','$ PER ACRE','PER SQ FT','Implied Acreage Summary'];
+    const headerLabels = ['Bracket','Count','Avg Lot Size (acres)','Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','ADJUSTED','$ ADJUSTED','DELTA','$ DELTA','LOT DELTA','PER ACRE','$ PER ACRE','PER SQ FT','Method 2 Summary'];
     try {
       const range = XLSX.utils.decode_range(ws2['!ref']);
       for (let R = range.s.r; R <= range.e.r; ++R) {
@@ -3353,7 +3452,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       debug('Method2 header styling skipped', e);
     }
 
-    XLSX.utils.book_append_sheet(wb, ws2, 'Implied Acreage');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Method 2');
 
     return wb;
   };
@@ -3447,7 +3546,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
     
     // Method 2 Analysis
-    csv += '\n\nIMPLIED ACREAGE: IMPROVED SALE LOT SIZE ANALYSIS\n';
+    csv += '\n\nMETHOD 2: IMPROVED SALE LOT SIZE ANALYSIS\n';
     csv += 'VCS,Total Sales,<1 Acre,1-5 Acres,5-10 Acres,>10 Acres,Implied Rate\n';
     
     Object.entries(bracketAnalysis).sort(([a], [b]) => a.localeCompare(b)).forEach(([vcs, data]) => {
@@ -3457,7 +3556,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     
     // Method 2 Summary
     if (method2Summary.average) {
-      csv += '\n\nIMPLIED ACREAGE SUMMARY\n';
+      csv += '\n\nMETHOD 2 SUMMARY\n';
       csv += `Average Implied Rate,${method2Summary.average}\n`;
       csv += `Median Implied Rate,${method2Summary.median}\n`;
       csv += `Coverage,${method2Summary.coverage}\n`;
@@ -3820,7 +3919,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
     debug('🔄 Recalculating category analysis');
-    debug('��� Total vacant sales:', vacantSales.length);
+    debug('���� Total vacant sales:', vacantSales.length);
     debug('📊 Checked sales count:', checkedSales.length);
     debug('📋 Included sales IDs:', Array.from(includedSales));
     debug('📋 Sale categories state:', saleCategories);
@@ -4226,6 +4325,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             </button>
           </div>
         </div>
+
       </div>
 
       {/* Method 1: Vacant Land Sales */}
@@ -4610,11 +4710,104 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           </div>
         </div>
       </div>
+      <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
+        <div style={{ display: 'flex', gap: '8px', flexDirection: 'column', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={() => setShowBracketEditor(prev => !prev)}
+              style={{
+                padding: '8px 12px',
+                backgroundColor: showBracketEditor ? '#F3F4F6' : 'white',
+                border: '1px solid #E5E7EB',
+                borderRadius: '6px',
+                cursor: 'pointer'
+              }}
+            >
+              {showBracketEditor ? 'Hide Bracket Settings' : 'Edit Brackets'}
+            </button>
+
+          </div>
+
+          {showBracketEditor && (
+            <div style={{ marginTop: '12px', padding: '12px', borderRadius: '6px', backgroundColor: 'white', border: '1px solid #E5E7EB', width: '90%', maxWidth: '980px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#6B7280' }}>Prime max (acres)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={bracketInputs.primeMax ?? ''}
+                    onChange={(e) => setBracketInputs(prev => ({ ...prev, primeMax: e.target.value }))}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#6B7280' }}>Secondary max (acres)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={bracketInputs.secondaryMax ?? ''}
+                    onChange={(e) => setBracketInputs(prev => ({ ...prev, secondaryMax: e.target.value }))}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#6B7280' }}>Excess max (acres)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={bracketInputs.excessMax ?? ''}
+                    onChange={(e) => setBracketInputs(prev => ({ ...prev, excessMax: e.target.value }))}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#6B7280' }}>Residual max (acres)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={bracketInputs.residualMax ?? ''}
+                    onChange={(e) => setBracketInputs(prev => ({ ...prev, residualMax: e.target.value }))}
+                    placeholder="leave empty for open-ended"
+                    style={{ width: '100%', padding: '8px', border: '1px solid #D1D5DB', borderRadius: '4px' }}
+                  />
+                </div>
+              </div>
+              <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <button
+                  onClick={() => { applyDefaultQuartileBrackets(); /* keep editor open to show changes */ }}
+                  style={{ padding: '8px 12px', backgroundColor: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: '6px', cursor: 'pointer' }}
+                >
+                  Apply Quartile Defaults
+                </button>
+                <button
+                  onClick={() => { validateAndApplyBrackets({ recalc: true }); setShowBracketEditor(false); }}
+                  style={{ padding: '8px 12px', backgroundColor: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                >
+                  Apply
+                </button>
+                <button
+                  onClick={() => setShowBracketEditor(false)}
+                  style={{ padding: '8px 12px', backgroundColor: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: '6px', cursor: 'pointer' }}
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => { validateAndApplyBrackets({ recalc: true }); saveRates(); }}
+                  style={{ padding: '8px 12px', backgroundColor: '#10B981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                >
+                  Save Brackets
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
       {/* Method 2: Improved Sale Lot Size Analysis */}
       <div style={{ marginBottom: '30px', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
         <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Implied Acreage: Improved Sale Lot Size Analysis</h3>
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Method 2: Improved Sale Lot Size Analysis</h3>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
               <label style={{ fontSize: '12px', color: '#6B7280' }}>Type and Use:</label>
               <select
@@ -4753,12 +4946,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           </tr>
                         </thead>
                         <tbody>
-                          {[
-                            { key: 'small', label: '<1.00', bracket: data.brackets.small },
-                            { key: 'medium', label: '1.00-5.00', bracket: data.brackets.medium },
-                            { key: 'large', label: '5.00-10.00', bracket: data.brackets.large },
-                            { key: 'xlarge', label: '>10.00', bracket: data.brackets.xlarge }
-                          ].map((row, rowIndex) => {
+                          {(() => {
+                            const pMax = cascadeConfig.normal?.prime?.max ?? 1;
+                            const sMax = cascadeConfig.normal?.secondary?.max ?? 5;
+                            const eMax = cascadeConfig.normal?.excess?.max ?? 10;
+                            const rMax = cascadeConfig.normal?.residual?.max ?? null;
+
+                            return [
+                              { key: 'small', label: `<${pMax.toFixed(2)}`, bracket: data.brackets.small },
+                              { key: 'medium', label: `${pMax.toFixed(2)}-${sMax.toFixed(2)}`, bracket: data.brackets.medium },
+                              { key: 'large', label: `${sMax.toFixed(2)}-${eMax.toFixed(2)}`, bracket: data.brackets.large },
+                              { key: 'xlarge', label: rMax ? `${eMax.toFixed(2)}-${rMax.toFixed(2)}` : `>${eMax.toFixed(2)}`, bracket: data.brackets.xlarge }
+                            ];
+                          })().map((row, rowIndex) => {
                             if (row.bracket.count === 0) return null;
 
                             // Calculate deltas from previous bracket
@@ -4818,57 +5018,85 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           <div style={{ borderTop: '2px solid #E5E7EB', backgroundColor: '#F8FAFC' }}>
             <div style={{ padding: '20px' }}>
               <h4 style={{ margin: '0 0 15px 0', fontSize: '16px', fontWeight: 'bold', color: '#1F2937' }}>
-                Implied Acreage Summary - Implied $/Acre Rates
+                Method 2 Summary - Implied {valuationMode === 'sf' ? '$/Square Foot Rates' : '$/Acre Rates'}
               </h4>
 
               <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-                {/* 1.00-4.99 Range */}
-                <div style={{ textAlign: 'center', minWidth: '150px' }}>
-                  <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>1.00-4.99 Acres</div>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>
-                    {method2Summary.mediumRange?.perAcre !== 'N/A' ?
-                      `$${method2Summary.mediumRange?.perAcre?.toLocaleString()}` : 'N/A'}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                    {method2Summary.mediumRange?.perSqFt !== 'N/A' ?
-                      `$${method2Summary.mediumRange?.perSqFt}/SF` : 'N/A'}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
-                    ({method2Summary.mediumRange?.count || 0} VCS)
-                  </div>
-                </div>
+                {/* dynamic bracket labels based on cascadeConfig */}
+                {(() => {
+                  const p = cascadeConfig.normal?.prime?.max ?? 1;
+                  const s = cascadeConfig.normal?.secondary?.max ?? 5;
+                  const e = cascadeConfig.normal?.excess?.max ?? 10;
+                  const r = cascadeConfig.normal?.residual?.max ?? null;
 
-                {/* 5.00-9.99 Range */}
-                <div style={{ textAlign: 'center', minWidth: '150px' }}>
-                  <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>5.00-9.99 Acres</div>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0D9488' }}>
-                    {method2Summary.largeRange?.perAcre !== 'N/A' ?
-                      `$${method2Summary.largeRange?.perAcre?.toLocaleString()}` : 'N/A'}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                    {method2Summary.largeRange?.perSqFt !== 'N/A' ?
-                      `$${method2Summary.largeRange?.perSqFt}/SF` : 'N/A'}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
-                    ({method2Summary.largeRange?.count || 0} VCS)
-                  </div>
-                </div>
+                  const labelMedium = `${p.toFixed(2)}-${s.toFixed(2)}`;
+                  const labelLarge = `${s.toFixed(2)}-${e.toFixed(2)}`;
+                  const labelXlarge = r ? `${e.toFixed(2)}-${r.toFixed(2)}` : `>${e.toFixed(2)}`;
 
-                {/* 10.00+ Range */}
-                <div style={{ textAlign: 'center', minWidth: '150px' }}>
-                  <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>10.00+ Acres</div>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#7C3AED' }}>
-                    {method2Summary.xlargeRange?.perAcre !== 'N/A' ?
-                      `$${method2Summary.xlargeRange?.perAcre?.toLocaleString()}` : 'N/A'}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                    {method2Summary.xlargeRange?.perSqFt !== 'N/A' ?
-                      `$${method2Summary.xlargeRange?.perSqFt}/SF` : 'N/A'}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
-                    ({method2Summary.xlargeRange?.count || 0} VCS)
-                  </div>
-                </div>
+                  return (
+                    <>
+                      {/* medium */}
+                      <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                        <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>{labelMedium} Acres</div>
+                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>
+                          {valuationMode === 'sf' ?
+                            (method2Summary.mediumRange?.perSqFt !== 'N/A' ? `$${method2Summary.mediumRange?.perSqFt}/SF` : 'N/A') :
+                            (method2Summary.mediumRange?.perAcre !== 'N/A' ? `$${method2Summary.mediumRange?.perAcre?.toLocaleString()}` : 'N/A')
+                          }
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                          {valuationMode === 'sf' ?
+                            (method2Summary.mediumRange?.perAcre !== 'N/A' ? `$${method2Summary.mediumRange?.perAcre?.toLocaleString()}/AC` : 'N/A') :
+                            (method2Summary.mediumRange?.perSqFt !== 'N/A' ? `$${method2Summary.mediumRange?.perSqFt}/SF` : 'N/A')
+                          }
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                          ({method2Summary.mediumRange?.count || 0} VCS)
+                        </div>
+                      </div>
+
+                      {/* large */}
+                      <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                        <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>{labelLarge} Acres</div>
+                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0D9488' }}>
+                          {valuationMode === 'sf' ?
+                            (method2Summary.largeRange?.perSqFt !== 'N/A' ? `$${method2Summary.largeRange?.perSqFt}/SF` : 'N/A') :
+                            (method2Summary.largeRange?.perAcre !== 'N/A' ? `$${method2Summary.largeRange?.perAcre?.toLocaleString()}` : 'N/A')
+                          }
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                          {valuationMode === 'sf' ?
+                            (method2Summary.largeRange?.perAcre !== 'N/A' ? `$${method2Summary.largeRange?.perAcre?.toLocaleString()}/AC` : 'N/A') :
+                            (method2Summary.largeRange?.perSqFt !== 'N/A' ? `$${method2Summary.largeRange?.perSqFt}/SF` : 'N/A')
+                          }
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                          ({method2Summary.largeRange?.count || 0} VCS)
+                        </div>
+                      </div>
+
+                      {/* xlarge */}
+                      <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                        <div style={{ fontSize: '14px', color: '#6B7280', marginBottom: '4px' }}>{labelXlarge}</div>
+                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#7C3AED' }}>
+                          {valuationMode === 'sf' ?
+                            (method2Summary.xlargeRange?.perSqFt !== 'N/A' ? `$${method2Summary.xlargeRange?.perSqFt}/SF` : 'N/A') :
+                            (method2Summary.xlargeRange?.perAcre !== 'N/A' ? `$${method2Summary.xlargeRange?.perAcre?.toLocaleString()}` : 'N/A')
+                          }
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                          {valuationMode === 'sf' ?
+                            (method2Summary.xlargeRange?.perAcre !== 'N/A' ? `$${method2Summary.xlargeRange?.perAcre?.toLocaleString()}/AC` : 'N/A') :
+                            (method2Summary.xlargeRange?.perSqFt !== 'N/A' ? `$${method2Summary.xlargeRange?.perSqFt}/SF` : 'N/A')
+                          }
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                          ({method2Summary.xlargeRange?.count || 0} VCS)
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
 
                 {/* Average Across All Positive Deltas */}
                 <div style={{ textAlign: 'center', minWidth: '150px' }}>
@@ -4882,8 +5110,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
                       if (allRates.length === 0) return 'N/A';
 
-                      const avgRate = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
-                      return `$${avgRate.toLocaleString()}`;
+                      const avgAcre = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
+                      if (valuationMode === 'sf') {
+                        const avgSf = (avgAcre / 43560).toFixed(2);
+                        return `$${avgSf}/SF`;
+                      }
+
+                      return `$${avgAcre.toLocaleString()}`;
                     })()}
                   </div>
                   <div style={{ fontSize: '12px', color: '#6B7280' }}>
@@ -4895,9 +5128,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
                       if (allRates.length === 0) return 'N/A';
 
-                      const avgRate = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
-                      const perSqFt = (avgRate / 43560).toFixed(2);
-                      return `$${perSqFt}/SF`;
+                      const avgAcre = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
+                      const perSqFt = (avgAcre / 43560).toFixed(2);
+
+                      // show secondary value (opposite of primary)
+                      return valuationMode === 'sf' ? `$${avgAcre.toLocaleString()}/AC` : `$${perSqFt}/SF`;
                     })()}
                   </div>
                   <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
@@ -6019,7 +6254,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>
-                Implied Acreage Sales - VCS {method2ModalVCS}
+                Method 2 Sales - VCS {method2ModalVCS}
               </h3>
               <button
                 onClick={() => setShowMethod2Modal(false)}
@@ -6062,7 +6297,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'block' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('lot')}

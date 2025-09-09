@@ -1363,10 +1363,14 @@ useEffect(() => {
                     <>
                   {/* Don't show Mark Complete button for analysis items that sync from other components */}
                   {item.status === 'completed' ? (
-    <span className="inline-flex items-center px-3 py-1 rounded-full bg-green-50 text-green-800 text-sm font-medium">
+    <button
+      onClick={() => handleItemStatusChange(item.id, 'pending')}
+      className="inline-flex items-center px-3 py-1 rounded-md bg-green-50 text-green-800 text-sm font-medium hover:bg-green-100"
+      title="Click to mark as not completed"
+    >
       <CheckSquare className="w-4 h-4 mr-2" />
       Completed
-    </span>
+    </button>
   ) : (
     !item.is_analysis_item && (
       <button
