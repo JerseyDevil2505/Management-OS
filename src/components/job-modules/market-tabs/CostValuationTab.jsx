@@ -16,6 +16,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   const [stateRecommendedFactor, setStateRecommendedFactor] = useState(marketLandData?.cost_conv_recommendation ?? null);
   const [isSaving, setIsSaving] = useState(false);
   const [includedMap, setIncludedMap] = useState({});
+  const [editedLandMap, setEditedLandMap] = useState({});
 
   useEffect(() => {
     setCostConvFactor(marketLandData?.cost_conv_factor ?? null);
