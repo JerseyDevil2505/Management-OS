@@ -439,8 +439,8 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                       );
                     })()}
                   </td>
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_det_items ? Number(p.values_det_items).toLocaleString() : '—'}</td>
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_base_cost ? Number(p.values_base_cost).toLocaleString() : '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_det_items ? formatCurrencyNoCents(Number(p.values_det_items)) : '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_base_cost ? formatCurrencyNoCents(Number(p.values_base_cost)) : '—'}</td>
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
                     const detItems = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
