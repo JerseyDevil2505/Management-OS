@@ -70,14 +70,17 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     });
   }, [properties, fromYear, toYear, typeGroup]);
 
-  // Initialize include map when filtered results change
+  // Initialize include map and edited land map when filtered results change
   useEffect(() => {
     const map = {};
+    const landMap = {};
     filtered.forEach(p => {
       const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
       map[key] = true;
+      landMap[key] = p.values_cama_land !== undefined && p.values_cama_land !== null ? p.values_cama_land : '';
     });
     setIncludedMap(map);
+    setEditedLandMap(landMap);
   }, [filtered]);
 
   // Recommended mean (average) based on included comparables
