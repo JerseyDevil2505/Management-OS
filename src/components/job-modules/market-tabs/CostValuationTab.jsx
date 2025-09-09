@@ -444,15 +444,18 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                   })()}</td>
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
-                    const replVal = p.values_repl_cost || 0;
-                    const salePrice = p.sales_price || 0;
+                    const replVal = p.values_repl_cost || p.values_base_cost || null;
+                    const salePrice = (p.values_norm_time && p.values_norm_time > 0) ? p.values_norm_time : (p.sales_price || 0);
+                    if (!replVal) {
+                      return <span className="text-xs text-yellow-800">Missing repl</span>;
+                    }
                     const val = (salePrice && replVal) ? (replVal / salePrice) : null;
                     return val ? Number(val).toFixed(2) : '—';
                   })()}</td>
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
-                    const salePrice = p.sales_price || 0;
-                    const replVal = p.values_repl_cost || 0;
+                    const salePrice = (p.values_norm_time && p.values_norm_time > 0) ? p.values_norm_time : (p.sales_price || 0);
+                    const replVal = p.values_repl_cost || p.values_base_cost || null;
                     const ccf = (salePrice && replVal) ? (replVal / salePrice) : null;
                     const baseRef = costConvFactor || recommendedMedian || recommendedFactor || 1;
                     const ratio = (ccf && baseRef) ? (ccf / baseRef) : null;
