@@ -233,11 +233,14 @@ const OverallAnalysisTab = ({
       groups[key].totalSizeAll += p.asset_sfla || 0;
       groups[key].totalYearAll += p.asset_year_built || 0;
       
-      // Only add to sales if it has valid price
-      if (p.values_norm_time && p.values_norm_time > 0) {
-        groups[key].salesProperties.push(p);
+      // Only add to sales if it has valid price (prefer job-scoped normalized value)
+      const keyForLookup = p.property_composite_key;
+      const timeNormFromPMA = timeNormalizedLookup.get(keyForLookup);
+      const timePrice = (timeNormFromPMA && timeNormFromPMA > 0) ? timeNormFromPMA : (p.values_norm_time && p.values_norm_time > 0 ? p.values_norm_time : null);
+      if (timePrice) {
+        groups[key].salesProperties.push({ ...p, _time_normalized_price: timePrice });
         groups[key].salesCount++;
-        groups[key].totalPrice += p.values_norm_time;
+        groups[key].totalPrice += timePrice;
         groups[key].totalSizeSales += p.asset_sfla || 0;
         groups[key].totalYearSales += p.asset_year_built || 0;
       }
@@ -348,11 +351,14 @@ const OverallAnalysisTab = ({
       groups[key].totalSizeAll += p.asset_sfla || 0;
       groups[key].totalYearAll += p.asset_year_built || 0;
       
-      // Only add to sales if it has valid price
-      if (p.values_norm_time && p.values_norm_time > 0) {
-        groups[key].salesProperties.push(p);
+      // Only add to sales if it has valid price (prefer job-scoped normalized value)
+      const keyForLookup = p.property_composite_key;
+      const timeNormFromPMA = timeNormalizedLookup.get(keyForLookup);
+      const timePrice = (timeNormFromPMA && timeNormFromPMA > 0) ? timeNormFromPMA : (p.values_norm_time && p.values_norm_time > 0 ? p.values_norm_time : null);
+      if (timePrice) {
+        groups[key].salesProperties.push({ ...p, _time_normalized_price: timePrice });
         groups[key].salesCount++;
-        groups[key].totalPrice += p.values_norm_time;
+        groups[key].totalPrice += timePrice;
         groups[key].totalSizeSales += p.asset_sfla || 0;
         groups[key].totalYearSales += p.asset_year_built || 0;
       }
@@ -1843,7 +1849,7 @@ const OverallAnalysisTab = ({
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearAll > 0 ? designGroup.avgYearAll : '—'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeAll > 0 ? formatNumber(designGroup.avgSizeAll) : '—'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearSales > 0 ? designGroup.avgYearSales : '—'}</div>
-                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeSales > 0 ? formatNumber(designGroup.avgSizeSales) : '���'}</div>
+                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeSales > 0 ? formatNumber(designGroup.avgSizeSales) : '�����'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">
                                         {designGroup.salesCount > 0 ? formatCurrency(designGroup.avgPrice) : '—'}
                                       </div>
