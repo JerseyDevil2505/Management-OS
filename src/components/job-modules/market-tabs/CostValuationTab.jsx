@@ -504,8 +504,10 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                     const baseRef = costConvFactor || recommendedMedian || recommendedFactor || 1;
                     const ccf = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : null;
                     const ratio = (ccf && baseRef) ? (ccf / baseRef) : null;
-                    const adjustedValue = (salePriceRow && ratio) ? Math.round(salePriceRow * ratio) : null;
-                    return adjustedValue !== null ? adjustedValue.toLocaleString() : '—';
+                    const ccf = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : null;
+                    const baseRef = costConvFactor || recommendedMedian || recommendedFactor || 1;
+                    const ratio = (ccf && baseRef) ? (ccf / baseRef) : null;
+                    return ratio ? formatPercentNoDecimals(ratio) : '—';
                   })()}</td>
                 </tr>
               );
