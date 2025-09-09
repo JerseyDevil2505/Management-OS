@@ -423,7 +423,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                       );
                     })()}
                   </td>
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_det_items ? Number(p.values_det_items).toLocaleString() : '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_det_items ? Number(p.values_det_items).toLocaleString() : '��'}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_base_cost ? Number(p.values_base_cost).toLocaleString() : '—'}</td>
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
@@ -459,12 +459,35 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                   })()}</td>
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
-                    const salePrice = (p.values_norm_time && p.values_norm_time > 0) ? p.values_norm_time : (p.sales_price || 0);
-                    const replVal = p.values_repl_cost || p.values_base_cost || null;
-                    const ccf = (salePrice && replVal) ? (replVal / salePrice) : null;
+                    const detItemsRow = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
+                    const baseVal = (p.values_base_cost !== undefined && p.values_base_cost !== null) ? Number(p.values_base_cost) : 0;
+                    const yearBuiltRow = p.asset_year_built || '';
+                    const deprRow = yearBuiltRow ? (1 - ((currentYear - parseInt(yearBuiltRow, 10)) / 100)) : '';
+                    const replWithDeprRow = (deprRow !== '' ? Math.round((detItemsRow + baseVal) * deprRow) : null);
+                    const salePriceRow = (p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
+                    const camaRow = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
+                    const improvRow = Math.round(salePriceRow - camaRow - detItemsRow);
+                    if (!replWithDeprRow) return '—';
+                    const ccf = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : null;
                     const baseRef = costConvFactor || recommendedMedian || recommendedFactor || 1;
                     const ratio = (ccf && baseRef) ? (ccf / baseRef) : null;
                     return ratio ? Number(ratio).toFixed(2) : '—';
+                  })()}</td>
+
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
+                    const detItemsRow = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
+                    const baseVal = (p.values_base_cost !== undefined && p.values_base_cost !== null) ? Number(p.values_base_cost) : 0;
+                    const yearBuiltRow = p.asset_year_built || '';
+                    const deprRow = yearBuiltRow ? (1 - ((currentYear - parseInt(yearBuiltRow, 10)) / 100)) : '';
+                    const replWithDeprRow = (deprRow !== '' ? Math.round((detItemsRow + baseVal) * deprRow) : null);
+                    const salePriceRow = (p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
+                    const camaRow = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
+                    const improvRow = Math.round(salePriceRow - camaRow - detItemsRow);
+                    const baseRef = costConvFactor || recommendedMedian || recommendedFactor || 1;
+                    const ccf = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : null;
+                    const ratio = (ccf && baseRef) ? (ccf / baseRef) : null;
+                    const adjustedValue = (salePriceRow && ratio) ? Math.round(salePriceRow * ratio) : null;
+                    return adjustedValue !== null ? adjustedValue.toLocaleString() : '—';
                   })()}</td>
                 </tr>
               );
