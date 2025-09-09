@@ -501,9 +501,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                     const salePriceRow = (p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
                     const camaRow = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
                     const improvRow = Math.round(salePriceRow - camaRow - detItemsRow);
-                    const baseRef = costConvFactor || recommendedMedian || recommendedFactor || 1;
-                    const ccf = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : null;
-                    const ratio = (ccf && baseRef) ? (ccf / baseRef) : null;
+                    if (!replWithDeprRow) return '—';
                     const ccf = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : null;
                     const baseRef = costConvFactor || recommendedMedian || recommendedFactor || 1;
                     const ratio = (ccf && baseRef) ? (ccf / baseRef) : null;
