@@ -429,7 +429,8 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
                     const timeNorm = p.values_norm_time || 0;
-                    const cama = p.values_cama_land || 0;
+                    const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
+                    const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land || 0);
                     const replVal = p.values_repl_cost || 0;
                     const val = timeNorm - cama - replVal;
                     return isFinite(val) ? Number(val).toFixed(2) : '—';
