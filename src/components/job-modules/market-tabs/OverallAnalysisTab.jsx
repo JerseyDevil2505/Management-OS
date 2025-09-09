@@ -178,9 +178,15 @@ const OverallAnalysisTab = ({
   const analyzeTypeUse = useCallback(() => {
     const groups = {};
     
-    // First, separate all properties from valid sales
-    const validSales = filteredProperties.filter(p => p.values_norm_time && p.values_norm_time > 0);
-    
+    // First, separate all properties from valid sales using job-scoped normalized values when available
+    const validSales = filteredProperties.filter(p => {
+      const key = p.property_composite_key;
+      const timeNormFromPMA = timeNormalizedLookup.get(key);
+      if (timeNormFromPMA && timeNormFromPMA > 0) return true;
+      // fallback to property-level values_norm_time if present
+      return p.values_norm_time && p.values_norm_time > 0;
+    });
+
     // Count ALL properties for inventory
     filteredProperties.forEach(p => {
       const typeCode = p.asset_type_use || 'Unknown';
