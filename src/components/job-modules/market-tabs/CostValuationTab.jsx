@@ -447,7 +447,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                     const baseVal = (p.values_base_cost !== undefined && p.values_base_cost !== null) ? Number(p.values_base_cost) : 0;
                     const depr = p.asset_year_built ? (1 - ((currentYear - parseInt(p.asset_year_built, 10)) / 100)) : '';
                     const val = depr !== '' ? Math.round((detItems + baseVal) * depr) : '';
-                    return (val !== '' && isFinite(val)) ? val.toLocaleString() : '—';
+                    return (val !== '' && isFinite(val)) ? formatCurrencyNoCents(val) : '—';
                   })()}</td>
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
