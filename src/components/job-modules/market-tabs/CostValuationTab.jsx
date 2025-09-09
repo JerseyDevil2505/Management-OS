@@ -133,13 +133,13 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       const saleDate = p.sales_date ? new Date(p.sales_date).toISOString().slice(0,10) : '';
       const salePrice = p.sales_price || '';
       const timeNorm = p.values_norm_time || '';
-      const repl = p.values_repl_cost || p.values_base_cost || 0;
-      const base = p.values_base_cost || 0;
-      const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? editedLandMap[key] : (p.values_cama_land || '');
+      const replCost = (p.values_repl_cost !== undefined && p.values_repl_cost !== null) ? Number(p.values_repl_cost) : null;
+      const base = (p.values_base_cost !== undefined && p.values_base_cost !== null) ? Number(p.values_base_cost) : 0;
+      const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
       const yearBuilt = p.asset_year_built || '';
       const depr = yearBuilt ? (1 - ((currentYear - parseInt(yearBuilt, 10)) / 100)) : '';
-      const replWithDepr = (repl && depr) ? ((repl + base) * depr) : '';
-      const improv = (timeNorm !== '' ? (timeNorm - (cama || 0) - (p.values_repl_cost || 0)) : '');
+      const replWithDepr = (replCost !== null && depr !== '') ? ((replCost + base) * depr) : '';
+      const improv = (timeNorm !== '' ? (timeNorm - cama - (replCost || 0)) : '');
       const ccf = (p.values_repl_cost && salePrice) ? (p.values_repl_cost / salePrice) : '';
       const baseRef = costConvFactor || recommendedMedian || recommendedFactor || 1;
       const adjustedRatio = (ccf && baseRef) ? (ccf / baseRef) : '';
@@ -427,18 +427,21 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_base_cost ? Number(p.values_base_cost).toLocaleString() : '—'}</td>
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
-                    const replVal = p.values_repl_cost || 0;
-                    const baseVal = p.values_base_cost || 0;
-                    const depr = p.asset_year_built ? (1 - ((currentYear - parseInt(p.asset_year_built, 10)) / 100)) : 1;
-                    const val = (replVal + baseVal) * depr;
-                    return isFinite(val) ? Number(val).toFixed(2) : '—';
+                    const hasRepl = p.values_repl_cost !== undefined && p.values_repl_cost !== null;
+                    if (!hasRepl) return <span className="text-xs text-yellow-800">Missing repl</span>;
+                    const replVal = Number(p.values_repl_cost);
+                    const baseVal = Number(p.values_base_cost || 0);
+                    const depr = p.asset_year_built ? (1 - ((currentYear - parseInt(p.asset_year_built, 10)) / 100)) : '';
+                    const val = depr !== '' ? ((replVal + baseVal) * depr) : '';
+                    return (val !== '' && isFinite(val)) ? Number(val).toFixed(2) : '—';
                   })()}</td>
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
-                    const timeNorm = p.values_norm_time || 0;
+                    const timeNorm = (p.values_norm_time !== undefined && p.values_norm_time !== null) ? Number(p.values_norm_time) : null;
+                    if (timeNorm === null) return '—';
                     const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
-                    const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land || 0);
-                    const replVal = p.values_repl_cost || 0;
+                    const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
+                    const replVal = (p.values_repl_cost !== undefined && p.values_repl_cost !== null) ? Number(p.values_repl_cost) : 0;
                     const val = timeNorm - cama - replVal;
                     return isFinite(val) ? Number(val).toFixed(2) : '—';
                   })()}</td>
