@@ -186,6 +186,31 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   }, [filtered]);
 
   // formatting helpers
+  const getLivingAreaValue = (p) => {
+    // Common field names that may contain living area
+    const candidates = [
+      'asset_living_area',
+      'living_area',
+      'asset_sfla',
+      'asset_sfl_a',
+      'asset_sf_la',
+      'sf_la',
+      'sf_living_area',
+      'asset_liv_area',
+      'asset_livingarea'
+    ];
+    for (const key of candidates) {
+      if (p[key] !== undefined && p[key] !== null && p[key] !== '') return Number(p[key]);
+    }
+    // Check nested raw_data if present
+    if (p.raw_data) {
+      for (const key of candidates) {
+        if (p.raw_data[key] !== undefined && p.raw_data[key] !== null && p.raw_data[key] !== '') return Number(p.raw_data[key]);
+      }
+    }
+    return null;
+  };
+
   const formatCurrency = (v) => {
     if (v === '' || v === null || v === undefined || !isFinite(Number(v))) return '—';
     return Number(v).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -280,7 +305,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       const adjustedValue = (cama !== '' ? (Number(cama) + ((Number(baseCost) * (depr !== '' ? Number(depr) : 0)) * (ccf !== '' ? Number(ccf) : 0)) + Number(detItems)) : '');
       const adjustedRatio = (salePrice && adjustedValue !== '' && salePrice !== 0) ? (Number(adjustedValue) / Number(salePrice)) : '';
 
-      return [included ? '1' : '0', p.property_block || '', p.property_lot || '', p.asset_qualifier || p.qualifier || '', p.property_card || '', p.property_location || '', saleDate, salePrice, p.sales_nu || '', timeNorm, yearBuilt, depr !== '' ? Number(depr).toFixed(3) : '', p.asset_building_class || '', p.asset_living_area || p.living_area || '', cama, p.values_det_items || '', baseCost || '', replWithDepr !== '' ? Number(replWithDepr).toFixed(0) : '', improv !== '' ? Number(improv).toFixed(0) : '', ccf ? Number(ccf).toFixed(2) : '', adjustedRatio ? Number(adjustedRatio).toFixed(2) : '', adjustedValue !== '' ? Number(adjustedValue).toFixed(0) : ''];
+      return [included ? '1' : '0', p.property_block || '', p.property_lot || '', p.asset_qualifier || p.qualifier || '', p.property_card || '', p.property_location || '', saleDate, salePrice, p.sales_nu || '', timeNorm, yearBuilt, depr !== '' ? Number(depr).toFixed(3) : '', p.asset_building_class || '', (getLivingAreaValue(p) !== null ? getLivingAreaValue(p) : ''), cama, p.values_det_items || '', baseCost || '', replWithDepr !== '' ? Number(replWithDepr).toFixed(0) : '', improv !== '' ? Number(improv).toFixed(0) : '', ccf ? Number(ccf).toFixed(2) : '', adjustedRatio ? Number(adjustedRatio).toFixed(2) : '', adjustedValue !== '' ? Number(adjustedValue).toFixed(0) : ''];
     });
 
     const csvContent = [headers, ...rows].map(r => r.map(cell => {
@@ -597,7 +622,10 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_year_built || '—'}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(p.asset_year_built ? (1 - ((currentYear - parseInt(p.asset_year_built, 10)) / 100)).toFixed(2) : '—')}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_building_class || '—'}</td>
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_living_area || p.living_area || '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{(() => {
+                    const la = getLivingAreaValue(p);
+                    return la !== null ? la : '—';
+                  })()}</td>
                   {/* Current Land editable */}
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">
                     {(() => {
