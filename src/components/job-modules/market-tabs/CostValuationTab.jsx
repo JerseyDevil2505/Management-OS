@@ -18,7 +18,6 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   const [isSavingRange, setIsSavingRange] = useState(false);
   const [includedMap, setIncludedMap] = useState({});
   const [editedLandMap, setEditedLandMap] = useState({});
-  const [selectedJobCcfKey, setSelectedJobCcfKey] = useState(null);
   // Debounce timer ref for auto-saving the year range
   const saveTimerRef = useRef(null);
 
