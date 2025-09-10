@@ -7762,7 +7762,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <label style={{ fontSize: '14px', fontWeight: '500' }}>Type Use Filter:</label>
+              <label style={{ fontSize: '14px', fontWeight: '500' }}>Type & Use</label>
               <select
                 value={globalEcoObsTypeFilter}
                 onChange={(e) => updateGlobalEcoObsTypeFilter(e.target.value)}
@@ -7776,10 +7776,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 }}
               >
                 <option value="all">All</option>
-                <option value="1">Single Family</option>
-                <option value="2">Two Family</option>
-                <option value="42">Multi-Family</option>
-                <option value="30">Townhouse</option>
+                <option value="1">1 — Single Family</option>
+                <option value="2">2 — Duplex / Semi-Detached</option>
+                <option value="3">3* — Row / Townhouse</option>
+                <option value="4">4* — MultiFamily</option>
+                <option value="5">5* — Conversions</option>
+                <option value="6">6 — Condominium</option>
+                <option value="all_residential">All Residential</option>
               </select>
             </div>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
