@@ -1511,6 +1511,7 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
       const propVcsRaw = rawRecord.VCS || rawRecord.vcs || rawRecord.property_vcs || rawRecord.VCS_CODE || rawRecord.vcs_code || null;
       const propVcs = propVcsRaw ? String(propVcsRaw).trim() : null;
 
+      // First, attempt authoritative LANDUR/LANDURUNITS header-mapped extraction
       for (let i = 1; i <= 6; i++) {
         const landKeys = [`LANDUR_${i}`, `LANDUR${i}`, `LANDUR ${i}`];
         const unitKeys = [`LANDURUNITS_${i}`, `LANDURUNITS${i}`, `LANDURUNITS ${i}`];
@@ -1518,32 +1519,20 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
         for (const k of landKeys) { if (rawRecord[k] !== undefined) { landCode = rawRecord[k]; break; } }
         for (const k of unitKeys) { if (rawRecord[k] !== undefined) { landUnitsRaw = rawRecord[k]; break; } }
 
+        // Normalize and parse units (allow decimals, commas, currency)
         const units = landUnitsRaw !== undefined && landUnitsRaw !== null ? parseFloat(String(landUnitsRaw).replace(/[,$\s\"]/g, '')) : NaN;
         if (isNaN(units) || units <= 0) continue;
 
-        if (selectedCodes && selectedCodes.length > 0) {
-          if (!landCode) continue;
-          const codeStr = String(landCode).trim();
-          const matches = selectedCodes.some(scRaw => {
-            const sc = String(scRaw).trim();
-            if (sc.includes('::')) {
-              const [vcsKeySel, codeSel] = sc.split('::').map(s => s.trim());
-              if (!codeSel) return false;
-              const codeMatches = codeSel === codeStr || codeSel.padStart(2,'0') === codeStr.padStart(2,'0');
-              if (!codeMatches) return false;
-              const idSet = vcsIdMap.get(String(vcsKeySel));
-              if (!idSet) return propVcs && (String(propVcs) === String(vcsKeySel) || String(propVcs).padStart(2,'0') === String(vcsKeySel).padStart(2,'0'));
-              if (!propVcs) return false;
-              return Array.from(idSet).some(id => String(id).trim() === String(propVcs).trim());
-            } else {
-              return sc === codeStr || sc.padStart(2,'0') === codeStr.padStart(2,'0');
-            }
-          });
-          if (!matches) continue;
-        }
+        // Normalize land code (digits only, pad to 2)
+        const codeStrRaw = landCode !== undefined && landCode !== null ? String(landCode).replace(/[^0-9]/g, '').padStart(2, '0') : '';
+        // Skip site-value code '01' per rules
+        if (codeStrRaw === '01') continue;
 
+        // Accept any other LANDUR_* codes as valid for acreage regardless of selectedCodes
         if (units >= 1000) totalSf += units; else totalAcres += units;
       }
+
+      // If no units from LANDUR_* fields, attempt positional scan for code/unit pairs (BRT fixed layout)
 
       // If no units from LANDUR_* fields, attempt positional scan for code/unit pairs (BRT fixed layout)
       if (totalAcres === 0 && totalSf === 0) {
@@ -2497,7 +2486,7 @@ export const checklistService = {
       
       if (error) throw error;
       
-      console.log(`✅ Loaded ${data?.length || 0} properties for mailing list`);
+      console.log(`�� Loaded ${data?.length || 0} properties for mailing list`);
       return data || [];
     } catch (error) {
       console.error('Mailing list generation error:', error);
