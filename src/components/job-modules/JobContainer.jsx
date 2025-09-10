@@ -379,32 +379,64 @@ const JobContainer = ({
       let hasMoreInspection = true;
       
       try {
+        const maxInspectionRetries = 3;
         while (hasMoreInspection) {
           const start = inspectionPage * 1000;
           const end = start + 999;
 
-          const { data: batch, error } = await withTimeout(
-            supabase
-              .from('inspection_data')
-              .select('*')
-              .eq('job_id', selectedJob.id)
-              .range(start, end),
-            20000,
-            `inspection data batch ${inspectionPage + 1}`
-          );
+          let attempt = 0;
+          let batch = null;
+          let batchError = null;
 
-          if (error) {
+          while (attempt <= maxInspectionRetries) {
+            attempt++;
+            try {
+              const res = await withTimeout(
+                supabase
+                  .from('inspection_data')
+                  .select('*')
+                  .eq('job_id', selectedJob.id)
+                  .range(start, end),
+                20000,
+                `inspection data batch ${inspectionPage + 1}`
+              );
+              batch = res.data;
+              batchError = res.error;
+
+              if (batchError) {
+                // If it's a network error (no code / failed to fetch) retry
+                const msg = (batchError && (batchError.message || '')).toString().toLowerCase();
+                if (attempt <= maxInspectionRetries && (msg.includes('failed to fetch') || msg.includes('network'))) {
+                  console.warn(`Inspection batch ${inspectionPage + 1} attempt ${attempt} failed with network error, retrying...`);
+                  await new Promise(r => setTimeout(r, 500 * attempt));
+                  continue;
+                }
+                break; // non-retriable or exhausted
+              }
+
+              break; // success
+            } catch (err) {
+              const msg = (err && (err.message || '')).toString().toLowerCase();
+              if (attempt <= maxInspectionRetries && (msg.includes('failed to fetch') || msg.includes('network') || msg.includes('timeout'))) {
+                console.warn(`Inspection batch ${inspectionPage + 1} attempt ${attempt} threw ${msg}. Retrying...`);
+                await new Promise(r => setTimeout(r, 500 * attempt));
+                continue;
+              }
+              // If we get here, it's a hard failure
+              batchError = err;
+              break;
+            }
+          }
+
+          if (batchError) {
             console.error('❌ INSPECTION DATA BATCH ERROR:');
             console.error(`  Batch: ${inspectionPage + 1}, Range: ${start}-${end}`);
-            console.error(`  Error Message: ${error.message || 'Unknown error'}`);
-            console.error(`  Error Code: ${error.code || 'No code'}`);
-            console.error(`  Error Details: ${error.details || 'No details'}`);
+            console.error(`  Error Message: ${batchError.message || batchError}`);
             console.error(`  Job ID: ${selectedJob.id}`);
-            if (error.stack) {
-              console.error(`  Stack: ${error.stack}`);
-            }
-            console.error(`  Full Error:`, error);
-            break; // Stop loading inspection data but continue with other data
+            if (batchError.stack) console.error(`  Stack: ${batchError.stack}`);
+            console.error(`  Full Error:`, batchError);
+            // stop loading inspection data but continue with other data
+            break;
           }
 
           if (batch && batch.length > 0) {
@@ -418,7 +450,7 @@ const JobContainer = ({
       } catch (inspectionError) {
         console.error('❌ INSPECTION DATA LOADING FAILED:');
         console.error(`  Error Message: ${inspectionError.message || 'Unknown error'}`);
-        console.error(`  Error Type: ${inspectionError.constructor.name}`);
+        console.error(`  Error Type: ${inspectionError.constructor?.name || 'Unknown'}`);
         console.error(`  Job ID: ${selectedJob.id}`);
         console.error(`  Pages Attempted: ${inspectionPage}`);
         console.error(`  Records Loaded: ${allInspectionData.length}`);
