@@ -1053,7 +1053,7 @@ const App = () => {
           />
         )}
 
-        {activeView === 'billing' && (
+        {activeView === 'billing' && (isAdmin ? (
           <BillingManagement
             activeJobs={appData.activeJobs}
             legacyJobs={appData.legacyJobs}
@@ -1065,7 +1065,12 @@ const App = () => {
             onDataUpdate={updateCacheItem}
             onRefresh={() => loadLiveData(['billing'])}
           />
-        )}
+        ) : (
+          <div className="p-6 bg-white rounded-lg shadow-sm border border-gray-200 text-center">
+            <h3 className="text-lg font-semibold">Access Denied</h3>
+            <p className="text-sm text-gray-600">You do not have permission to view Billing.</p>
+          </div>
+        ))}
 
         {activeView === 'employees' && (
           <EmployeeManagement
