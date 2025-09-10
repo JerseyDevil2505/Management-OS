@@ -1546,6 +1546,21 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
       }
 
       // If no units from LANDUR_* fields, first check AC/ACAREA-style parsed fields (BRT headers)
+      try {
+        for (let n = 1; n <= 6; n++) {
+          const keys = [`ACAREA_${n}`, `ACAREA${n}`, `AC_${n}`, `AC${n}`];
+          for (const k of keys) {
+            if (rawRecord[k] !== undefined && rawRecord[k] !== null && String(rawRecord[k]).trim() !== '') {
+              const val = String(rawRecord[k]).replace(/[^0-9\.,]/g, '');
+              const num = parseFloat(val.replace(/,/g, ''));
+              if (!isNaN(num) && num > 0) totalAcres += num;
+            }
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+
       // If still none, attempt positional scan for code/unit pairs (BRT fixed layout)
       if (totalAcres === 0 && totalSf === 0) {
         try {
