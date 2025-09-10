@@ -2834,7 +2834,78 @@ const analyzeImportFile = async (file) => {
       )}
 
       {/* Block Analysis Tab Content */}
-      {activeSubTab === 'marketAnalysis' && (
+      {activeSubTab === 'unitRates' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Unit Rate Configuration (BRT)</h3>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={saveUnitRateConfig}
+                  disabled={vendorType !== 'BRT' || isSavingUnitConfig}
+                  className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {isSavingUnitConfig ? 'Saving...' : 'Save Config'}
+                </button>
+                <button
+                  onClick={calculateUnitRates}
+                  disabled={vendorType !== 'BRT' || isCalculatingUnitSizes}
+                  className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                >
+                  {isCalculatingUnitSizes ? 'Calculating...' : 'Calculate Lot Size'}
+                </button>
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-600 mb-4">Select unit-rate codes to include when calculating lot acreage. If none selected, all unit rates will be summed.</p>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-2">
+                <div className="border rounded p-2 max-h-64 overflow-auto">
+                  {unitRateCodes.length === 0 ? (
+                    <div className="text-sm text-gray-500">No unit rate codes found for this job.</div>
+                  ) : (
+                    unitRateCodes.map(u => (
+                      <label key={u.code} className="flex items-center gap-3 py-1">
+                        <input
+                          type="checkbox"
+                          disabled={vendorType !== 'BRT'}
+                          checked={selectedUnitRateCodes.has(u.code)}
+                          onChange={() => toggleUnitRateCode(u.code)}
+                        />
+                        <div className="text-sm">
+                          <div className="font-medium">{u.code}</div>
+                          <div className="text-xs text-gray-500">{u.description}</div>
+                        </div>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="bg-gray-50 p-3 rounded">
+                  <p className="text-sm text-gray-700">Summary</p>
+                  <div className="mt-3">
+                    <div className="text-sm">Total Codes: <strong>{unitRateCodes.length}</strong></div>
+                    <div className="text-sm mt-1">Selected: <strong>{selectedUnitRateCodes.size}</strong></div>
+                  </div>
+
+                  <div className="mt-4">
+                    <p className="text-xs text-gray-600">Notes:</p>
+                    <ul className="text-xs text-gray-600 list-disc list-inside mt-2">
+                      <li>Only BRT jobs support unit-rate configuration.</li>
+                      <li>Calculation uses heuristic: values ≥1000 treated as SF, smaller as acres.</li>
+                      <li>Results are saved to property_market_analysis.market_manual_lot_acre</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+{activeSubTab === 'marketAnalysis' && (
         <div className="space-y-6" style={{ position: 'relative' }}>
           {/* Configuration Section */}
           <div className="bg-white rounded-lg shadow p-6">
