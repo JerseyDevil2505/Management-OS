@@ -584,7 +584,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">
                     <input
                       type="radio"
-                      name={`jobCcfSelection_${i}`}
+                      name="jobCcfSelection"
                       checked={selectedJobCcfKey === (p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`)}
                       onChange={() => setSelectedJobCcfKey(p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`)}
                     />
