@@ -500,8 +500,19 @@ useEffect(() => {
     setIsCalculatingUnitSizes(true);
     try {
       const selected = Array.from(selectedUnitRateCodes);
-      const result = await runUnitRateLotCalculation(jobData.id, selected);
-      alert(`Calculated lot sizes for ${result.updated} properties`);
+      // Prefer v2 calculator which returns detailed stats when available
+      let result = null;
+      if (typeof runUnitRateLotCalculation_v2 === 'function') {
+        result = await runUnitRateLotCalculation_v2(jobData.id, selected);
+      } else {
+        result = await runUnitRateLotCalculation(jobData.id, selected);
+      }
+
+      const updated = result?.updated ?? 0;
+      const acreageSet = result?.acreage_set ?? (result?.updated ?? 0);
+      const acreageNull = result?.acreage_null ?? (updated - acreageSet);
+
+      alert(`Calculated lot sizes — updated: ${updated} properties\nacreage set: ${acreageSet}\nacreage null: ${acreageNull}`);
       // Refresh cache/data
       if (onUpdateJobCache) onUpdateJobCache(jobData.id);
     } catch (e) {
@@ -611,7 +622,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         if (false) console.log('  🏗️ property_m4_class:', firstProp.property_m4_class, '(should be "2", "1", "3B", etc.)');
         if (false) console.log('  💰 values_mod_total:', firstProp.values_mod_total, '(should be 64900, 109900, etc.)');
         if (false) console.log('  📋 sales_nu:', firstProp.sales_nu, '(should be empty or "1")');
-        if (false) console.log('  ��� sales_price:', firstProp.sales_price, '(working field for comparison)');
+        if (false) console.log('  ✅ sales_price:', firstProp.sales_price, '(working field for comparison)');
         if (false) console.log('  ✅ property_location:', firstProp.property_location, '(working field for comparison)');
 
         // Check if the problem is that the fields exist but are being overwritten
