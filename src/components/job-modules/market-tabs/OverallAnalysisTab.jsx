@@ -1454,7 +1454,18 @@ const OverallAnalysisTab = ({
                       <tbody className="bg-white divide-y divide-gray-200">
                         {analysis.typeUse.groups
                           .filter(g => g.code !== 'Unknown')
-                          .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
+                          .sort((a, b) => {
+                            const priorityFor = (g) => {
+                              if (!g || !g.code) return 9;
+                              const first = g.code.toString().charAt(0);
+                              const map = { '1': 0, '2': 1, '3': 2, '4': 3, '6': 4 };
+                              return map[first] !== undefined ? map[first] : 5;
+                            };
+                            const pa = priorityFor(a);
+                            const pb = priorityFor(b);
+                            if (pa !== pb) return pa - pb;
+                            return (b.avgAdjustedPrice || 0) - (a.avgAdjustedPrice || 0);
+                          })
                           .map((group, idx) => (
                           <tr key={`${group.code}-${idx}`} className={group === analysis.typeUse.baseline ? 'bg-yellow-50' : ''}>
                             <td className="px-4 py-3 text-sm">
