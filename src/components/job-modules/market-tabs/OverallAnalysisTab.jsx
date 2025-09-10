@@ -283,18 +283,25 @@ const OverallAnalysisTab = ({
       }
     });
 
-    // Calculate deltas from baseline
+    // After computing avgAdjustedPrice, prefer Single Family as baseline if available with sales
+    const groupsArray = Object.values(groups);
+    const sfGroup = groupsArray.find(g => g.code && g.code.toString().startsWith('1') && g.salesCount > 0);
+    if (sfGroup) {
+      baselineGroup = sfGroup;
+    }
+
+    // Calculate deltas from baseline (baselineGroup may have been overridden to SF)
     Object.values(groups).forEach(group => {
       if (baselineGroup && group !== baselineGroup && group.salesCount > 0) {
         const delta = group.avgAdjustedPrice - baselineGroup.avgAdjustedPrice;
         group.delta = delta;
-        group.deltaPercent = baselineGroup.avgAdjustedPrice > 0 ? 
+        group.deltaPercent = baselineGroup.avgAdjustedPrice > 0 ?
           (delta / baselineGroup.avgAdjustedPrice * 100) : 0;
       } else {
         group.delta = 0;
         group.deltaPercent = 0;
       }
-      
+
       // Get CME bracket only if there are sales
       if (group.salesCount > 0) {
         group.cmeBracket = getCMEBracket(group.avgAdjustedPrice);
@@ -303,10 +310,7 @@ const OverallAnalysisTab = ({
       }
     });
 
-    // Force baseline for Type & Use analysis to Single Family when available
-    const groupsArray = Object.values(groups);
-    const singleFamilyBaseline = groupsArray.find(g => g.code && g.code.toString().startsWith('1')) || baselineGroup;
-    return { groups: groupsArray, baseline: singleFamilyBaseline };
+    return { groups: groupsArray, baseline: baselineGroup };
   }, [filteredProperties, codeDefinitions, vendorType]);
   // Design & Style Analysis - UPDATED WITH FILTER FOR EMPTY/UNKNOWN AND DUAL COLUMNS
   const analyzeDesign = useCallback(() => {
