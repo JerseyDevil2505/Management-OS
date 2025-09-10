@@ -379,7 +379,7 @@ const groupedUnitRateCodes = useMemo(() => {
 
   return Array.from(map.values()).map(g => ({
     description: g.description,
-    items: g.items.sort((a, b) => (a.vcs || '').localeCompare(b.vcs || '') || (a.code || '').localeCompare(b.code || ''))
+    items: g.items.sort((a, b) => (a.vcsLabel || a.vcs || '').toString().localeCompare((b.vcsLabel || b.vcs || '').toString()) || (a.code || '').localeCompare(b.code || ''))
   })).sort((a, b) => a.description.localeCompare(b.description));
 }, [unitRateCodes]);
 
@@ -2940,7 +2940,7 @@ const analyzeImportFile = async (file) => {
 
                             <div className="text-sm flex-1">
                               <div className="font-medium">{desc}</div>
-                              <div className="text-xs text-gray-500">{group.items.length} instance{group.items.length > 1 ? 's' : ''} • {group.items.map(i => `${i.vcs}·${i.code}`).join(', ')}</div>
+                              <div className="text-xs text-gray-500">{group.items.length} instance{group.items.length > 1 ? 's' : ''} • {group.items.map(i => `${i.vcsLabel || i.vcs}·${i.code}`).join(', ')}</div>
                             </div>
 
                           </label>
