@@ -1495,6 +1495,16 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
     const stats = { totalParsed: 0, acreageSet: 0, sampledNullKeys: [] };
 
     for (const [compositeKey, rawRecord] of propertyMap.entries()) {
+      // DEBUG: log full rawRecord for specific composite keys when needed
+      if (compositeKey === '20251020-1-2_NONE-1-191 WATER STREET' || compositeKey === '20251020-1-2_NONE-1-191 WATER STREET') {
+        try {
+          console.warn('DEBUG: rawRecord keys for', compositeKey, Object.keys(rawRecord));
+          console.warn('DEBUG: rawRecord sample values:', Object.entries(rawRecord).slice(0,60));
+          const orderedValuesDbg = Object.keys(rawRecord).map(k => rawRecord[k]);
+          console.warn('DEBUG: ordered values slice (260..300):', orderedValuesDbg.slice(260, 305));
+        } catch (e) { console.error('DEBUG logging failed', e); }
+      }
+
       stats.totalParsed++;
       let totalAcres = 0; let totalSf = 0;
 
