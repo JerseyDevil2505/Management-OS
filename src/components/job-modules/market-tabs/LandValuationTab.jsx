@@ -4774,7 +4774,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               >
                 {getTypeUseOptions().map(option => (
                   <option key={option.code} value={option.code}>
-                    {option.code} - {option.description}
+                    {option.description}
                   </option>
                 ))}
               </select>
