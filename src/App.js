@@ -28,7 +28,9 @@ const App = () => {
   // Update URL when view changes
   const handleViewChange = useCallback((view) => {
     // Prevent non-admins from navigating to billing/payroll
-    if ((view === 'billing' || view === 'payroll') && !isAdmin) {
+    const role = user?.role?.toString?.().toLowerCase?.() || '';
+    const isAdminLocal = role === 'admin' || role === 'owner';
+    if ((view === 'billing' || view === 'payroll') && !isAdminLocal) {
       setActiveView('employees');
       window.history.pushState({}, '', '/employees');
       return;
@@ -37,7 +39,7 @@ const App = () => {
     setActiveView(view);
     // Update URL without page reload
     window.history.pushState({}, '', `/${view}`);
-  }, [isAdmin]);
+  }, [user]);
 
   // Listen for browser back/forward buttons
   useEffect(() => {
