@@ -474,7 +474,6 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
               <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Repl w/Depr</th>
               <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Improv</th>
               <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">CCF</th>
-              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Use Job CCF</th>
               <th className="px-3 py-2 text-xs text-gray-600 border-b border-gray-200">Adjusted Value</th>
               <th className="px-3 py-2 text-xs text-gray-600 border-b border-gray-200">Adjusted Ratio</th>
             </tr>
