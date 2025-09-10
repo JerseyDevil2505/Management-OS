@@ -579,15 +579,6 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                     return val ? Number(val).toFixed(2) : '—';
                   })()}</td>
 
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">
-                    <input
-                      type="radio"
-                      name="jobCcfSelection"
-                      checked={selectedJobCcfKey === (p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`)}
-                      onChange={() => setSelectedJobCcfKey(p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`)}
-                    />
-                  </td>
-
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
                     const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
                     const detItemsRow = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
