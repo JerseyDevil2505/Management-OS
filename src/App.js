@@ -25,21 +25,6 @@ const App = () => {
     return validViews.includes(path) ? path : 'admin-jobs';
   });
 
-  // Update URL when view changes
-  const handleViewChange = useCallback((view) => {
-    // Prevent non-admins from navigating to billing/payroll
-    const role = user?.role?.toString?.().toLowerCase?.() || '';
-    const isAdminLocal = role === 'admin' || role === 'owner';
-    if ((view === 'billing' || view === 'payroll') && !isAdminLocal) {
-      setActiveView('employees');
-      window.history.pushState({}, '', '/employees');
-      return;
-    }
-
-    setActiveView(view);
-    // Update URL without page reload
-    window.history.pushState({}, '', `/${view}`);
-  }, [user]);
 
   // Listen for browser back/forward buttons
   useEffect(() => {
