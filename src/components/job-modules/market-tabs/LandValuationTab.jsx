@@ -702,69 +702,20 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // ========== GET TYPE USE OPTIONS ==========
   const getTypeUseOptions = useCallback(() => {
-    if (!properties) return [{ code: '1', description: '1-Single Family' }];
-
-    // Get unique asset_type_use codes ONLY from properties with time-normalized data
-    const uniqueCodes = new Set();
-    properties.forEach(prop => {
-      if (prop.asset_type_use &&
-          prop.property_m4_class === '2' &&
-          prop.values_norm_time != null &&
-          prop.values_norm_time > 0) {
-        const rawCode = prop.asset_type_use.toString().trim().toUpperCase();
-        if (rawCode && rawCode !== '' && rawCode !== 'null' && rawCode !== 'undefined') {
-          uniqueCodes.add(rawCode);
-        }
-      }
-    });
-
-    const options = [];
-
-    // Always include Single Family
-    if (uniqueCodes.has('1') || uniqueCodes.has('10')) {
-      options.push({ code: '1', description: '1-Single Family' });
-    }
-
-    // Add umbrella groups only if we have matching codes
-    const umbrellaGroups = [
-      {
-        codes: ['30', '31', '3E', '3I'],
-        groupCode: '3',
-        description: '3-Row/Townhouses'
-      },
-      {
-        codes: ['42', '43', '44'],
-        groupCode: '4',
-        description: '4-MultiFamily'
-      },
-      {
-        codes: ['51', '52', '53'],
-        groupCode: '5',
-        description: '5-Conversions'
-      }
+    // Standardized Type & Use dropdown options for consistency across tabs
+    const standard = [
+      { code: '1', description: '1 — Single Family' },
+      { code: '2', description: '2 — Duplex / Semi-Detached' },
+      { code: '3', description: '3* — Row / Townhouse (3E,3I,30,31)' },
+      { code: '4', description: '4* — MultiFamily (42,43,44)' },
+      { code: '5', description: '5* — Conversions (51,52,53)' },
+      { code: '6', description: '6 — Condominium' },
+      { code: 'all_residential', description: 'All Residential' }
     ];
 
-    umbrellaGroups.forEach(group => {
-      const hasMatchingCodes = group.codes.some(code => uniqueCodes.has(code));
-      if (hasMatchingCodes) {
-        options.push({ code: group.groupCode, description: group.description });
-      }
-    });
-
-    // Add any other individual codes that don't fit the umbrella groups
-    const allUmbrellaCodes = ['1', '10', '30', '31', '3E', '3I', '42', '43', '44', '51', '52', '53'];
-    uniqueCodes.forEach(code => {
-      if (!allUmbrellaCodes.includes(code)) {
-        // Special case for code '2' - Semi Det
-        if (code === '2') {
-          options.push({ code, description: `2-Semi Det` });
-        } else {
-          options.push({ code, description: `${code}-Other` });
-        }
-      }
-    });
-
-    return options.sort((a, b) => a.code.localeCompare(b.code));
+    // If properties are present, keep the standard list; otherwise fallback to single family only
+    if (!properties || properties.length === 0) return [standard[0]];
+    return standard;
   }, [properties]);
 
   // ========== GET VCS DESCRIPTION HELPER ==========
@@ -3870,7 +3821,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const updateSpecialCategory = (category, rate) => {
-    debug(`🔧 Updating special category: ${category} = ${rate}`);
+    debug(`���� Updating special category: ${category} = ${rate}`);
     setCascadeConfig(prev => {
       const newConfig = {
         ...prev,
@@ -6353,7 +6304,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'salePrice' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
+                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '��' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('normTime')}
