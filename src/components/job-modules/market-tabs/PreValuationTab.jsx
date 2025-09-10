@@ -324,6 +324,15 @@ useEffect(() => {
   const codesMap = new Map();
   try {
     const vcsSection = codeDefinitions.sections.VCS;
+    // Build a map of vcsKey -> short identifier (e.g. PLV/WAT/etc) when available
+    const vcsLabelMap = {};
+    Object.keys(vcsSection).forEach(vcsKey => {
+      const vEntry = vcsSection[vcsKey];
+      // Prefer DATA.KEY or KEY as the short code, fall back to DATA.VALUE (long name) or numeric key
+      const short = (vEntry?.DATA?.KEY && String(vEntry.DATA.KEY).trim()) || (vEntry?.KEY && String(vEntry.KEY).trim()) || (vEntry?.DATA?.VALUE && String(vEntry.DATA.VALUE).trim()) || String(vcsKey);
+      vcsLabelMap[String(vcsKey)] = short;
+    });
+
     Object.keys(vcsSection).forEach(vcsKey => {
       const entry = vcsSection[vcsKey];
       const urcMap = entry?.MAP?.['8']?.MAP;
@@ -334,9 +343,10 @@ useEffect(() => {
         const desc = e.MAP?.['1']?.DATA?.VALUE || e.DATA?.VALUE || '';
         if (codeVal) {
           const compositeKey = `${vcsKey}::${String(codeVal).trim()}`;
-          const label = `${vcsKey} · ${String(codeVal).trim()} — ${String(desc || `Code ${codeVal}`).trim()}`;
+          const vcsLabel = vcsLabelMap[String(vcsKey)] || vcsKey;
+          const label = `${vcsLabel} · ${String(codeVal).trim()} — ${String(desc || `Code ${codeVal}`).trim()}`;
           if (!codesMap.has(compositeKey)) {
-            codesMap.set(compositeKey, { code: String(codeVal).trim(), vcs: vcsKey, description: String(desc || `Code ${codeVal}`).trim(), label });
+            codesMap.set(compositeKey, { code: String(codeVal).trim(), vcs: vcsKey, vcsLabel, description: String(desc || `Code ${codeVal}`).trim(), label });
           }
         }
       });
