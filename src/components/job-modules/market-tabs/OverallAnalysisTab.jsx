@@ -303,7 +303,10 @@ const OverallAnalysisTab = ({
       }
     });
 
-    return { groups: Object.values(groups), baseline: baselineGroup };
+    // Force baseline for Type & Use analysis to Single Family when available
+    const groupsArray = Object.values(groups);
+    const singleFamilyBaseline = groupsArray.find(g => g.code && g.code.toString().startsWith('1')) || baselineGroup;
+    return { groups: groupsArray, baseline: singleFamilyBaseline };
   }, [filteredProperties, codeDefinitions, vendorType]);
   // Design & Style Analysis - UPDATED WITH FILTER FOR EMPTY/UNKNOWN AND DUAL COLUMNS
   const analyzeDesign = useCallback(() => {
