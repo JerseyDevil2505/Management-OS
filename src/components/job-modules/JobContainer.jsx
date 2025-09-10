@@ -237,8 +237,20 @@ const JobContainer = ({
               }
               console.error(`  Full Error Object:`, batchError);
 
-              // CRITICAL FIX: Stop processing on first failure
-              if (batchError.message?.includes('timeout') || batchError.message?.includes('canceling statement')) {
+              // Retry transient/network failures up to maxRetries
+              const transient = (batchError.message && (batchError.message.toLowerCase().includes('failed to fetch') || batchError.message.toLowerCase().includes('network') || batchError.message.toLowerCase().includes('timeout')));
+              if (transient && retryCount < maxRetries) {
+                retryCount++;
+                const backoff = 500 * retryCount;
+                console.warn(`Transient batch error detected. Retrying batch ${batch + 1} (attempt ${retryCount}/${maxRetries}) after ${backoff}ms`);
+                await new Promise(r => setTimeout(r, backoff));
+                // decrement batch to retry same batch in next loop iteration
+                batch--;
+                continue;
+              }
+
+              // CRITICAL FIX: Stop processing on database timeouts or when retries exhausted
+              if (batchError.message?.toLowerCase().includes('timeout') || batchError.message?.toLowerCase().includes('canceling statement')) {
                 console.error(`🛑 DATABASE TIMEOUT ON BATCH ${batch + 1} - STOPPING ALL PROCESSING`);
                 throw new Error(`Database timeout on batch ${batch + 1}. Loaded ${allProperties.length} of ${count} records before failure.`);
               }
