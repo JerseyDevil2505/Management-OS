@@ -3821,7 +3821,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const updateSpecialCategory = (category, rate) => {
-    debug(`���� Updating special category: ${category} = ${rate}`);
+    debug(`🔧 Updating special category: ${category} = ${rate}`);
     setCascadeConfig(prev => {
       const newConfig = {
         ...prev,
@@ -4760,7 +4760,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Method 2: Improved Sale Lot Size Analysis</h3>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <label style={{ fontSize: '12px', color: '#6B7280' }}>Type and Use:</label>
+              <label style={{ fontSize: '12px', color: '#6B7280' }}>Type & Use</label>
               <select
                 value={method2TypeFilter}
                 onChange={(e) => setMethod2TypeFilter(e.target.value)}
@@ -6304,7 +6304,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'salePrice' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '��' : '���') : ''}
+                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('normTime')}
