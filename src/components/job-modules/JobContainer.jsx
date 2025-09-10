@@ -306,7 +306,16 @@ const JobContainer = ({
                   asset_zoning: marketAnalysis.asset_zoning || null,
                   values_norm_size: marketAnalysis.values_norm_size || null,
                   values_norm_time: marketAnalysis.values_norm_time || null,
-                  sales_history: marketAnalysis.sales_history || null
+                  sales_history: marketAnalysis.sales_history || null,
+                  // Ensure manual/calculated lot acreage and applied unit codes are available to UI
+                  market_manual_lot_acre: marketAnalysis.market_manual_lot_acre ?? property.market_manual_lot_acre ?? null,
+                  market_manual_acre: marketAnalysis.market_manual_acre ?? property.market_manual_acre ?? null,
+                  market_unit_codes_applied: marketAnalysis.market_unit_codes_applied ?? property.market_unit_codes_applied ?? null,
+                  // Also expose common lot fields for fallbacks
+                  asset_lot_acre: marketAnalysis.asset_lot_acre ?? property.asset_lot_acre ?? null,
+                  asset_lot_sf: marketAnalysis.asset_lot_sf ?? property.asset_lot_sf ?? null,
+                  asset_lot_frontage: marketAnalysis.asset_lot_frontage ?? property.asset_lot_frontage ?? null,
+                  asset_lot_depth: marketAnalysis.asset_lot_depth ?? property.asset_lot_depth ?? null
                 };
               });
 
