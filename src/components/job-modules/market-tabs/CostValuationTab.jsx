@@ -531,9 +531,11 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
           <tbody>
             {filtered.slice(0, 500).map((p, i) => {
               const saleYear = safeSaleYear(p);
-              const salePrice = (p.values_norm_time && p.values_norm_time > 0) ? p.values_norm_time : (p.sales_price || 0);
+              const salePriceDisplay = (p.sales_price !== undefined && p.sales_price !== null) ? Number(p.sales_price) : 0;
+              const priceTimeDisplay = (p.values_norm_time !== undefined && p.values_norm_time !== null) ? Number(p.values_norm_time) : 0;
+              const basisPrice = (priceBasis === 'price_time' && p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
               const repl = p.values_repl_cost || p.values_base_cost || null;
-              const factor = (repl && salePrice) ? (repl / salePrice) : null;
+              const factor = (repl && basisPrice) ? (repl / basisPrice) : null;
 
               return (
                 <tr key={p.property_composite_key || i} className="hover:bg-gray-50">
