@@ -63,6 +63,26 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     }
   };
 
+  const savePriceBasis = async (basis) => {
+    // Persist the selected basis to market_land_valuation
+    if (!jobData?.id) { setPriceBasis(basis); return; }
+    setIsSaving(true);
+    try {
+      const { data, error } = await supabase
+        .from('market_land_valuation')
+        .upsert([{ job_id: jobData.id, cost_valuation_price_basis: basis, updated_at: new Date().toISOString() }], { onConflict: 'job_id' })
+        .select()
+        .single();
+      if (error) throw error;
+      setPriceBasis(basis);
+      if (onUpdateJobCache && jobData?.id) onUpdateJobCache(jobData.id, null);
+    } catch (e) {
+      console.error('Error saving price basis:', e);
+      alert('Failed to save price basis. See console.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Derive sale year safely
   const safeSaleYear = (p) => {
@@ -531,7 +551,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.property_location || ''}</td>
 
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.sales_date ? new Date(p.sales_date).toLocaleDateString() : '�����'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.sales_date ? new Date(p.sales_date).toLocaleDateString() : '���'}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{formatCurrencyNoCents(salePrice)}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.sales_nu || '—'}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_norm_time ? formatCurrencyNoCents(Number(p.values_norm_time)) : '—'}</td>
