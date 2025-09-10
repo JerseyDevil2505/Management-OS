@@ -958,21 +958,23 @@ const App = () => {
                   💰 Billing
                 </button>
               )}
-              <button
-                onClick={() => handleViewChange('payroll')}
-                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
-                  activeView === 'payroll'
-                    ? 'text-blue-600 shadow-lg border-white'
-                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
-                }`}
-                style={activeView === 'payroll' ? { 
-                  backgroundColor: '#FFFFFF',
-                  opacity: 1,
-                  backdropFilter: 'none'
-                } : {}}
-              >
-                💸 Payroll
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => handleViewChange('payroll')}
+                  className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                    activeView === 'payroll'
+                      ? 'text-blue-600 shadow-lg border-white'
+                      : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                  }`}
+                  style={activeView === 'payroll' ? {
+                    backgroundColor: '#FFFFFF',
+                    opacity: 1,
+                    backdropFilter: 'none'
+                  } : {}}
+                >
+                  💸 Payroll
+                </button>
+              )}
               <button
                 onClick={() => handleViewChange('users')}
                 className={`px-4 py-2 rounded-xl font-medium text-sm border ${
