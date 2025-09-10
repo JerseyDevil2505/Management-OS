@@ -1524,15 +1524,12 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
         if (isNaN(units) || units <= 0) continue;
 
         // Normalize land code (digits only, pad to 2)
-        const codeStrRaw = landCode !== undefined && landCode !== null ? String(landCode).replace(/[^0-9]/g, '').padStart(2, '0') : '';
-        // Skip site-value code '01' per rules
-        if (codeStrRaw === '01') continue;
+        const codeStr = landCode !== undefined && landCode !== null ? String(landCode).replace(/[^0-9]/g, '').padStart(2, '0') : '';
 
-        // If user provided selectedCodes, respect them (selectedCodes acts as an inclusion list)
+        // If user provided selectedCodes, treat them as an EXCLUSION list: skip matching codes
         if (selectedCodes && selectedCodes.length > 0) {
           if (!landCode) continue;
-          const codeStr = String(landCode).trim().padStart(2, '0');
-          const matches = selectedCodes.some(scRaw => {
+          const isExcluded = selectedCodes.some(scRaw => {
             const sc = String(scRaw).trim();
             if (sc.includes('::')) {
               const [vcsKeySel, codeSel] = sc.split('::').map(s => s.trim());
@@ -1547,7 +1544,7 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
               return sc === codeStr || sc.padStart(2, '0') === codeStr.padStart(2, '0');
             }
           });
-          if (!matches) continue;
+          if (isExcluded) continue;
         }
 
         if (units >= 1000) totalSf += units; else totalAcres += units;
