@@ -420,10 +420,10 @@ useEffect(() => {
 }, [marketLandData]);// Only run when marketLandData actually changes
 
   // Unit Rate helpers
-  const toggleUnitRateCode = (code) => {
+  const toggleUnitRateCode = (key) => {
     const s = new Set(selectedUnitRateCodes);
-    if (s.has(code)) s.delete(code);
-    else s.add(code);
+    if (s.has(key)) s.delete(key);
+    else s.add(key);
     setSelectedUnitRateCodes(new Set(s));
   };
 
