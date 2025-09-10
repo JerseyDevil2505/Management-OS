@@ -310,7 +310,49 @@ useEffect(() => {
   };
 
   loadChecklistStatuses();
-}, []);  
+  }, []);
+
+// ==================== UNIT RATE CODES (BRT) ====================
+useEffect(() => {
+  // Build a unique list of URC/unit-rate codes from codeDefinitions (BRT format)
+  if (!codeDefinitions || !codeDefinitions.sections || !codeDefinitions.sections.VCS) {
+    setUnitRateCodes([]);
+    setSelectedUnitRateCodes(new Set());
+    return;
+  }
+
+  const codesMap = new Map();
+  try {
+    const vcsSection = codeDefinitions.sections.VCS;
+    Object.keys(vcsSection).forEach(vcsKey => {
+      const entry = vcsSection[vcsKey];
+      const urcMap = entry?.MAP?.['8']?.MAP;
+      if (!urcMap) return;
+      Object.keys(urcMap).forEach(k => {
+        const e = urcMap[k];
+        const codeVal = e.KEY || e.DATA?.KEY || k;
+        const desc = e.MAP?.['1']?.DATA?.VALUE || e.DATA?.VALUE || '';
+        if (codeVal && !codesMap.has(String(codeVal))) {
+          codesMap.set(String(codeVal), String(desc || `Code ${codeVal}`));
+        }
+      });
+    });
+  } catch (err) {
+    console.error('Error extracting unit rate codes:', err);
+  }
+
+  const codes = Array.from(codesMap.entries()).map(([code, description]) => ({ code, description }));
+  setUnitRateCodes(codes);
+
+  // restore saved config if jobData contains unit_rate_config
+  try {
+    const saved = jobData?.unit_rate_config?.codes || jobData?.unit_rate_config || [];
+    setSelectedUnitRateCodes(new Set(saved));
+  } catch (e) {
+    // ignore
+  }
+
+}, [codeDefinitions, jobData]);
 
 // ==================== USE SAVED NORMALIZATION DATA FROM PROPS ====================
 useEffect(() => {
