@@ -446,13 +446,28 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         </div>
       </div>
 
+      {/* Price basis toggle */}
+      <div className="mb-3 text-sm text-gray-700">
+        <div className="mb-1">Choose basis for calculations: <span className="text-xs text-gray-500">Price Time = normalized price; Sale Price = actual sale price</span></div>
+        <div className="flex gap-2">
+          <button
+            className={`px-3 py-1 rounded ${priceBasis === 'price_time' ? 'bg-indigo-600 text-white' : 'bg-gray-100'}`}
+            onClick={() => { setPriceBasis('price_time'); savePriceBasis('price_time'); }}
+          >Price Time</button>
+          <button
+            className={`px-3 py-1 rounded ${priceBasis === 'sale_price' ? 'bg-indigo-600 text-white' : 'bg-gray-100'}`}
+            onClick={() => { setPriceBasis('sale_price'); savePriceBasis('sale_price'); }}
+          >Sale Price</button>
+        </div>
+      </div>
+
       {recommendedFactor !== null && (
         <div className="mb-4 p-3 border border-gray-200 rounded bg-green-50 flex items-center justify-between">
           <div>
             <div className="text-sm text-gray-700 font-medium">Recommended Factor (mean)</div>
             <div className="text-lg font-semibold">{Number(recommendedFactor).toFixed(2)}</div>
             <div className="text-xs text-gray-500">Based on {filtered.filter(p => {
-              const has = (p.values_repl_cost || p.values_base_cost) && (p.values_norm_time || p.sales_price);
+              const has = (p.values_repl_cost || p.values_base_cost) && (priceBasis === 'price_time' ? p.values_norm_time : p.sales_price);
               const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
               const included = includedMap[key] !== undefined ? includedMap[key] : true;
               return has && included;
@@ -516,7 +531,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.property_location || ''}</td>
 
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.sales_date ? new Date(p.sales_date).toLocaleDateString() : '���'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.sales_date ? new Date(p.sales_date).toLocaleDateString() : '�����'}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{formatCurrencyNoCents(salePrice)}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.sales_nu || '—'}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_norm_time ? formatCurrencyNoCents(Number(p.values_norm_time)) : '—'}</td>
