@@ -2882,16 +2882,17 @@ const analyzeImportFile = async (file) => {
                     <div className="text-sm text-gray-500">No unit rate codes found for this job.</div>
                   ) : (
                     unitRateCodes.map(u => (
-                      <label key={u.code} className="flex items-center gap-3 py-1">
+                      <label key={u.key} className="flex items-center gap-3 py-1">
                         <input
                           type="checkbox"
                           disabled={vendorType !== 'BRT'}
-                          checked={selectedUnitRateCodes.has(u.code)}
-                          onChange={() => toggleUnitRateCode(u.code)}
+                          checked={selectedUnitRateCodes.has(u.key)}
+                          onChange={() => toggleUnitRateCode(u.key)}
                         />
                         <div className="text-sm">
                           <div className="font-medium">{u.code}</div>
-                          <div className="text-xs text-gray-500">{u.description}</div>
+                          <div className="text-xs text-gray-500">{u.description} <span className="text-xs text-gray-400">({u.vcs})</span></div>
+                          <div className="text-xs text-gray-500">{u.label}</div>
                         </div>
                       </label>
                     ))
