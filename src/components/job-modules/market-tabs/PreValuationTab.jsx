@@ -502,6 +502,8 @@ useEffect(() => {
       const selected = Array.from(selectedUnitRateCodes);
       // Prefer v2 calculator which returns detailed stats when available
       let result = null;
+      // DEBUG: log selected codes for inspection
+      try { console.warn('Running unit-rate calc with selected codes:', selected); } catch(e){}
       if (typeof runUnitRateLotCalculation_v2 === 'function') {
         result = await runUnitRateLotCalculation_v2(jobData.id, selected);
       } else {
@@ -2834,7 +2836,7 @@ const analyzeImportFile = async (file) => {
                   </p>
                   <ul className="text-sm mt-2 space-y-1">
                     <li>• <strong>Single Family (1x):</strong> All codes starting with 1</li>
-                    <li>��� <strong>Semi-Detached (2x):</strong> All codes starting with 2</li>
+                    <li>• <strong>Semi-Detached (2x):</strong> All codes starting with 2</li>
                     <li>• <strong>Row/Townhouses (3x):</strong> All codes starting with 3</li>
                     <li>• <strong>Multifamily (4x):</strong> All codes starting with 4</li>
                     <li>• <strong>Conversions (5x):</strong> All codes starting with 5</li>
