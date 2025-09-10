@@ -773,6 +773,15 @@ const App = () => {
     }
   };
 
+  // If a non-admin user becomes active and the current view is restricted, redirect them
+  useEffect(() => {
+    if (!user) return;
+    if (!isAdmin && (activeView === 'billing' || activeView === 'payroll')) {
+      setActiveView('employees');
+      window.history.pushState({}, '', '/employees');
+    }
+  }, [user, isAdmin, activeView]);
+
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
