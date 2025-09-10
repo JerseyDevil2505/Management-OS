@@ -1081,19 +1081,24 @@ const App = () => {
           />
         )}
 
-        {activeView === 'payroll' && (
+        {activeView === 'payroll' && (isAdmin ? (
           <PayrollManagement
-            employees={appData.employees.filter(e => 
-              ['active', 'part_time', 'full_time'].includes(e.employment_status) && 
+            employees={appData.employees.filter(e =>
+              ['active', 'part_time', 'full_time'].includes(e.employment_status) &&
               ['residential', 'management'].includes(e.inspector_type?.toLowerCase())
-            )}      
+            )}
             jobs={appData.jobs}
             archivedPeriods={appData.archivedPayrollPeriods}
             dataRecency={appData.dataRecency}
             onDataUpdate={updateCacheItem}
             onRefresh={() => loadLiveData(['payroll'])}
           />
-        )}
+        ) : (
+          <div className="p-6 bg-white rounded-lg shadow-sm border border-gray-200 text-center">
+            <h3 className="text-lg font-semibold">Access Denied</h3>
+            <p className="text-sm text-gray-600">You do not have permission to view Payroll.</p>
+          </div>
+        ))}
 
         {activeView === 'users' && (
           <UserManagement />
