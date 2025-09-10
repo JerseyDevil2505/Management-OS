@@ -27,10 +27,17 @@ const App = () => {
 
   // Update URL when view changes
   const handleViewChange = useCallback((view) => {
+    // Prevent non-admins from navigating to billing/payroll
+    if ((view === 'billing' || view === 'payroll') && !isAdmin) {
+      setActiveView('employees');
+      window.history.pushState({}, '', '/employees');
+      return;
+    }
+
     setActiveView(view);
     // Update URL without page reload
     window.history.pushState({}, '', `/${view}`);
-  }, []);
+  }, [isAdmin]);
 
   // Listen for browser back/forward buttons
   useEffect(() => {
