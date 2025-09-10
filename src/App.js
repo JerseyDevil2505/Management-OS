@@ -16,6 +16,10 @@ import UserManagement from './components/UserManagement';
 
 const App = () => {
   // ==========================================
+  // Authentication state (move to top to avoid TDZ)
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
   // URL-BASED VIEW STATE (FIXES F5 ISSUE!)
   // ==========================================
   const [activeView, setActiveView] = useState(() => {
@@ -25,12 +29,6 @@ const App = () => {
     return validViews.includes(path) ? path : 'admin-jobs';
   });
 
-  // Update URL when view changes
-  const handleViewChange = useCallback((view) => {
-    setActiveView(view);
-    // Update URL without page reload
-    window.history.pushState({}, '', `/${view}`);
-  }, []);
 
   // Listen for browser back/forward buttons
   useEffect(() => {
@@ -115,9 +113,24 @@ const App = () => {
   // Job selection state
   const [selectedJob, setSelectedJob] = useState(null);
 
-  // Authentication state
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Simple helper - true for users allowed to access billing/payroll
+  const isAdmin = (user?.role || '').toString().toLowerCase() === 'admin' || (user?.role || '').toString().toLowerCase() === 'owner';
+
+  // Update URL when view changes
+  const handleViewChange = useCallback((view) => {
+    // Prevent non-admins from navigating to billing/payroll
+    const role = user?.role?.toString?.().toLowerCase?.() || '';
+    const isAdminLocal = role === 'admin' || role === 'owner';
+    if ((view === 'billing' || view === 'payroll') && !isAdminLocal) {
+      setActiveView('employees');
+      window.history.pushState({}, '', '/employees');
+      return;
+    }
+
+    setActiveView(view);
+    // Update URL without page reload
+    window.history.pushState({}, '', `/${view}`);
+  }, [user]);
 
   // ==========================================
   // JOB FRESHNESS CALCULATOR
@@ -763,6 +776,15 @@ const App = () => {
     }
   };
 
+  // If a non-admin user becomes active and the current view is restricted, redirect them
+  useEffect(() => {
+    if (!user) return;
+    if (!isAdmin && (activeView === 'billing' || activeView === 'payroll')) {
+      setActiveView('employees');
+      window.history.pushState({}, '', '/employees');
+    }
+  }, [user, isAdmin, activeView]);
+
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
@@ -931,36 +953,40 @@ const App = () => {
               >
                 📋 Jobs ({appData.jobs.length})
               </button>
-              <button
-                onClick={() => handleViewChange('billing')}
-                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
-                  activeView === 'billing'
-                    ? 'text-blue-600 shadow-lg border-white'
-                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
-                }`}
-                style={activeView === 'billing' ? { 
-                  backgroundColor: '#FFFFFF',
-                  opacity: 1,
-                  backdropFilter: 'none'
-                } : {}}
-              >
-                💰 Billing
-              </button>
-              <button
-                onClick={() => handleViewChange('payroll')}
-                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
-                  activeView === 'payroll'
-                    ? 'text-blue-600 shadow-lg border-white'
-                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
-                }`}
-                style={activeView === 'payroll' ? { 
-                  backgroundColor: '#FFFFFF',
-                  opacity: 1,
-                  backdropFilter: 'none'
-                } : {}}
-              >
-                💸 Payroll
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => handleViewChange('billing')}
+                  className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                    activeView === 'billing'
+                      ? 'text-blue-600 shadow-lg border-white'
+                      : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                  }`}
+                  style={activeView === 'billing' ? {
+                    backgroundColor: '#FFFFFF',
+                    opacity: 1,
+                    backdropFilter: 'none'
+                  } : {}}
+                >
+                  💰 Billing
+                </button>
+              )}
+              {isAdmin && (
+                <button
+                  onClick={() => handleViewChange('payroll')}
+                  className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                    activeView === 'payroll'
+                      ? 'text-blue-600 shadow-lg border-white'
+                      : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                  }`}
+                  style={activeView === 'payroll' ? {
+                    backgroundColor: '#FFFFFF',
+                    opacity: 1,
+                    backdropFilter: 'none'
+                  } : {}}
+                >
+                  💸 Payroll
+                </button>
+              )}
               <button
                 onClick={() => handleViewChange('users')}
                 className={`px-4 py-2 rounded-xl font-medium text-sm border ${
@@ -1039,7 +1065,7 @@ const App = () => {
           />
         )}
 
-        {activeView === 'billing' && (
+        {activeView === 'billing' && (isAdmin ? (
           <BillingManagement
             activeJobs={appData.activeJobs}
             legacyJobs={appData.legacyJobs}
@@ -1051,7 +1077,12 @@ const App = () => {
             onDataUpdate={updateCacheItem}
             onRefresh={() => loadLiveData(['billing'])}
           />
-        )}
+        ) : (
+          <div className="p-6 bg-white rounded-lg shadow-sm border border-gray-200 text-center">
+            <h3 className="text-lg font-semibold">Access Denied</h3>
+            <p className="text-sm text-gray-600">You do not have permission to view Billing.</p>
+          </div>
+        ))}
 
         {activeView === 'employees' && (
           <EmployeeManagement
@@ -1062,19 +1093,24 @@ const App = () => {
           />
         )}
 
-        {activeView === 'payroll' && (
+        {activeView === 'payroll' && (isAdmin ? (
           <PayrollManagement
-            employees={appData.employees.filter(e => 
-              ['active', 'part_time', 'full_time'].includes(e.employment_status) && 
+            employees={appData.employees.filter(e =>
+              ['active', 'part_time', 'full_time'].includes(e.employment_status) &&
               ['residential', 'management'].includes(e.inspector_type?.toLowerCase())
-            )}      
+            )}
             jobs={appData.jobs}
             archivedPeriods={appData.archivedPayrollPeriods}
             dataRecency={appData.dataRecency}
             onDataUpdate={updateCacheItem}
             onRefresh={() => loadLiveData(['payroll'])}
           />
-        )}
+        ) : (
+          <div className="p-6 bg-white rounded-lg shadow-sm border border-gray-200 text-center">
+            <h3 className="text-lg font-semibold">Access Denied</h3>
+            <p className="text-sm text-gray-600">You do not have permission to view Payroll.</p>
+          </div>
+        ))}
 
         {activeView === 'users' && (
           <UserManagement />
