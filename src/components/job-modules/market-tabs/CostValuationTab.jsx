@@ -426,7 +426,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
           <p className="text-gray-600">Global Cost Conversion Factor and New Construction analysis (job-level)</p>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <div className="text-sm text-gray-600">Job Factor</div>
+          <div className="text-sm text-gray-600">Custom CCF</div>
           <div className="flex items-center gap-2">
             <input
               type="number"
@@ -446,7 +446,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
           </div>
           <div className="text-xs text-gray-500 mt-1">Stored on market_land_valuation for this job</div>
           <div className="mt-3 w-full">
-            <div className="text-sm text-gray-600">State Recommended Factor</div>
+            <div className="text-sm text-gray-600">State County CCF</div>
             <div className="flex items-center gap-2 mt-1">
               <input
                 type="number"
@@ -461,7 +461,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                 onClick={() => saveStateRecommendedFactor(stateRecommendedFactor)}
                 disabled={isSaving || stateRecommendedFactor === null || stateRecommendedFactor === ''}
               >
-                {isSaving ? 'Saving...' : (savedRecommendation ? 'Saved' : 'Save State Recommendation')}
+                {isSaving ? 'Saving...' : (savedRecommendation ? 'Saved' : 'Save State Factor')}
               </button>
             </div>
             <div className="text-xs text-gray-500 mt-1">Stored on market_land_valuation as cost_conv_recommendation</div>
@@ -491,7 +491,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         </div>
 
         <div>
-          <label className="text-sm text-gray-600 block">Property Type</label>
+          <label className="text-sm text-gray-600 block">Type & Use</label>
           <select
             value={typeGroup}
             onChange={(e) => setTypeGroup(e.target.value)}
@@ -629,7 +629,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_building_class || '—'}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{(() => {
                     const la = getLivingAreaValue(p);
-                    return la !== null ? la : '—';
+                    return la !== null ? formatNumberNoDecimals(la) : '—';
                   })()}</td>
                   {/* Current Land editable */}
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">
