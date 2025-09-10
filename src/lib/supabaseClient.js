@@ -717,7 +717,14 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
 // Get total lot size (aggregates multiple fields)
 getTotalLotSize: async function(property, vendorType, codeDefinitions) {
   if (!property) return null;
-  
+
+  // If a manual/calculated lot acreage exists (from unit-rate calc), prefer it
+  const manualAcre = property.market_manual_lot_acre ?? property.market_manual_acre ?? property.market_manual_lot_acre;
+  if (manualAcre !== undefined && manualAcre !== null) {
+    const num = parseFloat(manualAcre);
+    if (!isNaN(num) && num > 0) return num;
+  }
+
   // First check direct acre/sf fields
   let totalAcres = parseFloat(property.asset_lot_acre) || 0;
   let totalSf = parseFloat(property.asset_lot_sf) || 0;
