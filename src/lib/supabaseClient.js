@@ -1535,6 +1535,38 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
         if (units >= 1000) totalSf += units; else totalAcres += units;
       }
 
+      // FALLBACK: if no LANDUR units found, try to extract acreage from any raw field value that mentions 'ACRE' or 'ACREAGE'
+      if (totalAcres === 0 && totalSf === 0) {
+        try {
+          for (const v of Object.values(rawRecord)) {
+            if (!v || typeof v !== 'string') continue;
+            // Skip obvious site-value tokens
+            const upper = v.toUpperCase();
+            if (upper.includes('SITE VALUE')) continue;
+            // Match patterns like 'ACREAGE 3.62' or 'ACRE 3.62' (also '02 ACREAGE 3.62')
+            const m = v.match(/ACRE(?:AGE)?[^0-9\-\.]*(\d{1,7}(?:\.\d+)?)/i);
+            if (m && m[1]) {
+              const n = parseFloat(m[1].replace(/,/g, ''));
+              if (!isNaN(n) && n > 0) {
+                totalAcres += n;
+                break;
+              }
+            }
+            // Also check for pattern '02 ACREAGE 3.62' where number before 'ACREAGE'
+            const m2 = v.match(/\b\d{1,2}\b\D{0,8}ACRE(?:AGE)?\D*(\d{1,7}(?:\.\d+)?)/i);
+            if (m2 && m2[1]) {
+              const n2 = parseFloat(m2[1].replace(/,/g, ''));
+              if (!isNaN(n2) && n2 > 0) {
+                totalAcres += n2;
+                break;
+              }
+            }
+          }
+        } catch (e) {
+          // ignore fallback errors
+        }
+      }
+
       const acres = totalAcres + (totalSf / 43560);
       const recordAcre = acres > 0 ? parseFloat(acres.toFixed(4)) : null;
       if (recordAcre !== null) stats.acreageSet++; else { if (stats.sampledNullKeys.length < 20) stats.sampledNullKeys.push(compositeKey); }
