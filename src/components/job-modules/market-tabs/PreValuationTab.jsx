@@ -85,6 +85,11 @@ const PreValuationTab = ({
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [lastAutoSave, setLastAutoSave] = useState(null);
   const [readyProperties, setReadyProperties] = useState(new Set());
+  // Unit Rate Configuration state (BRT only)
+  const [unitRateCodes, setUnitRateCodes] = useState([]);
+  const [selectedUnitRateCodes, setSelectedUnitRateCodes] = useState(new Set());
+  const [isCalculatingUnitSizes, setIsCalculatingUnitSizes] = useState(false);
+  const [isSavingUnitConfig, setIsSavingUnitConfig] = useState(false);
   const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
   const [normSortConfig, setNormSortConfig] = useState({ field: null, direction: 'asc' });
   const [locationVariations, setLocationVariations] = useState({});
@@ -2348,7 +2353,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('sales_date')}
                             >
-                              Sale Date {normSortConfig.field === 'sales_date' && (normSortConfig.direction === 'asc' ? '��' : '↓')}
+                              Sale Date {normSortConfig.field === 'sales_date' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
                             </th>
                             <th 
                               className="px-4 py-3 text-right text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
