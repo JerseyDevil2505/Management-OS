@@ -9,7 +9,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   const [fromYear, setFromYear] = useState(marketLandData?.cost_valuation_from_year ?? (currentYear - 3));
   const [toYear, setToYear] = useState(marketLandData?.cost_valuation_to_year ?? currentYear);
   // Replace prefix inputs with dropdown groupings
-  const [typeGroup, setTypeGroup] = useState('single_family'); // default codes beginning with '1'
+  const [typeGroup, setTypeGroup] = useState(marketLandData?.type_group ?? '1'); // default codes beginning with '1'
   // Price basis for calculations: 'price_time' or 'sale_price'
   const [priceBasis, setPriceBasis] = useState(marketLandData?.cost_valuation_price_basis ?? 'price_time');
 
