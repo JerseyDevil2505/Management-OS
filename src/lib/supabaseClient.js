@@ -1545,7 +1545,8 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
         if (units >= 1000) totalSf += units; else totalAcres += units;
       }
 
-      // If no units from LANDUR_* fields, attempt positional scan for code/unit pairs (BRT fixed layout)
+      // If no units from LANDUR_* fields, first check AC/ACAREA-style parsed fields (BRT headers)
+      // If still none, attempt positional scan for code/unit pairs (BRT fixed layout)
       if (totalAcres === 0 && totalSf === 0) {
         try {
           const orderedValues = Object.keys(rawRecord).map(k => rawRecord[k]);
