@@ -512,6 +512,11 @@ useEffect(() => {
       const acreageSet = result?.acreage_set ?? (result?.updated ?? 0);
       const acreageNull = result?.acreage_null ?? (updated - acreageSet);
 
+      // Log sample null keys for debugging (will appear in browser console)
+      if (result?.sample_null_keys && Array.isArray(result.sample_null_keys) && result.sample_null_keys.length > 0) {
+        console.warn('Sample composite keys with NULL acreage (first 20):', result.sample_null_keys);
+      }
+
       alert(`Calculated lot sizes — updated: ${updated} properties\nacreage set: ${acreageSet}\nacreage null: ${acreageNull}`);
       // Refresh cache/data
       if (onUpdateJobCache) onUpdateJobCache(jobData.id);
@@ -2829,7 +2834,7 @@ const analyzeImportFile = async (file) => {
                   </p>
                   <ul className="text-sm mt-2 space-y-1">
                     <li>• <strong>Single Family (1x):</strong> All codes starting with 1</li>
-                    <li>• <strong>Semi-Detached (2x):</strong> All codes starting with 2</li>
+                    <li>��� <strong>Semi-Detached (2x):</strong> All codes starting with 2</li>
                     <li>• <strong>Row/Townhouses (3x):</strong> All codes starting with 3</li>
                     <li>• <strong>Multifamily (4x):</strong> All codes starting with 4</li>
                     <li>• <strong>Conversions (5x):</strong> All codes starting with 5</li>
