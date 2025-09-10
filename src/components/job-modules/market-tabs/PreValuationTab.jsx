@@ -2818,22 +2818,20 @@ const analyzeImportFile = async (file) => {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Property Type Filter
+                  Type & Use
                 </label>
                 <select
                   value={blockTypeFilter}
                   onChange={(e) => setBlockTypeFilter(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
                 >
-                  <option value="single_family">Single Family (1x)</option>
-                  <option value="semi_detached">Semi-Detached (2x)</option>
-                  <option value="townhouses">Row/Townhouses (3x)</option>
-                  <option value="multifamily">Multifamily (4x)</option>
-                  <option value="conversions">Conversions (5x)</option>
-                  <option value="condominiums">Condominiums (6x)</option>
+                  <option value="1">1 — Single Family</option>
+                  <option value="2">2 — Duplex / Semi-Detached</option>
+                  <option value="3">3* — Row / Townhouse (3E,3I,30,31)</option>
+                  <option value="4">4* — MultiFamily (42,43,44)</option>
+                  <option value="5">5* — Conversions (51,52,53)</option>
+                  <option value="6">6 — Condominium</option>
                   <option value="all_residential">All Residential</option>
-                  <option value="commercial">Commercial</option>
-                  <option value="all">All Properties</option>
                 </select>
               </div>
               
