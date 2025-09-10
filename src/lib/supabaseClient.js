@@ -1535,6 +1535,50 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
         if (units >= 1000) totalSf += units; else totalAcres += units;
       }
 
+      // If no units from LANDUR_* fields, attempt positional scan for code/unit pairs (BRT fixed layout)
+      if (totalAcres === 0 && totalSf === 0) {
+        try {
+          const orderedValues = Object.keys(rawRecord).map(k => rawRecord[k]);
+          for (let idx = 0; idx < orderedValues.length - 1; idx++) {
+            const codeCand = orderedValues[idx];
+            const unitsCand = orderedValues[idx + 1];
+            if (codeCand === undefined || unitsCand === undefined) continue;
+            const codeStrRaw = String(codeCand || '').replace(/[^0-9]/g, '');
+            const unitsStrRaw = String(unitsCand || '').replace(/[^0-9\.\,]/g, '');
+            if (!/^[0-9]{1,2}$/.test(codeStrRaw)) continue;
+            const codeNumStr = codeStrRaw.padStart(2, '0');
+            const unitsNum = parseFloat(unitsStrRaw.replace(/,/g, ''));
+            if (isNaN(unitsNum) || unitsNum <= 0) continue;
+
+            // Check selection match for this positional code
+            let include = true;
+            if (selectedCodes && selectedCodes.length > 0) {
+              include = selectedCodes.some(scRaw => {
+                const sc = String(scRaw).trim();
+                if (sc.includes('::')) {
+                  const [vcsKeySel, codeSel] = sc.split('::').map(s => s.trim());
+                  if (!codeSel) return false;
+                  const codeMatches = codeSel === codeNumStr || codeSel.padStart(2, '0') === codeNumStr;
+                  if (!codeMatches) return false;
+                  const idSet = vcsIdMap.get(String(vcsKeySel));
+                  if (!idSet) return propVcs && (String(propVcs) === String(vcsKeySel) || String(propVcs).padStart(2, '0') === String(vcsKeySel).padStart(2, '0'));
+                  if (!propVcs) return false;
+                  return Array.from(idSet).some(id => String(id).trim() === String(propVcs).trim());
+                } else {
+                  return sc === codeNumStr || sc.padStart(2, '0') === codeNumStr;
+                }
+              });
+            }
+
+            if (!include) continue;
+
+            if (unitsNum >= 1000) totalSf += unitsNum; else totalAcres += unitsNum;
+          }
+        } catch (e) {
+          // ignore positional fallback errors
+        }
+      }
+
       // FALLBACK: if no LANDUR units found, try to extract acreage from any raw field value that mentions 'ACRE' or 'ACREAGE'
       if (totalAcres === 0 && totalSf === 0) {
         try {
