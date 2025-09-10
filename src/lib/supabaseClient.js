@@ -1304,6 +1304,76 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
   }
 };  
 
+// ===== UNIT RATE LOT CALCULATION =====
+export async function runUnitRateLotCalculation(jobId, selectedCodes = []) {
+  // selectedCodes: array of code identifiers (strings) to include
+  if (!jobId) throw new Error('jobId required');
+
+  try {
+    // Get parsed source file and code definitions
+    const rawDataForJob = await getRawDataForJob(jobId);
+    if (!rawDataForJob) {
+      throw new Error('No source file parsed data available for this job');
+    }
+
+    const codeDefinitions = rawDataForJob.vendorType === 'BRT' ? (rawDataForJob.codeDefinitions || rawDataForJob.parsed_code_definitions || null) : null;
+
+    // Iterate over parsed property map and compute acreage based on selectedCodes
+    const updates = [];
+    for (const [compositeKey, rawRecord] of rawDataForJob.propertyMap.entries()) {
+      let totalAcres = 0;
+      let totalSf = 0;
+
+      for (let i = 1; i <= 6; i++) {
+        const landCode = rawRecord[`LANDUR_${i}`];
+        const landUnitsRaw = rawRecord[`LANDURUNITS_${i}`];
+        const units = landUnitsRaw !== undefined && landUnitsRaw !== null ? parseFloat(String(landUnitsRaw).replace(/[,$\s\"]/g, '')) : NaN;
+        if (isNaN(units) || units <= 0) continue;
+
+        // If no selected codes, include everything. Otherwise, include only if code matches selectedCodes
+        if (selectedCodes && selectedCodes.length > 0) {
+          if (!landCode) continue;
+          const codeStr = String(landCode).trim();
+          // Compare both padded and unpadded
+          const matches = selectedCodes.some(sc => String(sc).trim() === codeStr || String(sc).padStart(2, '0') === String(codeStr).padStart(2, '0'));
+          if (!matches) continue;
+        }
+
+        // Heuristic: treat >=1000 as SF, else acres
+        if (units >= 1000) totalSf += units;
+        else totalAcres += units;
+      }
+
+      const acres = totalAcres + (totalSf / 43560);
+
+      // Save into property_market_analysis for this composite key
+      updates.push({
+        job_id: jobId,
+        property_composite_key: compositeKey,
+        market_manual_lot_acre: acres > 0 ? parseFloat(acres.toFixed(4)) : null,
+        market_unit_codes_applied: selectedCodes
+      });
+    }
+
+    // Upsert updates in batches
+    const batchSize = 200;
+    for (let i = 0; i < updates.length; i += batchSize) {
+      const batch = updates.slice(i, i + batchSize);
+      const { error } = await supabase.from('property_market_analysis').upsert(batch, { onConflict: ['job_id','property_composite_key'] });
+      if (error) {
+        console.error('Error upserting market analysis batch:', error);
+        throw error;
+      }
+    }
+
+    return { updated: updates.length };
+
+  } catch (error) {
+    console.error('runUnitRateLotCalculation error:', error);
+    throw error;
+  }
+}
+
 // ===== EMPLOYEE MANAGEMENT SERVICES =====
 export const employeeService = {
   async getAll() {
