@@ -151,7 +151,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
         const included = includedMap[key] !== undefined ? includedMap[key] : true;
         if (!included) return null;
-        const salePrice = (p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
+        const salePrice = (priceBasis === 'price_time' && p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
         const detItems = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
         const baseCost = (p.values_base_cost !== undefined && p.values_base_cost !== null) ? Number(p.values_base_cost) : 0;
         const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
@@ -179,7 +179,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
         const included = includedMap[key] !== undefined ? includedMap[key] : true;
         if (!included) return null;
-        const salePrice = (p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
+        const salePrice = (priceBasis === 'price_time' && p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
         const detItems = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
         const baseCost = (p.values_base_cost !== undefined && p.values_base_cost !== null) ? Number(p.values_base_cost) : 0;
         const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
@@ -210,7 +210,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
       const included = includedMap[key] !== false;
       const saleDate = p.sales_date ? new Date(p.sales_date).toISOString().slice(0,10) : '';
-      const salePrice = (p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
+      const salePrice = (priceBasis === 'price_time' && p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
       const timeNorm = (p.values_norm_time !== undefined && p.values_norm_time !== null) ? Number(p.values_norm_time) : '';
       const detItems = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
       const baseCost = (p.values_base_cost !== undefined && p.values_base_cost !== null) ? Number(p.values_base_cost) : 0;
@@ -302,7 +302,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       const included = includedMap[key] !== false;
       if (!included) return;
 
-      const salePrice = (p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
+      const salePrice = (priceBasis === 'price_time' && p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
       if (isFinite(salePrice)) sumSale += salePrice;
 
       // compute adjusted value for this row using job-level factor if present, otherwise use per-row CCF
@@ -516,7 +516,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.property_location || ''}</td>
 
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.sales_date ? new Date(p.sales_date).toLocaleDateString() : '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.sales_date ? new Date(p.sales_date).toLocaleDateString() : '���'}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{formatCurrencyNoCents(salePrice)}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.sales_nu || '—'}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_norm_time ? formatCurrencyNoCents(Number(p.values_norm_time)) : '—'}</td>
