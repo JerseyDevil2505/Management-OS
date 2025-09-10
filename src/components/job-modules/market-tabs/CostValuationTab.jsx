@@ -83,8 +83,12 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       if (!year) return false;
       if (year < fromYear || year > toYear) return false;
 
-      // Require a valid time-normalized price
-      if (!(p.values_norm_time && p.values_norm_time > 0)) return false;
+      // Require a valid price depending on selected basis
+      if (priceBasis === 'price_time') {
+        if (!(p.values_norm_time && p.values_norm_time > 0)) return false;
+      } else {
+        if (!(p.sales_price && Number(p.sales_price) > 0)) return false;
+      }
 
       // asset_type_use exists on property_records
       const typeVal = p.asset_type_use ? p.asset_type_use.toString().trim() : '';
