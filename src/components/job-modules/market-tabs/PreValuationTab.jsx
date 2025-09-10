@@ -415,7 +415,48 @@ useEffect(() => {
   }
 }, [marketLandData]);// Only run when marketLandData actually changes
 
-  // ==================== WORKSHEET INITIALIZATION ====================
+  // Unit Rate helpers
+  const toggleUnitRateCode = (code) => {
+    const s = new Set(selectedUnitRateCodes);
+    if (s.has(code)) s.delete(code);
+    else s.add(code);
+    setSelectedUnitRateCodes(new Set(s));
+  };
+
+  const saveUnitRateConfig = async () => {
+    if (!jobData?.id) return;
+    setIsSavingUnitConfig(true);
+    try {
+      const payload = { codes: Array.from(selectedUnitRateCodes) };
+      const { error } = await supabase.from('jobs').update({ unit_rate_config: payload }).eq('id', jobData.id);
+      if (error) throw error;
+      alert('Unit rate configuration saved');
+    } catch (e) {
+      console.error('Error saving unit rate config:', e);
+      alert('Failed to save unit rate configuration');
+    } finally {
+      setIsSavingUnitConfig(false);
+    }
+  };
+
+  const calculateUnitRates = async () => {
+    if (!jobData?.id) return;
+    setIsCalculatingUnitSizes(true);
+    try {
+      const selected = Array.from(selectedUnitRateCodes);
+      const result = await runUnitRateLotCalculation(jobData.id, selected);
+      alert(`Calculated lot sizes for ${result.updated} properties`);
+      // Refresh cache/data
+      if (onUpdateJobCache) onUpdateJobCache(jobData.id);
+    } catch (e) {
+      console.error('Error calculating unit rates:', e);
+      alert('Calculation failed');
+    } finally {
+      setIsCalculatingUnitSizes(false);
+    }
+  };
+
+// ==================== WORKSHEET INITIALIZATION ====================
   useEffect(() => {
     if (properties && properties.length > 0) {
       const worksheetData = properties.map(prop => {
