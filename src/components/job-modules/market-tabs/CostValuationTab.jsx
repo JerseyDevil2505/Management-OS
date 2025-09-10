@@ -67,18 +67,54 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     // Persist the selected basis to market_land_valuation
     if (!jobData?.id) { setPriceBasis(basis); return; }
     setIsSaving(true);
+
+    const extractErrorMessage = (err) => {
+      if (!err) return 'Unknown error';
+      if (typeof err === 'string') return err;
+      if (err.message) return err.message;
+      if (err.error) return err.error;
+      if (err.details) return err.details;
+      try { return JSON.stringify(err); } catch (e) { return String(err); }
+    };
+
     try {
       const { data, error } = await supabase
         .from('market_land_valuation')
         .upsert([{ job_id: jobData.id, cost_valuation_price_basis: basis, updated_at: new Date().toISOString() }], { onConflict: 'job_id' })
         .select()
         .single();
-      if (error) throw error;
+
+      if (error) {
+        // Fallback: try update then insert
+        console.warn('Upsert failed, attempting update/insert fallback', error);
+        const errMsg = extractErrorMessage(error);
+
+        try {
+          const { error: updateError } = await supabase
+            .from('market_land_valuation')
+            .update({ cost_valuation_price_basis: basis, updated_at: new Date().toISOString() })
+            .eq('job_id', jobData.id);
+          if (updateError) {
+            // Try insert
+            const { error: insertError } = await supabase
+              .from('market_land_valuation')
+              .insert({ job_id: jobData.id, cost_valuation_price_basis: basis, updated_at: new Date().toISOString() });
+            if (insertError) throw insertError;
+          }
+        } catch (fallbackErr) {
+          console.error('Fallback update/insert failed saving price basis:', fallbackErr);
+          const msg = extractErrorMessage(fallbackErr);
+          alert(`Failed to save price basis: ${msg}`);
+          return;
+        }
+      }
+
       setPriceBasis(basis);
       if (onUpdateJobCache && jobData?.id) onUpdateJobCache(jobData.id, null);
     } catch (e) {
+      const msg = extractErrorMessage(e);
       console.error('Error saving price basis:', e);
-      alert('Failed to save price basis. See console.');
+      alert(`Failed to save price basis: ${msg}`);
     } finally {
       setIsSaving(false);
     }
