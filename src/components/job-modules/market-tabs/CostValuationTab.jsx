@@ -507,8 +507,6 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
             <option value="5">5* — Conversions (51,52,53)</option>
             <option value="6">6 — Condominium</option>
             <option value="all_residential">All Residential</option>
-            <option value="commercial">Commercial</option>
-            <option value="all">All Properties</option>
           </select>
         </div>
 
