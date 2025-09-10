@@ -325,7 +325,7 @@ const JobContainer = ({
           } catch (error) {
             // ENHANCED: Comprehensive error logging for debugging
             console.error(`🚨 CRITICAL ERROR ON BATCH ${batch + 1}:`);
-            console.error(`  Error Type: ${error.constructor.name}`);
+            console.error(`  Error Type: ${error.constructor?.name || 'Unknown'}`);
             console.error(`  Error Message: ${error.message || 'Unknown error'}`);
             console.error(`  Error Code: ${error.code || 'No code'}`);
             console.error(`  Error Details: ${error.details || 'No details'}`);
@@ -348,6 +348,19 @@ const JobContainer = ({
               console.error(`    - This suggests database performance issues`);
               console.error(`    - Consider reducing batch size or optimizing query`);
               console.error(`    - Current batch size: ${batchSize} records`);
+            }
+
+            // Detect transient/network errors and retry the current batch up to maxRetries
+            const transientMessage = (error.message || '').toString().toLowerCase();
+            const isTransient = transientMessage.includes('failed to fetch') || transientMessage.includes('network') || transientMessage.includes('timeout') || error.name === 'TypeError';
+
+            if (isTransient && retryCount < maxRetries) {
+              retryCount++;
+              const backoff = 500 * retryCount;
+              console.warn(`Transient network error detected on batch ${batch + 1}. Retrying (attempt ${retryCount}/${maxRetries}) after ${backoff}ms`);
+              await new Promise(r => setTimeout(r, backoff));
+              batch--; // retry the same batch index on next loop iteration
+              continue;
             }
 
             // STOP PROCESSING - don't continue to next batches
