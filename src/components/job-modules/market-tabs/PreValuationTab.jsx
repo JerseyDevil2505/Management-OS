@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase, interpretCodes, worksheetService, checklistService } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, worksheetService, checklistService, runUnitRateLotCalculation } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 import { 
   TrendingUp, 
@@ -2348,7 +2348,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('sales_date')}
                             >
-                              Sale Date {normSortConfig.field === 'sales_date' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                              Sale Date {normSortConfig.field === 'sales_date' && (normSortConfig.direction === 'asc' ? '��' : '↓')}
                             </th>
                             <th 
                               className="px-4 py-3 text-right text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
