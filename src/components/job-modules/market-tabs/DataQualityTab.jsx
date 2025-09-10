@@ -23,6 +23,7 @@ const DataQualityTab = ({
 }) => {
   // ==================== INTERNAL STATE MANAGEMENT ====================
   const [checkResults, setCheckResults] = useState({});
+  const [rawResults, setRawResults] = useState({});
   const [qualityScore, setQualityScore] = useState(null);
   const [issueStats, setIssueStats] = useState({
     critical: 0,
@@ -50,6 +51,15 @@ const DataQualityTab = ({
     const out = {};
     Object.entries(results).forEach(([cat, arr]) => {
       out[cat] = (arr || []).filter(issue => !ignoredSet.has(`${issue.property_key}-${issue.check}`));
+    });
+    return out;
+  };
+
+  // Helper: get only ignored issues from raw results
+  const getIgnoredResults = (ignoredSet = ignoredIssues) => {
+    const out = {};
+    Object.entries(rawResults || {}).forEach(([cat, arr]) => {
+      out[cat] = (arr || []).filter(issue => ignoredSet.has(`${issue.property_key}-${issue.check}`));
     });
     return out;
   };
@@ -319,6 +329,76 @@ const DataQualityTab = ({
     XLSX.writeFile(wb, `DQ_Report_${jobInfo}_${timestamp}.xlsx`);
     
     console.log('✅ Excel report exported successfully');
+  };
+
+  // Export ONLY ignored issues to Excel
+  const exportIgnoredToExcel = () => {
+    if (ignoredIssues.size === 0) return;
+    const ignoredByCategory = getIgnoredResults();
+    const hasAny = Object.values(ignoredByCategory).some(arr => arr && arr.length > 0);
+    if (!hasAny) return;
+
+    const wb = XLSX.utils.book_new();
+    const timestamp = new Date().toISOString().split('T')[0];
+    const jobInfo = `${jobData?.job_number || 'Job'}_${jobData?.municipality || 'Municipality'}`;
+
+    // SUMMARY SHEET
+    const summaryData = [
+      ['Ignored Issues Summary'],
+      [],
+      ['Job Number', jobData?.job_number || 'N/A'],
+      ['Municipality', jobData?.municipality || 'N/A'],
+      ['Analysis Date', new Date().toLocaleDateString()],
+      [],
+      ['Category', 'Critical', 'Warning', 'Info', 'Total']
+    ];
+
+    Object.entries(ignoredByCategory).forEach(([category, issues]) => {
+      if (issues && issues.length > 0) {
+        const critical = issues.filter(i => i.severity === 'critical').length;
+        const warning = issues.filter(i => i.severity === 'warning').length;
+        const info = issues.filter(i => i.severity === 'info').length;
+        summaryData.push([
+          category.replace(/_/g, ' ').toUpperCase(),
+          critical,
+          warning,
+          info,
+          issues.length
+        ]);
+      }
+    });
+
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, summarySheet, 'Ignored Summary');
+
+    // DETAILS SHEET
+    const detailsData = [
+      ['Block', 'Lot', 'Qualifier', 'Card', 'Location', 'Class', 'Check Type', 'Severity', 'Message']
+    ];
+
+    Object.entries(ignoredByCategory).forEach(([category, issues]) => {
+      (issues || []).forEach(issue => {
+        const property = properties.find(p => p.property_composite_key === issue.property_key);
+        if (property) {
+          detailsData.push([
+            property.property_block || '',
+            property.property_lot || '',
+            property.property_qualifier || '',
+            property.property_card || '',
+            property.property_location || '',
+            property.property_m4_class || '',
+            getCheckTitle(issue.check),
+            issue.severity,
+            issue.message
+          ]);
+        }
+      });
+    });
+
+    const detailsSheet = XLSX.utils.aoa_to_sheet(detailsData);
+    XLSX.utils.book_append_sheet(wb, detailsSheet, 'Ignored Details');
+
+    XLSX.writeFile(wb, `DQ_Ignored_${jobInfo}_${timestamp}.xlsx`);
   };
 
 const generateQCFormPDF = () => {
@@ -637,6 +717,9 @@ const generateQCFormPDF = () => {
         }
       });
       
+      // Initialize raw results with standard checks
+      setRawResults(results);
+
       // Run all custom checks automatically
       if (customChecks.length > 0) {
         setAnalysisProgress({
@@ -659,7 +742,7 @@ const generateQCFormPDF = () => {
           await runCustomCheck(customChecks[i]);
         }
       }
-      
+
       await saveQualityResults(results);
 
       // Apply ignored filter for display
@@ -1813,6 +1896,12 @@ const editCustomCheck = (check) => {
       custom: [...(checkResults.custom || []), ...results.custom]
     };
 
+    // Update raw results with unfiltered custom issues
+    setRawResults(prev => ({
+      ...prev,
+      custom: [...(prev?.custom || []), ...results.custom]
+    }));
+
     setCheckResults(updatedResults);
     applyAndSetResults(updatedResults);
 
@@ -1922,6 +2011,12 @@ const editCustomCheck = (check) => {
       updatedResults.custom.push(...customResults);
     }
     
+    // Update raw results with all custom issues
+    setRawResults(prev => ({
+      ...prev,
+      custom: updatedResults.custom
+    }));
+
     // Update state with complete results and update display (apply ignored filter)
     setCheckResults(updatedResults);
     applyAndSetResults(updatedResults);
@@ -1968,6 +2063,16 @@ const editCustomCheck = (check) => {
           }`}
         >
           Custom Checks/Definitions
+        </button>
+        <button
+          onClick={() => setDataQualityActiveSubTab('ignored')}
+          className={`px-4 py-2 font-medium text-sm transition-all ${
+            dataQualityActiveSubTab === 'ignored'
+              ? 'border-b-2 border-blue-500 text-blue-600 -mb-[1px] bg-blue-50'
+              : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+          }`}
+        >
+          Ignored {ignoredIssues.size > 0 ? `(${ignoredIssues.size})` : ''}
         </button>
         <button
           onClick={() => setDataQualityActiveSubTab('history')}
@@ -2049,35 +2154,6 @@ const editCustomCheck = (check) => {
             </button>
 
 
-            {ignoredIssues.size > 0 && (
-              <button
-              onClick={async () => {
-                if (!window.confirm(`Clear ${ignoredIssues.size} ignored issues? This will restore them to the issue lists.`)) return;
-                setIgnoredIssues(new Set());
-                try {
-                  await supabase
-                    .from('market_land_valuation')
-                    .update({
-                      ignored_issues: [],
-                      updated_at: new Date().toISOString()
-                    })
-                    .eq('job_id', jobData.id);
-
-                  // Clear cache
-                  if (onUpdateJobCache && jobData?.id) {
-                    onUpdateJobCache(jobData.id, null);
-                  }
-                } catch (error) {
-                  console.error('Error clearing ignored issues:', error);
-                }
-              }}
-              className="px-4 py-2 bg-yellow-600 text-white rounded-lg font-medium hover:bg-yellow-700 transition-all flex items-center gap-2"
-            >
-              <X size={16} />
-              Clear {ignoredIssues.size} Ignored
-            </button>
-            )}
-            
             <button 
               onClick={generateQCFormPDF}
               className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-all flex items-center gap-2"
@@ -2237,6 +2313,127 @@ const editCustomCheck = (check) => {
         </div>
       )}
       
+      {/* IGNORED TAB CONTENT */}
+      {dataQualityActiveSubTab === 'ignored' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="text-lg font-semibold text-gray-800">Ignored Issues</h4>
+            <div className="flex gap-2">
+              <button
+                onClick={exportIgnoredToExcel}
+                disabled={ignoredIssues.size === 0}
+                className={`px-4 py-2 bg-white border-2 border-blue-600 text-blue-600 rounded-lg font-medium hover:bg-blue-50 transition-all flex items-center gap-2 ${ignoredIssues.size === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <Download size={16} />
+                Export Ignored
+              </button>
+              {ignoredIssues.size > 0 && (
+                <button
+                  onClick={async () => {
+                    if (!window.confirm(`Clear ${ignoredIssues.size} ignored issues? This will restore them to the issue lists.`)) return;
+                    const emptySet = new Set();
+                    setIgnoredIssues(emptySet);
+                    try {
+                      await supabase
+                        .from('market_land_valuation')
+                        .update({
+                          ignored_issues: [],
+                          updated_at: new Date().toISOString()
+                        })
+                        .eq('job_id', jobData.id);
+                      if (onUpdateJobCache && jobData?.id) {
+                        onUpdateJobCache(jobData.id, null);
+                      }
+                      // Recompute displayed results after clearing ignored
+                      applyAndSetResults(rawResults || {} , emptySet);
+                    } catch (error) {
+                      console.error('Error clearing ignored issues:', error);
+                    }
+                  }}
+                  className="px-4 py-2 bg-yellow-600 text-white rounded-lg font-medium hover:bg-yellow-700 transition-all flex items-center gap-2"
+                >
+                  <X size={16} />
+                  Clear {ignoredIssues.size} Ignored
+                </button>
+              )}
+            </div>
+          </div>
+
+          {ignoredIssues.size === 0 ? (
+            <div className="bg-white border border-gray-200 rounded-lg p-12 text-center">
+              <AlertCircle size={48} className="text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">No Ignored Issues</h3>
+              <p className="text-gray-600">You haven't ignored any issues. Use the "Ignore" action in issue details to move items here.</p>
+            </div>
+          ) : Object.keys(rawResults || {}).length === 0 ? (
+            <div className="bg-white border border-gray-200 rounded-lg p-12 text-center">
+              <AlertCircle size={48} className="text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">Run Analysis to View Details</h3>
+              <p className="text-gray-600">Ignored items will appear here after you run the analysis.</p>
+            </div>
+          ) : (
+            <div>
+              {Object.entries(getIgnoredResults()).map(([category, issues]) => {
+                if (!issues || issues.length === 0) return null;
+                const criticalCount = issues.filter(i => i.severity === 'critical').length;
+                const warningCount = issues.filter(i => i.severity === 'warning').length;
+                const infoCount = issues.filter(i => i.severity === 'info').length;
+                return (
+                  <div key={`ignored-${category}`} className="bg-white border border-gray-200 rounded-lg mb-3 overflow-hidden">
+                    <div className="p-4 bg-gray-50 flex justify-between items-center">
+                      <span className="font-semibold text-gray-800 capitalize">{category.replace(/_/g, ' ')} Ignored ({issues.length})</span>
+                      <div className="flex gap-2">
+                        {criticalCount > 0 && (
+                          <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">{criticalCount} Critical</span>
+                        )}
+                        {warningCount > 0 && (
+                          <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-semibold">{warningCount} Warning</span>
+                        )}
+                        {infoCount > 0 && (
+                          <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">{infoCount} Info</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="p-4 border-t border-gray-200">
+                      {Object.entries(
+                        (issues || []).reduce((acc, issue) => {
+                          if (!acc[issue.check]) acc[issue.check] = [];
+                          acc[issue.check].push(issue);
+                          return acc;
+                        }, {})
+                      ).map(([checkType, checkIssues]) => (
+                        <div key={`ignored-${category}-${checkType}`} className="p-3 bg-gray-50 rounded-lg mb-2 flex justify-between items-center">
+                          <span className="text-sm text-gray-700">{getCheckTitle(checkType)}</span>
+                          <div className="flex items-center gap-3">
+                            <span className={`text-sm font-semibold ${
+                              checkIssues[0].severity === 'critical' ? 'text-red-600' :
+                              checkIssues[0].severity === 'warning' ? 'text-yellow-600' : 'text-blue-600'
+                            }`}>
+                              {checkIssues.length} properties
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const ignoredList = (rawResults[category] || []).filter(r => r.check === checkType).filter(r => ignoredIssues.has(`${r.property_key}-${r.check}`));
+                                setModalData({ title: `${getCheckTitle(checkType)} (Ignored)`, properties: ignoredList });
+                                setShowDetailsModal(true);
+                              }}
+                              className="px-3 py-1 text-xs bg-white border border-blue-600 text-blue-600 rounded hover:bg-blue-50 transition-colors"
+                            >
+                              View Details
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* CUSTOM CHECKS TAB CONTENT */}
       {dataQualityActiveSubTab === 'custom' && (
         <div>
