@@ -1318,11 +1318,30 @@ export async function runUnitRateLotCalculation(jobId, selectedCodes = []) {
 
     const codeDefinitions = rawDataForJob.vendorType === 'BRT' ? (rawDataForJob.codeDefinitions || rawDataForJob.parsed_code_definitions || null) : null;
 
+    // Build VCS identifier map from codeDefinitions for robust matching (vcsKey -> set of identifiers)
+    const vcsIdMap = new Map();
+    if (codeDefinitions && codeDefinitions.sections && codeDefinitions.sections.VCS) {
+      Object.keys(codeDefinitions.sections.VCS).forEach(vkey => {
+        const entry = codeDefinitions.sections.VCS[vkey];
+        const ids = new Set();
+        ids.add(String(vkey));
+        if (entry?.DATA?.VALUE) ids.add(String(entry.DATA.VALUE));
+        if (entry?.DATA?.KEY) ids.add(String(entry.DATA.KEY));
+        // Also include any MAP keys that might identify the VCS
+        if (entry?.KEY) ids.add(String(entry.KEY));
+        vcsIdMap.set(String(vkey), ids);
+      });
+    }
+
     // Iterate over parsed property map and compute acreage based on selectedCodes
     const updates = [];
     for (const [compositeKey, rawRecord] of rawDataForJob.propertyMap.entries()) {
       let totalAcres = 0;
       let totalSf = 0;
+
+      // determine property VCS identifier
+      const propVcsRaw = rawRecord.VCS || rawRecord.vcs || rawRecord.property_vcs || rawRecord.VCS_CODE || null;
+      const propVcs = propVcsRaw ? String(propVcsRaw).trim() : null;
 
       for (let i = 1; i <= 6; i++) {
         const landCode = rawRecord[`LANDUR_${i}`];
@@ -1334,8 +1353,34 @@ export async function runUnitRateLotCalculation(jobId, selectedCodes = []) {
         if (selectedCodes && selectedCodes.length > 0) {
           if (!landCode) continue;
           const codeStr = String(landCode).trim();
-          // Compare both padded and unpadded
-          const matches = selectedCodes.some(sc => String(sc).trim() === codeStr || String(sc).padStart(2, '0') === String(codeStr).padStart(2, '0'));
+
+          // selectedCodes entries are expected to be namespaced as 'VCSKEY::CODE'
+          const matches = selectedCodes.some(scRaw => {
+            const sc = String(scRaw).trim();
+            if (sc.includes('::')) {
+              const [vcsKeySel, codeSel] = sc.split('::').map(s => s.trim());
+              if (!codeSel) return false;
+
+              // code must match
+              const codeMatches = codeSel === codeStr || codeSel.padStart(2, '0') === codeStr.padStart(2, '0');
+              if (!codeMatches) return false;
+
+              // vcs must match property vcs - check known identifiers
+              const idSet = vcsIdMap.get(String(vcsKeySel));
+              if (!idSet) {
+                // fallback: match vcsKeySel against propVcs directly
+                return propVcs && (String(propVcs) === String(vcsKeySel) || String(propVcs).padStart(2,'0') === String(vcsKeySel).padStart(2,'0'));
+              }
+
+              if (!propVcs) return false;
+              return Array.from(idSet).some(id => String(id).trim() === String(propVcs).trim());
+
+            } else {
+              // legacy: user selected un-namespaced code -> match code only across all VCS
+              return sc === codeStr || sc.padStart(2, '0') === codeStr.padStart(2, '0');
+            }
+          });
+
           if (!matches) continue;
         }
 
