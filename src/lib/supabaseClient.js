@@ -1219,77 +1219,79 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
     };
   },
   // ===== SMART ACREAGE CALCULATOR =====
-  getCalculatedAcreage: function(property, vendorType) {
-    // 1. Check direct acre field first
-    if (property.asset_lot_acre && property.asset_lot_acre > 0) {
-      return parseFloat(property.asset_lot_acre).toFixed(2);
+  getCalculatedAcreage: async function(property, vendorType) {
+    // 1. Prefer property_market_analysis fields (migrated schema)
+    const marketAnalysis = property.property_market_analysis || property.property_market_analysis_raw || null;
+
+    const acreField = marketAnalysis?.asset_lot_acre ?? property.asset_lot_acre;
+    if (acreField && parseFloat(acreField) > 0) {
+      return parseFloat(acreField).toFixed(2);
     }
 
-    // 2. Check square feet field and convert
-    if (property.asset_lot_sf && property.asset_lot_sf > 0) {
-      return (property.asset_lot_sf / 43560).toFixed(2);
+    // 2. Check square feet field on market analysis or property
+    const sfField = marketAnalysis?.asset_lot_sf ?? property.asset_lot_sf;
+    if (sfField && parseFloat(sfField) > 0) {
+      return (parseFloat(sfField) / 43560).toFixed(2);
     }
 
-    // 3. Calculate from frontage × depth (NEW!)
-    if (property.asset_lot_frontage && property.asset_lot_depth) {
-      const sf = property.asset_lot_frontage * property.asset_lot_depth;
+    // 3. Calculate from frontage × depth (market analysis first)
+    const frontage = marketAnalysis?.asset_lot_frontage ?? property.asset_lot_frontage;
+    const depth = marketAnalysis?.asset_lot_depth ?? property.asset_lot_depth;
+    if (frontage && depth && parseFloat(frontage) > 0 && parseFloat(depth) > 0) {
+      const sf = parseFloat(frontage) * parseFloat(depth);
       return (sf / 43560).toFixed(2);
     }
 
-    // 4. Check raw data for vendor-specific fields
-    if (vendorType === 'BRT' && property.raw_data) {
-      let totalSf = 0;
-      let totalAcres = 0;
-      
-      // Check LANDUR fields for SF or ACRE
-      for (let i = 1; i <= 6; i++) {
-        const landur = property.raw_data[`LANDUR_${i}`];
-        if (landur) {
-          // Check for SF indicators
-          if (landur.includes('SF') || landur.includes('SITE')) {
-            const match = landur.match(/(\d+)\s*(SF|SITE)/);
-            if (match) totalSf += parseInt(match[1]);
+    // 4. If we have job/property identifiers, try to pull raw parsed source row and inspect LANDURUNITS fields
+    try {
+      if (vendorType === 'BRT' && property.job_id && property.property_composite_key) {
+        const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+        if (rawData) {
+          let totalAcres = 0;
+          let totalSf = 0;
+
+          for (let i = 1; i <= 6; i++) {
+            const unitsRaw = rawData[`LANDURUNITS_${i}`] || rawData[`LANDURUNITS_${i}`.replace(/_/g, '_')];
+            const codeRaw = rawData[`LANDUR_${i}`] || rawData[`LANDUR_${i}`.replace(/_/g, '_')];
+
+            const units = unitsRaw !== undefined && unitsRaw !== null ? parseFloat(String(unitsRaw).replace(/[,\s\"]/g, '')) : NaN;
+            const code = codeRaw !== undefined && codeRaw !== null ? String(codeRaw).trim() : null;
+
+            if (!isNaN(units) && units > 0) {
+              // Try to be smart: if units >= 1000 assume SF, otherwise acres
+              if (units >= 1000) {
+                totalSf += units;
+              } else {
+                totalAcres += units;
+              }
+            }
           }
-          // Check for ACRE indicators
-          if (landur.includes('ACRE') || landur.includes('AC')) {
-            const match = landur.match(/(\d+\.?\d*)\s*(ACRE|AC)/);
-            if (match) totalAcres += parseFloat(match[1]);
-          }
+
+          const acresFromLandur = totalAcres + (totalSf / 43560);
+          if (acresFromLandur > 0) return acresFromLandur.toFixed(2);
         }
       }
-      
-      // Return acres (converted from SF if needed)
-      if (totalAcres > 0) return totalAcres.toFixed(2);
-      if (totalSf > 0) return (totalSf / 43560).toFixed(2);
+    } catch (e) {
+      console.error('Error while reading raw data for acreage calculation:', e);
     }
 
-    // 5. Microsystems vendor check
-    if (vendorType === 'Microsystems' && property.raw_data) {
-      // Check for Microsystems-specific fields
-      // Common field names: 'Lot Area', 'Site Area', 'Acreage'
-      const lotArea = property.raw_data['Lot Area'] || property.raw_data['Site Area'];
-      if (lotArea) {
-        const numValue = parseFloat(lotArea);
-        if (!isNaN(numValue)) {
-          // Microsystems often stores in SF
-          if (numValue > 1000) {
-            // Likely square feet
-            return (numValue / 43560).toFixed(2);
-          } else {
-            // Likely already in acres
-            return numValue.toFixed(2);
+    // 5. Microsystems vendor check using raw parsed source row when available
+    try {
+      if (vendorType === 'Microsystems' && property.job_id && property.property_composite_key) {
+        const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
+        if (rawData) {
+          const lotArea = rawData['Lot Area'] || rawData['Site Area'] || rawData['Acreage'] || rawData['Acres'];
+          if (lotArea) {
+            const numValue = parseFloat(String(lotArea).replace(/[,$]/g, ''));
+            if (!isNaN(numValue)) {
+              if (numValue > 1000) return (numValue / 43560).toFixed(2);
+              return numValue.toFixed(2);
+            }
           }
         }
       }
-      
-      // Check for direct acreage field
-      const acreage = property.raw_data['Acreage'] || property.raw_data['Acres'];
-      if (acreage) {
-        const numValue = parseFloat(acreage);
-        if (!isNaN(numValue)) {
-          return numValue.toFixed(2);
-        }
-      }
+    } catch (e) {
+      console.error('Error while reading raw data for Microsystems acreage calculation:', e);
     }
 
     // Default return if no acreage can be calculated
