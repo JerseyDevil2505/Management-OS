@@ -50,18 +50,6 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     }
   };
 
-  // Debounced effect to persist years whenever user edits them
-  useEffect(() => {
-    if (!jobData?.id) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      saveYearRange(fromYear, toYear);
-    }, 800);
-
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    };
-  }, [fromYear, toYear, jobData?.id]);
 
   // Derive sale year safely
   const safeSaleYear = (p) => {
@@ -376,6 +364,13 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
             onClick={() => { setFromYear(currentYear - 3); setToYear(currentYear); setTypeGroup('single_family'); }}
           >
             Reset
+          </button>
+          <button
+            className="px-3 py-2 bg-green-600 text-white rounded text-sm"
+            onClick={() => saveYearRange(fromYear, toYear)}
+            disabled={isSavingRange}
+          >
+            {isSavingRange ? 'Saving...' : 'Save Years'}
           </button>
           <button
             className="px-3 py-2 bg-indigo-600 text-white rounded text-sm"
