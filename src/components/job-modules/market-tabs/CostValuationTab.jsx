@@ -324,7 +324,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     const ratioPercent = (sumSale && sumSale !== 0) ? `${Math.round((sumAdj / sumSale) * 100)}%` : '—';
 
     return { sumSale, sumAdj, ratioPercent };
-  }, [filtered, includedMap, selectedJobCcfKey, costConvFactor, editedLandMap, currentYear]);
+  }, [filtered, includedMap, costConvFactor, editedLandMap, currentYear]);
 
   return (
     <div className="bg-white rounded-lg p-6">
