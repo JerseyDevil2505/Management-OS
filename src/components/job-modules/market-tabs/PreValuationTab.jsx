@@ -1011,30 +1011,26 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       // Get properties with size-normalized values for analysis
       const normalizedProps = properties.filter(p => p.values_norm_size && p.values_norm_size > 0);
       
-      // Filter by property type
+      // Filter by property type using Type & Use codes
       const filteredProps = normalizedProps.filter(p => {
         const typeUse = p.asset_type_use?.toString().trim();
         if (!typeUse) return false;
-        
+
         switch (blockTypeFilter) {
-          case 'single_family':
+          case '1':
             return typeUse.startsWith('1');
-          case 'semi_detached':
+          case '2':
             return typeUse.startsWith('2');
-          case 'townhouses':
+          case '3':
             return typeUse.startsWith('3');
-          case 'multifamily':
+          case '4':
             return typeUse.startsWith('4');
-          case 'conversions':
+          case '5':
             return typeUse.startsWith('5');
-          case 'condominiums':
+          case '6':
             return typeUse.startsWith('6');
           case 'all_residential':
-            return typeUse.match(/^[1-6]/);
-          case 'commercial':
-            return ['50', '51', '52'].some(code => typeUse === code || typeUse.startsWith(code));
-          case 'all':
-            return true;
+            return ['1','2','3','4','5','6'].some(prefix => typeUse.startsWith(prefix));
           default:
             return true;
         }
