@@ -33,18 +33,29 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   }, [marketLandData]);
 
   // Auto-save cost valuation year range (debounced) to market_land_valuation
+  const [savedYears, setSavedYears] = useState(false);
   const saveYearRange = async (from, to) => {
     if (!jobData?.id) return;
     setIsSavingRange(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('market_land_valuation')
-        .upsert([{ job_id: jobData.id, cost_valuation_from_year: from, cost_valuation_to_year: to, updated_at: new Date().toISOString() }], { onConflict: 'job_id' });
+        .upsert([{ job_id: jobData.id, cost_valuation_from_year: from, cost_valuation_to_year: to, updated_at: new Date().toISOString() }], { onConflict: 'job_id' })
+        .select()
+        .single();
       if (error) throw error;
+      if (data) {
+        // ensure UI reflects saved values
+        if (data.cost_valuation_from_year !== undefined && data.cost_valuation_from_year !== null) setFromYear(Number(data.cost_valuation_from_year));
+        if (data.cost_valuation_to_year !== undefined && data.cost_valuation_to_year !== null) setToYear(Number(data.cost_valuation_to_year));
+      }
       if (onUpdateJobCache && jobData?.id) onUpdateJobCache(jobData.id, null);
+      setSavedYears(true);
+      setTimeout(() => setSavedYears(false), 1500);
       console.log('Saved cost valuation year range', { from, to });
     } catch (e) {
       console.error('Error saving cost valuation date range:', e);
+      alert('Failed to save sales year range. See console.');
     } finally {
       setIsSavingRange(false);
     }
@@ -227,17 +238,21 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
 
   // Save state recommended factor to market_land_valuation
+  const [savedRecommendation, setSavedRecommendation] = useState(false);
   const saveStateRecommendedFactor = async (factor) => {
     if (!jobData?.id) return alert('Missing job id');
     setIsSaving(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('market_land_valuation')
-        .upsert([{ job_id: jobData.id, cost_conv_recommendation: factor, updated_at: new Date().toISOString() }], { onConflict: 'job_id' });
+        .upsert([{ job_id: jobData.id, cost_conv_recommendation: factor, updated_at: new Date().toISOString() }], { onConflict: 'job_id' })
+        .select()
+        .single();
       if (error) throw error;
       setStateRecommendedFactor(factor);
       if (onUpdateJobCache && jobData?.id) onUpdateJobCache(jobData.id, null);
-      alert('Saved state recommended factor');
+      setSavedRecommendation(true);
+      setTimeout(() => setSavedRecommendation(false), 1500);
     } catch (e) {
       console.error('Error saving state recommended factor:', e);
       alert('Failed to save state recommended factor. See console.');
@@ -247,18 +262,22 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   };
 
   // Save job-level cost_conv_factor to market_land_valuation
+  const [savedFactor, setSavedFactor] = useState(false);
   const saveCostConvFactor = async (factor) => {
     if (!jobData?.id) return alert('Missing job id');
     setIsSaving(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('market_land_valuation')
-        .upsert([{ job_id: jobData.id, cost_conv_factor: factor, updated_at: new Date().toISOString() }], { onConflict: 'job_id' });
+        .upsert([{ job_id: jobData.id, cost_conv_factor: factor, updated_at: new Date().toISOString() }], { onConflict: 'job_id' })
+        .select()
+        .single();
       if (error) throw error;
       setCostConvFactor(factor);
       // Invalidate cache if parent provided
       if (onUpdateJobCache && jobData?.id) onUpdateJobCache(jobData.id, null);
-      alert('Saved cost conversion factor');
+      setSavedFactor(true);
+      setTimeout(() => setSavedFactor(false), 1500);
     } catch (e) {
       console.error('Error saving cost conv factor:', e);
       alert('Failed to save factor. See console.');
@@ -290,7 +309,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
               onClick={() => saveCostConvFactor(costConvFactor)}
               disabled={isSaving || costConvFactor === null || costConvFactor === ''}
             >
-              {isSaving ? 'Saving...' : 'Save Factor'}
+              {isSaving ? 'Saving...' : (savedFactor ? 'Saved' : 'Save Factor')}
             </button>
           </div>
           <div className="text-xs text-gray-500 mt-1">Stored on market_land_valuation for this job</div>
@@ -310,7 +329,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                 onClick={() => saveStateRecommendedFactor(stateRecommendedFactor)}
                 disabled={isSaving || stateRecommendedFactor === null || stateRecommendedFactor === ''}
               >
-                {isSaving ? 'Saving...' : 'Save State Recommendation'}
+                {isSaving ? 'Saving...' : (savedRecommendation ? 'Saved' : 'Save State Recommendation')}
               </button>
             </div>
             <div className="text-xs text-gray-500 mt-1">Stored on market_land_valuation as cost_conv_recommendation</div>
@@ -370,7 +389,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
             onClick={() => saveYearRange(fromYear, toYear)}
             disabled={isSavingRange}
           >
-            {isSavingRange ? 'Saving...' : 'Save Years'}
+            {isSavingRange ? 'Saving...' : (savedYears ? 'Saved' : 'Save Years')}
           </button>
           <button
             className="px-3 py-2 bg-indigo-600 text-white rounded text-sm"
@@ -393,14 +412,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
               return has && included;
             }).length} comparable properties</div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              className="px-3 py-2 bg-yellow-600 text-white rounded text-sm"
-              onClick={() => setCostConvFactor(Number(recommendedFactor.toFixed(2)))}
-            >
-              Use Recommendation
-            </button>
-          </div>
+                {/* Recommendation actions removed - keep Save Recommendation manual via Save Factor */}
         </div>
       )}
 
