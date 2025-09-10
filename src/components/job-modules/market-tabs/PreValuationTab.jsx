@@ -332,8 +332,12 @@ useEffect(() => {
         const e = urcMap[k];
         const codeVal = e.KEY || e.DATA?.KEY || k;
         const desc = e.MAP?.['1']?.DATA?.VALUE || e.DATA?.VALUE || '';
-        if (codeVal && !codesMap.has(String(codeVal))) {
-          codesMap.set(String(codeVal), String(desc || `Code ${codeVal}`));
+        if (codeVal) {
+          const compositeKey = `${vcsKey}::${String(codeVal).trim()}`;
+          const label = `${vcsKey} · ${String(codeVal).trim()} — ${String(desc || `Code ${codeVal}`).trim()}`;
+          if (!codesMap.has(compositeKey)) {
+            codesMap.set(compositeKey, { code: String(codeVal).trim(), vcs: vcsKey, description: String(desc || `Code ${codeVal}`).trim(), label });
+          }
         }
       });
     });
@@ -341,7 +345,7 @@ useEffect(() => {
     console.error('Error extracting unit rate codes:', err);
   }
 
-  const codes = Array.from(codesMap.entries()).map(([code, description]) => ({ code, description }));
+  const codes = Array.from(codesMap.entries()).map(([key, meta]) => ({ key, ...meta }));
   setUnitRateCodes(codes);
 
   // restore saved config if jobData contains unit_rate_config
