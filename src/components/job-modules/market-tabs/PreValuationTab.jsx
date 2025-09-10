@@ -124,7 +124,7 @@ const PreValuationTab = ({
 
   // Market Analysis State
   const [marketAnalysisData, setMarketAnalysisData] = useState([]);
-  const [blockTypeFilter, setBlockTypeFilter] = useState('single_family');
+  const [blockTypeFilter, setBlockTypeFilter] = useState('1');
   const [colorScaleStart, setColorScaleStart] = useState(100000);
   const [colorScaleIncrement, setColorScaleIncrement] = useState(50000);
   const [selectedBlockDetails, setSelectedBlockDetails] = useState(null);
