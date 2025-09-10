@@ -891,26 +891,42 @@ const getPricePerUnit = useCallback((price, size) => {
       const newSales = properties.filter(prop => {
         if (existingIds.has(prop.id)) return false;
 
-        const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
-        const inDateRange = prop.sales_date >= dateRange.start.toISOString().split('T')[0] &&
-                            prop.sales_date <= dateRange.end.toISOString().split('T')[0];
+        // Validate sale price (ignore placeholders <= 10) and parse dates reliably
+        const hasValidSale = prop.sales_date && prop.sales_price && Number(prop.sales_price) > 10;
+        const saleDateObj = prop.sales_date ? new Date(prop.sales_date) : null;
+        const startDate = new Date(dateRange.start); startDate.setHours(0,0,0,0);
+        const endDate = new Date(dateRange.end); endDate.setHours(23,59,59,999);
+        const inDateRange = saleDateObj instanceof Date && !isNaN(saleDateObj) && saleDateObj >= startDate && saleDateObj <= endDate;
 
-        const nu = prop.sales_nu || '';
-        const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
-                        nu === '7' || nu.charCodeAt(0) === 32;
+        const nu = (prop.sales_nu || '').toString();
+        const nuTrim = nu.trim();
+        const validNu = nuTrim === '' || ['00','07','7'].includes(nuTrim) || nu.startsWith(' ');
 
-        const isAdditionalCard = prop.property_addl_card &&
-                          prop.property_addl_card !== 'NONE' &&
-                          prop.property_addl_card !== 'M';
+        // Additional card logic per vendor
+        let isAdditionalCard = false;
+        if (prop.property_addl_card) {
+          const card = String(prop.property_addl_card).trim().toUpperCase();
+          if (vendorType === 'BRT') {
+            // BRT: numeric cards, primary starts with '1'
+            if (card === '' || card === 'NONE') isAdditionalCard = false;
+            else if (!card.startsWith('1')) isAdditionalCard = true;
+          } else if (vendorType === 'Microsystems') {
+            // Microsystems: primary card is 'M'
+            if (card === '' || card === 'NONE' || card === 'M') isAdditionalCard = false;
+            else isAdditionalCard = true;
+          } else {
+            if (card !== 'NONE' && card !== 'M') isAdditionalCard = true;
+          }
+        }
         if (isAdditionalCard) return false;
 
-        const isVacantClass = prop.property_m4_class === '1' || prop.property_m4_class === '3B';
-        const isTeardown = prop.property_m4_class === '2' &&
+        const isVacantClass = String(prop.property_m4_class).toUpperCase() === '1' || String(prop.property_m4_class).toUpperCase() === '3B';
+        const isTeardown = String(prop.property_m4_class) === '2' &&
                           prop.asset_building_class && parseInt(prop.asset_building_class) > 10 &&
                           prop.asset_design_style &&
                           prop.asset_type_use &&
                           prop.values_mod_improvement < 10000;
-        const isPreConstruction = prop.property_m4_class === '2' &&
+        const isPreConstruction = String(prop.property_m4_class) === '2' &&
                                  prop.asset_building_class && parseInt(prop.asset_building_class) > 10 &&
                                  prop.asset_design_style &&
                                  prop.asset_type_use &&
@@ -949,35 +965,48 @@ const getPricePerUnit = useCallback((price, size) => {
         return false;
       }
 
-      const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
-      const inDateRange = prop.sales_date >= dateRange.start.toISOString().split('T')[0] &&
-                          prop.sales_date <= dateRange.end.toISOString().split('T')[0];
+      // Validate sale price (ignore placeholders <= 10) and normalize dates
+      const hasValidSale = prop.sales_date && prop.sales_price && Number(prop.sales_price) > 10;
+      const saleDateObj = prop.sales_date ? new Date(prop.sales_date) : null;
+      const startDate = new Date(dateRange.start); startDate.setHours(0,0,0,0);
+      const endDate = new Date(dateRange.end); endDate.setHours(23,59,59,999);
+      const inDateRange = saleDateObj instanceof Date && !isNaN(saleDateObj) && saleDateObj >= startDate && saleDateObj <= endDate;
 
       // Check NU codes for valid sales
-      const nu = prop.sales_nu || '';
-      const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
-                      nu === '7' || nu.charCodeAt(0) === 32;
+      const nu = (prop.sales_nu || '').toString();
+      const nuTrim = nu.trim();
+      const validNu = nuTrim === '' || ['00','07','7'].includes(nuTrim) || nu.startsWith(' ');
 
-      // Skip additional cards - they don't have land
-      const isAdditionalCard = prop.property_addl_card &&
-                        prop.property_addl_card !== 'NONE' &&
-                        prop.property_addl_card !== 'M';
+      // Skip additional cards - they don't have land (vendor-specific rules)
+      let isAdditionalCard = false;
+      if (prop.property_addl_card) {
+        const card = String(prop.property_addl_card).trim().toUpperCase();
+        if (vendorType === 'BRT') {
+          if (card === '' || card === 'NONE') isAdditionalCard = false;
+          else if (!card.startsWith('1')) isAdditionalCard = true;
+        } else if (vendorType === 'Microsystems') {
+          if (card === '' || card === 'NONE' || card === 'M') isAdditionalCard = false;
+          else isAdditionalCard = true;
+        } else {
+          if (card !== 'NONE' && card !== 'M') isAdditionalCard = true;
+        }
+      }
       if (isAdditionalCard) {
         return false;
       }
 
       // Standard vacant classes
-      const isVacantClass = prop.property_m4_class === '1' || prop.property_m4_class === '3B';
+      const isVacantClass = String(prop.property_m4_class).toUpperCase() === '1' || String(prop.property_m4_class).toUpperCase() === '3B';
 
       // NEW: Teardown detection (Class 2 with minimal improvement)
-      const isTeardown = prop.property_m4_class === '2' &&
+      const isTeardown = String(prop.property_m4_class) === '2' &&
                         prop.asset_building_class && parseInt(prop.asset_building_class) > 10 &&
                         prop.asset_design_style &&
                         prop.asset_type_use &&
                         prop.values_mod_improvement < 10000;
 
       // NEW: Pre-construction detection (sold before house was built)
-      const isPreConstruction = prop.property_m4_class === '2' &&
+      const isPreConstruction = String(prop.property_m4_class) === '2' &&
                                prop.asset_building_class && parseInt(prop.asset_building_class) > 10 &&
                                prop.asset_design_style &&
                                prop.asset_type_use &&
