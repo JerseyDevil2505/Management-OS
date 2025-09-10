@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Calculator } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 
@@ -15,13 +15,48 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   const [costConvFactor, setCostConvFactor] = useState(marketLandData?.cost_conv_factor ?? null);
   const [stateRecommendedFactor, setStateRecommendedFactor] = useState(marketLandData?.cost_conv_recommendation ?? null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingRange, setIsSavingRange] = useState(false);
   const [includedMap, setIncludedMap] = useState({});
   const [editedLandMap, setEditedLandMap] = useState({});
+  // Debounce timer ref for auto-saving the year range
+  const saveTimerRef = useRef(null);
 
   useEffect(() => {
     setCostConvFactor(marketLandData?.cost_conv_factor ?? null);
     setStateRecommendedFactor(marketLandData?.cost_conv_recommendation ?? null);
   }, [marketLandData]);
+
+  // Auto-save cost valuation year range (debounced) to market_land_valuation
+  const saveYearRange = async (from, to) => {
+    if (!jobData?.id) return;
+    setIsSavingRange(true);
+    try {
+      const { error } = await supabase
+        .from('market_land_valuation')
+        .update({ cost_valuation_from_year: from, cost_valuation_to_year: to, updated_at: new Date().toISOString() })
+        .eq('job_id', jobData.id);
+      if (error) throw error;
+      if (onUpdateJobCache && jobData?.id) onUpdateJobCache(jobData.id, null);
+      console.log('Saved cost valuation year range', { from, to });
+    } catch (e) {
+      console.error('Error saving cost valuation date range:', e);
+    } finally {
+      setIsSavingRange(false);
+    }
+  };
+
+  // Debounced effect to persist years whenever user edits them
+  useEffect(() => {
+    if (!jobData?.id) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveYearRange(fromYear, toYear);
+    }, 800);
+
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [fromYear, toYear, jobData?.id]);
 
   // Derive sale year safely
   const safeSaleYear = (p) => {
