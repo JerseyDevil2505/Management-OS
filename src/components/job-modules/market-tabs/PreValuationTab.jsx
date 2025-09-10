@@ -1973,6 +1973,18 @@ const analyzeImportFile = async (file) => {
           Market Analysis
         </button>
         <button
+          onClick={() => setActiveSubTab('unitRates')}
+          disabled={vendorType !== 'BRT'}
+          title={vendorType !== 'BRT' ? 'Unit Rate Configuration is only available for BRT jobs' : ''}
+          className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+            activeSubTab === 'unitRates'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-gray-600 hover:text-gray-800'
+          } ${vendorType !== 'BRT' ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          Unit Rate Configuration
+        </button>
+        <button
           onClick={() => setActiveSubTab('worksheet')}
           className={`px-4 py-2 font-medium border-b-2 transition-colors ${
             activeSubTab === 'worksheet'
