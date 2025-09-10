@@ -1528,7 +1528,28 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
         // Skip site-value code '01' per rules
         if (codeStrRaw === '01') continue;
 
-        // Accept any other LANDUR_* codes as valid for acreage regardless of selectedCodes
+        // If user provided selectedCodes, respect them (selectedCodes acts as an inclusion list)
+        if (selectedCodes && selectedCodes.length > 0) {
+          if (!landCode) continue;
+          const codeStr = String(landCode).trim().padStart(2, '0');
+          const matches = selectedCodes.some(scRaw => {
+            const sc = String(scRaw).trim();
+            if (sc.includes('::')) {
+              const [vcsKeySel, codeSel] = sc.split('::').map(s => s.trim());
+              if (!codeSel) return false;
+              const codeMatches = codeSel === codeStr || codeSel.padStart(2, '0') === codeStr.padStart(2, '0');
+              if (!codeMatches) return false;
+              const idSet = vcsIdMap.get(String(vcsKeySel));
+              if (!idSet) return propVcs && (String(propVcs) === String(vcsKeySel) || String(propVcs).padStart(2,'0') === String(vcsKeySel).padStart(2,'0'));
+              if (!propVcs) return false;
+              return Array.from(idSet).some(id => String(id).trim() === String(propVcs).trim());
+            } else {
+              return sc === codeStr || sc.padStart(2, '0') === codeStr.padStart(2, '0');
+            }
+          });
+          if (!matches) continue;
+        }
+
         if (units >= 1000) totalSf += units; else totalAcres += units;
       }
 
