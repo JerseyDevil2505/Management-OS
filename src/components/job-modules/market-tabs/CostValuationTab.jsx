@@ -622,9 +622,14 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                     const camaRow = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
                     const improvRow = Math.round(salePriceRow - camaRow - detItemsRow);
                     if (!replWithDeprRow) return '—';
-                    if (!selectedJobCcfKey || selectedJobCcfKey !== key || costConvFactor === null || costConvFactor === '') return '—';
-                    const adjustedValue = (camaRow + ((baseVal * (deprRow !== '' ? deprRow : 0)) * Number(costConvFactor)) + detItemsRow);
-                    const ratio = (salePriceRow && adjustedValue) ? (adjustedValue / salePriceRow) : null;
+                    let adjustedValueRow = null;
+                    if (costConvFactor !== null && costConvFactor !== '') {
+                      adjustedValueRow = (camaRow + ((baseVal * (deprRow !== '' ? deprRow : 0)) * Number(costConvFactor)) + detItemsRow);
+                    } else {
+                      const ccf = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : 0;
+                      adjustedValueRow = (camaRow + ((baseVal * (deprRow !== '' ? deprRow : 0)) * ccf) + detItemsRow);
+                    }
+                    const ratio = (salePriceRow && adjustedValueRow) ? (adjustedValueRow / salePriceRow) : null;
                     return ratio ? formatPercentNoDecimals(ratio) : '—';
                   })()}</td>
                 </tr>
