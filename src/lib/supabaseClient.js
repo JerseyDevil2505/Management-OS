@@ -1407,15 +1407,19 @@ export async function runUnitRateLotCalculation(jobId, selectedCodes = []) {
       const { error } = await supabase.from('property_market_analysis').upsert(batch, { onConflict: ['job_id','property_composite_key'] });
       if (error) {
         console.error('Error upserting market analysis batch:', error);
-        throw error;
+        // Normalize Supabase error to a readable message
+        const msg = (error && error.message) ? error.message : JSON.stringify(error);
+        throw new Error(`Upsert batch failed: ${msg}`);
       }
     }
 
     return { updated: updates.length };
 
   } catch (error) {
+    // Ensure we surface a readable error message to callers/UI
     console.error('runUnitRateLotCalculation error:', error);
-    throw error;
+    const msg = (error && error.message) ? error.message : JSON.stringify(error);
+    throw new Error(msg);
   }
 }
 
