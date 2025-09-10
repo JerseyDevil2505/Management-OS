@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase, interpretCodes, worksheetService, checklistService, runUnitRateLotCalculation } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 import { 
@@ -358,6 +358,24 @@ useEffect(() => {
 
 }, [codeDefinitions, jobData]);
 
+// Group unit rate codes by description so we can show only a single instance per description
+const groupedUnitRateCodes = useMemo(() => {
+  const map = new Map();
+  unitRateCodes.forEach(u => {
+    const desc = (u.description || `Code ${u.code}`).trim();
+    if (!map.has(desc)) map.set(desc, { description: desc, items: [] });
+    map.get(desc).items.push(u);
+  });
+
+  return Array.from(map.values()).map(g => ({
+    description: g.description,
+    items: g.items.sort((a, b) => (a.vcs || '').localeCompare(b.vcs || '') || (a.code || '').localeCompare(b.code || ''))
+  })).sort((a, b) => a.description.localeCompare(b.description));
+}, [unitRateCodes]);
+
+// Refs for checkbox indeterminate state per group
+const groupRefs = useRef({});
+
 // ==================== USE SAVED NORMALIZATION DATA FROM PROPS ====================
 useEffect(() => {
   if (!marketLandData) {
@@ -424,6 +442,19 @@ useEffect(() => {
     const s = new Set(selectedUnitRateCodes);
     if (s.has(key)) s.delete(key);
     else s.add(key);
+    setSelectedUnitRateCodes(new Set(s));
+  };
+
+  const toggleUnitRateGroup = (description) => {
+    const group = groupedUnitRateCodes.find(g => g.description === description);
+    if (!group) return;
+    const s = new Set(selectedUnitRateCodes);
+    const allSelected = group.items.every(i => s.has(i.key));
+    if (allSelected) {
+      group.items.forEach(i => s.delete(i.key));
+    } else {
+      group.items.forEach(i => s.add(i.key));
+    }
     setSelectedUnitRateCodes(new Set(s));
   };
 
@@ -2878,24 +2909,34 @@ const analyzeImportFile = async (file) => {
             <div className="grid grid-cols-3 gap-4">
               <div className="col-span-2">
                 <div className="border rounded p-2 max-h-64 overflow-auto">
-                  {unitRateCodes.length === 0 ? (
+                  {groupedUnitRateCodes.length === 0 ? (
                     <div className="text-sm text-gray-500">No unit rate codes found for this job.</div>
                   ) : (
-                    unitRateCodes.map(u => (
-                      <label key={u.key} className="flex items-center gap-3 py-1">
-                        <input
-                          type="checkbox"
-                          disabled={vendorType !== 'BRT'}
-                          checked={selectedUnitRateCodes.has(u.key)}
-                          onChange={() => toggleUnitRateCode(u.key)}
-                        />
-                        <div className="text-sm">
-                          <div className="font-medium">{u.code}</div>
-                          <div className="text-xs text-gray-500">{u.description} <span className="text-xs text-gray-400">({u.vcs})</span></div>
-                          <div className="text-xs text-gray-500">{u.label}</div>
+                    groupedUnitRateCodes.map(group => {
+                      const allSelected = group.items.every(i => selectedUnitRateCodes.has(i.key));
+                      const someSelected = group.items.some(i => selectedUnitRateCodes.has(i.key));
+                      const desc = group.description;
+
+                      return (
+                        <div key={desc} className="py-1">
+                          <label className="flex items-center gap-3">
+                            <input
+                              ref={el => { groupRefs.current[desc] = el; if (el) el.indeterminate = someSelected && !allSelected; }}
+                              type="checkbox"
+                              disabled={vendorType !== 'BRT'}
+                              checked={allSelected}
+                              onChange={() => toggleUnitRateGroup(desc)}
+                            />
+
+                            <div className="text-sm flex-1">
+                              <div className="font-medium">{desc}</div>
+                              <div className="text-xs text-gray-500">{group.items.length} instance{group.items.length > 1 ? 's' : ''} • {group.items.map(i => `${i.vcs}·${i.code}`).join(', ')}</div>
+                            </div>
+
+                          </label>
                         </div>
-                      </label>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>
