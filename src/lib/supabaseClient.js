@@ -1423,6 +1423,146 @@ export async function runUnitRateLotCalculation(jobId, selectedCodes = []) {
   }
 }
 
+// ===== UNIT RATE LOT CALCULATION (v2) =====
+export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
+  if (!jobId) throw new Error('jobId required');
+  try {
+    const rawDataForJob = await getRawDataForJob(jobId);
+    if (!rawDataForJob) throw new Error('No source file parsed data available for this job');
+
+    const codeDefinitions = rawDataForJob.vendorType === 'BRT' ? (rawDataForJob.codeDefinitions || rawDataForJob.parsed_code_definitions || null) : null;
+
+    const vcsIdMap = new Map();
+    if (codeDefinitions && codeDefinitions.sections && codeDefinitions.sections.VCS) {
+      Object.keys(codeDefinitions.sections.VCS).forEach(vkey => {
+        const entry = codeDefinitions.sections.VCS[vkey];
+        const ids = new Set();
+        ids.add(String(vkey));
+        if (entry?.DATA?.VALUE) ids.add(String(entry.DATA.VALUE));
+        if (entry?.DATA?.KEY) ids.add(String(entry.DATA.KEY));
+        if (entry?.KEY) ids.add(String(entry.KEY));
+        vcsIdMap.set(String(vkey), ids);
+      });
+    }
+
+    // Build a propertyMap fallback if parsed map is empty
+    let propertyMap = rawDataForJob.propertyMap instanceof Map ? rawDataForJob.propertyMap : new Map();
+
+    if ((!propertyMap || propertyMap.size === 0)) {
+      // fetch raw content directly
+      const { data: job, error: jobErr } = await supabase
+        .from('jobs')
+        .select('raw_file_content, ccdd_code, start_date')
+        .eq('id', jobId)
+        .single();
+
+      if (!jobErr && job?.raw_file_content) {
+        const lines = job.raw_file_content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (lines.length >= 2) {
+          const headers = parseCSVLine(lines[0]).map(h => String(h || '').trim());
+          const map = new Map();
+          const yearCreated = job.start_date ? new Date(job.start_date).getFullYear() : (new Date()).getFullYear();
+          const ccddCode = job.ccdd_code || '';
+
+          for (let i = 1; i < lines.length; i++) {
+            const values = parseCSVLine(lines[i]);
+            if (values.length !== headers.length) continue;
+            const rec = {};
+            headers.forEach((h, idx) => {
+              const key = (h || `F${idx+1}`).toString().trim();
+              rec[key] = values[idx] !== undefined ? values[idx] : null;
+            });
+
+            let compositeKey = null;
+            try { compositeKey = generateCompositeKeyFromRecord(rec, rawDataForJob.vendorType || 'BRT', yearCreated, ccddCode); } catch (e) { compositeKey = null; }
+            if (!compositeKey) {
+              const f1 = (values[0] || '').toString().replace(/[^0-9A-Za-z\.\-_ ]/g, '').trim();
+              const f2 = (values[1] || '').toString().replace(/[^0-9A-Za-z\.\-_ ]/g, '').trim();
+              const f3 = (values[2] || '').toString().replace(/[^0-9A-Za-z\.\-_ ]/g, '').trim();
+              const f4 = (values[3] || '').toString().replace(/[^0-9A-Za-z\.\-_ ]/g, '').trim();
+              const addr = (values[6] || '').toString().replace(/["\n\r]/g, '').trim() || 'NONE';
+              compositeKey = `${yearCreated}${ccddCode}-${f1}-${f2}_${f3}-${f4}-${addr}`;
+            }
+            map.set(compositeKey, rec);
+          }
+
+          if (map.size > 0) propertyMap = map;
+        }
+      }
+    }
+
+    const updates = [];
+    const stats = { totalParsed: 0, acreageSet: 0, sampledNullKeys: [] };
+
+    for (const [compositeKey, rawRecord] of propertyMap.entries()) {
+      stats.totalParsed++;
+      let totalAcres = 0; let totalSf = 0;
+
+      const propVcsRaw = rawRecord.VCS || rawRecord.vcs || rawRecord.property_vcs || rawRecord.VCS_CODE || rawRecord.vcs_code || null;
+      const propVcs = propVcsRaw ? String(propVcsRaw).trim() : null;
+
+      for (let i = 1; i <= 6; i++) {
+        const landKeys = [`LANDUR_${i}`, `LANDUR${i}`, `LANDUR ${i}`];
+        const unitKeys = [`LANDURUNITS_${i}`, `LANDURUNITS${i}`, `LANDURUNITS ${i}`];
+        let landCode = null; let landUnitsRaw = null;
+        for (const k of landKeys) { if (rawRecord[k] !== undefined) { landCode = rawRecord[k]; break; } }
+        for (const k of unitKeys) { if (rawRecord[k] !== undefined) { landUnitsRaw = rawRecord[k]; break; } }
+
+        const units = landUnitsRaw !== undefined && landUnitsRaw !== null ? parseFloat(String(landUnitsRaw).replace(/[,$\s\"]/g, '')) : NaN;
+        if (isNaN(units) || units <= 0) continue;
+
+        if (selectedCodes && selectedCodes.length > 0) {
+          if (!landCode) continue;
+          const codeStr = String(landCode).trim();
+          const matches = selectedCodes.some(scRaw => {
+            const sc = String(scRaw).trim();
+            if (sc.includes('::')) {
+              const [vcsKeySel, codeSel] = sc.split('::').map(s => s.trim());
+              if (!codeSel) return false;
+              const codeMatches = codeSel === codeStr || codeSel.padStart(2,'0') === codeStr.padStart(2,'0');
+              if (!codeMatches) return false;
+              const idSet = vcsIdMap.get(String(vcsKeySel));
+              if (!idSet) return propVcs && (String(propVcs) === String(vcsKeySel) || String(propVcs).padStart(2,'0') === String(vcsKeySel).padStart(2,'0'));
+              if (!propVcs) return false;
+              return Array.from(idSet).some(id => String(id).trim() === String(propVcs).trim());
+            } else {
+              return sc === codeStr || sc.padStart(2,'0') === codeStr.padStart(2,'0');
+            }
+          });
+          if (!matches) continue;
+        }
+
+        if (units >= 1000) totalSf += units; else totalAcres += units;
+      }
+
+      const acres = totalAcres + (totalSf / 43560);
+      const recordAcre = acres > 0 ? parseFloat(acres.toFixed(4)) : null;
+      if (recordAcre !== null) stats.acreageSet++; else { if (stats.sampledNullKeys.length < 20) stats.sampledNullKeys.push(compositeKey); }
+
+      updates.push({ job_id: jobId, property_composite_key: compositeKey, market_manual_lot_acre: recordAcre, market_unit_codes_applied: selectedCodes });
+    }
+
+    // Upsert in batches
+    const batchSize = 200;
+    for (let i = 0; i < updates.length; i += batchSize) {
+      const batch = updates.slice(i, i + batchSize);
+      const { error } = await supabase.from('property_market_analysis').upsert(batch, { onConflict: ['job_id','property_composite_key'] });
+      if (error) {
+        console.error('Error upserting market analysis batch (v2):', error);
+        const msg = (error && error.message) ? error.message : JSON.stringify(error);
+        throw new Error(`Upsert batch failed: ${msg}`);
+      }
+    }
+
+    return { updated: updates.length, acreage_set: stats.acreageSet, acreage_null: updates.length - stats.acreageSet, sample_null_keys: stats.sampledNullKeys };
+
+  } catch (error) {
+    console.error('runUnitRateLotCalculation_v2 error:', error);
+    const msg = (error && error.message) ? error.message : JSON.stringify(error);
+    throw new Error(msg);
+  }
+}
+
 // ===== EMPLOYEE MANAGEMENT SERVICES =====
 export const employeeService = {
   async getAll() {
