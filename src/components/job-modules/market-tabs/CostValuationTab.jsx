@@ -299,14 +299,23 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       const salePrice = (p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
       if (isFinite(salePrice)) sumSale += salePrice;
 
-      if (selectedJobCcfKey && selectedJobCcfKey === key && costConvFactor !== null && costConvFactor !== '') {
+      // compute adjusted value for this row using job-level factor if present, otherwise use per-row CCF
+      {
         const detItems = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
         const baseVal = (p.values_base_cost !== undefined && p.values_base_cost !== null) ? Number(p.values_base_cost) : 0;
         const yearBuilt = p.asset_year_built || '';
         const depr = yearBuilt ? (1 - ((currentYear - parseInt(yearBuilt, 10)) / 100)) : '';
         if (depr) {
           const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
-          const adjustedValue = (cama + ((baseVal * (depr !== '' ? depr : 0)) * Number(costConvFactor)) + detItems);
+          let adjustedValue = null;
+          if (costConvFactor !== null && costConvFactor !== '') {
+            adjustedValue = (cama + ((baseVal * (depr !== '' ? depr : 0)) * Number(costConvFactor)) + detItems);
+          } else {
+            const replWithDepr = (detItems + baseVal) * depr;
+            const improv = salePrice - cama - detItems;
+            const ccf = (replWithDepr && replWithDepr !== 0) ? (improv / replWithDepr) : null;
+            if (ccf !== null) adjustedValue = (cama + ((baseVal * (depr !== '' ? depr : 0)) * ccf) + detItems);
+          }
           if (isFinite(adjustedValue)) sumAdj += adjustedValue;
         }
       }
