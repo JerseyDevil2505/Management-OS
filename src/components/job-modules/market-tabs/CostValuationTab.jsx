@@ -211,6 +211,11 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     return null;
   };
 
+  const formatNumberNoDecimals = (v) => {
+    if (v === '' || v === null || v === undefined || !isFinite(Number(v))) return '—';
+    return Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 });
+  };
+
   const formatCurrency = (v) => {
     if (v === '' || v === null || v === undefined || !isFinite(Number(v))) return '—';
     return Number(v).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
