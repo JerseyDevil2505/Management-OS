@@ -16,6 +16,10 @@ import UserManagement from './components/UserManagement';
 
 const App = () => {
   // ==========================================
+  // Authentication state (move to top to avoid TDZ)
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
   // URL-BASED VIEW STATE (FIXES F5 ISSUE!)
   // ==========================================
   const [activeView, setActiveView] = useState(() => {
