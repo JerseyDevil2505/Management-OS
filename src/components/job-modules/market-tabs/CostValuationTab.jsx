@@ -149,16 +149,19 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       // asset_type_use exists on property_records
       const typeVal = p.asset_type_use ? p.asset_type_use.toString().trim() : '';
 
-      // Apply typeGroup filter
+      // Apply typeGroup filter using code prefixes
       if (typeGroup && typeGroup !== 'all') {
-        if (typeGroup === 'single_family' && !typeVal.startsWith('1')) return false;
-        if (typeGroup === 'semi_detached' && !typeVal.startsWith('2')) return false;
-        if (typeGroup === 'townhouses' && !typeVal.startsWith('3')) return false;
-        if (typeGroup === 'multifamily' && !typeVal.startsWith('4')) return false;
-        if (typeGroup === 'conversions' && !typeVal.startsWith('5')) return false;
-        if (typeGroup === 'condominiums' && !typeVal.startsWith('6')) return false;
-        if (typeGroup === 'commercial' && !typeVal.startsWith('4') && !typeVal.startsWith('5') && !typeVal.startsWith('6') && !typeVal.startsWith('7')) {
-          // coarse commercial check - leave as-is for non-residential
+        // Normalize typeVal to string
+        const tv = (typeVal || '').toString();
+        if (typeGroup === 'all_residential') {
+          // Accept codes starting with 1-6
+          if (!['1','2','3','4','5','6'].some(prefix => tv.startsWith(prefix))) return false;
+        } else if (typeGroup === 'commercial') {
+          // Coarse commercial: exclude residential prefixes 1-6
+          if (['1','2','3','4','5','6'].some(prefix => tv.startsWith(prefix))) return false;
+        } else {
+          // Single prefix/group (e.g., '1','2','3','4','5','6')
+          if (!tv.startsWith(typeGroup)) return false;
         }
       }
 
@@ -497,12 +500,12 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
             onChange={(e) => setTypeGroup(e.target.value)}
             className="px-3 py-2 border rounded w-48"
           >
-            <option value="single_family">Single Family (1x)</option>
-            <option value="semi_detached">Semi-Detached (2x)</option>
-            <option value="townhouses">Row/Townhouses (3x)</option>
-            <option value="multifamily">Multifamily (4x)</option>
-            <option value="conversions">Conversions (5x)</option>
-            <option value="condominiums">Condominiums (6x)</option>
+            <option value="1">1 — Single Family</option>
+            <option value="2">2 — Duplex / Semi-Detached</option>
+            <option value="3">3* — Row / Townhouse (3E, 3I, 30, 31)</option>
+            <option value="4">4* — MultiFamily (42,43,44)</option>
+            <option value="5">5* — Conversions (51,52,53)</option>
+            <option value="6">6 — Condominium</option>
             <option value="all_residential">All Residential</option>
             <option value="commercial">Commercial</option>
             <option value="all">All Properties</option>
