@@ -600,9 +600,15 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                     const improvRow = Math.round(salePriceRow - camaRow - detItemsRow);
                     // compute adjusted value here: Current Land + ((Base Cost * Depr) * JOB CCF) + Det Item - only when this row is selected
                     if (!replWithDeprRow) return '—';
-                    if (!selectedJobCcfKey || selectedJobCcfKey !== key || costConvFactor === null || costConvFactor === '') return '';
-                    const adjustedValue = (camaRow + ((baseVal * (deprRow !== '' ? deprRow : 0)) * Number(costConvFactor)) + detItemsRow);
-                    return isFinite(adjustedValue) ? formatCurrencyNoCents(Math.round(adjustedValue)) : '—';
+                    // Use job-level factor when available, otherwise compute per-row CCF
+                    let adjustedValueRow = null;
+                    if (costConvFactor !== null && costConvFactor !== '') {
+                      adjustedValueRow = (camaRow + ((baseVal * (deprRow !== '' ? deprRow : 0)) * Number(costConvFactor)) + detItemsRow);
+                    } else {
+                      const ccf = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : 0;
+                      adjustedValueRow = (camaRow + ((baseVal * (deprRow !== '' ? deprRow : 0)) * ccf) + detItemsRow);
+                    }
+                    return isFinite(adjustedValueRow) ? formatCurrencyNoCents(Math.round(adjustedValueRow)) : '—';
                   })()}</td>
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
