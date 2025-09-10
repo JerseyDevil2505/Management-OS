@@ -468,6 +468,17 @@ useEffect(() => {
     setSelectedUnitRateCodes(new Set(s));
   };
 
+  const formatError = (err) => {
+    try {
+      if (!err) return 'Unknown error';
+      if (typeof err === 'string') return err;
+      if (err.message) return err.message;
+      return JSON.stringify(err);
+    } catch (e) {
+      return String(err);
+    }
+  };
+
   const saveUnitRateConfig = async () => {
     if (!jobData?.id) return;
     setIsSavingUnitConfig(true);
@@ -478,7 +489,7 @@ useEffect(() => {
       alert('Unit rate configuration saved');
     } catch (e) {
       console.error('Error saving unit rate config:', e);
-      alert('Failed to save unit rate configuration');
+      alert(`Failed to save unit rate configuration: ${formatError(e)}`);
     } finally {
       setIsSavingUnitConfig(false);
     }
@@ -495,7 +506,7 @@ useEffect(() => {
       if (onUpdateJobCache) onUpdateJobCache(jobData.id);
     } catch (e) {
       console.error('Error calculating unit rates:', e);
-      alert('Calculation failed');
+      alert(`Calculation failed: ${formatError(e)}`);
     } finally {
       setIsCalculatingUnitSizes(false);
     }
@@ -2457,7 +2468,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('card')}
                             >
-                              Card {normSortConfig.field === 'card' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                              Card {normSortConfig.field === 'card' && (normSortConfig.direction === 'asc' ? '��' : '↓')}
                             </th>
                             <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-32 cursor-pointer hover:bg-gray-100"
