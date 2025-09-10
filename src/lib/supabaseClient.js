@@ -1220,21 +1220,27 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
   },
   // ===== SMART ACREAGE CALCULATOR =====
   getCalculatedAcreage: function(property, vendorType) {
-    // 1. Prefer property_market_analysis fields (migrated schema)
+    // 1. Prefer a manual override field in property_market_analysis
     const marketAnalysis = property.property_market_analysis || property.property_market_analysis_raw || null;
 
+    const manualAcre = marketAnalysis?.market_manual_lot_acre ?? marketAnalysis?.market_manual_acre ?? property.market_manual_lot_acre;
+    if (manualAcre && parseFloat(manualAcre) > 0) {
+      return parseFloat(manualAcre).toFixed(2);
+    }
+
+    // 2. Prefer property_market_analysis fields (migrated schema)
     const acreField = marketAnalysis?.asset_lot_acre ?? property.asset_lot_acre;
     if (acreField && parseFloat(acreField) > 0) {
       return parseFloat(acreField).toFixed(2);
     }
 
-    // 2. Check square feet field on market analysis or property
+    // 3. Check square feet field on market analysis or property
     const sfField = marketAnalysis?.asset_lot_sf ?? property.asset_lot_sf;
     if (sfField && parseFloat(sfField) > 0) {
       return (parseFloat(sfField) / 43560).toFixed(2);
     }
 
-    // 3. Calculate from frontage × depth (market analysis first)
+    // 4. Calculate from frontage × depth (market analysis first)
     const frontage = marketAnalysis?.asset_lot_frontage ?? property.asset_lot_frontage;
     const depth = marketAnalysis?.asset_lot_depth ?? property.asset_lot_depth;
     if (frontage && depth && parseFloat(frontage) > 0 && parseFloat(depth) > 0) {
@@ -1242,7 +1248,7 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
       return (sf / 43560).toFixed(2);
     }
 
-    // 4. Try to use raw_data attached to property (non-async fallback)
+    // 5. Try to use raw_data attached to property (non-async fallback)
     try {
       if (vendorType === 'BRT' && property.raw_data) {
         let totalAcres = 0;
@@ -1282,6 +1288,15 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
       }
     } catch (e) {
       console.error('Error while parsing raw_data for acreage calculation fallback:', e);
+    }
+
+    // 6. Fall back to PROPERTY_ACREAGE (divide by 10000) if present
+    if (property.PROPERTY_ACREAGE || property.property_acreage) {
+      const propAcreage = parseFloat(property.PROPERTY_ACREAGE ?? property.property_acreage);
+      if (!isNaN(propAcreage) && propAcreage > 0) {
+        const acres = propAcreage / 10000;
+        return acres.toFixed(2);
+      }
     }
 
     // Default return if no acreage can be calculated
