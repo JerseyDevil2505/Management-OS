@@ -1567,10 +1567,10 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
             const unitsNum = parseFloat(unitsStrRaw.replace(/,/g, ''));
             if (isNaN(unitsNum) || unitsNum <= 0) continue;
 
-            // Check selection match for this positional code
-            let include = true;
+            // Treat selectedCodes as EXCLUSION list for positional codes as well
+            let isExcludedPos = false;
             if (selectedCodes && selectedCodes.length > 0) {
-              include = selectedCodes.some(scRaw => {
+              isExcludedPos = selectedCodes.some(scRaw => {
                 const sc = String(scRaw).trim();
                 if (sc.includes('::')) {
                   const [vcsKeySel, codeSel] = sc.split('::').map(s => s.trim());
@@ -1587,7 +1587,7 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
               });
             }
 
-            if (!include) continue;
+            if (isExcludedPos) continue;
 
             if (unitsNum >= 1000) totalSf += unitsNum; else totalAcres += unitsNum;
           }
