@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { supabase, interpretCodes, worksheetService, checklistService, runUnitRateLotCalculation } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, worksheetService, checklistService, runUnitRateLotCalculation, runUnitRateLotCalculation_v2 } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 import { 
   TrendingUp, 
@@ -611,7 +611,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         if (false) console.log('  🏗️ property_m4_class:', firstProp.property_m4_class, '(should be "2", "1", "3B", etc.)');
         if (false) console.log('  💰 values_mod_total:', firstProp.values_mod_total, '(should be 64900, 109900, etc.)');
         if (false) console.log('  📋 sales_nu:', firstProp.sales_nu, '(should be empty or "1")');
-        if (false) console.log('  ✅ sales_price:', firstProp.sales_price, '(working field for comparison)');
+        if (false) console.log('  ��� sales_price:', firstProp.sales_price, '(working field for comparison)');
         if (false) console.log('  ✅ property_location:', firstProp.property_location, '(working field for comparison)');
 
         // Check if the problem is that the fields exist but are being overwritten
