@@ -119,6 +119,9 @@ const App = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Simple helper - true for users allowed to access billing/payroll
+  const isAdmin = (user?.role || '').toString().toLowerCase() === 'admin' || (user?.role || '').toString().toLowerCase() === 'owner';
+
   // ==========================================
   // JOB FRESHNESS CALCULATOR
   // ==========================================
