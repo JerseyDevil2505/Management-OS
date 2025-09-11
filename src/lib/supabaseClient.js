@@ -1772,10 +1772,13 @@ export async function runUnitRateLotCalculation(jobId, selectedCodes = []) {
       const acres = totalAcres + (totalSf / 43560);
 
       // Save into property_market_analysis for this composite key (do NOT persist applied codes here)
+      const acreVal = acres > 0 ? parseFloat(acres.toFixed(4)) : null;
+      const sfVal = acreVal !== null ? Math.round(acreVal * 43560) : null;
       updates.push({
         job_id: jobId,
         property_composite_key: compositeKey,
-        market_manual_lot_acre: acres > 0 ? parseFloat(acres.toFixed(4)) : null
+        market_manual_lot_acre: acreVal,
+        market_manual_lot_sf: sfVal
       });
 
       // Track what codes were applied for this property in a job-level map
@@ -2040,8 +2043,9 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = [], op
       const acres = totalAcres + (totalSf / 43560);
       const recordAcre = acres > 0 ? parseFloat(acres.toFixed(4)) : null;
       if (recordAcre !== null) stats.acreageSet++; else { if (stats.sampledNullKeys.length < 20) stats.sampledNullKeys.push(compositeKey); }
+      const recordSf = recordAcre !== null ? Math.round(recordAcre * 43560) : null;
 
-      updates.push({ job_id: jobId, property_composite_key: compositeKey, market_manual_lot_acre: recordAcre });
+      updates.push({ job_id: jobId, property_composite_key: compositeKey, market_manual_lot_acre: recordAcre, market_manual_lot_sf: recordSf });
       appliedCodesMap[compositeKey] = selectedCodes || [];
     }
 
@@ -3443,7 +3447,7 @@ export const propertyService = {
       }
 
       if (data) {
-        console.log(`✅ Found raw data for property ${propertyCompositeKey}`);
+        console.log(`��� Found raw data for property ${propertyCompositeKey}`);
         return data;
       }
 
