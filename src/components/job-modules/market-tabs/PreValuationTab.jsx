@@ -563,6 +563,18 @@ useEffect(() => {
   }
 }, [marketLandData]);// Only run when marketLandData actually changes
 
+// Keep combinedMappings in sync if marketLandData updates independently
+useEffect(() => {
+  try {
+    const existing = marketLandData?.unit_rate_codes_applied;
+    const payloadObj = existing && typeof existing === 'string' ? JSON.parse(existing) : (existing || {});
+    const mappingsFromDB = payloadObj.mappings || {};
+    setCombinedMappings(mappingsFromDB);
+  } catch (e) {
+    // ignore
+  }
+}, [marketLandData]);
+
   // Unit Rate helpers
   const toggleUnitRateCode = (key) => {
     const s = new Set(selectedUnitRateCodes);
@@ -750,7 +762,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         if (false) console.log('🔍 CRITICAL FIELD CHECK FOR FIRST PROPERTY:');
         if (false) console.log('  🏗️ property_m4_class:', firstProp.property_m4_class, '(should be "2", "1", "3B", etc.)');
         if (false) console.log('  💰 values_mod_total:', firstProp.values_mod_total, '(should be 64900, 109900, etc.)');
-        if (false) console.log('  �� sales_nu:', firstProp.sales_nu, '(should be empty or "1")');
+        if (false) console.log('  📋 sales_nu:', firstProp.sales_nu, '(should be empty or "1")');
         if (false) console.log('  ✅ sales_price:', firstProp.sales_price, '(working field for comparison)');
         if (false) console.log('  ✅ property_location:', firstProp.property_location, '(working field for comparison)');
 
@@ -3297,7 +3309,7 @@ const analyzeImportFile = async (file) => {
               <strong>Color Scale:</strong> 
               <br/>• First color: $0 - ${(colorScaleIncrement - 1).toLocaleString()}
               <br/>• Second color: ${colorScaleIncrement.toLocaleString()} - ${((colorScaleIncrement * 2) - 1).toLocaleString()}
-              <br/>�� Third color: ${(colorScaleIncrement * 2).toLocaleString()} - ${((colorScaleIncrement * 3) - 1).toLocaleString()}
+              <br/>��� Third color: ${(colorScaleIncrement * 2).toLocaleString()} - ${((colorScaleIncrement * 3) - 1).toLocaleString()}
               <br/>• And so on... Total of {marketAnalysisData.length} blocks analyzed.
             </div>
           </div>
