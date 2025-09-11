@@ -311,7 +311,7 @@ const JobContainer = ({
                   market_manual_lot_acre: marketAnalysis.market_manual_lot_acre ?? property.market_manual_lot_acre ?? null,
                   market_manual_acre: marketAnalysis.market_manual_acre ?? property.market_manual_acre ?? null,
                   // Use job-level applied codes map stored in marketLandData; per-property column removed
-                  market_unit_codes_applied: (marketLandData?.unit_rate_codes_applied ? marketLandData.unit_rate_codes_applied[property.property_composite_key] : null) ?? null,
+                  unit_rate_codes_applied: (marketLandData?.unit_rate_codes_applied ? marketLandData.unit_rate_codes_applied[property.property_composite_key] : null) ?? null,
                   // Also expose common lot fields for fallbacks
                   asset_lot_acre: marketAnalysis.asset_lot_acre ?? property.asset_lot_acre ?? null,
                   asset_lot_sf: marketAnalysis.asset_lot_sf ?? property.asset_lot_sf ?? null,
