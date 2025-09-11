@@ -1803,7 +1803,7 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = [], op
 
             // Treat selectedCodes as INCLUSION list for positional codes as well
             let isIncludedPos = true;
-            if (selectedCodes && selectedCodes.length > 0) {
+            if (shouldApplySelection(selectedCodes)) {
               isIncludedPos = selectedCodes.some(scRaw => {
                 const sc = String(scRaw).trim();
                 if (sc.includes('::')) {
