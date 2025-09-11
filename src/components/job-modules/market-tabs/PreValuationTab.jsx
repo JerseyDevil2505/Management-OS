@@ -3204,6 +3204,50 @@ const analyzeImportFile = async (file) => {
                     </ul>
                   </div>
 
+                  {/* Mappings status - show saved and staged mappings so user can see what's been prepared */}
+                  <div className="mt-4 border-t pt-4">
+                    <h4 className="text-sm font-medium mb-2">Mappings Status</h4>
+                    <div className="space-y-2 text-sm">
+                      <div>
+                        <div className="font-medium">Saved Mappings</div>
+                        {Object.keys(combinedMappings || {}).length === 0 ? (
+                          <div className="text-xs text-gray-500">No saved mappings</div>
+                        ) : (
+                          <div className="mt-2 space-y-1">
+                            {Object.keys(combinedMappings).map(k => (
+                              <div key={k} className="flex justify-between items-center bg-white border p-2 rounded">
+                                <div>
+                                  <div className="font-medium">{k}</div>
+                                  <div className="text-xs text-gray-500">Acre: {(combinedMappings[k].acre||[]).join(', ') || '-'} • SF: {(combinedMappings[k].sf||[]).join(', ') || '-'} • Exclude: {(combinedMappings[k].exclude||[]).join(', ') || '-'}</div>
+                                </div>
+                                <div className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs">Saved</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-3">
+                        <div className="font-medium">Staged Mappings (Ready to Save)</div>
+                        {Object.keys(stagedMappings || {}).length === 0 ? (
+                          <div className="text-xs text-gray-500">No staged mappings</div>
+                        ) : (
+                          <div className="mt-2 space-y-1">
+                            {Object.keys(stagedMappings).map(k => (
+                              <div key={k} className="flex justify-between items-center bg-white border p-2 rounded">
+                                <div>
+                                  <div className="font-medium">{k}</div>
+                                  <div className="text-xs text-gray-500">Acre: {(stagedMappings[k].acre||[]).join(', ') || '-'} • SF: {(stagedMappings[k].sf||[]).join(', ') || '-'} • Exclude: {(stagedMappings[k].exclude||[]).join(', ') || '-'}</div>
+                                </div>
+                                <div className="px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded text-xs">Staged</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Unit Rate Mappings Editor */}
                   <div className="mt-4 border-t pt-4">
                     <h4 className="text-sm font-medium mb-2">Unit Rate Mappings (per VCS)</h4>
