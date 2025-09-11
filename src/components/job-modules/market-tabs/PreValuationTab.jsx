@@ -155,8 +155,7 @@ const PreValuationTab = ({
   const addCodeToZone = (code, zone) => {
     code = String(code).trim();
     if (!code) return;
-    // Normalize to two digits when numeric-like
-    const normalized = code.replace(/[^0-9]/g, '') ? String(code).trim() : String(code).trim();
+    const normalized = code;
     // remove from other zones
     setMappingAcre(prev => prev.filter(c => c !== normalized));
     setMappingSf(prev => prev.filter(c => c !== normalized));
@@ -164,6 +163,15 @@ const PreValuationTab = ({
     if (zone === 'acre') setMappingAcre(prev => prev.includes(normalized) ? prev : [...prev, normalized]);
     if (zone === 'sf') setMappingSf(prev => prev.includes(normalized) ? prev : [...prev, normalized]);
     if (zone === 'exclude') setMappingExclude(prev => prev.includes(normalized) ? prev : [...prev, normalized]);
+
+    // Remove from available codes for current VCS
+    if (mappingVcsKey) {
+      setAvailableCodesByVcs(prev => {
+        const copy = { ...prev };
+        copy[mappingVcsKey] = (copy[mappingVcsKey] || []).filter(x => String(x.code) !== String(normalized));
+        return copy;
+      });
+    }
   };
 
   const removeCodeFromZone = (code, zone) => {
@@ -171,6 +179,21 @@ const PreValuationTab = ({
     if (zone === 'acre') setMappingAcre(prev => prev.filter(x => x !== c));
     if (zone === 'sf') setMappingSf(prev => prev.filter(x => x !== c));
     if (zone === 'exclude') setMappingExclude(prev => prev.filter(x => x !== c));
+
+    // Re-add to available codes for current VCS if not already present
+    if (mappingVcsKey) {
+      setAvailableCodesByVcs(prev => {
+        const copy = { ...prev };
+        const list = copy[mappingVcsKey] ? copy[mappingVcsKey].slice() : [];
+        const exists = list.some(x => String(x.code) === String(c));
+        if (!exists) {
+          const found = unitRateCodes.find(u => String(u.vcs) === String(mappingVcsKey) && String(u.code) === String(c));
+          if (found) list.push({ code: found.code, description: found.description, key: found.key, vcs: found.vcs, vcsLabel: found.vcsLabel });
+          copy[mappingVcsKey] = list;
+        }
+        return copy;
+      });
+    }
   };
 
   const stageMapping = () => {
@@ -3002,7 +3025,7 @@ const analyzeImportFile = async (file) => {
                     <li>• <strong>Semi-Detached (2x):</strong> All codes starting with 2</li>
                     <li>• <strong>Row/Townhouses (3x):</strong> All codes starting with 3</li>
                     <li>• <strong>Multifamily (4x):</strong> All codes starting with 4</li>
-                    <li>�� <strong>Conversions (5x):</strong> All codes starting with 5</li>
+                    <li>• <strong>Conversions (5x):</strong> All codes starting with 5</li>
                     <li>�� <strong>Condominiums (6x):</strong> All codes starting with 6</li>
                   </ul>
                 </div>
