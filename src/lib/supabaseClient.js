@@ -1611,7 +1611,8 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
       const recordAcre = acres > 0 ? parseFloat(acres.toFixed(4)) : null;
       if (recordAcre !== null) stats.acreageSet++; else { if (stats.sampledNullKeys.length < 20) stats.sampledNullKeys.push(compositeKey); }
 
-      updates.push({ job_id: jobId, property_composite_key: compositeKey, market_manual_lot_acre: recordAcre, market_unit_codes_applied: selectedCodes });
+      updates.push({ job_id: jobId, property_composite_key: compositeKey, market_manual_lot_acre: recordAcre });
+      appliedCodesMap[compositeKey] = selectedCodes || [];
     }
 
     // Upsert in batches
@@ -2768,7 +2769,7 @@ export const propertyService = {
 
       // OPTIMIZED: Extract deletion list from versionInfo for targeted deletion
       const deletionsList = versionInfo.deletionsList || null;
-      console.log(`🎯 DELETION OPTIMIZATION: ${deletionsList ? `Passing ${deletionsList.length} properties for targeted deletion` : 'No deletion list provided'}`);
+      console.log(`���� DELETION OPTIMIZATION: ${deletionsList ? `Passing ${deletionsList.length} properties for targeted deletion` : 'No deletion list provided'}`);
 
       // Use updaters for UPSERT operations with optimized deletion
       if (vendorType === 'BRT') {
