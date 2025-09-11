@@ -1532,7 +1532,7 @@ export async function runUnitRateLotCalculation(jobId, selectedCodes = []) {
     try {
       const payload = {
         job_id: jobId,
-        market_unit_codes_applied: appliedCodesMap || {},
+        unit_rate_codes_applied: appliedCodesMap || {},
         unit_rate_last_run: {
           timestamp: new Date().toISOString(),
           selected_codes: selectedCodes || [],
@@ -1552,7 +1552,7 @@ export async function runUnitRateLotCalculation(jobId, selectedCodes = []) {
         try {
           const summaryPayload = {
             job_id: jobId,
-            market_unit_codes_applied: {},
+            unit_rate_codes_applied: {},
             unit_rate_last_run: {
               timestamp: new Date().toISOString(),
               selected_codes: selectedCodes || [],
@@ -1786,7 +1786,7 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
     try {
       const payload = {
         job_id: jobId,
-        market_unit_codes_applied: appliedCodesMap || {},
+        unit_rate_codes_applied: appliedCodesMap || {},
         unit_rate_last_run: {
           timestamp: new Date().toISOString(),
           selected_codes: selectedCodes || [],
@@ -1804,7 +1804,7 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
         try {
           const summaryPayload = {
             job_id: jobId,
-            market_unit_codes_applied: {},
+            unit_rate_codes_applied: {},
             unit_rate_last_run: payload.unit_rate_last_run,
             updated_at: new Date().toISOString()
           };
