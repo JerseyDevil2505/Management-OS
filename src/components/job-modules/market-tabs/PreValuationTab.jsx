@@ -95,6 +95,30 @@ const PreValuationTab = ({
   const [locationVariations, setLocationVariations] = useState({});
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [currentLocationChoice, setCurrentLocationChoice] = useState(null);
+
+  // Debug helper state (temporary UI for environments where console is unavailable)
+  const [debugCompositeKey, setDebugCompositeKey] = useState('');
+  const [debugSelectedCodes, setDebugSelectedCodes] = useState('');
+  const [debugOutput, setDebugOutput] = useState(null);
+  const [debugRunning, setDebugRunning] = useState(false);
+
+  const runDebugForProperty = async () => {
+    if (!jobData?.id || !debugCompositeKey) {
+      alert('Job ID and composite key required');
+      return;
+    }
+    setDebugRunning(true);
+    setDebugOutput(null);
+    try {
+      const codes = debugSelectedCodes ? debugSelectedCodes.split(',').map(s => s.trim()).filter(Boolean) : [];
+      const res = await computeLotAcreForProperty(jobData.id, debugCompositeKey, codes);
+      setDebugOutput(res);
+    } catch (e) {
+      setDebugOutput({ error: (e && e.message) ? e.message : String(e) });
+    } finally {
+      setDebugRunning(false);
+    }
+  };
   const [worksheetStats, setWorksheetStats] = useState({
     totalProperties: 0,
     vcsAssigned: 0,
@@ -4582,7 +4606,27 @@ const analyzeImportFile = async (file) => {
         </div>
       )}
 
+      {/* Debug floating panel: show LANDUR/LANDURUNITS extraction when console not available */}
+      <div className="fixed bottom-4 right-4 w-96 bg-white shadow-lg rounded-lg p-3 z-50">
+        <div className="flex items-center justify-between mb-2">
+          <strong className="text-sm">Debug: LANDUR extraction</strong>
+          <button onClick={() => { setDebugOutput(null); setDebugCompositeKey(''); setDebugSelectedCodes(''); }} className="text-xs text-gray-500">Clear</button>
+        </div>
+        <div className="mb-2 text-xs text-gray-600">Job: {jobData?.id || '—'}</div>
+        <input className="w-full mb-2 px-2 py-1 border rounded text-sm" placeholder="Composite key (e.g. 2025...-12-11.01_...)" value={debugCompositeKey} onChange={(e) => setDebugCompositeKey(e.target.value)} />
+        <input className="w-full mb-2 px-2 py-1 border rounded text-sm" placeholder="Selected codes (comma-separated, e.g. 02,PLV::03)" value={debugSelectedCodes} onChange={(e) => setDebugSelectedCodes(e.target.value)} />
+        <div className="flex space-x-2 mb-2">
+          <button onClick={runDebugForProperty} disabled={debugRunning} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">Run</button>
+          <button onClick={() => { setDebugOutput(null); }} className="px-3 py-1 bg-gray-100 text-gray-700 rounded text-sm">Hide</button>
+        </div>
+        <div className="max-h-60 overflow-auto bg-gray-50 p-2 rounded text-xs">
+          {debugRunning ? <div className="text-sm text-gray-600">Running...</div> : (
+            debugOutput ? <pre className="whitespace-pre-wrap">{JSON.stringify(debugOutput, null, 2)}</pre> : <div className="text-xs text-gray-500">No output yet. Enter composite key and Run.</div>
+          )}
+        </div>
+      </div>
+
    </div>
- );
+  );
 };
 export default PreValuationTab;
