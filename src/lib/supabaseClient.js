@@ -1519,6 +1519,7 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
     }
 
     const updates = [];
+    const appliedCodesMap = {};
     const stats = { totalParsed: 0, acreageSet: 0, sampledNullKeys: [] };
 
     for (const [compositeKey, rawRecord] of propertyMap.entries()) {
