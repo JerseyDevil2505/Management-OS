@@ -1684,6 +1684,7 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
 
 // ===== UNIT RATE LOT CALCULATION =====
 export async function runUnitRateLotCalculation(jobId, selectedCodes = []) {
+  // existing implementation continues...
   // selectedCodes: array of code identifiers (strings) to include
   if (!jobId) throw new Error('jobId required');
 
