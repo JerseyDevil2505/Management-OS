@@ -1435,7 +1435,37 @@ export async function runUnitRateLotCalculation(jobId, selectedCodes = []) {
         updated_at: new Date().toISOString()
       };
       const { error: mvError } = await supabase.from('market_land_valuation').upsert([payload], { onConflict: 'job_id' });
-      if (mvError) console.error('Failed to persist appliedCodesMap to market_land_valuation:', mvError);
+      if (mvError) {
+        try {
+          console.error('Failed to persist appliedCodesMap to market_land_valuation:', JSON.stringify(mvError));
+        } catch (logErr) {
+          console.error('Failed to persist appliedCodesMap to market_land_valuation (error object):', mvError);
+        }
+
+        // Attempt fallback: persist only summary info (smaller payload)
+        try {
+          const summaryPayload = {
+            job_id: jobId,
+            unit_rate_codes_applied: {},
+            unit_rate_last_run: {
+              timestamp: new Date().toISOString(),
+              selected_codes: selectedCodes || [],
+              updated_count: updates.length,
+              acreage_set: updates.filter(u => u.market_manual_lot_acre !== null).length,
+              acreage_null: updates.filter(u => u.market_manual_lot_acre === null).length
+            },
+            updated_at: new Date().toISOString()
+          };
+          const { error: mvError2 } = await supabase.from('market_land_valuation').upsert([summaryPayload], { onConflict: 'job_id' });
+          if (mvError2) {
+            try { console.error('Fallback upsert to market_land_valuation failed:', JSON.stringify(mvError2)); } catch(e2) { console.error('Fallback upsert failed (object):', mvError2); }
+          } else {
+            console.warn('Persisted unit-rate run summary (fallback) to market_land_valuation');
+          }
+        } catch (fbErr) {
+          console.error('Error during fallback persist to market_land_valuation:', fbErr);
+        }
+      }
     } catch (e) {
       console.error('Error writing appliedCodesMap to market_land_valuation:', e);
     }
