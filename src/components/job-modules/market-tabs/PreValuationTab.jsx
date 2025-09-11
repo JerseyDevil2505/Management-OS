@@ -3074,21 +3074,26 @@ const analyzeImportFile = async (file) => {
 
                       return (
                         <div key={desc} className="py-1">
-                          <label className="flex items-center gap-3">
-                            <input
-                              ref={el => { groupRefs.current[desc] = el; if (el) el.indeterminate = someSelected && !allSelected; }}
-                              type="checkbox"
-                              disabled={vendorType !== 'BRT'}
-                              checked={allSelected}
-                              onChange={() => toggleUnitRateGroup(desc)}
-                            />
-
-                            <div className="text-sm flex-1">
-                              <div className="font-medium">{desc}</div>
-                              <div className="text-xs text-gray-500">{group.items.length} instance{group.items.length > 1 ? 's' : ''} • {group.items.map(i => `${i.vcsLabel || i.vcs}·${i.code}`).join(', ')}</div>
+                          <div className="text-sm">
+                            <div className="font-medium">{desc}</div>
+                            <div className="text-xs text-gray-500">{group.items.length} instance{group.items.length > 1 ? 's' : ''} • {group.items.map(i => `${i.vcsLabel || i.vcs}·${i.code}`).join(', ')}</div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {group.items.map(i => {
+                                const display = `${i.vcsLabel || i.vcs}·${i.code}`;
+                                return (
+                                  <div
+                                    key={i.key}
+                                    draggable
+                                    onDragStart={(e) => { e.dataTransfer.setData('text/plain', JSON.stringify({ code: i.code, vcs: i.vcs })); }}
+                                    className="px-2 py-1 bg-gray-100 border border-gray-200 rounded text-xs cursor-grab"
+                                    title={`Drag ${display} into a bucket`}
+                                  >
+                                    {display}
+                                  </div>
+                                );
+                              })}
                             </div>
-
-                          </label>
+                          </div>
                         </div>
                       );
                     })
