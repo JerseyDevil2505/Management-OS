@@ -370,31 +370,6 @@ useEffect(() => {
   loadChecklistStatuses();
   }, []);
 
-  // Expose compute helper to window for debugging
-  useEffect(() => {
-    if (typeof window !== 'undefined' && !window.__computeLotAcreForProperty) {
-      try {
-        window.__computeLotAcreForProperty = async (jobId, propertyCompositeKey, selectedCodes = []) => {
-          try {
-            const res = await computeLotAcreForProperty(jobId, propertyCompositeKey, selectedCodes);
-            console.log('computeLotAcreForProperty result:', res);
-            return res;
-          } catch (e) {
-            console.error('Error in __computeLotAcreForProperty:', e);
-            throw e;
-          }
-        };
-      } catch (e) {
-        console.warn('Failed to attach __computeLotAcreForProperty to window:', e);
-      }
-    }
-
-    return () => {
-      if (typeof window !== 'undefined' && window.__computeLotAcreForProperty) {
-        try { delete window.__computeLotAcreForProperty; } catch (e) {}
-      }
-    };
-  }, []);
 
 // ==================== UNIT RATE CODES (BRT) ====================
 useEffect(() => {
