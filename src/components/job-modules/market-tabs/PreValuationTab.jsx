@@ -3168,7 +3168,7 @@ const analyzeImportFile = async (file) => {
               <strong>Color Scale:</strong> 
               <br/>• First color: $0 - ${(colorScaleIncrement - 1).toLocaleString()}
               <br/>• Second color: ${colorScaleIncrement.toLocaleString()} - ${((colorScaleIncrement * 2) - 1).toLocaleString()}
-              <br/>• Third color: ${(colorScaleIncrement * 2).toLocaleString()} - ${((colorScaleIncrement * 3) - 1).toLocaleString()}
+              <br/>�� Third color: ${(colorScaleIncrement * 2).toLocaleString()} - ${((colorScaleIncrement * 3) - 1).toLocaleString()}
               <br/>• And so on... Total of {marketAnalysisData.length} blocks analyzed.
             </div>
           </div>
@@ -4618,6 +4618,23 @@ const analyzeImportFile = async (file) => {
         <div className="flex space-x-2 mb-2">
           <button onClick={runDebugForProperty} disabled={debugRunning} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">Run</button>
           <button onClick={() => { setDebugOutput(null); }} className="px-3 py-1 bg-gray-100 text-gray-700 rounded text-sm">Hide</button>
+          <button onClick={() => {
+            // Autofill composite key for block 12 lot 11.01 (search worksheetProperties)
+            try {
+              const matches = worksheetProperties.filter(p => String(p.block).trim() === '12' && String(p.lot).trim().startsWith('11.01'));
+              if (matches.length === 0) {
+                alert('No matching property found in worksheet (block 12 lot 11.01)');
+              } else if (matches.length === 1) {
+                setDebugCompositeKey(matches[0].property_composite_key);
+                alert('Composite key autofilled');
+              } else {
+                setDebugCompositeKey(matches[0].property_composite_key);
+                alert(`Multiple matches found; autofilled first: ${matches[0].property_composite_key}`);
+              }
+            } catch (e) {
+              alert('Autofill failed: ' + (e && e.message ? e.message : String(e)));
+            }
+          }} className="px-3 py-1 bg-green-600 text-white rounded text-sm">Autofill 12/11.01</button>
         </div>
         <div className="max-h-60 overflow-auto bg-gray-50 p-2 rounded text-xs">
           {debugRunning ? <div className="text-sm text-gray-600">Running...</div> : (
