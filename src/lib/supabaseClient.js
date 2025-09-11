@@ -314,7 +314,23 @@ export async function persistComputedLotAcre(jobId, propertyCompositeKey, select
 if (typeof window !== 'undefined') {
   window.__computeLotAcreForProperty = async (jobId, propertyCompositeKey, selectedCodes = []) => {
     try {
-      const res = await computeLotAcreForProperty(jobId, propertyCompositeKey, selectedCodes);
+      // If no selectedCodes passed, attempt to use saved job config (including empty explicit selection)
+      let sel = Array.isArray(selectedCodes) ? selectedCodes : [];
+      let useJobConfig = false;
+      if ((!sel || sel.length === 0) && jobId) {
+        try {
+          const { data: jobRow } = await supabase.from('jobs').select('unit_rate_config').eq('id', jobId).single();
+          if (jobRow) {
+            const saved = jobRow.unit_rate_config?.codes || jobRow.unit_rate_config || [];
+            sel = Array.isArray(saved) ? saved : [];
+            useJobConfig = true;
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      const res = await computeLotAcreForProperty(jobId, propertyCompositeKey, sel, { useJobConfig });
       console.log('computeLotAcreForProperty result:', res);
       return res;
     } catch (e) {
