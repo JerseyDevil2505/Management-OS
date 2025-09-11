@@ -136,6 +136,84 @@ async function getRawDataForProperty(jobId, propertyCompositeKey) {
 }
 
 /**
+ * Normalize selected codes into canonical VCSKEY::CODE format where possible.
+ * Accepts inputs like 'CHSP·02', 'CHSP:02', '23::02', '02' and returns normalized array.
+ */
+export async function normalizeSelectedCodes(jobId, selectedCodes = []) {
+  const rawDataForJob = await getRawDataForJob(jobId);
+  const codeDefinitions = rawDataForJob?.codeDefinitions || rawDataForJob?.parsed_code_definitions || null;
+  const vcsSection = codeDefinitions && codeDefinitions.sections && codeDefinitions.sections.VCS ? codeDefinitions.sections.VCS : null;
+  const vcsIdMap = new Map();
+  const vcsLabelToKey = new Map();
+
+  if (vcsSection) {
+    Object.keys(vcsSection).forEach(vkey => {
+      const entry = vcsSection[vkey];
+      const ids = new Set();
+      ids.add(String(vkey));
+      if (entry?.DATA?.VALUE) ids.add(String(entry.DATA.VALUE));
+      if (entry?.DATA?.KEY) ids.add(String(entry.DATA.KEY));
+      if (entry?.KEY) ids.add(String(entry.KEY));
+      vcsIdMap.set(String(vkey), ids);
+
+      // Map label variants to key (uppercased)
+      const short = (entry?.DATA?.KEY && String(entry.DATA.KEY).trim()) || (entry?.KEY && String(entry.KEY).trim()) || (entry?.DATA?.VALUE && String(entry.DATA.VALUE).trim()) || String(vkey);
+      if (short) vcsLabelToKey.set(String(short).trim().toUpperCase(), String(vkey));
+      if (entry?.DATA?.VALUE) vcsLabelToKey.set(String(entry.DATA.VALUE).trim().toUpperCase(), String(vkey));
+      if (entry?.DATA?.KEY) vcsLabelToKey.set(String(entry.DATA.KEY).trim().toUpperCase(), String(vkey));
+    });
+  }
+
+  const normalized = [];
+  for (const raw of (Array.isArray(selectedCodes) ? selectedCodes : [])) {
+    try {
+      if (!raw && raw !== 0) continue;
+      const s = String(raw).trim();
+      if (!s) continue;
+
+      // Normalize separators to support '::', '·', '.', ':'
+      let sep = null;
+      if (s.includes('::')) sep = '::';
+      else if (s.includes('·')) sep = '·';
+      else if (s.includes(':')) sep = ':';
+      else if (s.includes('.')) sep = '.';
+
+      if (sep) {
+        const parts = s.split(sep).map(p => p.trim()).filter(Boolean);
+        const vcsPart = (parts[0] || '').toUpperCase();
+        const codePart = (parts[1] || '').replace(/[^0-9]/g, '').padStart(2, '0');
+        if (!codePart) continue;
+
+        // Try to map vcsPart to numeric key
+        let vkey = null;
+        if (vcsIdMap.has(vcsPart)) vkey = vcsPart;
+        if (!vkey && vcsLabelToKey.has(vcsPart)) vkey = vcsLabelToKey.get(vcsPart);
+        if (!vkey) {
+          // Try to find by idSet membership
+          for (const [k, idSet] of vcsIdMap.entries()) {
+            if (Array.from(idSet).some(id => String(id).trim().toUpperCase() === vcsPart)) {
+              vkey = k; break;
+            }
+          }
+        }
+
+        if (vkey) normalized.push(`${vkey}::${codePart}`);
+        else normalized.push(`${vcsPart}::${codePart}`);
+      } else {
+        // Code-only
+        const codeOnly = s.replace(/[^0-9]/g, '').padStart(2, '0');
+        if (codeOnly) normalized.push(codeOnly);
+      }
+    } catch (e) {
+      // Skip malformed entries
+      continue;
+    }
+  }
+
+  return normalized;
+}
+
+/**
  * Diagnostic helper: compute lot acreage for a single property using header-mapped LANDUR/LANDURUNITS
  * Returns detailed debug object (codes, units, included flag, totals)
  */
@@ -319,7 +397,15 @@ export async function persistComputedLotAcre(jobId, propertyCompositeKey, select
       }
     }
 
-    const result = await computeLotAcreForProperty(jobId, propertyCompositeKey, sel, { useJobConfig });
+    // Normalize selection before computing
+    let normalizedSel = [];
+    try {
+      normalizedSel = await normalizeSelectedCodes(jobId, sel);
+    } catch (e) {
+      normalizedSel = Array.isArray(sel) ? sel : [];
+    }
+
+    const result = await computeLotAcreForProperty(jobId, propertyCompositeKey, normalizedSel, { useJobConfig });
     const acres = result?.total_acres ?? null;
 
     // Upsert into property_market_analysis
@@ -359,8 +445,8 @@ export async function persistComputedLotAcre(jobId, propertyCompositeKey, select
           applied = {};
         }
       }
-      // Use the actual selection used for calculation (sel) when persisting
-      applied[propertyCompositeKey] = sel || [];
+      // Use the normalized selection used for calculation when persisting
+      applied[propertyCompositeKey] = normalizedSel || [];
 
       const payload = {
         job_id: jobId,
