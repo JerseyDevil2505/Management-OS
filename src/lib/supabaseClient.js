@@ -1648,7 +1648,7 @@ export async function runUnitRateLotCalculation(jobId, selectedCodes = []) {
 }
 
 // ===== UNIT RATE LOT CALCULATION (v2) =====
-export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
+export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = [], options = {}) {
   if (!jobId) throw new Error('jobId required');
   try {
     const rawDataForJob = await getRawDataForJob(jobId);
@@ -1671,6 +1671,15 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
 
     // Build a propertyMap fallback if parsed map is empty
     let propertyMap = rawDataForJob.propertyMap instanceof Map ? rawDataForJob.propertyMap : new Map();
+
+    // Determine whether to treat an empty selectedCodes as an explicit selection (i.e. use saved job config even if empty)
+    const treatEmptyAsExplicit = !!options.useJobConfig;
+
+    // Helper to decide if selection filtering should be applied for a given property
+    const shouldApplySelection = (selCodes) => {
+      if (treatEmptyAsExplicit) return true; // use provided selCodes even if empty
+      return Array.isArray(selCodes) && selCodes.length > 0;
+    };
 
     if ((!propertyMap || propertyMap.size === 0)) {
       // fetch raw content directly
