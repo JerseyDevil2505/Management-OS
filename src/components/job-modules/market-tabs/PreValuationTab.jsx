@@ -666,13 +666,45 @@ useEffect(() => {
       const rawCodes = Array.from(selectedUnitRateCodes);
       let normalizedCodes = rawCodes;
       try { normalizedCodes = await normalizeSelectedCodes(jobData.id, rawCodes); } catch(e) { normalizedCodes = rawCodes; }
+
+      // Save selected unit-rate codes to jobs.unit_rate_config
       const payload = { codes: normalizedCodes };
       const { error } = await supabase.from('jobs').update({ unit_rate_config: payload }).eq('id', jobData.id);
       if (error) throw error;
-      alert('Unit rate configuration saved');
+
+      // Persist any staged VCS mappings to market_land_valuation
+      const stagedKeys = Object.keys(stagedMappings || {});
+      if (stagedKeys.length > 0) {
+        const savePromises = stagedKeys.map(async (vk) => {
+          const m = stagedMappings[vk];
+          try {
+            await saveUnitRateMappings(jobData.id, vk, { acre: m.acre || [], sf: m.sf || [], exclude: m.exclude || [] });
+            return { vk, ok: true };
+          } catch (e) {
+            console.error('Failed saving mapping for', vk, e);
+            return { vk, ok: false, error: e };
+          }
+        });
+        const results = await Promise.all(savePromises);
+        const failed = results.filter(r => !r.ok);
+        if (failed.length > 0) {
+          throw new Error(`Failed to save mappings for: ${failed.map(f => f.vk).join(', ')}`);
+        }
+
+        // On success, merge staged into combined and clear stagedMappings
+        const merged = { ...(combinedMappings || {}) };
+        stagedKeys.forEach(k => { merged[k] = stagedMappings[k]; });
+        setCombinedMappings(merged);
+        setStagedMappings({});
+
+        // Update VCS options shown
+        setVcsOptionsShown(vcsOptions.filter(opt => !merged[opt.key]));
+      }
+
+      alert('Unit rate configuration and mappings saved');
     } catch (e) {
-      console.error('Error saving unit rate config:', e);
-      alert(`Failed to save unit rate configuration: ${formatError(e)}`);
+      console.error('Error saving unit rate config/mappings:', e);
+      alert(`Failed to save unit rate configuration/mappings: ${formatError(e)}`);
     } finally {
       setIsSavingUnitConfig(false);
     }
