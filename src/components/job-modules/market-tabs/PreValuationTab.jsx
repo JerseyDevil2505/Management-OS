@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { supabase, interpretCodes, worksheetService, checklistService, runUnitRateLotCalculation, runUnitRateLotCalculation_v2, computeLotAcreForProperty } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, worksheetService, checklistService, runUnitRateLotCalculation, runUnitRateLotCalculation_v2, computeLotAcreForProperty, persistComputedLotAcre } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 import { 
   TrendingUp, 
@@ -115,6 +115,28 @@ const PreValuationTab = ({
       setDebugOutput(res);
     } catch (e) {
       setDebugOutput({ error: (e && e.message) ? e.message : String(e) });
+    } finally {
+      setDebugRunning(false);
+    }
+  };
+
+  const saveDebugToDb = async () => {
+    if (!jobData?.id || !debugCompositeKey) {
+      alert('Job ID and composite key required');
+      return;
+    }
+    setDebugRunning(true);
+    setDebugOutput(null);
+    try {
+      const codes = debugSelectedCodes ? debugSelectedCodes.split(',').map(s => s.trim()).filter(Boolean) : [];
+      const res = await persistComputedLotAcre(jobData.id, debugCompositeKey, codes);
+      setDebugOutput({ saved: true, result: res });
+      // Refresh job cache so UI shows updated value
+      if (onUpdateJobCache) onUpdateJobCache(jobData.id);
+      alert('Saved computed lot acreage to database');
+    } catch (e) {
+      setDebugOutput({ error: (e && e.message) ? e.message : String(e) });
+      alert('Failed to save computed acreage: ' + ((e && e.message) ? e.message : String(e)));
     } finally {
       setDebugRunning(false);
     }
@@ -4635,6 +4657,7 @@ const analyzeImportFile = async (file) => {
               alert('Autofill failed: ' + (e && e.message ? e.message : String(e)));
             }
           }} className="px-3 py-1 bg-green-600 text-white rounded text-sm">Autofill 12/11.01</button>
+          <button onClick={saveDebugToDb} disabled={debugRunning} className="px-3 py-1 bg-indigo-600 text-white rounded text-sm">Save</button>
         </div>
         <div className="max-h-60 overflow-auto bg-gray-50 p-2 rounded text-xs">
           {debugRunning ? <div className="text-sm text-gray-600">Running...</div> : (
