@@ -745,6 +745,18 @@ export const interpretCodes = {
 | asset_lot_depth | numeric | |
 | asset_lot_frontage | numeric | |
 | asset_lot_sf | numeric | |
+| LANDUR_1 | text | BRT parsed land use code (zero-padded, e.g. '01') |
+| LANDUR_2 | text | BRT parsed land use code (zero-padded) |
+| LANDUR_3 | text | BRT parsed land use code (zero-padded) |
+| LANDUR_4 | text | BRT parsed land use code (zero-padded) |
+| LANDUR_5 | text | BRT parsed land use code (zero-padded) |
+| LANDUR_6 | text | BRT parsed land use code (zero-padded) |
+| LANDURUNITS_1 | numeric | Numeric units corresponding to LANDUR_1 |
+| LANDURUNITS_2 | numeric | Numeric units corresponding to LANDUR_2 |
+| LANDURUNITS_3 | numeric | Numeric units corresponding to LANDUR_3 |
+| LANDURUNITS_4 | numeric | Numeric units corresponding to LANDUR_4 |
+| LANDURUNITS_5 | numeric | Numeric units corresponding to LANDUR_5 |
+| LANDURUNITS_6 | numeric | Numeric units corresponding to LANDUR_6 |
 | asset_map_page | text | **REMOVED** - Moved to property_market_analysis |
 | asset_neighborhood | text | |
 | asset_sfla | numeric | |
