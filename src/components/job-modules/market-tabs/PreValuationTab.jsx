@@ -2542,7 +2542,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-32 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('property_location')}
                             >
-                              Location {normSortConfig.field === 'property_location' && (normSortConfig.direction === 'asc' ? '���' : '��')}
+                              Location {normSortConfig.field === 'property_location' && (normSortConfig.direction === 'asc' ? '���' : '↓')}
                             </th>
                             <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
@@ -3042,8 +3042,26 @@ const analyzeImportFile = async (file) => {
                     <ul className="text-xs text-gray-600 list-disc list-inside mt-2">
                       <li>Only BRT jobs support unit-rate configuration.</li>
                       <li>Calculation uses heuristic: values ≥1000 treated as SF, smaller as acres.</li>
-                      <li>Results are saved to property_market_analysis.market_manual_lot_acre</li>
+                      <li>Results are saved to property_market_analysis.market_manual_lot_acre and market_manual_lot_sf</li>
                     </ul>
+                  </div>
+
+                  {/* Unit Rate Mappings Editor */}
+                  <div className="mt-4 border-t pt-4">
+                    <h4 className="text-sm font-medium mb-2">Unit Rate Mappings (per VCS)</h4>
+                    <div className="grid grid-cols-1 gap-2">
+                      <input placeholder="VCS key (e.g. 1 or 01 or NAME)" value={mappingVcsKey} onChange={e => setMappingVcsKey(e.target.value)} className="w-full px-3 py-2 border rounded" />
+                      <label className="text-xs">Acre codes (comma separated, e.g. 01,02)</label>
+                      <textarea value={mappingAcreCodes} onChange={e => setMappingAcreCodes(e.target.value)} className="w-full px-3 py-2 border rounded" rows={2} />
+                      <label className="text-xs">SF codes (comma separated)</label>
+                      <textarea value={mappingSfCodes} onChange={e => setMappingSfCodes(e.target.value)} className="w-full px-3 py-2 border rounded" rows={2} />
+                      <label className="text-xs">Exclude codes (comma separated)</label>
+                      <textarea value={mappingExcludeCodes} onChange={e => setMappingExcludeCodes(e.target.value)} className="w-full px-3 py-2 border rounded" rows={2} />
+                      <div className="flex gap-2">
+                        <button onClick={saveMapping} disabled={!mappingVcsKey || isSavingMappings} className="px-3 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">{isSavingMappings ? 'Saving...' : 'Save Mapping'}</button>
+                        <button onClick={handleGenerateLotSizes} disabled={isGeneratingLotSizes} className="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700">{isGeneratingLotSizes ? 'Generating...' : 'Generate Lot Sizes for Job'}</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
