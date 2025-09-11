@@ -110,8 +110,20 @@ const PreValuationTab = ({
     setDebugRunning(true);
     setDebugOutput(null);
     try {
-      const codes = debugSelectedCodes ? debugSelectedCodes.split(',').map(s => s.trim()).filter(Boolean) : [];
-      const res = await computeLotAcreForProperty(jobData.id, debugCompositeKey, codes);
+      let codes = debugSelectedCodes ? debugSelectedCodes.split(',').map(s => s.trim()).filter(Boolean) : [];
+      let options = {};
+      // If no explicit codes provided in debug input, fall back to saved job config (treat empty saved config as explicit)
+      if ((!codes || codes.length === 0) && jobData?.unit_rate_config) {
+        try {
+          const saved = jobData.unit_rate_config?.codes || jobData.unit_rate_config || [];
+          codes = Array.isArray(saved) ? saved : [];
+          options.useJobConfig = true;
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      const res = await computeLotAcreForProperty(jobData.id, debugCompositeKey, codes, options);
       setDebugOutput(res);
     } catch (e) {
       setDebugOutput({ error: (e && e.message) ? e.message : String(e) });
