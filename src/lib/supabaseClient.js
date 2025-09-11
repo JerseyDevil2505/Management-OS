@@ -136,6 +136,112 @@ async function getRawDataForProperty(jobId, propertyCompositeKey) {
 }
 
 /**
+ * Diagnostic helper: compute lot acreage for a single property using header-mapped LANDUR/LANDURUNITS
+ * Returns detailed debug object (codes, units, included flag, totals)
+ */
+export async function computeLotAcreForProperty(jobId, propertyCompositeKey, selectedCodes = []) {
+  if (!jobId || !propertyCompositeKey) throw new Error('jobId and propertyCompositeKey required');
+  const rawRecord = await getRawDataForProperty(jobId, propertyCompositeKey);
+  if (!rawRecord) return { property_composite_key: propertyCompositeKey, error: 'No raw record found for this property' };
+
+  // Build VCS id map for namespaced selections if needed
+  const rawDataForJob = await getRawDataForJob(jobId);
+  const codeDefinitions = rawDataForJob?.codeDefinitions || rawDataForJob?.parsed_code_definitions || null;
+  const vcsIdMap = new Map();
+  if (codeDefinitions && codeDefinitions.sections && codeDefinitions.sections.VCS) {
+    Object.keys(codeDefinitions.sections.VCS).forEach(vkey => {
+      const entry = codeDefinitions.sections.VCS[vkey];
+      const ids = new Set();
+      ids.add(String(vkey));
+      if (entry?.DATA?.VALUE) ids.add(String(entry.DATA.VALUE));
+      if (entry?.DATA?.KEY) ids.add(String(entry.DATA.KEY));
+      if (entry?.KEY) ids.add(String(entry.KEY));
+      vcsIdMap.set(String(vkey), ids);
+    });
+  }
+
+  const propVcsRaw = rawRecord.VCS || rawRecord.vcs || rawRecord.property_vcs || rawRecord.VCS_CODE || null;
+  const propVcs = propVcsRaw ? String(propVcsRaw).trim() : null;
+
+  const details = [];
+  let totalAcres = 0;
+  let totalSf = 0;
+
+  for (let i = 1; i <= 6; i++) {
+    const codeRaw = rawRecord[`LANDUR_${i}`];
+    const unitsRaw = rawRecord[`LANDURUNITS_${i}`];
+    const codeStr = codeRaw !== undefined && codeRaw !== null ? String(codeRaw).replace(/[^0-9]/g, '').padStart(2, '0') : '';
+    const unitsNum = unitsRaw !== undefined && unitsRaw !== null ? parseFloat(String(unitsRaw).replace(/[,$\s\"]/g, '')) : NaN;
+
+    const detail = { index: i, code_raw: codeRaw, code: codeStr, units_raw: unitsRaw, units: isNaN(unitsNum) ? null : unitsNum, included: false };
+
+    // Skip empty or invalid units
+    if (isNaN(unitsNum) || unitsNum <= 0) {
+      details.push(detail);
+      continue;
+    }
+
+    // Always skip site-value code '01'
+    if (codeStr === '01') {
+      details.push(detail);
+      continue;
+    }
+
+    // If selectedCodes provided, treat as inclusion list
+    let include = true;
+    if (selectedCodes && selectedCodes.length > 0) {
+      include = selectedCodes.some(scRaw => {
+        const sc = String(scRaw).trim();
+        if (sc.includes('::')) {
+          const [vcsKeySel, codeSel] = sc.split('::').map(s => s.trim());
+          if (!codeSel) return false;
+          const codeMatches = codeSel === codeStr || codeSel.padStart(2, '0') === codeStr.padStart(2, '0');
+          if (!codeMatches) return false;
+          const idSet = vcsIdMap.get(String(vcsKeySel));
+          if (!idSet) return propVcs && (String(propVcs) === String(vcsKeySel) || String(propVcs).padStart(2,'0') === String(vcsKeySel).padStart(2,'0'));
+          if (!propVcs) return false;
+          return Array.from(idSet).some(id => String(id).trim() === String(propVcs).trim());
+        } else {
+          return sc === codeStr || sc.padStart(2, '0') === codeStr.padStart(2, '0');
+        }
+      });
+    }
+
+    if (include) {
+      detail.included = true;
+      if (unitsNum >= 1000) totalSf += unitsNum; else totalAcres += unitsNum;
+    }
+
+    details.push(detail);
+  }
+
+  const finalAcres = totalAcres + (totalSf / 43560);
+
+  return {
+    property_composite_key: propertyCompositeKey,
+    job_id: jobId,
+    selected_codes: selectedCodes,
+    propVcs: propVcs,
+    details,
+    total_acres: isFinite(finalAcres) && finalAcres > 0 ? parseFloat(finalAcres.toFixed(4)) : null
+  };
+}
+
+// Expose quick debug helper on window in dev mode
+if (typeof window !== 'undefined') {
+  window.__computeLotAcreForProperty = async (jobId, propertyCompositeKey, selectedCodes = []) => {
+    try {
+      const res = await computeLotAcreForProperty(jobId, propertyCompositeKey, selectedCodes);
+      console.log('computeLotAcreForProperty result:', res);
+      return res;
+    } catch (e) {
+      console.error('Error in __computeLotAcreForProperty:', e);
+      throw e;
+    }
+  };
+}
+
+/**
  * Detect vendor type from source file content
  */
 function detectVendorTypeFromContent(fileContent) {
