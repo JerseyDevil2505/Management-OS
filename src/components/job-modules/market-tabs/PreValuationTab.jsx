@@ -516,8 +516,6 @@ useEffect(() => {
 
       // Prefer v2 calculator which returns detailed stats when available
       let result = null;
-      // DEBUG: log selected codes for inspection
-      try { console.warn('Running unit-rate calc with selected codes:', selected); } catch(e){}
       const useJobConfig = !!jobData?.unit_rate_config;
       if (typeof runUnitRateLotCalculation_v2 === 'function') {
         result = await runUnitRateLotCalculation_v2(jobData.id, selected, { useJobConfig });
@@ -529,12 +527,7 @@ useEffect(() => {
       const acreageSet = result?.acreage_set ?? (result?.updated ?? 0);
       const acreageNull = result?.acreage_null ?? (updated - acreageSet);
 
-      // Log sample null keys for debugging (will appear in browser console)
-      if (result?.sample_null_keys && Array.isArray(result.sample_null_keys) && result.sample_null_keys.length > 0) {
-        console.warn('Sample composite keys with NULL acreage (first 20):', result.sample_null_keys);
-      }
 
-      alert(`Calculated lot sizes — updated: ${updated} properties\nacreage set: ${acreageSet}\nacreage null: ${acreageNull}`);
       // Refresh cache/data
       if (onUpdateJobCache) onUpdateJobCache(jobData.id);
     } catch (e) {
