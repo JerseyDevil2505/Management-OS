@@ -6,10 +6,12 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   const currentYear = new Date().getFullYear();
 
   // Filters
-  const [fromYear, setFromYear] = useState(currentYear - 3);
-  const [toYear, setToYear] = useState(currentYear);
+  const [fromYear, setFromYear] = useState(marketLandData?.cost_valuation_from_year ?? (currentYear - 3));
+  const [toYear, setToYear] = useState(marketLandData?.cost_valuation_to_year ?? currentYear);
   // Replace prefix inputs with dropdown groupings
-  const [typeGroup, setTypeGroup] = useState('single_family'); // default codes beginning with '1'
+  const [typeGroup, setTypeGroup] = useState(marketLandData?.type_group ?? '1'); // default codes beginning with '1'
+  // Price basis for calculations: 'price_time' or 'sale_price'
+  const [priceBasis, setPriceBasis] = useState(marketLandData?.cost_valuation_price_basis ?? 'price_time');
 
   // Factor state (job-level)
   const [costConvFactor, setCostConvFactor] = useState(marketLandData?.cost_conv_factor ?? null);
@@ -24,39 +26,99 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   useEffect(() => {
     setCostConvFactor(marketLandData?.cost_conv_factor ?? null);
     setStateRecommendedFactor(marketLandData?.cost_conv_recommendation ?? null);
+    if (marketLandData?.cost_valuation_from_year !== undefined && marketLandData?.cost_valuation_from_year !== null) {
+      setFromYear(Number(marketLandData.cost_valuation_from_year));
+    }
+    if (marketLandData?.cost_valuation_to_year !== undefined && marketLandData?.cost_valuation_to_year !== null) {
+      setToYear(Number(marketLandData.cost_valuation_to_year));
+    }
   }, [marketLandData]);
 
   // Auto-save cost valuation year range (debounced) to market_land_valuation
+  const [savedYears, setSavedYears] = useState(false);
   const saveYearRange = async (from, to) => {
     if (!jobData?.id) return;
     setIsSavingRange(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('market_land_valuation')
-        .update({ cost_valuation_from_year: from, cost_valuation_to_year: to, updated_at: new Date().toISOString() })
-        .eq('job_id', jobData.id);
+        .upsert([{ job_id: jobData.id, cost_valuation_from_year: from, cost_valuation_to_year: to, updated_at: new Date().toISOString() }], { onConflict: 'job_id' })
+        .select()
+        .single();
       if (error) throw error;
+      if (data) {
+        // ensure UI reflects saved values
+        if (data.cost_valuation_from_year !== undefined && data.cost_valuation_from_year !== null) setFromYear(Number(data.cost_valuation_from_year));
+        if (data.cost_valuation_to_year !== undefined && data.cost_valuation_to_year !== null) setToYear(Number(data.cost_valuation_to_year));
+      }
       if (onUpdateJobCache && jobData?.id) onUpdateJobCache(jobData.id, null);
+      setSavedYears(true);
+      setTimeout(() => setSavedYears(false), 1500);
       console.log('Saved cost valuation year range', { from, to });
     } catch (e) {
       console.error('Error saving cost valuation date range:', e);
+      alert('Failed to save sales year range. See console.');
     } finally {
       setIsSavingRange(false);
     }
   };
 
-  // Debounced effect to persist years whenever user edits them
-  useEffect(() => {
-    if (!jobData?.id) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      saveYearRange(fromYear, toYear);
-    }, 800);
+  const savePriceBasis = async (basis) => {
+    // Persist the selected basis to market_land_valuation
+    if (!jobData?.id) { setPriceBasis(basis); return; }
+    setIsSaving(true);
 
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    const extractErrorMessage = (err) => {
+      if (!err) return 'Unknown error';
+      if (typeof err === 'string') return err;
+      if (err.message) return err.message;
+      if (err.error) return err.error;
+      if (err.details) return err.details;
+      try { return JSON.stringify(err); } catch (e) { return String(err); }
     };
-  }, [fromYear, toYear, jobData?.id]);
+
+    try {
+      const { data, error } = await supabase
+        .from('market_land_valuation')
+        .upsert([{ job_id: jobData.id, cost_valuation_price_basis: basis, updated_at: new Date().toISOString() }], { onConflict: 'job_id' })
+        .select()
+        .single();
+
+      if (error) {
+        // Fallback: try update then insert
+        console.warn('Upsert failed, attempting update/insert fallback', error);
+        const errMsg = extractErrorMessage(error);
+
+        try {
+          const { error: updateError } = await supabase
+            .from('market_land_valuation')
+            .update({ cost_valuation_price_basis: basis, updated_at: new Date().toISOString() })
+            .eq('job_id', jobData.id);
+          if (updateError) {
+            // Try insert
+            const { error: insertError } = await supabase
+              .from('market_land_valuation')
+              .insert({ job_id: jobData.id, cost_valuation_price_basis: basis, updated_at: new Date().toISOString() });
+            if (insertError) throw insertError;
+          }
+        } catch (fallbackErr) {
+          console.error('Fallback update/insert failed saving price basis:', fallbackErr);
+          const msg = extractErrorMessage(fallbackErr);
+          alert(`Failed to save price basis: ${msg}`);
+          return;
+        }
+      }
+
+      setPriceBasis(basis);
+      if (onUpdateJobCache && jobData?.id) onUpdateJobCache(jobData.id, null);
+    } catch (e) {
+      const msg = extractErrorMessage(e);
+      console.error('Error saving price basis:', e);
+      alert(`Failed to save price basis: ${msg}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Derive sale year safely
   const safeSaleYear = (p) => {
@@ -77,22 +139,29 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       if (!year) return false;
       if (year < fromYear || year > toYear) return false;
 
-      // Require a valid time-normalized price
-      if (!(p.values_norm_time && p.values_norm_time > 0)) return false;
+      // Require a valid price depending on selected basis
+      if (priceBasis === 'price_time') {
+        if (!(p.values_norm_time && p.values_norm_time > 0)) return false;
+      } else {
+        if (!(p.sales_price && Number(p.sales_price) > 0)) return false;
+      }
 
       // asset_type_use exists on property_records
       const typeVal = p.asset_type_use ? p.asset_type_use.toString().trim() : '';
 
-      // Apply typeGroup filter
+      // Apply typeGroup filter using code prefixes
       if (typeGroup && typeGroup !== 'all') {
-        if (typeGroup === 'single_family' && !typeVal.startsWith('1')) return false;
-        if (typeGroup === 'semi_detached' && !typeVal.startsWith('2')) return false;
-        if (typeGroup === 'townhouses' && !typeVal.startsWith('3')) return false;
-        if (typeGroup === 'multifamily' && !typeVal.startsWith('4')) return false;
-        if (typeGroup === 'conversions' && !typeVal.startsWith('5')) return false;
-        if (typeGroup === 'condominiums' && !typeVal.startsWith('6')) return false;
-        if (typeGroup === 'commercial' && !typeVal.startsWith('4') && !typeVal.startsWith('5') && !typeVal.startsWith('6') && !typeVal.startsWith('7')) {
-          // coarse commercial check - leave as-is for non-residential
+        // Normalize typeVal to string
+        const tv = (typeVal || '').toString();
+        if (typeGroup === 'all_residential') {
+          // Accept codes starting with 1-6
+          if (!['1','2','3','4','5','6'].some(prefix => tv.startsWith(prefix))) return false;
+        } else if (typeGroup === 'commercial') {
+          // Coarse commercial: exclude residential prefixes 1-6
+          if (['1','2','3','4','5','6'].some(prefix => tv.startsWith(prefix))) return false;
+        } else {
+          // Single prefix/group (e.g., '1','2','3','4','5','6')
+          if (!tv.startsWith(typeGroup)) return false;
         }
       }
 
@@ -120,6 +189,36 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   }, [filtered]);
 
   // formatting helpers
+  const getLivingAreaValue = (p) => {
+    // Common field names that may contain living area
+    const candidates = [
+      'asset_living_area',
+      'living_area',
+      'asset_sfla',
+      'asset_sfl_a',
+      'asset_sf_la',
+      'sf_la',
+      'sf_living_area',
+      'asset_liv_area',
+      'asset_livingarea'
+    ];
+    for (const key of candidates) {
+      if (p[key] !== undefined && p[key] !== null && p[key] !== '') return Number(p[key]);
+    }
+    // Check nested raw_data if present
+    if (p.raw_data) {
+      for (const key of candidates) {
+        if (p.raw_data[key] !== undefined && p.raw_data[key] !== null && p.raw_data[key] !== '') return Number(p.raw_data[key]);
+      }
+    }
+    return null;
+  };
+
+  const formatNumberNoDecimals = (v) => {
+    if (v === '' || v === null || v === undefined || !isFinite(Number(v))) return '—';
+    return Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 });
+  };
+
   const formatCurrency = (v) => {
     if (v === '' || v === null || v === undefined || !isFinite(Number(v))) return '—';
     return Number(v).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -141,7 +240,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
         const included = includedMap[key] !== undefined ? includedMap[key] : true;
         if (!included) return null;
-        const salePrice = (p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
+        const salePrice = (priceBasis === 'price_time' && p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
         const detItems = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
         const baseCost = (p.values_base_cost !== undefined && p.values_base_cost !== null) ? Number(p.values_base_cost) : 0;
         const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
@@ -169,7 +268,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
         const included = includedMap[key] !== undefined ? includedMap[key] : true;
         if (!included) return null;
-        const salePrice = (p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
+        const salePrice = (priceBasis === 'price_time' && p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
         const detItems = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
         const baseCost = (p.values_base_cost !== undefined && p.values_base_cost !== null) ? Number(p.values_base_cost) : 0;
         const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
@@ -200,7 +299,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
       const included = includedMap[key] !== false;
       const saleDate = p.sales_date ? new Date(p.sales_date).toISOString().slice(0,10) : '';
-      const salePrice = (p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
+      const salePrice = (priceBasis === 'price_time' && p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
       const timeNorm = (p.values_norm_time !== undefined && p.values_norm_time !== null) ? Number(p.values_norm_time) : '';
       const detItems = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
       const baseCost = (p.values_base_cost !== undefined && p.values_base_cost !== null) ? Number(p.values_base_cost) : 0;
@@ -214,7 +313,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       const adjustedValue = (cama !== '' ? (Number(cama) + ((Number(baseCost) * (depr !== '' ? Number(depr) : 0)) * (ccf !== '' ? Number(ccf) : 0)) + Number(detItems)) : '');
       const adjustedRatio = (salePrice && adjustedValue !== '' && salePrice !== 0) ? (Number(adjustedValue) / Number(salePrice)) : '';
 
-      return [included ? '1' : '0', p.property_block || '', p.property_lot || '', p.asset_qualifier || p.qualifier || '', p.property_card || '', p.property_location || '', saleDate, salePrice, p.sales_nu || '', timeNorm, yearBuilt, depr !== '' ? Number(depr).toFixed(3) : '', p.asset_building_class || '', p.asset_living_area || p.living_area || '', cama, p.values_det_items || '', baseCost || '', replWithDepr !== '' ? Number(replWithDepr).toFixed(0) : '', improv !== '' ? Number(improv).toFixed(0) : '', ccf ? Number(ccf).toFixed(2) : '', adjustedRatio ? Number(adjustedRatio).toFixed(2) : '', adjustedValue !== '' ? Number(adjustedValue).toFixed(0) : ''];
+      return [included ? '1' : '0', p.property_block || '', p.property_lot || '', p.asset_qualifier || p.qualifier || '', p.property_card || '', p.property_location || '', saleDate, salePrice, p.sales_nu || '', timeNorm, yearBuilt, depr !== '' ? Number(depr).toFixed(3) : '', p.asset_building_class || '', (getLivingAreaValue(p) !== null ? getLivingAreaValue(p) : ''), cama, p.values_det_items || '', baseCost || '', replWithDepr !== '' ? Number(replWithDepr).toFixed(0) : '', improv !== '' ? Number(improv).toFixed(0) : '', ccf ? Number(ccf).toFixed(2) : '', adjustedRatio ? Number(adjustedRatio).toFixed(2) : '', adjustedValue !== '' ? Number(adjustedValue).toFixed(0) : ''];
     });
 
     const csvContent = [headers, ...rows].map(r => r.map(cell => {
@@ -234,18 +333,21 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
 
   // Save state recommended factor to market_land_valuation
+  const [savedRecommendation, setSavedRecommendation] = useState(false);
   const saveStateRecommendedFactor = async (factor) => {
     if (!jobData?.id) return alert('Missing job id');
     setIsSaving(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('market_land_valuation')
-        .update({ cost_conv_recommendation: factor, updated_at: new Date().toISOString() })
-        .eq('job_id', jobData.id);
+        .upsert([{ job_id: jobData.id, cost_conv_recommendation: factor, updated_at: new Date().toISOString() }], { onConflict: 'job_id' })
+        .select()
+        .single();
       if (error) throw error;
       setStateRecommendedFactor(factor);
       if (onUpdateJobCache && jobData?.id) onUpdateJobCache(jobData.id, null);
-      alert('Saved state recommended factor');
+      setSavedRecommendation(true);
+      setTimeout(() => setSavedRecommendation(false), 1500);
     } catch (e) {
       console.error('Error saving state recommended factor:', e);
       alert('Failed to save state recommended factor. See console.');
@@ -255,19 +357,22 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   };
 
   // Save job-level cost_conv_factor to market_land_valuation
+  const [savedFactor, setSavedFactor] = useState(false);
   const saveCostConvFactor = async (factor) => {
     if (!jobData?.id) return alert('Missing job id');
     setIsSaving(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('market_land_valuation')
-        .update({ cost_conv_factor: factor, updated_at: new Date().toISOString() })
-        .eq('job_id', jobData.id);
+        .upsert([{ job_id: jobData.id, cost_conv_factor: factor, updated_at: new Date().toISOString() }], { onConflict: 'job_id' })
+        .select()
+        .single();
       if (error) throw error;
       setCostConvFactor(factor);
       // Invalidate cache if parent provided
       if (onUpdateJobCache && jobData?.id) onUpdateJobCache(jobData.id, null);
-      alert('Saved cost conversion factor');
+      setSavedFactor(true);
+      setTimeout(() => setSavedFactor(false), 1500);
     } catch (e) {
       console.error('Error saving cost conv factor:', e);
       alert('Failed to save factor. See console.');
@@ -275,6 +380,46 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       setIsSaving(false);
     }
   };
+
+  // Summary totals for displayed/included rows (uses job-level CCF for selected row)
+  const summaryTotals = useMemo(() => {
+    let sumSale = 0;
+    let sumAdj = 0;
+
+    filtered.forEach(p => {
+      const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
+      const included = includedMap[key] !== false;
+      if (!included) return;
+
+      const salePrice = (priceBasis === 'price_time' && p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
+      if (isFinite(salePrice)) sumSale += salePrice;
+
+      // compute adjusted value for this row using job-level factor if present, otherwise use per-row CCF
+      {
+        const detItems = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
+        const baseVal = (p.values_base_cost !== undefined && p.values_base_cost !== null) ? Number(p.values_base_cost) : 0;
+        const yearBuilt = p.asset_year_built || '';
+        const depr = yearBuilt ? (1 - ((currentYear - parseInt(yearBuilt, 10)) / 100)) : '';
+        if (depr) {
+          const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
+          let adjustedValue = null;
+          if (costConvFactor !== null && costConvFactor !== '') {
+            adjustedValue = (cama + ((baseVal * (depr !== '' ? depr : 0)) * Number(costConvFactor)) + detItems);
+          } else {
+            const replWithDepr = (detItems + baseVal) * depr;
+            const improv = salePrice - cama - detItems;
+            const ccf = (replWithDepr && replWithDepr !== 0) ? (improv / replWithDepr) : null;
+            if (ccf !== null) adjustedValue = (cama + ((baseVal * (depr !== '' ? depr : 0)) * ccf) + detItems);
+          }
+          if (isFinite(adjustedValue)) sumAdj += adjustedValue;
+        }
+      }
+    });
+
+    const ratioPercent = (sumSale && sumSale !== 0) ? `${Math.round((sumAdj / sumSale) * 100)}%` : '—';
+
+    return { sumSale, sumAdj, ratioPercent };
+  }, [filtered, includedMap, costConvFactor, editedLandMap, currentYear, priceBasis]);
 
   return (
     <div className="bg-white rounded-lg p-6">
@@ -284,7 +429,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
           <p className="text-gray-600">Global Cost Conversion Factor and New Construction analysis (job-level)</p>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <div className="text-sm text-gray-600">Job Factor</div>
+          <div className="text-sm text-gray-600">Custom CCF</div>
           <div className="flex items-center gap-2">
             <input
               type="number"
@@ -299,12 +444,12 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
               onClick={() => saveCostConvFactor(costConvFactor)}
               disabled={isSaving || costConvFactor === null || costConvFactor === ''}
             >
-              {isSaving ? 'Saving...' : 'Save Factor'}
+              {isSaving ? 'Saving...' : (savedFactor ? 'Saved' : 'Save Factor')}
             </button>
           </div>
           <div className="text-xs text-gray-500 mt-1">Stored on market_land_valuation for this job</div>
           <div className="mt-3 w-full">
-            <div className="text-sm text-gray-600">State Recommended Factor</div>
+            <div className="text-sm text-gray-600">State County CCF</div>
             <div className="flex items-center gap-2 mt-1">
               <input
                 type="number"
@@ -319,7 +464,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                 onClick={() => saveStateRecommendedFactor(stateRecommendedFactor)}
                 disabled={isSaving || stateRecommendedFactor === null || stateRecommendedFactor === ''}
               >
-                {isSaving ? 'Saving...' : 'Save State Recommendation'}
+                {isSaving ? 'Saving...' : (savedRecommendation ? 'Saved' : 'Save State Factor')}
               </button>
             </div>
             <div className="text-xs text-gray-500 mt-1">Stored on market_land_valuation as cost_conv_recommendation</div>
@@ -349,21 +494,19 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         </div>
 
         <div>
-          <label className="text-sm text-gray-600 block">Property Type</label>
+          <label className="text-sm text-gray-600 block">Type & Use</label>
           <select
             value={typeGroup}
             onChange={(e) => setTypeGroup(e.target.value)}
             className="px-3 py-2 border rounded w-48"
           >
-            <option value="single_family">Single Family (1x)</option>
-            <option value="semi_detached">Semi-Detached (2x)</option>
-            <option value="townhouses">Row/Townhouses (3x)</option>
-            <option value="multifamily">Multifamily (4x)</option>
-            <option value="conversions">Conversions (5x)</option>
-            <option value="condominiums">Condominiums (6x)</option>
+            <option value="1">1 — Single Family</option>
+            <option value="2">2 — Duplex / Semi-Detached</option>
+            <option value="3">3* — Row / Townhouse (3E, 3I, 30, 31)</option>
+            <option value="4">4* — MultiFamily (42,43,44)</option>
+            <option value="5">5* — Conversions (51,52,53)</option>
+            <option value="6">6 — Condominium</option>
             <option value="all_residential">All Residential</option>
-            <option value="commercial">Commercial</option>
-            <option value="all">All Properties</option>
           </select>
         </div>
 
@@ -375,11 +518,33 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
             Reset
           </button>
           <button
+            className="px-3 py-2 bg-green-600 text-white rounded text-sm"
+            onClick={() => saveYearRange(fromYear, toYear)}
+            disabled={isSavingRange}
+          >
+            {isSavingRange ? 'Saving...' : (savedYears ? 'Saved' : 'Save Years')}
+          </button>
+          <button
             className="px-3 py-2 bg-indigo-600 text-white rounded text-sm"
             onClick={() => exportCsv()}
           >
             Export CSV
           </button>
+        </div>
+      </div>
+
+      {/* Price basis toggle */}
+      <div className="mb-3 text-sm text-gray-700">
+        <div className="mb-1">Choose basis for calculations: <span className="text-xs text-gray-500">Price Time = normalized price; Sale Price = actual sale price</span></div>
+        <div className="flex gap-2">
+          <button
+            className={`px-3 py-1 rounded ${priceBasis === 'price_time' ? 'bg-indigo-600 text-white' : 'bg-gray-100'}`}
+            onClick={() => { setPriceBasis('price_time'); savePriceBasis('price_time'); }}
+          >Price Time</button>
+          <button
+            className={`px-3 py-1 rounded ${priceBasis === 'sale_price' ? 'bg-indigo-600 text-white' : 'bg-gray-100'}`}
+            onClick={() => { setPriceBasis('sale_price'); savePriceBasis('sale_price'); }}
+          >Sale Price</button>
         </div>
       </div>
 
@@ -389,26 +554,13 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
             <div className="text-sm text-gray-700 font-medium">Recommended Factor (mean)</div>
             <div className="text-lg font-semibold">{Number(recommendedFactor).toFixed(2)}</div>
             <div className="text-xs text-gray-500">Based on {filtered.filter(p => {
-              const has = (p.values_repl_cost || p.values_base_cost) && (p.values_norm_time || p.sales_price);
+              const has = (p.values_repl_cost || p.values_base_cost) && (priceBasis === 'price_time' ? p.values_norm_time : p.sales_price);
               const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
               const included = includedMap[key] !== undefined ? includedMap[key] : true;
               return has && included;
             }).length} comparable properties</div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              className="px-3 py-2 bg-yellow-600 text-white rounded text-sm"
-              onClick={() => setCostConvFactor(Number(recommendedFactor.toFixed(2)))}
-            >
-              Use Recommendation
-            </button>
-            <button
-              className="px-3 py-2 bg-blue-600 text-white rounded text-sm"
-              onClick={() => saveCostConvFactor(Number(recommendedFactor.toFixed(2)))}
-            >
-              Save Recommendation
-            </button>
-          </div>
+                {/* Recommendation actions removed - keep Save Recommendation manual via Save Factor */}
         </div>
       )}
 
@@ -446,9 +598,11 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
           <tbody>
             {filtered.slice(0, 500).map((p, i) => {
               const saleYear = safeSaleYear(p);
-              const salePrice = (p.values_norm_time && p.values_norm_time > 0) ? p.values_norm_time : (p.sales_price || 0);
+              const salePriceDisplay = (p.sales_price !== undefined && p.sales_price !== null) ? Number(p.sales_price) : 0;
+              const priceTimeDisplay = (p.values_norm_time !== undefined && p.values_norm_time !== null) ? Number(p.values_norm_time) : 0;
+              const basisPrice = (priceBasis === 'price_time' && p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
               const repl = p.values_repl_cost || p.values_base_cost || null;
-              const factor = (repl && salePrice) ? (repl / salePrice) : null;
+              const factor = (repl && basisPrice) ? (repl / basisPrice) : null;
 
               return (
                 <tr key={p.property_composite_key || i} className="hover:bg-gray-50">
@@ -466,15 +620,18 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.property_location || ''}</td>
 
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.sales_date ? new Date(p.sales_date).toLocaleDateString() : '—'}</td>
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{formatCurrencyNoCents(salePrice)}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.sales_date ? new Date(p.sales_date).toLocaleDateString() : '���'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{formatCurrencyNoCents(salePriceDisplay)}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.sales_nu || '—'}</td>
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.values_norm_time ? formatCurrencyNoCents(Number(p.values_norm_time)) : '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{priceTimeDisplay ? formatCurrencyNoCents(priceTimeDisplay) : '—'}</td>
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_year_built || '—'}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(p.asset_year_built ? (1 - ((currentYear - parseInt(p.asset_year_built, 10)) / 100)).toFixed(2) : '—')}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_building_class || '—'}</td>
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.asset_living_area || p.living_area || '—'}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{(() => {
+                    const la = getLivingAreaValue(p);
+                    return la !== null ? formatNumberNoDecimals(la) : '—';
+                  })()}</td>
                   {/* Current Land editable */}
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">
                     {(() => {
@@ -507,7 +664,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
                     const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
-                    const salePriceRow = (p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
+                    const salePriceRow = basisPrice;
                     const camaRow = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
                     const detItemsRow = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
                     const val = Math.round(salePriceRow - camaRow - detItemsRow);
@@ -521,10 +678,25 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                     const yearBuiltRow = p.asset_year_built || '';
                     const deprRow = yearBuiltRow ? (1 - ((currentYear - parseInt(yearBuiltRow, 10)) / 100)) : '';
                     const replWithDeprRow = (deprRow !== '' ? Math.round((detItemsRow + baseVal) * deprRow) : null);
-                    const salePriceRow = (p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
+                    const salePriceRow = basisPrice;
                     const camaRow = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
                     const improvRow = Math.round(salePriceRow - camaRow - detItemsRow);
                     if (!replWithDeprRow) return <span className="text-xs text-yellow-800">Missing repl</span>;
+                    const val = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : null;
+                    return val ? Number(val).toFixed(2) : '���';
+                  })()}</td>
+
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
+                    const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
+                    const detItemsRow = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
+                    const baseVal = (p.values_base_cost !== undefined && p.values_base_cost !== null) ? Number(p.values_base_cost) : 0;
+                    const yearBuiltRow = p.asset_year_built || '';
+                    const deprRow = yearBuiltRow ? (1 - ((currentYear - parseInt(yearBuiltRow, 10)) / 100)) : '';
+                    const replWithDeprRow = (deprRow !== '' ? Math.round((detItemsRow + baseVal) * deprRow) : null);
+                    const salePriceRow = basisPrice;
+                    const camaRow = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
+                    const improvRow = Math.round(salePriceRow - camaRow - detItemsRow);
+                    if (!replWithDeprRow) return '—';
                     const val = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : null;
                     return val ? Number(val).toFixed(2) : '—';
                   })()}</td>
@@ -536,14 +708,20 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                     const yearBuiltRow = p.asset_year_built || '';
                     const deprRow = yearBuiltRow ? (1 - ((currentYear - parseInt(yearBuiltRow, 10)) / 100)) : '';
                     const replWithDeprRow = (deprRow !== '' ? Math.round((detItemsRow + baseVal) * deprRow) : null);
-                    const salePriceRow = (p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
+                    const salePriceRow = basisPrice;
                     const camaRow = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
                     const improvRow = Math.round(salePriceRow - camaRow - detItemsRow);
-                    // compute adjusted value here: Current Land + ((Base Cost * Depr) * CCF) + Det Item
+                    // compute adjusted value here: Current Land + ((Base Cost * Depr) * JOB CCF) + Det Item - only when this row is selected
                     if (!replWithDeprRow) return '—';
-                    const ccf = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : 0;
-                    const adjustedValue = (camaRow + ((baseVal * (deprRow !== '' ? deprRow : 0)) * ccf) + detItemsRow);
-                    return isFinite(adjustedValue) ? formatCurrencyNoCents(Math.round(adjustedValue)) : '—';
+                    // Use job-level factor when available, otherwise compute per-row CCF
+                    let adjustedValueRow = null;
+                    if (costConvFactor !== null && costConvFactor !== '') {
+                      adjustedValueRow = (camaRow + ((baseVal * (deprRow !== '' ? deprRow : 0)) * Number(costConvFactor)) + detItemsRow);
+                    } else {
+                      const ccf = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : 0;
+                      adjustedValueRow = (camaRow + ((baseVal * (deprRow !== '' ? deprRow : 0)) * ccf) + detItemsRow);
+                    }
+                    return isFinite(adjustedValueRow) ? formatCurrencyNoCents(Math.round(adjustedValueRow)) : '—';
                   })()}</td>
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
@@ -553,13 +731,18 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                     const yearBuiltRow = p.asset_year_built || '';
                     const deprRow = yearBuiltRow ? (1 - ((currentYear - parseInt(yearBuiltRow, 10)) / 100)) : '';
                     const replWithDeprRow = (deprRow !== '' ? Math.round((detItemsRow + baseVal) * deprRow) : null);
-                    const salePriceRow = (p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
+                    const salePriceRow = basisPrice;
                     const camaRow = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
                     const improvRow = Math.round(salePriceRow - camaRow - detItemsRow);
                     if (!replWithDeprRow) return '—';
-                    const ccf = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : 0;
-                    const adjustedValue = (camaRow + ((baseVal * (deprRow !== '' ? deprRow : 0)) * ccf) + detItemsRow);
-                    const ratio = (salePriceRow && adjustedValue) ? (adjustedValue / salePriceRow) : null;
+                    let adjustedValueRow = null;
+                    if (costConvFactor !== null && costConvFactor !== '') {
+                      adjustedValueRow = (camaRow + ((baseVal * (deprRow !== '' ? deprRow : 0)) * Number(costConvFactor)) + detItemsRow);
+                    } else {
+                      const ccf = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : 0;
+                      adjustedValueRow = (camaRow + ((baseVal * (deprRow !== '' ? deprRow : 0)) * ccf) + detItemsRow);
+                    }
+                    const ratio = (salePriceRow && adjustedValueRow) ? (adjustedValueRow / salePriceRow) : null;
                     return ratio ? formatPercentNoDecimals(ratio) : '—';
                   })()}</td>
                 </tr>
@@ -567,6 +750,14 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
             })}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-3 border-t pt-3">
+        <div className="flex gap-6 text-sm">
+          <div>Sum Sale Price: <span className="font-semibold">{formatCurrencyNoCents(summaryTotals.sumSale)}</span></div>
+          <div>Sum Adjusted Value: <span className="font-semibold">{formatCurrencyNoCents(summaryTotals.sumAdj)}</span></div>
+          <div>Ratio: <span className="font-semibold">{summaryTotals.ratioPercent}</span></div>
+        </div>
       </div>
 
       <div className="mt-3 text-sm text-gray-500">Showing {Math.min(filtered.length, 500).toLocaleString()} of {filtered.length.toLocaleString()} filtered properties (first 500 rows)</div>

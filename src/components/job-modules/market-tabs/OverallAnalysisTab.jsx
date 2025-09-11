@@ -283,18 +283,25 @@ const OverallAnalysisTab = ({
       }
     });
 
-    // Calculate deltas from baseline
+    // After computing avgAdjustedPrice, prefer Single Family as baseline if available with sales
+    const groupsArray = Object.values(groups);
+    const sfGroup = groupsArray.find(g => g.code && g.code.toString().startsWith('1') && g.salesCount > 0);
+    if (sfGroup) {
+      baselineGroup = sfGroup;
+    }
+
+    // Calculate deltas from baseline (baselineGroup may have been overridden to SF)
     Object.values(groups).forEach(group => {
       if (baselineGroup && group !== baselineGroup && group.salesCount > 0) {
         const delta = group.avgAdjustedPrice - baselineGroup.avgAdjustedPrice;
         group.delta = delta;
-        group.deltaPercent = baselineGroup.avgAdjustedPrice > 0 ? 
+        group.deltaPercent = baselineGroup.avgAdjustedPrice > 0 ?
           (delta / baselineGroup.avgAdjustedPrice * 100) : 0;
       } else {
         group.delta = 0;
         group.deltaPercent = 0;
       }
-      
+
       // Get CME bracket only if there are sales
       if (group.salesCount > 0) {
         group.cmeBracket = getCMEBracket(group.avgAdjustedPrice);
@@ -303,7 +310,7 @@ const OverallAnalysisTab = ({
       }
     });
 
-    return { groups: Object.values(groups), baseline: baselineGroup };
+    return { groups: groupsArray, baseline: baselineGroup };
   }, [filteredProperties, codeDefinitions, vendorType]);
   // Design & Style Analysis - UPDATED WITH FILTER FOR EMPTY/UNKNOWN AND DUAL COLUMNS
   const analyzeDesign = useCallback(() => {
@@ -1447,7 +1454,18 @@ const OverallAnalysisTab = ({
                       <tbody className="bg-white divide-y divide-gray-200">
                         {analysis.typeUse.groups
                           .filter(g => g.code !== 'Unknown')
-                          .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
+                          .sort((a, b) => {
+                            const priorityFor = (g) => {
+                              if (!g || !g.code) return 9;
+                              const first = g.code.toString().charAt(0);
+                              const map = { '1': 0, '2': 1, '3': 2, '4': 3, '6': 4 };
+                              return map[first] !== undefined ? map[first] : 5;
+                            };
+                            const pa = priorityFor(a);
+                            const pb = priorityFor(b);
+                            if (pa !== pb) return pa - pb;
+                            return (b.avgAdjustedPrice || 0) - (a.avgAdjustedPrice || 0);
+                          })
                           .map((group, idx) => (
                           <tr key={`${group.code}-${idx}`} className={group === analysis.typeUse.baseline ? 'bg-yellow-50' : ''}>
                             <td className="px-4 py-3 text-sm">

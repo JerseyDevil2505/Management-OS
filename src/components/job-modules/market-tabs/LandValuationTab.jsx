@@ -702,69 +702,20 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // ========== GET TYPE USE OPTIONS ==========
   const getTypeUseOptions = useCallback(() => {
-    if (!properties) return [{ code: '1', description: '1-Single Family' }];
-
-    // Get unique asset_type_use codes ONLY from properties with time-normalized data
-    const uniqueCodes = new Set();
-    properties.forEach(prop => {
-      if (prop.asset_type_use &&
-          prop.property_m4_class === '2' &&
-          prop.values_norm_time != null &&
-          prop.values_norm_time > 0) {
-        const rawCode = prop.asset_type_use.toString().trim().toUpperCase();
-        if (rawCode && rawCode !== '' && rawCode !== 'null' && rawCode !== 'undefined') {
-          uniqueCodes.add(rawCode);
-        }
-      }
-    });
-
-    const options = [];
-
-    // Always include Single Family
-    if (uniqueCodes.has('1') || uniqueCodes.has('10')) {
-      options.push({ code: '1', description: '1-Single Family' });
-    }
-
-    // Add umbrella groups only if we have matching codes
-    const umbrellaGroups = [
-      {
-        codes: ['30', '31', '3E', '3I'],
-        groupCode: '3',
-        description: '3-Row/Townhouses'
-      },
-      {
-        codes: ['42', '43', '44'],
-        groupCode: '4',
-        description: '4-MultiFamily'
-      },
-      {
-        codes: ['51', '52', '53'],
-        groupCode: '5',
-        description: '5-Conversions'
-      }
+    // Standardized Type & Use dropdown options for consistency across tabs
+    const standard = [
+      { code: '1', description: '1 — Single Family' },
+      { code: '2', description: '2 — Duplex / Semi-Detached' },
+      { code: '3', description: '3* — Row / Townhouse (3E,3I,30,31)' },
+      { code: '4', description: '4* — MultiFamily (42,43,44)' },
+      { code: '5', description: '5* — Conversions (51,52,53)' },
+      { code: '6', description: '6 — Condominium' },
+      { code: 'all_residential', description: 'All Residential' }
     ];
 
-    umbrellaGroups.forEach(group => {
-      const hasMatchingCodes = group.codes.some(code => uniqueCodes.has(code));
-      if (hasMatchingCodes) {
-        options.push({ code: group.groupCode, description: group.description });
-      }
-    });
-
-    // Add any other individual codes that don't fit the umbrella groups
-    const allUmbrellaCodes = ['1', '10', '30', '31', '3E', '3I', '42', '43', '44', '51', '52', '53'];
-    uniqueCodes.forEach(code => {
-      if (!allUmbrellaCodes.includes(code)) {
-        // Special case for code '2' - Semi Det
-        if (code === '2') {
-          options.push({ code, description: `2-Semi Det` });
-        } else {
-          options.push({ code, description: `${code}-Other` });
-        }
-      }
-    });
-
-    return options.sort((a, b) => a.code.localeCompare(b.code));
+    // If properties are present, keep the standard list; otherwise fallback to single family only
+    if (!properties || properties.length === 0) return [standard[0]];
+    return standard;
   }, [properties]);
 
   // ========== GET VCS DESCRIPTION HELPER ==========
@@ -940,26 +891,42 @@ const getPricePerUnit = useCallback((price, size) => {
       const newSales = properties.filter(prop => {
         if (existingIds.has(prop.id)) return false;
 
-        const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
-        const inDateRange = prop.sales_date >= dateRange.start.toISOString().split('T')[0] &&
-                            prop.sales_date <= dateRange.end.toISOString().split('T')[0];
+        // Validate sale price (ignore placeholders <= 10) and parse dates reliably
+        const hasValidSale = prop.sales_date && prop.sales_price && Number(prop.sales_price) > 10;
+        const saleDateObj = prop.sales_date ? new Date(prop.sales_date) : null;
+        const startDate = new Date(dateRange.start); startDate.setHours(0,0,0,0);
+        const endDate = new Date(dateRange.end); endDate.setHours(23,59,59,999);
+        const inDateRange = saleDateObj instanceof Date && !isNaN(saleDateObj) && saleDateObj >= startDate && saleDateObj <= endDate;
 
-        const nu = prop.sales_nu || '';
-        const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
-                        nu === '7' || nu.charCodeAt(0) === 32;
+        const nu = (prop.sales_nu || '').toString();
+        const nuTrim = nu.trim();
+        const validNu = nuTrim === '' || ['00','07','7'].includes(nuTrim) || nu.startsWith(' ');
 
-        const isAdditionalCard = prop.property_addl_card &&
-                          prop.property_addl_card !== 'NONE' &&
-                          prop.property_addl_card !== 'M';
+        // Additional card logic per vendor
+        let isAdditionalCard = false;
+        if (prop.property_addl_card) {
+          const card = String(prop.property_addl_card).trim().toUpperCase();
+          if (vendorType === 'BRT') {
+            // BRT: numeric cards, primary starts with '1'
+            if (card === '' || card === 'NONE') isAdditionalCard = false;
+            else if (!card.startsWith('1')) isAdditionalCard = true;
+          } else if (vendorType === 'Microsystems') {
+            // Microsystems: primary card is 'M'
+            if (card === '' || card === 'NONE' || card === 'M') isAdditionalCard = false;
+            else isAdditionalCard = true;
+          } else {
+            if (card !== 'NONE' && card !== 'M') isAdditionalCard = true;
+          }
+        }
         if (isAdditionalCard) return false;
 
-        const isVacantClass = prop.property_m4_class === '1' || prop.property_m4_class === '3B';
-        const isTeardown = prop.property_m4_class === '2' &&
+        const isVacantClass = String(prop.property_m4_class).toUpperCase() === '1' || String(prop.property_m4_class).toUpperCase() === '3B';
+        const isTeardown = String(prop.property_m4_class) === '2' &&
                           prop.asset_building_class && parseInt(prop.asset_building_class) > 10 &&
                           prop.asset_design_style &&
                           prop.asset_type_use &&
                           prop.values_mod_improvement < 10000;
-        const isPreConstruction = prop.property_m4_class === '2' &&
+        const isPreConstruction = String(prop.property_m4_class) === '2' &&
                                  prop.asset_building_class && parseInt(prop.asset_building_class) > 10 &&
                                  prop.asset_design_style &&
                                  prop.asset_type_use &&
@@ -998,35 +965,48 @@ const getPricePerUnit = useCallback((price, size) => {
         return false;
       }
 
-      const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
-      const inDateRange = prop.sales_date >= dateRange.start.toISOString().split('T')[0] &&
-                          prop.sales_date <= dateRange.end.toISOString().split('T')[0];
+      // Validate sale price (ignore placeholders <= 10) and normalize dates
+      const hasValidSale = prop.sales_date && prop.sales_price && Number(prop.sales_price) > 10;
+      const saleDateObj = prop.sales_date ? new Date(prop.sales_date) : null;
+      const startDate = new Date(dateRange.start); startDate.setHours(0,0,0,0);
+      const endDate = new Date(dateRange.end); endDate.setHours(23,59,59,999);
+      const inDateRange = saleDateObj instanceof Date && !isNaN(saleDateObj) && saleDateObj >= startDate && saleDateObj <= endDate;
 
       // Check NU codes for valid sales
-      const nu = prop.sales_nu || '';
-      const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
-                      nu === '7' || nu.charCodeAt(0) === 32;
+      const nu = (prop.sales_nu || '').toString();
+      const nuTrim = nu.trim();
+      const validNu = nuTrim === '' || ['00','07','7'].includes(nuTrim) || nu.startsWith(' ');
 
-      // Skip additional cards - they don't have land
-      const isAdditionalCard = prop.property_addl_card &&
-                        prop.property_addl_card !== 'NONE' &&
-                        prop.property_addl_card !== 'M';
+      // Skip additional cards - they don't have land (vendor-specific rules)
+      let isAdditionalCard = false;
+      if (prop.property_addl_card) {
+        const card = String(prop.property_addl_card).trim().toUpperCase();
+        if (vendorType === 'BRT') {
+          if (card === '' || card === 'NONE') isAdditionalCard = false;
+          else if (!card.startsWith('1')) isAdditionalCard = true;
+        } else if (vendorType === 'Microsystems') {
+          if (card === '' || card === 'NONE' || card === 'M') isAdditionalCard = false;
+          else isAdditionalCard = true;
+        } else {
+          if (card !== 'NONE' && card !== 'M') isAdditionalCard = true;
+        }
+      }
       if (isAdditionalCard) {
         return false;
       }
 
       // Standard vacant classes
-      const isVacantClass = prop.property_m4_class === '1' || prop.property_m4_class === '3B';
+      const isVacantClass = String(prop.property_m4_class).toUpperCase() === '1' || String(prop.property_m4_class).toUpperCase() === '3B';
 
       // NEW: Teardown detection (Class 2 with minimal improvement)
-      const isTeardown = prop.property_m4_class === '2' &&
+      const isTeardown = String(prop.property_m4_class) === '2' &&
                         prop.asset_building_class && parseInt(prop.asset_building_class) > 10 &&
                         prop.asset_design_style &&
                         prop.asset_type_use &&
                         prop.values_mod_improvement < 10000;
 
       // NEW: Pre-construction detection (sold before house was built)
-      const isPreConstruction = prop.property_m4_class === '2' &&
+      const isPreConstruction = String(prop.property_m4_class) === '2' &&
                                prop.asset_building_class && parseInt(prop.asset_building_class) > 10 &&
                                prop.asset_design_style &&
                                prop.asset_type_use &&
@@ -4809,7 +4789,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>Method 2: Improved Sale Lot Size Analysis</h3>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <label style={{ fontSize: '12px', color: '#6B7280' }}>Type and Use:</label>
+              <label style={{ fontSize: '12px', color: '#6B7280' }}>Type & Use</label>
               <select
                 value={method2TypeFilter}
                 onChange={(e) => setMethod2TypeFilter(e.target.value)}
@@ -4823,7 +4803,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               >
                 {getTypeUseOptions().map(option => (
                   <option key={option.code} value={option.code}>
-                    {option.code} - {option.description}
+                    {option.description}
                   </option>
                 ))}
               </select>
@@ -7811,7 +7791,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <label style={{ fontSize: '14px', fontWeight: '500' }}>Type Use Filter:</label>
+              <label style={{ fontSize: '14px', fontWeight: '500' }}>Type & Use</label>
               <select
                 value={globalEcoObsTypeFilter}
                 onChange={(e) => updateGlobalEcoObsTypeFilter(e.target.value)}
@@ -7825,10 +7805,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 }}
               >
                 <option value="all">All</option>
-                <option value="1">Single Family</option>
-                <option value="2">Two Family</option>
-                <option value="42">Multi-Family</option>
-                <option value="30">Townhouse</option>
+                <option value="1">1 — Single Family</option>
+                <option value="2">2 — Duplex / Semi-Detached</option>
+                <option value="3">3* — Row / Townhouse</option>
+                <option value="4">4* — MultiFamily</option>
+                <option value="5">5* — Conversions</option>
+                <option value="6">6 — Condominium</option>
+                <option value="all_residential">All Residential</option>
               </select>
             </div>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>

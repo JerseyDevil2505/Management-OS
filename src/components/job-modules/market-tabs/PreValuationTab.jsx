@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase, interpretCodes, worksheetService, checklistService } from '../../../lib/supabaseClient';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { supabase, interpretCodes, worksheetService, checklistService, runUnitRateLotCalculation, runUnitRateLotCalculation_v2, computeLotAcreForProperty, persistComputedLotAcre, normalizeSelectedCodes } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 import { 
   TrendingUp, 
@@ -85,11 +85,17 @@ const PreValuationTab = ({
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [lastAutoSave, setLastAutoSave] = useState(null);
   const [readyProperties, setReadyProperties] = useState(new Set());
+  // Unit Rate Configuration state (BRT only)
+  const [unitRateCodes, setUnitRateCodes] = useState([]);
+  const [selectedUnitRateCodes, setSelectedUnitRateCodes] = useState(new Set());
+  const [isCalculatingUnitSizes, setIsCalculatingUnitSizes] = useState(false);
+  const [isSavingUnitConfig, setIsSavingUnitConfig] = useState(false);
   const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
   const [normSortConfig, setNormSortConfig] = useState({ field: null, direction: 'asc' });
   const [locationVariations, setLocationVariations] = useState({});
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [currentLocationChoice, setCurrentLocationChoice] = useState(null);
+
   const [worksheetStats, setWorksheetStats] = useState({
     totalProperties: 0,
     vcsAssigned: 0,
@@ -124,7 +130,7 @@ const PreValuationTab = ({
 
   // Market Analysis State
   const [marketAnalysisData, setMarketAnalysisData] = useState([]);
-  const [blockTypeFilter, setBlockTypeFilter] = useState('single_family');
+  const [blockTypeFilter, setBlockTypeFilter] = useState('1');
   const [colorScaleStart, setColorScaleStart] = useState(100000);
   const [colorScaleIncrement, setColorScaleIncrement] = useState(50000);
   const [selectedBlockDetails, setSelectedBlockDetails] = useState(null);
@@ -305,7 +311,82 @@ useEffect(() => {
   };
 
   loadChecklistStatuses();
-}, []);  
+  }, []);
+
+
+// ==================== UNIT RATE CODES (BRT) ====================
+useEffect(() => {
+  // Build a unique list of URC/unit-rate codes from codeDefinitions (BRT format)
+  if (!codeDefinitions || !codeDefinitions.sections || !codeDefinitions.sections.VCS) {
+    setUnitRateCodes([]);
+    setSelectedUnitRateCodes(new Set());
+    return;
+  }
+
+  const codesMap = new Map();
+  try {
+    const vcsSection = codeDefinitions.sections.VCS;
+    // Build a map of vcsKey -> short identifier (e.g. PLV/WAT/etc) when available
+    const vcsLabelMap = {};
+    Object.keys(vcsSection).forEach(vcsKey => {
+      const vEntry = vcsSection[vcsKey];
+      // Prefer DATA.KEY or KEY as the short code, fall back to DATA.VALUE (long name) or numeric key
+      const short = (vEntry?.DATA?.KEY && String(vEntry.DATA.KEY).trim()) || (vEntry?.KEY && String(vEntry.KEY).trim()) || (vEntry?.DATA?.VALUE && String(vEntry.DATA.VALUE).trim()) || String(vcsKey);
+      vcsLabelMap[String(vcsKey)] = short;
+    });
+
+    Object.keys(vcsSection).forEach(vcsKey => {
+      const entry = vcsSection[vcsKey];
+      const urcMap = entry?.MAP?.['8']?.MAP;
+      if (!urcMap) return;
+      Object.keys(urcMap).forEach(k => {
+        const e = urcMap[k];
+        const codeVal = e.KEY || e.DATA?.KEY || k;
+        const desc = e.MAP?.['1']?.DATA?.VALUE || e.DATA?.VALUE || '';
+        if (codeVal) {
+          const compositeKey = `${vcsKey}::${String(codeVal).trim()}`;
+          const vcsLabel = vcsLabelMap[String(vcsKey)] || vcsKey;
+          const label = `${vcsLabel} · ${String(codeVal).trim()} — ${String(desc || `Code ${codeVal}`).trim()}`;
+          if (!codesMap.has(compositeKey)) {
+            codesMap.set(compositeKey, { code: String(codeVal).trim(), vcs: vcsKey, vcsLabel, description: String(desc || `Code ${codeVal}`).trim(), label });
+          }
+        }
+      });
+    });
+  } catch (err) {
+    console.error('Error extracting unit rate codes:', err);
+  }
+
+  const codes = Array.from(codesMap.entries()).map(([key, meta]) => ({ key, ...meta }));
+  setUnitRateCodes(codes);
+
+  // restore saved config if jobData contains unit_rate_config
+  try {
+    const saved = jobData?.unit_rate_config?.codes || jobData?.unit_rate_config || [];
+    setSelectedUnitRateCodes(new Set(saved));
+  } catch (e) {
+    // ignore
+  }
+
+}, [codeDefinitions, jobData]);
+
+// Group unit rate codes by description so we can show only a single instance per description
+const groupedUnitRateCodes = useMemo(() => {
+  const map = new Map();
+  unitRateCodes.forEach(u => {
+    const desc = (u.description || `Code ${u.code}`).trim();
+    if (!map.has(desc)) map.set(desc, { description: desc, items: [] });
+    map.get(desc).items.push(u);
+  });
+
+  return Array.from(map.values()).map(g => ({
+    description: g.description,
+    items: g.items.sort((a, b) => (a.vcsLabel || a.vcs || '').toString().localeCompare((b.vcsLabel || b.vcs || '').toString()) || (a.code || '').localeCompare(b.code || ''))
+  })).sort((a, b) => a.description.localeCompare(b.description));
+}, [unitRateCodes]);
+
+// Refs for checkbox indeterminate state per group
+const groupRefs = useRef({});
 
 // ==================== USE SAVED NORMALIZATION DATA FROM PROPS ====================
 useEffect(() => {
@@ -368,7 +449,103 @@ useEffect(() => {
   }
 }, [marketLandData]);// Only run when marketLandData actually changes
 
-  // ==================== WORKSHEET INITIALIZATION ====================
+  // Unit Rate helpers
+  const toggleUnitRateCode = (key) => {
+    const s = new Set(selectedUnitRateCodes);
+    if (s.has(key)) s.delete(key);
+    else s.add(key);
+    setSelectedUnitRateCodes(new Set(s));
+  };
+
+  const toggleUnitRateGroup = (description) => {
+    const group = groupedUnitRateCodes.find(g => g.description === description);
+    if (!group) return;
+    const s = new Set(selectedUnitRateCodes);
+    const allSelected = group.items.every(i => s.has(i.key));
+    if (allSelected) {
+      group.items.forEach(i => s.delete(i.key));
+    } else {
+      group.items.forEach(i => s.add(i.key));
+    }
+    setSelectedUnitRateCodes(new Set(s));
+  };
+
+  const formatError = (err) => {
+    try {
+      if (!err) return 'Unknown error';
+      if (typeof err === 'string') return err;
+      if (err.message) return err.message;
+      return JSON.stringify(err);
+    } catch (e) {
+      return String(err);
+    }
+  };
+
+  const saveUnitRateConfig = async () => {
+    if (!jobData?.id) return;
+    setIsSavingUnitConfig(true);
+    try {
+      const rawCodes = Array.from(selectedUnitRateCodes);
+      let normalizedCodes = rawCodes;
+      try { normalizedCodes = await normalizeSelectedCodes(jobData.id, rawCodes); } catch(e) { normalizedCodes = rawCodes; }
+      const payload = { codes: normalizedCodes };
+      const { error } = await supabase.from('jobs').update({ unit_rate_config: payload }).eq('id', jobData.id);
+      if (error) throw error;
+      alert('Unit rate configuration saved');
+    } catch (e) {
+      console.error('Error saving unit rate config:', e);
+      alert(`Failed to save unit rate configuration: ${formatError(e)}`);
+    } finally {
+      setIsSavingUnitConfig(false);
+    }
+  };
+
+  const calculateUnitRates = async () => {
+    if (!jobData?.id) return;
+    setIsCalculatingUnitSizes(true);
+    try {
+      // Determine selected codes: prefer UI selection; if empty, fall back to saved job config (if present)
+      let selected = Array.from(selectedUnitRateCodes);
+      if ((!selected || selected.length === 0) && jobData?.unit_rate_config) {
+        try {
+          selected = jobData.unit_rate_config?.codes || jobData.unit_rate_config || [];
+        } catch (e) {
+          selected = [];
+        }
+      }
+
+      // Prefer v2 calculator which returns detailed stats when available
+      let result = null;
+      // DEBUG: log selected codes for inspection
+      try { console.warn('Running unit-rate calc with selected codes:', selected); } catch(e){}
+      const useJobConfig = !!jobData?.unit_rate_config;
+      if (typeof runUnitRateLotCalculation_v2 === 'function') {
+        result = await runUnitRateLotCalculation_v2(jobData.id, selected, { useJobConfig });
+      } else {
+        result = await runUnitRateLotCalculation(jobData.id, selected);
+      }
+
+      const updated = result?.updated ?? 0;
+      const acreageSet = result?.acreage_set ?? (result?.updated ?? 0);
+      const acreageNull = result?.acreage_null ?? (updated - acreageSet);
+
+      // Log sample null keys for debugging (will appear in browser console)
+      if (result?.sample_null_keys && Array.isArray(result.sample_null_keys) && result.sample_null_keys.length > 0) {
+        console.warn('Sample composite keys with NULL acreage (first 20):', result.sample_null_keys);
+      }
+
+      alert(`Calculated lot sizes — updated: ${updated} properties\nacreage set: ${acreageSet}\nacreage null: ${acreageNull}`);
+      // Refresh cache/data
+      if (onUpdateJobCache) onUpdateJobCache(jobData.id);
+    } catch (e) {
+      console.error('Error calculating unit rates:', e);
+      alert(`Calculation failed: ${formatError(e)}`);
+    } finally {
+      setIsCalculatingUnitSizes(false);
+    }
+  };
+
+// ==================== WORKSHEET INITIALIZATION ====================
   useEffect(() => {
     if (properties && properties.length > 0) {
       const worksheetData = properties.map(prop => {
@@ -1011,30 +1188,26 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       // Get properties with size-normalized values for analysis
       const normalizedProps = properties.filter(p => p.values_norm_size && p.values_norm_size > 0);
       
-      // Filter by property type
+      // Filter by property type using Type & Use codes
       const filteredProps = normalizedProps.filter(p => {
         const typeUse = p.asset_type_use?.toString().trim();
         if (!typeUse) return false;
-        
+
         switch (blockTypeFilter) {
-          case 'single_family':
+          case '1':
             return typeUse.startsWith('1');
-          case 'semi_detached':
+          case '2':
             return typeUse.startsWith('2');
-          case 'townhouses':
+          case '3':
             return typeUse.startsWith('3');
-          case 'multifamily':
+          case '4':
             return typeUse.startsWith('4');
-          case 'conversions':
+          case '5':
             return typeUse.startsWith('5');
-          case 'condominiums':
+          case '6':
             return typeUse.startsWith('6');
           case 'all_residential':
-            return typeUse.match(/^[1-6]/);
-          case 'commercial':
-            return ['50', '51', '52'].some(code => typeUse === code || typeUse.startsWith(code));
-          case 'all':
-            return true;
+            return ['1','2','3','4','5','6'].some(prefix => typeUse.startsWith(prefix));
           default:
             return true;
         }
@@ -1889,6 +2062,18 @@ const analyzeImportFile = async (file) => {
           Market Analysis
         </button>
         <button
+          onClick={() => setActiveSubTab('unitRates')}
+          disabled={vendorType !== 'BRT'}
+          title={vendorType !== 'BRT' ? 'Unit Rate Configuration is only available for BRT jobs' : ''}
+          className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+            activeSubTab === 'unitRates'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-gray-600 hover:text-gray-800'
+          } ${vendorType !== 'BRT' ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          Unit Rate Configuration
+        </button>
+        <button
           onClick={() => setActiveSubTab('worksheet')}
           className={`px-4 py-2 font-medium border-b-2 transition-colors ${
             activeSubTab === 'worksheet'
@@ -2316,7 +2501,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('card')}
                             >
-                              Card {normSortConfig.field === 'card' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                              Card {normSortConfig.field === 'card' && (normSortConfig.direction === 'asc' ? '��' : '↓')}
                             </th>
                             <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-32 cursor-pointer hover:bg-gray-100"
@@ -2750,7 +2935,89 @@ const analyzeImportFile = async (file) => {
       )}
 
       {/* Block Analysis Tab Content */}
-      {activeSubTab === 'marketAnalysis' && (
+      {activeSubTab === 'unitRates' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Unit Rate Configuration (BRT)</h3>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={saveUnitRateConfig}
+                  disabled={vendorType !== 'BRT' || isSavingUnitConfig}
+                  className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {isSavingUnitConfig ? 'Saving...' : 'Save Config'}
+                </button>
+                <button
+                  onClick={calculateUnitRates}
+                  disabled={vendorType !== 'BRT' || isCalculatingUnitSizes}
+                  className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                >
+                  {isCalculatingUnitSizes ? 'Calculating...' : 'Calculate Lot Size'}
+                </button>
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-600 mb-4">Select unit-rate codes to include when calculating lot acreage. If none selected, all unit rates will be summed.</p>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-2">
+                <div className="border rounded p-2 max-h-64 overflow-auto">
+                  {groupedUnitRateCodes.length === 0 ? (
+                    <div className="text-sm text-gray-500">No unit rate codes found for this job.</div>
+                  ) : (
+                    groupedUnitRateCodes.map(group => {
+                      const allSelected = group.items.every(i => selectedUnitRateCodes.has(i.key));
+                      const someSelected = group.items.some(i => selectedUnitRateCodes.has(i.key));
+                      const desc = group.description;
+
+                      return (
+                        <div key={desc} className="py-1">
+                          <label className="flex items-center gap-3">
+                            <input
+                              ref={el => { groupRefs.current[desc] = el; if (el) el.indeterminate = someSelected && !allSelected; }}
+                              type="checkbox"
+                              disabled={vendorType !== 'BRT'}
+                              checked={allSelected}
+                              onChange={() => toggleUnitRateGroup(desc)}
+                            />
+
+                            <div className="text-sm flex-1">
+                              <div className="font-medium">{desc}</div>
+                              <div className="text-xs text-gray-500">{group.items.length} instance{group.items.length > 1 ? 's' : ''} • {group.items.map(i => `${i.vcsLabel || i.vcs}·${i.code}`).join(', ')}</div>
+                            </div>
+
+                          </label>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="bg-gray-50 p-3 rounded">
+                  <p className="text-sm text-gray-700">Summary</p>
+                  <div className="mt-3">
+                    <div className="text-sm">Total Codes: <strong>{unitRateCodes.length}</strong></div>
+                    <div className="text-sm mt-1">Selected: <strong>{selectedUnitRateCodes.size}</strong></div>
+                  </div>
+
+                  <div className="mt-4">
+                    <p className="text-xs text-gray-600">Notes:</p>
+                    <ul className="text-xs text-gray-600 list-disc list-inside mt-2">
+                      <li>Only BRT jobs support unit-rate configuration.</li>
+                      <li>Calculation uses heuristic: values ≥1000 treated as SF, smaller as acres.</li>
+                      <li>Results are saved to property_market_analysis.market_manual_lot_acre</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+{activeSubTab === 'marketAnalysis' && (
         <div className="space-y-6" style={{ position: 'relative' }}>
           {/* Configuration Section */}
           <div className="bg-white rounded-lg shadow p-6">
@@ -2818,22 +3085,20 @@ const analyzeImportFile = async (file) => {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Property Type Filter
+                  Type & Use
                 </label>
                 <select
                   value={blockTypeFilter}
                   onChange={(e) => setBlockTypeFilter(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
                 >
-                  <option value="single_family">Single Family (1x)</option>
-                  <option value="semi_detached">Semi-Detached (2x)</option>
-                  <option value="townhouses">Row/Townhouses (3x)</option>
-                  <option value="multifamily">Multifamily (4x)</option>
-                  <option value="conversions">Conversions (5x)</option>
-                  <option value="condominiums">Condominiums (6x)</option>
+                  <option value="1">1 — Single Family</option>
+                  <option value="2">2 — Duplex / Semi-Detached</option>
+                  <option value="3">3* — Row / Townhouse (3E,3I,30,31)</option>
+                  <option value="4">4* �� MultiFamily (42,43,44)</option>
+                  <option value="5">5* — Conversions (51,52,53)</option>
+                  <option value="6">6 — Condominium</option>
                   <option value="all_residential">All Residential</option>
-                  <option value="commercial">Commercial</option>
-                  <option value="all">All Properties</option>
                 </select>
               </div>
               
@@ -2868,7 +3133,7 @@ const analyzeImportFile = async (file) => {
               <strong>Color Scale:</strong> 
               <br/>• First color: $0 - ${(colorScaleIncrement - 1).toLocaleString()}
               <br/>• Second color: ${colorScaleIncrement.toLocaleString()} - ${((colorScaleIncrement * 2) - 1).toLocaleString()}
-              <br/>• Third color: ${(colorScaleIncrement * 2).toLocaleString()} - ${((colorScaleIncrement * 3) - 1).toLocaleString()}
+              <br/>�� Third color: ${(colorScaleIncrement * 2).toLocaleString()} - ${((colorScaleIncrement * 3) - 1).toLocaleString()}
               <br/>• And so on... Total of {marketAnalysisData.length} blocks analyzed.
             </div>
           </div>
@@ -4306,7 +4571,7 @@ const analyzeImportFile = async (file) => {
         </div>
       )}
 
-   </div>
- );
+       </div>
+  );
 };
 export default PreValuationTab;
