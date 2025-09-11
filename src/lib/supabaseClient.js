@@ -1398,13 +1398,15 @@ export async function runUnitRateLotCalculation(jobId, selectedCodes = []) {
 
       const acres = totalAcres + (totalSf / 43560);
 
-      // Save into property_market_analysis for this composite key
+      // Save into property_market_analysis for this composite key (do NOT persist applied codes here)
       updates.push({
         job_id: jobId,
         property_composite_key: compositeKey,
-        market_manual_lot_acre: acres > 0 ? parseFloat(acres.toFixed(4)) : null,
-        market_unit_codes_applied: selectedCodes
+        market_manual_lot_acre: acres > 0 ? parseFloat(acres.toFixed(4)) : null
       });
+
+      // Track what codes were applied for this property in a job-level map
+      appliedCodesMap[compositeKey] = selectedCodes || [];
     }
 
     // Upsert updates in batches
