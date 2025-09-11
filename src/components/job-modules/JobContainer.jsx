@@ -542,6 +542,13 @@ const JobContainer = ({
               'market land valuation insert'
             );
             marketData = newMarket;
+            try {
+              if (marketData && marketData.unit_rate_codes_applied && typeof marketData.unit_rate_codes_applied === 'string') {
+                marketData.unit_rate_codes_applied = JSON.parse(marketData.unit_rate_codes_applied);
+              }
+            } catch (e) {
+              console.warn('Failed to parse marketData.unit_rate_codes_applied after insert:', e);
+            }
           } catch (createError) {
             console.error('❌ MARKET DATA CREATION ERROR:');
             console.error(`  Error Message: ${createError.message || 'Unknown error'}`);
