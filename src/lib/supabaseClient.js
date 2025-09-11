@@ -194,23 +194,87 @@ export async function computeLotAcreForProperty(jobId, propertyCompositeKey, sel
       return Array.isArray(selCodes) && selCodes.length > 0;
     };
 
+    // Comparison logging for debugging string matching logic
+    detail.comparison_logs = [];
     let include = true;
     if (shouldApplySelection(selectedCodes)) {
-      include = selectedCodes.some(scRaw => {
+      include = false;
+      for (let si = 0; si < selectedCodes.length; si++) {
+        const scRaw = selectedCodes[si];
+        const scOrig = scRaw;
         const sc = String(scRaw).trim();
-        if (sc.includes('::')) {
-          const [vcsKeySel, codeSel] = sc.split('::').map(s => s.trim());
-          if (!codeSel) return false;
-          const codeMatches = codeSel === codeStr || codeSel.padStart(2, '0') === codeStr.padStart(2, '0');
-          if (!codeMatches) return false;
+        const logEntry = { selected_raw: scOrig, selected_norm: sc, code_raw: codeRaw, code_norm: codeStr, propVcs_raw: propVcsRaw, propVcs_norm: propVcs, matched: false, reason: null };
+
+        if (sc.includes('::') || sc.includes('·') || sc.includes('.') || sc.includes(':')) {
+          // Normalize possible separators: '::', '·', '.', ':'
+          const sep = sc.includes('::') ? '::' : (sc.includes('·') ? '·' : (sc.includes(':') ? ':' : '.'));
+          const parts = sc.split(sep).map(s => s.trim()).filter(Boolean);
+          const vcsKeySel = parts[0] || '';
+          const codeSel = parts[1] || '';
+
+          logEntry.vcsKeySel = vcsKeySel;
+          logEntry.codeSel = codeSel;
+
+          if (!codeSel) {
+            logEntry.reason = 'no_code_in_selection';
+            detail.comparison_logs.push(logEntry);
+            continue;
+          }
+
+          const codeMatches = (codeSel === codeStr) || (codeSel.padStart(2, '0') === codeStr.padStart(2, '0'));
+          if (!codeMatches) {
+            logEntry.reason = 'code_mismatch';
+            detail.comparison_logs.push(logEntry);
+            continue;
+          }
+
+          // Try to match VCS: compare by id set or by direct string
           const idSet = vcsIdMap.get(String(vcsKeySel));
-          if (!idSet) return propVcs && (String(propVcs) === String(vcsKeySel) || String(propVcs).padStart(2,'0') === String(vcsKeySel).padStart(2,'0'));
-          if (!propVcs) return false;
-          return Array.from(idSet).some(id => String(id).trim() === String(propVcs).trim());
+          if (idSet && propVcs) {
+            const matchedVcs = Array.from(idSet).some(id => String(id).trim() === String(propVcs).trim());
+            if (matchedVcs) {
+              logEntry.matched = true;
+              logEntry.reason = 'code_and_vcs_match';
+              include = true;
+              detail.comparison_logs.push(logEntry);
+              break;
+            } else {
+              logEntry.reason = 'vcs_idset_mismatch';
+              detail.comparison_logs.push(logEntry);
+              continue;
+            }
+          } else {
+            // Fallback: compare vcsKeySel directly to propVcs
+            if (propVcs && (String(propVcs).trim() === String(vcsKeySel).trim() || String(propVcs).trim().padStart(2,'0') === String(vcsKeySel).trim().padStart(2,'0'))) {
+              logEntry.matched = true;
+              logEntry.reason = 'vcs_direct_match';
+              include = true;
+              detail.comparison_logs.push(logEntry);
+              break;
+            } else {
+              logEntry.reason = 'vcs_direct_mismatch';
+              detail.comparison_logs.push(logEntry);
+              continue;
+            }
+          }
         } else {
-          return sc === codeStr || sc.padStart(2, '0') === codeStr.padStart(2, '0');
+          // Code-only selection (e.g., '02')
+          const codeSel = sc;
+          logEntry.codeSel = codeSel;
+          const codeMatches = (codeSel === codeStr) || (codeSel.padStart(2, '0') === codeStr.padStart(2, '0'));
+          if (codeMatches) {
+            logEntry.matched = true;
+            logEntry.reason = 'code_only_match';
+            include = true;
+            detail.comparison_logs.push(logEntry);
+            break;
+          } else {
+            logEntry.reason = 'code_only_mismatch';
+            detail.comparison_logs.push(logEntry);
+            continue;
+          }
         }
-      });
+      }
     }
 
     if (include) {
