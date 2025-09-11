@@ -1646,6 +1646,26 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
       }
     }
 
+    // Persist job-level map of applied codes into market_land_valuation for audit and global visibility
+    try {
+      const payload = {
+        job_id: jobId,
+        unit_rate_codes_applied: appliedCodesMap || {},
+        unit_rate_last_run: {
+          timestamp: new Date().toISOString(),
+          selected_codes: selectedCodes || [],
+          updated_count: updates.length,
+          acreage_set: updates.filter(u => u.market_manual_lot_acre !== null).length,
+          acreage_null: updates.filter(u => u.market_manual_lot_acre === null).length
+        },
+        updated_at: new Date().toISOString()
+      };
+      const { error: mvError } = await supabase.from('market_land_valuation').upsert([payload], { onConflict: 'job_id' });
+      if (mvError) console.error('Failed to persist appliedCodesMap to market_land_valuation (v2):', mvError);
+    } catch (e) {
+      console.error('Error writing appliedCodesMap to market_land_valuation (v2):', e);
+    }
+
     return { updated: updates.length, acreage_set: stats.acreageSet, acreage_null: updates.length - stats.acreageSet, sample_null_keys: stats.sampledNullKeys };
 
   } catch (error) {
