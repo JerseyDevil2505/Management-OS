@@ -105,6 +105,10 @@ const PreValuationTab = ({
   const [stagedMappings, setStagedMappings] = useState({});
   // Combined view of persisted mappings (from marketLandData) + staged
   const [combinedMappings, setCombinedMappings] = useState({});
+  // Available codes per VCS for drag source (updates as user drags)
+  const [availableCodesByVcs, setAvailableCodesByVcs] = useState({});
+  // VCS options displayed (exclude staged ones)
+  const [vcsOptionsShown, setVcsOptionsShown] = useState([]);
   // Drag state
   const [draggingCode, setDraggingCode] = useState(null);
 
