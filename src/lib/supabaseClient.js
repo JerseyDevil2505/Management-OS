@@ -1691,7 +1691,27 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = []) {
         updated_at: new Date().toISOString()
       };
       const { error: mvError } = await supabase.from('market_land_valuation').upsert([payload], { onConflict: 'job_id' });
-      if (mvError) console.error('Failed to persist appliedCodesMap to market_land_valuation (v2):', mvError);
+      if (mvError) {
+        try { console.error('Failed to persist appliedCodesMap to market_land_valuation (v2):', JSON.stringify(mvError)); } catch (logErr) { console.error('Failed to persist appliedCodesMap to market_land_valuation (v2) (object):', mvError); }
+
+        // Fallback: try to persist only a compact summary
+        try {
+          const summaryPayload = {
+            job_id: jobId,
+            unit_rate_codes_applied: {},
+            unit_rate_last_run: payload.unit_rate_last_run,
+            updated_at: new Date().toISOString()
+          };
+          const { error: mvError2 } = await supabase.from('market_land_valuation').upsert([summaryPayload], { onConflict: 'job_id' });
+          if (mvError2) {
+            try { console.error('Fallback upsert to market_land_valuation (v2) failed:', JSON.stringify(mvError2)); } catch(e2) { console.error('Fallback upsert (v2) failed (object):', mvError2); }
+          } else {
+            console.warn('Persisted unit-rate run summary (fallback v2) to market_land_valuation');
+          }
+        } catch (fbErr) {
+          console.error('Error during fallback persist to market_land_valuation (v2):', fbErr);
+        }
+      }
     } catch (e) {
       console.error('Error writing appliedCodesMap to market_land_valuation (v2):', e);
     }
