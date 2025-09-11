@@ -1760,8 +1760,8 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = [], op
         // Normalize land code (digits only, pad to 2)
         const codeStr = landCode !== undefined && landCode !== null ? String(landCode).replace(/[^0-9]/g, '').padStart(2, '0') : '';
 
-        // If user provided selectedCodes, treat them as an INCLUSION list: only include matching codes
-        if (selectedCodes && selectedCodes.length > 0) {
+        // If user provided selectedCodes (or we are using job-level config), treat them as an INCLUSION list: only include matching codes
+        if (shouldApplySelection(selectedCodes)) {
           if (!landCode) continue;
           const isIncluded = selectedCodes.some(scRaw => {
             const sc = String(scRaw).trim();
