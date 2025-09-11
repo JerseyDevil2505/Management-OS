@@ -518,6 +518,15 @@ const JobContainer = ({
           console.error(`  Full Error:`, error);
         } else {
           marketData = data;
+
+        // Normalize unit_rate_codes_applied if it's stored as a JSON string
+        try {
+          if (marketData && marketData.unit_rate_codes_applied && typeof marketData.unit_rate_codes_applied === 'string') {
+            marketData.unit_rate_codes_applied = JSON.parse(marketData.unit_rate_codes_applied);
+          }
+        } catch (e) {
+          console.warn('Failed to parse marketData.unit_rate_codes_applied, leaving as-is:', e);
+        }
         }
 
         // Create if doesn't exist
