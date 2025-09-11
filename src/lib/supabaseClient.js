@@ -371,7 +371,7 @@ export async function computeLotAcreForProperty(jobId, propertyCompositeKey, sel
     selected_codes: selectedCodes,
     propVcs: propVcs,
     details,
-    total_acres: isFinite(finalAcres) && finalAcres > 0 ? parseFloat(finalAcres.toFixed(4)) : null
+    total_acres: isFinite(finalAcres) && finalAcres > 0 ? parseFloat(finalAcres.toFixed(2)) : null
   };
 }
 
@@ -3447,7 +3447,7 @@ export const propertyService = {
       }
 
       if (data) {
-        console.log(`��� Found raw data for property ${propertyCompositeKey}`);
+        console.log(`✅ Found raw data for property ${propertyCompositeKey}`);
         return data;
       }
 
