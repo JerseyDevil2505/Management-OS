@@ -171,7 +171,7 @@ export async function normalizeSelectedCodes(jobId, selectedCodes = []) {
       const s = String(raw).trim();
       if (!s) continue;
 
-      // Normalize separators to support '::', '·', '.', ':'
+      // Normalize separators to support '::', '��', '.', ':'
       let sep = null;
       if (s.includes('::')) sep = '::';
       else if (s.includes('·')) sep = '·';
@@ -412,7 +412,7 @@ export async function persistComputedLotAcre(jobId, propertyCompositeKey, select
     const upsertRow = {
       job_id: jobId,
       property_composite_key: propertyCompositeKey,
-      market_manual_lot_acre: acres !== null ? parseFloat(Number(acres).toFixed(4)) : null,
+      market_manual_lot_acre: acres !== null ? parseFloat(Number(acres).toFixed(2)) : null,
       updated_at: new Date().toISOString()
     };
 
