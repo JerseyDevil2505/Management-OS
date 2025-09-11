@@ -239,7 +239,23 @@ export async function computeLotAcreForProperty(jobId, propertyCompositeKey, sel
 export async function persistComputedLotAcre(jobId, propertyCompositeKey, selectedCodes = []) {
   if (!jobId || !propertyCompositeKey) throw new Error('jobId and propertyCompositeKey required');
   try {
-    const result = await computeLotAcreForProperty(jobId, propertyCompositeKey, selectedCodes);
+    // If no selectedCodes provided, try to fetch saved job config and use it (including empty explicit selection)
+    let sel = Array.isArray(selectedCodes) ? selectedCodes : [];
+    let useJobConfig = false;
+    if ((!sel || sel.length === 0)) {
+      try {
+        const { data: jobRow, error: jobErr } = await supabase.from('jobs').select('unit_rate_config').eq('id', jobId).single();
+        if (!jobErr && jobRow) {
+          const saved = jobRow.unit_rate_config?.codes || jobRow.unit_rate_config || [];
+          sel = Array.isArray(saved) ? saved : [];
+          useJobConfig = true;
+        }
+      } catch (e) {
+        // ignore and proceed with empty selection
+      }
+    }
+
+    const result = await computeLotAcreForProperty(jobId, propertyCompositeKey, sel, { useJobConfig });
     const acres = result?.total_acres ?? null;
 
     // Upsert into property_market_analysis
