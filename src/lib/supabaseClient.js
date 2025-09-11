@@ -279,8 +279,24 @@ export async function persistComputedLotAcre(jobId, propertyCompositeKey, select
         // PGRST116 = no rows — ignore
         console.warn('Warning fetching existing market_land_valuation row:', fetchErr);
       }
-      const applied = (existing && existing.unit_rate_codes_applied) ? existing.unit_rate_codes_applied : {};
-      applied[propertyCompositeKey] = selectedCodes || [];
+      // Normalize existing.unit_rate_codes_applied: it may be an object or a JSON string
+      let applied = {};
+      if (existing && existing.unit_rate_codes_applied) {
+        try {
+          if (typeof existing.unit_rate_codes_applied === 'string') {
+            applied = JSON.parse(existing.unit_rate_codes_applied);
+          } else if (typeof existing.unit_rate_codes_applied === 'object' && existing.unit_rate_codes_applied !== null) {
+            applied = existing.unit_rate_codes_applied;
+          } else {
+            applied = {};
+          }
+        } catch (e) {
+          console.warn('Failed to parse existing.unit_rate_codes_applied, resetting to {}', e);
+          applied = {};
+        }
+      }
+      // Use the actual selection used for calculation (sel) when persisting
+      applied[propertyCompositeKey] = sel || [];
 
       const payload = {
         job_id: jobId,
