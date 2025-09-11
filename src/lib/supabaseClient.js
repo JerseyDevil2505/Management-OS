@@ -171,7 +171,7 @@ export async function normalizeSelectedCodes(jobId, selectedCodes = []) {
       const s = String(raw).trim();
       if (!s) continue;
 
-      // Normalize separators to support '::', '��', '.', ':'
+      // Normalize separators to support '::', '·', '.', ':'
       let sep = null;
       if (s.includes('::')) sep = '::';
       else if (s.includes('·')) sep = '·';
@@ -1772,7 +1772,7 @@ export async function runUnitRateLotCalculation(jobId, selectedCodes = []) {
       const acres = totalAcres + (totalSf / 43560);
 
       // Save into property_market_analysis for this composite key (do NOT persist applied codes here)
-      const acreVal = acres > 0 ? parseFloat(acres.toFixed(4)) : null;
+      const acreVal = acres > 0 ? parseFloat(acres.toFixed(2)) : null;
       const sfVal = acreVal !== null ? Math.round(acreVal * 43560) : null;
       updates.push({
         job_id: jobId,
