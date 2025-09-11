@@ -3147,6 +3147,32 @@ const analyzeImportFile = async (file) => {
                         ))}
                       </select>
 
+                      {/* VCS-specific codes box: shows codes for the selected VCS to drag from */}
+                      {mappingVcsKey ? (
+                        <div className="mt-2 p-2 border rounded bg-white">
+                          <div className="flex justify-between items-center">
+                            <div className="text-sm font-medium">Codes in VCS {mappingVcsKey}</div>
+                            <div className="text-xs text-gray-500">{unitRateCodes.filter(u => String(u.vcs) === String(mappingVcsKey)).length} codes</div>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2 max-h-48 overflow-auto p-1">
+                            {unitRateCodes.filter(u => String(u.vcs) === String(mappingVcsKey)).map(u => (
+                              <div
+                                key={u.key}
+                                draggable
+                                onDragStart={(e) => { e.dataTransfer.setData('text/plain', JSON.stringify({ code: u.code, vcs: u.vcs })); }}
+                                className="px-2 py-1 bg-gray-100 border border-gray-200 rounded text-xs cursor-grab"
+                                title={`Drag ${u.vcsLabel || u.vcs}·${u.code} into a bucket`}
+                              >
+                                {u.vcsLabel ? `${u.vcsLabel}·${u.code}` : `${u.vcs}·${u.code}`}
+                              </div>
+                            ))}
+                            {unitRateCodes.filter(u => String(u.vcs) === String(mappingVcsKey)).length === 0 && (
+                              <div className="text-xs text-gray-500">No codes found for this VCS.</div>
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
+
                       <div className="grid grid-cols-3 gap-2">
                         <div>
                           <label className="text-xs">Acre</label>
