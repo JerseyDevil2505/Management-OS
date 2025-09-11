@@ -91,6 +91,48 @@ const PreValuationTab = ({
   const [isCalculatingUnitSizes, setIsCalculatingUnitSizes] = useState(false);
   const [isSavingUnitConfig, setIsSavingUnitConfig] = useState(false);
   const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
+
+  // Unit rate mappings editor state
+  const [mappingVcsKey, setMappingVcsKey] = useState('');
+  const [mappingAcreCodes, setMappingAcreCodes] = useState('');
+  const [mappingSfCodes, setMappingSfCodes] = useState('');
+  const [mappingExcludeCodes, setMappingExcludeCodes] = useState('');
+  const [isSavingMappings, setIsSavingMappings] = useState(false);
+  const [isGeneratingLotSizes, setIsGeneratingLotSizes] = useState(false);
+
+  const saveMapping = async () => {
+    if (!jobData?.id) return alert('Job required');
+    if (!mappingVcsKey) return alert('Enter VCS key');
+    setIsSavingMappings(true);
+    try {
+      const acreArr = mappingAcreCodes.split(',').map(s => s.trim()).filter(Boolean);
+      const sfArr = mappingSfCodes.split(',').map(s => s.trim()).filter(Boolean);
+      const exclArr = mappingExcludeCodes.split(',').map(s => s.trim()).filter(Boolean);
+      await saveUnitRateMappings(jobData.id, mappingVcsKey, { acre: acreArr, sf: sfArr, exclude: exclArr });
+      alert('Mappings saved');
+    } catch (e) {
+      console.error('Failed saving mappings', e);
+      alert('Saving mappings failed');
+    } finally {
+      setIsSavingMappings(false);
+    }
+  };
+
+  const handleGenerateLotSizes = async () => {
+    if (!jobData?.id) return alert('Job required');
+    if (!confirm('Generate lot sizes for entire job using current mappings?')) return;
+    setIsGeneratingLotSizes(true);
+    try {
+      const res = await generateLotSizesForJob(jobData.id);
+      alert(`Generated lot sizes for ${res.updated} properties`);
+      if (onUpdateJobCache) onUpdateJobCache(jobData.id, null);
+    } catch (e) {
+      console.error('Generate failed', e);
+      alert('Generate failed: ' + (e.message || e));
+    } finally {
+      setIsGeneratingLotSizes(false);
+    }
+  };
   const [normSortConfig, setNormSortConfig] = useState({ field: null, direction: 'asc' });
   const [locationVariations, setLocationVariations] = useState({});
   const [showLocationModal, setShowLocationModal] = useState(false);
@@ -2500,7 +2542,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-32 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('property_location')}
                             >
-                              Location {normSortConfig.field === 'property_location' && (normSortConfig.direction === 'asc' ? '���' : '↓')}
+                              Location {normSortConfig.field === 'property_location' && (normSortConfig.direction === 'asc' ? '���' : '��')}
                             </th>
                             <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
