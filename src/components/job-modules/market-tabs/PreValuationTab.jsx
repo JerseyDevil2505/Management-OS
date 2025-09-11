@@ -3102,11 +3102,12 @@ const analyzeImportFile = async (file) => {
                                   <div
                                     key={i.key}
                                     draggable
-                                    onDragStart={(e) => { e.dataTransfer.setData('text/plain', JSON.stringify({ code: i.code, vcs: i.vcs })); }}
+                                    onDragStart={(e) => { e.dataTransfer.setData('text/plain', JSON.stringify({ code: i.code, vcs: i.vcs, description: i.description })); }}
                                     className="px-2 py-1 bg-gray-100 border border-gray-200 rounded text-xs cursor-grab"
                                     title={`Drag ${display} into a bucket`}
                                   >
-                                    {display}
+                                    <div className="font-medium">{display}</div>
+                                    <div className="text-xs text-gray-500 truncate max-w-xs">{i.description}</div>
                                   </div>
                                 );
                               })}
@@ -3159,11 +3160,12 @@ const analyzeImportFile = async (file) => {
                               <div
                                 key={u.key}
                                 draggable
-                                onDragStart={(e) => { e.dataTransfer.setData('text/plain', JSON.stringify({ code: u.code, vcs: u.vcs })); }}
+                                onDragStart={(e) => { e.dataTransfer.setData('text/plain', JSON.stringify({ code: u.code, vcs: u.vcs, description: u.description })); }}
                                 className="px-2 py-1 bg-gray-100 border border-gray-200 rounded text-xs cursor-grab"
                                 title={`Drag ${u.vcsLabel || u.vcs}·${u.code} into a bucket`}
                               >
-                                {u.vcsLabel ? `${u.vcsLabel}·${u.code}` : `${u.vcs}·${u.code}`}
+                                <div className="font-medium">{u.vcsLabel ? `${u.vcsLabel}·${u.code}` : `${u.vcs}·${u.code}`}</div>
+                                <div className="text-xs text-gray-500 truncate max-w-xs">{u.description}</div>
                               </div>
                             ))}
                             {unitRateCodes.filter(u => String(u.vcs) === String(mappingVcsKey)).length === 0 && (
