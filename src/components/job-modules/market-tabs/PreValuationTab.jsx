@@ -94,13 +94,19 @@ const PreValuationTab = ({
 
   // Unit rate mappings editor state
   const [mappingVcsKey, setMappingVcsKey] = useState('');
-  const [mappingAcreCodes, setMappingAcreCodes] = useState('');
-  const [mappingSfCodes, setMappingSfCodes] = useState('');
-  const [mappingExcludeCodes, setMappingExcludeCodes] = useState('');
+  const [mappingAcre, setMappingAcre] = useState([]);
+  const [mappingSf, setMappingSf] = useState([]);
+  const [mappingExclude, setMappingExclude] = useState([]);
   const [isSavingMappings, setIsSavingMappings] = useState(false);
   const [isGeneratingLotSizes, setIsGeneratingLotSizes] = useState(false);
   // Dynamic VCS options for mappings dropdown
   const [vcsOptions, setVcsOptions] = useState([]);
+  // Local staged mappings (not yet persisted)
+  const [stagedMappings, setStagedMappings] = useState({});
+  // Combined view of persisted mappings (from marketLandData) + staged
+  const [combinedMappings, setCombinedMappings] = useState({});
+  // Drag state
+  const [draggingCode, setDraggingCode] = useState(null);
 
   const saveMapping = async () => {
     if (!jobData?.id) return alert('Job required');
