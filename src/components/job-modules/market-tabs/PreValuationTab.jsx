@@ -488,6 +488,31 @@ useEffect(() => {
 
 }, [codeDefinitions, jobData]);
 
+// Whenever unitRateCodes, combinedMappings or stagedMappings change, rebuild availableCodesByVcs and vcsOptionsShown
+useEffect(() => {
+  const byVcs = {};
+  unitRateCodes.forEach(u => {
+    const v = String(u.vcs);
+    if (!byVcs[v]) byVcs[v] = [];
+    byVcs[v].push({ code: u.code, description: u.description, key: u.key, vcs: u.vcs, vcsLabel: u.vcsLabel });
+  });
+  // Remove codes already assigned in combinedMappings or stagedMappings
+  const removeAssigned = (arr, assigned) => arr.filter(item => !(assigned.includes(String(item.code))));
+  Object.keys(byVcs).forEach(v => {
+    const assigned = [];
+    const cm = combinedMappings[v] || { acre: [], sf: [], exclude: [] };
+    const sm = stagedMappings[v] || { acre: [], sf: [], exclude: [] };
+    assigned.push(...(cm.acre||[]), ...(cm.sf||[]), ...(cm.exclude||[]), ...(sm.acre||[]), ...(sm.sf||[]), ...(sm.exclude||[]));
+    byVcs[v] = removeAssigned(byVcs[v], assigned);
+  });
+  setAvailableCodesByVcs(byVcs);
+
+  // vcsOptionsShown excludes VCS that are staged (Ready to Save)
+  const shown = vcsOptions.filter(opt => !stagedMappings[opt.key]);
+  setVcsOptionsShown(shown);
+
+}, [unitRateCodes, combinedMappings, stagedMappings, vcsOptions]);
+
 // Group unit rate codes by description so we can show only a single instance per description
 const groupedUnitRateCodes = useMemo(() => {
   const map = new Map();
@@ -2977,7 +3002,7 @@ const analyzeImportFile = async (file) => {
                     <li>• <strong>Semi-Detached (2x):</strong> All codes starting with 2</li>
                     <li>• <strong>Row/Townhouses (3x):</strong> All codes starting with 3</li>
                     <li>• <strong>Multifamily (4x):</strong> All codes starting with 4</li>
-                    <li>• <strong>Conversions (5x):</strong> All codes starting with 5</li>
+                    <li>�� <strong>Conversions (5x):</strong> All codes starting with 5</li>
                     <li>�� <strong>Condominiums (6x):</strong> All codes starting with 6</li>
                   </ul>
                 </div>
