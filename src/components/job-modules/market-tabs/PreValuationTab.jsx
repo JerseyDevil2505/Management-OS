@@ -3092,7 +3092,7 @@ const analyzeImportFile = async (file) => {
                   <option value="1">1 — Single Family</option>
                   <option value="2">2 — Duplex / Semi-Detached</option>
                   <option value="3">3* — Row / Townhouse (3E,3I,30,31)</option>
-                  <option value="4">4* — MultiFamily (42,43,44)</option>
+                  <option value="4">4* �� MultiFamily (42,43,44)</option>
                   <option value="5">5* — Conversions (51,52,53)</option>
                   <option value="6">6 — Condominium</option>
                   <option value="all_residential">All Residential</option>
@@ -4568,45 +4568,7 @@ const analyzeImportFile = async (file) => {
         </div>
       )}
 
-      {/* Debug floating panel: show LANDUR/LANDURUNITS extraction when console not available */}
-      <div className="fixed bottom-4 right-4 w-96 bg-white shadow-lg rounded-lg p-3 z-50">
-        <div className="flex items-center justify-between mb-2">
-          <strong className="text-sm">Debug: LANDUR extraction</strong>
-          <button onClick={() => { setDebugOutput(null); setDebugCompositeKey(''); setDebugSelectedCodes(''); }} className="text-xs text-gray-500">Clear</button>
-        </div>
-        <div className="mb-2 text-xs text-gray-600">Job: {jobData?.id || '—'}</div>
-        <input className="w-full mb-2 px-2 py-1 border rounded text-sm" placeholder="Composite key (e.g. 2025...-12-11.01_...)" value={debugCompositeKey} onChange={(e) => setDebugCompositeKey(e.target.value)} />
-        <input className="w-full mb-2 px-2 py-1 border rounded text-sm" placeholder="Selected codes (comma-separated, e.g. 02,PLV::03)" value={debugSelectedCodes} onChange={(e) => setDebugSelectedCodes(e.target.value)} />
-        <div className="flex space-x-2 mb-2">
-          <button onClick={runDebugForProperty} disabled={debugRunning} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">Run</button>
-          <button onClick={() => { setDebugOutput(null); }} className="px-3 py-1 bg-gray-100 text-gray-700 rounded text-sm">Hide</button>
-          <button onClick={() => {
-            // Autofill composite key for block 12 lot 11.01 (search worksheetProperties)
-            try {
-              const matches = worksheetProperties.filter(p => String(p.block).trim() === '12' && String(p.lot).trim().startsWith('11.01'));
-              if (matches.length === 0) {
-                alert('No matching property found in worksheet (block 12 lot 11.01)');
-              } else if (matches.length === 1) {
-                setDebugCompositeKey(matches[0].property_composite_key);
-                alert('Composite key autofilled');
-              } else {
-                setDebugCompositeKey(matches[0].property_composite_key);
-                alert(`Multiple matches found; autofilled first: ${matches[0].property_composite_key}`);
-              }
-            } catch (e) {
-              alert('Autofill failed: ' + (e && e.message ? e.message : String(e)));
-            }
-          }} className="px-3 py-1 bg-green-600 text-white rounded text-sm">Autofill 12/11.01</button>
-          <button onClick={saveDebugToDb} disabled={debugRunning} className="px-3 py-1 bg-indigo-600 text-white rounded text-sm">Save</button>
-        </div>
-        <div className="max-h-60 overflow-auto bg-gray-50 p-2 rounded text-xs">
-          {debugRunning ? <div className="text-sm text-gray-600">Running...</div> : (
-            debugOutput ? <pre className="whitespace-pre-wrap">{JSON.stringify(debugOutput, null, 2)}</pre> : <div className="text-xs text-gray-500">No output yet. Enter composite key and Run.</div>
-          )}
-        </div>
-      </div>
-
-   </div>
+       </div>
   );
 };
 export default PreValuationTab;
