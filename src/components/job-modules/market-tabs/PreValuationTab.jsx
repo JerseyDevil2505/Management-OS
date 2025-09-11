@@ -99,6 +99,8 @@ const PreValuationTab = ({
   const [mappingExcludeCodes, setMappingExcludeCodes] = useState('');
   const [isSavingMappings, setIsSavingMappings] = useState(false);
   const [isGeneratingLotSizes, setIsGeneratingLotSizes] = useState(false);
+  // Dynamic VCS options for mappings dropdown
+  const [vcsOptions, setVcsOptions] = useState([]);
 
   const saveMapping = async () => {
     if (!jobData?.id) return alert('Job required');
@@ -376,6 +378,14 @@ useEffect(() => {
       const short = (vEntry?.DATA?.KEY && String(vEntry.DATA.KEY).trim()) || (vEntry?.KEY && String(vEntry.KEY).trim()) || (vEntry?.DATA?.VALUE && String(vEntry.DATA.VALUE).trim()) || String(vcsKey);
       vcsLabelMap[String(vcsKey)] = short;
     });
+
+    // Build VCS dropdown options for mappings editor
+    try {
+      const vcsOptionsArr = Object.keys(vcsSection).map(k => ({ key: String(k), label: vcsLabelMap[String(k)] || String(k) }));
+      setVcsOptions(vcsOptionsArr);
+    } catch (err) {
+      setVcsOptions([]);
+    }
 
     Object.keys(vcsSection).forEach(vcsKey => {
       const entry = vcsSection[vcsKey];
@@ -3050,17 +3060,20 @@ const analyzeImportFile = async (file) => {
                   <div className="mt-4 border-t pt-4">
                     <h4 className="text-sm font-medium mb-2">Unit Rate Mappings (per VCS)</h4>
                     <div className="grid grid-cols-1 gap-2">
-                      <input placeholder="VCS key (e.g. 1 or 01 or NAME)" value={mappingVcsKey} onChange={e => setMappingVcsKey(e.target.value)} className="w-full px-3 py-2 border rounded" />
+                      <label className="text-xs">VCS</label>
+                      <select value={mappingVcsKey} onChange={e => setMappingVcsKey(e.target.value)} className="w-full px-3 py-2 border rounded">
+                        <option value="">— Select VCS —</option>
+                        {vcsOptions.map(v => (
+                          <option key={v.key} value={v.key}>{v.label}</option>
+                        ))}
+                      </select>
                       <label className="text-xs">Acre codes (comma separated, e.g. 01,02)</label>
                       <textarea value={mappingAcreCodes} onChange={e => setMappingAcreCodes(e.target.value)} className="w-full px-3 py-2 border rounded" rows={2} />
                       <label className="text-xs">SF codes (comma separated)</label>
                       <textarea value={mappingSfCodes} onChange={e => setMappingSfCodes(e.target.value)} className="w-full px-3 py-2 border rounded" rows={2} />
                       <label className="text-xs">Exclude codes (comma separated)</label>
                       <textarea value={mappingExcludeCodes} onChange={e => setMappingExcludeCodes(e.target.value)} className="w-full px-3 py-2 border rounded" rows={2} />
-                      <div className="flex gap-2">
-                        <button onClick={saveMapping} disabled={!mappingVcsKey || isSavingMappings} className="px-3 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">{isSavingMappings ? 'Saving...' : 'Save Mapping'}</button>
-                        <button onClick={handleGenerateLotSizes} disabled={isGeneratingLotSizes} className="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700">{isGeneratingLotSizes ? 'Generating...' : 'Generate Lot Sizes for Job'}</button>
-                      </div>
+                      <div className="text-xs text-gray-500">Save and generate actions are available below the instance viewer.</div>
                     </div>
                   </div>
                 </div>
@@ -3726,19 +3739,14 @@ const analyzeImportFile = async (file) => {
                         />
                       </td>
                       <td className="px-2 py-1 text-center bg-gray-50">
-                        <input
-                          type="checkbox"
-                          checked={readyProperties.has(prop.property_composite_key)}
-                          onChange={(e) => {
-                            let newReadyProperties;
-                            if (e.target.checked) {
-                              newReadyProperties = new Set([...readyProperties, prop.property_composite_key]);
-                            } else {
-                              newReadyProperties = new Set(readyProperties);
-                              newReadyProperties.delete(prop.property_composite_key);
-                            }
+                        <button
+                          onClick={() => {
+                            const key = prop.property_composite_key;
+                            const newReadyProperties = new Set(readyProperties);
+                            if (newReadyProperties.has(key)) newReadyProperties.delete(key);
+                            else newReadyProperties.add(key);
                             setReadyProperties(newReadyProperties);
-                            
+
                             // Update stats with the new ready count
                             const stats = {
                               totalProperties: worksheetProperties.length,
@@ -3749,8 +3757,10 @@ const analyzeImportFile = async (file) => {
                             };
                             setWorksheetStats(stats);
                           }}
-                          className="w-4 h-4"
-                        />
+                          className={`px-2 py-1 rounded text-xs font-medium ${readyProperties.has(prop.property_composite_key) ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}`}
+                        >
+                          {readyProperties.has(prop.property_composite_key) ? 'Ready' : 'Mark'}
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -3787,7 +3797,7 @@ const analyzeImportFile = async (file) => {
              <div>
                <strong>Selected for Processing:</strong> {readyProperties.size} properties
              </div>
-             <div className="flex gap-2">
+             <div className="flex gap-2 items-center">
                <button
                  onClick={processSelectedProperties}
                  disabled={readyProperties.size === 0}
@@ -3795,6 +3805,12 @@ const analyzeImportFile = async (file) => {
                >
                  Process Selected Properties
                </button>
+
+               <div className="flex gap-2">
+                 <button onClick={saveMapping} disabled={!mappingVcsKey || isSavingMappings} className="px-3 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">{isSavingMappings ? 'Saving...' : 'Save Mapping'}</button>
+                 <button onClick={handleGenerateLotSizes} disabled={isGeneratingLotSizes} className="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700">{isGeneratingLotSizes ? 'Generating...' : 'Generate Lot Sizes for Job'}</button>
+               </div>
+
                <button
                 onClick={async () => {
                   if (!jobData?.id) return;
