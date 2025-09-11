@@ -2041,7 +2041,7 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = [], op
       // No free-text ACRE fallback — only LANDUR/LANDURUNITS and positional numeric code/unit pairs are used for BRT
 
       const acres = totalAcres + (totalSf / 43560);
-      const recordAcre = acres > 0 ? parseFloat(acres.toFixed(4)) : null;
+      const recordAcre = acres > 0 ? parseFloat(acres.toFixed(2)) : null;
       if (recordAcre !== null) stats.acreageSet++; else { if (stats.sampledNullKeys.length < 20) stats.sampledNullKeys.push(compositeKey); }
       const recordSf = recordAcre !== null ? Math.round(recordAcre * 43560) : null;
 
