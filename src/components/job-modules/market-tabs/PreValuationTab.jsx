@@ -1540,7 +1540,7 @@ const handleSalesDecision = (saleId, decision) => {
       time_normalized_price: k.time_normalized_price,
       has_value: !!k.time_normalized_price
     })));
-    if (false) console.log('��� Reject count:', rejects.length);
+    if (false) console.log('🔍 Reject count:', rejects.length);
 
     setIsSavingDecisions(true);
     setSaveProgress({ current: 0, total: keeps.length + rejects.length, message: 'Preparing to save...' });
@@ -1751,7 +1751,7 @@ const handleSalesDecision = (saleId, decision) => {
 
       //Clear cache after auto-save
       if (onUpdateJobCache && jobData?.id) {
-        if (false) console.log('🗑�� Clearing cache after auto-save worksheet');
+        if (false) console.log('🗑️ Clearing cache after auto-save worksheet');
         onUpdateJobCache(jobData.id, null);
       }
       
@@ -3123,13 +3123,44 @@ const analyzeImportFile = async (file) => {
                           <option key={v.key} value={v.key}>{v.label}</option>
                         ))}
                       </select>
-                      <label className="text-xs">Acre codes (comma separated, e.g. 01,02)</label>
-                      <textarea value={mappingAcreCodes} onChange={e => setMappingAcreCodes(e.target.value)} className="w-full px-3 py-2 border rounded" rows={2} />
-                      <label className="text-xs">SF codes (comma separated)</label>
-                      <textarea value={mappingSfCodes} onChange={e => setMappingSfCodes(e.target.value)} className="w-full px-3 py-2 border rounded" rows={2} />
-                      <label className="text-xs">Exclude codes (comma separated)</label>
-                      <textarea value={mappingExcludeCodes} onChange={e => setMappingExcludeCodes(e.target.value)} className="w-full px-3 py-2 border rounded" rows={2} />
-                      <div className="text-xs text-gray-500">Save and generate actions are available below the instance viewer.</div>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-xs">Acre</label>
+                          <div onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault(); try{const d=JSON.parse(e.dataTransfer.getData('text/plain')); addCodeToZone(d.code,'acre')}catch{} }} className="min-h-16 p-2 border rounded bg-white">
+                            {mappingAcre.length === 0 ? <div className="text-xs text-gray-400">Drop codes here</div> : mappingAcre.map(c => (
+                              <div key={c} className="inline-block mr-2 mb-2 px-2 py-1 bg-green-50 border border-green-200 rounded text-xs">
+                                {c} <button onClick={() => removeCodeFromZone(c,'acre')} className="ml-1 text-red-500">×</button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs">SF</label>
+                          <div onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault(); try{const d=JSON.parse(e.dataTransfer.getData('text/plain')); addCodeToZone(d.code,'sf')}catch{} }} className="min-h-16 p-2 border rounded bg-white">
+                            {mappingSf.length === 0 ? <div className="text-xs text-gray-400">Drop codes here</div> : mappingSf.map(c => (
+                              <div key={c} className="inline-block mr-2 mb-2 px-2 py-1 bg-blue-50 border border-blue-200 rounded text-xs">
+                                {c} <button onClick={() => removeCodeFromZone(c,'sf')} className="ml-1 text-red-500">×</button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs">Exclude</label>
+                          <div onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault(); try{const d=JSON.parse(e.dataTransfer.getData('text/plain')); addCodeToZone(d.code,'exclude')}catch{} }} className="min-h-16 p-2 border rounded bg-white">
+                            {mappingExclude.length === 0 ? <div className="text-xs text-gray-400">Drop codes here</div> : mappingExclude.map(c => (
+                              <div key={c} className="inline-block mr-2 mb-2 px-2 py-1 bg-gray-50 border border-gray-200 rounded text-xs">
+                                {c} <button onClick={() => removeCodeFromZone(c,'exclude')} className="ml-1 text-red-500">×</button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button onClick={stageMapping} disabled={!mappingVcsKey} className="px-3 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600">Ready to Save</button>
+                        <div className="text-xs text-gray-500">Drag codes from the list on the left into the desired bucket, then click "Ready to Save" to stage into the summary below.</div>
+                      </div>
                     </div>
                   </div>
                 </div>
