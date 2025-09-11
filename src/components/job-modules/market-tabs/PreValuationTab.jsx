@@ -141,6 +141,48 @@ const PreValuationTab = ({
       setIsGeneratingLotSizes(false);
     }
   };
+  // Mapping helpers: add/remove codes to zones and staging
+  const addCodeToZone = (code, zone) => {
+    code = String(code).trim();
+    if (!code) return;
+    // Normalize to two digits when numeric-like
+    const normalized = code.replace(/[^0-9]/g, '') ? String(code).trim() : String(code).trim();
+    // remove from other zones
+    setMappingAcre(prev => prev.filter(c => c !== normalized));
+    setMappingSf(prev => prev.filter(c => c !== normalized));
+    setMappingExclude(prev => prev.filter(c => c !== normalized));
+    if (zone === 'acre') setMappingAcre(prev => prev.includes(normalized) ? prev : [...prev, normalized]);
+    if (zone === 'sf') setMappingSf(prev => prev.includes(normalized) ? prev : [...prev, normalized]);
+    if (zone === 'exclude') setMappingExclude(prev => prev.includes(normalized) ? prev : [...prev, normalized]);
+  };
+
+  const removeCodeFromZone = (code, zone) => {
+    const c = String(code).trim();
+    if (zone === 'acre') setMappingAcre(prev => prev.filter(x => x !== c));
+    if (zone === 'sf') setMappingSf(prev => prev.filter(x => x !== c));
+    if (zone === 'exclude') setMappingExclude(prev => prev.filter(x => x !== c));
+  };
+
+  const stageMapping = () => {
+    if (!mappingVcsKey) return alert('Select a VCS first');
+    const payload = { acre: mappingAcre.slice(), sf: mappingSf.slice(), exclude: mappingExclude.slice() };
+    setStagedMappings(prev => ({ ...prev, [mappingVcsKey]: payload }));
+    setCombinedMappings(prev => ({ ...prev, [mappingVcsKey]: payload }));
+    alert(`Staged mapping for VCS ${mappingVcsKey}`);
+  };
+
+  // When the selected VCS changes, populate mapping arrays from staged -> combined -> empty
+  useEffect(() => {
+    if (!mappingVcsKey) {
+      setMappingAcre([]); setMappingSf([]); setMappingExclude([]);
+      return;
+    }
+    const m = (stagedMappings && stagedMappings[mappingVcsKey]) || (combinedMappings && combinedMappings[mappingVcsKey]) || { acre: [], sf: [], exclude: [] };
+    setMappingAcre(Array.isArray(m.acre) ? m.acre.slice() : []);
+    setMappingSf(Array.isArray(m.sf) ? m.sf.slice() : []);
+    setMappingExclude(Array.isArray(m.exclude) ? m.exclude.slice() : []);
+  }, [mappingVcsKey, stagedMappings, combinedMappings]);
+
   const [normSortConfig, setNormSortConfig] = useState({ field: null, direction: 'asc' });
   const [locationVariations, setLocationVariations] = useState({});
   const [showLocationModal, setShowLocationModal] = useState(false);
@@ -1498,7 +1540,7 @@ const handleSalesDecision = (saleId, decision) => {
       time_normalized_price: k.time_normalized_price,
       has_value: !!k.time_normalized_price
     })));
-    if (false) console.log('🔍 Reject count:', rejects.length);
+    if (false) console.log('��� Reject count:', rejects.length);
 
     setIsSavingDecisions(true);
     setSaveProgress({ current: 0, total: keeps.length + rejects.length, message: 'Preparing to save...' });
@@ -1709,7 +1751,7 @@ const handleSalesDecision = (saleId, decision) => {
 
       //Clear cache after auto-save
       if (onUpdateJobCache && jobData?.id) {
-        if (false) console.log('🗑️ Clearing cache after auto-save worksheet');
+        if (false) console.log('🗑�� Clearing cache after auto-save worksheet');
         onUpdateJobCache(jobData.id, null);
       }
       
@@ -3579,7 +3621,7 @@ const analyzeImportFile = async (file) => {
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('building_class_display')}
                         >
-                          Building Class {sortConfig.field === 'building_class_display' && (sortConfig.direction === 'asc' ? '��' : '��')}
+                          Building Class {sortConfig.field === 'building_class_display' && (sortConfig.direction === 'asc' ? '↑' : '��')}
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
