@@ -187,9 +187,15 @@ export async function computeLotAcreForProperty(jobId, propertyCompositeKey, sel
       continue;
     }
 
-    // If selectedCodes provided, treat as inclusion list
+    // If selectedCodes provided (or job-level config explicitly requested), treat as inclusion list
+    const treatEmptyAsExplicit = !!options.useJobConfig;
+    const shouldApplySelection = (selCodes) => {
+      if (treatEmptyAsExplicit) return true;
+      return Array.isArray(selCodes) && selCodes.length > 0;
+    };
+
     let include = true;
-    if (selectedCodes && selectedCodes.length > 0) {
+    if (shouldApplySelection(selectedCodes)) {
       include = selectedCodes.some(scRaw => {
         const sc = String(scRaw).trim();
         if (sc.includes('::')) {
