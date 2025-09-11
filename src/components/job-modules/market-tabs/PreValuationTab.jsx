@@ -3179,20 +3179,20 @@ const analyzeImportFile = async (file) => {
                       <label className="text-xs">VCS</label>
                       <select value={mappingVcsKey} onChange={e => setMappingVcsKey(e.target.value)} className="w-full px-3 py-2 border rounded">
                         <option value="">— Select VCS —</option>
-                        {vcsOptions.map(v => (
+                        {vcsOptionsShown.map(v => (
                           <option key={v.key} value={v.key}>{v.label}</option>
                         ))}
                       </select>
 
-                      {/* VCS-specific codes box: shows codes for the selected VCS to drag from */}
+                      {/* VCS-specific codes box: shows currently available codes for the selected VCS to drag from */}
                       {mappingVcsKey ? (
                         <div className="mt-2 p-2 border rounded bg-white">
                           <div className="flex justify-between items-center">
                             <div className="text-sm font-medium">Codes in VCS {mappingVcsKey}</div>
-                            <div className="text-xs text-gray-500">{unitRateCodes.filter(u => String(u.vcs) === String(mappingVcsKey)).length} codes</div>
+                            <div className="text-xs text-gray-500">{(availableCodesByVcs[mappingVcsKey] || []).length} codes</div>
                           </div>
                           <div className="mt-2 flex flex-wrap gap-2 max-h-48 overflow-auto p-1">
-                            {unitRateCodes.filter(u => String(u.vcs) === String(mappingVcsKey)).map(u => (
+                            {(availableCodesByVcs[mappingVcsKey] || []).map(u => (
                               <div
                                 key={u.key}
                                 draggable
@@ -3204,8 +3204,8 @@ const analyzeImportFile = async (file) => {
                                 <div className="text-xs text-gray-500 truncate max-w-xs">{u.description}</div>
                               </div>
                             ))}
-                            {unitRateCodes.filter(u => String(u.vcs) === String(mappingVcsKey)).length === 0 && (
-                              <div className="text-xs text-gray-500">No codes found for this VCS.</div>
+                            {(availableCodesByVcs[mappingVcsKey] || []).length === 0 && (
+                              <div className="text-xs text-gray-500">No codes available for this VCS.</div>
                             )}
                           </div>
                         </div>
