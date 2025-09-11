@@ -585,8 +585,9 @@ useEffect(() => {
       let result = null;
       // DEBUG: log selected codes for inspection
       try { console.warn('Running unit-rate calc with selected codes:', selected); } catch(e){}
+      const useJobConfig = !!jobData?.unit_rate_config;
       if (typeof runUnitRateLotCalculation_v2 === 'function') {
-        result = await runUnitRateLotCalculation_v2(jobData.id, selected);
+        result = await runUnitRateLotCalculation_v2(jobData.id, selected, { useJobConfig });
       } else {
         result = await runUnitRateLotCalculation(jobData.id, selected);
       }
@@ -2561,7 +2562,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('qualifier')}
                             >
-                              Qual {normSortConfig.field === 'qualifier' && (normSortConfig.direction === 'asc' ? '↑' : '����')}
+                              Qual {normSortConfig.field === 'qualifier' && (normSortConfig.direction === 'asc' ? '↑' : '��')}
                             </th>
                             <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
