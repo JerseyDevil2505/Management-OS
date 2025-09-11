@@ -393,6 +393,14 @@ useEffect(() => {
       setVcsOptions([]);
     }
 
+    // Initialize combined mappings from marketLandData (if available)
+    try {
+      const existing = marketLandData?.unit_rate_codes_applied;
+      const payloadObj = existing && typeof existing === 'string' ? JSON.parse(existing) : (existing || {});
+      const mappingsFromDB = payloadObj.mappings || {};
+      setCombinedMappings(mappingsFromDB);
+    } catch(e){ setCombinedMappings({}); }
+
     Object.keys(vcsSection).forEach(vcsKey => {
       const entry = vcsSection[vcsKey];
       const urcMap = entry?.MAP?.['8']?.MAP;
@@ -3571,7 +3579,7 @@ const analyzeImportFile = async (file) => {
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('building_class_display')}
                         >
-                          Building Class {sortConfig.field === 'building_class_display' && (sortConfig.direction === 'asc' ? '↑' : '��')}
+                          Building Class {sortConfig.field === 'building_class_display' && (sortConfig.direction === 'asc' ? '��' : '��')}
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
