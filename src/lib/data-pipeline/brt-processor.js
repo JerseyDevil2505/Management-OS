@@ -561,6 +561,20 @@ export class BRTProcessor {
       asset_view: rawRecord.VIEW,
       asset_year_built: this.parseInteger(rawRecord.YEARBUILT),
 
+      // LANDUR fields (BRT unit-rate codes and units)
+      LANDUR_1: (rawRecord['LANDUR_1'] !== undefined && rawRecord['LANDUR_1'] !== null) ? String(rawRecord['LANDUR_1']).replace(/[^0-9]/g,'').padStart(2,'0') : null,
+      LANDURUNITS_1: this.parseNumeric(rawRecord['LANDURUNITS_1']),
+      LANDUR_2: (rawRecord['LANDUR_2'] !== undefined && rawRecord['LANDUR_2'] !== null) ? String(rawRecord['LANDUR_2']).replace(/[^0-9]/g,'').padStart(2,'0') : null,
+      LANDURUNITS_2: this.parseNumeric(rawRecord['LANDURUNITS_2']),
+      LANDUR_3: (rawRecord['LANDUR_3'] !== undefined && rawRecord['LANDUR_3'] !== null) ? String(rawRecord['LANDUR_3']).replace(/[^0-9]/g,'').padStart(2,'0') : null,
+      LANDURUNITS_3: this.parseNumeric(rawRecord['LANDURUNITS_3']),
+      LANDUR_4: (rawRecord['LANDUR_4'] !== undefined && rawRecord['LANDUR_4'] !== null) ? String(rawRecord['LANDUR_4']).replace(/[^0-9]/g,'').padStart(2,'0') : null,
+      LANDURUNITS_4: this.parseNumeric(rawRecord['LANDURUNITS_4']),
+      LANDUR_5: (rawRecord['LANDUR_5'] !== undefined && rawRecord['LANDUR_5'] !== null) ? String(rawRecord['LANDUR_5']).replace(/[^0-9]/g,'').padStart(2,'0') : null,
+      LANDURUNITS_5: this.parseNumeric(rawRecord['LANDURUNITS_5']),
+      LANDUR_6: (rawRecord['LANDUR_6'] !== undefined && rawRecord['LANDUR_6'] !== null) ? String(rawRecord['LANDUR_6']).replace(/[^0-9]/g,'').padStart(2,'0') : null,
+      LANDURUNITS_6: this.parseNumeric(rawRecord['LANDURUNITS_6']),
+
       // Analysis and calculation fields
       // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
       //          asset_zoning, values_norm_size, values_norm_time
