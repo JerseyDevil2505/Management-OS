@@ -1668,14 +1668,14 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
       console.error('Error while parsing raw_data for acreage calculation fallback:', e);
     }
 
-    // 6. Fall back to PROPERTY_ACREAGE (divide by 10000) if present
-    if (property.PROPERTY_ACREAGE || property.property_acreage) {
-      const propAcreage = parseFloat(property.PROPERTY_ACREAGE ?? property.property_acreage);
-      if (!isNaN(propAcreage) && propAcreage > 0) {
-        const acres = propAcreage / 10000;
-        return acres.toFixed(2);
-      }
+    // 6. Fall back to PROPERTY_ACREAGE (divide by 10000) if present — skip for BRT (we prefer stricter BRT logic)
+  if (vendorType !== 'BRT' && (property.PROPERTY_ACREAGE || property.property_acreage)) {
+    const propAcreage = parseFloat(property.PROPERTY_ACREAGE ?? property.property_acreage);
+    if (!isNaN(propAcreage) && propAcreage > 0) {
+      const acres = propAcreage / 10000;
+      return acres.toFixed(2);
     }
+  }
 
     // Default return if no acreage can be calculated
     return '0.00';
@@ -2849,7 +2849,7 @@ export const checklistService = {
       
       if (error) throw error;
       
-      console.log(`✅ Created ${data.length} checklist items for job`);
+      console.log(`�� Created ${data.length} checklist items for job`);
       return data;
     } catch (error) {
       console.error('Checklist creation error:', error);
