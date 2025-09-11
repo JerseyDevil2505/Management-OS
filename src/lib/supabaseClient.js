@@ -139,7 +139,7 @@ async function getRawDataForProperty(jobId, propertyCompositeKey) {
  * Diagnostic helper: compute lot acreage for a single property using header-mapped LANDUR/LANDURUNITS
  * Returns detailed debug object (codes, units, included flag, totals)
  */
-export async function computeLotAcreForProperty(jobId, propertyCompositeKey, selectedCodes = []) {
+export async function computeLotAcreForProperty(jobId, propertyCompositeKey, selectedCodes = [], options = {}) {
   if (!jobId || !propertyCompositeKey) throw new Error('jobId and propertyCompositeKey required');
   const rawRecord = await getRawDataForProperty(jobId, propertyCompositeKey);
   if (!rawRecord) return { property_composite_key: propertyCompositeKey, error: 'No raw record found for this property' };
