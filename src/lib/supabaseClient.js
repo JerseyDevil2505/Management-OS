@@ -1342,6 +1342,7 @@ export async function runUnitRateLotCalculation(jobId, selectedCodes = []) {
 
     // Iterate over parsed property map and compute acreage based on selectedCodes
     const updates = [];
+    const appliedCodesMap = {};
     for (const [compositeKey, rawRecord] of rawDataForJob.propertyMap.entries()) {
       let totalAcres = 0;
       let totalSf = 0;
