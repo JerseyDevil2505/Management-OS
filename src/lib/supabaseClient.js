@@ -1416,10 +1416,27 @@ export async function runUnitRateLotCalculation(jobId, selectedCodes = []) {
       const { error } = await supabase.from('property_market_analysis').upsert(batch, { onConflict: ['job_id','property_composite_key'] });
       if (error) {
         console.error('Error upserting market analysis batch:', error);
-        // Normalize Supabase error to a readable message
         const msg = (error && error.message) ? error.message : JSON.stringify(error);
         throw new Error(`Upsert batch failed: ${msg}`);
       }
+    }
+
+    // Persist job-level map of applied codes into market_land_valuation for audit and global visibility
+    try {
+      const payload = {
+        job_id: jobId,
+        unit_rate_codes_applied: appliedCodesMap || {},
+        unit_rate_last_run: {
+          timestamp: new Date().toISOString(),
+          selected_codes: selectedCodes || [],
+          updated_count: updates.length
+        },
+        updated_at: new Date().toISOString()
+      };
+      const { error: mvError } = await supabase.from('market_land_valuation').upsert([payload], { onConflict: 'job_id' });
+      if (mvError) console.error('Failed to persist appliedCodesMap to market_land_valuation:', mvError);
+    } catch (e) {
+      console.error('Error writing appliedCodesMap to market_land_valuation:', e);
     }
 
     return { updated: updates.length };
@@ -2769,7 +2786,7 @@ export const propertyService = {
 
       // OPTIMIZED: Extract deletion list from versionInfo for targeted deletion
       const deletionsList = versionInfo.deletionsList || null;
-      console.log(`���� DELETION OPTIMIZATION: ${deletionsList ? `Passing ${deletionsList.length} properties for targeted deletion` : 'No deletion list provided'}`);
+      console.log(`🎯 DELETION OPTIMIZATION: ${deletionsList ? `Passing ${deletionsList.length} properties for targeted deletion` : 'No deletion list provided'}`);
 
       // Use updaters for UPSERT operations with optimized deletion
       if (vendorType === 'BRT') {
@@ -2992,7 +3009,7 @@ export const propertyService = {
       console.error('  Stack:', error.stack);
 
       // Fallback: use client-side parsing
-      console.log('���� Attempting client-side fallback...');
+      console.log('����� Attempting client-side fallback...');
       try {
         return await this.getRawDataForPropertyClientSide(jobId, propertyCompositeKey);
       } catch (fallbackError) {
