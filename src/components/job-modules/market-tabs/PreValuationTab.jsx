@@ -485,7 +485,10 @@ useEffect(() => {
     if (!jobData?.id) return;
     setIsSavingUnitConfig(true);
     try {
-      const payload = { codes: Array.from(selectedUnitRateCodes) };
+      const rawCodes = Array.from(selectedUnitRateCodes);
+      let normalizedCodes = rawCodes;
+      try { normalizedCodes = await normalizeSelectedCodes(jobData.id, rawCodes); } catch(e) { normalizedCodes = rawCodes; }
+      const payload = { codes: normalizedCodes };
       const { error } = await supabase.from('jobs').update({ unit_rate_config: payload }).eq('id', jobData.id);
       if (error) throw error;
       alert('Unit rate configuration saved');
