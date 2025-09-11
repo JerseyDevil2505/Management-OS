@@ -571,7 +571,16 @@ useEffect(() => {
     if (!jobData?.id) return;
     setIsCalculatingUnitSizes(true);
     try {
-      const selected = Array.from(selectedUnitRateCodes);
+      // Determine selected codes: prefer UI selection; if empty, fall back to saved job config (if present)
+      let selected = Array.from(selectedUnitRateCodes);
+      if ((!selected || selected.length === 0) && jobData?.unit_rate_config) {
+        try {
+          selected = jobData.unit_rate_config?.codes || jobData.unit_rate_config || [];
+        } catch (e) {
+          selected = [];
+        }
+      }
+
       // Prefer v2 calculator which returns detailed stats when available
       let result = null;
       // DEBUG: log selected codes for inspection
@@ -2552,7 +2561,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('qualifier')}
                             >
-                              Qual {normSortConfig.field === 'qualifier' && (normSortConfig.direction === 'asc' ? '↑' : '��')}
+                              Qual {normSortConfig.field === 'qualifier' && (normSortConfig.direction === 'asc' ? '↑' : '����')}
                             </th>
                             <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
