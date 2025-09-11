@@ -113,10 +113,16 @@ const PreValuationTab = ({
     if (!mappingVcsKey) return alert('Enter VCS key');
     setIsSavingMappings(true);
     try {
-      const acreArr = mappingAcreCodes.split(',').map(s => s.trim()).filter(Boolean);
-      const sfArr = mappingSfCodes.split(',').map(s => s.trim()).filter(Boolean);
-      const exclArr = mappingExcludeCodes.split(',').map(s => s.trim()).filter(Boolean);
+      const acreArr = mappingAcre.map(c => String(c).trim()).filter(Boolean);
+      const sfArr = mappingSf.map(c => String(c).trim()).filter(Boolean);
+      const exclArr = mappingExclude.map(c => String(c).trim()).filter(Boolean);
       await saveUnitRateMappings(jobData.id, mappingVcsKey, { acre: acreArr, sf: sfArr, exclude: exclArr });
+      // Update combined mappings local view
+      const merged = { ...(combinedMappings || {}) };
+      merged[mappingVcsKey] = { acre: acreArr, sf: sfArr, exclude: exclArr };
+      setCombinedMappings(merged);
+      // Clear staged for this VCS
+      setStagedMappings(prev => { const copy = { ...prev }; delete copy[mappingVcsKey]; return copy; });
       alert('Mappings saved');
     } catch (e) {
       console.error('Failed saving mappings', e);
@@ -744,7 +750,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         if (false) console.log('🔍 CRITICAL FIELD CHECK FOR FIRST PROPERTY:');
         if (false) console.log('  🏗️ property_m4_class:', firstProp.property_m4_class, '(should be "2", "1", "3B", etc.)');
         if (false) console.log('  💰 values_mod_total:', firstProp.values_mod_total, '(should be 64900, 109900, etc.)');
-        if (false) console.log('  📋 sales_nu:', firstProp.sales_nu, '(should be empty or "1")');
+        if (false) console.log('  �� sales_nu:', firstProp.sales_nu, '(should be empty or "1")');
         if (false) console.log('  ✅ sales_price:', firstProp.sales_price, '(working field for comparison)');
         if (false) console.log('  ✅ property_location:', firstProp.property_location, '(working field for comparison)');
 
