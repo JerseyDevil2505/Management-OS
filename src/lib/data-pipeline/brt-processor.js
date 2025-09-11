@@ -881,16 +881,7 @@ export class BRTProcessor {
       }
     }
 
-    // 2. Fall back to PROPERTY_ACREAGE (divide by 10000)
-    if (rawRecord.PROPERTY_ACREAGE) {
-      const propAcreage = parseFloat(rawRecord.PROPERTY_ACREAGE);
-      if (!isNaN(propAcreage) && propAcreage > 0) {
-        const acres = propAcreage / 10000;
-        return parseFloat(acres.toFixed(2));
-      }
-    }
-
-    // 3. Parse LANDUR/LANDURUNITS if present (support up to 6 entries)
+    // 2. Parse LANDUR/LANDURUNITS if present (support up to 6 entries)
     let totalAcres = 0;
     let totalSf = 0;
 
