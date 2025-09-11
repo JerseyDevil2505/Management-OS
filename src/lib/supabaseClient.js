@@ -227,6 +227,67 @@ export async function computeLotAcreForProperty(jobId, propertyCompositeKey, sel
   };
 }
 
+/**
+ * Persist computed lot acreage for a single property and update job-level applied codes map
+ */
+export async function persistComputedLotAcre(jobId, propertyCompositeKey, selectedCodes = []) {
+  if (!jobId || !propertyCompositeKey) throw new Error('jobId and propertyCompositeKey required');
+  try {
+    const result = await computeLotAcreForProperty(jobId, propertyCompositeKey, selectedCodes);
+    const acres = result?.total_acres ?? null;
+
+    // Upsert into property_market_analysis
+    const upsertRow = {
+      job_id: jobId,
+      property_composite_key: propertyCompositeKey,
+      market_manual_lot_acre: acres !== null ? parseFloat(Number(acres).toFixed(4)) : null,
+      updated_at: new Date().toISOString()
+    };
+
+    const { error: upsertError } = await supabase.from('property_market_analysis').upsert([upsertRow], { onConflict: ['job_id','property_composite_key'] });
+    if (upsertError) {
+      console.error('Error upserting computed lot acre:', upsertError);
+      throw upsertError;
+    }
+
+    // Update job-level unit_rate_codes_applied in market_land_valuation
+    try {
+      const { data: existing, error: fetchErr } = await supabase.from('market_land_valuation').select('unit_rate_codes_applied').eq('job_id', jobId).single();
+      if (fetchErr && fetchErr.code !== 'PGRST116') {
+        // PGRST116 = no rows — ignore
+        console.warn('Warning fetching existing market_land_valuation row:', fetchErr);
+      }
+      const applied = (existing && existing.unit_rate_codes_applied) ? existing.unit_rate_codes_applied : {};
+      applied[propertyCompositeKey] = selectedCodes || [];
+
+      const payload = {
+        job_id: jobId,
+        unit_rate_codes_applied: applied,
+        unit_rate_last_run: {
+          timestamp: new Date().toISOString(),
+          selected_codes: selectedCodes || [],
+          updated_count: 1
+        },
+        updated_at: new Date().toISOString()
+      };
+
+      const { error: mvError } = await supabase.from('market_land_valuation').upsert([payload], { onConflict: 'job_id' });
+      if (mvError) {
+        console.error('Failed to persist unit_rate_codes_applied for single property:', mvError);
+        // don't throw — this is non-critical for the property value
+      }
+    } catch (e) {
+      console.error('Error updating market_land_valuation:', e);
+    }
+
+    return { property_composite_key: propertyCompositeKey, job_id: jobId, market_manual_lot_acre: acres };
+
+  } catch (error) {
+    console.error('persistComputedLotAcre error:', error);
+    throw error;
+  }
+}
+
 // Expose quick debug helper on window in dev mode
 if (typeof window !== 'undefined') {
   window.__computeLotAcreForProperty = async (jobId, propertyCompositeKey, selectedCodes = []) => {
