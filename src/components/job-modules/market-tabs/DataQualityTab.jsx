@@ -186,7 +186,6 @@ const DataQualityTab = ({
           if (rawData && typeof rawData === 'object') {
             const fieldNames = Object.keys(rawData).sort();
             setAllRawDataFields(fieldNames);
-            console.log(`📋 Discovered ${fieldNames.length} raw data fields for custom checks`);
           }
         } catch (error) {
           console.error('Error loading raw data fields:', error);
