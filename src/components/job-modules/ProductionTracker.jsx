@@ -927,7 +927,7 @@ const ProductionTracker = ({
       
       initializeData();
     }
-  }, [jobData?.id, properties, inspectionData, employees]); // Added employees to deps
+  }, [jobData?.id, properties, inspectionData, employees, latestFileVersion]); // Added employees and latestFileVersion to deps
 
   // Update employee data when external inspectors list changes
   useEffect(() => {

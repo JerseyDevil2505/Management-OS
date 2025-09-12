@@ -186,7 +186,6 @@ const DataQualityTab = ({
           if (rawData && typeof rawData === 'object') {
             const fieldNames = Object.keys(rawData).sort();
             setAllRawDataFields(fieldNames);
-            console.log(`📋 Discovered ${fieldNames.length} raw data fields for custom checks`);
           }
         } catch (error) {
           console.error('Error loading raw data fields:', error);
@@ -673,7 +672,6 @@ const generateQCFormPDF = () => {
 
       // Create cache for raw data to avoid repeated RPC calls
       const rawDataCache = new Map();
-      console.log('🔄 Starting quality checks with job-level raw data access...');
 
       const pageSize = 100; // Process data in batches of 100
       const totalPages = Math.ceil(properties.length / pageSize);

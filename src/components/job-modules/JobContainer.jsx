@@ -400,7 +400,7 @@ const JobContainer = ({
         setLoadingProgress(100);
 
         if (allProperties.length !== count) {
-          console.warn(`⚠️ Expected ${count} properties but loaded ${allProperties.length}`);
+          console.warn(`��️ Expected ${count} properties but loaded ${allProperties.length}`);
         }
 
       } else {
@@ -715,6 +715,11 @@ const JobContainer = ({
         end_date: jobData?.end_date || selectedJob.end_date,
         workflow_stats: jobData?.workflow_stats || selectedJob.workflowStats || null,
 
+        // Preserve unit rate/staged mappings from DB so child components see them
+        unit_rate_config: (jobData && jobData.unit_rate_config && typeof jobData.unit_rate_config === 'string') ? (() => { try { return JSON.parse(jobData.unit_rate_config); } catch(e){ return jobData.unit_rate_config; } })() : (jobData?.unit_rate_config || selectedJob.unit_rate_config || null),
+        staged_unit_rate_config: (jobData && jobData.staged_unit_rate_config && typeof jobData.staged_unit_rate_config === 'string') ? (() => { try { return JSON.parse(jobData.staged_unit_rate_config); } catch(e){ return jobData.staged_unit_rate_config; } })() : (jobData?.staged_unit_rate_config || selectedJob.staged_unit_rate_config || null),
+        unit_rate_codes_applied: (jobData && jobData.unit_rate_codes_applied && typeof jobData.unit_rate_codes_applied === 'string') ? (() => { try { return JSON.parse(jobData.unit_rate_codes_applied); } catch(e){ return jobData.unit_rate_codes_applied; } })() : (jobData?.unit_rate_codes_applied || selectedJob.unit_rate_codes_applied || null),
+
         // ADD THESE TWO LINES:
         parsed_code_definitions: jobData?.parsed_code_definitions || null,
         vendor_type: jobData?.vendor_type || null,
@@ -722,6 +727,15 @@ const JobContainer = ({
       };
       
       setJobData(enrichedJobData);
+
+      // Debug: log unit-rate mappings that are passed to children
+      try {
+        console.log('🔁 Enriched job mappings:', {
+          unit_rate_config: enrichedJobData.unit_rate_config,
+          staged_unit_rate_config: enrichedJobData.staged_unit_rate_config,
+          unit_rate_codes_applied: enrichedJobData.unit_rate_codes_applied
+        });
+      } catch (e) { console.warn('Failed logging enriched job mappings', e); }
 
       console.log(`✅ Job data loaded: ${allProperties.length} properties`);
       
@@ -857,6 +871,17 @@ const JobContainer = ({
       propertyRecordsCount,
       onFileProcessed: handleFileProcessed,
       onDataRefresh: loadLatestFileVersions,  // FIXED: Pass data refresh function for modal close timing
+      // NEW: Provide a job-level refresh callback so children can request the parent to reload job data
+      onUpdateJobCache: async (jobId, opts = null) => {
+        try {
+          // If jobId provided and matches current selectedJob, reload; otherwise ignore
+          if (!jobId || (selectedJob && jobId === selectedJob.id)) {
+            await loadLatestFileVersions();
+          }
+        } catch (e) {
+          console.warn('onUpdateJobCache failed:', e);
+        }
+      },
       dataUpdateNotification,  // Pass notification to all components
       clearDataNotification: () => setDataUpdateNotification({  // Way to clear it
         hasNewData: false,

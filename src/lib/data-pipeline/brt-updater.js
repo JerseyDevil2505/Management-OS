@@ -567,6 +567,20 @@ export class BRTUpdater {
       asset_view: rawRecord.VIEW,
       asset_year_built: this.parseInteger(rawRecord.YEARBUILT),
 
+      // LANDUR fields (BRT unit-rate codes and units) - use lowercase column names to match DB
+      landur_1: (rawRecord['LANDUR_1'] !== undefined && rawRecord['LANDUR_1'] !== null) ? String(rawRecord['LANDUR_1']).replace(/[^0-9]/g,'').padStart(2,'0') : null,
+      landurunits_1: this.parseNumeric(rawRecord['LANDURUNITS_1']),
+      landur_2: (rawRecord['LANDUR_2'] !== undefined && rawRecord['LANDUR_2'] !== null) ? String(rawRecord['LANDUR_2']).replace(/[^0-9]/g,'').padStart(2,'0') : null,
+      landurunits_2: this.parseNumeric(rawRecord['LANDURUNITS_2']),
+      landur_3: (rawRecord['LANDUR_3'] !== undefined && rawRecord['LANDUR_3'] !== null) ? String(rawRecord['LANDUR_3']).replace(/[^0-9]/g,'').padStart(2,'0') : null,
+      landurunits_3: this.parseNumeric(rawRecord['LANDURUNITS_3']),
+      landur_4: (rawRecord['LANDUR_4'] !== undefined && rawRecord['LANDUR_4'] !== null) ? String(rawRecord['LANDUR_4']).replace(/[^0-9]/g,'').padStart(2,'0') : null,
+      landurunits_4: this.parseNumeric(rawRecord['LANDURUNITS_4']),
+      landur_5: (rawRecord['LANDUR_5'] !== undefined && rawRecord['LANDUR_5'] !== null) ? String(rawRecord['LANDUR_5']).replace(/[^0-9]/g,'').padStart(2,'0') : null,
+      landurunits_5: this.parseNumeric(rawRecord['LANDURUNITS_5']),
+      landur_6: (rawRecord['LANDUR_6'] !== undefined && rawRecord['LANDUR_6'] !== null) ? String(rawRecord['LANDUR_6']).replace(/[^0-9]/g,'').padStart(2,'0') : null,
+      landurunits_6: this.parseNumeric(rawRecord['LANDURUNITS_6']),
+
       // Analysis and calculation fields
       // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
       //          asset_zoning, values_norm_size, values_norm_time
@@ -899,16 +913,7 @@ export class BRTUpdater {
       }
     }
 
-    // 2. Fall back to PROPERTY_ACREAGE (divide by 10000)
-    if (rawRecord.PROPERTY_ACREAGE) {
-      const propAcreage = parseFloat(rawRecord.PROPERTY_ACREAGE);
-      if (!isNaN(propAcreage) && propAcreage > 0) {
-        const acres = propAcreage / 10000;
-        return parseFloat(acres.toFixed(2));
-      }
-    }
-
-    // 3. Parse LANDUR/LANDURUNITS if present (support up to 6 entries)
+    // 2. Parse LANDUR/LANDURUNITS if present (support up to 6 entries)
     let totalAcres = 0;
     let totalSf = 0;
 

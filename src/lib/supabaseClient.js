@@ -125,6 +125,36 @@ async function getRawDataForJob(jobId) {
   }
 }
 
+// Helper: persist unit rate run summary to jobs table if column exists; otherwise fallback to market_land_valuation
+async function persistUnitRateRunSummary(jobId, jobPayload) {
+  try {
+    const { error } = await supabase.from('jobs').update(jobPayload).eq('id', jobId);
+    if (!error) return { updated: true, target: 'jobs' };
+
+    const isMissingColumn = error && (error.code === 'PGRST204' || (error.message && error.message.includes("Could not find the 'unit_rate_last_run'")));
+    if (!isMissingColumn) return { updated: false, error };
+
+    try {
+      const { data: existing, error: selErr } = await supabase.from('market_land_valuation').select('id').eq('job_id', jobId).single();
+      if (selErr && selErr.code === 'PGRST116') {
+        const { error: insErr } = await supabase.from('market_land_valuation').insert({ job_id: jobId, unit_rate_last_run: jobPayload.unit_rate_last_run, unit_rate_codes_applied: jobPayload.unit_rate_codes_applied || null });
+        if (insErr) return { updated: false, error: insErr };
+        return { updated: true, target: 'market_land_valuation', action: 'insert' };
+      }
+
+      const updateObj = { unit_rate_last_run: jobPayload.unit_rate_last_run };
+      if (jobPayload.unit_rate_codes_applied) updateObj.unit_rate_codes_applied = jobPayload.unit_rate_codes_applied;
+      const { error: updErr } = await supabase.from('market_land_valuation').update(updateObj).eq('job_id', jobId);
+      if (updErr) return { updated: false, error: updErr };
+      return { updated: true, target: 'market_land_valuation', action: 'update' };
+    } catch (e2) {
+      return { updated: false, error: e2 };
+    }
+  } catch (e) {
+    return { updated: false, error: e };
+  }
+}
+
 /**
  * Get raw data for a specific property
  */
@@ -219,12 +249,30 @@ export async function normalizeSelectedCodes(jobId, selectedCodes = []) {
  */
 export async function computeLotAcreForProperty(jobId, propertyCompositeKey, selectedCodes = [], options = {}) {
   if (!jobId || !propertyCompositeKey) throw new Error('jobId and propertyCompositeKey required');
-  const rawRecord = await getRawDataForProperty(jobId, propertyCompositeKey);
-  if (!rawRecord) return { property_composite_key: propertyCompositeKey, error: 'No raw record found for this property' };
 
-  // Build VCS id map for namespaced selections if needed
-  const rawDataForJob = await getRawDataForJob(jobId);
-  const codeDefinitions = rawDataForJob?.codeDefinitions || rawDataForJob?.parsed_code_definitions || null;
+  // Load property record from property_records table (authoritative source)
+  const { data: propRow, error: propErr } = await supabase
+    .from('property_records')
+    .select('*')
+    .eq('job_id', jobId)
+    .eq('property_composite_key', propertyCompositeKey)
+    .single();
+
+  if (propErr || !propRow) return { property_composite_key: propertyCompositeKey, error: 'No property record found for this property' };
+
+  const rawRecord = propRow;
+
+  // Build VCS id map for namespaced selections if needed (use parsed code definitions when available)
+  let codeDefinitions = null;
+  let rawDataForJob = null;
+  try {
+    rawDataForJob = await getRawDataForJob(jobId);
+    codeDefinitions = rawDataForJob?.codeDefinitions || rawDataForJob?.parsed_code_definitions || null;
+  } catch (e) {
+    codeDefinitions = null;
+    rawDataForJob = null;
+  }
+
   const vcsIdMap = new Map();
   if (codeDefinitions && codeDefinitions.sections && codeDefinitions.sections.VCS) {
     Object.keys(codeDefinitions.sections.VCS).forEach(vkey => {
@@ -238,41 +286,44 @@ export async function computeLotAcreForProperty(jobId, propertyCompositeKey, sel
     });
   }
 
-  const propVcsRaw = rawRecord.VCS || rawRecord.vcs || rawRecord.property_vcs || rawRecord.VCS_CODE || null;
+  // Determine property's VCS value from common columns
+  const propVcsRaw = rawRecord.property_vcs || rawRecord.propertyVcs || rawRecord.VCS || rawRecord.vcs || rawRecord.VCS_CODE || null;
   const propVcs = propVcsRaw ? String(propVcsRaw).trim() : null;
 
   const details = [];
   let totalAcres = 0;
   let totalSf = 0;
 
+  // Helper to read land code/unit fields with fallbacks for naming differences
+  const readField = (obj, base, i) => {
+    const candidates = [
+      `${base}_${i}`,
+      `${base}${i}`,
+      `${base} ${i}`,
+      `${base.toLowerCase()}_${i}`,
+      `${base.toLowerCase()}${i}`,
+      `${base.toLowerCase()} ${i}`
+    ];
+    for (const k of candidates) {
+      if (Object.prototype.hasOwnProperty.call(obj, k)) return obj[k];
+    }
+    return undefined;
+  };
+
   for (let i = 1; i <= 6; i++) {
-    const codeRaw = rawRecord[`LANDUR_${i}`];
-    const unitsRaw = rawRecord[`LANDURUNITS_${i}`];
+    const codeRaw = readField(rawRecord, 'LANDUR', i);
+    const unitsRaw = readField(rawRecord, 'LANDURUNITS', i);
     const codeStr = codeRaw !== undefined && codeRaw !== null ? String(codeRaw).replace(/[^0-9]/g, '').padStart(2, '0') : '';
     const unitsNum = unitsRaw !== undefined && unitsRaw !== null ? parseFloat(String(unitsRaw).replace(/[,$\s\"]/g, '')) : NaN;
 
     const detail = { index: i, code_raw: codeRaw, code: codeStr, units_raw: unitsRaw, units: isNaN(unitsNum) ? null : unitsNum, included: false };
 
-    // Skip empty or invalid units
-    if (isNaN(unitsNum) || unitsNum <= 0) {
-      details.push(detail);
-      continue;
-    }
+    if (isNaN(unitsNum) || unitsNum <= 0) { details.push(detail); continue; }
+    if (codeStr === '01') { details.push(detail); continue; }
 
-    // Always skip site-value code '01'
-    if (codeStr === '01') {
-      details.push(detail);
-      continue;
-    }
-
-    // If selectedCodes provided (or job-level config explicitly requested), treat as inclusion list
     const treatEmptyAsExplicit = !!options.useJobConfig;
-    const shouldApplySelection = (selCodes) => {
-      if (treatEmptyAsExplicit) return true;
-      return Array.isArray(selCodes) && selCodes.length > 0;
-    };
+    const shouldApplySelection = (selCodes) => treatEmptyAsExplicit ? true : (Array.isArray(selCodes) && selCodes.length > 0);
 
-    // Comparison logging for debugging string matching logic
     detail.comparison_logs = [];
     let include = true;
     if (shouldApplySelection(selectedCodes)) {
@@ -284,7 +335,6 @@ export async function computeLotAcreForProperty(jobId, propertyCompositeKey, sel
         const logEntry = { selected_raw: scOrig, selected_norm: sc, code_raw: codeRaw, code_norm: codeStr, propVcs_raw: propVcsRaw, propVcs_norm: propVcs, matched: false, reason: null };
 
         if (sc.includes('::') || sc.includes('·') || sc.includes('.') || sc.includes(':')) {
-          // Normalize possible separators: '::', '·', '.', ':'
           const sep = sc.includes('::') ? '::' : (sc.includes('·') ? '·' : (sc.includes(':') ? ':' : '.'));
           const parts = sc.split(sep).map(s => s.trim()).filter(Boolean);
           const vcsKeySel = parts[0] || '';
@@ -293,77 +343,48 @@ export async function computeLotAcreForProperty(jobId, propertyCompositeKey, sel
           logEntry.vcsKeySel = vcsKeySel;
           logEntry.codeSel = codeSel;
 
-          if (!codeSel) {
-            logEntry.reason = 'no_code_in_selection';
-            detail.comparison_logs.push(logEntry);
-            continue;
-          }
-
+          if (!codeSel) { logEntry.reason = 'no_code_in_selection'; detail.comparison_logs.push(logEntry); continue; }
           const codeMatches = (codeSel === codeStr) || (codeSel.padStart(2, '0') === codeStr.padStart(2, '0'));
-          if (!codeMatches) {
-            logEntry.reason = 'code_mismatch';
-            detail.comparison_logs.push(logEntry);
-            continue;
-          }
+          if (!codeMatches) { logEntry.reason = 'code_mismatch'; detail.comparison_logs.push(logEntry); continue; }
 
-          // Try to match VCS: compare by id set or by direct string
           const idSet = vcsIdMap.get(String(vcsKeySel));
           if (idSet && propVcs) {
             const matchedVcs = Array.from(idSet).some(id => String(id).trim() === String(propVcs).trim());
-            if (matchedVcs) {
-              logEntry.matched = true;
-              logEntry.reason = 'code_and_vcs_match';
-              include = true;
-              detail.comparison_logs.push(logEntry);
-              break;
-            } else {
-              logEntry.reason = 'vcs_idset_mismatch';
-              detail.comparison_logs.push(logEntry);
-              continue;
-            }
+            if (matchedVcs) { logEntry.matched = true; logEntry.reason = 'code_and_vcs_match'; include = true; detail.comparison_logs.push(logEntry); break; }
+            else { logEntry.reason = 'vcs_idset_mismatch'; detail.comparison_logs.push(logEntry); continue; }
           } else {
-            // Fallback: compare vcsKeySel directly to propVcs
-            if (propVcs && (String(propVcs).trim() === String(vcsKeySel).trim() || String(propVcs).trim().padStart(2,'0') === String(vcsKeySel).trim().padStart(2,'0'))) {
-              logEntry.matched = true;
-              logEntry.reason = 'vcs_direct_match';
-              include = true;
-              detail.comparison_logs.push(logEntry);
-              break;
-            } else {
-              logEntry.reason = 'vcs_direct_mismatch';
-              detail.comparison_logs.push(logEntry);
-              continue;
-            }
+            if (propVcs && (String(propVcs).trim() === String(vcsKeySel).trim() || String(propVcs).trim().padStart(2,'0') === String(vcsKeySel).trim().padStart(2,'0'))) { logEntry.matched = true; logEntry.reason = 'vcs_direct_match'; include = true; detail.comparison_logs.push(logEntry); break; }
+            else { logEntry.reason = 'vcs_direct_mismatch'; detail.comparison_logs.push(logEntry); continue; }
           }
         } else {
-          // Code-only selection (e.g., '02')
           const codeSel = sc;
           logEntry.codeSel = codeSel;
           const codeMatches = (codeSel === codeStr) || (codeSel.padStart(2, '0') === codeStr.padStart(2, '0'));
-          if (codeMatches) {
-            logEntry.matched = true;
-            logEntry.reason = 'code_only_match';
-            include = true;
-            detail.comparison_logs.push(logEntry);
-            break;
-          } else {
-            logEntry.reason = 'code_only_mismatch';
-            detail.comparison_logs.push(logEntry);
-            continue;
-          }
+          if (codeMatches) { logEntry.matched = true; logEntry.reason = 'code_only_match'; include = true; detail.comparison_logs.push(logEntry); break; }
+          else { logEntry.reason = 'code_only_mismatch'; detail.comparison_logs.push(logEntry); continue; }
         }
       }
     }
 
-    if (include) {
-      detail.included = true;
-      if (unitsNum >= 1000) totalSf += unitsNum; else totalAcres += unitsNum;
-    }
-
+    if (include) { detail.included = true; if (unitsNum >= 1000) totalSf += unitsNum; else totalAcres += unitsNum; }
     details.push(detail);
   }
 
   const finalAcres = totalAcres + (totalSf / 43560);
+
+  // If we couldn't derive acres from LANDUR fields, fall back to other property fields (asset_lot_acre or asset_lot_sf)
+  let resultAcres = (isFinite(finalAcres) && finalAcres > 0) ? parseFloat(finalAcres.toFixed(2)) : null;
+  if (!resultAcres) {
+    try {
+      const vendorType = (rawDataForJob && rawDataForJob.vendorType) || 'BRT';
+      const fallback = await interpretCodes.getTotalLotSize(rawRecord, vendorType, codeDefinitions);
+      if (fallback && !isNaN(Number(fallback)) && Number(fallback) > 0) {
+        resultAcres = parseFloat(Number(fallback).toFixed(2));
+      }
+    } catch (e) {
+      // ignore fallback errors
+    }
+  }
 
   return {
     property_composite_key: propertyCompositeKey,
@@ -371,7 +392,8 @@ export async function computeLotAcreForProperty(jobId, propertyCompositeKey, sel
     selected_codes: selectedCodes,
     propVcs: propVcs,
     details,
-    total_acres: isFinite(finalAcres) && finalAcres > 0 ? parseFloat(finalAcres.toFixed(4)) : null
+    total_acres: resultAcres,
+    total_sf: resultAcres !== null ? Math.round(resultAcres * 43560) : null
   };
 }
 
@@ -408,11 +430,12 @@ export async function persistComputedLotAcre(jobId, propertyCompositeKey, select
     const result = await computeLotAcreForProperty(jobId, propertyCompositeKey, normalizedSel, { useJobConfig });
     const acres = result?.total_acres ?? null;
 
-    // Upsert into property_market_analysis
+    // Upsert into property_market_analysis (include SF as well)
     const upsertRow = {
       job_id: jobId,
       property_composite_key: propertyCompositeKey,
-      market_manual_lot_acre: acres !== null ? parseFloat(Number(acres).toFixed(4)) : null,
+      market_manual_lot_acre: acres !== null ? parseFloat(Number(acres).toFixed(2)) : null,
+      market_manual_lot_sf: (acres !== null && !isNaN(acres)) ? Math.round(Number(acres) * 43560) : null,
       updated_at: new Date().toISOString()
     };
 
@@ -422,34 +445,18 @@ export async function persistComputedLotAcre(jobId, propertyCompositeKey, select
       throw upsertError;
     }
 
-    // Update job-level unit_rate_codes_applied in market_land_valuation
+    // Persist property-level applied codes into the jobs row (do not use market_land_valuation)
     try {
-      const { data: existing, error: fetchErr } = await supabase.from('market_land_valuation').select('unit_rate_codes_applied').eq('job_id', jobId).single();
-      if (fetchErr && fetchErr.code !== 'PGRST116') {
-        // PGRST116 = no rows — ignore
-        console.warn('Warning fetching existing market_land_valuation row:', fetchErr);
-      }
-      // Normalize existing.unit_rate_codes_applied: it may be an object or a JSON string
+      const { data: jobRow, error: jobErr } = await supabase.from('jobs').select('unit_rate_codes_applied').eq('id', jobId).single();
       let applied = {};
-      if (existing && existing.unit_rate_codes_applied) {
+      if (!jobErr && jobRow && jobRow.unit_rate_codes_applied) {
         try {
-          if (typeof existing.unit_rate_codes_applied === 'string') {
-            applied = JSON.parse(existing.unit_rate_codes_applied);
-          } else if (typeof existing.unit_rate_codes_applied === 'object' && existing.unit_rate_codes_applied !== null) {
-            applied = existing.unit_rate_codes_applied;
-          } else {
-            applied = {};
-          }
-        } catch (e) {
-          console.warn('Failed to parse existing.unit_rate_codes_applied, resetting to {}', e);
-          applied = {};
-        }
+          applied = typeof jobRow.unit_rate_codes_applied === 'string' ? JSON.parse(jobRow.unit_rate_codes_applied) : jobRow.unit_rate_codes_applied || {};
+        } catch (e) { applied = {}; }
       }
-      // Use the normalized selection used for calculation when persisting
       applied[propertyCompositeKey] = normalizedSel || [];
 
-      const payload = {
-        job_id: jobId,
+      const jobPayload = {
         unit_rate_codes_applied: applied,
         unit_rate_last_run: {
           timestamp: new Date().toISOString(),
@@ -459,13 +466,10 @@ export async function persistComputedLotAcre(jobId, propertyCompositeKey, select
         updated_at: new Date().toISOString()
       };
 
-      const { error: mvError } = await supabase.from('market_land_valuation').upsert([payload], { onConflict: 'job_id' });
-      if (mvError) {
-        console.error('Failed to persist unit_rate_codes_applied for single property:', mvError);
-        // don't throw — this is non-critical for the property value
-      }
+      const persistResult = await persistUnitRateRunSummary(jobId, jobPayload);
+      if (!persistResult.updated) console.warn('Failed to persist unit-rate run summary (compute property path):', persistResult.error);
     } catch (e) {
-      console.error('Error updating market_land_valuation:', e);
+      console.warn('Error updating jobs row with unit rate run info:', e);
     }
 
     return { property_composite_key: propertyCompositeKey, job_id: jobId, market_manual_lot_acre: acres };
@@ -1668,14 +1672,14 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
       console.error('Error while parsing raw_data for acreage calculation fallback:', e);
     }
 
-    // 6. Fall back to PROPERTY_ACREAGE (divide by 10000) if present
-    if (property.PROPERTY_ACREAGE || property.property_acreage) {
-      const propAcreage = parseFloat(property.PROPERTY_ACREAGE ?? property.property_acreage);
-      if (!isNaN(propAcreage) && propAcreage > 0) {
-        const acres = propAcreage / 10000;
-        return acres.toFixed(2);
-      }
+    // 6. Fall back to PROPERTY_ACREAGE (divide by 10000) if present — skip for BRT (we prefer stricter BRT logic)
+  if (vendorType !== 'BRT' && (property.PROPERTY_ACREAGE || property.property_acreage)) {
+    const propAcreage = parseFloat(property.PROPERTY_ACREAGE ?? property.property_acreage);
+    if (!isNaN(propAcreage) && propAcreage > 0) {
+      const acres = propAcreage / 10000;
+      return acres.toFixed(2);
     }
+  }
 
     // Default return if no acreage can be calculated
     return '0.00';
@@ -1684,6 +1688,7 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
 
 // ===== UNIT RATE LOT CALCULATION =====
 export async function runUnitRateLotCalculation(jobId, selectedCodes = []) {
+  // existing implementation continues...
   // selectedCodes: array of code identifiers (strings) to include
   if (!jobId) throw new Error('jobId required');
 
@@ -1771,10 +1776,13 @@ export async function runUnitRateLotCalculation(jobId, selectedCodes = []) {
       const acres = totalAcres + (totalSf / 43560);
 
       // Save into property_market_analysis for this composite key (do NOT persist applied codes here)
+      const acreVal = acres > 0 ? parseFloat(acres.toFixed(2)) : null;
+      const sfVal = acreVal !== null ? Math.round(acreVal * 43560) : null;
       updates.push({
         job_id: jobId,
         property_composite_key: compositeKey,
-        market_manual_lot_acre: acres > 0 ? parseFloat(acres.toFixed(4)) : null
+        market_manual_lot_acre: acreVal,
+        market_manual_lot_sf: sfVal
       });
 
       // Track what codes were applied for this property in a job-level map
@@ -1933,16 +1941,7 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = [], op
     const stats = { totalParsed: 0, acreageSet: 0, sampledNullKeys: [] };
 
     for (const [compositeKey, rawRecord] of propertyMap.entries()) {
-      // DEBUG: log full rawRecord for specific composite keys when needed
-      if (compositeKey === '20251020-1-2_NONE-1-191 WATER STREET' || compositeKey === '20251020-1-2_NONE-1-191 WATER STREET') {
-        try {
-          console.warn('DEBUG: rawRecord keys for', compositeKey, Object.keys(rawRecord));
-          console.warn('DEBUG: rawRecord sample values:', Object.entries(rawRecord).slice(0,60));
-          const orderedValuesDbg = Object.keys(rawRecord).map(k => rawRecord[k]);
-          console.warn('DEBUG: ordered values slice (260..300):', orderedValuesDbg.slice(260, 305));
-        } catch (e) { console.error('DEBUG logging failed', e); }
-      }
-
+  
       stats.totalParsed++;
       let totalAcres = 0; let totalSf = 0;
 
@@ -2037,10 +2036,11 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = [], op
       // No free-text ACRE fallback — only LANDUR/LANDURUNITS and positional numeric code/unit pairs are used for BRT
 
       const acres = totalAcres + (totalSf / 43560);
-      const recordAcre = acres > 0 ? parseFloat(acres.toFixed(4)) : null;
+      const recordAcre = acres > 0 ? parseFloat(acres.toFixed(2)) : null;
       if (recordAcre !== null) stats.acreageSet++; else { if (stats.sampledNullKeys.length < 20) stats.sampledNullKeys.push(compositeKey); }
+      const recordSf = recordAcre !== null ? Math.round(recordAcre * 43560) : null;
 
-      updates.push({ job_id: jobId, property_composite_key: compositeKey, market_manual_lot_acre: recordAcre });
+      updates.push({ job_id: jobId, property_composite_key: compositeKey, market_manual_lot_acre: recordAcre, market_manual_lot_sf: recordSf });
       appliedCodesMap[compositeKey] = selectedCodes || [];
     }
 
@@ -2056,10 +2056,9 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = [], op
       }
     }
 
-    // Persist job-level map of applied codes into market_land_valuation for audit and global visibility
+    // Persist job-level summary into jobs table instead of market_land_valuation
     try {
-      const payload = {
-        job_id: jobId,
+      const jobPayload = {
         unit_rate_codes_applied: appliedCodesMap || {},
         unit_rate_last_run: {
           timestamp: new Date().toISOString(),
@@ -2070,30 +2069,12 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = [], op
         },
         updated_at: new Date().toISOString()
       };
-      const { error: mvError } = await supabase.from('market_land_valuation').upsert([payload], { onConflict: 'job_id' });
-      if (mvError) {
-        try { console.error('Failed to persist appliedCodesMap to market_land_valuation (v2):', JSON.stringify(mvError)); } catch (logErr) { console.error('Failed to persist appliedCodesMap to market_land_valuation (v2) (object):', mvError); }
-
-        // Fallback: try to persist only a compact summary
-        try {
-          const summaryPayload = {
-            job_id: jobId,
-            unit_rate_codes_applied: {},
-            unit_rate_last_run: payload.unit_rate_last_run,
-            updated_at: new Date().toISOString()
-          };
-          const { error: mvError2 } = await supabase.from('market_land_valuation').upsert([summaryPayload], { onConflict: 'job_id' });
-          if (mvError2) {
-            try { console.error('Fallback upsert to market_land_valuation (v2) failed:', JSON.stringify(mvError2)); } catch(e2) { console.error('Fallback upsert (v2) failed (object):', mvError2); }
-          } else {
-            console.warn('Persisted unit-rate run summary (fallback v2) to market_land_valuation');
-          }
-        } catch (fbErr) {
-          console.error('Error during fallback persist to market_land_valuation (v2):', fbErr);
-        }
+      const { error: jobUpdateErr } = await supabase.from('jobs').update(jobPayload).eq('id', jobId);
+      if (jobUpdateErr) {
+        try { console.warn('Failed to persist appliedCodesMap summary to jobs table:', JSON.stringify(jobUpdateErr)); } catch (logErr) { console.warn('Failed to persist appliedCodesMap summary to jobs table (object):', jobUpdateErr); }
       }
     } catch (e) {
-      console.error('Error writing appliedCodesMap to market_land_valuation (v2):', e);
+      console.warn('Error writing appliedCodesMap summary to jobs table:', e);
     }
 
     return { updated: updates.length, acreage_set: stats.acreageSet, acreage_null: updates.length - stats.acreageSet, sample_null_keys: stats.sampledNullKeys };
@@ -2106,6 +2087,404 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = [], op
 }
 
 // ===== EMPLOYEE MANAGEMENT SERVICES =====
+// Generate lot sizes for entire job using mappings stored in market_land_valuation.unit_rate_codes_applied
+export async function generateLotSizesForJob(jobId) {
+  if (!jobId) throw new Error('jobId required');
+
+  // Prefer unit_rate_config structured mappings first; capture flat code arrays if present; then staged_unit_rate_config; legacy unit_rate_codes_applied last
+  let mappings = null;
+  let codeOnlySelected = null; // capture flat list of selected codes if unit_rate_config stores that
+  let jobRowGlobal = null;
+  let marketRowGlobal = null;
+
+  const deepParse = (val) => {
+    let v = val;
+    let attempts = 0;
+    while (typeof v === 'string' && attempts < 4) {
+      try {
+        v = JSON.parse(v);
+      } catch (e) {
+        break;
+      }
+      attempts++;
+    }
+    return v;
+  };
+
+  try {
+    const { data: jobRow, error: jobErr } = await supabase.from('jobs').select('unit_rate_codes_applied,staged_unit_rate_config,unit_rate_config').eq('id', jobId).single();
+    jobRowGlobal = jobRow || null;
+    if (!jobErr && jobRow) {
+      // 1) Examine unit_rate_config for either structured mappings or flat codes
+      if (jobRow.unit_rate_config) {
+        const urc = deepParse(jobRow.unit_rate_config);
+
+        if (Array.isArray(urc) && urc.length > 0) {
+          codeOnlySelected = urc;
+        } else if (urc && typeof urc === 'object') {
+          // Try multiple common shapes
+          const keys = Object.keys(urc);
+          const looksLikeStaged = keys.length > 0 && keys.every(k => /^\d+$/.test(String(k).trim()));
+          if (looksLikeStaged) {
+            mappings = urc;
+          } else if (urc.mappings && typeof urc.mappings === 'object' && Object.keys(urc.mappings).length > 0) {
+            mappings = urc.mappings;
+          } else if (Array.isArray(urc.codes) && urc.codes.length > 0) {
+            codeOnlySelected = urc.codes;
+          } else if (Array.isArray(urc.selected_codes) && urc.selected_codes.length > 0) {
+            codeOnlySelected = urc.selected_codes;
+          } else if (Array.isArray(urc.codes_selected) && urc.codes_selected.length > 0) {
+            codeOnlySelected = urc.codes_selected;
+          } else {
+            // Try to find any nested object that looks like mappings
+            for (const k of Object.keys(urc)) {
+              const candidate = urc[k];
+              if (candidate && typeof candidate === 'object') {
+                const cKeys = Object.keys(candidate);
+                if (cKeys.length > 0 && cKeys.every(x => /^\d+$/.test(String(x).trim()))) {
+                  mappings = candidate; break;
+                }
+                if (candidate.mappings && typeof candidate.mappings === 'object') { mappings = candidate.mappings; break; }
+              }
+            }
+          }
+        }
+      }
+
+      // 2) If no structured mappings found, examine staged_unit_rate_config
+      if (!mappings && jobRow.staged_unit_rate_config) {
+        const suc = deepParse(jobRow.staged_unit_rate_config);
+        if (Array.isArray(suc) && suc.length > 0) {
+          codeOnlySelected = codeOnlySelected || suc;
+        } else if (suc && typeof suc === 'object') {
+          const keys = Object.keys(suc);
+          const looksLikeStagedSuc = keys.length > 0 && keys.every(k => /^\d+$/.test(String(k).trim()));
+          if (looksLikeStagedSuc) mappings = suc;
+          else if (suc.mappings && typeof suc.mappings === 'object' && Object.keys(suc.mappings).length > 0) mappings = suc.mappings;
+          else if (Array.isArray(suc.codes) && suc.codes.length > 0) codeOnlySelected = codeOnlySelected || suc.codes;
+        }
+      }
+
+      // 3) Legacy: fall back to unit_rate_codes_applied.mappings only if still no mappings
+      if (!mappings && jobRow.unit_rate_codes_applied) {
+        const ura = deepParse(jobRow.unit_rate_codes_applied);
+        if (ura && typeof ura === 'object') mappings = ura.mappings || null;
+      }
+    }
+  } catch (e) {
+    // ignore and try fallback
+    mappings = null;
+    codeOnlySelected = null;
+  }
+
+  // If we captured a flat code-only selection earlier, run code-only path immediately (no need to hit market_land_valuation)
+  if (!mappings && codeOnlySelected && Array.isArray(codeOnlySelected) && codeOnlySelected.length > 0) {
+    let normalizedSel = [];
+    try {
+      normalizedSel = await normalizeSelectedCodes(jobId, codeOnlySelected);
+    } catch (e) {
+      normalizedSel = Array.isArray(codeOnlySelected) ? codeOnlySelected : [];
+    }
+
+    const { data: props, error: propsErr } = await supabase.from('property_records').select('property_composite_key').eq('job_id', jobId);
+    if (propsErr) throw propsErr;
+
+    const updates = [];
+    let updatedCount = 0;
+
+    for (const p of props) {
+      try {
+        const res = await computeLotAcreForProperty(jobId, p.property_composite_key, normalizedSel, { useJobConfig: true });
+        const acresFinal = res?.total_acres ?? null;
+        const sfFinal = acresFinal !== null ? Math.round(Number(acresFinal) * 43560) : null;
+        updates.push({ job_id: jobId, property_composite_key: p.property_composite_key, market_manual_lot_acre: acresFinal, market_manual_lot_sf: sfFinal, updated_at: new Date().toISOString() });
+        updatedCount++;
+      } catch (err) {
+        console.warn('Skipping property due to error computing lot acre:', p.property_composite_key, err);
+        continue;
+      }
+    }
+
+    // Batch upsert property_market_analysis
+    const batchSize = 500;
+    for (let i = 0; i < updates.length; i += batchSize) {
+      const batch = updates.slice(i, i + batchSize);
+      const { error } = await supabase.from('property_market_analysis').upsert(batch, { onConflict: ['job_id','property_composite_key'] });
+      if (error) console.error('Error upserting market_manual lot sizes (code-only path):', error);
+    }
+
+    // Persist summary run info to jobs table
+    try {
+      const jobPayload = { unit_rate_last_run: { timestamp: new Date().toISOString(), selected_codes: codeOnlySelected || [], updated_count: updatedCount }, updated_at: new Date().toISOString() };
+      const persistResult = await persistUnitRateRunSummary(jobId, jobPayload);
+      if (!persistResult.updated) console.warn('Failed to persist unit-rate run summary (code-only path):', persistResult.error);
+    } catch (e) {
+      console.warn('Error writing unit-rate run summary to jobs table (code-only path):', e);
+    }
+
+    return { job_id: jobId, updated: updatedCount };
+  }
+
+  // If we didn't get structured per-VCS mappings, try fallback to market_land_valuation
+  if (!mappings) {
+    const { data: marketRow, error: marketErr } = await supabase.from('market_land_valuation').select('unit_rate_codes_applied').eq('job_id', jobId).single();
+    marketRowGlobal = marketRow || null;
+    if (marketErr && marketErr.code !== 'PGRST116') {
+      console.warn('Error loading market_land_valuation mappings (fallback):', marketErr);
+    }
+    const mappingsPayloadRaw = (marketRow && marketRow.unit_rate_codes_applied) ? marketRow.unit_rate_codes_applied : null;
+    const mappingsPayload = typeof mappingsPayloadRaw === 'string' ? (() => { try { return JSON.parse(mappingsPayloadRaw); } catch(e){ return mappingsPayloadRaw; } })() : mappingsPayloadRaw;
+
+    // mappingsPayload can be either { mappings: {...} } (per-VCS) or a per-property map (propertyKey -> [codes]) or { per_property: {...} }
+    mappings = mappingsPayload?.mappings || null;
+    const appliedPerProperty = mappingsPayload?.per_property || (mappingsPayload && typeof mappingsPayload === 'object' && !Array.isArray(mappingsPayload) && Object.values(mappingsPayload).every(v => Array.isArray(v)) ? mappingsPayload : null);
+
+    // If we have per-property applied codes (legacy), compute per property using those codes
+    if (!mappings && appliedPerProperty) {
+      const { data: props, error: propsErr } = await supabase.from('property_records').select('property_composite_key').eq('job_id', jobId);
+      if (propsErr) throw propsErr;
+
+      const updates = [];
+      let updatedCount = 0;
+
+      for (const p of props) {
+        const codesForProperty = appliedPerProperty[p.property_composite_key] || appliedPerProperty.per_property?.[p.property_composite_key] || null;
+        if (!codesForProperty || !Array.isArray(codesForProperty) || codesForProperty.length === 0) continue;
+        let normalizedSel = [];
+        try {
+          normalizedSel = await normalizeSelectedCodes(jobId, codesForProperty);
+        } catch (e) {
+          normalizedSel = codesForProperty;
+        }
+        try {
+          const res = await computeLotAcreForProperty(jobId, p.property_composite_key, normalizedSel, { useJobConfig: true });
+          const acresFinal = res?.total_acres ?? null;
+          const sfFinal = acresFinal !== null ? Math.round(Number(acresFinal) * 43560) : null;
+          updates.push({ job_id: jobId, property_composite_key: p.property_composite_key, market_manual_lot_acre: acresFinal, market_manual_lot_sf: sfFinal, updated_at: new Date().toISOString() });
+          updatedCount++;
+        } catch (err) {
+          console.warn('Skipping property due to error computing lot acre (per-property path):', p.property_composite_key, err);
+          continue;
+        }
+      }
+
+      // Batch upsert
+      const batchSize = 500;
+      for (let i = 0; i < updates.length; i += batchSize) {
+        const batch = updates.slice(i, i + batchSize);
+        const { error } = await supabase.from('property_market_analysis').upsert(batch, { onConflict: ['job_id','property_composite_key'] });
+        if (error) console.error('Error upserting market_manual lot sizes (per-property path):', error);
+      }
+
+      // Persist summary
+      try {
+        const jobPayload = { unit_rate_last_run: { timestamp: new Date().toISOString(), selected_codes_source: 'per_property_applied', updated_count: updatedCount }, updated_at: new Date().toISOString() };
+        const persistResult = await persistUnitRateRunSummary(jobId, jobPayload);
+        if (!persistResult.updated) console.warn('Failed to persist unit-rate run summary (per-property path):', persistResult.error);
+      } catch (e) { console.warn('Error writing unit-rate run summary to jobs table (per-property path):', e); }
+
+      return { job_id: jobId, updated: updatedCount };
+    }
+  }
+
+  if (!mappings) {
+    // Diagnostic logging to help debug why no mappings were detected — stringify safely with previews
+    try {
+      const safeStringify = (obj, max = 1000) => {
+        try {
+          const s = JSON.stringify(obj, Object.keys(obj || {}).length > 200 ? Object.keys(obj).slice(0,50) : null, 2);
+          return s.length > max ? s.slice(0, max) + '... (truncated)' : s;
+        } catch (e) {
+          try { return String(obj).slice(0, max); } catch (e2) { return '[unstringifiable]'; }
+        }
+      };
+
+      const parsedUrcPreview = jobRowGlobal ? (() => { try { return deepParse(jobRowGlobal.unit_rate_config); } catch(e){ return jobRowGlobal.unit_rate_config; } })() : null;
+      const parsedStagedPreview = jobRowGlobal ? (() => { try { return deepParse(jobRowGlobal.staged_unit_rate_config); } catch(e){ return jobRowGlobal.staged_unit_rate_config; } })() : null;
+
+      const info = {
+        jobId,
+        codeOnlySelectedPreview: Array.isArray(codeOnlySelected) ? (codeOnlySelected.length > 20 ? codeOnlySelected.slice(0,20) : codeOnlySelected) : codeOnlySelected,
+        unit_rate_config_type: jobRowGlobal ? typeof jobRowGlobal.unit_rate_config : null,
+        unit_rate_config_preview: parsedUrcPreview && typeof parsedUrcPreview !== 'string' ? (Array.isArray(parsedUrcPreview) ? parsedUrcPreview.slice(0,20) : Object.keys(parsedUrcPreview).slice(0,20)) : parsedUrcPreview,
+        staged_unit_rate_config_type: jobRowGlobal ? typeof jobRowGlobal.staged_unit_rate_config : null,
+        staged_unit_rate_config_preview: parsedStagedPreview && typeof parsedStagedPreview !== 'string' ? (Array.isArray(parsedStagedPreview) ? parsedStagedPreview.slice(0,20) : Object.keys(parsedStagedPreview).slice(0,20)) : parsedStagedPreview,
+        marketRow_preview: marketRowGlobal ? (marketRowGlobal.unit_rate_codes_applied ? (typeof marketRowGlobal.unit_rate_codes_applied === 'string' ? marketRowGlobal.unit_rate_codes_applied.slice(0,500) : Object.keys(marketRowGlobal.unit_rate_codes_applied).slice(0,20)) : null) : null,
+        mappingsDetected: mappings
+      };
+
+      console.error('generateLotSizesForJob: NO MAPPINGS FOUND - diagnostic preview:\n' + safeStringify(info, 2000));
+    } catch (e) { console.error('generateLotSizesForJob: failed to produce diagnostic preview', e); }
+    throw new Error('No mappings found for job; please configure mappings (staged_unit_rate_config or unit_rate_codes_applied or unit_rate_config)');
+  }
+
+  // Build VCS id map from code definitions once to allow flexible matching between numeric keys and property_vcs labels
+  let vcsIdMap = new Map();
+  try {
+    const rawDataForJob = await getRawDataForJob(jobId);
+    const codeDefinitions = rawDataForJob?.codeDefinitions || rawDataForJob?.parsed_code_definitions || null;
+    if (codeDefinitions && codeDefinitions.sections && codeDefinitions.sections.VCS) {
+      Object.keys(codeDefinitions.sections.VCS).forEach(vkey => {
+        const entry = codeDefinitions.sections.VCS[vkey];
+        const ids = new Set();
+        ids.add(String(vkey));
+        if (entry?.DATA?.VALUE) ids.add(String(entry.DATA.VALUE));
+        if (entry?.DATA?.KEY) ids.add(String(entry.DATA.KEY));
+        if (entry?.KEY) ids.add(String(entry.KEY));
+        vcsIdMap.set(String(vkey), ids);
+      });
+    }
+  } catch (e) {
+    vcsIdMap = new Map();
+  }
+
+  // Fetch properties for job with LANDUR fields
+  const { data: props, error: propsErr } = await supabase.from('property_records').select('property_composite_key, property_vcs, landur_1, landurunits_1, landur_2, landurunits_2, landur_3, landurunits_3, landur_4, landurunits_4, landur_5, landurunits_5, landur_6, landurunits_6').eq('job_id', jobId);
+  if (propsErr) throw propsErr;
+
+  const updates = [];
+  const appliedCodesMap = {};
+
+  for (const p of props) {
+    const vcs = p.property_vcs ? String(p.property_vcs).trim() : null;
+    // Resolve mapping for this property's VCS flexibly:
+    let mapForVcs = null;
+
+    // 1) direct key match
+    if (vcs && mappings[vcs]) mapForVcs = mappings[vcs];
+
+    // 2) numeric padding match (e.g., '2' -> '02')
+    if (!mapForVcs && vcs) {
+      const padded = String(vcs).padStart(2, '0');
+      if (mappings[padded]) mapForVcs = mappings[padded];
+    }
+
+    // 3) try matching by id sets from code definitions (vcsIdMap)
+    if (!mapForVcs && vcsIdMap && vcsIdMap.size > 0) {
+      for (const mk of Object.keys(mappings)) {
+        const idSet = vcsIdMap.get(String(mk));
+        if (idSet && vcs && Array.from(idSet).some(id => String(id).trim() === String(vcs).trim())) {
+          mapForVcs = mappings[mk];
+          break;
+        }
+      }
+    }
+
+    // 4) try matching mapping key as label (case-insensitive)
+    if (!mapForVcs && vcs) {
+      for (const mk of Object.keys(mappings)) {
+        try {
+          if (String(mk).trim().toUpperCase() === String(vcs).trim().toUpperCase()) {
+            mapForVcs = mappings[mk];
+            break;
+          }
+        } catch (e) { /* ignore */ }
+      }
+    }
+
+    // 5) fallback to wildcard mapping if present
+    if (!mapForVcs && mappings['*']) mapForVcs = mappings['*'];
+
+    if (!mapForVcs) continue; // no mapping - skip
+
+    let totalAcres = 0;
+    let totalSf = 0;
+    const appliedCodes = [];
+
+    for (let i = 1; i <= 6; i++) {
+      const code = p[`landur_${i}`];
+      const units = p[`landurunits_${i}`];
+      if (!code || units === null || units === undefined) continue;
+      const codeStr = String(code).padStart(2,'0');
+      // exclusion
+      if (Array.isArray(mapForVcs.exclude) && mapForVcs.exclude.includes(codeStr)) {
+        appliedCodes.push({ code: codeStr, mapping: 'exclude' });
+        continue;
+      }
+      if (Array.isArray(mapForVcs.acre) && mapForVcs.acre.includes(codeStr)) {
+        totalAcres += Number(units) || 0;
+        appliedCodes.push({ code: codeStr, mapping: 'acre' });
+        continue;
+      }
+      if (Array.isArray(mapForVcs.sf) && mapForVcs.sf.includes(codeStr)) {
+        totalSf += Number(units) || 0;
+        appliedCodes.push({ code: codeStr, mapping: 'sf' });
+        continue;
+      }
+      // fallback heuristic
+      if ((Number(units) || 0) >= 1000) {
+        totalSf += Number(units) || 0;
+        appliedCodes.push({ code: codeStr, mapping: 'sf' });
+      } else {
+        totalAcres += Number(units) || 0;
+        appliedCodes.push({ code: codeStr, mapping: 'acre' });
+      }
+    }
+
+    const acresFinal = parseFloat((totalAcres + (totalSf / 43560)).toFixed(2));
+    const sfFinal = acresFinal !== null ? Math.round(acresFinal * 43560) : null;
+
+    updates.push({ job_id: jobId, property_composite_key: p.property_composite_key, market_manual_lot_acre: acresFinal, market_manual_lot_sf: sfFinal, updated_at: new Date().toISOString() });
+    appliedCodesMap[p.property_composite_key] = appliedCodes.map(a => ({ code: a.code, mapping: a.mapping }));
+  }
+
+  // Batch upsert
+  const batchSize = 500;
+  for (let i = 0; i < updates.length; i += batchSize) {
+    const batch = updates.slice(i, i + batchSize);
+    const { error } = await supabase.from('property_market_analysis').upsert(batch, { onConflict: ['job_id','property_composite_key'] });
+    if (error) console.error('Error upserting market_manual lot sizes:', error);
+  }
+
+  // Persist applied per-property codes into the jobs row (store under unit_rate_codes_applied.per_property)
+  try {
+    const { data: jobRow } = await supabase.from('jobs').select('unit_rate_codes_applied').eq('id', jobId).single();
+    let applied = {};
+    if (jobRow && jobRow.unit_rate_codes_applied) {
+      applied = typeof jobRow.unit_rate_codes_applied === 'string' ? JSON.parse(jobRow.unit_rate_codes_applied) : jobRow.unit_rate_codes_applied;
+    }
+    applied.per_property = applied.per_property || {};
+    Object.assign(applied.per_property, appliedCodesMap);
+
+    const jobPayload = { unit_rate_codes_applied: applied, unit_rate_last_run: { timestamp: new Date().toISOString(), updated_count: updates.length }, updated_at: new Date().toISOString() };
+  const persistResult = await persistUnitRateRunSummary(jobId, jobPayload);
+  if (!persistResult.updated) console.warn('Failed to persist appliedCodesMap to jobs table:', persistResult.error);
+  } catch (e) {
+    console.warn('Error persisting appliedCodesMap to jobs table:', e);
+  }
+
+  return { job_id: jobId, updated: updates.length };
+}
+
+// Save unit rate mappings (merge into existing mappings)
+export async function saveUnitRateMappings(jobId, vcsKey, mappingObj) {
+  if (!jobId) throw new Error('jobId required');
+  if (!vcsKey) throw new Error('vcsKey required');
+
+  // Merge mapping into jobs.unit_rate_codes_applied.mappings (do not use market_land_valuation)
+  const { data: jobRow, error: jobErr } = await supabase.from('jobs').select('unit_rate_codes_applied').eq('id', jobId).single();
+  let payloadObj = { mappings: {} };
+  if (!jobErr && jobRow && jobRow.unit_rate_codes_applied) {
+    try { payloadObj = typeof jobRow.unit_rate_codes_applied === 'string' ? JSON.parse(jobRow.unit_rate_codes_applied) : jobRow.unit_rate_codes_applied; } catch(e) { payloadObj = { mappings: {} }; }
+  }
+
+  payloadObj.mappings = payloadObj.mappings || {};
+  // normalize codes to 2-digit strings
+  const normalizeArr = (arr) => Array.isArray(arr) ? arr.map(c => String(c).replace(/[^0-9]/g,'').padStart(2,'0')) : [];
+  payloadObj.mappings[vcsKey] = {
+    acre: normalizeArr(mappingObj.acre),
+    sf: normalizeArr(mappingObj.sf),
+    exclude: normalizeArr(mappingObj.exclude)
+  };
+
+  const jobPayload = { unit_rate_codes_applied: payloadObj, unit_rate_last_run: { timestamp: new Date().toISOString() }, updated_at: new Date().toISOString() };
+  const persistResult = await persistUnitRateRunSummary(jobId, jobPayload);
+  if (!persistResult.updated) {
+    throw persistResult.error || new Error('Failed to persist unit rate mappings summary');
+  }
+  return { ok: true };
+}
+
 export const employeeService = {
   async getAll() {
     try {
@@ -2849,7 +3228,7 @@ export const checklistService = {
       
       if (error) throw error;
       
-      console.log(`✅ Created ${data.length} checklist items for job`);
+      console.log(`�� Created ${data.length} checklist items for job`);
       return data;
     } catch (error) {
       console.error('Checklist creation error:', error);
@@ -3417,59 +3796,27 @@ export const propertyService = {
   // NEW: Get raw file data for a specific property from jobs.raw_file_content
   async getRawDataForProperty(jobId, propertyCompositeKey) {
     try {
-      console.log(`🔍 Fetching raw data for job ${jobId}, property ${propertyCompositeKey}`);
-      console.log(`📋 RPC Parameters:`, {
-        p_job_id: jobId,
-        p_property_composite_key: propertyCompositeKey,
-        jobIdType: typeof jobId,
-        propertyKeyType: typeof propertyCompositeKey
-      });
-
+      // Try RPC first (if function exists)
       const { data, error } = await supabase.rpc('get_raw_data_for_property', {
         p_job_id: jobId,
         p_property_composite_key: propertyCompositeKey
       });
 
       if (error) {
-        console.error('❌ RPC function error:');
-        console.error('  Message:', getErrorMessage(error));
-        console.error('  Details:', error.details);
-        console.error('  Hint:', error.hint);
-        console.error('  Code:', error.code);
-        console.error('  Full Error Object:', JSON.stringify(error, null, 2));
-        console.error('  Stack:', error.stack);
-        throw error;
+        // RPC failed or not available — fall back silently to client-side parsing
+        return await this.getRawDataForPropertyClientSide(jobId, propertyCompositeKey);
       }
 
-      if (data) {
-        console.log(`✅ Found raw data for property ${propertyCompositeKey}`);
-        return data;
-      }
+      if (data) return data;
 
-      console.warn(`���️ No raw data found for property ${propertyCompositeKey}, trying client-side fallback...`);
-
-      // Fallback: use client-side parsing
+      // No RPC data — use client-side parsing
       return await this.getRawDataForPropertyClientSide(jobId, propertyCompositeKey);
 
     } catch (error) {
-      console.error('❌ Error fetching raw data for property:');
-      console.error('  Job ID:', jobId);
-      console.error('  Property Key:', propertyCompositeKey);
-      console.error('  Error Message:', getErrorMessage(error));
-      console.error('  Error Type:', error.constructor.name);
-      console.error('  Full Error:', JSON.stringify(error, null, 2));
-      console.error('  Stack:', error.stack);
-
-      // Fallback: use client-side parsing
-      console.log('����� Attempting client-side fallback...');
+      // On unexpected errors, attempt client-side fallback and avoid noisy logging
       try {
         return await this.getRawDataForPropertyClientSide(jobId, propertyCompositeKey);
-      } catch (fallbackError) {
-        console.error('❌ Client-side fallback also failed:');
-        console.error('  Fallback Error Message:', getErrorMessage(fallbackError));
-        console.error('  Fallback Error Type:', fallbackError.constructor.name);
-        console.error('  Fallback Error Stack:', fallbackError.stack);
-        console.error('  Full Fallback Error:', JSON.stringify(fallbackError, null, 2));
+      } catch (e) {
         return null;
       }
     }
@@ -3477,31 +3824,12 @@ export const propertyService = {
 
   // Fallback: Client-side raw data parsing
   async getRawDataForPropertyClientSide(jobId, propertyCompositeKey) {
-    console.log(`🔄 Using client-side parsing for job ${jobId}, property ${propertyCompositeKey}`);
-
     const rawData = await getRawDataForJob(jobId);
-    console.log(`📊 Raw data structure:`, {
-      hasRawData: !!rawData,
-      vendorType: rawData?.vendorType,
-      hasPropertyMap: !!rawData?.propertyMap,
-      propertyMapSize: rawData?.propertyMap?.size || 0,
-      propertyMapType: rawData?.propertyMap?.constructor?.name
-    });
-
-    if (!rawData || !rawData.propertyMap) {
-      console.warn('⚠️ No property map available for job');
-      return null;
-    }
+    if (!rawData || !rawData.propertyMap) return null;
 
     const propertyRawData = rawData.propertyMap.get(propertyCompositeKey);
-    if (propertyRawData) {
-      console.log(`✅ Found raw data via client-side parsing for ${propertyCompositeKey}`);
-      return propertyRawData;
-    }
+    if (propertyRawData) return propertyRawData;
 
-    // Show some sample keys for debugging
-    const sampleKeys = Array.from(rawData.propertyMap.keys()).slice(0, 3);
-    console.warn(`⚠️ Property ${propertyCompositeKey} not found in parsed data. Sample keys:`, sampleKeys);
     return null;
   },
 

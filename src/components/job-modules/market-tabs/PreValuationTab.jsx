@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { supabase, interpretCodes, worksheetService, checklistService, runUnitRateLotCalculation, runUnitRateLotCalculation_v2, computeLotAcreForProperty, persistComputedLotAcre, normalizeSelectedCodes } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, worksheetService, checklistService, runUnitRateLotCalculation, runUnitRateLotCalculation_v2, computeLotAcreForProperty, persistComputedLotAcre, normalizeSelectedCodes, saveUnitRateMappings, generateLotSizesForJob } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 import { 
   TrendingUp, 
@@ -91,6 +91,143 @@ const PreValuationTab = ({
   const [isCalculatingUnitSizes, setIsCalculatingUnitSizes] = useState(false);
   const [isSavingUnitConfig, setIsSavingUnitConfig] = useState(false);
   const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
+
+  // Unit rate mappings editor state
+  const [mappingVcsKey, setMappingVcsKey] = useState('');
+  const [mappingAcre, setMappingAcre] = useState([]);
+  const [mappingSf, setMappingSf] = useState([]);
+  const [mappingExclude, setMappingExclude] = useState([]);
+  const [isSavingMappings, setIsSavingMappings] = useState(false);
+  const [isGeneratingLotSizes, setIsGeneratingLotSizes] = useState(false);
+  // Dynamic VCS options for mappings dropdown
+  const [vcsOptions, setVcsOptions] = useState([]);
+  // Local staged mappings (not yet persisted)
+  const [stagedMappings, setStagedMappings] = useState({});
+  // Combined view of persisted mappings (from marketLandData) + staged
+  const [combinedMappings, setCombinedMappings] = useState({});
+  // Available codes per VCS for drag source (updates as user drags)
+  const [availableCodesByVcs, setAvailableCodesByVcs] = useState({});
+  // VCS options displayed (exclude staged ones)
+  const [vcsOptionsShown, setVcsOptionsShown] = useState([]);
+  // Drag state
+  const [draggingCode, setDraggingCode] = useState(null);
+
+  const saveMapping = async () => {
+    if (!jobData?.id) return alert('Job required');
+    if (!mappingVcsKey) return alert('Enter VCS key');
+    setIsSavingMappings(true);
+    try {
+      const acreArr = mappingAcre.map(c => String(c).trim()).filter(Boolean);
+      const sfArr = mappingSf.map(c => String(c).trim()).filter(Boolean);
+      const exclArr = mappingExclude.map(c => String(c).trim()).filter(Boolean);
+      await saveUnitRateMappings(jobData.id, mappingVcsKey, { acre: acreArr, sf: sfArr, exclude: exclArr });
+      // Update combined mappings local view
+      const merged = { ...(combinedMappings || {}) };
+      merged[mappingVcsKey] = { acre: acreArr, sf: sfArr, exclude: exclArr };
+      setCombinedMappings(merged);
+      // Clear staged for this VCS
+      setStagedMappings(prev => { const copy = { ...prev }; delete copy[mappingVcsKey]; return copy; });
+      alert('Mappings saved');
+    } catch (e) {
+      console.error('Failed saving mappings', e);
+      alert('Saving mappings failed');
+    } finally {
+      setIsSavingMappings(false);
+    }
+  };
+
+  const handleGenerateLotSizes = async () => {
+    if (!jobData?.id) return alert('Job required');
+    if (!window.confirm('Generate lot sizes for entire job using current mappings?')) return;
+    setIsGeneratingLotSizes(true);
+    try {
+      const res = await generateLotSizesForJob(jobData.id);
+      alert(`Generated lot sizes for ${res.updated} properties`);
+      if (onUpdateJobCache) onUpdateJobCache(jobData.id, null);
+    } catch (e) {
+      console.error('Generate failed', e);
+      alert('Generate failed: ' + (e.message || e));
+    } finally {
+      setIsGeneratingLotSizes(false);
+    }
+  };
+  // Mapping helpers: add/remove codes to zones and staging
+  const addCodeToZone = (code, zone) => {
+    code = String(code).trim();
+    if (!code) return;
+    const normalized = code;
+    // remove from other zones
+    setMappingAcre(prev => prev.filter(c => c !== normalized));
+    setMappingSf(prev => prev.filter(c => c !== normalized));
+    setMappingExclude(prev => prev.filter(c => c !== normalized));
+    if (zone === 'acre') setMappingAcre(prev => prev.includes(normalized) ? prev : [...prev, normalized]);
+    if (zone === 'sf') setMappingSf(prev => prev.includes(normalized) ? prev : [...prev, normalized]);
+    if (zone === 'exclude') setMappingExclude(prev => prev.includes(normalized) ? prev : [...prev, normalized]);
+
+    // Remove from available codes for current VCS
+    if (mappingVcsKey) {
+      setAvailableCodesByVcs(prev => {
+        const copy = { ...prev };
+        copy[mappingVcsKey] = (copy[mappingVcsKey] || []).filter(x => String(x.code) !== String(normalized));
+        return copy;
+      });
+    }
+  };
+
+  const removeCodeFromZone = (code, zone) => {
+    const c = String(code).trim();
+    if (zone === 'acre') setMappingAcre(prev => prev.filter(x => x !== c));
+    if (zone === 'sf') setMappingSf(prev => prev.filter(x => x !== c));
+    if (zone === 'exclude') setMappingExclude(prev => prev.filter(x => x !== c));
+
+    // Re-add to available codes for current VCS if not already present
+    if (mappingVcsKey) {
+      setAvailableCodesByVcs(prev => {
+        const copy = { ...prev };
+        const list = copy[mappingVcsKey] ? copy[mappingVcsKey].slice() : [];
+        const exists = list.some(x => String(x.code) === String(c));
+        if (!exists) {
+          const found = unitRateCodes.find(u => String(u.vcs) === String(mappingVcsKey) && String(u.code) === String(c));
+          if (found) list.push({ code: found.code, description: found.description, key: found.key, vcs: found.vcs, vcsLabel: found.vcsLabel });
+          copy[mappingVcsKey] = list;
+        }
+        return copy;
+      });
+    }
+  };
+
+  const stageMapping = async () => {
+    if (!mappingVcsKey) return alert('Select a VCS first');
+    if (!jobData?.id) return alert('Job required');
+    const payload = { acre: mappingAcre.slice(), sf: mappingSf.slice(), exclude: mappingExclude.slice() };
+    const newStaged = { ...(stagedMappings || {}), [mappingVcsKey]: payload };
+
+    // Update local staged state (do not mark as saved yet)
+    setStagedMappings(newStaged);
+
+    // Persist staged snapshot to jobs.staged_unit_rate_config so it survives reloads
+    try {
+      const { error } = await supabase.from('jobs').update({ staged_unit_rate_config: newStaged }).eq('id', jobData.id);
+      if (error) throw error;
+      alert(`Staged mapping for VCS ${mappingVcsKey}`);
+    } catch (e) {
+      console.error('Failed persisting staged mapping', e);
+      alert('Failed staging mapping: ' + (e.message || e));
+    }
+  };
+
+  // When the selected VCS changes, populate mapping arrays from staged -> combined -> empty
+  useEffect(() => {
+    if (!mappingVcsKey) {
+      setMappingAcre([]); setMappingSf([]); setMappingExclude([]);
+      return;
+    }
+    const m = (stagedMappings && stagedMappings[mappingVcsKey]) || (combinedMappings && combinedMappings[mappingVcsKey]) || { acre: [], sf: [], exclude: [] };
+    setMappingAcre(Array.isArray(m.acre) ? m.acre.slice() : []);
+    setMappingSf(Array.isArray(m.sf) ? m.sf.slice() : []);
+    setMappingExclude(Array.isArray(m.exclude) ? m.exclude.slice() : []);
+  }, [mappingVcsKey, stagedMappings, combinedMappings]);
+
   const [normSortConfig, setNormSortConfig] = useState({ field: null, direction: 'asc' });
   const [locationVariations, setLocationVariations] = useState({});
   const [showLocationModal, setShowLocationModal] = useState(false);
@@ -335,6 +472,24 @@ useEffect(() => {
       vcsLabelMap[String(vcsKey)] = short;
     });
 
+    // Build VCS dropdown options for mappings editor
+    try {
+      const vcsOptionsArr = Object.keys(vcsSection).map(k => ({ key: String(k), label: vcsLabelMap[String(k)] || String(k) }));
+      setVcsOptions(vcsOptionsArr);
+    } catch (err) {
+      setVcsOptions([]);
+    }
+
+    // Initialize combined mappings from marketLandData (if available) — only if mappings exist to avoid overwriting job-level saved mappings
+    try {
+      const existing = marketLandData?.unit_rate_codes_applied;
+      const payloadObj = existing && typeof existing === 'string' ? JSON.parse(existing) : (existing || {});
+      const mappingsFromDB = payloadObj.mappings || {};
+      if (mappingsFromDB && Object.keys(mappingsFromDB).length > 0) {
+        setCombinedMappings(mappingsFromDB);
+      }
+    } catch(e){ /* leave combinedMappings as-is */ }
+
     Object.keys(vcsSection).forEach(vcsKey => {
       const entry = vcsSection[vcsKey];
       const urcMap = entry?.MAP?.['8']?.MAP;
@@ -369,6 +524,65 @@ useEffect(() => {
   }
 
 }, [codeDefinitions, jobData]);
+
+// Load staged mappings persisted on the jobs row into UI state when jobData changes
+useEffect(() => {
+  try {
+    const staged = jobData?.staged_unit_rate_config || jobData?.stagedUnitRateConfig || null;
+    if (staged && typeof staged === 'object') {
+      setStagedMappings(staged);
+    }
+
+    // If unit_rate_config is a structured staged-style mapping, use it as the saved mappings view
+    const saved = jobData?.unit_rate_config || jobData?.unitRateConfig || null;
+    let savedMappings = null;
+    if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+      // Heuristic: if keys are numeric VCS keys, treat as mappings
+      const keys = Object.keys(saved);
+      const looksLikeStaged = keys.length > 0 && keys.every(k => /^\d+$/.test(k));
+      if (looksLikeStaged) savedMappings = saved;
+      // If object has .mappings (legacy shape), unwrap it
+      if (!savedMappings && saved.mappings && typeof saved.mappings === 'object') savedMappings = saved.mappings;
+    }
+
+    // Prefer savedMappings (from unit_rate_config) to marketLandData mappings; merge staged on top so staged edits are visible
+    if (savedMappings) {
+      setCombinedMappings(prev => ({ ...(savedMappings || {}), ...(staged || {}) }));
+    } else {
+      // fallback: keep previous behavior of merging staged into existing combinedMappings
+      if (staged && typeof staged === 'object') {
+        setCombinedMappings(prev => ({ ...(prev || {}), ...(staged || {}) }));
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to load staged/saved mappings from jobData:', e);
+  }
+}, [jobData]);
+
+// Whenever unitRateCodes, combinedMappings or stagedMappings change, rebuild availableCodesByVcs and vcsOptionsShown
+useEffect(() => {
+  const byVcs = {};
+  unitRateCodes.forEach(u => {
+    const v = String(u.vcs);
+    if (!byVcs[v]) byVcs[v] = [];
+    byVcs[v].push({ code: u.code, description: u.description, key: u.key, vcs: u.vcs, vcsLabel: u.vcsLabel });
+  });
+  // Remove codes already assigned in combinedMappings or stagedMappings
+  const removeAssigned = (arr, assigned) => arr.filter(item => !(assigned.includes(String(item.code))));
+  Object.keys(byVcs).forEach(v => {
+    const assigned = [];
+    const cm = combinedMappings[v] || { acre: [], sf: [], exclude: [] };
+    const sm = stagedMappings[v] || { acre: [], sf: [], exclude: [] };
+    assigned.push(...(cm.acre||[]), ...(cm.sf||[]), ...(cm.exclude||[]), ...(sm.acre||[]), ...(sm.sf||[]), ...(sm.exclude||[]));
+    byVcs[v] = removeAssigned(byVcs[v], assigned);
+  });
+  setAvailableCodesByVcs(byVcs);
+
+  // vcsOptionsShown excludes VCS that are staged (Ready to Save)
+  const shown = vcsOptions.filter(opt => !stagedMappings[opt.key]);
+  setVcsOptionsShown(shown);
+
+}, [unitRateCodes, combinedMappings, stagedMappings, vcsOptions]);
 
 // Group unit rate codes by description so we can show only a single instance per description
 const groupedUnitRateCodes = useMemo(() => {
@@ -449,6 +663,21 @@ useEffect(() => {
   }
 }, [marketLandData]);// Only run when marketLandData actually changes
 
+// Keep combinedMappings in sync if marketLandData updates independently
+useEffect(() => {
+  try {
+    const existing = marketLandData?.unit_rate_codes_applied;
+    const payloadObj = existing && typeof existing === 'string' ? JSON.parse(existing) : (existing || {});
+    const mappingsFromDB = payloadObj.mappings || {};
+    if (mappingsFromDB && Object.keys(mappingsFromDB).length > 0) {
+      // Merge DB mappings into existing combined mappings so jobData.unit_rate_config isn't overwritten by an empty marketLandData
+      setCombinedMappings(prev => ({ ...(prev || {}), ...(mappingsFromDB || {}) }));
+    }
+  } catch (e) {
+    // ignore
+  }
+}, [marketLandData]);
+
   // Unit Rate helpers
   const toggleUnitRateCode = (key) => {
     const s = new Set(selectedUnitRateCodes);
@@ -485,16 +714,51 @@ useEffect(() => {
     if (!jobData?.id) return;
     setIsSavingUnitConfig(true);
     try {
-      const rawCodes = Array.from(selectedUnitRateCodes);
-      let normalizedCodes = rawCodes;
-      try { normalizedCodes = await normalizeSelectedCodes(jobData.id, rawCodes); } catch(e) { normalizedCodes = rawCodes; }
-      const payload = { codes: normalizedCodes };
-      const { error } = await supabase.from('jobs').update({ unit_rate_config: payload }).eq('id', jobData.id);
-      if (error) throw error;
-      alert('Unit rate configuration saved');
+      // If local stagedMappings is empty, try to load persisted staged from jobs row so Save Config uses the authoritative staged snapshot
+      let staged = stagedMappings || {};
+      if ((!staged || Object.keys(staged).length === 0) && jobData?.id) {
+        try {
+          const { data: jobRow } = await supabase.from('jobs').select('staged_unit_rate_config').eq('id', jobData.id).single();
+          if (jobRow && jobRow.staged_unit_rate_config) {
+            staged = jobRow.staged_unit_rate_config;
+          }
+        } catch (e) {
+          // ignore - proceed with local staged (empty)
+        }
+      }
+
+      const derived = [];
+      Object.keys(staged || {}).forEach(vk => {
+        const m = staged[vk] || { acre: [], sf: [], exclude: [] };
+        (m.acre || []).forEach(c => { if (c || c === 0) derived.push(`${vk}::${String(c).trim()}`); });
+        (m.sf || []).forEach(c => { if (c || c === 0) derived.push(`${vk}::${String(c).trim()}`); });
+      });
+
+      // Always derive flat codes from staged mappings (acre + sf). Do NOT fall back to UI selection.
+      const finalCodes = Array.from(new Set(derived.map(c => String(c).trim())));
+
+      // Persist the structured staged mapping into unit_rate_config only (do NOT modify staged_unit_rate_config)
+      const updatePayload = { unit_rate_config: staged };
+
+      const { error } = await supabase.from('jobs').update(updatePayload).eq('id', jobData.id);
+      if (error) {
+        console.warn('Update failed, attempting upsert fallback:', error);
+        const { error: upsertErr } = await supabase.from('jobs').upsert([{ id: jobData.id, ...updatePayload }], { onConflict: 'id' });
+        if (upsertErr) throw upsertErr;
+      }
+
+      // No flat codes to set in selectedUnitRateCodes anymore; keep UI staged state and combined view
+      try {
+        setSelectedUnitRateCodes(new Set());
+      } catch (e) { /* ignore */ }
+
+      setCombinedMappings(prev => ({ ...(prev || {}), ...(staged || {}) }));
+      setVcsOptionsShown(vcsOptions.filter(opt => !(staged || {})[opt.key]));
+
+      alert('Unit rate configuration saved to job (staged structure persisted)');
     } catch (e) {
-      console.error('Error saving unit rate config:', e);
-      alert(`Failed to save unit rate configuration: ${formatError(e)}`);
+      console.error('Error saving unit rate config/mappings:', e);
+      alert(`Failed to save unit rate configuration/mappings: ${formatError(e)}`);
     } finally {
       setIsSavingUnitConfig(false);
     }
@@ -504,39 +768,13 @@ useEffect(() => {
     if (!jobData?.id) return;
     setIsCalculatingUnitSizes(true);
     try {
-      // Determine selected codes: prefer UI selection; if empty, fall back to saved job config (if present)
-      let selected = Array.from(selectedUnitRateCodes);
-      if ((!selected || selected.length === 0) && jobData?.unit_rate_config) {
-        try {
-          selected = jobData.unit_rate_config?.codes || jobData.unit_rate_config || [];
-        } catch (e) {
-          selected = [];
-        }
-      }
+      // Use generateLotSizesForJob which applies staged mappings (jobs.staged_unit_rate_config) directly
+      const res = await generateLotSizesForJob(jobData.id);
+      const updated = res?.updated ?? 0;
+      alert(`Generated lot sizes for ${updated} properties`);
 
-      // Prefer v2 calculator which returns detailed stats when available
-      let result = null;
-      // DEBUG: log selected codes for inspection
-      try { console.warn('Running unit-rate calc with selected codes:', selected); } catch(e){}
-      const useJobConfig = !!jobData?.unit_rate_config;
-      if (typeof runUnitRateLotCalculation_v2 === 'function') {
-        result = await runUnitRateLotCalculation_v2(jobData.id, selected, { useJobConfig });
-      } else {
-        result = await runUnitRateLotCalculation(jobData.id, selected);
-      }
-
-      const updated = result?.updated ?? 0;
-      const acreageSet = result?.acreage_set ?? (result?.updated ?? 0);
-      const acreageNull = result?.acreage_null ?? (updated - acreageSet);
-
-      // Log sample null keys for debugging (will appear in browser console)
-      if (result?.sample_null_keys && Array.isArray(result.sample_null_keys) && result.sample_null_keys.length > 0) {
-        console.warn('Sample composite keys with NULL acreage (first 20):', result.sample_null_keys);
-      }
-
-      alert(`Calculated lot sizes — updated: ${updated} properties\nacreage set: ${acreageSet}\nacreage null: ${acreageNull}`);
-      // Refresh cache/data
-      if (onUpdateJobCache) onUpdateJobCache(jobData.id);
+      // Do NOT auto-refresh job to avoid supabase 500 spikes
+      // Keep local UI state as-is; user can refresh manually if needed
     } catch (e) {
       console.error('Error calculating unit rates:', e);
       alert(`Calculation failed: ${formatError(e)}`);
@@ -831,7 +1069,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           });
 
           // Also log all property keys to see what's available
-          if (false) console.log(`🔍 Sale ${index + 1} ALL AVAILABLE KEYS:`, Object.keys(prop));
+          if (false) console.log(`��� Sale ${index + 1} ALL AVAILABLE KEYS:`, Object.keys(prop));
         }
         
         // Determine if outlier based on equalization ratio
@@ -921,7 +1159,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
 
       //Clear cache after saving normalization data
       if (onUpdateJobCache && jobData?.id) {
-        if (false) console.log('🗑️ Clearing cache after time normalization');
+        if (false) console.log('���️ Clearing cache after time normalization');
         onUpdateJobCache(jobData.id, null);
       }
       
@@ -1518,7 +1756,7 @@ const handleSalesDecision = (saleId, decision) => {
         onUpdateJobCache(jobData.id, null);
       }
 
-      if (false) console.log(`✅ Batch save complete: ${keeps.length} keeps saved, ${rejects.length} rejects cleared`);
+      if (false) console.log(`��� Batch save complete: ${keeps.length} keeps saved, ${rejects.length} rejects cleared`);
       alert(`✅ Successfully saved ${keeps.length} keeps and cleared ${rejects.length} rejects from database`);
 
     } catch (error) {
@@ -2402,7 +2640,7 @@ const analyzeImportFile = async (file) => {
                               return;
                             }
 
-                            if (!window.confirm(`Keep ${willKeep} pending sales where sales_nu is blank, 00 or 07? This will mark them as Kept and save decisions to the database.`)) return;
+                            if (!window.window.confirm(`Keep ${willKeep} pending sales where sales_nu is blank, 00 or 07? This will mark them as Kept and save decisions to the database.`)) return;
 
                             const updated = timeNormalizedSales.map(s => {
                               if (s.keep_reject === 'pending' && isNUKeepable(s.sales_nu)) return { ...s, keep_reject: 'keep' };
@@ -2445,7 +2683,7 @@ const analyzeImportFile = async (file) => {
                               return;
                             }
 
-                            if (!window.confirm(`Reject ${toReject} outlier sales (skipping sales_nu blank/00/07)? This will mark them as Rejected and clear normalized values in the database.`)) return;
+                            if (!window.window.confirm(`Reject ${toReject} outlier sales (skipping sales_nu blank/00/07)? This will mark them as Rejected and clear normalized values in the database.`)) return;
 
                             const updated = timeNormalizedSales.map(s => {
                               if (s.is_outlier && !isNUSkip(s.sales_nu)) return { ...s, keep_reject: 'reject' };
@@ -2960,57 +3198,162 @@ const analyzeImportFile = async (file) => {
 
             <p className="text-sm text-gray-600 mb-4">Select unit-rate codes to include when calculating lot acreage. If none selected, all unit rates will be summed.</p>
 
-            <div className="grid grid-cols-3 gap-4">
-              <div className="col-span-2">
-                <div className="border rounded p-2 max-h-64 overflow-auto">
-                  {groupedUnitRateCodes.length === 0 ? (
-                    <div className="text-sm text-gray-500">No unit rate codes found for this job.</div>
-                  ) : (
-                    groupedUnitRateCodes.map(group => {
-                      const allSelected = group.items.every(i => selectedUnitRateCodes.has(i.key));
-                      const someSelected = group.items.some(i => selectedUnitRateCodes.has(i.key));
-                      const desc = group.description;
-
-                      return (
-                        <div key={desc} className="py-1">
-                          <label className="flex items-center gap-3">
-                            <input
-                              ref={el => { groupRefs.current[desc] = el; if (el) el.indeterminate = someSelected && !allSelected; }}
-                              type="checkbox"
-                              disabled={vendorType !== 'BRT'}
-                              checked={allSelected}
-                              onChange={() => toggleUnitRateGroup(desc)}
-                            />
-
-                            <div className="text-sm flex-1">
-                              <div className="font-medium">{desc}</div>
-                              <div className="text-xs text-gray-500">{group.items.length} instance{group.items.length > 1 ? 's' : ''} • {group.items.map(i => `${i.vcsLabel || i.vcs}·${i.code}`).join(', ')}</div>
-                            </div>
-
-                          </label>
+            <div className="grid grid-cols-1 gap-4">
+              {/* Instance window - larger */}
+              <div className="border rounded p-2 max-h-[520px] overflow-auto">
+                {groupedUnitRateCodes.length === 0 ? (
+                  <div className="text-sm text-gray-500">No unit rate codes found for this job.</div>
+                ) : (
+                  groupedUnitRateCodes.map(group => {
+                    const desc = group.description;
+                    return (
+                      <div key={desc} className="py-1">
+                        <div className="text-sm">
+                          <div className="font-medium">{desc}</div>
+                          <div className="text-xs text-gray-500">{group.items.length} instance{group.items.length > 1 ? 's' : ''} • {group.items.map(i => `${i.vcsLabel || i.vcs}·${i.code}`).join(', ')}</div>
+                          <div className="mt-2 text-xs text-gray-600">{group.items.length} instance{group.items.length > 1 ? 's' : ''}. Use the Codes in VCS box to the right to drag into buckets.</div>
                         </div>
-                      );
-                    })
-                  )}
-                </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
-              <div>
-                <div className="bg-gray-50 p-3 rounded">
-                  <p className="text-sm text-gray-700">Summary</p>
-                  <div className="mt-3">
-                    <div className="text-sm">Total Codes: <strong>{unitRateCodes.length}</strong></div>
-                    <div className="text-sm mt-1">Selected: <strong>{selectedUnitRateCodes.size}</strong></div>
-                  </div>
 
-                  <div className="mt-4">
-                    <p className="text-xs text-gray-600">Notes:</p>
-                    <ul className="text-xs text-gray-600 list-disc list-inside mt-2">
-                      <li>Only BRT jobs support unit-rate configuration.</li>
-                      <li>Calculation uses heuristic: values ≥1000 treated as SF, smaller as acres.</li>
-                      <li>Results are saved to property_market_analysis.market_manual_lot_acre</li>
-                    </ul>
+              {/* Lower area with staged (left), controls (center), saved (right) */}
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <div className="font-medium mb-2">Staged Mappings</div>
+                  <div className="border rounded p-2 h-72 overflow-auto bg-white">
+                    {Object.keys(stagedMappings || {}).length === 0 ? (
+                      <div className="text-xs text-gray-500">No staged mappings</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {Object.keys(stagedMappings).map(k => (
+                          <div key={k} className="border p-2 rounded bg-gray-50">
+                            <div className="flex justify-between items-center">
+                              <div className="font-medium">{k}</div>
+                              <div className="text-xs text-yellow-800">Staged</div>
+                            </div>
+                            <div className="text-xs text-gray-600 mt-1">Acre: {(stagedMappings[k].acre||[]).join(', ') || '-'} • SF: {(stagedMappings[k].sf||[]).join(', ') || '-'} • Exclude: {(stagedMappings[k].exclude||[]).join(', ') || '-'}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
+
+                <div>
+                  <div className="bg-gray-50 p-3 rounded">
+                    <p className="text-sm text-gray-700">Summary</p>
+                    <div className="mt-3">
+                      <div className="text-sm">Total Codes: <strong>{unitRateCodes.length}</strong></div>
+                      <div className="text-sm mt-1">Selected: <strong>{selectedUnitRateCodes.size}</strong></div>
+                    </div>
+
+                    <div className="mt-4">
+                      <p className="text-xs text-gray-600">Notes:</p>
+                      <ul className="text-xs text-gray-600 list-disc list-inside mt-2">
+                        <li>Only BRT jobs support unit-rate configuration.</li>
+                        <li>Calculation uses heuristic: values ≥1000 treated as SF, smaller as acres.</li>
+                        <li>Results are saved to property_market_analysis.market_manual_lot_acre and market_manual_lot_sf</li>
+                      </ul>
+                    </div>
+
+                    <div className="mt-4 border-t pt-4">
+                      <label className="text-xs">VCS</label>
+                      <select value={mappingVcsKey} onChange={e => setMappingVcsKey(e.target.value)} className="w-full px-3 py-2 border rounded">
+                        <option value="">— Select VCS —</option>
+                        {vcsOptionsShown.map(v => (
+                          <option key={v.key} value={v.key}>{v.label}</option>
+                        ))}
+                      </select>
+
+                      {/* Codes box + drag targets */}
+                      {mappingVcsKey ? (
+                        <div className="mt-2 p-2 border rounded bg-white">
+                          <div className="flex justify-between items-center">
+                            <div className="text-sm font-medium">Codes in VCS {mappingVcsKey}</div>
+                            <div className="text-xs text-gray-500">{(availableCodesByVcs[mappingVcsKey] || []).length} codes</div>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2 max-h-48 overflow-auto p-1">
+                            {(availableCodesByVcs[mappingVcsKey] || []).map(u => (
+                              <div
+                                key={u.key}
+                                draggable
+                                onDragStart={(e) => { e.dataTransfer.setData('text/plain', JSON.stringify({ code: u.code, vcs: u.vcs, description: u.description })); }}
+                                className="px-2 py-1 bg-gray-100 border border-gray-200 rounded text-xs cursor-grab"
+                                title={`Drag ${u.vcsLabel || u.vcs}·${u.code} into a bucket`}
+                              >
+                                <div className="font-medium">{u.vcsLabel ? `${u.vcsLabel}·${u.code}` : `${u.vcs}·${u.code}`}</div>
+                                <div className="text-xs text-gray-500 truncate max-w-xs">{u.description}</div>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2 mt-3">
+                            <div>
+                              <label className="text-xs">Acre</label>
+                              <div onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault(); try{const d=JSON.parse(e.dataTransfer.getData('text/plain')); addCodeToZone(d.code,'acre')}catch{} }} className="min-h-16 p-2 border rounded bg-white">
+                                {mappingAcre.length === 0 ? <div className="text-xs text-gray-400">Drop codes here</div> : mappingAcre.map(c => (
+                                  <div key={c} className="inline-block mr-2 mb-2 px-2 py-1 bg-green-50 border border-green-200 rounded text-xs">
+                                    {c} <button onClick={() => removeCodeFromZone(c,'acre')} className="ml-1 text-red-500">×</button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-xs">SF</label>
+                              <div onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault(); try{const d=JSON.parse(e.dataTransfer.getData('text/plain')); addCodeToZone(d.code,'sf')}catch{} }} className="min-h-16 p-2 border rounded bg-white">
+                                {mappingSf.length === 0 ? <div className="text-xs text-gray-400">Drop codes here</div> : mappingSf.map(c => (
+                                  <div key={c} className="inline-block mr-2 mb-2 px-2 py-1 bg-blue-50 border border-blue-200 rounded text-xs">
+                                    {c} <button onClick={() => removeCodeFromZone(c,'sf')} className="ml-1 text-red-500">×</button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-xs">Exclude</label>
+                              <div onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault(); try{const d=JSON.parse(e.dataTransfer.getData('text/plain')); addCodeToZone(d.code,'exclude')}catch{} }} className="min-h-16 p-2 border rounded bg-white">
+                                {mappingExclude.length === 0 ? <div className="text-xs text-gray-400">Drop codes here</div> : mappingExclude.map(c => (
+                                  <div key={c} className="inline-block mr-2 mb-2 px-2 py-1 bg-gray-50 border border-gray-200 rounded text-xs">
+                                    {c} <button onClick={() => removeCodeFromZone(c,'exclude')} className="ml-1 text-red-500">×</button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2 mt-3">
+                            <button onClick={stageMapping} disabled={!mappingVcsKey} className="px-3 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600">Ready to Save</button>
+                            <div className="text-xs text-gray-500">Drag codes from the list above into the desired bucket, then click "Ready to Save" to stage into the left panel.</div>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="font-medium mb-2">Saved Mappings</div>
+                  <div className="border rounded p-2 h-72 overflow-auto bg-white">
+                    {Object.keys(combinedMappings || {}).length === 0 ? (
+                      <div className="text-xs text-gray-500">No saved mappings</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {Object.keys(combinedMappings).map(k => (
+                          <div key={k} className="border p-2 rounded bg-gray-50">
+                            <div className="flex justify-between items-center">
+                              <div className="font-medium">{k}</div>
+                              <div className="text-xs text-green-800">Saved</div>
+                            </div>
+                            <div className="text-xs text-gray-600 mt-1">Acre: {(combinedMappings[k].acre||[]).join(', ') || '-'} • SF: {(combinedMappings[k].sf||[]).join(', ') || '-'} • Exclude: {(combinedMappings[k].exclude||[]).join(', ') || '-'}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
               </div>
             </div>
           </div>
@@ -3133,7 +3476,7 @@ const analyzeImportFile = async (file) => {
               <strong>Color Scale:</strong> 
               <br/>• First color: $0 - ${(colorScaleIncrement - 1).toLocaleString()}
               <br/>• Second color: ${colorScaleIncrement.toLocaleString()} - ${((colorScaleIncrement * 2) - 1).toLocaleString()}
-              <br/>�� Third color: ${(colorScaleIncrement * 2).toLocaleString()} - ${((colorScaleIncrement * 3) - 1).toLocaleString()}
+              <br/>��� Third color: ${(colorScaleIncrement * 2).toLocaleString()} - ${((colorScaleIncrement * 3) - 1).toLocaleString()}
               <br/>• And so on... Total of {marketAnalysisData.length} blocks analyzed.
             </div>
           </div>
@@ -3332,7 +3675,7 @@ const analyzeImportFile = async (file) => {
 
                 <button
                   onClick={() => {
-                    if (window.confirm(`Copy current VCS to new VCS for ALL ${worksheetProperties.length} properties? This will OVERWRITE any existing new VCS values!`)) {
+                    if (window.window.confirm(`Copy current VCS to new VCS for ALL ${worksheetProperties.length} properties? This will OVERWRITE any existing new VCS values!`)) {
                       const updated = worksheetProperties.map(prop => ({
                         ...prop,
                         new_vcs: prop.property_vcs || ''
@@ -3505,7 +3848,7 @@ const analyzeImportFile = async (file) => {
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('type_use_display')}
                         >
-                          Type/Use {sortConfig.field === 'type_use_display' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          Type/Use {sortConfig.field === 'type_use_display' && (sortConfig.direction === 'asc' ? '↑' : '��')}
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
@@ -3673,19 +4016,14 @@ const analyzeImportFile = async (file) => {
                         />
                       </td>
                       <td className="px-2 py-1 text-center bg-gray-50">
-                        <input
-                          type="checkbox"
-                          checked={readyProperties.has(prop.property_composite_key)}
-                          onChange={(e) => {
-                            let newReadyProperties;
-                            if (e.target.checked) {
-                              newReadyProperties = new Set([...readyProperties, prop.property_composite_key]);
-                            } else {
-                              newReadyProperties = new Set(readyProperties);
-                              newReadyProperties.delete(prop.property_composite_key);
-                            }
+                        <button
+                          onClick={() => {
+                            const key = prop.property_composite_key;
+                            const newReadyProperties = new Set(readyProperties);
+                            if (newReadyProperties.has(key)) newReadyProperties.delete(key);
+                            else newReadyProperties.add(key);
                             setReadyProperties(newReadyProperties);
-                            
+
                             // Update stats with the new ready count
                             const stats = {
                               totalProperties: worksheetProperties.length,
@@ -3696,8 +4034,10 @@ const analyzeImportFile = async (file) => {
                             };
                             setWorksheetStats(stats);
                           }}
-                          className="w-4 h-4"
-                        />
+                          className={`px-2 py-1 rounded text-xs font-medium ${readyProperties.has(prop.property_composite_key) ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}`}
+                        >
+                          {readyProperties.has(prop.property_composite_key) ? 'Ready' : 'Mark'}
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -3734,7 +4074,7 @@ const analyzeImportFile = async (file) => {
              <div>
                <strong>Selected for Processing:</strong> {readyProperties.size} properties
              </div>
-             <div className="flex gap-2">
+             <div className="flex gap-2 items-center">
                <button
                  onClick={processSelectedProperties}
                  disabled={readyProperties.size === 0}
@@ -3742,6 +4082,12 @@ const analyzeImportFile = async (file) => {
                >
                  Process Selected Properties
                </button>
+
+               <div className="flex gap-2">
+                 <button onClick={saveMapping} disabled={!mappingVcsKey || isSavingMappings} className="px-3 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">{isSavingMappings ? 'Saving...' : 'Save Mapping'}</button>
+                 <button onClick={handleGenerateLotSizes} disabled={isGeneratingLotSizes} className="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700">{isGeneratingLotSizes ? 'Generating...' : 'Generate Lot Sizes for Job'}</button>
+               </div>
+
                <button
                 onClick={async () => {
                   if (!jobData?.id) return;
@@ -3767,7 +4113,7 @@ const analyzeImportFile = async (file) => {
                 style={{ backgroundColor: preValChecklist.page_by_page ? '#10B981' : '#E5E7EB', color: preValChecklist.page_by_page ? 'white' : '#374151' }}
                 title={preValChecklist.page_by_page ? 'Click to reopen' : 'Mark Page by Page Worksheet complete'}
               >
-                {isProcessingPageByPage ? 'Processing...' : (preValChecklist.page_by_page ? '✓ Mark Complete' : 'Mark Complete')}
+                {isProcessingPageByPage ? 'Processing...' : (preValChecklist.page_by_page ? '��� Mark Complete' : 'Mark Complete')}
               </button>
              </div>
            </div>
