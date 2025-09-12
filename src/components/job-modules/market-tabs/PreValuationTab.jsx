@@ -625,7 +625,7 @@ useEffect(() => {
   // Always restore everything when we have marketLandData
   if (marketLandData.normalization_config) {
     const config = marketLandData.normalization_config;
-    if (false) console.log('���� Found normalization config:', config);
+    if (false) console.log('📋 Found normalization config:', config);
 
     // Set configuration values with explicit logging
     const eqRatio = config.equalizationRatio || '';
@@ -2076,8 +2076,10 @@ const analyzeImportFile = async (file) => {
         const year = row.Year || row.YEAR || new Date().getFullYear();
         const ccdd = row.Ccdd || row.CCDD || jobData?.ccdd || '';
         const block = (row.Block || row.BLOCK)?.toString() || '';
-        const lot = (row.Lot || row.LOT)?.toString() || '';
-        
+        const lot = (row.Lot || row.LOT || row.lot || '')?.toString().trim();
+        console.log('Lot value from row:', row.Lot, 'Final lot:', lot);
+        console.log('Full row data:', row);
+
         // Handle qualifier - both vendors
         let qual = (row.Qual || row.Qualifier || row.QUALIFIER)?.toString().trim() || '';
         qual = qual || 'NONE';
