@@ -2764,7 +2764,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-20 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('asset_type_use')}
                             >
-                              Type {normSortConfig.field === 'asset_type_use' && (normSortConfig.direction === 'asc' ? '���' : '↓')}
+                              Type {normSortConfig.field === 'asset_type_use' && (normSortConfig.direction === 'asc' ? '����' : '↓')}
                             </th>
                             <th 
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
@@ -3365,7 +3365,7 @@ const analyzeImportFile = async (file) => {
                         {Object.keys(combinedMappings).map(k => (
                           <div key={k} className="border p-2 rounded bg-gray-50">
                             <div className="flex justify-between items-center">
-                              <div className="font-medium">{k}</div>
+                              <div className="font-medium">{getVCSDisplayName(k)}</div>
                               <div className="text-xs text-green-800">Saved</div>
                             </div>
                             <div className="text-xs text-gray-600 mt-1">Acre: {(combinedMappings[k].acre||[]).join(', ') || '-'} • SF: {(combinedMappings[k].sf||[]).join(', ') || '-'} • Exclude: {(combinedMappings[k].exclude||[]).join(', ') || '-'}</div>
