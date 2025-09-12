@@ -464,10 +464,8 @@ export async function persistComputedLotAcre(jobId, propertyCompositeKey, select
         updated_at: new Date().toISOString()
       };
 
-      const { error: jobUpdateErr } = await supabase.from('jobs').update(jobPayload).eq('id', jobId);
-      if (jobUpdateErr) {
-        console.warn('Failed to persist unit-rate run to jobs table:', jobUpdateErr);
-      }
+      const persistResult = await persistUnitRateRunSummary(jobId, jobPayload);
+      if (!persistResult.updated) console.warn('Failed to persist unit-rate run summary (compute property path):', persistResult.error);
     } catch (e) {
       console.warn('Error updating jobs row with unit rate run info:', e);
     }
