@@ -730,7 +730,7 @@ const getPricePerUnit = useCallback((price, size) => {
       { code: '3', description: '3* — Row / Townhouse (3E,3I,30,31)' },
       { code: '4', description: '4* — MultiFamily (42,43,44)' },
       { code: '5', description: '5* — Conversions (51,52,53)' },
-      { code: '6', description: '6 �� Condominium' },
+      { code: '6', description: '6 — Condominium' },
       { code: 'all_residential', description: 'All Residential' }
     ];
 
@@ -4279,8 +4279,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             </label>
             <input
               type="date"
-              value={dateRange.end.toISOString().split('T')[0]}
-              onChange={(e) => setDateRange(prev => ({ ...prev, end: new Date(e.target.value) }))}
+              value={safeISODate(dateRange.end)}
+              onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value ? new Date(e.target.value) : prev.end }))}
               style={{
                 width: '100%',
                 padding: '8px',
@@ -4382,7 +4382,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         type="checkbox"
                         checked={includedSales.has(sale.id)}
                         onChange={(e) => {
-                          debug(`��� Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
+                          debug(`����� Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
                             checked: e.target.checked,
                             saleId: sale.id
                           });
