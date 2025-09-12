@@ -2110,11 +2110,11 @@ const analyzeImportFile = async (file) => {
         if (vendorType === 'Microsystems') {
           // For Microsystems, handle the duplicate Location field issue
           // Try to get the first Location column (property address) not the second one
-          location = row.Location?.toString().trim() || '';
+          location = row.Location?.toString() || '';
           // If Location seems to be empty or is actually the analysis field, try other patterns
           if (!location || location.toLowerCase().includes('analysis')) {
-            location = row['Property Location']?.toString().trim() || 
-                      row.Address?.toString().trim() || 
+            location = row['Property Location']?.toString() ||
+                      row.Address?.toString() ||
                       'NONE';
           }
         } else { // BRT
