@@ -2259,7 +2259,7 @@ const analyzeImportFile = async (file) => {
         const lot = String(getVal(row, ['Lot','LOT','lot'])).trim();
         let qual = String(getVal(row, ['Qualifier','Qual','QUALIFIER','QUAL'])).trim(); if (!qual) qual = 'NONE';
         const card = String(getVal(row, ['Card','CARD','card','Bldg','BLDG'])).trim() || 'NONE';
-        let location = String(getVal(row, ['Location','PROPERTY_LOCATION','Property Location','Address'])) || 'NONE';
+        let location = String(getVal(row, ['PROPERTY_LOCATION','Property Location','Location','Address'])) || 'NONE';
         try {
           const locationAnalysis = getVal(row, ['Location Analysis','LocationAnalysis','Loc Analysis','Location_Analysis']) || '';
           const isNumericOnly = /^[0-9]+(\.[0-9]+)?$/.test(String(location));
