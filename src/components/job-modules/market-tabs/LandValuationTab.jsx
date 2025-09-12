@@ -428,7 +428,7 @@ useEffect(() => {
   // Load cascade config from either location (prefer cascade_rates, fallback to raw_land_config)
   const savedConfig = marketLandData.cascade_rates || marketLandData.raw_land_config?.cascade_config;
   if (savedConfig) {
-    debug('🔧 Loading cascade config:', {
+    debug('��� Loading cascade config:', {
       source: marketLandData.cascade_rates ? 'cascade_rates' : 'raw_land_config',
       specialCategories: savedConfig.specialCategories,
       mode: savedConfig.mode
@@ -813,7 +813,7 @@ const getPricePerUnit = useCallback((price, size) => {
       debug('⏰ Auto-save interval triggered');
       // Use window reference to avoid hoisting issues
       if (window.landValuationSave) {
-        window.landValuationSave();
+        window.landValuationSave({ source: 'autosave' });
       }
     }, 30000);
     return () => {
@@ -829,7 +829,7 @@ const getPricePerUnit = useCallback((price, size) => {
     debug('🔄 State change detected, triggering immediate save');
     const timeoutId = setTimeout(() => {
       if (window.landValuationSave) {
-        window.landValuationSave();
+        window.landValuationSave({ source: 'autosave' });
       }
     }, 1000); // 1 second delay to batch multiple changes
 
@@ -2290,7 +2290,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     debug('💾 Triggering immediate save for Act Site change');
     setTimeout(() => {
       if (window.landValuationSave) {
-        window.landValuationSave();
+        window.landValuationSave({ source: 'autosave' });
       }
     }, 500); // Short delay to batch multiple rapid changes
   };
@@ -2708,7 +2708,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   // ========== SAVE & EXPORT FUNCTIONS ==========
-  const saveAnalysis = async () => {
+  const saveAnalysis = async (options = {}) => {
     if (!jobData?.id) {
       debug('❌ Save cancelled: No job ID');
       return;
@@ -2830,7 +2830,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Notify parent component
       if (onAnalysisUpdate) {
-        onAnalysisUpdate(analysisData);
+        onAnalysisUpdate(analysisData, options);
       }
     } catch (error) {
       console.error('��� Save failed:', error);
