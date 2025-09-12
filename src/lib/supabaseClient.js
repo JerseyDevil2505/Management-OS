@@ -2350,7 +2350,7 @@ export async function generateLotSizesForJob(jobId) {
   const appliedCodesMap = {};
 
   for (const p of props) {
-    const vcs = p.property_vcs ? String(p.property_vcs).trim() : null;
+    const vcs = p.property_vcs ? String(p.property_vcs).trim().replace(/^0+/, '') : null;
     console.log(`=== DEBUG FOR PROPERTY ${p.property_composite_key} ===`);
     console.log(`Property VCS: "${vcs}"`);
     console.log(`Available mapping keys:`, Object.keys(mappings));
