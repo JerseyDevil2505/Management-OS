@@ -1999,11 +1999,7 @@ const processSelectedProperties = async () => {
         const { error } = await safeUpsertPropertyMarket(updates);
         if (error) throw error;
 
-        // Clear cache after updating property records
-        if (onUpdateJobCache && jobData?.id) {
-          if (false) console.log('🗑️ Clearing cache after processing worksheet properties');
-          callRefresh(null);
-        }
+        // Intentionally not clearing parent cache here to avoid interrupting user workflow; refresh manually when needed
       }
       
       setProcessProgress({ 
