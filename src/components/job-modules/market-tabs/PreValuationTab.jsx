@@ -2032,7 +2032,7 @@ const processSelectedProperties = async () => {
   
   const exportWorksheetToExcel = () => {
     // Export using the canonical property_location (address) and explicit Location Analysis field.
-    let csv = 'Block,Lot,Qualifier,Card,Property_Location,Address,Class,Current VCS,Building,Type/Use,Design,New VCS,Location Analysis,Zoning,Map Page,Key Page,Notes,Ready\n';
+    let csv = 'Block,Lot,Qualifier,Card,Address,Class,Current VCS,Building,Type/Use,Design,New VCS,Location Analysis,Zoning,Map Page,Key Page,Notes,Ready\n';
 
     // Debug sample: log first 10 property_location values to help detect truncation
     try {
