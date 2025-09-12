@@ -576,6 +576,11 @@ if (typeof window !== 'undefined') {
   };
 }
 
+if (typeof window !== 'undefined') {
+  // Expose convenience debug function to clear legacy asset lot fields
+  window.clearLegacyAssetLotFields = clearLegacyAssetLotFields;
+}
+
 /**
  * Detect vendor type from source file content
  */
