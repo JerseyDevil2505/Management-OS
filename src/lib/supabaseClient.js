@@ -3566,59 +3566,27 @@ export const propertyService = {
   // NEW: Get raw file data for a specific property from jobs.raw_file_content
   async getRawDataForProperty(jobId, propertyCompositeKey) {
     try {
-      console.log(`🔍 Fetching raw data for job ${jobId}, property ${propertyCompositeKey}`);
-      console.log(`📋 RPC Parameters:`, {
-        p_job_id: jobId,
-        p_property_composite_key: propertyCompositeKey,
-        jobIdType: typeof jobId,
-        propertyKeyType: typeof propertyCompositeKey
-      });
-
+      // Try RPC first (if function exists)
       const { data, error } = await supabase.rpc('get_raw_data_for_property', {
         p_job_id: jobId,
         p_property_composite_key: propertyCompositeKey
       });
 
       if (error) {
-        console.error('❌ RPC function error:');
-        console.error('  Message:', getErrorMessage(error));
-        console.error('  Details:', error.details);
-        console.error('  Hint:', error.hint);
-        console.error('  Code:', error.code);
-        console.error('  Full Error Object:', JSON.stringify(error, null, 2));
-        console.error('  Stack:', error.stack);
-        throw error;
+        // RPC failed or not available — fall back silently to client-side parsing
+        return await this.getRawDataForPropertyClientSide(jobId, propertyCompositeKey);
       }
 
-      if (data) {
-        console.log(`✅ Found raw data for property ${propertyCompositeKey}`);
-        return data;
-      }
+      if (data) return data;
 
-      console.warn(`���️ No raw data found for property ${propertyCompositeKey}, trying client-side fallback...`);
-
-      // Fallback: use client-side parsing
+      // No RPC data — use client-side parsing
       return await this.getRawDataForPropertyClientSide(jobId, propertyCompositeKey);
 
     } catch (error) {
-      console.error('❌ Error fetching raw data for property:');
-      console.error('  Job ID:', jobId);
-      console.error('  Property Key:', propertyCompositeKey);
-      console.error('  Error Message:', getErrorMessage(error));
-      console.error('  Error Type:', error.constructor.name);
-      console.error('  Full Error:', JSON.stringify(error, null, 2));
-      console.error('  Stack:', error.stack);
-
-      // Fallback: use client-side parsing
-      console.log('����� Attempting client-side fallback...');
+      // On unexpected errors, attempt client-side fallback and avoid noisy logging
       try {
         return await this.getRawDataForPropertyClientSide(jobId, propertyCompositeKey);
-      } catch (fallbackError) {
-        console.error('❌ Client-side fallback also failed:');
-        console.error('  Fallback Error Message:', getErrorMessage(fallbackError));
-        console.error('  Fallback Error Type:', fallbackError.constructor.name);
-        console.error('  Fallback Error Stack:', fallbackError.stack);
-        console.error('  Full Fallback Error:', JSON.stringify(fallbackError, null, 2));
+      } catch (e) {
         return null;
       }
     }
@@ -3626,31 +3594,12 @@ export const propertyService = {
 
   // Fallback: Client-side raw data parsing
   async getRawDataForPropertyClientSide(jobId, propertyCompositeKey) {
-    console.log(`🔄 Using client-side parsing for job ${jobId}, property ${propertyCompositeKey}`);
-
     const rawData = await getRawDataForJob(jobId);
-    console.log(`📊 Raw data structure:`, {
-      hasRawData: !!rawData,
-      vendorType: rawData?.vendorType,
-      hasPropertyMap: !!rawData?.propertyMap,
-      propertyMapSize: rawData?.propertyMap?.size || 0,
-      propertyMapType: rawData?.propertyMap?.constructor?.name
-    });
-
-    if (!rawData || !rawData.propertyMap) {
-      console.warn('⚠️ No property map available for job');
-      return null;
-    }
+    if (!rawData || !rawData.propertyMap) return null;
 
     const propertyRawData = rawData.propertyMap.get(propertyCompositeKey);
-    if (propertyRawData) {
-      console.log(`✅ Found raw data via client-side parsing for ${propertyCompositeKey}`);
-      return propertyRawData;
-    }
+    if (propertyRawData) return propertyRawData;
 
-    // Show some sample keys for debugging
-    const sampleKeys = Array.from(rawData.propertyMap.keys()).slice(0, 3);
-    console.warn(`⚠️ Property ${propertyCompositeKey} not found in parsed data. Sample keys:`, sampleKeys);
     return null;
   },
 
