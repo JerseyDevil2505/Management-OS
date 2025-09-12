@@ -2326,6 +2326,12 @@ export async function generateLotSizesForJob(jobId) {
   let codeDefinitions = null;
   try {
     rawDataForJob = await getRawDataForJob(jobId);
+    console.log('Raw data for job result:', {
+      hasRawData: !!rawDataForJob,
+      hasCodeDefs: !!rawDataForJob?.codeDefinitions,
+      hasParsedCodeDefs: !!rawDataForJob?.parsed_code_definitions,
+      keys: rawDataForJob ? Object.keys(rawDataForJob) : 'null'
+    });
     codeDefinitions = rawDataForJob?.codeDefinitions || rawDataForJob?.parsed_code_definitions || null;
     if (codeDefinitions && codeDefinitions.sections && codeDefinitions.sections.VCS) {
       Object.keys(codeDefinitions.sections.VCS).forEach(vkey => {
