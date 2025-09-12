@@ -2287,6 +2287,7 @@ export async function generateLotSizesForJob(jobId) {
         if (!persistResult.updated) console.warn('Failed to persist unit-rate run summary (per-property path):', persistResult.error);
       } catch (e) { console.warn('Error writing unit-rate run summary to jobs table (per-property path):', e); }
 
+      try { console.timeEnd && console.timeEnd('generateLotSizesForJob'); } catch(e) { /* ignore */ }
       return { job_id: jobId, updated: updatedCount };
     }
   }
@@ -2319,6 +2320,7 @@ export async function generateLotSizesForJob(jobId) {
 
       console.error('generateLotSizesForJob: NO MAPPINGS FOUND - diagnostic preview:\n' + safeStringify(info, 2000));
     } catch (e) { console.error('generateLotSizesForJob: failed to produce diagnostic preview', e); }
+    try { console.timeEnd && console.timeEnd('generateLotSizesForJob'); } catch(e) { /* ignore */ }
     throw new Error('No mappings found for job; please configure mappings (staged_unit_rate_config or unit_rate_codes_applied or unit_rate_config)');
   }
 
@@ -2477,6 +2479,7 @@ export async function generateLotSizesForJob(jobId) {
     console.warn('Error persisting appliedCodesMap to jobs table:', e);
   }
 
+  try { console.timeEnd && console.timeEnd('generateLotSizesForJob'); } catch(e) { /* ignore */ }
   return { job_id: jobId, updated: updates.length };
 }
 
