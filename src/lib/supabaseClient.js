@@ -371,7 +371,8 @@ export async function computeLotAcreForProperty(jobId, propertyCompositeKey, sel
     selected_codes: selectedCodes,
     propVcs: propVcs,
     details,
-    total_acres: isFinite(finalAcres) && finalAcres > 0 ? parseFloat(finalAcres.toFixed(2)) : null
+    total_acres: isFinite(finalAcres) && finalAcres > 0 ? parseFloat(finalAcres.toFixed(2)) : null,
+    total_sf: isFinite(totalSf) && totalSf > 0 ? Math.round(totalSf) : null
   };
 }
 
@@ -408,11 +409,12 @@ export async function persistComputedLotAcre(jobId, propertyCompositeKey, select
     const result = await computeLotAcreForProperty(jobId, propertyCompositeKey, normalizedSel, { useJobConfig });
     const acres = result?.total_acres ?? null;
 
-    // Upsert into property_market_analysis
+    // Upsert into property_market_analysis (include SF as well)
     const upsertRow = {
       job_id: jobId,
       property_composite_key: propertyCompositeKey,
       market_manual_lot_acre: acres !== null ? parseFloat(Number(acres).toFixed(2)) : null,
+      market_manual_lot_sf: (acres !== null && !isNaN(acres)) ? Math.round(Number(acres) * 43560) : null,
       updated_at: new Date().toISOString()
     };
 
@@ -422,34 +424,18 @@ export async function persistComputedLotAcre(jobId, propertyCompositeKey, select
       throw upsertError;
     }
 
-    // Update job-level unit_rate_codes_applied in market_land_valuation
+    // Persist property-level applied codes into the jobs row (do not use market_land_valuation)
     try {
-      const { data: existing, error: fetchErr } = await supabase.from('market_land_valuation').select('unit_rate_codes_applied').eq('job_id', jobId).single();
-      if (fetchErr && fetchErr.code !== 'PGRST116') {
-        // PGRST116 = no rows — ignore
-        console.warn('Warning fetching existing market_land_valuation row:', fetchErr);
-      }
-      // Normalize existing.unit_rate_codes_applied: it may be an object or a JSON string
+      const { data: jobRow, error: jobErr } = await supabase.from('jobs').select('unit_rate_codes_applied').eq('id', jobId).single();
       let applied = {};
-      if (existing && existing.unit_rate_codes_applied) {
+      if (!jobErr && jobRow && jobRow.unit_rate_codes_applied) {
         try {
-          if (typeof existing.unit_rate_codes_applied === 'string') {
-            applied = JSON.parse(existing.unit_rate_codes_applied);
-          } else if (typeof existing.unit_rate_codes_applied === 'object' && existing.unit_rate_codes_applied !== null) {
-            applied = existing.unit_rate_codes_applied;
-          } else {
-            applied = {};
-          }
-        } catch (e) {
-          console.warn('Failed to parse existing.unit_rate_codes_applied, resetting to {}', e);
-          applied = {};
-        }
+          applied = typeof jobRow.unit_rate_codes_applied === 'string' ? JSON.parse(jobRow.unit_rate_codes_applied) : jobRow.unit_rate_codes_applied || {};
+        } catch (e) { applied = {}; }
       }
-      // Use the normalized selection used for calculation when persisting
       applied[propertyCompositeKey] = normalizedSel || [];
 
-      const payload = {
-        job_id: jobId,
+      const jobPayload = {
         unit_rate_codes_applied: applied,
         unit_rate_last_run: {
           timestamp: new Date().toISOString(),
@@ -459,13 +445,12 @@ export async function persistComputedLotAcre(jobId, propertyCompositeKey, select
         updated_at: new Date().toISOString()
       };
 
-      const { error: mvError } = await supabase.from('market_land_valuation').upsert([payload], { onConflict: 'job_id' });
-      if (mvError) {
-        console.error('Failed to persist unit_rate_codes_applied for single property:', mvError);
-        // don't throw — this is non-critical for the property value
+      const { error: jobUpdateErr } = await supabase.from('jobs').update(jobPayload).eq('id', jobId);
+      if (jobUpdateErr) {
+        console.warn('Failed to persist unit-rate run to jobs table:', jobUpdateErr);
       }
     } catch (e) {
-      console.error('Error updating market_land_valuation:', e);
+      console.warn('Error updating jobs row with unit rate run info:', e);
     }
 
     return { property_composite_key: propertyCompositeKey, job_id: jobId, market_manual_lot_acre: acres };
@@ -1937,16 +1922,7 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = [], op
     const stats = { totalParsed: 0, acreageSet: 0, sampledNullKeys: [] };
 
     for (const [compositeKey, rawRecord] of propertyMap.entries()) {
-      // DEBUG: log full rawRecord for specific composite keys when needed
-      if (compositeKey === '20251020-1-2_NONE-1-191 WATER STREET' || compositeKey === '20251020-1-2_NONE-1-191 WATER STREET') {
-        try {
-          console.warn('DEBUG: rawRecord keys for', compositeKey, Object.keys(rawRecord));
-          console.warn('DEBUG: rawRecord sample values:', Object.entries(rawRecord).slice(0,60));
-          const orderedValuesDbg = Object.keys(rawRecord).map(k => rawRecord[k]);
-          console.warn('DEBUG: ordered values slice (260..300):', orderedValuesDbg.slice(260, 305));
-        } catch (e) { console.error('DEBUG logging failed', e); }
-      }
-
+  
       stats.totalParsed++;
       let totalAcres = 0; let totalSf = 0;
 
@@ -2061,10 +2037,9 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = [], op
       }
     }
 
-    // Persist job-level map of applied codes into market_land_valuation for audit and global visibility
+    // Persist job-level summary into jobs table instead of market_land_valuation
     try {
-      const payload = {
-        job_id: jobId,
+      const jobPayload = {
         unit_rate_codes_applied: appliedCodesMap || {},
         unit_rate_last_run: {
           timestamp: new Date().toISOString(),
@@ -2075,30 +2050,12 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = [], op
         },
         updated_at: new Date().toISOString()
       };
-      const { error: mvError } = await supabase.from('market_land_valuation').upsert([payload], { onConflict: 'job_id' });
-      if (mvError) {
-        try { console.error('Failed to persist appliedCodesMap to market_land_valuation (v2):', JSON.stringify(mvError)); } catch (logErr) { console.error('Failed to persist appliedCodesMap to market_land_valuation (v2) (object):', mvError); }
-
-        // Fallback: try to persist only a compact summary
-        try {
-          const summaryPayload = {
-            job_id: jobId,
-            unit_rate_codes_applied: {},
-            unit_rate_last_run: payload.unit_rate_last_run,
-            updated_at: new Date().toISOString()
-          };
-          const { error: mvError2 } = await supabase.from('market_land_valuation').upsert([summaryPayload], { onConflict: 'job_id' });
-          if (mvError2) {
-            try { console.error('Fallback upsert to market_land_valuation (v2) failed:', JSON.stringify(mvError2)); } catch(e2) { console.error('Fallback upsert (v2) failed (object):', mvError2); }
-          } else {
-            console.warn('Persisted unit-rate run summary (fallback v2) to market_land_valuation');
-          }
-        } catch (fbErr) {
-          console.error('Error during fallback persist to market_land_valuation (v2):', fbErr);
-        }
+      const { error: jobUpdateErr } = await supabase.from('jobs').update(jobPayload).eq('id', jobId);
+      if (jobUpdateErr) {
+        try { console.warn('Failed to persist appliedCodesMap summary to jobs table:', JSON.stringify(jobUpdateErr)); } catch (logErr) { console.warn('Failed to persist appliedCodesMap summary to jobs table (object):', jobUpdateErr); }
       }
     } catch (e) {
-      console.error('Error writing appliedCodesMap to market_land_valuation (v2):', e);
+      console.warn('Error writing appliedCodesMap summary to jobs table:', e);
     }
 
     return { updated: updates.length, acreage_set: stats.acreageSet, acreage_null: updates.length - stats.acreageSet, sample_null_keys: stats.sampledNullKeys };
