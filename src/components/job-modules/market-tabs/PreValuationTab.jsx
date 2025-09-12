@@ -710,6 +710,13 @@ useEffect(() => {
     }
   };
 
+  // Helper to display VCS names (frontend-only). Falls back to numeric key when codeDefinitions not available
+  const getVCSDisplayName = useCallback((numericKey) => {
+    if (!codeDefinitions?.sections?.VCS) return numericKey;
+    const vcsEntry = codeDefinitions.sections.VCS[String(numericKey)];
+    return vcsEntry?.DATA?.KEY || vcsEntry?.KEY || numericKey;
+  }, [codeDefinitions]);
+
   const saveUnitRateConfig = async () => {
     if (!jobData?.id) return;
     setIsSavingUnitConfig(true);
@@ -2757,7 +2764,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-20 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('asset_type_use')}
                             >
-                              Type {normSortConfig.field === 'asset_type_use' && (normSortConfig.direction === 'asc' ? '���' : '↓')}
+                              Type {normSortConfig.field === 'asset_type_use' && (normSortConfig.direction === 'asc' ? '����' : '↓')}
                             </th>
                             <th 
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
@@ -3231,8 +3238,23 @@ const analyzeImportFile = async (file) => {
                         {Object.keys(stagedMappings).map(k => (
                           <div key={k} className="border p-2 rounded bg-gray-50">
                             <div className="flex justify-between items-center">
-                              <div className="font-medium">{k}</div>
-                              <div className="text-xs text-yellow-800">Staged</div>
+                              <div className="font-medium">{getVCSDisplayName(k)}</div>
+                              <div className="flex items-center gap-2">
+                                <div className="text-xs text-yellow-800">Staged</div>
+                                <button
+                                  onClick={() => {
+                                    setStagedMappings(prev => {
+                                      const copy = { ...prev };
+                                      delete copy[k];
+                                      return copy;
+                                    });
+                                  }}
+                                  className="text-red-500 hover:text-red-700 text-xs"
+                                  title="Remove staged mapping"
+                                >
+                                  ×
+                                </button>
+                              </div>
                             </div>
                             <div className="text-xs text-gray-600 mt-1">Acre: {(stagedMappings[k].acre||[]).join(', ') || '-'} • SF: {(stagedMappings[k].sf||[]).join(', ') || '-'} • Exclude: {(stagedMappings[k].exclude||[]).join(', ') || '-'}</div>
                           </div>
@@ -3343,7 +3365,7 @@ const analyzeImportFile = async (file) => {
                         {Object.keys(combinedMappings).map(k => (
                           <div key={k} className="border p-2 rounded bg-gray-50">
                             <div className="flex justify-between items-center">
-                              <div className="font-medium">{k}</div>
+                              <div className="font-medium">{getVCSDisplayName(k)}</div>
                               <div className="text-xs text-green-800">Saved</div>
                             </div>
                             <div className="text-xs text-gray-600 mt-1">Acre: {(combinedMappings[k].acre||[]).join(', ') || '-'} • SF: {(combinedMappings[k].sf||[]).join(', ') || '-'} • Exclude: {(combinedMappings[k].exclude||[]).join(', ') || '-'}</div>
