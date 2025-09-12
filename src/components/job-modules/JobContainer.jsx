@@ -1172,11 +1172,20 @@ const JobContainer = ({
                 return (
                   <button
                     key={module.id}
-                    onClick={() => {
+                    onClick={async () => {
                       if (isAvailable) {
-                        // If leaving a module that made changes, refresh data
+                        // When switching modules, refresh parent job data (mount/switch rule)
+                        if (activeModule !== module.id) {
+                          try {
+                            console.log(`Module switch: reloading job data for module ${module.id}`);
+                            await loadLatestFileVersions();
+                          } catch (e) {
+                            console.warn('Module switch refresh failed:', e);
+                          }
+                        }
+
+                        // clear moduleHasChanges flag when leaving
                         if (moduleHasChanges && activeModule !== module.id) {
-                          console.log(`Module ${activeModule} had changes, will reload fresh data`);
                           setModuleHasChanges(false);
                         }
                         setActiveModule(module.id);
