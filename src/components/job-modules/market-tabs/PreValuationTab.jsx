@@ -710,6 +710,13 @@ useEffect(() => {
     }
   };
 
+  // Helper to display VCS names (frontend-only). Falls back to numeric key when codeDefinitions not available
+  const getVCSDisplayName = useCallback((numericKey) => {
+    if (!codeDefinitions?.sections?.VCS) return numericKey;
+    const vcsEntry = codeDefinitions.sections.VCS[String(numericKey)];
+    return vcsEntry?.DATA?.KEY || vcsEntry?.KEY || numericKey;
+  }, [codeDefinitions]);
+
   const saveUnitRateConfig = async () => {
     if (!jobData?.id) return;
     setIsSavingUnitConfig(true);
