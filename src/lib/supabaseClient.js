@@ -2214,8 +2214,8 @@ export async function generateLotSizesForJob(jobId) {
     // Persist summary run info to jobs table
     try {
       const jobPayload = { unit_rate_last_run: { timestamp: new Date().toISOString(), selected_codes: codeOnlySelected || [], updated_count: updatedCount }, updated_at: new Date().toISOString() };
-      const { error: jobUpdateErr } = await supabase.from('jobs').update(jobPayload).eq('id', jobId);
-      if (jobUpdateErr) console.warn('Failed to persist unit-rate run summary to jobs table (code-only path):', jobUpdateErr);
+      const persistResult = await persistUnitRateRunSummary(jobId, jobPayload);
+      if (!persistResult.updated) console.warn('Failed to persist unit-rate run summary (code-only path):', persistResult.error);
     } catch (e) {
       console.warn('Error writing unit-rate run summary to jobs table (code-only path):', e);
     }
