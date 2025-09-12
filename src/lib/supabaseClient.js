@@ -2050,53 +2050,81 @@ export async function generateLotSizesForJob(jobId) {
   // Prefer unit_rate_config structured mappings first; capture flat code arrays if present; then staged_unit_rate_config; legacy unit_rate_codes_applied last
   let mappings = null;
   let codeOnlySelected = null; // capture flat list of selected codes if unit_rate_config stores that
+  let jobRowGlobal = null;
+  let marketRowGlobal = null;
+
+  const deepParse = (val) => {
+    let v = val;
+    let attempts = 0;
+    while (typeof v === 'string' && attempts < 4) {
+      try {
+        v = JSON.parse(v);
+      } catch (e) {
+        break;
+      }
+      attempts++;
+    }
+    return v;
+  };
+
   try {
     const { data: jobRow, error: jobErr } = await supabase.from('jobs').select('unit_rate_codes_applied,staged_unit_rate_config,unit_rate_config').eq('id', jobId).single();
+    jobRowGlobal = jobRow || null;
     if (!jobErr && jobRow) {
       // 1) Examine unit_rate_config for either structured mappings or flat codes
       if (jobRow.unit_rate_config) {
-        const urc = jobRow.unit_rate_config;
-        const parsedUrc = (typeof urc === 'string') ? (() => { try { return JSON.parse(urc); } catch(e){ return urc; } })() : urc;
+        const urc = deepParse(jobRow.unit_rate_config);
 
-        if (Array.isArray(parsedUrc) && parsedUrc.length > 0) {
-          // flat array of selected codes
-          codeOnlySelected = parsedUrc;
-        } else if (parsedUrc && typeof parsedUrc === 'object') {
-          const keys = Object.keys(parsedUrc);
-          const looksLikeStaged = keys.length > 0 && keys.every(k => /^\d+$/.test(k));
+        if (Array.isArray(urc) && urc.length > 0) {
+          codeOnlySelected = urc;
+        } else if (urc && typeof urc === 'object') {
+          // Try multiple common shapes
+          const keys = Object.keys(urc);
+          const looksLikeStaged = keys.length > 0 && keys.every(k => /^\d+$/.test(String(k).trim()));
           if (looksLikeStaged) {
-            mappings = parsedUrc;
-          } else if (parsedUrc.mappings && typeof parsedUrc.mappings === 'object' && Object.keys(parsedUrc.mappings).length > 0) {
-            mappings = parsedUrc.mappings;
-          } else if (Array.isArray(parsedUrc.codes) && parsedUrc.codes.length > 0) {
-            codeOnlySelected = parsedUrc.codes;
-          } else if (Array.isArray(parsedUrc.selected_codes) && parsedUrc.selected_codes.length > 0) {
-            codeOnlySelected = parsedUrc.selected_codes;
-          } else if (Array.isArray(parsedUrc.codes_selected) && parsedUrc.codes_selected.length > 0) {
-            codeOnlySelected = parsedUrc.codes_selected;
+            mappings = urc;
+          } else if (urc.mappings && typeof urc.mappings === 'object' && Object.keys(urc.mappings).length > 0) {
+            mappings = urc.mappings;
+          } else if (Array.isArray(urc.codes) && urc.codes.length > 0) {
+            codeOnlySelected = urc.codes;
+          } else if (Array.isArray(urc.selected_codes) && urc.selected_codes.length > 0) {
+            codeOnlySelected = urc.selected_codes;
+          } else if (Array.isArray(urc.codes_selected) && urc.codes_selected.length > 0) {
+            codeOnlySelected = urc.codes_selected;
+          } else {
+            // Try to find any nested object that looks like mappings
+            for (const k of Object.keys(urc)) {
+              const candidate = urc[k];
+              if (candidate && typeof candidate === 'object') {
+                const cKeys = Object.keys(candidate);
+                if (cKeys.length > 0 && cKeys.every(x => /^\d+$/.test(String(x).trim()))) {
+                  mappings = candidate; break;
+                }
+                if (candidate.mappings && typeof candidate.mappings === 'object') { mappings = candidate.mappings; break; }
+              }
+            }
           }
         }
       }
 
       // 2) If no structured mappings found, examine staged_unit_rate_config
       if (!mappings && jobRow.staged_unit_rate_config) {
-        const suc = jobRow.staged_unit_rate_config;
-        const parsedSuc = (typeof suc === 'string') ? (() => { try { return JSON.parse(suc); } catch(e){ return suc; } })() : suc;
-        if (parsedSuc && typeof parsedSuc === 'object') {
-          const keys = Object.keys(parsedSuc);
-          const looksLikeStagedSuc = keys.length > 0 && keys.every(k => /^\d+$/.test(k));
-          if (looksLikeStagedSuc) mappings = parsedSuc;
-          else if (parsedSuc.mappings && typeof parsedSuc.mappings === 'object' && Object.keys(parsedSuc.mappings).length > 0) mappings = parsedSuc.mappings;
-          else if (Array.isArray(parsedSuc.codes) && parsedSuc.codes.length > 0) codeOnlySelected = codeOnlySelected || parsedSuc.codes;
-        } else if (Array.isArray(parsedSuc) && parsedSuc.length > 0) {
-          codeOnlySelected = codeOnlySelected || parsedSuc;
+        const suc = deepParse(jobRow.staged_unit_rate_config);
+        if (Array.isArray(suc) && suc.length > 0) {
+          codeOnlySelected = codeOnlySelected || suc;
+        } else if (suc && typeof suc === 'object') {
+          const keys = Object.keys(suc);
+          const looksLikeStagedSuc = keys.length > 0 && keys.every(k => /^\d+$/.test(String(k).trim()));
+          if (looksLikeStagedSuc) mappings = suc;
+          else if (suc.mappings && typeof suc.mappings === 'object' && Object.keys(suc.mappings).length > 0) mappings = suc.mappings;
+          else if (Array.isArray(suc.codes) && suc.codes.length > 0) codeOnlySelected = codeOnlySelected || suc.codes;
         }
       }
 
       // 3) Legacy: fall back to unit_rate_codes_applied.mappings only if still no mappings
       if (!mappings && jobRow.unit_rate_codes_applied) {
-        const payloadObj = typeof jobRow.unit_rate_codes_applied === 'string' ? JSON.parse(jobRow.unit_rate_codes_applied) : jobRow.unit_rate_codes_applied;
-        mappings = payloadObj.mappings || null;
+        const ura = deepParse(jobRow.unit_rate_codes_applied);
+        if (ura && typeof ura === 'object') mappings = ura.mappings || null;
       }
     }
   } catch (e) {
