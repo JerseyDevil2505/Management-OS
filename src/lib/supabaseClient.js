@@ -2105,6 +2105,54 @@ export async function generateLotSizesForJob(jobId) {
     codeOnlySelected = null;
   }
 
+  // If we captured a flat code-only selection earlier, run code-only path immediately (no need to hit market_land_valuation)
+  if (!mappings && codeOnlySelected && Array.isArray(codeOnlySelected) && codeOnlySelected.length > 0) {
+    let normalizedSel = [];
+    try {
+      normalizedSel = await normalizeSelectedCodes(jobId, codeOnlySelected);
+    } catch (e) {
+      normalizedSel = Array.isArray(codeOnlySelected) ? codeOnlySelected : [];
+    }
+
+    const { data: props, error: propsErr } = await supabase.from('property_records').select('property_composite_key').eq('job_id', jobId);
+    if (propsErr) throw propsErr;
+
+    const updates = [];
+    let updatedCount = 0;
+
+    for (const p of props) {
+      try {
+        const res = await computeLotAcreForProperty(jobId, p.property_composite_key, normalizedSel, { useJobConfig: true });
+        const acresFinal = res?.total_acres ?? null;
+        const sfFinal = acresFinal !== null ? Math.round(Number(acresFinal) * 43560) : null;
+        updates.push({ job_id: jobId, property_composite_key: p.property_composite_key, market_manual_lot_acre: acresFinal, market_manual_lot_sf: sfFinal, updated_at: new Date().toISOString() });
+        updatedCount++;
+      } catch (err) {
+        console.warn('Skipping property due to error computing lot acre:', p.property_composite_key, err);
+        continue;
+      }
+    }
+
+    // Batch upsert property_market_analysis
+    const batchSize = 500;
+    for (let i = 0; i < updates.length; i += batchSize) {
+      const batch = updates.slice(i, i + batchSize);
+      const { error } = await supabase.from('property_market_analysis').upsert(batch, { onConflict: ['job_id','property_composite_key'] });
+      if (error) console.error('Error upserting market_manual lot sizes (code-only path):', error);
+    }
+
+    // Persist summary run info to jobs table
+    try {
+      const jobPayload = { unit_rate_last_run: { timestamp: new Date().toISOString(), selected_codes: codeOnlySelected || [], updated_count: updatedCount }, updated_at: new Date().toISOString() };
+      const { error: jobUpdateErr } = await supabase.from('jobs').update(jobPayload).eq('id', jobId);
+      if (jobUpdateErr) console.warn('Failed to persist unit-rate run summary to jobs table (code-only path):', jobUpdateErr);
+    } catch (e) {
+      console.warn('Error writing unit-rate run summary to jobs table (code-only path):', e);
+    }
+
+    return { job_id: jobId, updated: updatedCount };
+  }
+
   // If we didn't get structured per-VCS mappings, try fallback to market_land_valuation
   if (!mappings) {
     const { data: marketRow, error: marketErr } = await supabase.from('market_land_valuation').select('unit_rate_codes_applied').eq('job_id', jobId).single();
@@ -2113,72 +2161,6 @@ export async function generateLotSizesForJob(jobId) {
     }
     const mappingsPayload = (marketRow && marketRow.unit_rate_codes_applied) ? (typeof marketRow.unit_rate_codes_applied === 'string' ? JSON.parse(marketRow.unit_rate_codes_applied) : marketRow.unit_rate_codes_applied) : null;
     mappings = mappingsPayload?.mappings || null;
-  }
-
-  // If still no per-VCS mappings but we have a flat list of selected codes in unit_rate_config, run code-only computation
-  if (!mappings) {
-    // Check if unit_rate_config contains a flat codes array (we attempted parsing earlier)
-    let codeOnlySelected = null;
-    try {
-      const { data: jobRow2, error: jobErr2 } = await supabase.from('jobs').select('unit_rate_config').eq('id', jobId).single();
-      if (!jobErr2 && jobRow2 && jobRow2.unit_rate_config) {
-        const urc2 = jobRow2.unit_rate_config;
-        const parsedUrc2 = (typeof urc2 === 'string') ? (() => { try { return JSON.parse(urc2); } catch(e){ return urc2; } })() : urc2;
-        if (Array.isArray(parsedUrc2)) codeOnlySelected = parsedUrc2;
-        else if (parsedUrc2 && typeof parsedUrc2 === 'object' && Array.isArray(parsedUrc2.codes)) codeOnlySelected = parsedUrc2.codes;
-      }
-    } catch (e) {
-      codeOnlySelected = null;
-    }
-
-    if (codeOnlySelected && Array.isArray(codeOnlySelected) && codeOnlySelected.length > 0) {
-      // Normalize selected codes and compute per-property acres using computeLotAcreForProperty
-      let normalizedSel = [];
-      try {
-        normalizedSel = await normalizeSelectedCodes(jobId, codeOnlySelected);
-      } catch (e) {
-        normalizedSel = Array.isArray(codeOnlySelected) ? codeOnlySelected : [];
-      }
-
-      // Fetch properties for job with LANDUR fields
-      const { data: props, error: propsErr } = await supabase.from('property_records').select('property_composite_key').eq('job_id', jobId);
-      if (propsErr) throw propsErr;
-
-      const updates = [];
-      let updatedCount = 0;
-
-      for (const p of props) {
-        try {
-          const res = await computeLotAcreForProperty(jobId, p.property_composite_key, normalizedSel, { useJobConfig: true });
-          const acresFinal = res?.total_acres ?? null;
-          const sfFinal = acresFinal !== null ? Math.round(Number(acresFinal) * 43560) : null;
-          updates.push({ job_id: jobId, property_composite_key: p.property_composite_key, market_manual_lot_acre: acresFinal, market_manual_lot_sf: sfFinal, updated_at: new Date().toISOString() });
-          updatedCount++;
-        } catch (err) {
-          console.warn('Skipping property due to error computing lot acre:', p.property_composite_key, err);
-          continue;
-        }
-      }
-
-      // Batch upsert property_market_analysis
-      const batchSize = 500;
-      for (let i = 0; i < updates.length; i += batchSize) {
-        const batch = updates.slice(i, i + batchSize);
-        const { error } = await supabase.from('property_market_analysis').upsert(batch, { onConflict: ['job_id','property_composite_key'] });
-        if (error) console.error('Error upserting market_manual lot sizes (code-only path):', error);
-      }
-
-      // Persist summary run info to jobs table (do not attempt to store full per_property mapping to avoid huge JSON)
-      try {
-        const jobPayload = { unit_rate_last_run: { timestamp: new Date().toISOString(), selected_codes: codeOnlySelected || [], updated_count: updatedCount }, updated_at: new Date().toISOString() };
-        const { error: jobUpdateErr } = await supabase.from('jobs').update(jobPayload).eq('id', jobId);
-        if (jobUpdateErr) console.warn('Failed to persist unit-rate run summary to jobs table (code-only path):', jobUpdateErr);
-      } catch (e) {
-        console.warn('Error writing unit-rate run summary to jobs table (code-only path):', e);
-      }
-
-      return { job_id: jobId, updated: updatedCount };
-    }
   }
 
   if (!mappings) {
