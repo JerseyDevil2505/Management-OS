@@ -879,21 +879,22 @@ const JobContainer = ({
       // Rate-limited: ignore rapid repeat refreshes unless forced via opts.forceRefresh
       onUpdateJobCache: async (jobId, opts = null) => {
         try {
+          // Only allow explicit forced refreshes from children. Regular child calls must pass { forceRefresh: true }.
           const force = opts && opts.forceRefresh;
+
+          // Ignore non-forced refresh requests to avoid interrupting user work
+          if (!force) {
+            console.log('Ignored child refresh request (require opts.forceRefresh === true)');
+            return;
+          }
+
           const now = Date.now();
-          // Use outer scoped refs to track last refresh timestamp
           if (!lastJobRefreshAtRef.current) lastJobRefreshAtRef.current = 0;
 
           const withinCooldown = (now - lastJobRefreshAtRef.current) < 30000; // 30s
 
           // If not for current job, ignore
           if (jobId && selectedJob && jobId !== selectedJob.id) return;
-
-          if (force) {
-            await loadLatestFileVersions();
-            lastJobRefreshAtRef.current = Date.now();
-            return;
-          }
 
           if (withinCooldown) {
             // Schedule a single pending refresh if not already scheduled
@@ -913,7 +914,7 @@ const JobContainer = ({
             return;
           }
 
-          // Otherwise perform refresh and update timestamp
+          // Perform refresh and update timestamp
           await loadLatestFileVersions();
           lastJobRefreshAtRef.current = Date.now();
         } catch (e) {
