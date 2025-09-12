@@ -2320,9 +2320,11 @@ export async function generateLotSizesForJob(jobId) {
 
   // Build VCS id map from code definitions once to allow flexible matching between numeric keys and property_vcs labels
   let vcsIdMap = new Map();
+  let rawDataForJob;
+  let codeDefinitions = null;
   try {
-    const rawDataForJob = await getRawDataForJob(jobId);
-    const codeDefinitions = rawDataForJob?.codeDefinitions || rawDataForJob?.parsed_code_definitions || null;
+    rawDataForJob = await getRawDataForJob(jobId);
+    codeDefinitions = rawDataForJob?.codeDefinitions || rawDataForJob?.parsed_code_definitions || null;
     if (codeDefinitions && codeDefinitions.sections && codeDefinitions.sections.VCS) {
       Object.keys(codeDefinitions.sections.VCS).forEach(vkey => {
         const entry = codeDefinitions.sections.VCS[vkey];
@@ -2347,6 +2349,24 @@ export async function generateLotSizesForJob(jobId) {
 
   for (const p of props) {
     const vcs = p.property_vcs ? String(p.property_vcs).trim() : null;
+    console.log(`=== DEBUG FOR PROPERTY ${p.property_composite_key} ===`);
+    console.log(`Property VCS: "${vcs}"`);
+    console.log(`Available mapping keys:`, Object.keys(mappings));
+    console.log(`Direct match found:`, mappings[vcs] ? 'YES' : 'NO');
+
+    // Test the VCS resolution logic
+    if (codeDefinitions?.sections?.VCS) {
+      console.log(`Code definitions available: YES`);
+      Object.keys(codeDefinitions.sections.VCS).forEach(vkey => {
+        const entry = codeDefinitions.sections.VCS[vkey];
+        if (entry?.DATA?.KEY === vcs || entry?.KEY === vcs) {
+          console.log(`Found VCS "${vcs}" maps to numeric key: ${vkey}`);
+          console.log(`Mapping for key ${vkey}:`, mappings[vkey]);
+        }
+      });
+    } else {
+      console.log(`Code definitions not available`);
+    }
     // Resolve mapping for this property's VCS flexibly:
     let mapForVcs = null;
 
