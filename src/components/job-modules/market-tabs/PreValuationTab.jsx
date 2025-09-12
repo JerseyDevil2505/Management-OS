@@ -2077,14 +2077,14 @@ const analyzeImportFile = async (file) => {
       // Analysis results
       const analysis = {
         fileName: file.name,
-        totalRows: jsonData.length,
+        totalRows: dataForAnalysis.length,
         matched: [],
         unmatched: [],
         fuzzyMatched: []
       };
-      
+
       // Process each row from Excel
-      for (const row of jsonData) {
+      for (const row of dataForAnalysis) {
         // Build composite key from Excel data - vendor aware
         const year = row.Year || row.YEAR || new Date().getFullYear();
         const ccdd = row.Ccdd || row.CCDD || jobData?.ccdd || '';
