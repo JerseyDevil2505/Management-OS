@@ -2467,6 +2467,10 @@ const analyzeImportFile = async (file) => {
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Normalization Configuration</h3>
               <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={pauseAutoRefresh} onChange={(e) => setPauseAutoRefresh(e.target.checked)} className="form-checkbox" />
+                  <span className="text-gray-600">Pause Auto-Refresh</span>
+                </label>
                 {hpiLoaded && (
                   <span className="text-green-600 text-sm">✓ HPI Data Loaded</span>
                 )}
@@ -2869,7 +2873,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-32 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('property_location')}
                             >
-                              Location {normSortConfig.field === 'property_location' && (normSortConfig.direction === 'asc' ? '���' : '↓')}
+                              Location {normSortConfig.field === 'property_location' && (normSortConfig.direction === 'asc' ? '���' : '���')}
                             </th>
                             <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
