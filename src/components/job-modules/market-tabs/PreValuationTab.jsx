@@ -698,13 +698,8 @@ useEffect(() => {
         (m.sf || []).forEach(c => { if (c || c === 0) derived.push(`${vk}::${String(c).trim()}`); });
       });
 
-      let finalCodes = Array.from(new Set(derived.map(c => String(c).trim())));
-
-      // If no staged-derived codes exist, fall back to the UI selection (normalized)
-      if (!finalCodes || finalCodes.length === 0) {
-        const rawCodes = Array.from(selectedUnitRateCodes);
-        try { finalCodes = await normalizeSelectedCodes(jobData.id, rawCodes); } catch (e) { finalCodes = rawCodes; }
-      }
+      // Always derive flat codes from staged mappings (acre + sf). Do NOT fall back to UI selection.
+      const finalCodes = Array.from(new Set(derived.map(c => String(c).trim())));
 
       // Prepare payload: store codes and track last run timestamp inside the config
       const payload = { codes: finalCodes, last_run: new Date().toISOString() };
