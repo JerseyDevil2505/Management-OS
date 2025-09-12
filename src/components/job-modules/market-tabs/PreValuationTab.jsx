@@ -3238,8 +3238,23 @@ const analyzeImportFile = async (file) => {
                         {Object.keys(stagedMappings).map(k => (
                           <div key={k} className="border p-2 rounded bg-gray-50">
                             <div className="flex justify-between items-center">
-                              <div className="font-medium">{k}</div>
-                              <div className="text-xs text-yellow-800">Staged</div>
+                              <div className="font-medium">{getVCSDisplayName(k)}</div>
+                              <div className="flex items-center gap-2">
+                                <div className="text-xs text-yellow-800">Staged</div>
+                                <button
+                                  onClick={() => {
+                                    setStagedMappings(prev => {
+                                      const copy = { ...prev };
+                                      delete copy[k];
+                                      return copy;
+                                    });
+                                  }}
+                                  className="text-red-500 hover:text-red-700 text-xs"
+                                  title="Remove staged mapping"
+                                >
+                                  ×
+                                </button>
+                              </div>
                             </div>
                             <div className="text-xs text-gray-600 mt-1">Acre: {(stagedMappings[k].acre||[]).join(', ') || '-'} • SF: {(stagedMappings[k].sf||[]).join(', ') || '-'} • Exclude: {(stagedMappings[k].exclude||[]).join(', ') || '-'}</div>
                           </div>
