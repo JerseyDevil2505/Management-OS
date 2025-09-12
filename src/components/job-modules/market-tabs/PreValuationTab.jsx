@@ -1414,7 +1414,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
 
       //Clear cache after size normalization
       if (onUpdateJobCache && jobData?.id) {
-        if (false) console.log('🗑️ Clearing cache after size normalization');
+        if (false) console.log('���️ Clearing cache after size normalization');
         callRefresh(null);
       }
 
@@ -2375,7 +2375,7 @@ const analyzeImportFile = async (file) => {
   
   useEffect(() => {
     let filtered = [...worksheetProperties];
-    
+
     if (worksheetSearchTerm) {
       const searchLower = worksheetSearchTerm.toLowerCase();
       filtered = filtered.filter(p =>
@@ -2385,30 +2385,30 @@ const analyzeImportFile = async (file) => {
         p.lot?.includes(worksheetSearchTerm)
       );
     }
-    
+
     switch (worksheetFilter) {
       case 'missing-vcs':
-        filtered = filtered.filter(p => !p.new_vcs);
+        filtered = filtered.filter(p => !p.new_vcs || editingRows.has(p.property_composite_key));
         break;
       case 'missing-location':
-        filtered = filtered.filter(p => !p.location_analysis);
+        filtered = filtered.filter(p => !p.location_analysis || editingRows.has(p.property_composite_key));
         break;
       case 'missing-zoning':
-        filtered = filtered.filter(p => !p.asset_zoning);
+        filtered = filtered.filter(p => !p.asset_zoning || editingRows.has(p.property_composite_key));
         break;
       case 'ready':
-        filtered = filtered.filter(p => readyProperties.has(p.property_composite_key));
+        filtered = filtered.filter(p => readyProperties.has(p.property_composite_key) || editingRows.has(p.property_composite_key));
         break;
       case 'completed':
-        filtered = filtered.filter(p => p.new_vcs && p.asset_zoning);
+        filtered = filtered.filter(p => (p.new_vcs && p.asset_zoning) || editingRows.has(p.property_composite_key));
         break;
-        case 'not-ready':
-        filtered = filtered.filter(p => !readyProperties.has(p.property_composite_key));
+      case 'not-ready':
+        filtered = filtered.filter(p => !readyProperties.has(p.property_composite_key) || editingRows.has(p.property_composite_key));
         break;
     }
-    
+
     setFilteredWorksheetProps(filtered);
-  }, [worksheetSearchTerm, worksheetFilter, worksheetProperties, readyProperties]);
+  }, [worksheetSearchTerm, worksheetFilter, worksheetProperties, readyProperties, editingRows]);
 
   // ==================== PAGINATION ====================
   
@@ -2909,7 +2909,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-20 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('asset_type_use')}
                             >
-                              Type {normSortConfig.field === 'asset_type_use' && (normSortConfig.direction === 'asc' ? '����' : '↓')}
+                              Type {normSortConfig.field === 'asset_type_use' && (normSortConfig.direction === 'asc' ? '�����' : '↓')}
                             </th>
                             <th 
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
