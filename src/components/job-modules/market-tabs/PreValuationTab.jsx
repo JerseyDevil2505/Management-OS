@@ -2108,17 +2108,14 @@ const analyzeImportFile = async (file) => {
         // Handle location field - check for the actual property location first
         let location;
         if (vendorType === 'Microsystems') {
-          // For Microsystems, handle the duplicate Location field issue
-          // Try to get the first Location column (property address) not the second one
-          location = row.Location?.toString() || '';
-          // If Location seems to be empty or is actually the analysis field, try other patterns
+          // Prefer explicit Property Location if present (this is the address field). Fallback to Location if not.
+          location = row.PROPERTY_LOCATION?.toString() || row['Property Location']?.toString() || row.Location?.toString() || '';
+          // If location seems empty or is the analysis field, try other patterns
           if (!location || location.toLowerCase().includes('analysis')) {
-            location = row['Property Location']?.toString() ||
-                      row.Address?.toString() ||
-                      'NONE';
+            location = row['Property Location']?.toString() || row.Address?.toString() || 'NONE';
           }
         } else { // BRT
-          location = (row.PROPERTY_LOCATION || row['Property Location'] || row.Location)?.toString() || 'NONE';
+          location = row.PROPERTY_LOCATION?.toString() || row['Property Location']?.toString() || row.Location?.toString() || 'NONE';
         }
 
         // If address components were split across columns (e.g. number in Location and street in Location Analysis),
