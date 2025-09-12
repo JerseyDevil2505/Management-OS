@@ -2445,8 +2445,8 @@ export async function generateLotSizesForJob(jobId) {
     Object.assign(applied.per_property, appliedCodesMap);
 
     const jobPayload = { unit_rate_codes_applied: applied, unit_rate_last_run: { timestamp: new Date().toISOString(), updated_count: updates.length }, updated_at: new Date().toISOString() };
-    const { error: jobUpdateErr } = await supabase.from('jobs').update(jobPayload).eq('id', jobId);
-    if (jobUpdateErr) console.warn('Failed to persist appliedCodesMap to jobs table:', jobUpdateErr);
+  const persistResult = await persistUnitRateRunSummary(jobId, jobPayload);
+  if (!persistResult.updated) console.warn('Failed to persist appliedCodesMap to jobs table:', persistResult.error);
   } catch (e) {
     console.warn('Error persisting appliedCodesMap to jobs table:', e);
   }
