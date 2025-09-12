@@ -2047,29 +2047,38 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = [], op
 export async function generateLotSizesForJob(jobId) {
   if (!jobId) throw new Error('jobId required');
 
-  // Prefer mappings stored on the jobs row (unit_rate_codes_applied, staged_unit_rate_config, or unit_rate_config), fall back to market_land_valuation
+  // Prefer structured mappings stored on the jobs row: 1) unit_rate_config (if structured per-VCS), 2) staged_unit_rate_config, 3) unit_rate_codes_applied (legacy); fall back to market_land_valuation
   let mappings = null;
   try {
     const { data: jobRow, error: jobErr } = await supabase.from('jobs').select('unit_rate_codes_applied,staged_unit_rate_config,unit_rate_config').eq('id', jobId).single();
     if (!jobErr && jobRow) {
-      if (jobRow.unit_rate_codes_applied) {
+      // 1) Prefer unit_rate_config when it already contains the structured per-VCS mapping object
+      if (jobRow.unit_rate_config) {
+        const urc = jobRow.unit_rate_config;
+        // If unit_rate_config is stored as a string, try to parse it
+        const parsedUrc = (typeof urc === 'string') ? (() => { try { return JSON.parse(urc); } catch(e){ return urc; } })() : urc;
+        if (parsedUrc && typeof parsedUrc === 'object' && !Array.isArray(parsedUrc)) {
+          const keys = Object.keys(parsedUrc);
+          const looksLikeStaged = keys.length > 0 && keys.every(k => /^\d+$/.test(k));
+          if (looksLikeStaged) {
+            mappings = parsedUrc;
+          } else if (parsedUrc.mappings && typeof parsedUrc.mappings === 'object' && Object.keys(parsedUrc.mappings).length > 0) {
+            mappings = parsedUrc.mappings;
+          }
+        }
+      }
+
+      // 2) If no structured unit_rate_config, use staged_unit_rate_config (authoritative staged snapshot)
+      if (!mappings && jobRow.staged_unit_rate_config) {
+        const suc = jobRow.staged_unit_rate_config;
+        const parsedSuc = (typeof suc === 'string') ? (() => { try { return JSON.parse(suc); } catch(e){ return suc; } })() : suc;
+        if (parsedSuc && typeof parsedSuc === 'object') mappings = parsedSuc;
+      }
+
+      // 3) Legacy: fall back to unit_rate_codes_applied.mappings only if still no mappings
+      if (!mappings && jobRow.unit_rate_codes_applied) {
         const payloadObj = typeof jobRow.unit_rate_codes_applied === 'string' ? JSON.parse(jobRow.unit_rate_codes_applied) : jobRow.unit_rate_codes_applied;
         mappings = payloadObj.mappings || null;
-      }
-      // If no applied mappings, use staged mappings directly
-      if (!mappings && jobRow.staged_unit_rate_config) {
-        mappings = jobRow.staged_unit_rate_config || null;
-      }
-      // Also accept unit_rate_config when it stores the structured staged mapping (some flows write staged into unit_rate_config)
-      if (!mappings && jobRow.unit_rate_config) {
-        // unit_rate_config may be { codes: [...] } (flat) or the staged object. If it's the staged object, use it directly.
-        const urc = jobRow.unit_rate_config;
-        if (typeof urc === 'object' && !Array.isArray(urc) && urc !== null) {
-          // Heuristic: if object keys look like numeric VCS keys, treat as mappings
-          const keys = Object.keys(urc);
-          const looksLikeStaged = keys.length > 0 && keys.every(k => /^\d+$/.test(k));
-          if (looksLikeStaged) mappings = urc;
-        }
       }
     }
   } catch (e) {
@@ -3042,7 +3051,7 @@ export const checklistService = {
         .single();
       
       if (error) throw error;
-      console.log('✅ Updated assessor email:', assessorEmail);
+      console.log('�� Updated assessor email:', assessorEmail);
       return data;
     } catch (error) {
       console.error('Assessor email update error:', error);
