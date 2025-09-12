@@ -2184,6 +2184,7 @@ export async function generateLotSizesForJob(jobId) {
   // If we didn't get structured per-VCS mappings, try fallback to market_land_valuation
   if (!mappings) {
     const { data: marketRow, error: marketErr } = await supabase.from('market_land_valuation').select('unit_rate_codes_applied').eq('job_id', jobId).single();
+    marketRowGlobal = marketRow || null;
     if (marketErr && marketErr.code !== 'PGRST116') {
       console.warn('Error loading market_land_valuation mappings (fallback):', marketErr);
     }
@@ -2192,6 +2193,16 @@ export async function generateLotSizesForJob(jobId) {
   }
 
   if (!mappings) {
+    // Diagnostic logging to help debug why no mappings were detected
+    try {
+      console.error('generateLotSizesForJob: NO MAPPINGS FOUND', {
+        jobId,
+        jobRow: jobRowGlobal,
+        codeOnlySelected,
+        marketRow: marketRowGlobal,
+        mappingsDetected: mappings
+      });
+    } catch (e) { console.error('generateLotSizesForJob: failed to log debug info', e); }
     throw new Error('No mappings found for job; please configure mappings (staged_unit_rate_config or unit_rate_codes_applied or unit_rate_config)');
   }
 
