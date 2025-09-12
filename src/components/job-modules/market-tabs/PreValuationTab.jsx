@@ -149,7 +149,7 @@ const PreValuationTab = ({
     try {
       const res = await generateLotSizesForJob(jobData.id);
       alert(`Generated lot sizes for ${res.updated} properties`);
-      if (onUpdateJobCache) onUpdateJobCache(jobData.id, null);
+      if (onUpdateJobCache) callRefresh(null);
     } catch (e) {
       console.error('Generate failed', e);
       alert('Generate failed: ' + (e.message || e));
@@ -1174,7 +1174,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       //Clear cache after saving normalization data
       if (onUpdateJobCache && jobData?.id) {
         if (false) console.log('���️ Clearing cache after time normalization');
-        onUpdateJobCache(jobData.id, null);
+        callRefresh(null);
       }
       
       setLastTimeNormalizationRun(new Date().toISOString());
@@ -1394,7 +1394,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       //Clear cache after size normalization
       if (onUpdateJobCache && jobData?.id) {
         if (false) console.log('🗑️ Clearing cache after size normalization');
-        onUpdateJobCache(jobData.id, null);
+        callRefresh(null);
       }
 
       // Track the run date
@@ -1767,7 +1767,7 @@ const handleSalesDecision = (saleId, decision) => {
       // FOURTH: Clear cache to prevent stale data issues
       if (onUpdateJobCache && jobData?.id) {
         if (false) console.log('🗑️ Clearing cache after batch save to prevent stale data');
-        onUpdateJobCache(jobData.id, null);
+        callRefresh(null);
       }
 
       if (false) console.log(`��� Batch save complete: ${keeps.length} keeps saved, ${rejects.length} rejects cleared`);
@@ -1903,7 +1903,7 @@ const handleSalesDecision = (saleId, decision) => {
       //Clear cache after auto-save
       if (onUpdateJobCache && jobData?.id) {
         if (false) console.log('🗑️ Clearing cache after auto-save worksheet');
-        onUpdateJobCache(jobData.id, null);
+        callRefresh(null);
       }
       
       setLastAutoSave(new Date());
@@ -1957,7 +1957,7 @@ const processSelectedProperties = async () => {
         // Clear cache after updating property records
         if (onUpdateJobCache && jobData?.id) {
           if (false) console.log('🗑️ Clearing cache after processing worksheet properties');
-          onUpdateJobCache(jobData.id, null);
+          callRefresh(null);
         }
       }
       
@@ -3548,7 +3548,7 @@ const analyzeImportFile = async (file) => {
                       const persistedStatus = updated?.status || newStatus;
                       setPreValChecklist(prev => ({ ...prev, market_analysis: persistedStatus === 'completed' }));
                       try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'market-analysis', status: persistedStatus } })); } catch(e){}
-                      try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
+                      try { if (typeof onUpdateJobCache === 'function') callRefresh(null); } catch(e){}
                     } catch (error) {
                       console.error('Market Analysis checklist update failed:', error);
                       alert('Failed to update checklist. Please try again.');
@@ -4247,7 +4247,7 @@ const analyzeImportFile = async (file) => {
                     const persistedStatus = updated?.status || newStatus;
                     setPreValChecklist(prev => ({ ...prev, page_by_page: persistedStatus === 'completed' }));
                     try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'page-by-page', status: persistedStatus } })); } catch(e){}
-                    try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
+                    try { if (typeof onUpdateJobCache === 'function') callRefresh(null); } catch(e){}
                   } catch (error) {
                     console.error('Page by Page checklist update failed:', error);
                     alert('Failed to update checklist. Please try again.');
@@ -4656,7 +4656,7 @@ const analyzeImportFile = async (file) => {
                       //Clear cache after saving zoning
                       if (onUpdateJobCache && jobData?.id) { 
                         if (false) console.log('🗑️ Clearing cache after saving zoning');
-                        onUpdateJobCache(jobData.id, null);
+                        callRefresh(null);
                       }
                         
                       alert('✅ Zoning requirements saved successfully');
@@ -4680,7 +4680,7 @@ const analyzeImportFile = async (file) => {
                       const persistedStatus = updated?.status || newStatus;
                       setPreValChecklist(prev => ({ ...prev, zoning_config: persistedStatus === 'completed' }));
                       try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'zoning-config', status: persistedStatus } })); } catch(e){}
-                      try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
+                      try { if (typeof onUpdateJobCache === 'function') callRefresh(null); } catch(e){}
                     } catch (error) {
                       console.error('Zoning checklist update failed:', error);
                       alert('Failed to update checklist. Please try again.');
