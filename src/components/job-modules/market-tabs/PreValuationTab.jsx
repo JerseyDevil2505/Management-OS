@@ -480,13 +480,15 @@ useEffect(() => {
       setVcsOptions([]);
     }
 
-    // Initialize combined mappings from marketLandData (if available)
+    // Initialize combined mappings from marketLandData (if available) — only if mappings exist to avoid overwriting job-level saved mappings
     try {
       const existing = marketLandData?.unit_rate_codes_applied;
       const payloadObj = existing && typeof existing === 'string' ? JSON.parse(existing) : (existing || {});
       const mappingsFromDB = payloadObj.mappings || {};
-      setCombinedMappings(mappingsFromDB);
-    } catch(e){ setCombinedMappings({}); }
+      if (mappingsFromDB && Object.keys(mappingsFromDB).length > 0) {
+        setCombinedMappings(mappingsFromDB);
+      }
+    } catch(e){ /* leave combinedMappings as-is */ }
 
     Object.keys(vcsSection).forEach(vcsKey => {
       const entry = vcsSection[vcsKey];
@@ -667,7 +669,10 @@ useEffect(() => {
     const existing = marketLandData?.unit_rate_codes_applied;
     const payloadObj = existing && typeof existing === 'string' ? JSON.parse(existing) : (existing || {});
     const mappingsFromDB = payloadObj.mappings || {};
-    setCombinedMappings(mappingsFromDB);
+    if (mappingsFromDB && Object.keys(mappingsFromDB).length > 0) {
+      // Merge DB mappings into existing combined mappings so jobData.unit_rate_config isn't overwritten by an empty marketLandData
+      setCombinedMappings(prev => ({ ...(prev || {}), ...(mappingsFromDB || {}) }));
+    }
   } catch (e) {
     // ignore
   }
