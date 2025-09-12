@@ -2047,32 +2047,50 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = [], op
 export async function generateLotSizesForJob(jobId) {
   if (!jobId) throw new Error('jobId required');
 
-  // Prefer structured mappings stored on the jobs row: 1) unit_rate_config (if structured per-VCS), 2) staged_unit_rate_config, 3) unit_rate_codes_applied (legacy); fall back to market_land_valuation
+  // Prefer unit_rate_config structured mappings first; capture flat code arrays if present; then staged_unit_rate_config; legacy unit_rate_codes_applied last
   let mappings = null;
+  let codeOnlySelected = null; // capture flat list of selected codes if unit_rate_config stores that
   try {
     const { data: jobRow, error: jobErr } = await supabase.from('jobs').select('unit_rate_codes_applied,staged_unit_rate_config,unit_rate_config').eq('id', jobId).single();
     if (!jobErr && jobRow) {
-      // 1) Prefer unit_rate_config when it already contains the structured per-VCS mapping object
+      // 1) Examine unit_rate_config for either structured mappings or flat codes
       if (jobRow.unit_rate_config) {
         const urc = jobRow.unit_rate_config;
-        // If unit_rate_config is stored as a string, try to parse it
         const parsedUrc = (typeof urc === 'string') ? (() => { try { return JSON.parse(urc); } catch(e){ return urc; } })() : urc;
-        if (parsedUrc && typeof parsedUrc === 'object' && !Array.isArray(parsedUrc)) {
+
+        if (Array.isArray(parsedUrc) && parsedUrc.length > 0) {
+          // flat array of selected codes
+          codeOnlySelected = parsedUrc;
+        } else if (parsedUrc && typeof parsedUrc === 'object') {
           const keys = Object.keys(parsedUrc);
           const looksLikeStaged = keys.length > 0 && keys.every(k => /^\d+$/.test(k));
           if (looksLikeStaged) {
             mappings = parsedUrc;
           } else if (parsedUrc.mappings && typeof parsedUrc.mappings === 'object' && Object.keys(parsedUrc.mappings).length > 0) {
             mappings = parsedUrc.mappings;
+          } else if (Array.isArray(parsedUrc.codes) && parsedUrc.codes.length > 0) {
+            codeOnlySelected = parsedUrc.codes;
+          } else if (Array.isArray(parsedUrc.selected_codes) && parsedUrc.selected_codes.length > 0) {
+            codeOnlySelected = parsedUrc.selected_codes;
+          } else if (Array.isArray(parsedUrc.codes_selected) && parsedUrc.codes_selected.length > 0) {
+            codeOnlySelected = parsedUrc.codes_selected;
           }
         }
       }
 
-      // 2) If no structured unit_rate_config, use staged_unit_rate_config (authoritative staged snapshot)
+      // 2) If no structured mappings found, examine staged_unit_rate_config
       if (!mappings && jobRow.staged_unit_rate_config) {
         const suc = jobRow.staged_unit_rate_config;
         const parsedSuc = (typeof suc === 'string') ? (() => { try { return JSON.parse(suc); } catch(e){ return suc; } })() : suc;
-        if (parsedSuc && typeof parsedSuc === 'object') mappings = parsedSuc;
+        if (parsedSuc && typeof parsedSuc === 'object') {
+          const keys = Object.keys(parsedSuc);
+          const looksLikeStagedSuc = keys.length > 0 && keys.every(k => /^\d+$/.test(k));
+          if (looksLikeStagedSuc) mappings = parsedSuc;
+          else if (parsedSuc.mappings && typeof parsedSuc.mappings === 'object' && Object.keys(parsedSuc.mappings).length > 0) mappings = parsedSuc.mappings;
+          else if (Array.isArray(parsedSuc.codes) && parsedSuc.codes.length > 0) codeOnlySelected = codeOnlySelected || parsedSuc.codes;
+        } else if (Array.isArray(parsedSuc) && parsedSuc.length > 0) {
+          codeOnlySelected = codeOnlySelected || parsedSuc;
+        }
       }
 
       // 3) Legacy: fall back to unit_rate_codes_applied.mappings only if still no mappings
@@ -2084,6 +2102,7 @@ export async function generateLotSizesForJob(jobId) {
   } catch (e) {
     // ignore and try fallback
     mappings = null;
+    codeOnlySelected = null;
   }
 
   // If we didn't get structured per-VCS mappings, try fallback to market_land_valuation
