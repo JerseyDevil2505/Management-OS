@@ -712,11 +712,8 @@ useEffect(() => {
       // Always derive flat codes from staged mappings (acre + sf). Do NOT fall back to UI selection.
       const finalCodes = Array.from(new Set(derived.map(c => String(c).trim())));
 
-      // Prepare payload: store codes and track last run timestamp inside the config
-      const payload = { codes: finalCodes, last_run: new Date().toISOString() };
-
-      // Persist both the structured staged mapping and the flat codes to the jobs row. Do NOT trigger a reload.
-      const updatePayload = { unit_rate_config: payload, staged_unit_rate_config: staged };
+      // Persist the structured staged mapping to BOTH staged_unit_rate_config and unit_rate_config (no flattening)
+      const updatePayload = { unit_rate_config: staged, staged_unit_rate_config: staged };
 
       const { error } = await supabase.from('jobs').update(updatePayload).eq('id', jobData.id);
       if (error) {
@@ -725,16 +722,15 @@ useEffect(() => {
         if (upsertErr) throw upsertErr;
       }
 
-      // Update local selection so UI reflects saved codes immediately
+      // No flat codes to set in selectedUnitRateCodes anymore; keep UI staged state and combined view
       try {
-        setSelectedUnitRateCodes(new Set(Array.isArray(payload.codes) ? payload.codes : []));
+        setSelectedUnitRateCodes(new Set());
       } catch (e) { /* ignore */ }
 
-      // Merge staged into combined view so UI shows staged as part of current mappings
       setCombinedMappings(prev => ({ ...(prev || {}), ...(staged || {}) }));
       setVcsOptionsShown(vcsOptions.filter(opt => !(staged || {})[opt.key]));
 
-      alert('Unit rate configuration saved to job (staged mappings preserved)');
+      alert('Unit rate configuration saved to job (staged structure persisted)');
     } catch (e) {
       console.error('Error saving unit rate config/mappings:', e);
       alert(`Failed to save unit rate configuration/mappings: ${formatError(e)}`);
@@ -876,7 +872,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         if (false) console.log('🔍 RAW PROPERTIES SAMPLE (first property):');
 
         const firstProp = properties[0];
-        if (false) console.log('���� CRITICAL FIELD CHECK FOR FIRST PROPERTY:');
+        if (false) console.log('🔍 CRITICAL FIELD CHECK FOR FIRST PROPERTY:');
         if (false) console.log('  🏗️ property_m4_class:', firstProp.property_m4_class, '(should be "2", "1", "3B", etc.)');
         if (false) console.log('  💰 values_mod_total:', firstProp.values_mod_total, '(should be 64900, 109900, etc.)');
         if (false) console.log('  📋 sales_nu:', firstProp.sales_nu, '(should be empty or "1")');
