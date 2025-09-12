@@ -125,6 +125,36 @@ async function getRawDataForJob(jobId) {
   }
 }
 
+// Helper: persist unit rate run summary to jobs table if column exists; otherwise fallback to market_land_valuation
+async function persistUnitRateRunSummary(jobId, jobPayload) {
+  try {
+    const { error } = await supabase.from('jobs').update(jobPayload).eq('id', jobId);
+    if (!error) return { updated: true, target: 'jobs' };
+
+    const isMissingColumn = error && (error.code === 'PGRST204' || (error.message && error.message.includes("Could not find the 'unit_rate_last_run'")));
+    if (!isMissingColumn) return { updated: false, error };
+
+    try {
+      const { data: existing, error: selErr } = await supabase.from('market_land_valuation').select('id').eq('job_id', jobId).single();
+      if (selErr && selErr.code === 'PGRST116') {
+        const { error: insErr } = await supabase.from('market_land_valuation').insert({ job_id: jobId, unit_rate_last_run: jobPayload.unit_rate_last_run, unit_rate_codes_applied: jobPayload.unit_rate_codes_applied || null });
+        if (insErr) return { updated: false, error: insErr };
+        return { updated: true, target: 'market_land_valuation', action: 'insert' };
+      }
+
+      const updateObj = { unit_rate_last_run: jobPayload.unit_rate_last_run };
+      if (jobPayload.unit_rate_codes_applied) updateObj.unit_rate_codes_applied = jobPayload.unit_rate_codes_applied;
+      const { error: updErr } = await supabase.from('market_land_valuation').update(updateObj).eq('job_id', jobId);
+      if (updErr) return { updated: false, error: updErr };
+      return { updated: true, target: 'market_land_valuation', action: 'update' };
+    } catch (e2) {
+      return { updated: false, error: e2 };
+    }
+  } catch (e) {
+    return { updated: false, error: e };
+  }
+}
+
 /**
  * Get raw data for a specific property
  */
