@@ -219,12 +219,28 @@ export async function normalizeSelectedCodes(jobId, selectedCodes = []) {
  */
 export async function computeLotAcreForProperty(jobId, propertyCompositeKey, selectedCodes = [], options = {}) {
   if (!jobId || !propertyCompositeKey) throw new Error('jobId and propertyCompositeKey required');
-  const rawRecord = await getRawDataForProperty(jobId, propertyCompositeKey);
-  if (!rawRecord) return { property_composite_key: propertyCompositeKey, error: 'No raw record found for this property' };
 
-  // Build VCS id map for namespaced selections if needed
-  const rawDataForJob = await getRawDataForJob(jobId);
-  const codeDefinitions = rawDataForJob?.codeDefinitions || rawDataForJob?.parsed_code_definitions || null;
+  // Load property record from property_records table (authoritative source)
+  const { data: propRow, error: propErr } = await supabase
+    .from('property_records')
+    .select('*')
+    .eq('job_id', jobId)
+    .eq('property_composite_key', propertyCompositeKey)
+    .single();
+
+  if (propErr || !propRow) return { property_composite_key: propertyCompositeKey, error: 'No property record found for this property' };
+
+  const rawRecord = propRow;
+
+  // Build VCS id map for namespaced selections if needed (use parsed code definitions when available)
+  let codeDefinitions = null;
+  try {
+    const rawDataForJob = await getRawDataForJob(jobId);
+    codeDefinitions = rawDataForJob?.codeDefinitions || rawDataForJob?.parsed_code_definitions || null;
+  } catch (e) {
+    codeDefinitions = null;
+  }
+
   const vcsIdMap = new Map();
   if (codeDefinitions && codeDefinitions.sections && codeDefinitions.sections.VCS) {
     Object.keys(codeDefinitions.sections.VCS).forEach(vkey => {
@@ -238,41 +254,44 @@ export async function computeLotAcreForProperty(jobId, propertyCompositeKey, sel
     });
   }
 
-  const propVcsRaw = rawRecord.VCS || rawRecord.vcs || rawRecord.property_vcs || rawRecord.VCS_CODE || null;
+  // Determine property's VCS value from common columns
+  const propVcsRaw = rawRecord.property_vcs || rawRecord.propertyVcs || rawRecord.VCS || rawRecord.vcs || rawRecord.VCS_CODE || null;
   const propVcs = propVcsRaw ? String(propVcsRaw).trim() : null;
 
   const details = [];
   let totalAcres = 0;
   let totalSf = 0;
 
+  // Helper to read land code/unit fields with fallbacks for naming differences
+  const readField = (obj, base, i) => {
+    const candidates = [
+      `${base}_${i}`,
+      `${base}${i}`,
+      `${base} ${i}`,
+      `${base.toLowerCase()}_${i}`,
+      `${base.toLowerCase()}${i}`,
+      `${base.toLowerCase()} ${i}`
+    ];
+    for (const k of candidates) {
+      if (Object.prototype.hasOwnProperty.call(obj, k)) return obj[k];
+    }
+    return undefined;
+  };
+
   for (let i = 1; i <= 6; i++) {
-    const codeRaw = rawRecord[`LANDUR_${i}`];
-    const unitsRaw = rawRecord[`LANDURUNITS_${i}`];
+    const codeRaw = readField(rawRecord, 'LANDUR', i);
+    const unitsRaw = readField(rawRecord, 'LANDURUNITS', i);
     const codeStr = codeRaw !== undefined && codeRaw !== null ? String(codeRaw).replace(/[^0-9]/g, '').padStart(2, '0') : '';
     const unitsNum = unitsRaw !== undefined && unitsRaw !== null ? parseFloat(String(unitsRaw).replace(/[,$\s\"]/g, '')) : NaN;
 
     const detail = { index: i, code_raw: codeRaw, code: codeStr, units_raw: unitsRaw, units: isNaN(unitsNum) ? null : unitsNum, included: false };
 
-    // Skip empty or invalid units
-    if (isNaN(unitsNum) || unitsNum <= 0) {
-      details.push(detail);
-      continue;
-    }
+    if (isNaN(unitsNum) || unitsNum <= 0) { details.push(detail); continue; }
+    if (codeStr === '01') { details.push(detail); continue; }
 
-    // Always skip site-value code '01'
-    if (codeStr === '01') {
-      details.push(detail);
-      continue;
-    }
-
-    // If selectedCodes provided (or job-level config explicitly requested), treat as inclusion list
     const treatEmptyAsExplicit = !!options.useJobConfig;
-    const shouldApplySelection = (selCodes) => {
-      if (treatEmptyAsExplicit) return true;
-      return Array.isArray(selCodes) && selCodes.length > 0;
-    };
+    const shouldApplySelection = (selCodes) => treatEmptyAsExplicit ? true : (Array.isArray(selCodes) && selCodes.length > 0);
 
-    // Comparison logging for debugging string matching logic
     detail.comparison_logs = [];
     let include = true;
     if (shouldApplySelection(selectedCodes)) {
@@ -284,7 +303,6 @@ export async function computeLotAcreForProperty(jobId, propertyCompositeKey, sel
         const logEntry = { selected_raw: scOrig, selected_norm: sc, code_raw: codeRaw, code_norm: codeStr, propVcs_raw: propVcsRaw, propVcs_norm: propVcs, matched: false, reason: null };
 
         if (sc.includes('::') || sc.includes('·') || sc.includes('.') || sc.includes(':')) {
-          // Normalize possible separators: '::', '·', '.', ':'
           const sep = sc.includes('::') ? '::' : (sc.includes('·') ? '·' : (sc.includes(':') ? ':' : '.'));
           const parts = sc.split(sep).map(s => s.trim()).filter(Boolean);
           const vcsKeySel = parts[0] || '';
@@ -293,73 +311,30 @@ export async function computeLotAcreForProperty(jobId, propertyCompositeKey, sel
           logEntry.vcsKeySel = vcsKeySel;
           logEntry.codeSel = codeSel;
 
-          if (!codeSel) {
-            logEntry.reason = 'no_code_in_selection';
-            detail.comparison_logs.push(logEntry);
-            continue;
-          }
-
+          if (!codeSel) { logEntry.reason = 'no_code_in_selection'; detail.comparison_logs.push(logEntry); continue; }
           const codeMatches = (codeSel === codeStr) || (codeSel.padStart(2, '0') === codeStr.padStart(2, '0'));
-          if (!codeMatches) {
-            logEntry.reason = 'code_mismatch';
-            detail.comparison_logs.push(logEntry);
-            continue;
-          }
+          if (!codeMatches) { logEntry.reason = 'code_mismatch'; detail.comparison_logs.push(logEntry); continue; }
 
-          // Try to match VCS: compare by id set or by direct string
           const idSet = vcsIdMap.get(String(vcsKeySel));
           if (idSet && propVcs) {
             const matchedVcs = Array.from(idSet).some(id => String(id).trim() === String(propVcs).trim());
-            if (matchedVcs) {
-              logEntry.matched = true;
-              logEntry.reason = 'code_and_vcs_match';
-              include = true;
-              detail.comparison_logs.push(logEntry);
-              break;
-            } else {
-              logEntry.reason = 'vcs_idset_mismatch';
-              detail.comparison_logs.push(logEntry);
-              continue;
-            }
+            if (matchedVcs) { logEntry.matched = true; logEntry.reason = 'code_and_vcs_match'; include = true; detail.comparison_logs.push(logEntry); break; }
+            else { logEntry.reason = 'vcs_idset_mismatch'; detail.comparison_logs.push(logEntry); continue; }
           } else {
-            // Fallback: compare vcsKeySel directly to propVcs
-            if (propVcs && (String(propVcs).trim() === String(vcsKeySel).trim() || String(propVcs).trim().padStart(2,'0') === String(vcsKeySel).trim().padStart(2,'0'))) {
-              logEntry.matched = true;
-              logEntry.reason = 'vcs_direct_match';
-              include = true;
-              detail.comparison_logs.push(logEntry);
-              break;
-            } else {
-              logEntry.reason = 'vcs_direct_mismatch';
-              detail.comparison_logs.push(logEntry);
-              continue;
-            }
+            if (propVcs && (String(propVcs).trim() === String(vcsKeySel).trim() || String(propVcs).trim().padStart(2,'0') === String(vcsKeySel).trim().padStart(2,'0'))) { logEntry.matched = true; logEntry.reason = 'vcs_direct_match'; include = true; detail.comparison_logs.push(logEntry); break; }
+            else { logEntry.reason = 'vcs_direct_mismatch'; detail.comparison_logs.push(logEntry); continue; }
           }
         } else {
-          // Code-only selection (e.g., '02')
           const codeSel = sc;
           logEntry.codeSel = codeSel;
           const codeMatches = (codeSel === codeStr) || (codeSel.padStart(2, '0') === codeStr.padStart(2, '0'));
-          if (codeMatches) {
-            logEntry.matched = true;
-            logEntry.reason = 'code_only_match';
-            include = true;
-            detail.comparison_logs.push(logEntry);
-            break;
-          } else {
-            logEntry.reason = 'code_only_mismatch';
-            detail.comparison_logs.push(logEntry);
-            continue;
-          }
+          if (codeMatches) { logEntry.matched = true; logEntry.reason = 'code_only_match'; include = true; detail.comparison_logs.push(logEntry); break; }
+          else { logEntry.reason = 'code_only_mismatch'; detail.comparison_logs.push(logEntry); continue; }
         }
       }
     }
 
-    if (include) {
-      detail.included = true;
-      if (unitsNum >= 1000) totalSf += unitsNum; else totalAcres += unitsNum;
-    }
-
+    if (include) { detail.included = true; if (unitsNum >= 1000) totalSf += unitsNum; else totalAcres += unitsNum; }
     details.push(detail);
   }
 
