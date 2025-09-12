@@ -2090,6 +2090,8 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = [], op
 // Generate lot sizes for entire job using mappings stored in market_land_valuation.unit_rate_codes_applied
 export async function generateLotSizesForJob(jobId) {
   if (!jobId) throw new Error('jobId required');
+  console.log('generateLotSizesForJob called for jobId:', jobId);
+  try { console.time && console.time('generateLotSizesForJob'); } catch(e) { /* ignore */ }
 
   // Prefer unit_rate_config structured mappings first; capture flat code arrays if present; then staged_unit_rate_config; legacy unit_rate_codes_applied last
   let mappings = null;
