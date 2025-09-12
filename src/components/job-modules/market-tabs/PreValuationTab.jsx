@@ -82,6 +82,13 @@ const PreValuationTab = ({
     }
   };
 
+  // Mounted guard to prevent initial effect storms
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+    return () => setIsMounted(false);
+  }, []);
+
   // Import diagnostic state (paste CSV to diagnose unmatched vs exact keys)
   const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
   const [diagnosticCsvText, setDiagnosticCsvText] = useState('');
@@ -1667,10 +1674,11 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
   
   // Auto-process when filter or scale changes
   useEffect(() => {
-    if (normalizationStats.sizeNormalized > 0) {
+    if (isMounted && normalizationStats.sizeNormalized > 0) {
+      // processBlockAnalysis is stable (useCallback). Don't include it in deps to avoid recreating this effect when it changes.
       processBlockAnalysis();
     }
-  }, [blockTypeFilter, colorScaleStart, colorScaleIncrement, normalizationStats.sizeNormalized, processBlockAnalysis]);
+  }, [blockTypeFilter, colorScaleStart, colorScaleIncrement, normalizationStats.sizeNormalized, isMounted]);
 
 const handleSalesDecision = (saleId, decision) => {
   // Update local UI state only. Persisting to DB happens in Save All (saveBatchDecisions).
@@ -1805,33 +1813,33 @@ const handleSalesDecision = (saleId, decision) => {
     setWorksheetStats(stats);
   }, [readyProperties]);
 
-  const handleWorksheetChange = (propertyKey, field, value) => {
+  const handleWorksheetChange = useCallback((propertyKey, field, value) => {
     // Check for location standardization
     if (field === 'location_analysis' && value) {
       checkLocationStandardization(value, propertyKey);
     }
-    
+
     const updated = worksheetProperties.map(prop =>
       prop.property_composite_key === propertyKey
-        ? { 
-            ...prop, 
-            [field]: field === 'new_vcs' || field === 'asset_zoning' 
-              ? value.toUpperCase() 
-              : value 
+        ? {
+            ...prop,
+            [field]: field === 'new_vcs' || field === 'asset_zoning'
+              ? value.toUpperCase()
+              : value
           }
         : prop
     );
-    
+
     setWorksheetProperties(updated);
     setFilteredWorksheetProps(updated);
     updateWorksheetStats(updated);
     setUnsavedChanges(true);
-    
+
     // Reset auto-save timer
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
-    const timer = setTimeout(autoSaveWorksheet, 30000);
+    const timer = setTimeout(() => autoSaveWorksheet(), 30000);
     setAutoSaveTimer(timer);
-  };
+  }, [worksheetProperties, autoSaveTimer, updateWorksheetStats, checkLocationStandardization, autoSaveWorksheet]);
 
   const checkLocationStandardization = (value, propertyKey) => {
     const valueLower = value.toLowerCase().trim();
@@ -1901,7 +1909,7 @@ const handleSalesDecision = (saleId, decision) => {
     setCurrentLocationChoice(null);
   };
 
-  const autoSaveWorksheet = async () => {
+  const autoSaveWorksheet = useCallback(async () => {
     try {
       await worksheetService.saveWorksheetStats(jobData.id, {
         last_saved: new Date().toISOString(),
@@ -1915,14 +1923,14 @@ const handleSalesDecision = (saleId, decision) => {
         if (false) console.log('🗑️ Clearing cache after auto-save worksheet');
         callRefresh(null);
       }
-      
+
       setLastAutoSave(new Date());
       setUnsavedChanges(false);
       if (false) console.log('✅ Auto-saved worksheet progress');
     } catch (error) {
       console.error('Auto-save failed:', error);
     }
-  };
+  }, [jobData?.id, worksheetStats, locationVariations]);
 
 const processSelectedProperties = async () => {
     const toProcess = worksheetProperties.filter(p => 
@@ -2883,7 +2891,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-32 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('property_location')}
                             >
-                              Location {normSortConfig.field === 'property_location' && (normSortConfig.direction === 'asc' ? '���' : '↓')}
+                              Location {normSortConfig.field === 'property_location' && (normSortConfig.direction === 'asc' ? '�����' : '↓')}
                             </th>
                             <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
@@ -3627,7 +3635,7 @@ const analyzeImportFile = async (file) => {
             
             <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
               <strong>Color Scale:</strong> 
-              <br/>• First color: $0 - ${(colorScaleIncrement - 1).toLocaleString()}
+              <br/>��� First color: $0 - ${(colorScaleIncrement - 1).toLocaleString()}
               <br/>• Second color: ${colorScaleIncrement.toLocaleString()} - ${((colorScaleIncrement * 2) - 1).toLocaleString()}
               <br/>��� Third color: ${(colorScaleIncrement * 2).toLocaleString()} - ${((colorScaleIncrement * 3) - 1).toLocaleString()}
               <br/>• And so on... Total of {marketAnalysisData.length} blocks analyzed.
