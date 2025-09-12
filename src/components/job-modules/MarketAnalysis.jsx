@@ -47,7 +47,6 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
       // For now, return empty array - this functionality would need job context for source file access
       const rawDataFields = [];
 
-      console.log(`📋 Raw data fields now accessed via source file content (job context required)`);
       return rawDataFields;
     }
     return [];
