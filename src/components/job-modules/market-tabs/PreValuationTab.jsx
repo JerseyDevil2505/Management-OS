@@ -523,6 +523,20 @@ useEffect(() => {
 
 }, [codeDefinitions, jobData]);
 
+// Load staged mappings persisted on the jobs row into UI state when jobData changes
+useEffect(() => {
+  try {
+    const staged = jobData?.staged_unit_rate_config || jobData?.stagedUnitRateConfig || null;
+    if (staged && typeof staged === 'object') {
+      setStagedMappings(staged);
+      // Also merge into combinedMappings view so user sees staged in summary immediately
+      setCombinedMappings(prev => ({ ...(prev || {}), ...(staged || {}) }));
+    }
+  } catch (e) {
+    console.warn('Failed to load staged mappings from jobData:', e);
+  }
+}, [jobData]);
+
 // Whenever unitRateCodes, combinedMappings or stagedMappings change, rebuild availableCodesByVcs and vcsOptionsShown
 useEffect(() => {
   const byVcs = {};
