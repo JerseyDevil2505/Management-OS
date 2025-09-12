@@ -1414,7 +1414,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
 
       //Clear cache after size normalization
       if (onUpdateJobCache && jobData?.id) {
-        if (false) console.log('���️ Clearing cache after size normalization');
+        if (false) console.log('🗑️ Clearing cache after size normalization');
         callRefresh(null);
       }
 
@@ -1890,6 +1890,30 @@ const handleSalesDecision = (saleId, decision) => {
     if (field === 'location_analysis' && value) {
       checkLocationStandardization(value, propertyKey);
     }
+
+    // Mark this row as being edited so it won't disappear while user types
+    setEditingRows(prev => {
+      const next = new Set(prev);
+      next.add(propertyKey);
+
+      // clear previous timer
+      const timers = editTimersRef.current;
+      const prevTimer = timers.get(propertyKey);
+      if (prevTimer) clearTimeout(prevTimer);
+
+      // set new timer to remove editing mark after 8 seconds of inactivity
+      const t = setTimeout(() => {
+        editTimersRef.current.delete(propertyKey);
+        setEditingRows(cur => {
+          const s = new Set(cur);
+          s.delete(propertyKey);
+          return s;
+        });
+      }, 8000);
+      timers.set(propertyKey, t);
+
+      return next;
+    });
 
     // Update using functional state update to avoid depending on worksheetProperties
     setWorksheetProperties(prev => {
@@ -2909,7 +2933,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-20 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('asset_type_use')}
                             >
-                              Type {normSortConfig.field === 'asset_type_use' && (normSortConfig.direction === 'asc' ? '�����' : '↓')}
+                              Type {normSortConfig.field === 'asset_type_use' && (normSortConfig.direction === 'asc' ? '����' : '↓')}
                             </th>
                             <th 
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
