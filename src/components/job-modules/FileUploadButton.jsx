@@ -339,7 +339,7 @@ const handleCodeFileUpdate = async () => {
     if (onDataRefresh) {
       console.log(`���� Code Update - Calling onDataRefresh to update job data`);
       console.log(`🔧 Code Update - BEFORE refresh - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
-      console.log(`🔧 Code Update - BEFORE refresh - job.code_file_version: ${job.code_file_version}`);
+      console.log(`�� Code Update - BEFORE refresh - job.code_file_version: ${job.code_file_version}`);
 
       await onDataRefresh();
 
@@ -600,17 +600,11 @@ const handleCodeFileUpdate = async () => {
           const cardField = job.vendor_type === 'BRT' ? 'CARD' : 'Bldg';
           const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
 
-          // Construct composite key similar to processors
+          // Construct composite key using generateCompositeKey to ensure normalization matches processors
           const year = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
           const ccddCode = job.ccdd_code || '';
-          const block = String(record[blockField] || '').trim();
-          const lot = String(record[lotField] || '').trim();
-          const qualifier = String(record[qualifierField] || '').trim() || 'NONE';
-          const card = String(record[cardField] || '').trim() || 'NONE';
-          const location = String(record[locationField] || '').trim() || 'NONE';
-
-          const compositeKey = `${year}${ccddCode}-${block}-${lot}_${qualifier}-${card}-${location}`;
-          propertiesAdded.push(compositeKey);
+          const compositeKey = generateCompositeKey(record, job.vendor_type, year, ccddCode);
+          if (compositeKey) propertiesAdded.push(compositeKey);
         });
       }
 
