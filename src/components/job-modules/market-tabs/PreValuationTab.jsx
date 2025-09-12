@@ -1887,27 +1887,29 @@ const handleSalesDecision = (saleId, decision) => {
       checkLocationStandardization(value, propertyKey);
     }
 
-    const updated = worksheetProperties.map(prop =>
-      prop.property_composite_key === propertyKey
-        ? {
-            ...prop,
-            [field]: field === 'new_vcs' || field === 'asset_zoning'
-              ? value.toUpperCase()
-              : value
-          }
-        : prop
-    );
+    // Update using functional state update to avoid depending on worksheetProperties
+    setWorksheetProperties(prev => {
+      const updated = prev.map(prop =>
+        prop.property_composite_key === propertyKey
+          ? {
+              ...prop,
+              [field]: field === 'new_vcs' || field === 'asset_zoning' ? value.toUpperCase() : value
+            }
+          : prop
+      );
+      setFilteredWorksheetProps(updated);
+      updateWorksheetStats(updated);
+      return updated;
+    });
 
-    setWorksheetProperties(updated);
-    setFilteredWorksheetProps(updated);
-    updateWorksheetStats(updated);
     setUnsavedChanges(true);
 
     // Reset auto-save timer
-    if (autoSaveTimer) clearTimeout(autoSaveTimer);
-    const timer = setTimeout(() => autoSaveWorksheet(), 30000);
-    setAutoSaveTimer(timer);
-  }, [worksheetProperties, autoSaveTimer, updateWorksheetStats, checkLocationStandardization, autoSaveWorksheet]);
+    setAutoSaveTimer(prevTimer => {
+      if (prevTimer) clearTimeout(prevTimer);
+      return setTimeout(() => { autoSaveWorksheet(); }, 30000);
+    });
+  }, [updateWorksheetStats, checkLocationStandardization, autoSaveWorksheet]);
 
   const autoSaveWorksheet = useCallback(async () => {
     try {
