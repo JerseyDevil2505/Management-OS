@@ -12,6 +12,23 @@ import * as XLSX from 'xlsx';
 // Debug shim: replace console.log/debug calls with this noop in production
 const debug = () => {};
 
+// ======= DATE HELPERS =======
+const safeDateObj = (d) => {
+  if (!d) return null;
+  const date = d instanceof Date ? d : new Date(d);
+  return isNaN(date.getTime()) ? null : date;
+};
+
+const safeISODate = (d) => {
+  const date = safeDateObj(d);
+  return date ? date.toISOString().split('T')[0] : '';
+};
+
+const safeLocaleDate = (d) => {
+  const date = safeDateObj(d);
+  return date ? date.toLocaleDateString() : 'N/A';
+};
+
 const LandValuationTab = ({
   properties,
   jobData,
