@@ -2188,8 +2188,59 @@ export async function generateLotSizesForJob(jobId) {
     if (marketErr && marketErr.code !== 'PGRST116') {
       console.warn('Error loading market_land_valuation mappings (fallback):', marketErr);
     }
-    const mappingsPayload = (marketRow && marketRow.unit_rate_codes_applied) ? (typeof marketRow.unit_rate_codes_applied === 'string' ? JSON.parse(marketRow.unit_rate_codes_applied) : marketRow.unit_rate_codes_applied) : null;
+    const mappingsPayloadRaw = (marketRow && marketRow.unit_rate_codes_applied) ? marketRow.unit_rate_codes_applied : null;
+    const mappingsPayload = typeof mappingsPayloadRaw === 'string' ? (() => { try { return JSON.parse(mappingsPayloadRaw); } catch(e){ return mappingsPayloadRaw; } })() : mappingsPayloadRaw;
+
+    // mappingsPayload can be either { mappings: {...} } (per-VCS) or a per-property map (propertyKey -> [codes]) or { per_property: {...} }
     mappings = mappingsPayload?.mappings || null;
+    const appliedPerProperty = mappingsPayload?.per_property || (mappingsPayload && typeof mappingsPayload === 'object' && !Array.isArray(mappingsPayload) && Object.values(mappingsPayload).every(v => Array.isArray(v)) ? mappingsPayload : null);
+
+    // If we have per-property applied codes (legacy), compute per property using those codes
+    if (!mappings && appliedPerProperty) {
+      const { data: props, error: propsErr } = await supabase.from('property_records').select('property_composite_key').eq('job_id', jobId);
+      if (propsErr) throw propsErr;
+
+      const updates = [];
+      let updatedCount = 0;
+
+      for (const p of props) {
+        const codesForProperty = appliedPerProperty[p.property_composite_key] || appliedPerProperty.per_property?.[p.property_composite_key] || null;
+        if (!codesForProperty || !Array.isArray(codesForProperty) || codesForProperty.length === 0) continue;
+        let normalizedSel = [];
+        try {
+          normalizedSel = await normalizeSelectedCodes(jobId, codesForProperty);
+        } catch (e) {
+          normalizedSel = codesForProperty;
+        }
+        try {
+          const res = await computeLotAcreForProperty(jobId, p.property_composite_key, normalizedSel, { useJobConfig: true });
+          const acresFinal = res?.total_acres ?? null;
+          const sfFinal = acresFinal !== null ? Math.round(Number(acresFinal) * 43560) : null;
+          updates.push({ job_id: jobId, property_composite_key: p.property_composite_key, market_manual_lot_acre: acresFinal, market_manual_lot_sf: sfFinal, updated_at: new Date().toISOString() });
+          updatedCount++;
+        } catch (err) {
+          console.warn('Skipping property due to error computing lot acre (per-property path):', p.property_composite_key, err);
+          continue;
+        }
+      }
+
+      // Batch upsert
+      const batchSize = 500;
+      for (let i = 0; i < updates.length; i += batchSize) {
+        const batch = updates.slice(i, i + batchSize);
+        const { error } = await supabase.from('property_market_analysis').upsert(batch, { onConflict: ['job_id','property_composite_key'] });
+        if (error) console.error('Error upserting market_manual lot sizes (per-property path):', error);
+      }
+
+      // Persist summary
+      try {
+        const jobPayload = { unit_rate_last_run: { timestamp: new Date().toISOString(), selected_codes_source: 'per_property_applied', updated_count: updatedCount }, updated_at: new Date().toISOString() };
+        const { error: jobUpdateErr } = await supabase.from('jobs').update(jobPayload).eq('id', jobId);
+        if (jobUpdateErr) console.warn('Failed to persist unit-rate run summary to jobs table (per-property path):', jobUpdateErr);
+      } catch (e) { console.warn('Error writing unit-rate run summary to jobs table (per-property path):', e); }
+
+      return { job_id: jobId, updated: updatedCount };
+    }
   }
 
   if (!mappings) {
