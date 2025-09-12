@@ -51,11 +51,16 @@ export class BRTUpdater {
    * CRITICAL FIX: Optimize batch for database performance
    */
   optimizeBatchForDatabase(batch) {
+    // Preserve explicit nulls for asset lot fields so upserts can clear legacy values
+    const PRESERVE_NULL_FIELDS = new Set(['asset_lot_acre', 'asset_lot_sf']);
     return batch.map(record => {
-      // Remove null/undefined values to reduce payload size
       const cleaned = {};
       for (const [key, value] of Object.entries(record)) {
-        if (value !== null && value !== undefined && value !== '') {
+        if (value === null && PRESERVE_NULL_FIELDS.has(key)) {
+          cleaned[key] = null;
+          continue;
+        }
+        if (value !== undefined && value !== '') {
           cleaned[key] = value;
         }
       }
