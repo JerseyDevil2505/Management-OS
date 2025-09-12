@@ -689,10 +689,21 @@ useEffect(() => {
     if (!jobData?.id) return;
     setIsSavingUnitConfig(true);
     try {
-      // Prefer deriving flat codes from staged mappings (acre/sf) when available
-      const staged = stagedMappings || {};
+      // If local stagedMappings is empty, try to load persisted staged from jobs row so Save Config uses the authoritative staged snapshot
+      let staged = stagedMappings || {};
+      if ((!staged || Object.keys(staged).length === 0) && jobData?.id) {
+        try {
+          const { data: jobRow } = await supabase.from('jobs').select('staged_unit_rate_config').eq('id', jobData.id).single();
+          if (jobRow && jobRow.staged_unit_rate_config) {
+            staged = jobRow.staged_unit_rate_config;
+          }
+        } catch (e) {
+          // ignore - proceed with local staged (empty)
+        }
+      }
+
       const derived = [];
-      Object.keys(staged).forEach(vk => {
+      Object.keys(staged || {}).forEach(vk => {
         const m = staged[vk] || { acre: [], sf: [], exclude: [] };
         (m.acre || []).forEach(c => { if (c || c === 0) derived.push(`${vk}::${String(c).trim()}`); });
         (m.sf || []).forEach(c => { if (c || c === 0) derived.push(`${vk}::${String(c).trim()}`); });
@@ -704,10 +715,9 @@ useEffect(() => {
       // Prepare payload: store codes and track last run timestamp inside the config
       const payload = { codes: finalCodes, last_run: new Date().toISOString() };
 
-      // Persist to the jobs row only (do NOT use market_land_valuation for this flow)
+      // Persist both the structured staged mapping and the flat codes to the jobs row. Do NOT trigger a reload.
       const updatePayload = { unit_rate_config: payload, staged_unit_rate_config: staged };
 
-      // Simple write: update; if update fails, attempt an upsert fallback. Do NOT reload job data here.
       const { error } = await supabase.from('jobs').update(updatePayload).eq('id', jobData.id);
       if (error) {
         console.warn('Update failed, attempting upsert fallback:', error);
@@ -866,7 +876,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         if (false) console.log('🔍 RAW PROPERTIES SAMPLE (first property):');
 
         const firstProp = properties[0];
-        if (false) console.log('🔍 CRITICAL FIELD CHECK FOR FIRST PROPERTY:');
+        if (false) console.log('���� CRITICAL FIELD CHECK FOR FIRST PROPERTY:');
         if (false) console.log('  🏗️ property_m4_class:', firstProp.property_m4_class, '(should be "2", "1", "3B", etc.)');
         if (false) console.log('  💰 values_mod_total:', firstProp.values_mod_total, '(should be 64900, 109900, etc.)');
         if (false) console.log('  📋 sales_nu:', firstProp.sales_nu, '(should be empty or "1")');
