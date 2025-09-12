@@ -529,11 +529,31 @@ useEffect(() => {
     const staged = jobData?.staged_unit_rate_config || jobData?.stagedUnitRateConfig || null;
     if (staged && typeof staged === 'object') {
       setStagedMappings(staged);
-      // Also merge into combinedMappings view so user sees staged in summary immediately
-      setCombinedMappings(prev => ({ ...(prev || {}), ...(staged || {}) }));
+    }
+
+    // If unit_rate_config is a structured staged-style mapping, use it as the saved mappings view
+    const saved = jobData?.unit_rate_config || jobData?.unitRateConfig || null;
+    let savedMappings = null;
+    if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+      // Heuristic: if keys are numeric VCS keys, treat as mappings
+      const keys = Object.keys(saved);
+      const looksLikeStaged = keys.length > 0 && keys.every(k => /^\d+$/.test(k));
+      if (looksLikeStaged) savedMappings = saved;
+      // If object has .mappings (legacy shape), unwrap it
+      if (!savedMappings && saved.mappings && typeof saved.mappings === 'object') savedMappings = saved.mappings;
+    }
+
+    // Prefer savedMappings (from unit_rate_config) to marketLandData mappings; merge staged on top so staged edits are visible
+    if (savedMappings) {
+      setCombinedMappings(prev => ({ ...(savedMappings || {}), ...(staged || {}) }));
+    } else {
+      // fallback: keep previous behavior of merging staged into existing combinedMappings
+      if (staged && typeof staged === 'object') {
+        setCombinedMappings(prev => ({ ...(prev || {}), ...(staged || {}) }));
+      }
     }
   } catch (e) {
-    console.warn('Failed to load staged mappings from jobData:', e);
+    console.warn('Failed to load staged/saved mappings from jobData:', e);
   }
 }, [jobData]);
 
@@ -1134,7 +1154,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
 
       //Clear cache after saving normalization data
       if (onUpdateJobCache && jobData?.id) {
-        if (false) console.log('🗑️ Clearing cache after time normalization');
+        if (false) console.log('���️ Clearing cache after time normalization');
         onUpdateJobCache(jobData.id, null);
       }
       
