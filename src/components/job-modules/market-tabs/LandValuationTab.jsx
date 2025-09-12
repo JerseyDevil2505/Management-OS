@@ -825,7 +825,7 @@ const getPricePerUnit = useCallback((price, size) => {
   // Auto-save every 30 seconds - but only after initial load is complete
   useEffect(() => {
     if (!isInitialLoadComplete) {
-      debug('���️ Auto-save waiting for initial load to complete');
+      debug('�����️ Auto-save waiting for initial load to complete');
       return;
     }
 
@@ -3520,7 +3520,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const exportLandRates = () => {
     let csv = 'LAND RATES ANALYSIS\n';
     csv += `Municipality: ${jobData?.municipality || ''}\n`;
-    csv += `Analysis Period: ${dateRange.start.toLocaleDateString()} to ${dateRange.end.toLocaleDateString()}\n`;
+    csv += `Analysis Period: ${safeLocaleDate(dateRange.start)} to ${safeLocaleDate(dateRange.end)}\n`;
     csv += `Valuation Mode: ${valuationMode.toUpperCase()}\n\n`;
     
     // Summary by Region
@@ -3873,7 +3873,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const updateSpecialCategory = (category, rate) => {
-    debug(`🔧 Updating special category: ${category} = ${rate}`);
+    debug(`���� Updating special category: ${category} = ${rate}`);
     setCascadeConfig(prev => {
       const newConfig = {
         ...prev,
