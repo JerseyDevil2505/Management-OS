@@ -730,7 +730,7 @@ const getPricePerUnit = useCallback((price, size) => {
       { code: '3', description: '3* — Row / Townhouse (3E,3I,30,31)' },
       { code: '4', description: '4* — MultiFamily (42,43,44)' },
       { code: '5', description: '5* — Conversions (51,52,53)' },
-      { code: '6', description: '6 — Condominium' },
+      { code: '6', description: '6 �� Condominium' },
       { code: 'all_residential', description: 'All Residential' }
     ];
 
@@ -4263,8 +4263,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             </label>
             <input
               type="date"
-              value={dateRange.start.toISOString().split('T')[0]}
-              onChange={(e) => setDateRange(prev => ({ ...prev, start: new Date(e.target.value) }))}
+              value={safeISODate(dateRange.start)}
+              onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value ? new Date(e.target.value) : prev.start }))}
               style={{
                 width: '100%',
                 padding: '8px',
