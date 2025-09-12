@@ -2116,6 +2116,8 @@ export async function generateLotSizesForJob(jobId) {
   try {
     const { data: jobRow, error: jobErr } = await supabase.from('jobs').select('unit_rate_codes_applied,staged_unit_rate_config,unit_rate_config').eq('id', jobId).single();
     jobRowGlobal = jobRow || null;
+    console.log('generateLotSizesForJob: fetched jobRow, error:', jobErr);
+    try { console.log('generateLotSizesForJob: jobRow sample:', jobRowGlobal ? (Object.keys(jobRowGlobal).slice(0,10)) : jobRowGlobal); } catch(e) { /* ignore */ }
     if (!jobErr && jobRow) {
       // 1) Examine unit_rate_config for either structured mappings or flat codes
       if (jobRow.unit_rate_config) {
