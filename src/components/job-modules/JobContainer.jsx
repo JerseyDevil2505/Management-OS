@@ -716,9 +716,9 @@ const JobContainer = ({
         workflow_stats: jobData?.workflow_stats || selectedJob.workflowStats || null,
 
         // Preserve unit rate/staged mappings from DB so child components see them
-        unit_rate_config: jobData?.unit_rate_config || selectedJob.unit_rate_config || null,
-        staged_unit_rate_config: jobData?.staged_unit_rate_config || selectedJob.staged_unit_rate_config || null,
-        unit_rate_codes_applied: jobData?.unit_rate_codes_applied || selectedJob.unit_rate_codes_applied || null,
+        unit_rate_config: (jobData && jobData.unit_rate_config && typeof jobData.unit_rate_config === 'string') ? (() => { try { return JSON.parse(jobData.unit_rate_config); } catch(e){ return jobData.unit_rate_config; } })() : (jobData?.unit_rate_config || selectedJob.unit_rate_config || null),
+        staged_unit_rate_config: (jobData && jobData.staged_unit_rate_config && typeof jobData.staged_unit_rate_config === 'string') ? (() => { try { return JSON.parse(jobData.staged_unit_rate_config); } catch(e){ return jobData.staged_unit_rate_config; } })() : (jobData?.staged_unit_rate_config || selectedJob.staged_unit_rate_config || null),
+        unit_rate_codes_applied: (jobData && jobData.unit_rate_codes_applied && typeof jobData.unit_rate_codes_applied === 'string') ? (() => { try { return JSON.parse(jobData.unit_rate_codes_applied); } catch(e){ return jobData.unit_rate_codes_applied; } })() : (jobData?.unit_rate_codes_applied || selectedJob.unit_rate_codes_applied || null),
 
         // ADD THESE TWO LINES:
         parsed_code_definitions: jobData?.parsed_code_definitions || null,
