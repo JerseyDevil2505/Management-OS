@@ -257,7 +257,7 @@ export class MicrosystemsUpdater {
       console.log(`✅ Loaded ${this.codeLookups.size} code definitions with FIXED AAACCCCSSSS parsing`);
       console.log(`📂 Organized into ${Object.keys(this.allCodes).length} field groups`);
       console.log(`🎯 InfoBy codes (140 prefix): ${Object.keys(this.allCodes['140'] || {}).join(', ')}`);
-      console.log(`🏠 HVAC codes (8 prefix): ${Object.keys(this.allCodes['8'] || {}).join(', ')}`);
+      console.log(`���� HVAC codes (8 prefix): ${Object.keys(this.allCodes['8'] || {}).join(', ')}`);
       console.log(`🏗�� Design codes (520 prefix): ${Object.keys(this.allCodes['520'] || {}).join(', ')}`);
       
       // Store code file in jobs table

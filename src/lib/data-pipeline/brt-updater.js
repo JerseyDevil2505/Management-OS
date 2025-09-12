@@ -51,11 +51,16 @@ export class BRTUpdater {
    * CRITICAL FIX: Optimize batch for database performance
    */
   optimizeBatchForDatabase(batch) {
+    // Preserve explicit nulls for asset lot fields so upserts can clear legacy values
+    const PRESERVE_NULL_FIELDS = new Set(['asset_lot_acre', 'asset_lot_sf']);
     return batch.map(record => {
-      // Remove null/undefined values to reduce payload size
       const cleaned = {};
       for (const [key, value] of Object.entries(record)) {
-        if (value !== null && value !== undefined && value !== '') {
+        if (value === null && PRESERVE_NULL_FIELDS.has(key)) {
+          cleaned[key] = null;
+          continue;
+        }
+        if (value !== undefined && value !== '') {
           cleaned[key] = value;
         }
       }
@@ -913,89 +918,8 @@ export class BRTUpdater {
       }
     }
 
-    // 2. Parse LANDUR/LANDURUNITS if present (support up to 6 entries)
-    let totalAcres = 0;
-    let totalSf = 0;
-
-    for (let i = 1; i <= 6; i++) {
-      const unitsRaw = rawRecord[`LANDURUNITS_${i}`] || rawRecord[`LANDURUNITS_${i}`.replace(/_/g, '_')];
-      const codeRaw = rawRecord[`LANDUR_${i}`] || rawRecord[`LANDUR_${i}`.replace(/_/g, '_')];
-
-      const units = unitsRaw !== undefined && unitsRaw !== null ? parseFloat(String(unitsRaw).replace(/[,\s\"]/g, '')) : NaN;
-      const code = codeRaw !== undefined && codeRaw !== null ? String(codeRaw).trim() : null;
-
-      if (!isNaN(units) && units > 0) {
-        // If description mapping is available via parsed code file, try to determine unit type
-        let interpretedAsAcres = null; // null = unknown, true = acres, false = sf
-
-        if (code && this.allCodeSections && this.allCodeSections.VCS) {
-          // Try to find VCS mapping for this property (rawRecord.VCS)
-          try {
-            const propVcs = rawRecord.VCS || rawRecord.vcs;
-            let vcsEntry = null;
-
-            if (propVcs && this.allCodeSections.VCS[propVcs]) {
-              vcsEntry = this.allCodeSections.VCS[propVcs];
-            } else {
-              // Search by KEY match
-              for (const [k, v] of Object.entries(this.allCodeSections.VCS)) {
-                if (v && (String(v.KEY) === String(propVcs) || String(v.DATA?.KEY) === String(propVcs))) {
-                  vcsEntry = v;
-                  break;
-                }
-              }
-            }
-
-            const urcMap = vcsEntry?.MAP?.['8']?.MAP;
-            if (urcMap) {
-              for (const mapKey of Object.keys(urcMap)) {
-                const entry = urcMap[mapKey];
-                const entryKey = entry.KEY || entry.DATA?.KEY;
-                if (!entryKey) continue;
-                // LANDUR codes sometimes stored without padding
-                if (String(entryKey) === String(code) || String(entryKey).padStart(2, '0') === String(code).padStart(2, '0')) {
-                  const desc = entry.MAP?.['1']?.DATA?.VALUE || entry.MAP?.['1']?.VALUE || '';
-                  const text = String(desc).toUpperCase();
-
-                  if (text.includes('SITE VALUE')) {
-                    interpretedAsAcres = 'skip';
-                  } else if (text.includes('ACRE') || text.includes(' AC') || text.includes('ACRES')) {
-                    interpretedAsAcres = true;
-                  } else if (text.includes('SF') || text.includes('SQUARE') || text.includes('SQ FT')) {
-                    interpretedAsAcres = false;
-                  }
-
-                  break;
-                }
-              }
-            }
-          } catch (e) {
-            // ignore and fallback
-          }
-        }
-
-        if (interpretedAsAcres === 'skip') {
-          // intentionally ignore site value type entries
-          continue;
-        }
-
-        if (interpretedAsAcres === true) {
-          totalAcres += units;
-        } else if (interpretedAsAcres === false) {
-          totalSf += units;
-        } else {
-          // Fallback heuristic: treat large numbers as SF, small numbers as acres
-          if (units >= 1000) {
-            totalSf += units;
-          } else {
-            totalAcres += units;
-          }
-        }
-      }
-    }
-
-    const acresFromLandur = totalAcres + (totalSf / 43560);
-    if (acresFromLandur > 0) return parseFloat(acresFromLandur.toFixed(2));
+    // NOTE: Removed LANDUR/LANDURUNITS parsing — asset_lot_acre should only be derived
+    // from explicit lot dimensions (frontage × depth) or direct lot size fields.
 
     // 4. No usable data
     return null;

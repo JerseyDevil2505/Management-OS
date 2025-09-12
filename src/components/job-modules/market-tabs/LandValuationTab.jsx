@@ -12,6 +12,23 @@ import * as XLSX from 'xlsx';
 // Debug shim: replace console.log/debug calls with this noop in production
 const debug = () => {};
 
+// ======= DATE HELPERS =======
+const safeDateObj = (d) => {
+  if (!d) return null;
+  const date = d instanceof Date ? d : new Date(d);
+  return isNaN(date.getTime()) ? null : date;
+};
+
+const safeISODate = (d) => {
+  const date = safeDateObj(d);
+  return date ? date.toISOString().split('T')[0] : '';
+};
+
+const safeLocaleDate = (d) => {
+  const date = safeDateObj(d);
+  return date ? date.toLocaleDateString() : 'N/A';
+};
+
 const LandValuationTab = ({
   properties,
   jobData,
@@ -418,17 +435,21 @@ useEffect(() => {
   // Restore all saved states from marketLandData
   if (marketLandData.raw_land_config) {
     if (marketLandData.raw_land_config.date_range) {
-      setDateRange({
-        start: new Date(marketLandData.raw_land_config.date_range.start),
-        end: new Date(marketLandData.raw_land_config.date_range.end)
-      });
+      // Validate dates before applying to state to avoid Invalid Date errors
+      const startCandidate = safeDateObj(marketLandData.raw_land_config.date_range.start);
+      const endCandidate = safeDateObj(marketLandData.raw_land_config.date_range.end);
+
+      setDateRange(prev => ({
+        start: startCandidate || prev.start,
+        end: endCandidate || prev.end
+      }));
     }
   }
 
   // Load cascade config from either location (prefer cascade_rates, fallback to raw_land_config)
   const savedConfig = marketLandData.cascade_rates || marketLandData.raw_land_config?.cascade_config;
   if (savedConfig) {
-    debug('🔧 Loading cascade config:', {
+    debug('��� Loading cascade config:', {
       source: marketLandData.cascade_rates ? 'cascade_rates' : 'raw_land_config',
       specialCategories: savedConfig.specialCategories,
       mode: savedConfig.mode
@@ -804,7 +825,7 @@ const getPricePerUnit = useCallback((price, size) => {
   // Auto-save every 30 seconds - but only after initial load is complete
   useEffect(() => {
     if (!isInitialLoadComplete) {
-      debug('���️ Auto-save waiting for initial load to complete');
+      debug('�����️ Auto-save waiting for initial load to complete');
       return;
     }
 
@@ -813,7 +834,7 @@ const getPricePerUnit = useCallback((price, size) => {
       debug('⏰ Auto-save interval triggered');
       // Use window reference to avoid hoisting issues
       if (window.landValuationSave) {
-        window.landValuationSave();
+        window.landValuationSave({ source: 'autosave' });
       }
     }, 30000);
     return () => {
@@ -829,7 +850,7 @@ const getPricePerUnit = useCallback((price, size) => {
     debug('🔄 State change detected, triggering immediate save');
     const timeoutId = setTimeout(() => {
       if (window.landValuationSave) {
-        window.landValuationSave();
+        window.landValuationSave({ source: 'autosave' });
       }
     }, 1000); // 1 second delay to batch multiple changes
 
@@ -894,8 +915,10 @@ const getPricePerUnit = useCallback((price, size) => {
         // Validate sale price (ignore placeholders <= 10) and parse dates reliably
         const hasValidSale = prop.sales_date && prop.sales_price && Number(prop.sales_price) > 10;
         const saleDateObj = prop.sales_date ? new Date(prop.sales_date) : null;
-        const startDate = new Date(dateRange.start); startDate.setHours(0,0,0,0);
-        const endDate = new Date(dateRange.end); endDate.setHours(23,59,59,999);
+        const startDate = safeDateObj(dateRange.start) ? new Date(safeDateObj(dateRange.start)) : new Date(0);
+        startDate.setHours(0,0,0,0);
+        const endDate = safeDateObj(dateRange.end) ? new Date(safeDateObj(dateRange.end)) : new Date(8640000000000000);
+        endDate.setHours(23,59,59,999);
         const inDateRange = saleDateObj instanceof Date && !isNaN(saleDateObj) && saleDateObj >= startDate && saleDateObj <= endDate;
 
         const nu = (prop.sales_nu || '').toString();
@@ -968,8 +991,10 @@ const getPricePerUnit = useCallback((price, size) => {
       // Validate sale price (ignore placeholders <= 10) and normalize dates
       const hasValidSale = prop.sales_date && prop.sales_price && Number(prop.sales_price) > 10;
       const saleDateObj = prop.sales_date ? new Date(prop.sales_date) : null;
-      const startDate = new Date(dateRange.start); startDate.setHours(0,0,0,0);
-      const endDate = new Date(dateRange.end); endDate.setHours(23,59,59,999);
+      const startDate = safeDateObj(dateRange.start) ? new Date(safeDateObj(dateRange.start)) : new Date(0);
+      startDate.setHours(0,0,0,0);
+      const endDate = safeDateObj(dateRange.end) ? new Date(safeDateObj(dateRange.end)) : new Date(8640000000000000);
+      endDate.setHours(23,59,59,999);
       const inDateRange = saleDateObj instanceof Date && !isNaN(saleDateObj) && saleDateObj >= startDate && saleDateObj <= endDate;
 
       // Check NU codes for valid sales
@@ -1483,8 +1508,10 @@ const getPricePerUnit = useCallback((price, size) => {
     // Must be in date range and have valid sale
     results = results.filter(p => {
       const hasValidSale = p.sales_date && p.sales_price && p.sales_price > 0;
-      const inDateRange = p.sales_date >= dateRange.start.toISOString().split('T')[0] &&
-                          p.sales_date <= dateRange.end.toISOString().split('T')[0];
+      const saleDateObj = p.sales_date ? new Date(p.sales_date) : null;
+      const startDate = safeDateObj(dateRange.start) || new Date(0);
+      const endDate = safeDateObj(dateRange.end) || new Date(8640000000000000);
+      const inDateRange = saleDateObj instanceof Date && !isNaN(saleDateObj.getTime()) && saleDateObj >= startDate && saleDateObj <= endDate;
       return hasValidSale && inDateRange;
     });
 
@@ -2290,7 +2317,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     debug('💾 Triggering immediate save for Act Site change');
     setTimeout(() => {
       if (window.landValuationSave) {
-        window.landValuationSave();
+        window.landValuationSave({ source: 'autosave' });
       }
     }, 500); // Short delay to batch multiple rapid changes
   };
@@ -2708,7 +2735,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   // ========== SAVE & EXPORT FUNCTIONS ==========
-  const saveAnalysis = async () => {
+  const saveAnalysis = async (options = {}) => {
     if (!jobData?.id) {
       debug('❌ Save cancelled: No job ID');
       return;
@@ -2830,7 +2857,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Notify parent component
       if (onAnalysisUpdate) {
-        onAnalysisUpdate(analysisData);
+        onAnalysisUpdate(analysisData, options);
       }
     } catch (error) {
       console.error('��� Save failed:', error);
@@ -3438,7 +3465,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const exportToExcel = (type) => {
-    const timestamp = new Date().toISOString().split('T')[0];
+    const timestamp = safeISODate(new Date());
     const municipality = (jobData?.municipality || 'export').replace(/[^a-zA-Z0-9]/g, '_');
     const filename = `${type}_${municipality}_${timestamp}.xlsx`;
 
@@ -3497,7 +3524,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const exportLandRates = () => {
     let csv = 'LAND RATES ANALYSIS\n';
     csv += `Municipality: ${jobData?.municipality || ''}\n`;
-    csv += `Analysis Period: ${dateRange.start.toLocaleDateString()} to ${dateRange.end.toLocaleDateString()}\n`;
+    csv += `Analysis Period: ${safeLocaleDate(dateRange.start)} to ${safeLocaleDate(dateRange.end)}\n`;
     csv += `Valuation Mode: ${valuationMode.toUpperCase()}\n\n`;
     
     // Summary by Region
@@ -3850,7 +3877,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const updateSpecialCategory = (category, rate) => {
-    debug(`🔧 Updating special category: ${category} = ${rate}`);
+    debug(`���� Updating special category: ${category} = ${rate}`);
     setCascadeConfig(prev => {
       const newConfig = {
         ...prev,
@@ -4240,8 +4267,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             </label>
             <input
               type="date"
-              value={dateRange.start.toISOString().split('T')[0]}
-              onChange={(e) => setDateRange(prev => ({ ...prev, start: new Date(e.target.value) }))}
+              value={safeISODate(dateRange.start)}
+              onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value ? new Date(e.target.value) : prev.start }))}
               style={{
                 width: '100%',
                 padding: '8px',
@@ -4256,8 +4283,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             </label>
             <input
               type="date"
-              value={dateRange.end.toISOString().split('T')[0]}
-              onChange={(e) => setDateRange(prev => ({ ...prev, end: new Date(e.target.value) }))}
+              value={safeISODate(dateRange.end)}
+              onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value ? new Date(e.target.value) : prev.end }))}
               style={{
                 width: '100%',
                 padding: '8px',
@@ -6319,7 +6346,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '�����') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '�������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Building, Factory, TrendingUp, DollarSign, Scale, Database, AlertCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import ManagementChecklist from './ManagementChecklist';
@@ -47,6 +47,10 @@ const JobContainer = ({
     timestamp: null,
     source: null // 'file_upload', 'initial_load', etc
   });
+
+  // Rate-limit parent job refreshes requested by children to avoid interrupting user work
+  const lastJobRefreshAtRef = useRef(0);
+  const pendingRefreshRef = useRef(false);
 
   // Load latest file versions and properties
   useEffect(() => {
@@ -872,12 +876,47 @@ const JobContainer = ({
       onFileProcessed: handleFileProcessed,
       onDataRefresh: loadLatestFileVersions,  // FIXED: Pass data refresh function for modal close timing
       // NEW: Provide a job-level refresh callback so children can request the parent to reload job data
+      // Rate-limited: ignore rapid repeat refreshes unless forced via opts.forceRefresh
       onUpdateJobCache: async (jobId, opts = null) => {
         try {
-          // If jobId provided and matches current selectedJob, reload; otherwise ignore
-          if (!jobId || (selectedJob && jobId === selectedJob.id)) {
-            await loadLatestFileVersions();
+          // Only allow explicit forced refreshes from children. Regular child calls must pass { forceRefresh: true }.
+          const force = opts && opts.forceRefresh;
+
+          // Ignore non-forced refresh requests to avoid interrupting user work
+          if (!force) {
+            console.log('Ignored child refresh request (require opts.forceRefresh === true)');
+            return;
           }
+
+          const now = Date.now();
+          if (!lastJobRefreshAtRef.current) lastJobRefreshAtRef.current = 0;
+
+          const withinCooldown = (now - lastJobRefreshAtRef.current) < 30000; // 30s
+
+          // If not for current job, ignore
+          if (jobId && selectedJob && jobId !== selectedJob.id) return;
+
+          if (withinCooldown) {
+            // Schedule a single pending refresh if not already scheduled
+            if (!pendingRefreshRef.current) {
+              pendingRefreshRef.current = true;
+              setTimeout(async () => {
+                try {
+                  await loadLatestFileVersions();
+                } catch (e) {
+                  console.warn('Deferred onUpdateJobCache failed:', e);
+                } finally {
+                  pendingRefreshRef.current = false;
+                  lastJobRefreshAtRef.current = Date.now();
+                }
+              }, 30000); // run after cooldown
+            }
+            return;
+          }
+
+          // Perform refresh and update timestamp
+          await loadLatestFileVersions();
+          lastJobRefreshAtRef.current = Date.now();
         } catch (e) {
           console.warn('onUpdateJobCache failed:', e);
         }
@@ -1133,11 +1172,20 @@ const JobContainer = ({
                 return (
                   <button
                     key={module.id}
-                    onClick={() => {
+                    onClick={async () => {
                       if (isAvailable) {
-                        // If leaving a module that made changes, refresh data
+                        // When switching modules, refresh parent job data (mount/switch rule)
+                        if (activeModule !== module.id) {
+                          try {
+                            console.log(`Module switch: reloading job data for module ${module.id}`);
+                            await loadLatestFileVersions();
+                          } catch (e) {
+                            console.warn('Module switch refresh failed:', e);
+                          }
+                        }
+
+                        // clear moduleHasChanges flag when leaving
                         if (moduleHasChanges && activeModule !== module.id) {
-                          console.log(`Module ${activeModule} had changes, will reload fresh data`);
                           setModuleHasChanges(false);
                         }
                         setActiveModule(module.id);

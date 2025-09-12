@@ -71,6 +71,30 @@ const PreValuationTab = ({
   const [worksheetProperties, setWorksheetProperties] = useState([]);
   const [lastTimeNormalizationRun, setLastTimeNormalizationRun] = useState(null);
   const [lastSizeNormalizationRun, setLastSizeNormalizationRun] = useState(null);
+
+  // Control to pause parent refreshes while user is actively editing
+  const [pauseAutoRefresh, setPauseAutoRefresh] = useState(false);
+
+  const callRefresh = (opts = null) => {
+    // Suppress refreshes while user has paused auto refresh or while this component is processing
+    if (pauseAutoRefresh || processingRef.current) return;
+    if (typeof onUpdateJobCache === 'function' && jobData?.id) {
+      try { onUpdateJobCache(jobData.id, opts); } catch (e) { console.warn('callRefresh failed:', e); }
+    }
+  };
+
+  // Mounted guard to prevent initial effect storms
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+    return () => setIsMounted(false);
+  }, []);
+
+  // Import diagnostic state (paste CSV to diagnose unmatched vs exact keys)
+  const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
+  const [diagnosticCsvText, setDiagnosticCsvText] = useState('');
+  const [diagnosticResults, setDiagnosticResults] = useState(null);
+  const [isRunningDiagnostic, setIsRunningDiagnostic] = useState(false);
   const [isSavingDecisions, setIsSavingDecisions] = useState(false);
   const [saveProgress, setSaveProgress] = useState({ current: 0, total: 0, message: '' });
   const [sizeNormProgress, setSizeNormProgress] = useState({ current: 0, total: 0, message: '' });
@@ -85,6 +109,14 @@ const PreValuationTab = ({
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [lastAutoSave, setLastAutoSave] = useState(null);
   const [readyProperties, setReadyProperties] = useState(new Set());
+
+  // Track rows currently being edited to avoid hiding them mid-edit when filters are applied
+  const [editingRows, setEditingRows] = useState(new Set());
+  const editTimersRef = useRef(new Map());
+  // Use a ref for immediate synchronous checks while typing to avoid timing issues with Set in state
+  const editingRowsRef = useRef(new Set());
+  // Ref to indicate when the component is performing a processing operation to suppress refreshes
+  const processingRef = useRef(false);
   // Unit Rate Configuration state (BRT only)
   const [unitRateCodes, setUnitRateCodes] = useState([]);
   const [selectedUnitRateCodes, setSelectedUnitRateCodes] = useState(new Set());
@@ -143,7 +175,7 @@ const PreValuationTab = ({
     try {
       const res = await generateLotSizesForJob(jobData.id);
       alert(`Generated lot sizes for ${res.updated} properties`);
-      if (onUpdateJobCache) onUpdateJobCache(jobData.id, null);
+      if (onUpdateJobCache) callRefresh(null);
     } catch (e) {
       console.error('Generate failed', e);
       alert('Generate failed: ' + (e.message || e));
@@ -248,6 +280,7 @@ const PreValuationTab = ({
   const [showImportModal, setShowImportModal] = useState(false);
   const [importPreview, setImportPreview] = useState(null);
   const [importFile, setImportFile] = useState(null);
+  const [importListTab, setImportListTab] = useState(null);
   const [isAnalyzingImport, setIsAnalyzingImport] = useState(false);
   const [importOptions, setImportOptions] = useState({
     updateExisting: true,
@@ -1167,7 +1200,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       //Clear cache after saving normalization data
       if (onUpdateJobCache && jobData?.id) {
         if (false) console.log('���️ Clearing cache after time normalization');
-        onUpdateJobCache(jobData.id, null);
+        callRefresh(null);
       }
       
       setLastTimeNormalizationRun(new Date().toISOString());
@@ -1387,7 +1420,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       //Clear cache after size normalization
       if (onUpdateJobCache && jobData?.id) {
         if (false) console.log('🗑️ Clearing cache after size normalization');
-        onUpdateJobCache(jobData.id, null);
+        callRefresh(null);
       }
 
       // Track the run date
@@ -1650,10 +1683,11 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
   
   // Auto-process when filter or scale changes
   useEffect(() => {
-    if (normalizationStats.sizeNormalized > 0) {
+    if (isMounted && normalizationStats.sizeNormalized > 0) {
+      // processBlockAnalysis is stable (useCallback). Don't include it in deps to avoid recreating this effect when it changes.
       processBlockAnalysis();
     }
-  }, [blockTypeFilter, colorScaleStart, colorScaleIncrement, normalizationStats.sizeNormalized, processBlockAnalysis]);
+  }, [blockTypeFilter, colorScaleStart, colorScaleIncrement, normalizationStats.sizeNormalized, isMounted]);
 
 const handleSalesDecision = (saleId, decision) => {
   // Update local UI state only. Persisting to DB happens in Save All (saveBatchDecisions).
@@ -1760,7 +1794,7 @@ const handleSalesDecision = (saleId, decision) => {
       // FOURTH: Clear cache to prevent stale data issues
       if (onUpdateJobCache && jobData?.id) {
         if (false) console.log('🗑️ Clearing cache after batch save to prevent stale data');
-        onUpdateJobCache(jobData.id, null);
+        callRefresh(null);
       }
 
       if (false) console.log(`��� Batch save complete: ${keeps.length} keeps saved, ${rejects.length} rejects cleared`);
@@ -1788,43 +1822,15 @@ const handleSalesDecision = (saleId, decision) => {
     setWorksheetStats(stats);
   }, [readyProperties]);
 
-  const handleWorksheetChange = (propertyKey, field, value) => {
-    // Check for location standardization
-    if (field === 'location_analysis' && value) {
-      checkLocationStandardization(value, propertyKey);
-    }
-    
-    const updated = worksheetProperties.map(prop =>
-      prop.property_composite_key === propertyKey
-        ? { 
-            ...prop, 
-            [field]: field === 'new_vcs' || field === 'asset_zoning' 
-              ? value.toUpperCase() 
-              : value 
-          }
-        : prop
-    );
-    
-    setWorksheetProperties(updated);
-    setFilteredWorksheetProps(updated);
-    updateWorksheetStats(updated);
-    setUnsavedChanges(true);
-    
-    // Reset auto-save timer
-    if (autoSaveTimer) clearTimeout(autoSaveTimer);
-    const timer = setTimeout(autoSaveWorksheet, 30000);
-    setAutoSaveTimer(timer);
-  };
-
-  const checkLocationStandardization = (value, propertyKey) => {
+  const checkLocationStandardization = useCallback((value, propertyKey) => {
     const valueLower = value.toLowerCase().trim();
-    
+
     // Check for similar existing values
     for (const [standard, variations] of Object.entries(locationVariations)) {
       if (variations.includes(valueLower) || standard.toLowerCase() === valueLower) {
         return;
       }
-      
+
       // Check for common variations
       const patterns = [
         ['avenue', 'ave', 'av'],
@@ -1833,9 +1839,9 @@ const handleSalesDecision = (saleId, decision) => {
         ['drive', 'dr'],
         ['railroad', 'rr', 'rail road', 'railraod']
       ];
-      
+
       for (const pattern of patterns) {
-        if (pattern.some(p => valueLower.includes(p)) && 
+        if (pattern.some(p => valueLower.includes(p)) &&
             pattern.some(p => standard.toLowerCase().includes(p))) {
           setCurrentLocationChoice({
             propertyKey,
@@ -1848,24 +1854,24 @@ const handleSalesDecision = (saleId, decision) => {
         }
       }
     }
-    
+
     // Add as new standard if no match found
     setLocationVariations(prev => ({
       ...prev,
       [value]: []
     }));
-  };
+  }, [locationVariations]);
 
-  const handleLocationStandardChoice = (choice) => {
+  const handleLocationStandardChoice = useCallback((choice) => {
     if (!currentLocationChoice) return;
-    
+
     if (choice === 'existing') {
       handleWorksheetChange(
         currentLocationChoice.propertyKey,
         'location_analysis',
         currentLocationChoice.existingStandard
       );
-      
+
       setLocationVariations(prev => ({
         ...prev,
         [currentLocationChoice.existingStandard]: [
@@ -1879,12 +1885,73 @@ const handleSalesDecision = (saleId, decision) => {
         [currentLocationChoice.newValue]: []
       }));
     }
-    
+
     setShowLocationModal(false);
     setCurrentLocationChoice(null);
-  };
+  }, [currentLocationChoice]);
 
-  const autoSaveWorksheet = async () => {
+  const handleWorksheetChange = useCallback((propertyKey, field, value) => {
+    // Check for location standardization
+    if (field === 'location_analysis' && value) {
+      checkLocationStandardization(value, propertyKey);
+    }
+
+    // Mark this row as being edited so it won't disappear while user types
+    // Update the ref immediately for synchronous checks and then mirror into state
+    try {
+      const refSet = new Set(editingRowsRef.current);
+      refSet.add(propertyKey);
+      editingRowsRef.current = refSet;
+      // Mirror into state to trigger updates where needed
+      setEditingRows(new Set(refSet));
+
+      // clear previous timer
+      const timers = editTimersRef.current;
+      const prevTimer = timers.get(propertyKey);
+      if (prevTimer) clearTimeout(prevTimer);
+
+      // set new timer to remove editing mark after 8 seconds of inactivity
+      const t = setTimeout(() => {
+        editTimersRef.current.delete(propertyKey);
+        // update ref and state
+        const refAfter = new Set(editingRowsRef.current);
+        refAfter.delete(propertyKey);
+        editingRowsRef.current = refAfter;
+        setEditingRows(new Set(refAfter));
+      }, 8000);
+      timers.set(propertyKey, t);
+    } catch (e) {
+      // Fallback to original behavior on failure
+      const next = new Set(editingRows);
+      next.add(propertyKey);
+      setEditingRows(next);
+    }
+
+    // Update using functional state update to avoid depending on worksheetProperties
+    setWorksheetProperties(prev => {
+      const updated = prev.map(prop =>
+        prop.property_composite_key === propertyKey
+          ? {
+              ...prop,
+              [field]: field === 'new_vcs' || field === 'asset_zoning' ? value.toUpperCase() : value
+            }
+          : prop
+      );
+      setFilteredWorksheetProps(updated);
+      updateWorksheetStats(updated);
+      return updated;
+    });
+
+    setUnsavedChanges(true);
+
+    // Reset auto-save timer
+    setAutoSaveTimer(prevTimer => {
+      if (prevTimer) clearTimeout(prevTimer);
+      return setTimeout(() => { autoSaveWorksheet(); }, 30000);
+    });
+  }, [updateWorksheetStats, checkLocationStandardization]);
+
+  const autoSaveWorksheet = useCallback(async () => {
     try {
       await worksheetService.saveWorksheetStats(jobData.id, {
         last_saved: new Date().toISOString(),
@@ -1893,45 +1960,46 @@ const handleSalesDecision = (saleId, decision) => {
         location_variations: locationVariations
       });
 
-      //Clear cache after auto-save
-      if (onUpdateJobCache && jobData?.id) {
-        if (false) console.log('🗑️ Clearing cache after auto-save worksheet');
-        onUpdateJobCache(jobData.id, null);
-      }
-      
+      // NOTE: intentionally NOT calling callRefresh here to avoid triggering job-wide refresh during edits/auto-save
+      // Clear cache only when user explicitly requests a refresh
+
       setLastAutoSave(new Date());
       setUnsavedChanges(false);
       if (false) console.log('✅ Auto-saved worksheet progress');
     } catch (error) {
       console.error('Auto-save failed:', error);
     }
-  };
+  }, [jobData?.id, worksheetStats, locationVariations]);
 
 const processSelectedProperties = async () => {
-    const toProcess = worksheetProperties.filter(p => 
+    const toProcess = worksheetProperties.filter(p =>
       readyProperties.has(p.property_composite_key)
     );
-    
+
     if (toProcess.length === 0) {
       alert('Please select properties to process by checking the "Ready" checkbox');
       return;
     }
-    
+
+    // Pause any automatic refreshes while processing to avoid parent reloads
+    setPauseAutoRefresh(true);
+    processingRef.current = true;
+
     setIsProcessingProperties(true);
     setProcessProgress({ current: 0, total: toProcess.length, message: 'Preparing to process properties...' });
-    
+
     try {
       // Process in batches of 500
       const batchSize = 500;
       for (let i = 0; i < toProcess.length; i += batchSize) {
         const batch = toProcess.slice(i, i + batchSize);
-        
-        setProcessProgress({ 
-          current: i, 
-          total: toProcess.length, 
-          message: `Processing batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(toProcess.length/batchSize)}...` 
+
+        setProcessProgress({
+          current: i,
+          total: toProcess.length,
+          message: `Processing batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(toProcess.length/batchSize)}...`
         });
-        
+
         // Build update array for batch upsert to property_market_analysis table
         const updates = batch.map(prop => ({
           job_id: jobData.id,
@@ -1947,19 +2015,15 @@ const processSelectedProperties = async () => {
         const { error } = await safeUpsertPropertyMarket(updates);
         if (error) throw error;
 
-        // Clear cache after updating property records
-        if (onUpdateJobCache && jobData?.id) {
-          if (false) console.log('🗑️ Clearing cache after processing worksheet properties');
-          onUpdateJobCache(jobData.id, null);
-        }
+        // Intentionally not clearing parent cache here to avoid interrupting user workflow; refresh manually when needed
       }
-      
-      setProcessProgress({ 
-        current: toProcess.length, 
-        total: toProcess.length, 
-        message: 'Processing complete!' 
+
+      setProcessProgress({
+        current: toProcess.length,
+        total: toProcess.length,
+        message: 'Processing complete!'
       });
-      
+
       setTimeout(() => {
         alert(`✅ Successfully processed ${toProcess.length} properties`);
         setReadyProperties(new Set());
@@ -1967,12 +2031,16 @@ const processSelectedProperties = async () => {
         setIsProcessingProperties(false);
         setProcessProgress({ current: 0, total: 0, message: '' });
       }, 500);
-      
+
     } catch (error) {
       console.error('Error processing properties:', error);
       alert('Error processing properties. Please try again.');
       setIsProcessingProperties(false);
       setProcessProgress({ current: 0, total: 0, message: '' });
+    } finally {
+      // Restore auto-refresh state after processing completes
+      processingRef.current = false;
+      setPauseAutoRefresh(false);
     }
   };
 
@@ -2025,11 +2093,17 @@ const processSelectedProperties = async () => {
   // ==================== IMPORT/EXPORT FUNCTIONS ====================
   
   const exportWorksheetToExcel = () => {
-    let csv = 'Block,Lot,Qualifier,Card,Location,Address,Class,Current VCS,Building,Type/Use,Design,New VCS,Location Analysis,Zoning,Map Page,Key Page,Notes,Ready\n';
-    
+    // Export using the canonical property_location (address) and explicit Location Analysis field.
+    let csv = 'Block,Lot,Qualifier,Card,Address,Class,Current VCS,Building,Type/Use,Design,New VCS,Location Analysis,Zoning,Map Page,Key Page,Notes,Ready\n';
+
+    // Debug sample: log first 10 property_location values to help detect truncation
+    try {
+      (filteredWorksheetProps || []).slice(0,10).forEach(p => console.log('EXPORT SAMPLE:', p.property_composite_key, '->', p.property_location));
+    } catch (e) {}
+
     filteredWorksheetProps.forEach(prop => {
-      csv += `"${prop.block}","${prop.lot}","${prop.qualifier || ''}","${prop.card || ''}","${prop.location || ''}",`;
-      csv += `"${prop.property_location}","${prop.property_class}","${prop.property_vcs}",`;
+      csv += `"${prop.block}","${prop.lot}","${prop.qualifier || ''}","${prop.card || ''}","${prop.property_location || ''}",`;
+      csv += `"${prop.property_class}","${prop.property_vcs}",`;
       csv += `"${prop.building_class_display}","${prop.type_use_display}","${prop.design_display}",`;
       csv += `"${prop.new_vcs}","${prop.location_analysis}","${prop.asset_zoning}",`;
       csv += `"${prop.asset_map_page}","${prop.asset_key_page}","${prop.worksheet_notes}",`;
@@ -2054,24 +2128,39 @@ const analyzeImportFile = async (file) => {
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
-      
+
+      // Clean up column names (trim whitespace on header names)
+      const cleanedData = jsonData.map(row => {
+        const cleanRow = {};
+        Object.keys(row).forEach(key => {
+          const cleanKey = key && typeof key === 'string' ? key.trim() : key;
+          cleanRow[cleanKey] = row[key];
+        });
+        return cleanRow;
+      });
+
+      // Use cleanedData for analysis
+      const dataForAnalysis = cleanedData;
+
       // Analysis results
       const analysis = {
         fileName: file.name,
-        totalRows: jsonData.length,
+        totalRows: dataForAnalysis.length,
         matched: [],
         unmatched: [],
         fuzzyMatched: []
       };
-      
+
       // Process each row from Excel
-      for (const row of jsonData) {
+      for (const row of dataForAnalysis) {
         // Build composite key from Excel data - vendor aware
         const year = row.Year || row.YEAR || new Date().getFullYear();
         const ccdd = row.Ccdd || row.CCDD || jobData?.ccdd || '';
         const block = (row.Block || row.BLOCK)?.toString() || '';
-        const lot = (row.Lot || row.LOT)?.toString() || '';
-        
+        const lot = (row.Lot || row.LOT || row.lot || '')?.toString().trim();
+        console.log('Lot value from row:', row.Lot, 'Final lot:', lot);
+        console.log('Full row data:', row);
+
         // Handle qualifier - both vendors
         let qual = (row.Qual || row.Qualifier || row.QUALIFIER)?.toString().trim() || '';
         qual = qual || 'NONE';
@@ -2087,29 +2176,50 @@ const analyzeImportFile = async (file) => {
         // Handle location field - check for the actual property location first
         let location;
         if (vendorType === 'Microsystems') {
-          // For Microsystems, handle the duplicate Location field issue
-          // Try to get the first Location column (property address) not the second one
-          location = row.Location?.toString().trim() || '';
-          // If Location seems to be empty or is actually the analysis field, try other patterns
+          // Prefer explicit Property Location if present (this is the address field). Fallback to Location if not.
+          location = row.PROPERTY_LOCATION?.toString() || row['Property Location']?.toString() || row.Location?.toString() || '';
+          // If location seems empty or is the analysis field, try other patterns
           if (!location || location.toLowerCase().includes('analysis')) {
-            location = row['Property Location']?.toString().trim() || 
-                      row.Address?.toString().trim() || 
-                      'NONE';
+            location = row['Property Location']?.toString() || row.Address?.toString() || 'NONE';
           }
         } else { // BRT
-          location = (row.PROPERTY_LOCATION || row['Property Location'] || row.Location)?.toString().trim() || 'NONE';
+          location = row.PROPERTY_LOCATION?.toString() || row['Property Location']?.toString() || row.Location?.toString() || 'NONE';
+        }
+
+        // If address components were split across columns (e.g. number in Location and street in Location Analysis),
+        // join them into a single address when it looks like Location only contains a street number.
+        try {
+          const locationAnalysis = row['Location Analysis'] || row['LocationAnalysis'] || row['Loc Analysis'] || row['Location_Analysis'] || '';
+          const isNumericOnly = /^[0-9]+(\.[0-9]+)?$/.test(String(location));
+          const isShort = String(location).length <= 6;
+          if ((isNumericOnly || isShort) && locationAnalysis && !String(locationAnalysis).toLowerCase().includes('analysis')) {
+            // Preserve original spacing and punctuation from locationAnalysis but remove leading/trailing whitespace
+            location = (String(location) + ' ' + String(locationAnalysis)).trim();
+          }
+        } catch (e) {
+          // ignore
         }
         
         const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual}-${card}-${location}`;
-        
+
+        // Debugging: log row data and built composite key, and sample worksheet keys
+        try {
+          console.log('Import row data:', { year, ccdd, block, lot, qual, card, location });
+          console.log('Built composite key:', compositeKey);
+          const sampleWorksheetKeys = (worksheetProperties || []).slice(0,5).map(p => p.property_composite_key);
+          console.log('Sample worksheet keys:', sampleWorksheetKeys);
+        } catch (e) {
+          // ignore console errors in prod
+        }
+
         // Debug for specific blocks
         if (parseInt(block) >= 7 && parseInt(block) <= 10) {
           if (false) console.log(`���� Import row ${block}-${lot}: compositeKey = ${compositeKey}`);
         }
-        
-        // Find matching property in worksheet
+
+        // Find matching property in worksheet (exact match on composite key)
         const match = worksheetProperties.find(p => p.property_composite_key === compositeKey);
-        
+
         if (match) {
           analysis.matched.push({
             compositeKey,
@@ -2191,6 +2301,74 @@ const analyzeImportFile = async (file) => {
       setIsAnalyzingImport(false);
     }
   };
+
+  // Run diagnostic on pasted CSV text (client-side) to show exact/fuzzy/unmatched counts
+  const runImportDiagnostic = async (csvText) => {
+    setIsRunningDiagnostic(true);
+    try {
+      if (!csvText || !csvText.trim()) return alert('Paste CSV text first');
+      // Parse CSV lines with quoted fields support
+      const rows = csvText.trim().split(/\r?\n/).map(line => line.split(/,(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)/).map(c => c.replace(/^\"|\"$/g, '').trim()));
+      const headers = rows.shift().map(h => h.trim());
+      const data = rows.map(r => Object.fromEntries(r.map((v,i) => [(headers[i]||`col${i}`), v])));
+
+      const propKeys = worksheetProperties.map(p => p.property_composite_key);
+
+      const levenshtein = (a,b) => { const m=[]; for(let i=0;i<=b.length;i++){m[i]=[i];} for(let j=0;j<=a.length;j++){m[0][j]=j;} for(let i=1;i<=b.length;i++){ for(let j=1;j<=a.length;j++){ m[i][j]=b[i-1]===a[j-1]?m[i-1][j-1]:Math.min(m[i-1][j-1]+1,m[i][j-1]+1,m[i-1][j]+1); } } return m[b.length][a.length]; };
+
+      const matched = [], fuzzy = [], unmatched = [];
+
+      const getVal = (row, keys) => { for (const k of keys) { if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') return row[k]; } return ''; };
+
+      for (const row of data) {
+        const year = getVal(row, ['Year','YEAR','year']) || new Date().getFullYear();
+        const ccdd = getVal(row, ['CCDD','Ccdd','Ccdd','ccdd']) || jobData?.ccdd || '';
+        const block = String(getVal(row, ['Block','BLOCK','block'])).trim();
+        const lot = String(getVal(row, ['Lot','LOT','lot'])).trim();
+        let qual = String(getVal(row, ['Qualifier','Qual','QUALIFIER','QUAL'])).trim(); if (!qual) qual = 'NONE';
+        const card = String(getVal(row, ['Card','CARD','card','Bldg','BLDG'])).trim() || 'NONE';
+        let location = String(getVal(row, ['PROPERTY_LOCATION','Property Location','Location','Address'])) || 'NONE';
+        try {
+          const locationAnalysis = getVal(row, ['Location Analysis','LocationAnalysis','Loc Analysis','Location_Analysis']) || '';
+          const isNumericOnly = /^[0-9]+(\.[0-9]+)?$/.test(String(location));
+          const isShort = String(location).length <= 6;
+          if ((isNumericOnly || isShort) && locationAnalysis && !String(locationAnalysis).toLowerCase().includes('analysis')) {
+            location = (String(location) + ' ' + String(locationAnalysis)).trim();
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual}-${card}-${location}`;
+        const exactMatch = worksheetProperties.find(p => p.property_composite_key === compositeKey);
+        if (exactMatch) {
+          matched.push({ compositeKey, row, id: exactMatch.id });
+          continue;
+        }
+
+        // find closest property key
+        let best = { key: null, d: Infinity };
+        for (const pk of propKeys) {
+          const d = levenshtein(pk, compositeKey);
+          if (d < best.d) best = { key: pk, d };
+        }
+        const sim = 1 - best.d / Math.max(best.key?.length || 1, compositeKey.length || 1);
+        if (sim >= (importOptions?.fuzzyMatchThreshold || 0.8)) {
+          fuzzy.push({ compositeKey, row, closest: best.key, sim: Number(sim.toFixed(3)) });
+        } else {
+          unmatched.push({ compositeKey, row, closest: best.key, dist: best.d });
+        }
+      }
+
+      setDiagnosticResults({ total: data.length, matched, fuzzy, unmatched });
+
+    } catch (e) {
+      console.error('Diagnostic error:', e);
+      alert('Diagnostic failed, see console');
+    } finally {
+      setIsRunningDiagnostic(false);
+    }
+  };
   
   // Helper function for fuzzy matching
   const calculateSimilarity = (str1, str2) => {
@@ -2234,7 +2412,7 @@ const analyzeImportFile = async (file) => {
   
   useEffect(() => {
     let filtered = [...worksheetProperties];
-    
+
     if (worksheetSearchTerm) {
       const searchLower = worksheetSearchTerm.toLowerCase();
       filtered = filtered.filter(p =>
@@ -2244,30 +2422,30 @@ const analyzeImportFile = async (file) => {
         p.lot?.includes(worksheetSearchTerm)
       );
     }
-    
+
     switch (worksheetFilter) {
       case 'missing-vcs':
-        filtered = filtered.filter(p => !p.new_vcs);
+        filtered = filtered.filter(p => !p.new_vcs || (editingRowsRef.current && editingRowsRef.current.has(p.property_composite_key) ) );
         break;
       case 'missing-location':
-        filtered = filtered.filter(p => !p.location_analysis);
+        filtered = filtered.filter(p => !p.location_analysis || (editingRowsRef.current && editingRowsRef.current.has(p.property_composite_key) ) );
         break;
       case 'missing-zoning':
-        filtered = filtered.filter(p => !p.asset_zoning);
+        filtered = filtered.filter(p => !p.asset_zoning || (editingRowsRef.current && editingRowsRef.current.has(p.property_composite_key) ) );
         break;
       case 'ready':
-        filtered = filtered.filter(p => readyProperties.has(p.property_composite_key));
+        filtered = filtered.filter(p => readyProperties.has(p.property_composite_key) || (editingRowsRef.current && editingRowsRef.current.has(p.property_composite_key) ) );
         break;
       case 'completed':
-        filtered = filtered.filter(p => p.new_vcs && p.asset_zoning);
+        filtered = filtered.filter(p => (p.new_vcs && p.asset_zoning) || (editingRowsRef.current && editingRowsRef.current.has(p.property_composite_key) ) );
         break;
-        case 'not-ready':
-        filtered = filtered.filter(p => !readyProperties.has(p.property_composite_key));
+      case 'not-ready':
+        filtered = filtered.filter(p => !readyProperties.has(p.property_composite_key) || (editingRowsRef.current && editingRowsRef.current.has(p.property_composite_key) ) );
         break;
     }
-    
+
     setFilteredWorksheetProps(filtered);
-  }, [worksheetSearchTerm, worksheetFilter, worksheetProperties, readyProperties]);
+  }, [worksheetSearchTerm, worksheetFilter, worksheetProperties, readyProperties, editingRows]);
 
   // ==================== PAGINATION ====================
   
@@ -2350,6 +2528,10 @@ const analyzeImportFile = async (file) => {
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Normalization Configuration</h3>
               <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={pauseAutoRefresh} onChange={(e) => setPauseAutoRefresh(e.target.checked)} className="form-checkbox" />
+                  <span className="text-gray-600">Pause Auto-Refresh</span>
+                </label>
                 {hpiLoaded && (
                   <span className="text-green-600 text-sm">✓ HPI Data Loaded</span>
                 )}
@@ -2940,7 +3122,7 @@ const analyzeImportFile = async (file) => {
                                       // DEBUG: Check all possible sales NU fields
                                       const salesNU = sale.sales_nu || sale.sales_instrument || sale.nu || sale.sale_nu || '';
                                       if (sale.id && sale.id.toString().endsWith('0')) { // Log every 10th for debugging
-                                        if (false) console.log(`���� Table render sales_nu for sale ${sale.id}:`, {
+                                        if (false) console.log(`������ Table render sales_nu for sale ${sale.id}:`, {
                                           sales_nu: sale.sales_nu,
                                           sales_instrument: sale.sales_instrument,
                                           nu: sale.nu,
@@ -3431,7 +3613,7 @@ const analyzeImportFile = async (file) => {
                       const persistedStatus = updated?.status || newStatus;
                       setPreValChecklist(prev => ({ ...prev, market_analysis: persistedStatus === 'completed' }));
                       try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'market-analysis', status: persistedStatus } })); } catch(e){}
-                      try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
+                      try { if (typeof onUpdateJobCache === 'function') callRefresh(null); } catch(e){}
                     } catch (error) {
                       console.error('Market Analysis checklist update failed:', error);
                       alert('Failed to update checklist. Please try again.');
@@ -3693,6 +3875,14 @@ const analyzeImportFile = async (file) => {
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
                   Export to Excel
+                </button>
+
+                <button
+                  onClick={() => setShowDiagnosticModal(true)}
+                  className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+                  title="Paste your edited CSV to diagnose unmatched rows"
+                >
+                  Run Import Diagnostic
                 </button>
 
                 <button
@@ -4038,28 +4228,32 @@ const analyzeImportFile = async (file) => {
                         />
                       </td>
                       <td className="px-2 py-1 text-center bg-gray-50">
-                        <button
-                          onClick={() => {
-                            const key = prop.property_composite_key;
-                            const newReadyProperties = new Set(readyProperties);
-                            if (newReadyProperties.has(key)) newReadyProperties.delete(key);
-                            else newReadyProperties.add(key);
-                            setReadyProperties(newReadyProperties);
+                        <label className="inline-flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={readyProperties.has(prop.property_composite_key)}
+                            onChange={() => {
+                              const key = prop.property_composite_key;
+                              const newReadyProperties = new Set(readyProperties);
+                              if (newReadyProperties.has(key)) newReadyProperties.delete(key);
+                              else newReadyProperties.add(key);
+                              setReadyProperties(newReadyProperties);
 
-                            // Update stats with the new ready count
-                            const stats = {
-                              totalProperties: worksheetProperties.length,
-                              vcsAssigned: worksheetProperties.filter(p => p.new_vcs).length,
-                              zoningEntered: worksheetProperties.filter(p => p.asset_zoning).length,
-                              locationAnalysis: worksheetProperties.filter(p => p.location_analysis).length,
-                              readyToProcess: newReadyProperties.size
-                            };
-                            setWorksheetStats(stats);
-                          }}
-                          className={`px-2 py-1 rounded text-xs font-medium ${readyProperties.has(prop.property_composite_key) ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}`}
-                        >
-                          {readyProperties.has(prop.property_composite_key) ? 'Ready' : 'Mark'}
-                        </button>
+                              // Update stats with the new ready count
+                              const stats = {
+                                totalProperties: worksheetProperties.length,
+                                vcsAssigned: worksheetProperties.filter(p => p.new_vcs).length,
+                                zoningEntered: worksheetProperties.filter(p => p.asset_zoning).length,
+                                locationAnalysis: worksheetProperties.filter(p => p.location_analysis).length,
+                                readyToProcess: newReadyProperties.size
+                              };
+                              setWorksheetStats(stats);
+                            }}
+                          />
+                          <span className="text-xs font-medium">
+                            {readyProperties.has(prop.property_composite_key) ? 'Ready' : 'Mark'}
+                          </span>
+                        </label>
                       </td>
                     </tr>
                   ))}
@@ -4105,10 +4299,8 @@ const analyzeImportFile = async (file) => {
                  Process Selected Properties
                </button>
 
-               <div className="flex gap-2">
-                 <button onClick={saveMapping} disabled={!mappingVcsKey || isSavingMappings} className="px-3 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">{isSavingMappings ? 'Saving...' : 'Save Mapping'}</button>
-                 <button onClick={handleGenerateLotSizes} disabled={isGeneratingLotSizes} className="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700">{isGeneratingLotSizes ? 'Generating...' : 'Generate Lot Sizes for Job'}</button>
-               </div>
+               {/* Mapping and Generate Lot Sizes removed per request */}
+              <div style={{width:0,height:0}} aria-hidden="true" />
 
                <button
                 onClick={async () => {
@@ -4122,7 +4314,7 @@ const analyzeImportFile = async (file) => {
                     const persistedStatus = updated?.status || newStatus;
                     setPreValChecklist(prev => ({ ...prev, page_by_page: persistedStatus === 'completed' }));
                     try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'page-by-page', status: persistedStatus } })); } catch(e){}
-                    try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
+                    try { if (typeof onUpdateJobCache === 'function') callRefresh(null); } catch(e){}
                   } catch (error) {
                     console.error('Page by Page checklist update failed:', error);
                     alert('Failed to update checklist. Please try again.');
@@ -4135,7 +4327,7 @@ const analyzeImportFile = async (file) => {
                 style={{ backgroundColor: preValChecklist.page_by_page ? '#10B981' : '#E5E7EB', color: preValChecklist.page_by_page ? 'white' : '#374151' }}
                 title={preValChecklist.page_by_page ? 'Click to reopen' : 'Mark Page by Page Worksheet complete'}
               >
-                {isProcessingPageByPage ? 'Processing...' : (preValChecklist.page_by_page ? '��� Mark Complete' : 'Mark Complete')}
+                {isProcessingPageByPage ? 'Processing...' : (preValChecklist.page_by_page ? '✓ Mark Complete' : 'Mark Complete')}
               </button>
              </div>
            </div>
@@ -4259,30 +4451,76 @@ const analyzeImportFile = async (file) => {
            </div>
 
            {/* Standardization Suggestions */}
-           {Object.keys(standardizations.locations).length > 0 && (
-             <div className="mb-4">
-               <h4 className="font-medium mb-2">Location Standardizations</h4>
-               <div className="space-y-2 max-h-32 overflow-y-auto border rounded p-2 bg-gray-50">
-                 {Object.entries(standardizations.locations).map(([original, standard], idx) => (
-                   <div key={idx} className="flex items-center gap-2 text-sm">
-                     <span className="px-2 py-1 bg-white rounded border">{original}</span>
-                     <span>→</span>
-                     <input
-                       type="text"
-                       value={standard}
-                       onChange={(e) => setStandardizations(prev => ({
-                         ...prev,
-                         locations: { ...prev.locations, [original]: e.target.value }
-                       }))}
-                       className="px-2 py-1 border rounded"
-                     />
-                   </div>
-                 ))}
-               </div>
-             </div>
-           )}
+          {Object.keys(standardizations.locations).length > 0 && (
+            <div className="mb-4">
+              <h4 className="font-medium mb-2">Location Standardizations</h4>
+              <div className="space-y-2 max-h-32 overflow-y-auto border rounded p-2 bg-gray-50">
+                {Object.entries(standardizations.locations).map(([original, standard], idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-sm">
+                    <span className="px-2 py-1 bg-white rounded border">{original}</span>
+                    <span>→</span>
+                    <input
+                      type="text"
+                      value={standard}
+                      onChange={(e) => setStandardizations(prev => ({
+                        ...prev,
+                        locations: { ...prev.locations, [original]: e.target.value }
+                      }))}
+                      className="px-2 py-1 border rounded"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-           <div className="flex justify-end gap-3 mt-6">
+          {/* View lists for matched / fuzzy / unmatched */}
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <button className={`px-3 py-1 rounded ${importListTab === 'matched' ? 'bg-green-600 text-white' : 'bg-green-50 text-green-700 border border-green-200'}`} onClick={() => setImportListTab(importListTab === 'matched' ? null : 'matched')}>View Exact ({importPreview.matched?.length || 0})</button>
+              <button className={`px-3 py-1 rounded ${importListTab === 'fuzzy' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 border border-blue-200'}`} onClick={() => setImportListTab(importListTab === 'fuzzy' ? null : 'fuzzy')}>View Fuzzy ({importPreview.fuzzyMatched?.length || 0})</button>
+              <button className={`px-3 py-1 rounded ${importListTab === 'unmatched' ? 'bg-orange-600 text-white' : 'bg-orange-50 text-orange-700 border border-orange-200'}`} onClick={() => setImportListTab(importListTab === 'unmatched' ? null : 'unmatched')}>View Unmatched ({importPreview.unmatched?.length || 0})</button>
+            </div>
+
+            {importListTab && (
+              <div className="max-h-64 overflow-y-auto border rounded p-2 bg-gray-50 text-sm">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr>
+                      <th className="py-1">Composite Key</th>
+                      <th className="py-1">Excel Location</th>
+                      <th className="py-1">Worksheet Address</th>
+                      <th className="py-1">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(importListTab === 'matched' ? importPreview.matched : importListTab === 'fuzzy' ? importPreview.fuzzyMatched : importPreview.unmatched || []).slice(0,200).map((item, idx) => (
+                      <tr key={idx} className="border-t">
+                        <td className="py-1">{item.compositeKey}</td>
+                        <td className="py-1">{(item.excelData && (item.excelData.Location || item.excelData.PROPERTY_LOCATION || item.excelData['Property Location'] || item.excelData.Address)) || ''}</td>
+                        <td className="py-1">{item.currentData?.property_location || ''}</td>
+                        <td className="py-1"><button className="px-2 py-1 bg-blue-600 text-white rounded text-xs" onClick={() => {
+                          // Focus worksheet list on this property
+                          if (item.currentData && item.currentData.property_composite_key) {
+                            setWorksheetSearchTerm(item.currentData.property_composite_key);
+                            setWorksheetFilter('all');
+                          } else if (item.compositeKey) {
+                            setWorksheetSearchTerm(item.compositeKey);
+                          }
+                          setShowImportModal(false);
+                        }}>Jump to</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {((importListTab === 'matched' ? importPreview.matched : importListTab === 'fuzzy' ? importPreview.fuzzyMatched : importPreview.unmatched || []).length > 200) && (
+                  <div className="text-xs text-gray-500 mt-2">Showing first 200 items</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-3 mt-6">
              <button
                onClick={() => {
                  setShowImportModal(false);
@@ -4310,10 +4548,11 @@ const analyzeImportFile = async (file) => {
                   // Then update UI with progress tracking
                    let processedCount = 0;
                    const updatedProps = worksheetProperties.map(prop => {
-                     const match = allUpdates.find(m => 
-                       m.currentData.id === prop.id  // Use ID for matching
-                     );
-                     if (match) {
+                    // Match by composite key (ID may not be reliably populated in import preview)
+                    const match = allUpdates.find(m =>
+                      m.currentData && m.currentData.property_composite_key === prop.property_composite_key
+                    );
+                    if (match) {
                        processedCount++;
                        // Update progress every 10 items or on last item
                        if (processedCount % 10 === 0 || processedCount === allUpdates.length) {
@@ -4484,7 +4723,7 @@ const analyzeImportFile = async (file) => {
                       //Clear cache after saving zoning
                       if (onUpdateJobCache && jobData?.id) { 
                         if (false) console.log('🗑️ Clearing cache after saving zoning');
-                        onUpdateJobCache(jobData.id, null);
+                        callRefresh(null);
                       }
                         
                       alert('✅ Zoning requirements saved successfully');
@@ -4508,7 +4747,7 @@ const analyzeImportFile = async (file) => {
                       const persistedStatus = updated?.status || newStatus;
                       setPreValChecklist(prev => ({ ...prev, zoning_config: persistedStatus === 'completed' }));
                       try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'zoning-config', status: persistedStatus } })); } catch(e){}
-                      try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
+                      try { if (typeof onUpdateJobCache === 'function') callRefresh(null); } catch(e){}
                     } catch (error) {
                       console.error('Zoning checklist update failed:', error);
                       alert('Failed to update checklist. Please try again.');

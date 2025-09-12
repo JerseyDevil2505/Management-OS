@@ -480,6 +480,72 @@ export async function persistComputedLotAcre(jobId, propertyCompositeKey, select
   }
 }
 
+/**
+ * Clear legacy asset_lot_acre/asset_lot_sf values in property_records for a job
+ * when a market_manual_lot_acre exists and the property has no explicit frontage/depth.
+ * This helps remove earlier LANDUR-derived values that are no longer authoritative.
+ */
+export async function clearLegacyAssetLotFields(jobId) {
+  if (!jobId) throw new Error('jobId required');
+  try {
+    // 1) Load market manual acre map
+    const { data: mmaData, error: mmaErr } = await supabase
+      .from('property_market_analysis')
+      .select('property_composite_key, market_manual_lot_acre, market_manual_lot_sf')
+      .eq('job_id', jobId);
+    if (mmaErr) throw mmaErr;
+    const manualMap = new Map();
+    (mmaData || []).forEach(r => manualMap.set(r.property_composite_key, { acre: r.market_manual_lot_acre, sf: r.market_manual_lot_sf }));
+
+    // 2) Find property_records with non-null asset_lot_acre
+    const { data: props, error: propsErr } = await supabase
+      .from('property_records')
+      .select('property_composite_key, asset_lot_acre, asset_lot_sf, asset_lot_frontage, asset_lot_depth')
+      .eq('job_id', jobId)
+      .not('asset_lot_acre', 'is', null);
+    if (propsErr) throw propsErr;
+
+    const toClear = [];
+    for (const p of (props || [])) {
+      const manual = manualMap.get(p.property_composite_key);
+      const hasFrontageOrDepth = (p.asset_lot_frontage && Number(p.asset_lot_frontage) > 0) || (p.asset_lot_depth && Number(p.asset_lot_depth) > 0);
+      // Clear only if manual exists (we computed market_manual) AND no explicit frontage/depth
+      if (manual && (manual.acre !== null && manual.acre !== undefined) && !hasFrontageOrDepth) {
+        toClear.push(p.property_composite_key);
+      }
+    }
+
+    if (toClear.length === 0) {
+      console.log('clearLegacyAssetLotFields: no records to clear');
+      return { cleared: 0 };
+    }
+
+    // 3) Update in batches
+    const batchSize = 500;
+    let cleared = 0;
+    for (let i = 0; i < toClear.length; i += batchSize) {
+      const batch = toClear.slice(i, i + batchSize);
+      const { error: upErr } = await supabase
+        .from('property_records')
+        .update({ asset_lot_acre: null, asset_lot_sf: null, updated_at: new Date().toISOString() })
+        .in('property_composite_key', batch)
+        .eq('job_id', jobId);
+      if (upErr) {
+        console.error('Error clearing legacy asset lot fields for batch:', upErr);
+      } else {
+        cleared += batch.length;
+      }
+    }
+
+    console.log(`clearLegacyAssetLotFields: cleared ${cleared} records`);
+    return { cleared };
+
+  } catch (error) {
+    console.error('clearLegacyAssetLotFields error:', error);
+    throw error;
+  }
+}
+
 // Expose quick debug helper on window in dev mode
 if (typeof window !== 'undefined') {
   window.__computeLotAcreForProperty = async (jobId, propertyCompositeKey, selectedCodes = []) => {
@@ -508,6 +574,11 @@ if (typeof window !== 'undefined') {
       throw e;
     }
   };
+}
+
+if (typeof window !== 'undefined') {
+  // Expose convenience debug function to clear legacy asset lot fields
+  window.clearLegacyAssetLotFields = clearLegacyAssetLotFields;
 }
 
 /**

@@ -193,9 +193,9 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
-                onAnalysisUpdate={(data) => {
-                  // Invalidate cache when land valuation data changes
-                  if (onUpdateJobCache) {
+                onAnalysisUpdate={(data, opts) => {
+                  // Only refresh parent when user-triggered (not autosave)
+                  if (opts?.source !== 'autosave' && onUpdateJobCache) {
                     onUpdateJobCache(jobData.id, null);
                   }
                 }}
