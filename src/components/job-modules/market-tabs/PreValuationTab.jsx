@@ -2041,7 +2041,7 @@ const processSelectedProperties = async () => {
 
     filteredWorksheetProps.forEach(prop => {
       csv += `"${prop.block}","${prop.lot}","${prop.qualifier || ''}","${prop.card || ''}","${prop.property_location || ''}",`;
-      csv += `"${prop.property_location}","${prop.property_class}","${prop.property_vcs}",`;
+      csv += `"${prop.property_class}","${prop.property_vcs}",`;
       csv += `"${prop.building_class_display}","${prop.type_use_display}","${prop.design_display}",`;
       csv += `"${prop.new_vcs}","${prop.location_analysis}","${prop.asset_zoning}",`;
       csv += `"${prop.asset_map_page}","${prop.asset_key_page}","${prop.worksheet_notes}",`;
