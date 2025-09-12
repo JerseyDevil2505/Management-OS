@@ -3461,7 +3461,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const exportToExcel = (type) => {
-    const timestamp = new Date().toISOString().split('T')[0];
+    const timestamp = safeISODate(new Date());
     const municipality = (jobData?.municipality || 'export').replace(/[^a-zA-Z0-9]/g, '_');
     const filename = `${type}_${municipality}_${timestamp}.xlsx`;
 
@@ -4382,7 +4382,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         type="checkbox"
                         checked={includedSales.has(sale.id)}
                         onChange={(e) => {
-                          debug(`����� Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
+                          debug(`��� Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
                             checked: e.target.checked,
                             saleId: sale.id
                           });
