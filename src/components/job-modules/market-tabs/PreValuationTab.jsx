@@ -2120,6 +2120,20 @@ const analyzeImportFile = async (file) => {
         } else { // BRT
           location = (row.PROPERTY_LOCATION || row['Property Location'] || row.Location)?.toString() || 'NONE';
         }
+
+        // If address components were split across columns (e.g. number in Location and street in Location Analysis),
+        // join them into a single address when it looks like Location only contains a street number.
+        try {
+          const locationAnalysis = row['Location Analysis'] || row['LocationAnalysis'] || row['Loc Analysis'] || row['Location_Analysis'] || '';
+          const isNumericOnly = /^[0-9]+(\.[0-9]+)?$/.test(String(location));
+          const isShort = String(location).length <= 6;
+          if ((isNumericOnly || isShort) && locationAnalysis && !String(locationAnalysis).toLowerCase().includes('analysis')) {
+            // Preserve original spacing and punctuation from locationAnalysis but remove leading/trailing whitespace
+            location = (String(location) + ' ' + String(locationAnalysis)).trim();
+          }
+        } catch (e) {
+          // ignore
+        }
         
         const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual}-${card}-${location}`;
 
@@ -2248,7 +2262,17 @@ const analyzeImportFile = async (file) => {
         const lot = String(getVal(row, ['Lot','LOT','lot'])).trim();
         let qual = String(getVal(row, ['Qualifier','Qual','QUALIFIER','QUAL'])).trim(); if (!qual) qual = 'NONE';
         const card = String(getVal(row, ['Card','CARD','card','Bldg','BLDG'])).trim() || 'NONE';
-        const location = String(getVal(row, ['Location','PROPERTY_LOCATION','Property Location','Address'])).trim() || 'NONE';
+        let location = String(getVal(row, ['Location','PROPERTY_LOCATION','Property Location','Address'])) || 'NONE';
+        try {
+          const locationAnalysis = getVal(row, ['Location Analysis','LocationAnalysis','Loc Analysis','Location_Analysis']) || '';
+          const isNumericOnly = /^[0-9]+(\.[0-9]+)?$/.test(String(location));
+          const isShort = String(location).length <= 6;
+          if ((isNumericOnly || isShort) && locationAnalysis && !String(locationAnalysis).toLowerCase().includes('analysis')) {
+            location = (String(location) + ' ' + String(locationAnalysis)).trim();
+          }
+        } catch (e) {
+          // ignore
+        }
 
         const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual}-${card}-${location}`;
         const exactMatch = worksheetProperties.find(p => p.property_composite_key === compositeKey);
