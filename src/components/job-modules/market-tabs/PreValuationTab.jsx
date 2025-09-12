@@ -1909,7 +1909,7 @@ const handleSalesDecision = (saleId, decision) => {
       if (prevTimer) clearTimeout(prevTimer);
       return setTimeout(() => { autoSaveWorksheet(); }, 30000);
     });
-  }, [updateWorksheetStats, checkLocationStandardization, autoSaveWorksheet]);
+  }, [updateWorksheetStats, checkLocationStandardization]);
 
   const autoSaveWorksheet = useCallback(async () => {
     try {
