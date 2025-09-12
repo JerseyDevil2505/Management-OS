@@ -2873,7 +2873,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-32 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('property_location')}
                             >
-                              Location {normSortConfig.field === 'property_location' && (normSortConfig.direction === 'asc' ? '���' : '���')}
+                              Location {normSortConfig.field === 'property_location' && (normSortConfig.direction === 'asc' ? '���' : '↓')}
                             </th>
                             <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
@@ -4234,10 +4234,8 @@ const analyzeImportFile = async (file) => {
                  Process Selected Properties
                </button>
 
-               <div className="flex gap-2">
-                 <button onClick={saveMapping} disabled={!mappingVcsKey || isSavingMappings} className="px-3 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">{isSavingMappings ? 'Saving...' : 'Save Mapping'}</button>
-                 <button onClick={handleGenerateLotSizes} disabled={isGeneratingLotSizes} className="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700">{isGeneratingLotSizes ? 'Generating...' : 'Generate Lot Sizes for Job'}</button>
-               </div>
+               {/* Mapping and Generate Lot Sizes removed per request */}
+              <div style={{width:0,height:0}} aria-hidden="true" />
 
                <button
                 onClick={async () => {
