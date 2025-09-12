@@ -1879,7 +1879,7 @@ const handleSalesDecision = (saleId, decision) => {
 
     setShowLocationModal(false);
     setCurrentLocationChoice(null);
-  }, [currentLocationChoice, handleWorksheetChange]);
+  }, [currentLocationChoice]);
 
   const handleWorksheetChange = useCallback((propertyKey, field, value) => {
     // Check for location standardization
