@@ -117,28 +117,67 @@ const FileUploadButton = ({
   };
 
   // FIXED: Composite key generation that matches processors EXACTLY
+  // Added normalization for location to improve matching (e.g. "RT.39" vs "ROUTE 39")
+  const normalizeLocationForKey = (raw) => {
+    if (raw === null || raw === undefined) return 'NONE';
+    let s = String(raw).trim().toUpperCase();
+
+    // Replace dots and slashes with spaces
+    s = s.replace(/[\.\/]+/g, ' ');
+
+    // Insert space between letters and digits when missing (e.g. RT39 -> RT 39)
+    s = s.replace(/([A-Z])(?=\d)/g, '$1 ');
+
+    // Normalize common abbreviations
+    s = s.replace(/\bRTE\b/g, 'ROUTE');
+    s = s.replace(/\bRT\b/g, 'ROUTE');
+    s = s.replace(/\bHWY\b/g, 'HWY');
+    s = s.replace(/\bAVE\b/g, 'AVE');
+    s = s.replace(/\bST\b/g, 'ST');
+
+    // Remove any remaining non-alphanumeric characters (keep spaces)
+    s = s.replace(/[^0-9A-Z ]+/g, ' ');
+
+    // Collapse whitespace
+    s = s.replace(/\s+/g, ' ').trim();
+
+    return s || 'NONE';
+  };
+
+  const normalizeCompositeKeyString = (key) => {
+    if (!key) return null;
+    // Remove trailing -LETTER suffix appended to locations (e.g. -A)
+    let k = String(key).toUpperCase().replace(/-[A-Z]$/,'');
+    // Replace punctuation with spaces and collapse
+    k = k.replace(/[^0-9A-Z ]+/g, ' ');
+    k = k.replace(/\s+/g, ' ').trim();
+    return k;
+  };
+
   const generateCompositeKey = (record, vendor, yearCreated, ccddCode) => {
+    const year = String(yearCreated || '').trim();
+    const ccdd = String(ccddCode || '').trim();
+
     if (vendor === 'BRT') {
-      // BRT format: preserve string values exactly as processors do
       const blockValue = String(record.BLOCK || '').trim();
       const lotValue = String(record.LOT || '').trim();
       const qualifierValue = String(record.QUALIFIER || '').trim() || 'NONE';
       const cardValue = String(record.CARD || '').trim() || 'NONE';
-      const locationValue = String(record.PROPERTY_LOCATION || '').trim() || 'NONE';
-      
-      return `${yearCreated}${ccddCode}-${blockValue}-${lotValue}_${qualifierValue}-${cardValue}-${locationValue}`;
+      const locationRaw = String(record.PROPERTY_LOCATION || '').trim() || 'NONE';
+      const locationValue = locationRaw === 'NONE' ? 'NONE' : normalizeLocationForKey(locationRaw);
+
+      return `${year}${ccdd}-${blockValue}-${lotValue}_${qualifierValue}-${cardValue}-${locationValue}`;
     } else if (vendor === 'Microsystems') {
-      // FIXED: Microsystems format - EXACT MATCH to processor logic
       const blockValue = String(record['Block'] || '').trim();
       const lotValue = String(record['Lot'] || '').trim();
       const qualValue = String(record['Qual'] || '').trim() || 'NONE';
       const bldgValue = String(record['Bldg'] || '').trim() || 'NONE';
-      const locationValue = String(record['Location'] || '').trim() || 'NONE';
-      
-      // This EXACTLY matches the processor: property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawRecord['Location'] || '').trim() || 'NONE'}`
-      return `${yearCreated}${ccddCode}-${blockValue}-${lotValue}_${qualValue}-${bldgValue}-${locationValue}`;
+      const locationRaw = String(record['Location'] || '').trim() || 'NONE';
+      const locationValue = locationRaw === 'NONE' ? 'NONE' : normalizeLocationForKey(locationRaw);
+
+      return `${year}${ccdd}-${blockValue}-${lotValue}_${qualValue}-${bldgValue}-${locationValue}`;
     }
-    
+
     return null;
   };
 
@@ -1530,7 +1569,7 @@ const handleCodeFileUpdate = async () => {
         });
         
         if (salesReverted > 0) {
-          addNotification(`↩️ Reverted ${salesReverted} sales to old values`, 'info');
+          addNotification(`���️ Reverted ${salesReverted} sales to old values`, 'info');
         }
       }
       
@@ -2873,7 +2912,7 @@ const handleCodeFileUpdate = async () => {
       <div className="flex items-center gap-3 text-gray-300">
         <FileText className="w-4 h-4 text-blue-400" />
         <span className="text-sm min-w-0 flex-1">
-          📄 Source: {getFileStatusWithRealVersion(job.updated_at || job.created_at, 'source')}
+          �� Source: {getFileStatusWithRealVersion(job.updated_at || job.created_at, 'source')}
         </span>
         
         <input
