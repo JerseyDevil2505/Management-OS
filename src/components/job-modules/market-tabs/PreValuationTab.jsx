@@ -254,6 +254,7 @@ const PreValuationTab = ({
   const [showImportModal, setShowImportModal] = useState(false);
   const [importPreview, setImportPreview] = useState(null);
   const [importFile, setImportFile] = useState(null);
+  const [importListTab, setImportListTab] = useState(null);
   const [isAnalyzingImport, setIsAnalyzingImport] = useState(false);
   const [importOptions, setImportOptions] = useState({
     updateExisting: true,
@@ -486,7 +487,7 @@ useEffect(() => {
       setVcsOptions([]);
     }
 
-    // Initialize combined mappings from marketLandData (if available) — only if mappings exist to avoid overwriting job-level saved mappings
+    // Initialize combined mappings from marketLandData (if available) ��� only if mappings exist to avoid overwriting job-level saved mappings
     try {
       const existing = marketLandData?.unit_rate_codes_applied;
       const payloadObj = existing && typeof existing === 'string' ? JSON.parse(existing) : (existing || {});
@@ -3484,7 +3485,7 @@ const analyzeImportFile = async (file) => {
                               <div className="font-medium">{getVCSDisplayName(k)}</div>
                               <div className="text-xs text-green-800">Saved</div>
                             </div>
-                            <div className="text-xs text-gray-600 mt-1">Acre: {(combinedMappings[k].acre||[]).join(', ') || '-'} • SF: {(combinedMappings[k].sf||[]).join(', ') || '-'} • Exclude: {(combinedMappings[k].exclude||[]).join(', ') || '-'}</div>
+                            <div className="text-xs text-gray-600 mt-1">Acre: {(combinedMappings[k].acre||[]).join(', ') || '-'} �� SF: {(combinedMappings[k].sf||[]).join(', ') || '-'} • Exclude: {(combinedMappings[k].exclude||[]).join(', ') || '-'}</div>
                           </div>
                         ))}
                       </div>
