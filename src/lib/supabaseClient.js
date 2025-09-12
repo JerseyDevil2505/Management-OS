@@ -2476,8 +2476,10 @@ export async function saveUnitRateMappings(jobId, vcsKey, mappingObj) {
   };
 
   const jobPayload = { unit_rate_codes_applied: payloadObj, unit_rate_last_run: { timestamp: new Date().toISOString() }, updated_at: new Date().toISOString() };
-  const { error: jobUpdateErr } = await supabase.from('jobs').update(jobPayload).eq('id', jobId);
-  if (jobUpdateErr) throw jobUpdateErr;
+  const persistResult = await persistUnitRateRunSummary(jobId, jobPayload);
+  if (!persistResult.updated) {
+    throw persistResult.error || new Error('Failed to persist unit rate mappings summary');
+  }
   return { ok: true };
 }
 
