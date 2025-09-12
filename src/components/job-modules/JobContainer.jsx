@@ -400,7 +400,7 @@ const JobContainer = ({
         setLoadingProgress(100);
 
         if (allProperties.length !== count) {
-          console.warn(`⚠️ Expected ${count} properties but loaded ${allProperties.length}`);
+          console.warn(`��️ Expected ${count} properties but loaded ${allProperties.length}`);
         }
 
       } else {
@@ -727,6 +727,15 @@ const JobContainer = ({
       };
       
       setJobData(enrichedJobData);
+
+      // Debug: log unit-rate mappings that are passed to children
+      try {
+        console.log('🔁 Enriched job mappings:', {
+          unit_rate_config: enrichedJobData.unit_rate_config,
+          staged_unit_rate_config: enrichedJobData.staged_unit_rate_config,
+          unit_rate_codes_applied: enrichedJobData.unit_rate_codes_applied
+        });
+      } catch (e) { console.warn('Failed logging enriched job mappings', e); }
 
       console.log(`✅ Job data loaded: ${allProperties.length} properties`);
       
