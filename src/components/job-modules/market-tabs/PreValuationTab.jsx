@@ -3163,95 +3163,68 @@ const analyzeImportFile = async (file) => {
 
             <p className="text-sm text-gray-600 mb-4">Select unit-rate codes to include when calculating lot acreage. If none selected, all unit rates will be summed.</p>
 
-            <div className="grid grid-cols-3 gap-4">
-              <div className="col-span-2">
-                <div className="border rounded p-2 max-h-64 overflow-auto">
-                  {groupedUnitRateCodes.length === 0 ? (
-                    <div className="text-sm text-gray-500">No unit rate codes found for this job.</div>
-                  ) : (
-                    groupedUnitRateCodes.map(group => {
-                      const allSelected = group.items.every(i => selectedUnitRateCodes.has(i.key));
-                      const someSelected = group.items.some(i => selectedUnitRateCodes.has(i.key));
-                      const desc = group.description;
-
-                      return (
-                        <div key={desc} className="py-1">
-                          <div className="text-sm">
-                            <div className="font-medium">{desc}</div>
-                            <div className="text-xs text-gray-500">{group.items.length} instance{group.items.length > 1 ? 's' : ''} • {group.items.map(i => `${i.vcsLabel || i.vcs}·${i.code}`).join(', ')}</div>
-                            <div className="mt-2 text-xs text-gray-600">{group.items.length} instance{group.items.length > 1 ? 's' : ''}. See "Codes in VCS" box to the right for drag-and-drop.</div>
-                          </div>
+            <div className="grid grid-cols-1 gap-4">
+              {/* Instance window - larger */}
+              <div className="border rounded p-2 max-h-[520px] overflow-auto">
+                {groupedUnitRateCodes.length === 0 ? (
+                  <div className="text-sm text-gray-500">No unit rate codes found for this job.</div>
+                ) : (
+                  groupedUnitRateCodes.map(group => {
+                    const desc = group.description;
+                    return (
+                      <div key={desc} className="py-1">
+                        <div className="text-sm">
+                          <div className="font-medium">{desc}</div>
+                          <div className="text-xs text-gray-500">{group.items.length} instance{group.items.length > 1 ? 's' : ''} • {group.items.map(i => `${i.vcsLabel || i.vcs}·${i.code}`).join(', ')}</div>
+                          <div className="mt-2 text-xs text-gray-600">{group.items.length} instance{group.items.length > 1 ? 's' : ''}. Use the Codes in VCS box to the right to drag into buckets.</div>
                         </div>
-                      );
-                    })
-                  )}
-                </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
-              <div>
-                <div className="bg-gray-50 p-3 rounded">
-                  <p className="text-sm text-gray-700">Summary</p>
-                  <div className="mt-3">
-                    <div className="text-sm">Total Codes: <strong>{unitRateCodes.length}</strong></div>
-                    <div className="text-sm mt-1">Selected: <strong>{selectedUnitRateCodes.size}</strong></div>
-                  </div>
 
-                  <div className="mt-4">
-                    <p className="text-xs text-gray-600">Notes:</p>
-                    <ul className="text-xs text-gray-600 list-disc list-inside mt-2">
-                      <li>Only BRT jobs support unit-rate configuration.</li>
-                      <li>Calculation uses heuristic: values ≥1000 treated as SF, smaller as acres.</li>
-                      <li>Results are saved to property_market_analysis.market_manual_lot_acre and market_manual_lot_sf</li>
-                    </ul>
-                  </div>
-
-                  {/* Mappings status - show saved and staged mappings so user can see what's been prepared */}
-                  <div className="mt-4 border-t pt-4">
-                    <h4 className="text-sm font-medium mb-2">Mappings Status</h4>
-                    <div className="space-y-2 text-sm">
-                      <div>
-                        <div className="font-medium">Saved Mappings</div>
-                        {Object.keys(combinedMappings || {}).length === 0 ? (
-                          <div className="text-xs text-gray-500">No saved mappings</div>
-                        ) : (
-                          <div className="mt-2 space-y-1">
-                            {Object.keys(combinedMappings).map(k => (
-                              <div key={k} className="flex justify-between items-center bg-white border p-2 rounded">
-                                <div>
-                                  <div className="font-medium">{k}</div>
-                                  <div className="text-xs text-gray-500">Acre: {(combinedMappings[k].acre||[]).join(', ') || '-'} • SF: {(combinedMappings[k].sf||[]).join(', ') || '-'} • Exclude: {(combinedMappings[k].exclude||[]).join(', ') || '-'}</div>
-                                </div>
-                                <div className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs">Saved</div>
-                              </div>
-                            ))}
+              {/* Lower area with staged (left), controls (center), saved (right) */}
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <div className="font-medium mb-2">Staged Mappings</div>
+                  <div className="border rounded p-2 h-72 overflow-auto bg-white">
+                    {Object.keys(stagedMappings || {}).length === 0 ? (
+                      <div className="text-xs text-gray-500">No staged mappings</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {Object.keys(stagedMappings).map(k => (
+                          <div key={k} className="border p-2 rounded bg-gray-50">
+                            <div className="flex justify-between items-center">
+                              <div className="font-medium">{k}</div>
+                              <div className="text-xs text-yellow-800">Staged</div>
+                            </div>
+                            <div className="text-xs text-gray-600 mt-1">Acre: {(stagedMappings[k].acre||[]).join(', ') || '-'} • SF: {(stagedMappings[k].sf||[]).join(', ') || '-'} • Exclude: {(stagedMappings[k].exclude||[]).join(', ') || '-'}</div>
                           </div>
-                        )}
+                        ))}
                       </div>
+                    )}
+                  </div>
+                </div>
 
-                      <div className="mt-3">
-                        <div className="font-medium">Staged Mappings (Ready to Save)</div>
-                        {Object.keys(stagedMappings || {}).length === 0 ? (
-                          <div className="text-xs text-gray-500">No staged mappings</div>
-                        ) : (
-                          <div className="mt-2 space-y-1">
-                            {Object.keys(stagedMappings).map(k => (
-                              <div key={k} className="flex justify-between items-center bg-white border p-2 rounded">
-                                <div>
-                                  <div className="font-medium">{k}</div>
-                                  <div className="text-xs text-gray-500">Acre: {(stagedMappings[k].acre||[]).join(', ') || '-'} • SF: {(stagedMappings[k].sf||[]).join(', ') || '-'} • Exclude: {(stagedMappings[k].exclude||[]).join(', ') || '-'}</div>
-                                </div>
-                                <div className="px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded text-xs">Staged</div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                <div>
+                  <div className="bg-gray-50 p-3 rounded">
+                    <p className="text-sm text-gray-700">Summary</p>
+                    <div className="mt-3">
+                      <div className="text-sm">Total Codes: <strong>{unitRateCodes.length}</strong></div>
+                      <div className="text-sm mt-1">Selected: <strong>{selectedUnitRateCodes.size}</strong></div>
                     </div>
-                  </div>
 
-                  {/* Unit Rate Mappings Editor */}
-                  <div className="mt-4 border-t pt-4">
-                    <h4 className="text-sm font-medium mb-2">Unit Rate Mappings (per VCS)</h4>
-                    <div className="grid grid-cols-1 gap-2">
+                    <div className="mt-4">
+                      <p className="text-xs text-gray-600">Notes:</p>
+                      <ul className="text-xs text-gray-600 list-disc list-inside mt-2">
+                        <li>Only BRT jobs support unit-rate configuration.</li>
+                        <li>Calculation uses heuristic: values ≥1000 treated as SF, smaller as acres.</li>
+                        <li>Results are saved to property_market_analysis.market_manual_lot_acre and market_manual_lot_sf</li>
+                      </ul>
+                    </div>
+
+                    <div className="mt-4 border-t pt-4">
                       <label className="text-xs">VCS</label>
                       <select value={mappingVcsKey} onChange={e => setMappingVcsKey(e.target.value)} className="w-full px-3 py-2 border rounded">
                         <option value="">— Select VCS —</option>
@@ -3260,7 +3233,7 @@ const analyzeImportFile = async (file) => {
                         ))}
                       </select>
 
-                      {/* VCS-specific codes box: shows currently available codes for the selected VCS to drag from */}
+                      {/* Codes box + drag targets */}
                       {mappingVcsKey ? (
                         <div className="mt-2 p-2 border rounded bg-white">
                           <div className="flex justify-between items-center">
@@ -3280,53 +3253,72 @@ const analyzeImportFile = async (file) => {
                                 <div className="text-xs text-gray-500 truncate max-w-xs">{u.description}</div>
                               </div>
                             ))}
-                            {(availableCodesByVcs[mappingVcsKey] || []).length === 0 && (
-                              <div className="text-xs text-gray-500">No codes available for this VCS.</div>
-                            )}
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2 mt-3">
+                            <div>
+                              <label className="text-xs">Acre</label>
+                              <div onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault(); try{const d=JSON.parse(e.dataTransfer.getData('text/plain')); addCodeToZone(d.code,'acre')}catch{} }} className="min-h-16 p-2 border rounded bg-white">
+                                {mappingAcre.length === 0 ? <div className="text-xs text-gray-400">Drop codes here</div> : mappingAcre.map(c => (
+                                  <div key={c} className="inline-block mr-2 mb-2 px-2 py-1 bg-green-50 border border-green-200 rounded text-xs">
+                                    {c} <button onClick={() => removeCodeFromZone(c,'acre')} className="ml-1 text-red-500">×</button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-xs">SF</label>
+                              <div onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault(); try{const d=JSON.parse(e.dataTransfer.getData('text/plain')); addCodeToZone(d.code,'sf')}catch{} }} className="min-h-16 p-2 border rounded bg-white">
+                                {mappingSf.length === 0 ? <div className="text-xs text-gray-400">Drop codes here</div> : mappingSf.map(c => (
+                                  <div key={c} className="inline-block mr-2 mb-2 px-2 py-1 bg-blue-50 border border-blue-200 rounded text-xs">
+                                    {c} <button onClick={() => removeCodeFromZone(c,'sf')} className="ml-1 text-red-500">×</button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-xs">Exclude</label>
+                              <div onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault(); try{const d=JSON.parse(e.dataTransfer.getData('text/plain')); addCodeToZone(d.code,'exclude')}catch{} }} className="min-h-16 p-2 border rounded bg-white">
+                                {mappingExclude.length === 0 ? <div className="text-xs text-gray-400">Drop codes here</div> : mappingExclude.map(c => (
+                                  <div key={c} className="inline-block mr-2 mb-2 px-2 py-1 bg-gray-50 border border-gray-200 rounded text-xs">
+                                    {c} <button onClick={() => removeCodeFromZone(c,'exclude')} className="ml-1 text-red-500">×</button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2 mt-3">
+                            <button onClick={stageMapping} disabled={!mappingVcsKey} className="px-3 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600">Ready to Save</button>
+                            <div className="text-xs text-gray-500">Drag codes from the list above into the desired bucket, then click "Ready to Save" to stage into the left panel.</div>
                           </div>
                         </div>
                       ) : null}
-
-                      <div className="grid grid-cols-3 gap-2">
-                        <div>
-                          <label className="text-xs">Acre</label>
-                          <div onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault(); try{const d=JSON.parse(e.dataTransfer.getData('text/plain')); addCodeToZone(d.code,'acre')}catch{} }} className="min-h-16 p-2 border rounded bg-white">
-                            {mappingAcre.length === 0 ? <div className="text-xs text-gray-400">Drop codes here</div> : mappingAcre.map(c => (
-                              <div key={c} className="inline-block mr-2 mb-2 px-2 py-1 bg-green-50 border border-green-200 rounded text-xs">
-                                {c} <button onClick={() => removeCodeFromZone(c,'acre')} className="ml-1 text-red-500">×</button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                        <div>
-                          <label className="text-xs">SF</label>
-                          <div onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault(); try{const d=JSON.parse(e.dataTransfer.getData('text/plain')); addCodeToZone(d.code,'sf')}catch{} }} className="min-h-16 p-2 border rounded bg-white">
-                            {mappingSf.length === 0 ? <div className="text-xs text-gray-400">Drop codes here</div> : mappingSf.map(c => (
-                              <div key={c} className="inline-block mr-2 mb-2 px-2 py-1 bg-blue-50 border border-blue-200 rounded text-xs">
-                                {c} <button onClick={() => removeCodeFromZone(c,'sf')} className="ml-1 text-red-500">×</button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                        <div>
-                          <label className="text-xs">Exclude</label>
-                          <div onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault(); try{const d=JSON.parse(e.dataTransfer.getData('text/plain')); addCodeToZone(d.code,'exclude')}catch{} }} className="min-h-16 p-2 border rounded bg-white">
-                            {mappingExclude.length === 0 ? <div className="text-xs text-gray-400">Drop codes here</div> : mappingExclude.map(c => (
-                              <div key={c} className="inline-block mr-2 mb-2 px-2 py-1 bg-gray-50 border border-gray-200 rounded text-xs">
-                                {c} <button onClick={() => removeCodeFromZone(c,'exclude')} className="ml-1 text-red-500">×</button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button onClick={stageMapping} disabled={!mappingVcsKey} className="px-3 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600">Ready to Save</button>
-                        <div className="text-xs text-gray-500">Drag codes from the list on the left into the desired bucket, then click "Ready to Save" to stage into the summary below.</div>
-                      </div>
                     </div>
                   </div>
                 </div>
+
+                <div>
+                  <div className="font-medium mb-2">Saved Mappings</div>
+                  <div className="border rounded p-2 h-72 overflow-auto bg-white">
+                    {Object.keys(combinedMappings || {}).length === 0 ? (
+                      <div className="text-xs text-gray-500">No saved mappings</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {Object.keys(combinedMappings).map(k => (
+                          <div key={k} className="border p-2 rounded bg-gray-50">
+                            <div className="flex justify-between items-center">
+                              <div className="font-medium">{k}</div>
+                              <div className="text-xs text-green-800">Saved</div>
+                            </div>
+                            <div className="text-xs text-gray-600 mt-1">Acre: {(combinedMappings[k].acre||[]).join(', ') || '-'} • SF: {(combinedMappings[k].sf||[]).join(', ') || '-'} • Exclude: {(combinedMappings[k].exclude||[]).join(', ') || '-'}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
               </div>
             </div>
           </div>
@@ -3447,7 +3439,7 @@ const analyzeImportFile = async (file) => {
             
             <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
               <strong>Color Scale:</strong> 
-              <br/>• First color: $0 - ${(colorScaleIncrement - 1).toLocaleString()}
+              <br/>��� First color: $0 - ${(colorScaleIncrement - 1).toLocaleString()}
               <br/>• Second color: ${colorScaleIncrement.toLocaleString()} - ${((colorScaleIncrement * 2) - 1).toLocaleString()}
               <br/>��� Third color: ${(colorScaleIncrement * 2).toLocaleString()} - ${((colorScaleIncrement * 3) - 1).toLocaleString()}
               <br/>• And so on... Total of {marketAnalysisData.length} blocks analyzed.
