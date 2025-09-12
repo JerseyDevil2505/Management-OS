@@ -2193,16 +2193,33 @@ export async function generateLotSizesForJob(jobId) {
   }
 
   if (!mappings) {
-    // Diagnostic logging to help debug why no mappings were detected
+    // Diagnostic logging to help debug why no mappings were detected — stringify safely with previews
     try {
-      console.error('generateLotSizesForJob: NO MAPPINGS FOUND', {
+      const safeStringify = (obj, max = 1000) => {
+        try {
+          const s = JSON.stringify(obj, Object.keys(obj || {}).length > 200 ? Object.keys(obj).slice(0,50) : null, 2);
+          return s.length > max ? s.slice(0, max) + '... (truncated)' : s;
+        } catch (e) {
+          try { return String(obj).slice(0, max); } catch (e2) { return '[unstringifiable]'; }
+        }
+      };
+
+      const parsedUrcPreview = jobRowGlobal ? (() => { try { return deepParse(jobRowGlobal.unit_rate_config); } catch(e){ return jobRowGlobal.unit_rate_config; } })() : null;
+      const parsedStagedPreview = jobRowGlobal ? (() => { try { return deepParse(jobRowGlobal.staged_unit_rate_config); } catch(e){ return jobRowGlobal.staged_unit_rate_config; } })() : null;
+
+      const info = {
         jobId,
-        jobRow: jobRowGlobal,
-        codeOnlySelected,
-        marketRow: marketRowGlobal,
+        codeOnlySelectedPreview: Array.isArray(codeOnlySelected) ? (codeOnlySelected.length > 20 ? codeOnlySelected.slice(0,20) : codeOnlySelected) : codeOnlySelected,
+        unit_rate_config_type: jobRowGlobal ? typeof jobRowGlobal.unit_rate_config : null,
+        unit_rate_config_preview: parsedUrcPreview && typeof parsedUrcPreview !== 'string' ? (Array.isArray(parsedUrcPreview) ? parsedUrcPreview.slice(0,20) : Object.keys(parsedUrcPreview).slice(0,20)) : parsedUrcPreview,
+        staged_unit_rate_config_type: jobRowGlobal ? typeof jobRowGlobal.staged_unit_rate_config : null,
+        staged_unit_rate_config_preview: parsedStagedPreview && typeof parsedStagedPreview !== 'string' ? (Array.isArray(parsedStagedPreview) ? parsedStagedPreview.slice(0,20) : Object.keys(parsedStagedPreview).slice(0,20)) : parsedStagedPreview,
+        marketRow_preview: marketRowGlobal ? (marketRowGlobal.unit_rate_codes_applied ? (typeof marketRowGlobal.unit_rate_codes_applied === 'string' ? marketRowGlobal.unit_rate_codes_applied.slice(0,500) : Object.keys(marketRowGlobal.unit_rate_codes_applied).slice(0,20)) : null) : null,
         mappingsDetected: mappings
-      });
-    } catch (e) { console.error('generateLotSizesForJob: failed to log debug info', e); }
+      };
+
+      console.error('generateLotSizesForJob: NO MAPPINGS FOUND - diagnostic preview:\n' + safeStringify(info, 2000));
+    } catch (e) { console.error('generateLotSizesForJob: failed to produce diagnostic preview', e); }
     throw new Error('No mappings found for job; please configure mappings (staged_unit_rate_config or unit_rate_codes_applied or unit_rate_config)');
   }
 
