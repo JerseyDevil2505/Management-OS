@@ -72,6 +72,9 @@ const PreValuationTab = ({
   const [lastTimeNormalizationRun, setLastTimeNormalizationRun] = useState(null);
   const [lastSizeNormalizationRun, setLastSizeNormalizationRun] = useState(null);
 
+  // Control to pause parent refreshes while user is actively editing
+  const [pauseAutoRefresh, setPauseAutoRefresh] = useState(false);
+
   // Import diagnostic state (paste CSV to diagnose unmatched vs exact keys)
   const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
   const [diagnosticCsvText, setDiagnosticCsvText] = useState('');
