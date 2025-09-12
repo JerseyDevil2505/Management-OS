@@ -625,7 +625,7 @@ useEffect(() => {
   // Always restore everything when we have marketLandData
   if (marketLandData.normalization_config) {
     const config = marketLandData.normalization_config;
-    if (false) console.log('📋 Found normalization config:', config);
+    if (false) console.log('���� Found normalization config:', config);
 
     // Set configuration values with explicit logging
     const eqRatio = config.equalizationRatio || '';
@@ -4392,10 +4392,11 @@ const analyzeImportFile = async (file) => {
                   // Then update UI with progress tracking
                    let processedCount = 0;
                    const updatedProps = worksheetProperties.map(prop => {
-                     const match = allUpdates.find(m => 
-                       m.currentData.id === prop.id  // Use ID for matching
-                     );
-                     if (match) {
+                    // Match by composite key (ID may not be reliably populated in import preview)
+                    const match = allUpdates.find(m =>
+                      m.currentData && m.currentData.property_composite_key === prop.property_composite_key
+                    );
+                    if (match) {
                        processedCount++;
                        // Update progress every 10 items or on last item
                        if (processedCount % 10 === 0 || processedCount === allUpdates.length) {
