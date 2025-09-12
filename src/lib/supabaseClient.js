@@ -2114,7 +2114,7 @@ export async function generateLotSizesForJob(jobId) {
   };
 
   try {
-    const { data: jobRow, error: jobErr } = await supabase.from('jobs').select('unit_rate_codes_applied,staged_unit_rate_config,unit_rate_config').eq('id', jobId).single();
+    const { data: jobRow, error: jobErr } = await supabase.from('jobs').select('staged_unit_rate_config,unit_rate_config').eq('id', jobId).single();
     jobRowGlobal = jobRow || null;
     console.log('generateLotSizesForJob: fetched jobRow, error:', jobErr);
     try { console.log('generateLotSizesForJob: jobRow sample:', jobRowGlobal ? (Object.keys(jobRowGlobal).slice(0,10)) : jobRowGlobal); } catch(e) { /* ignore */ }
@@ -2169,11 +2169,7 @@ export async function generateLotSizesForJob(jobId) {
         }
       }
 
-      // 3) Legacy: fall back to unit_rate_codes_applied.mappings only if still no mappings
-      if (!mappings && jobRow.unit_rate_codes_applied) {
-        const ura = deepParse(jobRow.unit_rate_codes_applied);
-        if (ura && typeof ura === 'object') mappings = ura.mappings || null;
-      }
+      // 3) Legacy: (ignored) - prefer unit_rate_config and staged_unit_rate_config only
     }
   } catch (e) {
     // ignore and try fallback
@@ -2464,17 +2460,12 @@ export async function generateLotSizesForJob(jobId) {
 
   // Persist applied per-property codes into the jobs row (store under unit_rate_codes_applied.per_property)
   try {
-    const { data: jobRow } = await supabase.from('jobs').select('unit_rate_codes_applied').eq('id', jobId).single();
-    let applied = {};
-    if (jobRow && jobRow.unit_rate_codes_applied) {
-      applied = typeof jobRow.unit_rate_codes_applied === 'string' ? JSON.parse(jobRow.unit_rate_codes_applied) : jobRow.unit_rate_codes_applied;
-    }
-    applied.per_property = applied.per_property || {};
-    Object.assign(applied.per_property, appliedCodesMap);
+    // Persist applied codes for this run; do not read legacy unit_rate_codes_applied - overwrite per_property with current run
+    const applied = { per_property: appliedCodesMap };
 
     const jobPayload = { unit_rate_codes_applied: applied, unit_rate_last_run: { timestamp: new Date().toISOString(), updated_count: updates.length }, updated_at: new Date().toISOString() };
-  const persistResult = await persistUnitRateRunSummary(jobId, jobPayload);
-  if (!persistResult.updated) console.warn('Failed to persist appliedCodesMap to jobs table:', persistResult.error);
+    const persistResult = await persistUnitRateRunSummary(jobId, jobPayload);
+    if (!persistResult.updated) console.warn('Failed to persist appliedCodesMap to jobs table:', persistResult.error);
   } catch (e) {
     console.warn('Error persisting appliedCodesMap to jobs table:', e);
   }
