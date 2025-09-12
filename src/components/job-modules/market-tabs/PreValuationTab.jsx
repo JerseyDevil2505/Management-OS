@@ -487,7 +487,7 @@ useEffect(() => {
       setVcsOptions([]);
     }
 
-    // Initialize combined mappings from marketLandData (if available) ��� only if mappings exist to avoid overwriting job-level saved mappings
+    // Initialize combined mappings from marketLandData (if available) — only if mappings exist to avoid overwriting job-level saved mappings
     try {
       const existing = marketLandData?.unit_rate_codes_applied;
       const payloadObj = existing && typeof existing === 'string' ? JSON.parse(existing) : (existing || {});
@@ -3485,7 +3485,7 @@ const analyzeImportFile = async (file) => {
                               <div className="font-medium">{getVCSDisplayName(k)}</div>
                               <div className="text-xs text-green-800">Saved</div>
                             </div>
-                            <div className="text-xs text-gray-600 mt-1">Acre: {(combinedMappings[k].acre||[]).join(', ') || '-'} �� SF: {(combinedMappings[k].sf||[]).join(', ') || '-'} • Exclude: {(combinedMappings[k].exclude||[]).join(', ') || '-'}</div>
+                            <div className="text-xs text-gray-600 mt-1">Acre: {(combinedMappings[k].acre||[]).join(', ') || '-'} • SF: {(combinedMappings[k].sf||[]).join(', ') || '-'} • Exclude: {(combinedMappings[k].exclude||[]).join(', ') || '-'}</div>
                           </div>
                         ))}
                       </div>
@@ -4384,30 +4384,76 @@ const analyzeImportFile = async (file) => {
            </div>
 
            {/* Standardization Suggestions */}
-           {Object.keys(standardizations.locations).length > 0 && (
-             <div className="mb-4">
-               <h4 className="font-medium mb-2">Location Standardizations</h4>
-               <div className="space-y-2 max-h-32 overflow-y-auto border rounded p-2 bg-gray-50">
-                 {Object.entries(standardizations.locations).map(([original, standard], idx) => (
-                   <div key={idx} className="flex items-center gap-2 text-sm">
-                     <span className="px-2 py-1 bg-white rounded border">{original}</span>
-                     <span>→</span>
-                     <input
-                       type="text"
-                       value={standard}
-                       onChange={(e) => setStandardizations(prev => ({
-                         ...prev,
-                         locations: { ...prev.locations, [original]: e.target.value }
-                       }))}
-                       className="px-2 py-1 border rounded"
-                     />
-                   </div>
-                 ))}
-               </div>
-             </div>
-           )}
+          {Object.keys(standardizations.locations).length > 0 && (
+            <div className="mb-4">
+              <h4 className="font-medium mb-2">Location Standardizations</h4>
+              <div className="space-y-2 max-h-32 overflow-y-auto border rounded p-2 bg-gray-50">
+                {Object.entries(standardizations.locations).map(([original, standard], idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-sm">
+                    <span className="px-2 py-1 bg-white rounded border">{original}</span>
+                    <span>→</span>
+                    <input
+                      type="text"
+                      value={standard}
+                      onChange={(e) => setStandardizations(prev => ({
+                        ...prev,
+                        locations: { ...prev.locations, [original]: e.target.value }
+                      }))}
+                      className="px-2 py-1 border rounded"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-           <div className="flex justify-end gap-3 mt-6">
+          {/* View lists for matched / fuzzy / unmatched */}
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <button className={`px-3 py-1 rounded ${importListTab === 'matched' ? 'bg-green-600 text-white' : 'bg-green-50 text-green-700 border border-green-200'}`} onClick={() => setImportListTab(importListTab === 'matched' ? null : 'matched')}>View Exact ({importPreview.matched?.length || 0})</button>
+              <button className={`px-3 py-1 rounded ${importListTab === 'fuzzy' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 border border-blue-200'}`} onClick={() => setImportListTab(importListTab === 'fuzzy' ? null : 'fuzzy')}>View Fuzzy ({importPreview.fuzzyMatched?.length || 0})</button>
+              <button className={`px-3 py-1 rounded ${importListTab === 'unmatched' ? 'bg-orange-600 text-white' : 'bg-orange-50 text-orange-700 border border-orange-200'}`} onClick={() => setImportListTab(importListTab === 'unmatched' ? null : 'unmatched')}>View Unmatched ({importPreview.unmatched?.length || 0})</button>
+            </div>
+
+            {importListTab && (
+              <div className="max-h-64 overflow-y-auto border rounded p-2 bg-gray-50 text-sm">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr>
+                      <th className="py-1">Composite Key</th>
+                      <th className="py-1">Excel Location</th>
+                      <th className="py-1">Worksheet Address</th>
+                      <th className="py-1">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(importListTab === 'matched' ? importPreview.matched : importListTab === 'fuzzy' ? importPreview.fuzzyMatched : importPreview.unmatched || []).slice(0,200).map((item, idx) => (
+                      <tr key={idx} className="border-t">
+                        <td className="py-1">{item.compositeKey}</td>
+                        <td className="py-1">{(item.excelData && (item.excelData.Location || item.excelData.PROPERTY_LOCATION || item.excelData['Property Location'] || item.excelData.Address)) || ''}</td>
+                        <td className="py-1">{item.currentData?.property_location || ''}</td>
+                        <td className="py-1"><button className="px-2 py-1 bg-blue-600 text-white rounded text-xs" onClick={() => {
+                          // Focus worksheet list on this property
+                          if (item.currentData && item.currentData.property_composite_key) {
+                            setWorksheetSearchTerm(item.currentData.property_composite_key);
+                            setWorksheetFilter('all');
+                          } else if (item.compositeKey) {
+                            setWorksheetSearchTerm(item.compositeKey);
+                          }
+                          setShowImportModal(false);
+                        }}>Jump to</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {((importListTab === 'matched' ? importPreview.matched : importListTab === 'fuzzy' ? importPreview.fuzzyMatched : importPreview.unmatched || []).length > 200) && (
+                  <div className="text-xs text-gray-500 mt-2">Showing first 200 items</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-3 mt-6">
              <button
                onClick={() => {
                  setShowImportModal(false);
