@@ -1629,11 +1629,7 @@ const generateQCFormPDF = () => {
         if (error) throw error;
       }
 
-      //Clear cache after saving quality results
-      if (onUpdateJobCache && jobData?.id) {
-        console.log('🗑️ Clearing cache after saving quality check results');
-        onUpdateJobCache(jobData.id, null);
-      }
+      // Cache refresh removed to avoid disrupting active analysis
 
       setRunHistory(updatedHistory);
 
@@ -2339,9 +2335,6 @@ const editCustomCheck = (check) => {
                           updated_at: new Date().toISOString()
                         })
                         .eq('job_id', jobData.id);
-                      if (onUpdateJobCache && jobData?.id) {
-                        onUpdateJobCache(jobData.id, null);
-                      }
                       // Recompute displayed results after clearing ignored
                       applyAndSetResults(rawResults || {} , emptySet);
                     } catch (error) {
@@ -2896,11 +2889,6 @@ const editCustomCheck = (check) => {
                                   })
                                   .eq('job_id', jobData.id);
 
-                                // Clear cache after update
-                                if (onUpdateJobCache && jobData?.id) {
-                                  onUpdateJobCache(jobData.id, null);
-                                }
-
                                 // Update displayed results/stats after toggling ignored
                                 applyAndSetResults(checkResults, newIgnored);
                               } catch (error) {
@@ -2956,7 +2944,6 @@ const editCustomCheck = (check) => {
                 const persistedStatus = updated?.status || newStatus;
                 setIsDataQualityComplete(persistedStatus === 'completed');
                 try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'data-quality-analysis', status: persistedStatus } })); } catch(e){}
-                try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
               } catch (error) {
                 console.error('Data Quality checklist update failed:', error);
                 alert('Failed to update checklist. Please try again.');
