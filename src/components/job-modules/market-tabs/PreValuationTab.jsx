@@ -4228,28 +4228,32 @@ const analyzeImportFile = async (file) => {
                         />
                       </td>
                       <td className="px-2 py-1 text-center bg-gray-50">
-                        <button
-                          onClick={() => {
-                            const key = prop.property_composite_key;
-                            const newReadyProperties = new Set(readyProperties);
-                            if (newReadyProperties.has(key)) newReadyProperties.delete(key);
-                            else newReadyProperties.add(key);
-                            setReadyProperties(newReadyProperties);
+                        <label className="inline-flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={readyProperties.has(prop.property_composite_key)}
+                            onChange={() => {
+                              const key = prop.property_composite_key;
+                              const newReadyProperties = new Set(readyProperties);
+                              if (newReadyProperties.has(key)) newReadyProperties.delete(key);
+                              else newReadyProperties.add(key);
+                              setReadyProperties(newReadyProperties);
 
-                            // Update stats with the new ready count
-                            const stats = {
-                              totalProperties: worksheetProperties.length,
-                              vcsAssigned: worksheetProperties.filter(p => p.new_vcs).length,
-                              zoningEntered: worksheetProperties.filter(p => p.asset_zoning).length,
-                              locationAnalysis: worksheetProperties.filter(p => p.location_analysis).length,
-                              readyToProcess: newReadyProperties.size
-                            };
-                            setWorksheetStats(stats);
-                          }}
-                          className={`px-2 py-1 rounded text-xs font-medium ${readyProperties.has(prop.property_composite_key) ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}`}
-                        >
-                          {readyProperties.has(prop.property_composite_key) ? 'Ready' : 'Mark'}
-                        </button>
+                              // Update stats with the new ready count
+                              const stats = {
+                                totalProperties: worksheetProperties.length,
+                                vcsAssigned: worksheetProperties.filter(p => p.new_vcs).length,
+                                zoningEntered: worksheetProperties.filter(p => p.asset_zoning).length,
+                                locationAnalysis: worksheetProperties.filter(p => p.location_analysis).length,
+                                readyToProcess: newReadyProperties.size
+                              };
+                              setWorksheetStats(stats);
+                            }}
+                          />
+                          <span className="text-xs font-medium">
+                            {readyProperties.has(prop.property_composite_key) ? 'Ready' : 'Mark'}
+                          </span>
+                        </label>
                       </td>
                     </tr>
                   ))}
@@ -4298,32 +4302,33 @@ const analyzeImportFile = async (file) => {
                {/* Mapping and Generate Lot Sizes removed per request */}
               <div style={{width:0,height:0}} aria-hidden="true" />
 
-               <label className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded">
-                <input
-                  type="checkbox"
-                  checked={!!preValChecklist.page_by_page}
-                  onChange={async (e) => {
-                    if (!jobData?.id) return;
-                    setIsProcessingPageByPage(true);
-                    const newStatus = e.target.checked ? 'completed' : 'pending';
-                    try {
-                      const { data: { user } } = await supabase.auth.getUser();
-                      const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
-                      const updated = await checklistService.updateItemStatus(jobData.id, 'page-by-page', newStatus, completedBy);
-                      const persistedStatus = updated?.status || newStatus;
-                      setPreValChecklist(prev => ({ ...prev, page_by_page: persistedStatus === 'completed' }));
-                      try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'page-by-page', status: persistedStatus } })); } catch(e){}
-                      // Do not force a refresh; respect user's pauseAutoRefresh
-                    } catch (error) {
-                      console.error('Page by Page checklist update failed:', error);
-                      alert('Failed to update checklist. Please try again.');
-                    } finally {
-                      setIsProcessingPageByPage(false);
-                    }
-                  }}
-                />
-                <span className="text-sm font-medium">Page-by-Page Worksheet Complete</span>
-              </label>
+               <button
+                onClick={async () => {
+                  if (!jobData?.id) return;
+                  setIsProcessingPageByPage(true);
+                  const newStatus = preValChecklist.page_by_page ? 'pending' : 'completed';
+                  try {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
+                    const updated = await checklistService.updateItemStatus(jobData.id, 'page-by-page', newStatus, completedBy);
+                    const persistedStatus = updated?.status || newStatus;
+                    setPreValChecklist(prev => ({ ...prev, page_by_page: persistedStatus === 'completed' }));
+                    try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'page-by-page', status: persistedStatus } })); } catch(e){}
+                    try { if (typeof onUpdateJobCache === 'function') callRefresh(null); } catch(e){}
+                  } catch (error) {
+                    console.error('Page by Page checklist update failed:', error);
+                    alert('Failed to update checklist. Please try again.');
+                  } finally {
+                    setIsProcessingPageByPage(false);
+                  }
+                }}
+                disabled={isProcessingPageByPage}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-medium"
+                style={{ backgroundColor: preValChecklist.page_by_page ? '#10B981' : '#E5E7EB', color: preValChecklist.page_by_page ? 'white' : '#374151' }}
+                title={preValChecklist.page_by_page ? 'Click to reopen' : 'Mark Page by Page Worksheet complete'}
+              >
+                {isProcessingPageByPage ? 'Processing...' : (preValChecklist.page_by_page ? '✓ Mark Complete' : 'Mark Complete')}
+              </button>
              </div>
            </div>
          </div>
