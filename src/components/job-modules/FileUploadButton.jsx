@@ -319,7 +319,7 @@ const handleCodeFileUpdate = async () => {
     const currentCodeVersion = job.code_file_version || 1;
     const newCodeVersion = currentCodeVersion + 1;
 
-    console.log(`��� Code Update - Current version: ${currentCodeVersion}, New version: ${newCodeVersion}`);
+    console.log(`🔧 Code Update - Current version: ${currentCodeVersion}, New version: ${newCodeVersion}`);
 
     const updateResult = await jobService.update(job.id, {
       code_file_version: newCodeVersion,
@@ -966,6 +966,7 @@ const handleCodeFileUpdate = async () => {
       const results = {
         summary: {
           missing: missing.length,
+          fuzzyMatches: typeof fuzzyMatches !== 'undefined' ? fuzzyMatches.length : 0,
           changes: changes.length,
           deletions: deletions.length,
           salesChanges: salesChanges.length,
@@ -973,6 +974,7 @@ const handleCodeFileUpdate = async () => {
         },
         details: {
           missing,
+          fuzzyMatches: typeof fuzzyMatches !== 'undefined' ? fuzzyMatches : [],
           changes,
           deletions,
           salesChanges,
@@ -1736,7 +1738,7 @@ const handleCodeFileUpdate = async () => {
       
       // Use vendor type from job data
       if (job.vendor_type) {
-        addNotification(`✅ Detected ${job.vendor_type} code file`, 'success');
+        addNotification(`��� Detected ${job.vendor_type} code file`, 'success');
       }
     } catch (error) {
       console.error('Error reading code file:', error);
