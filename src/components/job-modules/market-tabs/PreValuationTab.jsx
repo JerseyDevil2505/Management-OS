@@ -75,6 +75,13 @@ const PreValuationTab = ({
   // Control to pause parent refreshes while user is actively editing
   const [pauseAutoRefresh, setPauseAutoRefresh] = useState(false);
 
+  const callRefresh = (opts = null) => {
+    if (pauseAutoRefresh) return;
+    if (typeof onUpdateJobCache === 'function' && jobData?.id) {
+      try { onUpdateJobCache(jobData.id, opts); } catch (e) { console.warn('callRefresh failed:', e); }
+    }
+  };
+
   // Import diagnostic state (paste CSV to diagnose unmatched vs exact keys)
   const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
   const [diagnosticCsvText, setDiagnosticCsvText] = useState('');
