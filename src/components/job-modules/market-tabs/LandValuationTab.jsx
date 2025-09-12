@@ -1504,8 +1504,10 @@ const getPricePerUnit = useCallback((price, size) => {
     // Must be in date range and have valid sale
     results = results.filter(p => {
       const hasValidSale = p.sales_date && p.sales_price && p.sales_price > 0;
-      const inDateRange = p.sales_date >= dateRange.start.toISOString().split('T')[0] &&
-                          p.sales_date <= dateRange.end.toISOString().split('T')[0];
+      const saleDateObj = p.sales_date ? new Date(p.sales_date) : null;
+      const startDate = safeDateObj(dateRange.start) || new Date(0);
+      const endDate = safeDateObj(dateRange.end) || new Date(8640000000000000);
+      const inDateRange = saleDateObj instanceof Date && !isNaN(saleDateObj.getTime()) && saleDateObj >= startDate && saleDateObj <= endDate;
       return hasValidSale && inDateRange;
     });
 
@@ -3920,7 +3922,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
     debug('🔄 Recalculating category analysis');
-    debug('����� Total vacant sales:', vacantSales.length);
+    debug('���� Total vacant sales:', vacantSales.length);
     debug('📊 Checked sales count:', checkedSales.length);
     debug('📋 Included sales IDs:', Array.from(includedSales));
     debug('📋 Sale categories state:', saleCategories);
