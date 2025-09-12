@@ -339,7 +339,7 @@ const handleCodeFileUpdate = async () => {
     if (onDataRefresh) {
       console.log(`���� Code Update - Calling onDataRefresh to update job data`);
       console.log(`🔧 Code Update - BEFORE refresh - job.code_file_uploaded_at: ${job.code_file_uploaded_at}`);
-      console.log(`�� Code Update - BEFORE refresh - job.code_file_version: ${job.code_file_version}`);
+      console.log(`🔧 Code Update - BEFORE refresh - job.code_file_version: ${job.code_file_version}`);
 
       await onDataRefresh();
 
@@ -693,8 +693,14 @@ const handleCodeFileUpdate = async () => {
         const lotField = job.vendor_type === 'BRT' ? 'LOT' : 'Lot';
         const qualifierField = job.vendor_type === 'BRT' ? 'QUALIFIER' : 'Qual';
         const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
-        
-        csvContent += `"${reportDate}","Property_Added","${record[blockField]}","${record[lotField]}","${record[qualifierField] || ''}","${record[locationField] || ''}","Property_Not_Existed","Property_Added","pending_review","",""\n`;
+
+        // Build composite key using same generator to ensure normalization matches processors
+        const year = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
+        const ccddCode = job.ccdd_code || '';
+        const compositeKey = generateCompositeKey(record, job.vendor_type, year, ccddCode) || '';
+        const locationVal = String(record[locationField] || '') || '';
+
+        csvContent += `"${reportDate}","${compositeKey}","Property_Added","${record[blockField]}","${record[lotField]}","${record[qualifierField] || ''}","${locationVal}","Property_Not_Existed","Property_Added","pending_review","",""\n`;
       });
     }
 
