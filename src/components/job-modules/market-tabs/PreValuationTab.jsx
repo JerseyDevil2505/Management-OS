@@ -2060,7 +2060,20 @@ const analyzeImportFile = async (file) => {
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
-      
+
+      // Clean up column names (trim whitespace on header names)
+      const cleanedData = jsonData.map(row => {
+        const cleanRow = {};
+        Object.keys(row).forEach(key => {
+          const cleanKey = key && typeof key === 'string' ? key.trim() : key;
+          cleanRow[cleanKey] = row[key];
+        });
+        return cleanRow;
+      });
+
+      // Use cleanedData for analysis
+      const dataForAnalysis = cleanedData;
+
       // Analysis results
       const analysis = {
         fileName: file.name,
