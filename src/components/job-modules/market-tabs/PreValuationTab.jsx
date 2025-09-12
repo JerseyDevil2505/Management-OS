@@ -2031,10 +2031,16 @@ const processSelectedProperties = async () => {
   // ==================== IMPORT/EXPORT FUNCTIONS ====================
   
   const exportWorksheetToExcel = () => {
-    let csv = 'Block,Lot,Qualifier,Card,Location,Address,Class,Current VCS,Building,Type/Use,Design,New VCS,Location Analysis,Zoning,Map Page,Key Page,Notes,Ready\n';
-    
+    // Export using the canonical property_location (address) and explicit Location Analysis field.
+    let csv = 'Block,Lot,Qualifier,Card,Property_Location,Address,Class,Current VCS,Building,Type/Use,Design,New VCS,Location Analysis,Zoning,Map Page,Key Page,Notes,Ready\n';
+
+    // Debug sample: log first 10 property_location values to help detect truncation
+    try {
+      (filteredWorksheetProps || []).slice(0,10).forEach(p => console.log('EXPORT SAMPLE:', p.property_composite_key, '->', p.property_location));
+    } catch (e) {}
+
     filteredWorksheetProps.forEach(prop => {
-      csv += `"${prop.block}","${prop.lot}","${prop.qualifier || ''}","${prop.card || ''}","${prop.location || ''}",`;
+      csv += `"${prop.block}","${prop.lot}","${prop.qualifier || ''}","${prop.card || ''}","${prop.property_location || ''}",`;
       csv += `"${prop.property_location}","${prop.property_class}","${prop.property_vcs}",`;
       csv += `"${prop.building_class_display}","${prop.type_use_display}","${prop.design_display}",`;
       csv += `"${prop.new_vcs}","${prop.location_analysis}","${prop.asset_zoning}",`;
