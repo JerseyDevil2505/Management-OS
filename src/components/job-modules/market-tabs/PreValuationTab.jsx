@@ -711,8 +711,32 @@ useEffect(() => {
 
       // Persist to the jobs row only (do NOT use market_land_valuation for this flow)
       const updatePayload = { unit_rate_config: payload, staged_unit_rate_config: staged };
-      const { error } = await supabase.from('jobs').update(updatePayload).eq('id', jobData.id);
-      if (error) throw error;
+
+      // Primary write: update and SELECT the row back to verify
+      const { data: updatedJob, error } = await supabase.from('jobs').update(updatePayload).eq('id', jobData.id).select('unit_rate_config,staged_unit_rate_config').single();
+      if (error) {
+        // Attempt fallback upsert if update failed
+        console.warn('Primary update failed, attempting upsert fallback:', error);
+        const { error: upsertErr } = await supabase.from('jobs').upsert([{ id: jobData.id, ...updatePayload }], { onConflict: 'id' });
+        if (upsertErr) throw upsertErr;
+      }
+
+      // Verify persisted values match expectation
+      try {
+        const { data: savedJob, error: fetchErr } = await supabase.from('jobs').select('unit_rate_config,staged_unit_rate_config').eq('id', jobData.id).single();
+        if (!fetchErr && savedJob) {
+          const savedCodes = (savedJob.unit_rate_config && savedJob.unit_rate_config.codes) || savedJob.unit_rate_config || [];
+          const wanted = Array.isArray(payload.codes) ? payload.codes : [];
+          const same = JSON.stringify((savedCodes || []).sort()) === JSON.stringify((wanted || []).sort());
+          if (!same) {
+            console.warn('Saved unit_rate_config.codes did not match expected payload.codes; attempting upsert with full payload');
+            const { error: upsertErr2 } = await supabase.from('jobs').upsert([{ id: jobData.id, ...updatePayload }], { onConflict: 'id' });
+            if (upsertErr2) console.warn('Upsert retry failed:', upsertErr2);
+          }
+        }
+      } catch (e) {
+        console.warn('Verification read failed after save:', e);
+      }
 
       // Update local selection so UI reflects saved codes immediately
       try {
