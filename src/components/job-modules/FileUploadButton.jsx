@@ -715,7 +715,7 @@ const handleCodeFileUpdate = async () => {
           `$${change.differences.sales_price.new.toLocaleString()} (${change.differences.sales_date.new || 'No Date'})` : 
           'No_Sale';
           
-        csvContent += `"${reportDate}","Sales_Change","${change.property_block}","${change.property_lot}","${change.property_qualifier || ''}","${change.property_location || ''}","${oldSaleValue}","${newSaleValue}","reviewed","user","${reportDate}"\n`;
+        csvContent += `"${reportDate}","${change.property_composite_key}","Sales_Change","${change.property_block}","${change.property_lot}","${change.property_qualifier || ''}","${change.property_location || ''}","${oldSaleValue}","${newSaleValue}","reviewed","user","${reportDate}"\n`;
       });
     }
 
@@ -1454,7 +1454,7 @@ const handleCodeFileUpdate = async () => {
         .eq('id', job.id);
 
       if (jobUpdateError) {
-        console.error('❌ Failed to update job validation_status:', jobUpdateError);
+        console.error('�� Failed to update job validation_status:', jobUpdateError);
         addBatchLog('⚠️ Warning: Could not update job validation status', 'warning');
       } else {
         addBatchLog('✅ Job validation status set to "updated"', 'success');
