@@ -108,6 +108,10 @@ const PreValuationTab = ({
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [lastAutoSave, setLastAutoSave] = useState(null);
   const [readyProperties, setReadyProperties] = useState(new Set());
+
+  // Track rows currently being edited to avoid hiding them mid-edit when filters are applied
+  const [editingRows, setEditingRows] = useState(new Set());
+  const editTimersRef = useRef(new Map());
   // Unit Rate Configuration state (BRT only)
   const [unitRateCodes, setUnitRateCodes] = useState([]);
   const [selectedUnitRateCodes, setSelectedUnitRateCodes] = useState(new Set());
