@@ -1813,6 +1813,74 @@ const handleSalesDecision = (saleId, decision) => {
     setWorksheetStats(stats);
   }, [readyProperties]);
 
+  const checkLocationStandardization = useCallback((value, propertyKey) => {
+    const valueLower = value.toLowerCase().trim();
+
+    // Check for similar existing values
+    for (const [standard, variations] of Object.entries(locationVariations)) {
+      if (variations.includes(valueLower) || standard.toLowerCase() === valueLower) {
+        return;
+      }
+
+      // Check for common variations
+      const patterns = [
+        ['avenue', 'ave', 'av'],
+        ['street', 'st'],
+        ['road', 'rd'],
+        ['drive', 'dr'],
+        ['railroad', 'rr', 'rail road', 'railraod']
+      ];
+
+      for (const pattern of patterns) {
+        if (pattern.some(p => valueLower.includes(p)) &&
+            pattern.some(p => standard.toLowerCase().includes(p))) {
+          setCurrentLocationChoice({
+            propertyKey,
+            newValue: value,
+            existingStandard: standard,
+            variations: locationVariations[standard] || []
+          });
+          setShowLocationModal(true);
+          return;
+        }
+      }
+    }
+
+    // Add as new standard if no match found
+    setLocationVariations(prev => ({
+      ...prev,
+      [value]: []
+    }));
+  }, [locationVariations]);
+
+  const handleLocationStandardChoice = useCallback((choice) => {
+    if (!currentLocationChoice) return;
+
+    if (choice === 'existing') {
+      handleWorksheetChange(
+        currentLocationChoice.propertyKey,
+        'location_analysis',
+        currentLocationChoice.existingStandard
+      );
+
+      setLocationVariations(prev => ({
+        ...prev,
+        [currentLocationChoice.existingStandard]: [
+          ...(prev[currentLocationChoice.existingStandard] || []),
+          currentLocationChoice.newValue
+        ]
+      }));
+    } else {
+      setLocationVariations(prev => ({
+        ...prev,
+        [currentLocationChoice.newValue]: []
+      }));
+    }
+
+    setShowLocationModal(false);
+    setCurrentLocationChoice(null);
+  }, [currentLocationChoice, handleWorksheetChange]);
+
   const handleWorksheetChange = useCallback((propertyKey, field, value) => {
     // Check for location standardization
     if (field === 'location_analysis' && value) {
@@ -1840,74 +1908,6 @@ const handleSalesDecision = (saleId, decision) => {
     const timer = setTimeout(() => autoSaveWorksheet(), 30000);
     setAutoSaveTimer(timer);
   }, [worksheetProperties, autoSaveTimer, updateWorksheetStats, checkLocationStandardization, autoSaveWorksheet]);
-
-  const checkLocationStandardization = (value, propertyKey) => {
-    const valueLower = value.toLowerCase().trim();
-    
-    // Check for similar existing values
-    for (const [standard, variations] of Object.entries(locationVariations)) {
-      if (variations.includes(valueLower) || standard.toLowerCase() === valueLower) {
-        return;
-      }
-      
-      // Check for common variations
-      const patterns = [
-        ['avenue', 'ave', 'av'],
-        ['street', 'st'],
-        ['road', 'rd'],
-        ['drive', 'dr'],
-        ['railroad', 'rr', 'rail road', 'railraod']
-      ];
-      
-      for (const pattern of patterns) {
-        if (pattern.some(p => valueLower.includes(p)) && 
-            pattern.some(p => standard.toLowerCase().includes(p))) {
-          setCurrentLocationChoice({
-            propertyKey,
-            newValue: value,
-            existingStandard: standard,
-            variations: locationVariations[standard] || []
-          });
-          setShowLocationModal(true);
-          return;
-        }
-      }
-    }
-    
-    // Add as new standard if no match found
-    setLocationVariations(prev => ({
-      ...prev,
-      [value]: []
-    }));
-  };
-
-  const handleLocationStandardChoice = (choice) => {
-    if (!currentLocationChoice) return;
-    
-    if (choice === 'existing') {
-      handleWorksheetChange(
-        currentLocationChoice.propertyKey,
-        'location_analysis',
-        currentLocationChoice.existingStandard
-      );
-      
-      setLocationVariations(prev => ({
-        ...prev,
-        [currentLocationChoice.existingStandard]: [
-          ...(prev[currentLocationChoice.existingStandard] || []),
-          currentLocationChoice.newValue
-        ]
-      }));
-    } else {
-      setLocationVariations(prev => ({
-        ...prev,
-        [currentLocationChoice.newValue]: []
-      }));
-    }
-    
-    setShowLocationModal(false);
-    setCurrentLocationChoice(null);
-  };
 
   const autoSaveWorksheet = useCallback(async () => {
     try {
@@ -2891,7 +2891,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-32 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('property_location')}
                             >
-                              Location {normSortConfig.field === 'property_location' && (normSortConfig.direction === 'asc' ? '�����' : '↓')}
+                              Location {normSortConfig.field === 'property_location' && (normSortConfig.direction === 'asc' ? '���' : '↓')}
                             </th>
                             <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
@@ -3635,7 +3635,7 @@ const analyzeImportFile = async (file) => {
             
             <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
               <strong>Color Scale:</strong> 
-              <br/>��� First color: $0 - ${(colorScaleIncrement - 1).toLocaleString()}
+              <br/>• First color: $0 - ${(colorScaleIncrement - 1).toLocaleString()}
               <br/>• Second color: ${colorScaleIncrement.toLocaleString()} - ${((colorScaleIncrement * 2) - 1).toLocaleString()}
               <br/>��� Third color: ${(colorScaleIncrement * 2).toLocaleString()} - ${((colorScaleIncrement * 3) - 1).toLocaleString()}
               <br/>• And so on... Total of {marketAnalysisData.length} blocks analyzed.
