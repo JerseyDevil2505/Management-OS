@@ -319,7 +319,7 @@ const handleCodeFileUpdate = async () => {
     const currentCodeVersion = job.code_file_version || 1;
     const newCodeVersion = currentCodeVersion + 1;
 
-    console.log(`🔧 Code Update - Current version: ${currentCodeVersion}, New version: ${newCodeVersion}`);
+    console.log(`��� Code Update - Current version: ${currentCodeVersion}, New version: ${newCodeVersion}`);
 
     const updateResult = await jobService.update(job.id, {
       code_file_version: newCodeVersion,
@@ -799,32 +799,49 @@ const handleCodeFileUpdate = async () => {
       setProcessingStatus('Generating composite keys...');
       const yearCreated = job.year_created || new Date().getFullYear();
       const ccddCode = job.ccdd_code || job.ccddCode;
-      
+
       const sourceKeys = new Set();
       const sourceKeyMap = new Map();
-      
+      const sourceNormMap = new Map(); // normalized -> original key
+
       sourceRecords.forEach(record => {
         const compositeKey = generateCompositeKey(record, job.vendor_type, yearCreated, ccddCode);
         if (compositeKey) {
           sourceKeys.add(compositeKey);
           sourceKeyMap.set(compositeKey, record);
+          const norm = normalizeCompositeKeyString(compositeKey);
+          if (norm) sourceNormMap.set(norm, compositeKey);
         }
       });
-      
-      
+
       // Create database key sets
       const dbKeys = new Set(dbRecords.map(r => r.property_composite_key));
       const dbKeyMap = new Map(dbRecords.map(r => [r.property_composite_key, r]));
-      
-      
+      const dbNormMap = new Map(); // normalized -> dbKey
+      dbRecords.forEach(r => {
+        const norm = normalizeCompositeKeyString(r.property_composite_key);
+        if (norm && !dbNormMap.has(norm)) dbNormMap.set(norm, r.property_composite_key);
+      });
+
+
       // Find differences
       setProcessingStatus('Comparing records...');
-      
+
       // Missing records (in source but not in database)
       const missingKeys = [...sourceKeys].filter(key => !dbKeys.has(key));
       const missing = missingKeys.map(key => sourceKeyMap.get(key));
-      
-      // Extra records (in database but not in source) 
+
+      // Fuzzy matches: source missing but matches DB after normalization
+      const fuzzyMatches = [];
+      missingKeys.forEach(srcKey => {
+        const norm = normalizeCompositeKeyString(srcKey);
+        const matchedDbKey = dbNormMap.get(norm);
+        if (matchedDbKey) {
+          fuzzyMatches.push({ source: srcKey, dbMatch: matchedDbKey, reason: 'normalized_match' });
+        }
+      });
+
+      // Extra records (in database but not in source)
       const extraKeys = [...dbKeys].filter(key => !sourceKeys.has(key));
       const deletions = extraKeys.map(key => dbKeyMap.get(key));
       
@@ -1569,7 +1586,7 @@ const handleCodeFileUpdate = async () => {
         });
         
         if (salesReverted > 0) {
-          addNotification(`���️ Reverted ${salesReverted} sales to old values`, 'info');
+          addNotification(`↩️ Reverted ${salesReverted} sales to old values`, 'info');
         }
       }
       
@@ -2912,7 +2929,7 @@ const handleCodeFileUpdate = async () => {
       <div className="flex items-center gap-3 text-gray-300">
         <FileText className="w-4 h-4 text-blue-400" />
         <span className="text-sm min-w-0 flex-1">
-          �� Source: {getFileStatusWithRealVersion(job.updated_at || job.created_at, 'source')}
+          📄 Source: {getFileStatusWithRealVersion(job.updated_at || job.created_at, 'source')}
         </span>
         
         <input
