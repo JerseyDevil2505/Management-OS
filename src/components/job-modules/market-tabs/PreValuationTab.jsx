@@ -3702,6 +3702,14 @@ const analyzeImportFile = async (file) => {
                 </button>
 
                 <button
+                  onClick={() => setShowDiagnosticModal(true)}
+                  className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+                  title="Paste your edited CSV to diagnose unmatched rows"
+                >
+                  Run Import Diagnostic
+                </button>
+
+                <button
                   onClick={() => {
                     if (window.window.confirm(`Copy current VCS to new VCS for ALL ${worksheetProperties.length} properties? This will OVERWRITE any existing new VCS values!`)) {
                       const updated = worksheetProperties.map(prop => ({
