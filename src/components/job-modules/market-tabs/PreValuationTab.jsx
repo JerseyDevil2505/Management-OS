@@ -2107,15 +2107,25 @@ const analyzeImportFile = async (file) => {
         }
         
         const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual}-${card}-${location}`;
-        
+
+        // Debugging: log row data and built composite key, and sample worksheet keys
+        try {
+          console.log('Import row data:', { year, ccdd, block, lot, qual, card, location });
+          console.log('Built composite key:', compositeKey);
+          const sampleWorksheetKeys = (worksheetProperties || []).slice(0,5).map(p => p.property_composite_key);
+          console.log('Sample worksheet keys:', sampleWorksheetKeys);
+        } catch (e) {
+          // ignore console errors in prod
+        }
+
         // Debug for specific blocks
         if (parseInt(block) >= 7 && parseInt(block) <= 10) {
           if (false) console.log(`���� Import row ${block}-${lot}: compositeKey = ${compositeKey}`);
         }
-        
-        // Find matching property in worksheet
+
+        // Find matching property in worksheet (exact match on composite key)
         const match = worksheetProperties.find(p => p.property_composite_key === compositeKey);
-        
+
         if (match) {
           analysis.matched.push({
             compositeKey,
