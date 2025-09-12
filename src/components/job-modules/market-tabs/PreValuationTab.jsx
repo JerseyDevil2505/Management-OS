@@ -2197,6 +2197,64 @@ const analyzeImportFile = async (file) => {
       setIsAnalyzingImport(false);
     }
   };
+
+  // Run diagnostic on pasted CSV text (client-side) to show exact/fuzzy/unmatched counts
+  const runImportDiagnostic = async (csvText) => {
+    setIsRunningDiagnostic(true);
+    try {
+      if (!csvText || !csvText.trim()) return alert('Paste CSV text first');
+      // Parse CSV lines with quoted fields support
+      const rows = csvText.trim().split(/\r?\n/).map(line => line.split(/,(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)/).map(c => c.replace(/^\"|\"$/g, '').trim()));
+      const headers = rows.shift().map(h => h.trim());
+      const data = rows.map(r => Object.fromEntries(r.map((v,i) => [(headers[i]||`col${i}`), v])));
+
+      const propKeys = worksheetProperties.map(p => p.property_composite_key);
+
+      const levenshtein = (a,b) => { const m=[]; for(let i=0;i<=b.length;i++){m[i]=[i];} for(let j=0;j<=a.length;j++){m[0][j]=j;} for(let i=1;i<=b.length;i++){ for(let j=1;j<=a.length;j++){ m[i][j]=b[i-1]===a[j-1]?m[i-1][j-1]:Math.min(m[i-1][j-1]+1,m[i][j-1]+1,m[i-1][j]+1); } } return m[b.length][a.length]; };
+
+      const matched = [], fuzzy = [], unmatched = [];
+
+      const getVal = (row, keys) => { for (const k of keys) { if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') return row[k]; } return ''; };
+
+      for (const row of data) {
+        const year = getVal(row, ['Year','YEAR','year']) || new Date().getFullYear();
+        const ccdd = getVal(row, ['CCDD','Ccdd','Ccdd','ccdd']) || jobData?.ccdd || '';
+        const block = String(getVal(row, ['Block','BLOCK','block'])).trim();
+        const lot = String(getVal(row, ['Lot','LOT','lot'])).trim();
+        let qual = String(getVal(row, ['Qualifier','Qual','QUALIFIER','QUAL'])).trim(); if (!qual) qual = 'NONE';
+        const card = String(getVal(row, ['Card','CARD','card','Bldg','BLDG'])).trim() || 'NONE';
+        const location = String(getVal(row, ['Location','PROPERTY_LOCATION','Property Location','Address'])).trim() || 'NONE';
+
+        const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual}-${card}-${location}`;
+        const exactMatch = worksheetProperties.find(p => p.property_composite_key === compositeKey);
+        if (exactMatch) {
+          matched.push({ compositeKey, row, id: exactMatch.id });
+          continue;
+        }
+
+        // find closest property key
+        let best = { key: null, d: Infinity };
+        for (const pk of propKeys) {
+          const d = levenshtein(pk, compositeKey);
+          if (d < best.d) best = { key: pk, d };
+        }
+        const sim = 1 - best.d / Math.max(best.key?.length || 1, compositeKey.length || 1);
+        if (sim >= (importOptions?.fuzzyMatchThreshold || 0.8)) {
+          fuzzy.push({ compositeKey, row, closest: best.key, sim: Number(sim.toFixed(3)) });
+        } else {
+          unmatched.push({ compositeKey, row, closest: best.key, dist: best.d });
+        }
+      }
+
+      setDiagnosticResults({ total: data.length, matched, fuzzy, unmatched });
+
+    } catch (e) {
+      console.error('Diagnostic error:', e);
+      alert('Diagnostic failed, see console');
+    } finally {
+      setIsRunningDiagnostic(false);
+    }
+  };
   
   // Helper function for fuzzy matching
   const calculateSimilarity = (str1, str2) => {
