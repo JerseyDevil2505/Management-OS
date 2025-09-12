@@ -2072,16 +2072,36 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = [], op
 export async function generateLotSizesForJob(jobId) {
   if (!jobId) throw new Error('jobId required');
 
-  // Load mappings from market_land_valuation
-  const { data: marketRow, error: marketErr } = await supabase.from('market_land_valuation').select('unit_rate_codes_applied').eq('job_id', jobId).single();
-  if (marketErr && marketErr.code !== 'PGRST116') {
-    console.warn('Error loading market_land_valuation mappings:', marketErr);
+  // Prefer mappings stored on the jobs row (unit_rate_codes_applied or staged_unit_rate_config), fall back to market_land_valuation
+  let mappings = null;
+  try {
+    const { data: jobRow, error: jobErr } = await supabase.from('jobs').select('unit_rate_codes_applied,staged_unit_rate_config').eq('id', jobId).single();
+    if (!jobErr && jobRow) {
+      if (jobRow.unit_rate_codes_applied) {
+        const payloadObj = typeof jobRow.unit_rate_codes_applied === 'string' ? JSON.parse(jobRow.unit_rate_codes_applied) : jobRow.unit_rate_codes_applied;
+        mappings = payloadObj.mappings || null;
+      }
+      // If no applied mappings, use staged mappings directly (staged shape is mappings-like but without outer object)
+      if (!mappings && jobRow.staged_unit_rate_config) {
+        mappings = jobRow.staged_unit_rate_config || null;
+      }
+    }
+  } catch (e) {
+    // ignore and try fallback
+    mappings = null;
   }
-  const mappingsPayload = (marketRow && marketRow.unit_rate_codes_applied) ? (typeof marketRow.unit_rate_codes_applied === 'string' ? JSON.parse(marketRow.unit_rate_codes_applied) : marketRow.unit_rate_codes_applied) : null;
 
-  const mappings = mappingsPayload?.mappings || null;
   if (!mappings) {
-    throw new Error('No mappings found in market_land_valuation.unit_rate_codes_applied; please configure mappings (mappings:{vcs:{acre:[],sf:[],exclude:[]}})');
+    const { data: marketRow, error: marketErr } = await supabase.from('market_land_valuation').select('unit_rate_codes_applied').eq('job_id', jobId).single();
+    if (marketErr && marketErr.code !== 'PGRST116') {
+      console.warn('Error loading market_land_valuation mappings (fallback):', marketErr);
+    }
+    const mappingsPayload = (marketRow && marketRow.unit_rate_codes_applied) ? (typeof marketRow.unit_rate_codes_applied === 'string' ? JSON.parse(marketRow.unit_rate_codes_applied) : marketRow.unit_rate_codes_applied) : null;
+    mappings = mappingsPayload?.mappings || null;
+  }
+
+  if (!mappings) {
+    throw new Error('No mappings found for job; please configure mappings (staged_unit_rate_config or unit_rate_codes_applied)');
   }
 
   // Fetch properties for job with LANDUR fields
@@ -2145,21 +2165,21 @@ export async function generateLotSizesForJob(jobId) {
     if (error) console.error('Error upserting market_manual lot sizes:', error);
   }
 
-  // Persist applied per-property codes into market_land_valuation
+  // Persist applied per-property codes into the jobs row (store under unit_rate_codes_applied.per_property)
   try {
-    const { data: existing } = await supabase.from('market_land_valuation').select('unit_rate_codes_applied').eq('job_id', jobId).single();
+    const { data: jobRow } = await supabase.from('jobs').select('unit_rate_codes_applied').eq('id', jobId).single();
     let applied = {};
-    if (existing && existing.unit_rate_codes_applied) {
-      applied = typeof existing.unit_rate_codes_applied === 'string' ? JSON.parse(existing.unit_rate_codes_applied) : existing.unit_rate_codes_applied;
+    if (jobRow && jobRow.unit_rate_codes_applied) {
+      applied = typeof jobRow.unit_rate_codes_applied === 'string' ? JSON.parse(jobRow.unit_rate_codes_applied) : jobRow.unit_rate_codes_applied;
     }
     applied.per_property = applied.per_property || {};
     Object.assign(applied.per_property, appliedCodesMap);
 
-    const payload = { job_id: jobId, unit_rate_codes_applied: applied, unit_rate_last_run: { timestamp: new Date().toISOString(), updated_count: updates.length }, updated_at: new Date().toISOString() };
-    const { error: mvError } = await supabase.from('market_land_valuation').upsert([payload], { onConflict: 'job_id' });
-    if (mvError) console.error('Failed to persist appliedCodesMap to market_land_valuation:', mvError);
+    const jobPayload = { unit_rate_codes_applied: applied, unit_rate_last_run: { timestamp: new Date().toISOString(), updated_count: updates.length }, updated_at: new Date().toISOString() };
+    const { error: jobUpdateErr } = await supabase.from('jobs').update(jobPayload).eq('id', jobId);
+    if (jobUpdateErr) console.warn('Failed to persist appliedCodesMap to jobs table:', jobUpdateErr);
   } catch (e) {
-    console.error('Error persisting appliedCodesMap:', e);
+    console.warn('Error persisting appliedCodesMap to jobs table:', e);
   }
 
   return { job_id: jobId, updated: updates.length };
@@ -2752,7 +2772,7 @@ export const checklistService = {
   // Get all checklist items for a job
   async getChecklistItems(jobId) {
     try {
-      console.log('📋 Loading checklist items for job:', jobId);
+      console.log('��� Loading checklist items for job:', jobId);
       
       const { data, error } = await supabase
         .from('checklist_items')
