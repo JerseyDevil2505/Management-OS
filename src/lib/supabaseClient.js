@@ -340,14 +340,28 @@ export async function computeLotAcreForProperty(jobId, propertyCompositeKey, sel
 
   const finalAcres = totalAcres + (totalSf / 43560);
 
+  // If we couldn't derive acres from LANDUR fields, fall back to other property fields (asset_lot_acre or asset_lot_sf)
+  let resultAcres = (isFinite(finalAcres) && finalAcres > 0) ? parseFloat(finalAcres.toFixed(2)) : null;
+  if (!resultAcres) {
+    try {
+      const vendorType = rawDataForJob?.vendorType || 'BRT';
+      const fallback = await getTotalLotSize(rawRecord, vendorType, codeDefinitions);
+      if (fallback && !isNaN(Number(fallback)) && Number(fallback) > 0) {
+        resultAcres = parseFloat(Number(fallback).toFixed(2));
+      }
+    } catch (e) {
+      // ignore fallback errors
+    }
+  }
+
   return {
     property_composite_key: propertyCompositeKey,
     job_id: jobId,
     selected_codes: selectedCodes,
     propVcs: propVcs,
     details,
-    total_acres: isFinite(finalAcres) && finalAcres > 0 ? parseFloat(finalAcres.toFixed(2)) : null,
-    total_sf: isFinite(totalSf) && totalSf > 0 ? Math.round(totalSf) : null
+    total_acres: resultAcres,
+    total_sf: resultAcres !== null ? Math.round(resultAcres * 43560) : null
   };
 }
 
