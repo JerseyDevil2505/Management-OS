@@ -2190,10 +2190,11 @@ export async function saveUnitRateMappings(jobId, vcsKey, mappingObj) {
   if (!jobId) throw new Error('jobId required');
   if (!vcsKey) throw new Error('vcsKey required');
 
-  const { data: existing } = await supabase.from('market_land_valuation').select('unit_rate_codes_applied').eq('job_id', jobId).single();
+  // Merge mapping into jobs.unit_rate_codes_applied.mappings (do not use market_land_valuation)
+  const { data: jobRow, error: jobErr } = await supabase.from('jobs').select('unit_rate_codes_applied').eq('id', jobId).single();
   let payloadObj = { mappings: {} };
-  if (existing && existing.unit_rate_codes_applied) {
-    try { payloadObj = typeof existing.unit_rate_codes_applied === 'string' ? JSON.parse(existing.unit_rate_codes_applied) : existing.unit_rate_codes_applied; } catch(e) { payloadObj = { mappings: {} }; }
+  if (!jobErr && jobRow && jobRow.unit_rate_codes_applied) {
+    try { payloadObj = typeof jobRow.unit_rate_codes_applied === 'string' ? JSON.parse(jobRow.unit_rate_codes_applied) : jobRow.unit_rate_codes_applied; } catch(e) { payloadObj = { mappings: {} }; }
   }
 
   payloadObj.mappings = payloadObj.mappings || {};
@@ -2205,9 +2206,9 @@ export async function saveUnitRateMappings(jobId, vcsKey, mappingObj) {
     exclude: normalizeArr(mappingObj.exclude)
   };
 
-  const upsertPayload = { job_id: jobId, unit_rate_codes_applied: payloadObj, unit_rate_last_run: { timestamp: new Date().toISOString() }, updated_at: new Date().toISOString() };
-  const { error } = await supabase.from('market_land_valuation').upsert([upsertPayload], { onConflict: 'job_id' });
-  if (error) throw error;
+  const jobPayload = { unit_rate_codes_applied: payloadObj, unit_rate_last_run: { timestamp: new Date().toISOString() }, updated_at: new Date().toISOString() };
+  const { error: jobUpdateErr } = await supabase.from('jobs').update(jobPayload).eq('id', jobId);
+  if (jobUpdateErr) throw jobUpdateErr;
   return { ok: true };
 }
 
@@ -2772,7 +2773,7 @@ export const checklistService = {
   // Get all checklist items for a job
   async getChecklistItems(jobId) {
     try {
-      console.log('��� Loading checklist items for job:', jobId);
+      console.log('📋 Loading checklist items for job:', jobId);
       
       const { data, error } = await supabase
         .from('checklist_items')
