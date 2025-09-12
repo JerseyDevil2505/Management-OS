@@ -2144,7 +2144,44 @@ export async function generateLotSizesForJob(jobId) {
 
   for (const p of props) {
     const vcs = p.property_vcs ? String(p.property_vcs).trim() : null;
-    const mapForVcs = (vcs && mappings[vcs]) ? mappings[vcs] : (mappings['*'] || null);
+    // Resolve mapping for this property's VCS flexibly:
+    let mapForVcs = null;
+
+    // 1) direct key match
+    if (vcs && mappings[vcs]) mapForVcs = mappings[vcs];
+
+    // 2) numeric padding match (e.g., '2' -> '02')
+    if (!mapForVcs && vcs) {
+      const padded = String(vcs).padStart(2, '0');
+      if (mappings[padded]) mapForVcs = mappings[padded];
+    }
+
+    // 3) try matching by id sets from code definitions (vcsIdMap)
+    if (!mapForVcs && vcsIdMap && vcsIdMap.size > 0) {
+      for (const mk of Object.keys(mappings)) {
+        const idSet = vcsIdMap.get(String(mk));
+        if (idSet && vcs && Array.from(idSet).some(id => String(id).trim() === String(vcs).trim())) {
+          mapForVcs = mappings[mk];
+          break;
+        }
+      }
+    }
+
+    // 4) try matching mapping key as label (case-insensitive)
+    if (!mapForVcs && vcs) {
+      for (const mk of Object.keys(mappings)) {
+        try {
+          if (String(mk).trim().toUpperCase() === String(vcs).trim().toUpperCase()) {
+            mapForVcs = mappings[mk];
+            break;
+          }
+        } catch (e) { /* ignore */ }
+      }
+    }
+
+    // 5) fallback to wildcard mapping if present
+    if (!mapForVcs && mappings['*']) mapForVcs = mappings['*'];
+
     if (!mapForVcs) continue; // no mapping - skip
 
     let totalAcres = 0;
