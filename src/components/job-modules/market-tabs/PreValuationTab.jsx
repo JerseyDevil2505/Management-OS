@@ -714,9 +714,23 @@ useEffect(() => {
       const { error } = await supabase.from('jobs').update(updatePayload).eq('id', jobData.id);
       if (error) throw error;
 
+      // Update local selection so UI reflects saved codes immediately
+      try {
+        setSelectedUnitRateCodes(new Set(Array.isArray(payload.codes) ? payload.codes : []));
+      } catch (e) { /* ignore */ }
+
       // Merge staged into combined view so UI shows staged as part of current mappings
       setCombinedMappings(prev => ({ ...(prev || {}), ...(staged || {}) }));
       setVcsOptionsShown(vcsOptions.filter(opt => !(staged || {})[opt.key]));
+
+      // Refresh parent cache so jobData reflects written values
+      if (typeof onUpdateJobCache === 'function') {
+        try {
+          await onUpdateJobCache(jobData.id, null);
+        } catch (e) {
+          console.warn('onUpdateJobCache failed after saving unit rate config:', e);
+        }
+      }
 
       alert('Unit rate configuration saved to job (staged mappings preserved)');
     } catch (e) {
