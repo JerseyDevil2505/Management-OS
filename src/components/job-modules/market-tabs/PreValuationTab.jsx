@@ -743,32 +743,13 @@ useEffect(() => {
     if (!jobData?.id) return;
     setIsCalculatingUnitSizes(true);
     try {
-      // Determine selected codes: prefer UI selection; if empty, fall back to saved job config (if present)
-      let selected = Array.from(selectedUnitRateCodes);
-      if ((!selected || selected.length === 0) && jobData?.unit_rate_config) {
-        try {
-          selected = jobData.unit_rate_config?.codes || jobData.unit_rate_config || [];
-        } catch (e) {
-          selected = [];
-        }
-      }
+      // Use generateLotSizesForJob which applies staged mappings (jobs.staged_unit_rate_config) directly
+      const res = await generateLotSizesForJob(jobData.id);
+      const updated = res?.updated ?? 0;
+      alert(`Generated lot sizes for ${updated} properties`);
 
-      // Prefer v2 calculator which returns detailed stats when available
-      let result = null;
-      const useJobConfig = !!jobData?.unit_rate_config;
-      if (typeof runUnitRateLotCalculation_v2 === 'function') {
-        result = await runUnitRateLotCalculation_v2(jobData.id, selected, { useJobConfig });
-      } else {
-        result = await runUnitRateLotCalculation(jobData.id, selected);
-      }
-
-      const updated = result?.updated ?? 0;
-      const acreageSet = result?.acreage_set ?? (result?.updated ?? 0);
-      const acreageNull = result?.acreage_null ?? (updated - acreageSet);
-
-
-      // Refresh cache/data
-      if (onUpdateJobCache) onUpdateJobCache(jobData.id);
+      // Do NOT auto-refresh job to avoid supabase 500 spikes
+      // Keep local UI state as-is; user can refresh manually if needed
     } catch (e) {
       console.error('Error calculating unit rates:', e);
       alert(`Calculation failed: ${formatError(e)}`);
@@ -1750,7 +1731,7 @@ const handleSalesDecision = (saleId, decision) => {
         onUpdateJobCache(jobData.id, null);
       }
 
-      if (false) console.log(`✅ Batch save complete: ${keeps.length} keeps saved, ${rejects.length} rejects cleared`);
+      if (false) console.log(`��� Batch save complete: ${keeps.length} keeps saved, ${rejects.length} rejects cleared`);
       alert(`✅ Successfully saved ${keeps.length} keeps and cleared ${rejects.length} rejects from database`);
 
     } catch (error) {
