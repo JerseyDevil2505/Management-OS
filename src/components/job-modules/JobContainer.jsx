@@ -857,6 +857,17 @@ const JobContainer = ({
       propertyRecordsCount,
       onFileProcessed: handleFileProcessed,
       onDataRefresh: loadLatestFileVersions,  // FIXED: Pass data refresh function for modal close timing
+      // NEW: Provide a job-level refresh callback so children can request the parent to reload job data
+      onUpdateJobCache: async (jobId, opts = null) => {
+        try {
+          // If jobId provided and matches current selectedJob, reload; otherwise ignore
+          if (!jobId || (selectedJob && jobId === selectedJob.id)) {
+            await loadLatestFileVersions();
+          }
+        } catch (e) {
+          console.warn('onUpdateJobCache failed:', e);
+        }
+      },
       dataUpdateNotification,  // Pass notification to all components
       clearDataNotification: () => setDataUpdateNotification({  // Way to clear it
         hasNewData: false,
