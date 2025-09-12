@@ -71,6 +71,12 @@ const PreValuationTab = ({
   const [worksheetProperties, setWorksheetProperties] = useState([]);
   const [lastTimeNormalizationRun, setLastTimeNormalizationRun] = useState(null);
   const [lastSizeNormalizationRun, setLastSizeNormalizationRun] = useState(null);
+
+  // Import diagnostic state (paste CSV to diagnose unmatched vs exact keys)
+  const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
+  const [diagnosticCsvText, setDiagnosticCsvText] = useState('');
+  const [diagnosticResults, setDiagnosticResults] = useState(null);
+  const [isRunningDiagnostic, setIsRunningDiagnostic] = useState(false);
   const [isSavingDecisions, setIsSavingDecisions] = useState(false);
   const [saveProgress, setSaveProgress] = useState({ current: 0, total: 0, message: '' });
   const [sizeNormProgress, setSizeNormProgress] = useState({ current: 0, total: 0, message: '' });
