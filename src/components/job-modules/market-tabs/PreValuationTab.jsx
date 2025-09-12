@@ -711,6 +711,13 @@ useEffect(() => {
 
         // Update VCS options shown
         setVcsOptionsShown(vcsOptions.filter(opt => !merged[opt.key]));
+
+        // Clear staged snapshot from jobs table
+        try {
+          await supabase.from('jobs').update({ staged_unit_rate_config: null }).eq('id', jobData.id);
+        } catch (e) {
+          console.warn('Failed clearing staged_unit_rate_config on jobs row:', e);
+        }
       }
 
       alert('Unit rate configuration and mappings saved');
@@ -4090,7 +4097,7 @@ const analyzeImportFile = async (file) => {
                 style={{ backgroundColor: preValChecklist.page_by_page ? '#10B981' : '#E5E7EB', color: preValChecklist.page_by_page ? 'white' : '#374151' }}
                 title={preValChecklist.page_by_page ? 'Click to reopen' : 'Mark Page by Page Worksheet complete'}
               >
-                {isProcessingPageByPage ? 'Processing...' : (preValChecklist.page_by_page ? '✓ Mark Complete' : 'Mark Complete')}
+                {isProcessingPageByPage ? 'Processing...' : (preValChecklist.page_by_page ? '��� Mark Complete' : 'Mark Complete')}
               </button>
              </div>
            </div>
