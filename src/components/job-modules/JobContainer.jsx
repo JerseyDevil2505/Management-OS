@@ -48,6 +48,10 @@ const JobContainer = ({
     source: null // 'file_upload', 'initial_load', etc
   });
 
+  // Rate-limit parent job refreshes requested by children to avoid interrupting user work
+  const lastJobRefreshAtRef = useRef(0);
+  const pendingRefreshRef = useRef(false);
+
   // Load latest file versions and properties
   useEffect(() => {
     if (selectedJob) {
