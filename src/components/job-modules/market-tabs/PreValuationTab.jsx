@@ -718,6 +718,19 @@ useEffect(() => {
         } catch (e) {
           console.warn('Failed clearing staged_unit_rate_config on jobs row:', e);
         }
+
+        // Refresh persisted mappings from market_land_valuation to ensure UI reflects saved state
+        try {
+          const { data: mvRow, error: mvErr } = await supabase.from('market_land_valuation').select('unit_rate_codes_applied').eq('job_id', jobData.id).single();
+          if (!mvErr && mvRow && mvRow.unit_rate_codes_applied) {
+            const payloadObj = typeof mvRow.unit_rate_codes_applied === 'string' ? JSON.parse(mvRow.unit_rate_codes_applied) : mvRow.unit_rate_codes_applied;
+            setCombinedMappings(payloadObj.mappings || {});
+            // update vcs options shown to exclude newly saved
+            setVcsOptionsShown(vcsOptions.filter(opt => !(payloadObj.mappings || {})[opt.key]));
+          }
+        } catch (e) {
+          console.warn('Failed refreshing market_land_valuation after save:', e);
+        }
       }
 
       alert('Unit rate configuration and mappings saved');
@@ -3424,7 +3437,7 @@ const analyzeImportFile = async (file) => {
                   <option value="3">3* — Row / Townhouse (3E,3I,30,31)</option>
                   <option value="4">4* �� MultiFamily (42,43,44)</option>
                   <option value="5">5* — Conversions (51,52,53)</option>
-                  <option value="6">6 — Condominium</option>
+                  <option value="6">6 ��� Condominium</option>
                   <option value="all_residential">All Residential</option>
                 </select>
               </div>
