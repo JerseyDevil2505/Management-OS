@@ -2072,18 +2072,29 @@ export async function runUnitRateLotCalculation_v2(jobId, selectedCodes = [], op
 export async function generateLotSizesForJob(jobId) {
   if (!jobId) throw new Error('jobId required');
 
-  // Prefer mappings stored on the jobs row (unit_rate_codes_applied or staged_unit_rate_config), fall back to market_land_valuation
+  // Prefer mappings stored on the jobs row (unit_rate_codes_applied, staged_unit_rate_config, or unit_rate_config), fall back to market_land_valuation
   let mappings = null;
   try {
-    const { data: jobRow, error: jobErr } = await supabase.from('jobs').select('unit_rate_codes_applied,staged_unit_rate_config').eq('id', jobId).single();
+    const { data: jobRow, error: jobErr } = await supabase.from('jobs').select('unit_rate_codes_applied,staged_unit_rate_config,unit_rate_config').eq('id', jobId).single();
     if (!jobErr && jobRow) {
       if (jobRow.unit_rate_codes_applied) {
         const payloadObj = typeof jobRow.unit_rate_codes_applied === 'string' ? JSON.parse(jobRow.unit_rate_codes_applied) : jobRow.unit_rate_codes_applied;
         mappings = payloadObj.mappings || null;
       }
-      // If no applied mappings, use staged mappings directly (staged shape is mappings-like but without outer object)
+      // If no applied mappings, use staged mappings directly
       if (!mappings && jobRow.staged_unit_rate_config) {
         mappings = jobRow.staged_unit_rate_config || null;
+      }
+      // Also accept unit_rate_config when it stores the structured staged mapping (some flows write staged into unit_rate_config)
+      if (!mappings && jobRow.unit_rate_config) {
+        // unit_rate_config may be { codes: [...] } (flat) or the staged object. If it's the staged object, use it directly.
+        const urc = jobRow.unit_rate_config;
+        if (typeof urc === 'object' && !Array.isArray(urc) && urc !== null) {
+          // Heuristic: if object keys look like numeric VCS keys, treat as mappings
+          const keys = Object.keys(urc);
+          const looksLikeStaged = keys.length > 0 && keys.every(k => /^\d+$/.test(k));
+          if (looksLikeStaged) mappings = urc;
+        }
       }
     }
   } catch (e) {
@@ -2101,7 +2112,27 @@ export async function generateLotSizesForJob(jobId) {
   }
 
   if (!mappings) {
-    throw new Error('No mappings found for job; please configure mappings (staged_unit_rate_config or unit_rate_codes_applied)');
+    throw new Error('No mappings found for job; please configure mappings (staged_unit_rate_config or unit_rate_codes_applied or unit_rate_config)');
+  }
+
+  // Build VCS id map from code definitions once to allow flexible matching between numeric keys and property_vcs labels
+  let vcsIdMap = new Map();
+  try {
+    const rawDataForJob = await getRawDataForJob(jobId);
+    const codeDefinitions = rawDataForJob?.codeDefinitions || rawDataForJob?.parsed_code_definitions || null;
+    if (codeDefinitions && codeDefinitions.sections && codeDefinitions.sections.VCS) {
+      Object.keys(codeDefinitions.sections.VCS).forEach(vkey => {
+        const entry = codeDefinitions.sections.VCS[vkey];
+        const ids = new Set();
+        ids.add(String(vkey));
+        if (entry?.DATA?.VALUE) ids.add(String(entry.DATA.VALUE));
+        if (entry?.DATA?.KEY) ids.add(String(entry.DATA.KEY));
+        if (entry?.KEY) ids.add(String(entry.KEY));
+        vcsIdMap.set(String(vkey), ids);
+      });
+    }
+  } catch (e) {
+    vcsIdMap = new Map();
   }
 
   // Fetch properties for job with LANDUR fields
