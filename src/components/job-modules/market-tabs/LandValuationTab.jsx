@@ -915,8 +915,10 @@ const getPricePerUnit = useCallback((price, size) => {
         // Validate sale price (ignore placeholders <= 10) and parse dates reliably
         const hasValidSale = prop.sales_date && prop.sales_price && Number(prop.sales_price) > 10;
         const saleDateObj = prop.sales_date ? new Date(prop.sales_date) : null;
-        const startDate = new Date(dateRange.start); startDate.setHours(0,0,0,0);
-        const endDate = new Date(dateRange.end); endDate.setHours(23,59,59,999);
+        const startDate = safeDateObj(dateRange.start) ? new Date(safeDateObj(dateRange.start)) : new Date(0);
+        startDate.setHours(0,0,0,0);
+        const endDate = safeDateObj(dateRange.end) ? new Date(safeDateObj(dateRange.end)) : new Date(8640000000000000);
+        endDate.setHours(23,59,59,999);
         const inDateRange = saleDateObj instanceof Date && !isNaN(saleDateObj) && saleDateObj >= startDate && saleDateObj <= endDate;
 
         const nu = (prop.sales_nu || '').toString();
