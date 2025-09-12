@@ -138,7 +138,7 @@ const PreValuationTab = ({
 
   const handleGenerateLotSizes = async () => {
     if (!jobData?.id) return alert('Job required');
-    if (!confirm('Generate lot sizes for entire job using current mappings?')) return;
+    if (!window.confirm('Generate lot sizes for entire job using current mappings?')) return;
     setIsGeneratingLotSizes(true);
     try {
       const res = await generateLotSizesForJob(jobData.id);
@@ -2640,7 +2640,7 @@ const analyzeImportFile = async (file) => {
                               return;
                             }
 
-                            if (!window.confirm(`Keep ${willKeep} pending sales where sales_nu is blank, 00 or 07? This will mark them as Kept and save decisions to the database.`)) return;
+                            if (!window.window.confirm(`Keep ${willKeep} pending sales where sales_nu is blank, 00 or 07? This will mark them as Kept and save decisions to the database.`)) return;
 
                             const updated = timeNormalizedSales.map(s => {
                               if (s.keep_reject === 'pending' && isNUKeepable(s.sales_nu)) return { ...s, keep_reject: 'keep' };
@@ -2683,7 +2683,7 @@ const analyzeImportFile = async (file) => {
                               return;
                             }
 
-                            if (!window.confirm(`Reject ${toReject} outlier sales (skipping sales_nu blank/00/07)? This will mark them as Rejected and clear normalized values in the database.`)) return;
+                            if (!window.window.confirm(`Reject ${toReject} outlier sales (skipping sales_nu blank/00/07)? This will mark them as Rejected and clear normalized values in the database.`)) return;
 
                             const updated = timeNormalizedSales.map(s => {
                               if (s.is_outlier && !isNUSkip(s.sales_nu)) return { ...s, keep_reject: 'reject' };
@@ -3675,7 +3675,7 @@ const analyzeImportFile = async (file) => {
 
                 <button
                   onClick={() => {
-                    if (window.confirm(`Copy current VCS to new VCS for ALL ${worksheetProperties.length} properties? This will OVERWRITE any existing new VCS values!`)) {
+                    if (window.window.confirm(`Copy current VCS to new VCS for ALL ${worksheetProperties.length} properties? This will OVERWRITE any existing new VCS values!`)) {
                       const updated = worksheetProperties.map(prop => ({
                         ...prop,
                         new_vcs: prop.property_vcs || ''
