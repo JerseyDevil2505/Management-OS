@@ -264,11 +264,13 @@ export async function computeLotAcreForProperty(jobId, propertyCompositeKey, sel
 
   // Build VCS id map for namespaced selections if needed (use parsed code definitions when available)
   let codeDefinitions = null;
+  let rawDataForJob = null;
   try {
-    const rawDataForJob = await getRawDataForJob(jobId);
+    rawDataForJob = await getRawDataForJob(jobId);
     codeDefinitions = rawDataForJob?.codeDefinitions || rawDataForJob?.parsed_code_definitions || null;
   } catch (e) {
     codeDefinitions = null;
+    rawDataForJob = null;
   }
 
   const vcsIdMap = new Map();
@@ -374,8 +376,8 @@ export async function computeLotAcreForProperty(jobId, propertyCompositeKey, sel
   let resultAcres = (isFinite(finalAcres) && finalAcres > 0) ? parseFloat(finalAcres.toFixed(2)) : null;
   if (!resultAcres) {
     try {
-      const vendorType = rawDataForJob?.vendorType || 'BRT';
-      const fallback = await getTotalLotSize(rawRecord, vendorType, codeDefinitions);
+      const vendorType = (rawDataForJob && rawDataForJob.vendorType) || 'BRT';
+      const fallback = await interpretCodes.getTotalLotSize(rawRecord, vendorType, codeDefinitions);
       if (fallback && !isNaN(Number(fallback)) && Number(fallback) > 0) {
         resultAcres = parseFloat(Number(fallback).toFixed(2));
       }
