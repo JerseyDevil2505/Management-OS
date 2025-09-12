@@ -689,58 +689,36 @@ useEffect(() => {
     if (!jobData?.id) return;
     setIsSavingUnitConfig(true);
     try {
-      const rawCodes = Array.from(selectedUnitRateCodes);
-      let normalizedCodes = rawCodes;
-      try { normalizedCodes = await normalizeSelectedCodes(jobData.id, rawCodes); } catch(e) { normalizedCodes = rawCodes; }
+      // Prefer deriving flat codes from staged mappings (acre/sf) when available
+      const staged = stagedMappings || {};
+      const derived = [];
+      Object.keys(staged).forEach(vk => {
+        const m = staged[vk] || { acre: [], sf: [], exclude: [] };
+        (m.acre || []).forEach(c => { if (c || c === 0) derived.push(`${vk}::${String(c).trim()}`); });
+        (m.sf || []).forEach(c => { if (c || c === 0) derived.push(`${vk}::${String(c).trim()}`); });
+      });
 
-      // Save selected unit-rate codes to jobs.unit_rate_config
-      const payload = { codes: normalizedCodes };
-      const { error } = await supabase.from('jobs').update({ unit_rate_config: payload }).eq('id', jobData.id);
-      if (error) throw error;
+      let finalCodes = Array.from(new Set(derived.map(c => String(c).trim())));
 
-      // Persist any staged VCS mappings to market_land_valuation
-      const stagedKeys = Object.keys(stagedMappings || {});
-      if (stagedKeys.length > 0) {
-        const savePromises = stagedKeys.map(async (vk) => {
-          const m = stagedMappings[vk];
-          try {
-            await saveUnitRateMappings(jobData.id, vk, { acre: m.acre || [], sf: m.sf || [], exclude: m.exclude || [] });
-            return { vk, ok: true };
-          } catch (e) {
-            console.error('Failed saving mapping for', vk, e);
-            return { vk, ok: false, error: e };
-          }
-        });
-        const results = await Promise.all(savePromises);
-        const failed = results.filter(r => !r.ok);
-        if (failed.length > 0) {
-          throw new Error(`Failed to save mappings for: ${failed.map(f => f.vk).join(', ')}`);
-        }
-
-        // On success, merge staged into combined (but DO NOT clear stagedMappings — keep stage persisted)
-        const merged = { ...(combinedMappings || {}) };
-        stagedKeys.forEach(k => { merged[k] = stagedMappings[k]; });
-        setCombinedMappings(merged);
-
-        // Update VCS options shown to reflect persisted mappings (staged remain visible in UI)
-        setVcsOptionsShown(vcsOptions.filter(opt => !merged[opt.key]));
-
-        // Do NOT clear jobs.staged_unit_rate_config — user requested staged data remain in DB
-        // Refresh persisted mappings from market_land_valuation to ensure Saved panel is up to date
-        try {
-          const { data: mvRow, error: mvErr } = await supabase.from('market_land_valuation').select('unit_rate_codes_applied').eq('job_id', jobData.id).single();
-          if (!mvErr && mvRow && mvRow.unit_rate_codes_applied) {
-            const payloadObj = typeof mvRow.unit_rate_codes_applied === 'string' ? JSON.parse(mvRow.unit_rate_codes_applied) : mvRow.unit_rate_codes_applied;
-            setCombinedMappings(payloadObj.mappings || {});
-            // update vcs options shown to exclude newly saved
-            setVcsOptionsShown(vcsOptions.filter(opt => !(payloadObj.mappings || {})[opt.key]));
-          }
-        } catch (e) {
-          console.warn('Failed refreshing market_land_valuation after save:', e);
-        }
+      // If no staged-derived codes exist, fall back to the UI selection (normalized)
+      if (!finalCodes || finalCodes.length === 0) {
+        const rawCodes = Array.from(selectedUnitRateCodes);
+        try { finalCodes = await normalizeSelectedCodes(jobData.id, rawCodes); } catch (e) { finalCodes = rawCodes; }
       }
 
-      alert('Unit rate configuration and mappings saved');
+      // Prepare payload: store codes and track last run timestamp inside the config
+      const payload = { codes: finalCodes, last_run: new Date().toISOString() };
+
+      // Persist to the jobs row only (do NOT use market_land_valuation for this flow)
+      const updatePayload = { unit_rate_config: payload, staged_unit_rate_config: staged };
+      const { error } = await supabase.from('jobs').update(updatePayload).eq('id', jobData.id);
+      if (error) throw error;
+
+      // Merge staged into combined view so UI shows staged as part of current mappings
+      setCombinedMappings(prev => ({ ...(prev || {}), ...(staged || {}) }));
+      setVcsOptionsShown(vcsOptions.filter(opt => !(staged || {})[opt.key]));
+
+      alert('Unit rate configuration saved to job (staged mappings preserved)');
     } catch (e) {
       console.error('Error saving unit rate config/mappings:', e);
       alert(`Failed to save unit rate configuration/mappings: ${formatError(e)}`);
