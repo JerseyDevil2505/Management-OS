@@ -196,12 +196,24 @@ const PreValuationTab = ({
     }
   };
 
-  const stageMapping = () => {
+  const stageMapping = async () => {
     if (!mappingVcsKey) return alert('Select a VCS first');
+    if (!jobData?.id) return alert('Job required');
     const payload = { acre: mappingAcre.slice(), sf: mappingSf.slice(), exclude: mappingExclude.slice() };
-    setStagedMappings(prev => ({ ...prev, [mappingVcsKey]: payload }));
-    setCombinedMappings(prev => ({ ...prev, [mappingVcsKey]: payload }));
-    alert(`Staged mapping for VCS ${mappingVcsKey}`);
+    const newStaged = { ...(stagedMappings || {}), [mappingVcsKey]: payload };
+
+    // Update local staged state (do not mark as saved yet)
+    setStagedMappings(newStaged);
+
+    // Persist staged snapshot to jobs.staged_unit_rate_config so it survives reloads
+    try {
+      const { error } = await supabase.from('jobs').update({ staged_unit_rate_config: newStaged }).eq('id', jobData.id);
+      if (error) throw error;
+      alert(`Staged mapping for VCS ${mappingVcsKey}`);
+    } catch (e) {
+      console.error('Failed persisting staged mapping', e);
+      alert('Failed staging mapping: ' + (e.message || e));
+    }
   };
 
   // When the selected VCS changes, populate mapping arrays from staged -> combined -> empty
@@ -3439,7 +3451,7 @@ const analyzeImportFile = async (file) => {
             
             <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
               <strong>Color Scale:</strong> 
-              <br/>��� First color: $0 - ${(colorScaleIncrement - 1).toLocaleString()}
+              <br/>• First color: $0 - ${(colorScaleIncrement - 1).toLocaleString()}
               <br/>• Second color: ${colorScaleIncrement.toLocaleString()} - ${((colorScaleIncrement * 2) - 1).toLocaleString()}
               <br/>��� Third color: ${(colorScaleIncrement * 2).toLocaleString()} - ${((colorScaleIncrement * 3) - 1).toLocaleString()}
               <br/>• And so on... Total of {marketAnalysisData.length} blocks analyzed.
