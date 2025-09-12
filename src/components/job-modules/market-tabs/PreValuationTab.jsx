@@ -76,7 +76,8 @@ const PreValuationTab = ({
   const [pauseAutoRefresh, setPauseAutoRefresh] = useState(false);
 
   const callRefresh = (opts = null) => {
-    if (pauseAutoRefresh) return;
+    // Suppress refreshes while user has paused auto refresh or while this component is processing
+    if (pauseAutoRefresh || processingRef.current) return;
     if (typeof onUpdateJobCache === 'function' && jobData?.id) {
       try { onUpdateJobCache(jobData.id, opts); } catch (e) { console.warn('callRefresh failed:', e); }
     }
@@ -112,6 +113,10 @@ const PreValuationTab = ({
   // Track rows currently being edited to avoid hiding them mid-edit when filters are applied
   const [editingRows, setEditingRows] = useState(new Set());
   const editTimersRef = useRef(new Map());
+  // Use a ref for immediate synchronous checks while typing to avoid timing issues with Set in state
+  const editingRowsRef = useRef(new Set());
+  // Ref to indicate when the component is performing a processing operation to suppress refreshes
+  const processingRef = useRef(false);
   // Unit Rate Configuration state (BRT only)
   const [unitRateCodes, setUnitRateCodes] = useState([]);
   const [selectedUnitRateCodes, setSelectedUnitRateCodes] = useState(new Set());
@@ -1892,9 +1897,13 @@ const handleSalesDecision = (saleId, decision) => {
     }
 
     // Mark this row as being edited so it won't disappear while user types
-    setEditingRows(prev => {
-      const next = new Set(prev);
-      next.add(propertyKey);
+    // Update the ref immediately for synchronous checks and then mirror into state
+    try {
+      const refSet = new Set(editingRowsRef.current);
+      refSet.add(propertyKey);
+      editingRowsRef.current = refSet;
+      // Mirror into state to trigger updates where needed
+      setEditingRows(new Set(refSet));
 
       // clear previous timer
       const timers = editTimersRef.current;
@@ -1904,16 +1913,19 @@ const handleSalesDecision = (saleId, decision) => {
       // set new timer to remove editing mark after 8 seconds of inactivity
       const t = setTimeout(() => {
         editTimersRef.current.delete(propertyKey);
-        setEditingRows(cur => {
-          const s = new Set(cur);
-          s.delete(propertyKey);
-          return s;
-        });
+        // update ref and state
+        const refAfter = new Set(editingRowsRef.current);
+        refAfter.delete(propertyKey);
+        editingRowsRef.current = refAfter;
+        setEditingRows(new Set(refAfter));
       }, 8000);
       timers.set(propertyKey, t);
-
-      return next;
-    });
+    } catch (e) {
+      // Fallback to original behavior on failure
+      const next = new Set(editingRows);
+      next.add(propertyKey);
+      setEditingRows(next);
+    }
 
     // Update using functional state update to avoid depending on worksheetProperties
     setWorksheetProperties(prev => {
@@ -1960,30 +1972,34 @@ const handleSalesDecision = (saleId, decision) => {
   }, [jobData?.id, worksheetStats, locationVariations]);
 
 const processSelectedProperties = async () => {
-    const toProcess = worksheetProperties.filter(p => 
+    const toProcess = worksheetProperties.filter(p =>
       readyProperties.has(p.property_composite_key)
     );
-    
+
     if (toProcess.length === 0) {
       alert('Please select properties to process by checking the "Ready" checkbox');
       return;
     }
-    
+
+    // Pause any automatic refreshes while processing to avoid parent reloads
+    setPauseAutoRefresh(true);
+    processingRef.current = true;
+
     setIsProcessingProperties(true);
     setProcessProgress({ current: 0, total: toProcess.length, message: 'Preparing to process properties...' });
-    
+
     try {
       // Process in batches of 500
       const batchSize = 500;
       for (let i = 0; i < toProcess.length; i += batchSize) {
         const batch = toProcess.slice(i, i + batchSize);
-        
-        setProcessProgress({ 
-          current: i, 
-          total: toProcess.length, 
-          message: `Processing batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(toProcess.length/batchSize)}...` 
+
+        setProcessProgress({
+          current: i,
+          total: toProcess.length,
+          message: `Processing batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(toProcess.length/batchSize)}...`
         });
-        
+
         // Build update array for batch upsert to property_market_analysis table
         const updates = batch.map(prop => ({
           job_id: jobData.id,
@@ -2001,13 +2017,13 @@ const processSelectedProperties = async () => {
 
         // Intentionally not clearing parent cache here to avoid interrupting user workflow; refresh manually when needed
       }
-      
-      setProcessProgress({ 
-        current: toProcess.length, 
-        total: toProcess.length, 
-        message: 'Processing complete!' 
+
+      setProcessProgress({
+        current: toProcess.length,
+        total: toProcess.length,
+        message: 'Processing complete!'
       });
-      
+
       setTimeout(() => {
         alert(`✅ Successfully processed ${toProcess.length} properties`);
         setReadyProperties(new Set());
@@ -2015,12 +2031,16 @@ const processSelectedProperties = async () => {
         setIsProcessingProperties(false);
         setProcessProgress({ current: 0, total: 0, message: '' });
       }, 500);
-      
+
     } catch (error) {
       console.error('Error processing properties:', error);
       alert('Error processing properties. Please try again.');
       setIsProcessingProperties(false);
       setProcessProgress({ current: 0, total: 0, message: '' });
+    } finally {
+      // Restore auto-refresh state after processing completes
+      processingRef.current = false;
+      setPauseAutoRefresh(false);
     }
   };
 
@@ -2405,22 +2425,22 @@ const analyzeImportFile = async (file) => {
 
     switch (worksheetFilter) {
       case 'missing-vcs':
-        filtered = filtered.filter(p => !p.new_vcs || editingRows.has(p.property_composite_key));
+        filtered = filtered.filter(p => !p.new_vcs || (editingRowsRef.current && editingRowsRef.current.has(p.property_composite_key) ) );
         break;
       case 'missing-location':
-        filtered = filtered.filter(p => !p.location_analysis || editingRows.has(p.property_composite_key));
+        filtered = filtered.filter(p => !p.location_analysis || (editingRowsRef.current && editingRowsRef.current.has(p.property_composite_key) ) );
         break;
       case 'missing-zoning':
-        filtered = filtered.filter(p => !p.asset_zoning || editingRows.has(p.property_composite_key));
+        filtered = filtered.filter(p => !p.asset_zoning || (editingRowsRef.current && editingRowsRef.current.has(p.property_composite_key) ) );
         break;
       case 'ready':
-        filtered = filtered.filter(p => readyProperties.has(p.property_composite_key) || editingRows.has(p.property_composite_key));
+        filtered = filtered.filter(p => readyProperties.has(p.property_composite_key) || (editingRowsRef.current && editingRowsRef.current.has(p.property_composite_key) ) );
         break;
       case 'completed':
-        filtered = filtered.filter(p => (p.new_vcs && p.asset_zoning) || editingRows.has(p.property_composite_key));
+        filtered = filtered.filter(p => (p.new_vcs && p.asset_zoning) || (editingRowsRef.current && editingRowsRef.current.has(p.property_composite_key) ) );
         break;
       case 'not-ready':
-        filtered = filtered.filter(p => !readyProperties.has(p.property_composite_key) || editingRows.has(p.property_composite_key));
+        filtered = filtered.filter(p => !readyProperties.has(p.property_composite_key) || (editingRowsRef.current && editingRowsRef.current.has(p.property_composite_key) ) );
         break;
     }
 
@@ -3102,7 +3122,7 @@ const analyzeImportFile = async (file) => {
                                       // DEBUG: Check all possible sales NU fields
                                       const salesNU = sale.sales_nu || sale.sales_instrument || sale.nu || sale.sale_nu || '';
                                       if (sale.id && sale.id.toString().endsWith('0')) { // Log every 10th for debugging
-                                        if (false) console.log(`���� Table render sales_nu for sale ${sale.id}:`, {
+                                        if (false) console.log(`������ Table render sales_nu for sale ${sale.id}:`, {
                                           sales_nu: sale.sales_nu,
                                           sales_instrument: sale.sales_instrument,
                                           nu: sale.nu,
@@ -4278,33 +4298,32 @@ const analyzeImportFile = async (file) => {
                {/* Mapping and Generate Lot Sizes removed per request */}
               <div style={{width:0,height:0}} aria-hidden="true" />
 
-               <button
-                onClick={async () => {
-                  if (!jobData?.id) return;
-                  setIsProcessingPageByPage(true);
-                  const newStatus = preValChecklist.page_by_page ? 'pending' : 'completed';
-                  try {
-                    const { data: { user } } = await supabase.auth.getUser();
-                    const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
-                    const updated = await checklistService.updateItemStatus(jobData.id, 'page-by-page', newStatus, completedBy);
-                    const persistedStatus = updated?.status || newStatus;
-                    setPreValChecklist(prev => ({ ...prev, page_by_page: persistedStatus === 'completed' }));
-                    try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'page-by-page', status: persistedStatus } })); } catch(e){}
-                    try { if (typeof onUpdateJobCache === 'function') callRefresh(null); } catch(e){}
-                  } catch (error) {
-                    console.error('Page by Page checklist update failed:', error);
-                    alert('Failed to update checklist. Please try again.');
-                  } finally {
-                    setIsProcessingPageByPage(false);
-                  }
-                }}
-                disabled={isProcessingPageByPage}
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-medium"
-                style={{ backgroundColor: preValChecklist.page_by_page ? '#10B981' : '#E5E7EB', color: preValChecklist.page_by_page ? 'white' : '#374151' }}
-                title={preValChecklist.page_by_page ? 'Click to reopen' : 'Mark Page by Page Worksheet complete'}
-              >
-                {isProcessingPageByPage ? 'Processing...' : (preValChecklist.page_by_page ? '��� Mark Complete' : 'Mark Complete')}
-              </button>
+               <label className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded">
+                <input
+                  type="checkbox"
+                  checked={!!preValChecklist.page_by_page}
+                  onChange={async (e) => {
+                    if (!jobData?.id) return;
+                    setIsProcessingPageByPage(true);
+                    const newStatus = e.target.checked ? 'completed' : 'pending';
+                    try {
+                      const { data: { user } } = await supabase.auth.getUser();
+                      const completedBy = newStatus === 'completed' ? (user?.id || null) : null;
+                      const updated = await checklistService.updateItemStatus(jobData.id, 'page-by-page', newStatus, completedBy);
+                      const persistedStatus = updated?.status || newStatus;
+                      setPreValChecklist(prev => ({ ...prev, page_by_page: persistedStatus === 'completed' }));
+                      try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'page-by-page', status: persistedStatus } })); } catch(e){}
+                      // Do not force a refresh; respect user's pauseAutoRefresh
+                    } catch (error) {
+                      console.error('Page by Page checklist update failed:', error);
+                      alert('Failed to update checklist. Please try again.');
+                    } finally {
+                      setIsProcessingPageByPage(false);
+                    }
+                  }}
+                />
+                <span className="text-sm font-medium">Page-by-Page Worksheet Complete</span>
+              </label>
              </div>
            </div>
          </div>
