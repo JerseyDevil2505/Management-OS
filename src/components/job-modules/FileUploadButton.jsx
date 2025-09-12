@@ -1395,12 +1395,22 @@ const handleCodeFileUpdate = async () => {
           const deletionsList = comparisonResults?.details?.deletions || [];
           addBatchLog(`🎯 DELETION OPTIMIZATION: Passing ${deletionsList.length} properties for targeted deletion`, 'info');
 
+          // Prefer Year/CCDD from CSV when present, otherwise fall back to job values
+          const parsedForYear = parseSourceFile(sourceFileContent, job.vendor_type);
+          let csvYear = job.year_created || new Date().getFullYear();
+          let csvCcdd = job.ccdd_code || job.ccddCode || '';
+          if (parsedForYear && parsedForYear.length > 0) {
+            const firstRow = parsedForYear[0];
+            if (firstRow.Year && String(firstRow.Year).trim() !== '') csvYear = String(firstRow.Year).trim();
+            if (firstRow.CCDD && String(firstRow.CCDD).trim() !== '') csvCcdd = String(firstRow.CCDD).trim();
+          }
+
           const result = await propertyService.updateCSVData(
             sourceFileContent,
             codeFileContent,
             job.id,
-            job.year_created || new Date().getFullYear(),
-            job.ccdd_code || job.ccddCode,
+            csvYear,
+            csvCcdd,
             job.vendor_type,
             {
               source_file_name: sourceFile?.name,
