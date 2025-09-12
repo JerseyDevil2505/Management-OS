@@ -712,8 +712,8 @@ useEffect(() => {
       // Always derive flat codes from staged mappings (acre + sf). Do NOT fall back to UI selection.
       const finalCodes = Array.from(new Set(derived.map(c => String(c).trim())));
 
-      // Persist the structured staged mapping to BOTH staged_unit_rate_config and unit_rate_config (no flattening)
-      const updatePayload = { unit_rate_config: staged, staged_unit_rate_config: staged };
+      // Persist the structured staged mapping into unit_rate_config only (do NOT modify staged_unit_rate_config)
+      const updatePayload = { unit_rate_config: staged };
 
       const { error } = await supabase.from('jobs').update(updatePayload).eq('id', jobData.id);
       if (error) {
