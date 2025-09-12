@@ -682,8 +682,8 @@ const handleCodeFileUpdate = async () => {
     if (!comparisonResults) return;
 
     // Create CSV content matching old format
-    let csvContent = "Report_Date,Change_Type,Block,Lot,Qualifier,Property_Location,Old_Value,New_Value,Status,Reviewed_By,Reviewed_Date\n";
-    
+    let csvContent = "Report_Date,Composite_Key,Change_Type,Block,Lot,Qualifier,Property_Location,Old_Value,New_Value,Status,Reviewed_By,Reviewed_Date\n";
+
     const reportDate = new Date().toLocaleDateString();
     
     // Add new records
