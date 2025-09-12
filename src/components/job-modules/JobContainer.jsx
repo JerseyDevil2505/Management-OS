@@ -715,6 +715,11 @@ const JobContainer = ({
         end_date: jobData?.end_date || selectedJob.end_date,
         workflow_stats: jobData?.workflow_stats || selectedJob.workflowStats || null,
 
+        // Preserve unit rate/staged mappings from DB so child components see them
+        unit_rate_config: jobData?.unit_rate_config || selectedJob.unit_rate_config || null,
+        staged_unit_rate_config: jobData?.staged_unit_rate_config || selectedJob.staged_unit_rate_config || null,
+        unit_rate_codes_applied: jobData?.unit_rate_codes_applied || selectedJob.unit_rate_codes_applied || null,
+
         // ADD THESE TWO LINES:
         parsed_code_definitions: jobData?.parsed_code_definitions || null,
         vendor_type: jobData?.vendor_type || null,
