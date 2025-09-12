@@ -1948,11 +1948,8 @@ const handleSalesDecision = (saleId, decision) => {
         location_variations: locationVariations
       });
 
-      //Clear cache after auto-save
-      if (onUpdateJobCache && jobData?.id) {
-        if (false) console.log('🗑️ Clearing cache after auto-save worksheet');
-        callRefresh(null);
-      }
+      // NOTE: intentionally NOT calling callRefresh here to avoid triggering job-wide refresh during edits/auto-save
+      // Clear cache only when user explicitly requests a refresh
 
       setLastAutoSave(new Date());
       setUnsavedChanges(false);
