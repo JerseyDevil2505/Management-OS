@@ -707,30 +707,12 @@ useEffect(() => {
       // Persist to the jobs row only (do NOT use market_land_valuation for this flow)
       const updatePayload = { unit_rate_config: payload, staged_unit_rate_config: staged };
 
-      // Primary write: update and SELECT the row back to verify
-      const { data: updatedJob, error } = await supabase.from('jobs').update(updatePayload).eq('id', jobData.id).select('unit_rate_config,staged_unit_rate_config').single();
+      // Simple write: update; if update fails, attempt an upsert fallback. Do NOT reload job data here.
+      const { error } = await supabase.from('jobs').update(updatePayload).eq('id', jobData.id);
       if (error) {
-        // Attempt fallback upsert if update failed
-        console.warn('Primary update failed, attempting upsert fallback:', error);
+        console.warn('Update failed, attempting upsert fallback:', error);
         const { error: upsertErr } = await supabase.from('jobs').upsert([{ id: jobData.id, ...updatePayload }], { onConflict: 'id' });
         if (upsertErr) throw upsertErr;
-      }
-
-      // Verify persisted values match expectation
-      try {
-        const { data: savedJob, error: fetchErr } = await supabase.from('jobs').select('unit_rate_config,staged_unit_rate_config').eq('id', jobData.id).single();
-        if (!fetchErr && savedJob) {
-          const savedCodes = (savedJob.unit_rate_config && savedJob.unit_rate_config.codes) || savedJob.unit_rate_config || [];
-          const wanted = Array.isArray(payload.codes) ? payload.codes : [];
-          const same = JSON.stringify((savedCodes || []).sort()) === JSON.stringify((wanted || []).sort());
-          if (!same) {
-            console.warn('Saved unit_rate_config.codes did not match expected payload.codes; attempting upsert with full payload');
-            const { error: upsertErr2 } = await supabase.from('jobs').upsert([{ id: jobData.id, ...updatePayload }], { onConflict: 'id' });
-            if (upsertErr2) console.warn('Upsert retry failed:', upsertErr2);
-          }
-        }
-      } catch (e) {
-        console.warn('Verification read failed after save:', e);
       }
 
       // Update local selection so UI reflects saved codes immediately
@@ -741,15 +723,6 @@ useEffect(() => {
       // Merge staged into combined view so UI shows staged as part of current mappings
       setCombinedMappings(prev => ({ ...(prev || {}), ...(staged || {}) }));
       setVcsOptionsShown(vcsOptions.filter(opt => !(staged || {})[opt.key]));
-
-      // Refresh parent cache so jobData reflects written values
-      if (typeof onUpdateJobCache === 'function') {
-        try {
-          await onUpdateJobCache(jobData.id, null);
-        } catch (e) {
-          console.warn('onUpdateJobCache failed after saving unit rate config:', e);
-        }
-      }
 
       alert('Unit rate configuration saved to job (staged mappings preserved)');
     } catch (e) {
