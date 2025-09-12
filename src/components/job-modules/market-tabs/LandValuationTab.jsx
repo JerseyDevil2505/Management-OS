@@ -435,10 +435,14 @@ useEffect(() => {
   // Restore all saved states from marketLandData
   if (marketLandData.raw_land_config) {
     if (marketLandData.raw_land_config.date_range) {
-      setDateRange({
-        start: new Date(marketLandData.raw_land_config.date_range.start),
-        end: new Date(marketLandData.raw_land_config.date_range.end)
-      });
+      // Validate dates before applying to state to avoid Invalid Date errors
+      const startCandidate = safeDateObj(marketLandData.raw_land_config.date_range.start);
+      const endCandidate = safeDateObj(marketLandData.raw_land_config.date_range.end);
+
+      setDateRange(prev => ({
+        start: startCandidate || prev.start,
+        end: endCandidate || prev.end
+      }));
     }
   }
 
@@ -3916,7 +3920,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
     debug('🔄 Recalculating category analysis');
-    debug('���� Total vacant sales:', vacantSales.length);
+    debug('����� Total vacant sales:', vacantSales.length);
     debug('📊 Checked sales count:', checkedSales.length);
     debug('📋 Included sales IDs:', Array.from(includedSales));
     debug('📋 Sale categories state:', saleCategories);
