@@ -703,23 +703,16 @@ useEffect(() => {
           throw new Error(`Failed to save mappings for: ${failed.map(f => f.vk).join(', ')}`);
         }
 
-        // On success, merge staged into combined and clear stagedMappings
+        // On success, merge staged into combined (but DO NOT clear stagedMappings — keep stage persisted)
         const merged = { ...(combinedMappings || {}) };
         stagedKeys.forEach(k => { merged[k] = stagedMappings[k]; });
         setCombinedMappings(merged);
-        setStagedMappings({});
 
-        // Update VCS options shown
+        // Update VCS options shown to reflect persisted mappings (staged remain visible in UI)
         setVcsOptionsShown(vcsOptions.filter(opt => !merged[opt.key]));
 
-        // Clear staged snapshot from jobs table
-        try {
-          await supabase.from('jobs').update({ staged_unit_rate_config: null }).eq('id', jobData.id);
-        } catch (e) {
-          console.warn('Failed clearing staged_unit_rate_config on jobs row:', e);
-        }
-
-        // Refresh persisted mappings from market_land_valuation to ensure UI reflects saved state
+        // Do NOT clear jobs.staged_unit_rate_config — user requested staged data remain in DB
+        // Refresh persisted mappings from market_land_valuation to ensure Saved panel is up to date
         try {
           const { data: mvRow, error: mvErr } = await supabase.from('market_land_valuation').select('unit_rate_codes_applied').eq('job_id', jobData.id).single();
           if (!mvErr && mvRow && mvRow.unit_rate_codes_applied) {
@@ -1066,7 +1059,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           });
 
           // Also log all property keys to see what's available
-          if (false) console.log(`🔍 Sale ${index + 1} ALL AVAILABLE KEYS:`, Object.keys(prop));
+          if (false) console.log(`��� Sale ${index + 1} ALL AVAILABLE KEYS:`, Object.keys(prop));
         }
         
         // Determine if outlier based on equalization ratio
@@ -3437,7 +3430,7 @@ const analyzeImportFile = async (file) => {
                   <option value="3">3* — Row / Townhouse (3E,3I,30,31)</option>
                   <option value="4">4* �� MultiFamily (42,43,44)</option>
                   <option value="5">5* — Conversions (51,52,53)</option>
-                  <option value="6">6 ��� Condominium</option>
+                  <option value="6">6 — Condominium</option>
                   <option value="all_residential">All Residential</option>
                 </select>
               </div>
@@ -3845,7 +3838,7 @@ const analyzeImportFile = async (file) => {
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('type_use_display')}
                         >
-                          Type/Use {sortConfig.field === 'type_use_display' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          Type/Use {sortConfig.field === 'type_use_display' && (sortConfig.direction === 'asc' ? '↑' : '��')}
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
