@@ -872,12 +872,46 @@ const JobContainer = ({
       onFileProcessed: handleFileProcessed,
       onDataRefresh: loadLatestFileVersions,  // FIXED: Pass data refresh function for modal close timing
       // NEW: Provide a job-level refresh callback so children can request the parent to reload job data
+      // Rate-limited: ignore rapid repeat refreshes unless forced via opts.forceRefresh
       onUpdateJobCache: async (jobId, opts = null) => {
         try {
-          // If jobId provided and matches current selectedJob, reload; otherwise ignore
-          if (!jobId || (selectedJob && jobId === selectedJob.id)) {
+          const force = opts && opts.forceRefresh;
+          const now = Date.now();
+          // Use outer scoped refs to track last refresh timestamp
+          if (!lastJobRefreshAtRef.current) lastJobRefreshAtRef.current = 0;
+
+          const withinCooldown = (now - lastJobRefreshAtRef.current) < 30000; // 30s
+
+          // If not for current job, ignore
+          if (jobId && selectedJob && jobId !== selectedJob.id) return;
+
+          if (force) {
             await loadLatestFileVersions();
+            lastJobRefreshAtRef.current = Date.now();
+            return;
           }
+
+          if (withinCooldown) {
+            // Schedule a single pending refresh if not already scheduled
+            if (!pendingRefreshRef.current) {
+              pendingRefreshRef.current = true;
+              setTimeout(async () => {
+                try {
+                  await loadLatestFileVersions();
+                } catch (e) {
+                  console.warn('Deferred onUpdateJobCache failed:', e);
+                } finally {
+                  pendingRefreshRef.current = false;
+                  lastJobRefreshAtRef.current = Date.now();
+                }
+              }, 30000); // run after cooldown
+            }
+            return;
+          }
+
+          // Otherwise perform refresh and update timestamp
+          await loadLatestFileVersions();
+          lastJobRefreshAtRef.current = Date.now();
         } catch (e) {
           console.warn('onUpdateJobCache failed:', e);
         }
