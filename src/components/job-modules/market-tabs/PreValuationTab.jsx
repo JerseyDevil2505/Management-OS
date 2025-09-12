@@ -2118,7 +2118,7 @@ const analyzeImportFile = async (file) => {
                       'NONE';
           }
         } else { // BRT
-          location = (row.PROPERTY_LOCATION || row['Property Location'] || row.Location)?.toString().trim() || 'NONE';
+          location = (row.PROPERTY_LOCATION || row['Property Location'] || row.Location)?.toString() || 'NONE';
         }
         
         const compositeKey = `${year}${ccdd}-${block}-${lot}_${qual}-${card}-${location}`;
