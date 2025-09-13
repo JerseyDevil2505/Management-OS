@@ -481,8 +481,8 @@ const App = () => {
 
     // For any billing-related updates, just reload fresh data
     if (type.includes('billing') || type.includes('event')) {
-      console.log('🔄 Billing data updated, reloading fresh data...');
-      await loadLiveData(['billing']);
+      console.log('🔄 Billing data updated, reloading fresh jobs + billing...');
+      await loadLiveData(['jobs', 'billing']);
       return;
     }
 
