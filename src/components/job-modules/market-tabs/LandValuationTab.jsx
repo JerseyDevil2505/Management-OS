@@ -899,7 +899,8 @@ const getPricePerUnit = useCallback((price, size) => {
 
       manuallyAddedProps.forEach(prop => {
         const acres = calculateAcreage(prop);
-        const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+        const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
+        const pricePerUnit = getPricePerUnit(prop.sales_price, sizeForUnit);
         finalSales.push({
           ...prop,
           totalAcres: acres,
@@ -970,7 +971,8 @@ const getPricePerUnit = useCallback((price, size) => {
         debug('🔄 Found new sales to add:', newSales.length);
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
-          const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+          const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
+          const pricePerUnit = getPricePerUnit(prop.sales_price, sizeForUnit);
           return {
             ...prop,
             totalAcres: acres,
@@ -1804,7 +1806,8 @@ const getPricePerUnit = useCallback((price, size) => {
 
     const enriched = toAdd.map(prop => {
       const acres = calculateAcreage(prop);
-      const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+      const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
+      const pricePerUnit = getPricePerUnit(prop.sales_price, sizeForUnit);
       return {
         ...prop,
         totalAcres: acres,
@@ -6439,7 +6442,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_design_style') || prop.asset_design_style || '-'
                         : prop.asset_design_style || '-';
                       const acres = calculateAcreage(prop);
-                      const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+                      const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
+                      const pricePerUnit = getPricePerUnit(prop.sales_price, sizeForUnit);
                       
                       return (
                         <tr key={prop.id}>
