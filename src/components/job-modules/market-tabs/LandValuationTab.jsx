@@ -1066,22 +1066,35 @@ const getPricePerUnit = useCallback((price, size) => {
       
       // Auto-categorize teardowns and pre-construction
       let category = saleCategories[prop.id];
-      // Check for additional cards on same property
-      const hasAdditionalCards = properties.some(p => 
-        p.property_block === prop.property_block &&
-        p.property_lot === prop.property_lot &&
-        p.property_addl_card && 
-        p.property_addl_card !== 'NONE' &&
-        p.property_addl_card !== 'M' &&
-        p.sales_date === prop.sales_date
-      );
+      // Determine additional-cards using centralized analyzer to avoid false positives
+      try {
+        const packageAnalysis = interpretCodes.getPackageSaleData(properties, prop);
+        if (packageAnalysis && packageAnalysis.is_additional_card && !isPackage) {
+          prop.packageData = {
+            is_package: false,
+            package_type: 'additional_cards',
+            package_count: packageAnalysis.package_count || 2,
+            properties: packageAnalysis.package_properties ? packageAnalysis.package_properties.map(p => p.composite_key) : []
+          };
+        }
+      } catch (e) {
+        // Fallback: keep previous heuristic if analyzer fails
+        const hasAdditionalCards = properties.some(p =>
+          p.property_block === prop.property_block &&
+          p.property_lot === prop.property_lot &&
+          p.property_addl_card &&
+          p.property_addl_card !== 'NONE' &&
+          p.property_addl_card !== 'M' &&
+          p.sales_date === prop.sales_date
+        );
 
-      if (hasAdditionalCards && !isPackage) {
-        prop.packageData = {
-          is_package: true,
-          package_type: 'additional_cards',
-          package_count: 2
-        };
+        if (hasAdditionalCards && !isPackage) {
+          prop.packageData = {
+            is_package: true,
+            package_type: 'additional_cards',
+            package_count: 2
+          };
+        }
       }
       if (!category) {
         if (prop.property_m4_class === '2' && prop.values_mod_improvement < 10000) {
