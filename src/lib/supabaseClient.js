@@ -1495,17 +1495,73 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
       return propClass === '3B';
     });
 
-    // Check if this is additional cards for same property
+    // Determine package type using robust checks:
+    // 1) If only one record -> not a package (handled earlier)
+    // 2) If multiple records but all share same base property (block-lot-qualifier) AND there are multiple distinct card values -> additional cards
+    // 3) If multiple distinct base properties -> multi-property package
+
     let isAdditionalCard = false;
-    if (packageProperties.length > 1) {
-      const firstParts = packageProperties[0].property_composite_key.split('-');
-      const expectedBase = `${firstParts[0]}-${firstParts[1]}-${firstParts[2]}-${firstParts[3]}`;
-      
-      isAdditionalCard = packageProperties.every(p => {
-        const parts = p.property_composite_key.split('-');
-        const base = `${parts[0]}-${parts[1]}-${parts[2]}-${parts[3]}`;
-        return base === expectedBase;
-      });
+    let isMultiPropertyPackage = false;
+
+    // Build sets of base keys and card identifiers using explicit fields when available
+    const baseKeys = new Set();
+    const cardIds = new Set();
+
+    packageProperties.forEach(p => {
+      const block = (p.property_block || '').toString().trim();
+      const lot = (p.property_lot || '').toString().trim();
+      const qual = (p.property_qualifier || '').toString().trim();
+      const baseKey = `${block}-${lot}-${qual}`;
+      baseKeys.add(baseKey);
+
+      // Card can be in explicit field or parsed from composite key
+      let card = p.property_card || p.property_addl_card || null;
+      if (!card && p.property_composite_key) {
+        const parts = p.property_composite_key.split('-').map(s => s.trim());
+        // heuristic: card is often the 4th or 5th part; try common positions
+        card = parts[4] || parts[3] || null;
+      }
+      if (card) cardIds.add(String(card).trim().toUpperCase());
+    });
+
+    if (baseKeys.size === 1) {
+      // All records refer to same base property. Determine if there are multiple distinct cards
+      // Apply vendor-specific rules to interpret cards
+      if (cardIds.size > 1) {
+        // For BRT, card values are numeric; require at least one numeric card > 1 to be additional
+        const sampleVendorCheck = packageProperties[0]?.vendor || null;
+        if (sampleVendorCheck === 'BRT') {
+          const numericCards = Array.from(cardIds).map(c => parseInt(c)).filter(n => !isNaN(n));
+          // If multiple numeric card values and at least one > 1, it's additional cards
+          if (numericCards.length > 1 && numericCards.some(n => n > 1)) {
+            isAdditionalCard = true;
+          }
+        } else {
+          // Microsystems or others: treat 'M' as main, other letters as additional
+          const nonMain = Array.from(cardIds).filter(c => c !== 'M');
+          if (nonMain.length > 0 && cardIds.size > 1) {
+            isAdditionalCard = true;
+          } else if (cardIds.size > 1) {
+            // Fallback: multiple distinct card identifiers -> additional
+            isAdditionalCard = true;
+          }
+        }
+
+        // Safety: if cardIds.size <=1, treat as single property sale (not additional)
+      } else {
+        // Only one unique card value across multiple records — treat as single property sale (avoid false positive)
+        // Do not mark as additional card
+        isAdditionalCard = false;
+      }
+    } else if (baseKeys.size > 1) {
+      // Multiple different base properties -> true package
+      isMultiPropertyPackage = true;
+    }
+
+    // If neither additional nor multi-property detected, but packageProperties.length > 1, default to package
+    if (!isAdditionalCard && !isMultiPropertyPackage && packageProperties.length > 1) {
+      // In ambiguous cases assume multi-property package to be safe
+      isMultiPropertyPackage = true;
     }
     
     const hasResidential = packageProperties.some(p => {
