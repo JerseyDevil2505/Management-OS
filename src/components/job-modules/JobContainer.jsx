@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Building, Factory, TrendingUp, DollarSign, Scale, Database, AlertCircle } from 'lucide-react';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase, interpretCodes } from '../../lib/supabaseClient';
 import ManagementChecklist from './ManagementChecklist';
 import ProductionTracker from './ProductionTracker';
 import MarketAnalysis from './MarketAnalysis';
@@ -320,7 +320,18 @@ const JobContainer = ({
                   asset_lot_acre: marketAnalysis.asset_lot_acre ?? property.asset_lot_acre ?? null,
                   asset_lot_sf: marketAnalysis.asset_lot_sf ?? property.asset_lot_sf ?? null,
                   asset_lot_frontage: marketAnalysis.asset_lot_frontage ?? property.asset_lot_frontage ?? null,
-                  asset_lot_depth: marketAnalysis.asset_lot_depth ?? property.asset_lot_depth ?? null
+                  asset_lot_depth: marketAnalysis.asset_lot_depth ?? property.asset_lot_depth ?? null,
+                  // Derived acreage using centralized calculator (returns numeric acres or null)
+                  calculated_lot_acre: (() => {
+                    try {
+                      const vendor = (jobData && (jobData.vendor_source || jobData.vendor)) || 'BRT';
+                      const val = interpretCodes.getCalculatedAcreage(propertyData, vendor);
+                      const num = parseFloat(val);
+                      return !isNaN(num) && num > 0 ? num : null;
+                    } catch (e) {
+                      return null;
+                    }
+                  })()
                 };
               });
 
@@ -1172,19 +1183,9 @@ const JobContainer = ({
                 return (
                   <button
                     key={module.id}
-                    onClick={async () => {
+                    onClick={() => {
                       if (isAvailable) {
-                        // When switching modules, refresh parent job data (mount/switch rule)
-                        if (activeModule !== module.id) {
-                          try {
-                            console.log(`Module switch: reloading job data for module ${module.id}`);
-                            await loadLatestFileVersions();
-                          } catch (e) {
-                            console.warn('Module switch refresh failed:', e);
-                          }
-                        }
-
-                        // clear moduleHasChanges flag when leaving
+                        // Do not reload parent data on module switch. Initial load happens when job is opened.
                         if (moduleHasChanges && activeModule !== module.id) {
                           setModuleHasChanges(false);
                         }

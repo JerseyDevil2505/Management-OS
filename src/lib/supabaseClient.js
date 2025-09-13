@@ -1164,35 +1164,37 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
 getTotalLotSize: async function(property, vendorType, codeDefinitions) {
   if (!property) return null;
 
-  // If a manual/calculated lot acreage exists (from unit-rate calc), prefer it
-  const manualAcre = property.market_manual_lot_acre ?? property.market_manual_acre ?? property.market_manual_lot_acre;
+  // 1) Explicit manual acreage from unit-rate processing (preferred)
+  const manualAcre = property.market_manual_lot_acre ?? property.market_manual_acre ?? property.manual_lot_acre ?? null;
   if (manualAcre !== undefined && manualAcre !== null) {
     const num = parseFloat(manualAcre);
     if (!isNaN(num) && num > 0) return num;
   }
 
-  // First check direct acre/sf fields
+  // 2) Explicit asset acreage
   let totalAcres = parseFloat(property.asset_lot_acre) || 0;
-  let totalSf = parseFloat(property.asset_lot_sf) || 0;
-  
-  // If no direct values, calculate from frontage × depth (works for both vendors)
+
+  // 3) Explicit square feet fields (manual then asset) -> convert to acres
+  const sfCandidates = (property.market_manual_lot_sf && parseFloat(property.market_manual_lot_sf)) || (property.asset_lot_sf && parseFloat(property.asset_lot_sf)) || 0;
+  let totalSf = sfCandidates || 0;
+
+  // 4) If still nothing, compute from frontage × depth
   if (totalAcres === 0 && totalSf === 0) {
     const frontage = parseFloat(property.asset_lot_frontage) || 0;
     const depth = parseFloat(property.asset_lot_depth) || 0;
-    
     if (frontage > 0 && depth > 0) {
       totalSf = frontage * depth;
     }
   }
-  
-// BRT: Check LANDUR codes only if still no data
+
+  // 5) BRT: Check LANDUR codes only if still no data and code definitions are available
   if (totalAcres === 0 && totalSf === 0 && vendorType === 'BRT' && property.job_id && property.property_composite_key && codeDefinitions) {
     const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
     const propertyVCS = rawData?.VCS || property.property_vcs;
-    
+
     if (propertyVCS && codeDefinitions.sections?.VCS) {
       let vcsData = codeDefinitions.sections.VCS[propertyVCS];
-      
+
       if (!vcsData) {
         // Search for matching VCS
         for (const [key, value] of Object.entries(codeDefinitions.sections.VCS)) {
@@ -1202,27 +1204,27 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
           }
         }
       }
-      
+
       if (vcsData?.MAP?.["8"]?.MAP) {
         const urcMap = vcsData.MAP["8"].MAP;
-        
+
         for (let i = 1; i <= 6; i++) {
           const landCode = rawData?.[`LANDUR_${i}`];
           const landUnits = parseFloat(rawData?.[`LANDURUNITS_${i}`]) || 0;
-          
+
           // BRT stores single digit codes without leading zero, pad them
           const paddedCode = landCode ? String(landCode).padStart(2, '0') : null;
-          
+
           if (paddedCode && landUnits > 0) {
             // Find the matching code entry (they're numbered "1", "2", "3" etc)
             for (const key in urcMap) {
               if (urcMap[key].KEY === paddedCode && urcMap[key].MAP?.["1"]?.DATA?.VALUE) {
                 const description = urcMap[key].MAP["1"].DATA.VALUE.toUpperCase();
-                
-                if ((description.includes('ACRE') || description.includes('AC')) && 
+
+                if ((description.includes('ACRE') || description.includes('AC')) &&
                     !description.includes('SITE VALUE')) {
                   totalAcres += landUnits;
-                } else if ((description.includes('SF') || description.includes('SQUARE')) && 
+                } else if ((description.includes('SF') || description.includes('SQUARE')) &&
                            !description.includes('SITE VALUE')) {
                   totalSf += landUnits;
                 }
@@ -1234,9 +1236,10 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
       }
     }
   }
-  // Convert all to acres and return
-  const finalAcres = totalAcres + (totalSf / 43560);
-  return finalAcres > 0 ? finalAcres : null;
+
+  // Convert sf to acres and return the first positive result
+  const finalAcres = (totalAcres && totalAcres > 0) ? totalAcres : (totalSf && totalSf > 0 ? (totalSf / 43560) : null);
+  return finalAcres && finalAcres > 0 ? finalAcres : null;
 },
 // Get bathroom plumbing sum (BRT only)
   getBathroomPlumbingSum: async function(property, vendorType) {
@@ -1492,17 +1495,73 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
       return propClass === '3B';
     });
 
-    // Check if this is additional cards for same property
+    // Determine package type using robust checks:
+    // 1) If only one record -> not a package (handled earlier)
+    // 2) If multiple records but all share same base property (block-lot-qualifier) AND there are multiple distinct card values -> additional cards
+    // 3) If multiple distinct base properties -> multi-property package
+
     let isAdditionalCard = false;
-    if (packageProperties.length > 1) {
-      const firstParts = packageProperties[0].property_composite_key.split('-');
-      const expectedBase = `${firstParts[0]}-${firstParts[1]}-${firstParts[2]}-${firstParts[3]}`;
-      
-      isAdditionalCard = packageProperties.every(p => {
-        const parts = p.property_composite_key.split('-');
-        const base = `${parts[0]}-${parts[1]}-${parts[2]}-${parts[3]}`;
-        return base === expectedBase;
-      });
+    let isMultiPropertyPackage = false;
+
+    // Build sets of base keys and card identifiers using explicit fields when available
+    const baseKeys = new Set();
+    const cardIds = new Set();
+
+    packageProperties.forEach(p => {
+      const block = (p.property_block || '').toString().trim();
+      const lot = (p.property_lot || '').toString().trim();
+      const qual = (p.property_qualifier || '').toString().trim();
+      const baseKey = `${block}-${lot}-${qual}`;
+      baseKeys.add(baseKey);
+
+      // Card can be in explicit field or parsed from composite key
+      let card = p.property_card || p.property_addl_card || null;
+      if (!card && p.property_composite_key) {
+        const parts = p.property_composite_key.split('-').map(s => s.trim());
+        // heuristic: card is often the 4th or 5th part; try common positions
+        card = parts[4] || parts[3] || null;
+      }
+      if (card) cardIds.add(String(card).trim().toUpperCase());
+    });
+
+    if (baseKeys.size === 1) {
+      // All records refer to same base property. Determine if there are multiple distinct cards
+      // Apply vendor-specific rules to interpret cards
+      if (cardIds.size > 1) {
+        // For BRT, card values are numeric; require at least one numeric card > 1 to be additional
+        const sampleVendorCheck = packageProperties[0]?.vendor || null;
+        if (sampleVendorCheck === 'BRT') {
+          const numericCards = Array.from(cardIds).map(c => parseInt(c)).filter(n => !isNaN(n));
+          // If multiple numeric card values and at least one > 1, it's additional cards
+          if (numericCards.length > 1 && numericCards.some(n => n > 1)) {
+            isAdditionalCard = true;
+          }
+        } else {
+          // Microsystems or others: treat 'M' as main, other letters as additional
+          const nonMain = Array.from(cardIds).filter(c => c !== 'M');
+          if (nonMain.length > 0 && cardIds.size > 1) {
+            isAdditionalCard = true;
+          } else if (cardIds.size > 1) {
+            // Fallback: multiple distinct card identifiers -> additional
+            isAdditionalCard = true;
+          }
+        }
+
+        // Safety: if cardIds.size <=1, treat as single property sale (not additional)
+      } else {
+        // Only one unique card value across multiple records — treat as single property sale (avoid false positive)
+        // Do not mark as additional card
+        isAdditionalCard = false;
+      }
+    } else if (baseKeys.size > 1) {
+      // Multiple different base properties -> true package
+      isMultiPropertyPackage = true;
+    }
+
+    // If neither additional nor multi-property detected, but packageProperties.length > 1, default to package
+    if (!isAdditionalCard && !isMultiPropertyPackage && packageProperties.length > 1) {
+      // In ambiguous cases assume multi-property package to be safe
+      isMultiPropertyPackage = true;
     }
     
     const hasResidential = packageProperties.some(p => {
@@ -1673,8 +1732,11 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
   },
   // ===== SMART ACREAGE CALCULATOR =====
   getCalculatedAcreage: function(property, vendorType) {
+    // Defensive: if property is falsy, return zero acres string
+    if (!property) return '0.00';
+
     // 1. Prefer a manual override field in property_market_analysis
-    const marketAnalysis = property.property_market_analysis || property.property_market_analysis_raw || null;
+    const marketAnalysis = (property && (property.property_market_analysis || property.property_market_analysis_raw)) || null;
 
     const manualAcre = marketAnalysis?.market_manual_lot_acre ?? marketAnalysis?.market_manual_acre ?? property.market_manual_lot_acre;
     if (manualAcre && parseFloat(manualAcre) > 0) {

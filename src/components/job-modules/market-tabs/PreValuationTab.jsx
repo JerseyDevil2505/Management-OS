@@ -75,13 +75,58 @@ const PreValuationTab = ({
   // Control to pause parent refreshes while user is actively editing
   const [pauseAutoRefresh, setPauseAutoRefresh] = useState(false);
 
-  const callRefresh = (opts = null) => {
-    // Suppress refreshes while user has paused auto refresh or while this component is processing
-    if (pauseAutoRefresh || processingRef.current) return;
-    if (typeof onUpdateJobCache === 'function' && jobData?.id) {
-      try { onUpdateJobCache(jobData.id, opts); } catch (e) { console.warn('callRefresh failed:', e); }
-    }
-  };
+  const callRefresh = useMemo(() => {
+    let refreshTimer = null;
+    let lastRefreshAt = 0;
+    const COOLDOWN = 30000; // 30s cooldown to match parent
+
+    const doRefresh = (force = false) => {
+      if (pauseAutoRefresh || processingRef.current) return;
+      if (typeof onUpdateJobCache !== 'function' || !jobData?.id) return;
+      try {
+        onUpdateJobCache(jobData.id, { forceRefresh: true });
+        lastRefreshAt = Date.now();
+      } catch (e) {
+        console.warn('debounced callRefresh failed:', e);
+      }
+    };
+
+    const queuedRefresh = (opts = null) => {
+      // If opts explicitly requests forceRefresh, perform immediate refresh
+      const force = opts && opts.forceRefresh;
+      const now = Date.now();
+
+      if (force) {
+        // Cancel any pending timer and refresh immediately
+        if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
+        doRefresh(true);
+        return;
+      }
+
+      // Respect pause and processing states
+      if (pauseAutoRefresh || processingRef.current) return;
+
+      const sinceLast = now - lastRefreshAt;
+      if (sinceLast > COOLDOWN) {
+        doRefresh(false);
+        return;
+      }
+
+      // Debounce subsequent calls until cooldown expires
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        refreshTimer = null;
+        doRefresh(false);
+      }, COOLDOWN - sinceLast);
+    };
+
+    queuedRefresh.cancel = () => {
+      if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
+    };
+
+    return queuedRefresh;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pauseAutoRefresh, onUpdateJobCache, jobData?.id]);
 
   // Mounted guard to prevent initial effect storms
   const [isMounted, setIsMounted] = useState(false);

@@ -170,6 +170,9 @@ const LandValuationTab = ({
   const [landNotes, setLandNotes] = useState({});
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCopiedNotification, setShowCopiedNotification] = useState(false);
+  // Notification for saved land rates
+  const [showSaveRatesNotification, setShowSaveRatesNotification] = useState(false);
+  const [saveRatesMessage, setSaveRatesMessage] = useState('');
   const [searchFilters, setSearchFilters] = useState({
     class: '',
     block: '',
@@ -677,16 +680,19 @@ useEffect(() => {
 
   // ========== GET PRICE PER UNIT ==========
 const getPricePerUnit = useCallback((price, size) => {
+  // Always return whole numbers for unit rates per user request
   if (valuationMode === 'acre') {
     return size > 0 ? Math.round(price / size) : 0;
   } else if (valuationMode === 'sf') {
-    // size is already in acres, convert to SF then calculate price per SF
-    const sizeInSF = size * 43560;
-    return sizeInSF > 0 ? parseFloat(price / sizeInSF) : 0;
+    // size is provided in acres; convert to SF then calculate price per SF
+    const sizeInSF = (parseFloat(size) || 0) * 43560;
+    return sizeInSF > 0 ? Math.round(price / sizeInSF) : 0;
   } else if (valuationMode === 'ff') {
-    // For front foot, need frontage
-    return 0; // Will be calculated differently
+    // For front foot, 'size' is expected to be frontage in feet
+    const frontage = parseFloat(size) || 0;
+    return frontage > 0 ? Math.round(price / frontage) : 0;
   }
+  return 0;
 }, [valuationMode]);
 
   // ========== GET UNIT LABEL ==========
@@ -893,7 +899,8 @@ const getPricePerUnit = useCallback((price, size) => {
 
       manuallyAddedProps.forEach(prop => {
         const acres = calculateAcreage(prop);
-        const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+        const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
+        const pricePerUnit = getPricePerUnit(prop.sales_price, sizeForUnit);
         finalSales.push({
           ...prop,
           totalAcres: acres,
@@ -964,7 +971,8 @@ const getPricePerUnit = useCallback((price, size) => {
         debug('🔄 Found new sales to add:', newSales.length);
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
-          const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+          const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
+          const pricePerUnit = getPricePerUnit(prop.sales_price, sizeForUnit);
           return {
             ...prop,
             totalAcres: acres,
@@ -1059,26 +1067,48 @@ const getPricePerUnit = useCallback((price, size) => {
     // Helper function to enrich property with calculated fields
     const enrichProperty = (prop, isPackage = false) => {
       const acres = calculateAcreage(prop);
-      const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
-      
+      // For front foot mode use frontage as size
+      let pricePerUnit;
+      if (valuationMode === 'ff') {
+        const frontage = parseFloat(prop.asset_lot_frontage) || 0;
+        pricePerUnit = getPricePerUnit(prop.sales_price, frontage);
+      } else {
+        pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+      }
+      // Ensure whole numbers for unit rates
+      const roundedUnitPrice = Math.round(pricePerUnit);
+
       // Auto-categorize teardowns and pre-construction
       let category = saleCategories[prop.id];
-      // Check for additional cards on same property
-      const hasAdditionalCards = properties.some(p => 
-        p.property_block === prop.property_block &&
-        p.property_lot === prop.property_lot &&
-        p.property_addl_card && 
-        p.property_addl_card !== 'NONE' &&
-        p.property_addl_card !== 'M' &&
-        p.sales_date === prop.sales_date
-      );
+      // Determine additional-cards using centralized analyzer to avoid false positives
+      try {
+        const packageAnalysis = interpretCodes.getPackageSaleData(properties, prop);
+        if (packageAnalysis && packageAnalysis.is_additional_card && !isPackage) {
+          prop.packageData = {
+            is_package: false,
+            package_type: 'additional_cards',
+            package_count: packageAnalysis.package_count || 2,
+            properties: packageAnalysis.package_properties ? packageAnalysis.package_properties.map(p => p.composite_key) : []
+          };
+        }
+      } catch (e) {
+        // Fallback: keep previous heuristic if analyzer fails
+        const hasAdditionalCards = properties.some(p =>
+          p.property_block === prop.property_block &&
+          p.property_lot === prop.property_lot &&
+          p.property_addl_card &&
+          p.property_addl_card !== 'NONE' &&
+          p.property_addl_card !== 'M' &&
+          p.sales_date === prop.sales_date
+        );
 
-      if (hasAdditionalCards && !isPackage) {
-        prop.packageData = {
-          is_package: true,
-          package_type: 'additional_cards',
-          package_count: 2
-        };
+        if (hasAdditionalCards && !isPackage) {
+          prop.packageData = {
+            is_package: true,
+            package_type: 'additional_cards',
+            package_count: 2
+          };
+        }
       }
       if (!category) {
         if (prop.property_m4_class === '2' && prop.values_mod_improvement < 10000) {
@@ -1093,7 +1123,7 @@ const getPricePerUnit = useCallback((price, size) => {
       return {
         ...prop,
         totalAcres: acres,
-        pricePerAcre: pricePerUnit,
+        pricePerAcre: roundedUnitPrice,
         autoCategory: category,
         isPackage
       };
@@ -1101,14 +1131,123 @@ const getPricePerUnit = useCallback((price, size) => {
 
     // Process packages and standalone (add to existing finalSales that contains manually added)
 
-    // Consolidate package sales
+    // Consolidate package sales using centralized analyzer
     Object.entries(packageGroups).forEach(([key, group]) => {
+      // Use centralized package analyzer to determine exact package type
+      const packageData = interpretCodes.getPackageSaleData(properties, group[0]);
+
+      if (packageData) {
+        // If packageData indicates an additional cards scenario
+        if (packageData.is_additional_card) {
+          // When it's additional cards, present as single enriched property (do not aggregate multiple properties)
+          const enriched = enrichProperty(group[0]);
+          enriched.packageData = {
+            is_package: false,
+            package_type: 'additional_cards',
+            package_count: packageData.package_count || group.length,
+            properties: packageData.package_properties ? packageData.package_properties.map(p => p.composite_key) : group.map(p => p.property_composite_key)
+          };
+          finalSales.push(enriched);
+          if (enriched.autoCategory) setSaleCategories(prev => ({...prev, [enriched.id]: enriched.autoCategory}));
+          return;
+        }
+
+        // Multi-property package
+        if (packageData.is_package_sale || packageData.package_count > 1) {
+            // Prefer any precomputed combined lot acres from the analyzer
+          const totalPrice = packageData.package_properties.reduce((sum, pObj) => {
+            const compKey = (typeof pObj === 'string') ? pObj : (pObj.composite_key || pObj.compositeKey || pObj.property_composite_key || pObj.composite);
+            const p = group.find(g => g.property_composite_key === compKey) || properties.find(pp => pp.property_composite_key === compKey);
+            return sum + (p?.sales_price || 0);
+          }, 0);
+
+          let totalAcres = null;
+          if (packageData.combined_lot_acres && !isNaN(Number(packageData.combined_lot_acres)) && Number(packageData.combined_lot_acres) > 0) {
+            totalAcres = Number(packageData.combined_lot_acres);
+          } else if (packageData.combined_lot_sf && !isNaN(Number(packageData.combined_lot_sf)) && Number(packageData.combined_lot_sf) > 0) {
+            totalAcres = Number(packageData.combined_lot_sf) / 43560;
+          } else {
+            totalAcres = packageData.package_properties.reduce((sum, pObj) => {
+              const compKey = (typeof pObj === 'string') ? pObj : (pObj.composite_key || pObj.compositeKey || pObj.property_composite_key || pObj.composite);
+              const p = group.find(g => g.property_composite_key === compKey) || properties.find(pp => pp.property_composite_key === compKey);
+              return sum + parseFloat(calculateAcreage(p) || 0);
+            }, 0);
+          }
+
+          let pricePerUnit;
+          let packageSale = null;
+
+          if (valuationMode === 'ff') {
+            // Sum frontage and compute average depth for display
+            const totalFrontage = packageData.package_properties.reduce((sum, pObj) => {
+              const compKey = (typeof pObj === 'string') ? pObj : (pObj.composite_key || pObj.compositeKey || pObj.property_composite_key || pObj.composite);
+              const p = group.find(g => g.property_composite_key === compKey) || properties.find(pp => pp.property_composite_key === compKey);
+              return sum + (parseFloat(p?.asset_lot_frontage) || 0);
+            }, 0);
+            const depthValues = packageData.package_properties.map(pObj => {
+              const compKey = (typeof pObj === 'string') ? pObj : (pObj.composite_key || pObj.compositeKey || pObj.property_composite_key || pObj.composite);
+              const p = group.find(g => g.property_composite_key === compKey) || properties.find(pp => pp.property_composite_key === compKey);
+              return parseFloat(p?.asset_lot_depth) || null;
+            }).filter(Boolean);
+            const avgDepth = depthValues.length > 0 ? (depthValues.reduce((s, v) => s + v, 0) / depthValues.length) : null;
+
+            pricePerUnit = getPricePerUnit(totalPrice, totalFrontage || 0);
+            const roundedPkgUnitPrice = Math.round(pricePerUnit);
+
+            packageSale = {
+              ...group[0],
+              id: `package_${key}`,
+              property_block: group[0].property_block,
+              property_lot: `${group[0].property_lot} (+${(packageData.package_count || group.length) - 1} more)`,
+              property_location: 'Multiple Properties',
+              sales_price: totalPrice,
+              // Keep totalAcres if available
+              totalAcres: totalAcres,
+              asset_lot_frontage: totalFrontage || null,
+              asset_lot_depth: avgDepth,
+              pricePerAcre: roundedPkgUnitPrice,
+              packageData: {
+                is_package: true,
+                package_count: packageData.package_count || group.length,
+                properties: packageData.package_properties ? packageData.package_properties.map(p => p.composite_key) : group.map(p => p.property_composite_key)
+              },
+              autoCategory: 'package'
+            };
+          } else {
+            pricePerUnit = getPricePerUnit(totalPrice, totalAcres || 0);
+
+            packageSale = {
+              ...group[0],
+              id: `package_${key}`,
+              property_block: group[0].property_block,
+              property_lot: `${group[0].property_lot} (+${(packageData.package_count || group.length) - 1} more)`,
+              property_location: 'Multiple Properties',
+              sales_price: totalPrice,
+              totalAcres: totalAcres,
+              pricePerAcre: pricePerUnit,
+              packageData: {
+                is_package: true,
+                package_count: packageData.package_count || group.length,
+                properties: packageData.package_properties ? packageData.package_properties.map(p => p.composite_key) : group.map(p => p.property_composite_key)
+              },
+              autoCategory: 'package'
+            };
+          }
+
+          finalSales.push(packageSale);
+          setIncludedSales(prev => new Set([...prev, packageSale.id]));
+          if (packageSale.autoCategory) setSaleCategories(prev => ({...prev, [packageSale.id]: packageSale.autoCategory}));
+          return;
+        }
+      }
+
+      // Default: fall back to previous behavior
       if (group.length > 1) {
         // Sum up package totals
         const totalPrice = group.reduce((sum, p) => sum + p.sales_price, 0);
         const totalAcres = group.reduce((sum, p) => sum + calculateAcreage(p), 0);
         const pricePerUnit = getPricePerUnit(totalPrice, totalAcres);
-        
+
         // Create consolidated entry
         const packageSale = {
           ...group[0], // Use first property as base
@@ -1126,9 +1265,9 @@ const getPricePerUnit = useCallback((price, size) => {
           },
           autoCategory: 'package'
         };
-        
+
         finalSales.push(packageSale);
-        
+
         // Auto-include package in analysis
         setIncludedSales(prev => new Set([...prev, packageSale.id]));
 
@@ -1274,7 +1413,7 @@ const getPricePerUnit = useCallback((price, size) => {
           vcsSales[vcs] = [];
         }
 
-        const acres = parseFloat(prop.asset_lot_acre || 0);
+        const acres = parseFloat(calculateAcreage(prop) || 0);
         const sfla = parseFloat(prop.asset_sfla || 0);
 
         vcsSales[vcs].push({
@@ -1586,8 +1725,8 @@ const getPricePerUnit = useCallback((price, size) => {
           bVal = b.normalizedTime || 0;
           break;
         case 'acres':
-          aVal = parseFloat(a.asset_lot_acre || 0);
-          bVal = parseFloat(b.asset_lot_acre || 0);
+          aVal = parseFloat(calculateAcreage(a) || 0);
+          bVal = parseFloat(calculateAcreage(b) || 0);
           break;
         case 'sfla':
           aVal = parseInt(a.asset_sfla || 0);
@@ -1667,7 +1806,8 @@ const getPricePerUnit = useCallback((price, size) => {
 
     const enriched = toAdd.map(prop => {
       const acres = calculateAcreage(prop);
-      const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+      const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
+      const pricePerUnit = getPricePerUnit(prop.sales_price, sizeForUnit);
       return {
         ...prop,
         totalAcres: acres,
@@ -2913,7 +3053,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Get typical lot size
       const vcsProps = properties?.filter(p =>
-        p.new_vcs === vcs && p.asset_lot_acre && p.asset_lot_acre > 0
+        p.new_vcs === vcs && calculateAcreage(p) > 0
       ) || [];
 
       let typicalLot = '';
@@ -3224,7 +3364,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const wb = XLSX.utils.book_new();
 
     // Sheet 1: Vacant Land Sales (Method 1) - include UI columns
-    const salesHeaders = ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Special Region','Category','Sale Date','$ Sale Price','Acres','$ / Acre','Package','Notes'];
+    const salesHeaders = valuationMode === 'ff'
+      ? ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Depth Table','Special Region','Category','Sale Date','$ Sale Price','Frontage','Depth','$ / FF','Package','Notes']
+      : ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Special Region','Category','Sale Date','$ Sale Price','Acres','$ / Acre','Package','Notes'];
     const salesRows = [salesHeaders];
 
     (vacantSales || []).forEach(sale => {
@@ -3239,27 +3381,64 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const salePrice = sale.sales_price != null ? Number(sale.sales_price) : '';
       const pricePerAcre = sale.pricePerAcre != null ? Number(sale.pricePerAcre) : '';
 
-      salesRows.push([
-        included,
-        sale.property_block || '',
-        sale.property_lot || '',
-        qual,
-        sale.property_location || '',
-        sale.property_m4_class || '',
-        sale.asset_building_class || '',
-        sale.asset_type_use || '',
-        sale.asset_design_style || '',
-        sale.new_vcs || '',
-        sale.asset_zoning || '',
-        region,
-        category,
-        sale.sales_date || '',
-        salePrice ? `$${salePrice.toLocaleString()}` : '',
-        acres,
-        pricePerAcre ? `$${Number(pricePerAcre).toLocaleString()}` : '',
-        isPackage,
-        notes
-      ]);
+      if (valuationMode === 'ff') {
+        const frontage = sale.asset_lot_frontage || '';
+        const depth = sale.asset_lot_depth || '';
+        const ffPrice = sale.pricePerAcre || '';
+        salesRows.push([
+          included,
+          sale.property_block || '',
+          sale.property_lot || '',
+          qual,
+          sale.property_location || '',
+          sale.property_m4_class || '',
+          sale.asset_building_class || '',
+          sale.asset_type_use || '',
+          sale.asset_design_style || '',
+          sale.new_vcs || '',
+          sale.asset_zoning || '',
+          // Depth table name
+          (() => {
+            try {
+              const zoneKey = sale.asset_zoning || '';
+              const zcfg = marketLandData?.zoning_config || {};
+              const entry = zcfg[zoneKey] || zcfg[zoneKey?.toUpperCase?.()] || zcfg[zoneKey?.toLowerCase?.()] || null;
+              return entry ? (entry.depth_table || entry.depthTable || entry.depth_table_name || '') : '';
+            } catch (e) { return ''; }
+          })(),
+          region,
+          category,
+          sale.sales_date || '',
+          salePrice ? `$${salePrice.toLocaleString()}` : '',
+          frontage,
+          depth,
+          ffPrice ? `$${Number(ffPrice).toLocaleString()}` : '',
+          isPackage,
+          notes
+        ]);
+      } else {
+        salesRows.push([
+          included,
+          sale.property_block || '',
+          sale.property_lot || '',
+          qual,
+          sale.property_location || '',
+          sale.property_m4_class || '',
+          sale.asset_building_class || '',
+          sale.asset_type_use || '',
+          sale.asset_design_style || '',
+          sale.new_vcs || '',
+          sale.asset_zoning || '',
+          region,
+          category,
+          sale.sales_date || '',
+          salePrice ? `$${salePrice.toLocaleString()}` : '',
+          acres,
+          pricePerAcre ? `$${Number(pricePerAcre).toLocaleString()}` : '',
+          isPackage,
+          notes
+        ]);
+      }
     });
 
     const ws1 = XLSX.utils.aoa_to_sheet(salesRows);
@@ -3986,18 +4165,33 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             const smaller = sortedSales[i];
             const larger = sortedSales[j];
 
-            const acreageDiff = larger.totalAcres - smaller.totalAcres;
+            // Determine size measure depending on valuation mode
+            let smallerSize = 0;
+            let largerSize = 0;
+            if (valuationMode === 'sf') {
+              smallerSize = (smaller.totalAcres || 0) * 43560;
+              largerSize = (larger.totalAcres || 0) * 43560;
+            } else if (valuationMode === 'ff') {
+              smallerSize = parseFloat(smaller.asset_lot_frontage) || 0;
+              largerSize = parseFloat(larger.asset_lot_frontage) || 0;
+            } else {
+              // default to acres
+              smallerSize = smaller.totalAcres || 0;
+              largerSize = larger.totalAcres || 0;
+            }
+
+            const sizeDiff = largerSize - smallerSize;
             const priceDiff = larger.sales_price - smaller.sales_price;
 
-            // Only exclude negative price differences - include all acreage differences
-            if (priceDiff > 0) {
-              const incrementalRate = priceDiff / acreageDiff;
+            // Only include positive price differences and positive size differences
+            if (priceDiff > 0 && sizeDiff > 0) {
+              const incrementalRate = priceDiff / sizeDiff;
               pairedRates.push({
                 rate: incrementalRate,
-                smallerAcres: smaller.totalAcres,
-                largerAcres: larger.totalAcres,
+                smallerSize,
+                largerSize,
                 priceDiff: priceDiff,
-                acreageDiff: acreageDiff,
+                sizeDiff: sizeDiff,
                 properties: `${smaller.property_block}/${smaller.property_lot} vs ${larger.property_block}/${larger.property_lot}`
               });
             }
@@ -4011,6 +4205,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             (rates[rates.length / 2 - 1] + rates[rates.length / 2]) / 2 :
             rates[Math.floor(rates.length / 2)];
 
+          // Prepare human-readable size unit for debugging
+          const sizeUnitLabel = valuationMode === 'acre' ? 'acres' : valuationMode === 'sf' ? 'sqft' : 'front ft';
           debug(`��� ${categoryType} paired analysis:`, {
             totalProperties: filtered.length,
             possiblePairs: (filtered.length * (filtered.length - 1)) / 2,
@@ -4019,34 +4215,29 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             rates: rates.map(r => Math.round(r)),
             medianRate: Math.round(medianRate),
             properties: pairedRates.map(p => p.properties),
-            acreageRanges: pairedRates.map(p => `${p.acreageDiff.toFixed(2)} acres`)
+            sizeRanges: pairedRates.map(p => `${p.sizeDiff.toFixed(2)} ${sizeUnitLabel}`)
           });
 
-          if (valuationMode === 'sf') {
-            return {
-              avg: (medianRate / 43560).toFixed(2),
-              count: filtered.length,
-              avgLotSize,
-              method: 'paired',
-              pairedAnalysis: {
-                pairs: pairedRates.length,
-                medianRate: Math.round(medianRate),
-                bestPair: pairedRates.sort((a, b) => Math.abs(a.acreageDiff - 1) - Math.abs(b.acreageDiff - 1))[0]
-              }
-            };
-          } else {
-            return {
-              avg: Math.round(medianRate),
-              count: filtered.length,
-              avgLotSize,
-              method: 'paired',
-              pairedAnalysis: {
-                pairs: pairedRates.length,
-                medianRate: Math.round(medianRate),
-                bestPair: pairedRates.sort((a, b) => Math.abs(a.acreageDiff - 1) - Math.abs(b.acreageDiff - 1))[0]
-              }
-            };
-          }
+          // Choose a target size for best-pair selection (1 acre or equivalent in SF). For FF default to smallest sizeDiff.
+          const targetSize = valuationMode === 'acre' ? 1 : valuationMode === 'sf' ? 43560 : 0;
+
+          const bestPair = pairedRates.sort((a, b) => {
+            if (targetSize > 0) return Math.abs(a.sizeDiff - targetSize) - Math.abs(b.sizeDiff - targetSize);
+            return Math.abs(a.sizeDiff) - Math.abs(b.sizeDiff);
+          })[0];
+
+          // Return rounded whole-number unit rates for all modes (user requested whole numbers only)
+          return {
+            avg: Math.round(medianRate),
+            count: filtered.length,
+            avgLotSize,
+            method: 'paired',
+            pairedAnalysis: {
+              pairs: pairedRates.length,
+              medianRate: Math.round(medianRate),
+              bestPair
+            }
+          };
         }
       }
 
@@ -4173,8 +4364,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       config.vcsList?.forEach(vcs => affectedVCS.add(vcs));
     });
 
-    // Additional notification that rates have been saved
-    alert(`Land rates have been saved for ${affectedVCS.size} VCS areas and are now available in the Allocation Study and VCS Sheet tabs.\\n\\nMethod: ${valuationMode.toUpperCase()}\\nNormal rates: ${Object.keys(cascadeConfig.normal).filter(k => cascadeConfig.normal[k]?.rate).length} tiers\\nSpecial regions: ${Object.keys(cascadeConfig.special || {}).length}\\nVCS-specific: ${Object.keys(cascadeConfig.vcsSpecific || {}).length}`);
+    // Additional notification that rates have been saved — show a concise toast instead of alert
+    const methodLabel = valuationMode ? valuationMode.toUpperCase() : 'N/A';
+    const normalTiers = Object.keys(cascadeConfig.normal || {}).filter(k => cascadeConfig.normal[k]?.rate).length;
+    const specialCount = Object.keys(cascadeConfig.special || {}).length;
+    const vcsSpecificCount = Object.keys(cascadeConfig.vcsSpecific || {}).length;
+
+    const message = `Land rates saved for ${affectedVCS.size} VCS areas. Available in Allocation Study and VCS Sheet.` +
+      `\n\nMethod: ${methodLabel}` +
+      `\nNormal rate tiers: ${normalTiers}` +
+      `\nSpecial regions: ${specialCount}` +
+      `\nVCS-specific configs: ${vcsSpecificCount}`;
+
+    setSaveRatesMessage(message);
+    setShowSaveRatesNotification(true);
+    setTimeout(() => {
+      setShowSaveRatesNotification(false);
+      setSaveRatesMessage('');
+    }, 7000);
   };
   // ========== RENDER LAND RATES TAB ==========
   const renderLandRatesTab = () => (
@@ -4193,6 +4400,26 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           animation: 'slideIn 0.3s ease'
         }}>
           ✓ Prompt copied! Paste into Claude AI
+        </div>
+      )}
+
+      {showSaveRatesNotification && saveRatesMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          backgroundColor: '#2563EB',
+          color: 'white',
+          padding: '12px 20px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+          zIndex: 9999,
+          animation: 'slideIn 0.3s ease',
+          maxWidth: '340px',
+          whiteSpace: 'pre-line'
+        }}>
+          <strong>Land rates saved</strong>
+          <div style={{ marginTop: '8px', fontSize: '13px' }}>{saveRatesMessage}</div>
         </div>
       )}
       {/* Mode Selection Buttons - TOP RIGHT */}
@@ -4356,13 +4583,23 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Design</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>VCS</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Zoning</th>
+                {valuationMode === 'ff' && (
+                  <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Depth Table</th>
+                )}
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Special Region</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Category</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Sale Date</th>
                 <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB' }}>Sale Price</th>
-                <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB' }}>
-                  {valuationMode === 'acre' ? 'Acres' : valuationMode === 'sf' ? 'Sq Ft' : 'Frontage'}
-                </th>
+                {valuationMode === 'ff' ? (
+                  <>
+                    <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB' }}>Frontage</th>
+                    <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB' }}>Depth</th>
+                  </>
+                ) : (
+                  <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB' }}>
+                    {valuationMode === 'acre' ? 'Acres' : valuationMode === 'sf' ? 'Sq Ft' : 'Frontage'}
+                  </th>
+                )}
                 <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #E5E7EB' }}>{getUnitLabel()}</th>
                 <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #E5E7EB' }}>Package</th>
                 <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Notes</th>
@@ -4433,6 +4670,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
                       {sale.asset_zoning || '-'}
                     </td>
+                    {valuationMode === 'ff' && (
+                      <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', fontSize: '12px' }}>
+                        {(() => {
+                          try {
+                            const zoneKey = sale.asset_zoning || sale.asset_zoning_code || sale.asset_zoning_text || '';
+                            const zcfg = marketLandData?.zoning_config || {};
+                            const entry = zcfg[zoneKey] || zcfg[zoneKey?.toUpperCase?.()] || zcfg[zoneKey?.toLowerCase?.()] || null;
+                            return entry ? (entry.depth_table || entry.depthTable || entry.depth_table_name || '') : '';
+                          } catch (e) { return ''; }
+                        })()}
+                      </td>
+                    )}
+
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
                       <select
                         value={specialRegions[sale.id] || 'Normal'}
@@ -4477,21 +4727,33 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right' }}>
                       ${sale.sales_price?.toLocaleString()}
                     </td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right' }}>
-                      {valuationMode === 'sf' ? 
-                        Math.round(sale.totalAcres * 43560).toLocaleString() : 
-                        sale.totalAcres?.toFixed(2)}
-                    </td>
-                    <td style={{ 
-                      padding: '8px', 
-                      borderBottom: '1px solid #E5E7EB', 
+                    {valuationMode === 'ff' ? (
+                      <>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right' }}>
+                          {sale.asset_lot_frontage != null ? String(sale.asset_lot_frontage) : ''}
+                        </td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right' }}>
+                          {sale.asset_lot_depth != null ? String(sale.asset_lot_depth) : ''}
+                        </td>
+                      </>
+                    ) : (
+                      <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right' }}>
+                        {valuationMode === 'sf' ?
+                          Math.round(sale.totalAcres * 43560).toLocaleString() :
+                          sale.totalAcres?.toFixed(2)}
+                      </td>
+                    )}
+
+                    <td style={{
+                      padding: '8px',
+                      borderBottom: '1px solid #E5E7EB',
                       textAlign: 'right',
                       fontWeight: 'bold',
                       color: sale.pricePerAcre > 100000 ? '#EF4444' : '#10B981'
                     }}>
-                      {valuationMode === 'sf' ? 
-                        `$${(sale.sales_price / (sale.totalAcres * 43560)).toFixed(2)}` :
-                        `$${sale.pricePerAcre?.toLocaleString()}`}
+                      {valuationMode === 'ff' ?
+                        `$${sale.pricePerAcre?.toLocaleString()}` :
+                        (valuationMode === 'sf' ? `$${(sale.sales_price / (sale.totalAcres * 43560)).toFixed(2)}` : `$${sale.pricePerAcre?.toLocaleString()}`)}
                     </td>
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'center' }}>
                       {sale.packageData && (
@@ -4660,13 +4922,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             <strong>Properties:</strong> {categoryAnalysis.rawLand.pairedAnalysis.bestPair.properties}
                           </div>
                           <div style={{ marginBottom: '4px' }}>
-                            <strong>Acreage Difference:</strong> {categoryAnalysis.rawLand.pairedAnalysis.bestPair.acreageDiff.toFixed(2)} acres
+                            <strong>Size Difference:</strong> {(() => {
+                              const bp = categoryAnalysis.rawLand.pairedAnalysis.bestPair;
+                              if (!bp) return '';
+                              if (valuationMode === 'acre') return `${bp.sizeDiff.toFixed(2)} acres`;
+                              if (valuationMode === 'sf') return `${Math.round(bp.sizeDiff).toLocaleString()} sqft`;
+                              return `${Math.round(bp.sizeDiff).toLocaleString()} ft`;
+                            })()}
                           </div>
                           <div style={{ marginBottom: '4px' }}>
                             <strong>Price Difference:</strong> ${categoryAnalysis.rawLand.pairedAnalysis.bestPair.priceDiff.toLocaleString()}
                           </div>
                           <div style={{ marginBottom: '4px' }}>
-                            <strong>Raw Land Rate:</strong> ${Math.round(categoryAnalysis.rawLand.pairedAnalysis.bestPair.rate).toLocaleString()}/acre
+                            <strong>Raw Land Rate:</strong> ${Math.round(categoryAnalysis.rawLand.pairedAnalysis.bestPair.rate).toLocaleString()} {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
                           </div>
                           <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '6px' }}>
                             Median of {categoryAnalysis.rawLand.pairedAnalysis.pairs} paired comparisons from {categoryAnalysis.rawLand.count} properties
@@ -4687,13 +4955,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             <strong>Properties:</strong> {categoryAnalysis.buildingLot.pairedAnalysis.bestPair.properties}
                           </div>
                           <div style={{ marginBottom: '4px' }}>
-                            <strong>Acreage Difference:</strong> {categoryAnalysis.buildingLot.pairedAnalysis.bestPair.acreageDiff.toFixed(2)} acres
+                            <strong>Size Difference:</strong> {(() => {
+                              const bp = categoryAnalysis.buildingLot.pairedAnalysis.bestPair;
+                              if (!bp) return '';
+                              if (valuationMode === 'acre') return `${bp.sizeDiff.toFixed(2)} acres`;
+                              if (valuationMode === 'sf') return `${Math.round(bp.sizeDiff).toLocaleString()} sqft`;
+                              return `${Math.round(bp.sizeDiff).toLocaleString()} ft`;
+                            })()}
                           </div>
                           <div style={{ marginBottom: '4px' }}>
                             <strong>Price Difference:</strong> ${categoryAnalysis.buildingLot.pairedAnalysis.bestPair.priceDiff.toLocaleString()}
                           </div>
                           <div style={{ marginBottom: '4px' }}>
-                            <strong>Raw Land Rate:</strong> ${Math.round(categoryAnalysis.buildingLot.pairedAnalysis.bestPair.rate).toLocaleString()}/acre
+                            <strong>Raw Land Rate:</strong> ${Math.round(categoryAnalysis.buildingLot.pairedAnalysis.bestPair.rate).toLocaleString()} {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
                           </div>
                           <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '6px' }}>
                             Median of {categoryAnalysis.buildingLot.pairedAnalysis.pairs} paired comparisons from {categoryAnalysis.buildingLot.count} properties
@@ -6168,7 +6442,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         ? interpretCodes.getMicrosystemsValue?.(prop, jobData.parsed_code_definitions, 'asset_design_style') || prop.asset_design_style || '-'
                         : prop.asset_design_style || '-';
                       const acres = calculateAcreage(prop);
-                      const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+                      const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
+                      const pricePerUnit = getPricePerUnit(prop.sales_price, sizeForUnit);
                       
                       return (
                         <tr key={prop.id}>
@@ -6332,7 +6607,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'address' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('saleDate')}
@@ -6346,7 +6621,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '�������') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '���������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
@@ -6436,7 +6711,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </thead>
                 <tbody>
                   {sortModalData(getMethod2SalesForVCS(method2ModalVCS)).map(prop => {
-                    const acres = parseFloat(prop.asset_lot_acre || 0);
+                    const acres = parseFloat(calculateAcreage(prop) || 0);
                     const isExcluded = method2ExcludedSales.has(prop.id);
 
                     // Check for pre-construction (sale before year built)
@@ -7181,7 +7456,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   // Get typical lot size for ALL properties in this VCS (for display purposes)
                   const vcsProps = properties?.filter(p =>
                     p.new_vcs === vcs &&
-                    p.asset_lot_acre && p.asset_lot_acre > 0 // Only properties with valid acreage
+                    calculateAcreage(p) > 0 // Only properties with valid acreage
                   ) || [];
                   const typicalLot = vcsProps.length > 0 ?
                     (vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length).toFixed(2) : '';
@@ -7834,7 +8109,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <option value="all">All</option>
                 <option value="1">1 — Single Family</option>
                 <option value="2">2 — Duplex / Semi-Detached</option>
-                <option value="3">3* — Row / Townhouse</option>
+                <option value="3">3* �� Row / Townhouse</option>
                 <option value="4">4* — MultiFamily</option>
                 <option value="5">5* — Conversions</option>
                 <option value="6">6 — Condominium</option>
