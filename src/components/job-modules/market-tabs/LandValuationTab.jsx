@@ -1120,7 +1120,7 @@ const getPricePerUnit = useCallback((price, size) => {
       return {
         ...prop,
         totalAcres: acres,
-        pricePerAcre: pricePerUnit,
+        pricePerAcre: roundedUnitPrice,
         autoCategory: category,
         isPackage
       };
@@ -6592,7 +6592,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '�������') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '���������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
