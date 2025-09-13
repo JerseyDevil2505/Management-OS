@@ -195,9 +195,9 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 marketLandData={marketLandData}
                 onAnalysisUpdate={(data, opts) => {
                   // Only refresh parent when user-triggered (not autosave)
-                  if (opts?.source !== 'autosave' && onUpdateJobCache) {
-                    onUpdateJobCache(jobData.id, null);
-                  }
+                if (opts?.source !== 'autosave' && onUpdateJobCache) {
+                  onUpdateJobCache(jobData.id, { forceRefresh: true });
+                }
                 }}
               />
             )}
