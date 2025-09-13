@@ -320,7 +320,18 @@ const JobContainer = ({
                   asset_lot_acre: marketAnalysis.asset_lot_acre ?? property.asset_lot_acre ?? null,
                   asset_lot_sf: marketAnalysis.asset_lot_sf ?? property.asset_lot_sf ?? null,
                   asset_lot_frontage: marketAnalysis.asset_lot_frontage ?? property.asset_lot_frontage ?? null,
-                  asset_lot_depth: marketAnalysis.asset_lot_depth ?? property.asset_lot_depth ?? null
+                  asset_lot_depth: marketAnalysis.asset_lot_depth ?? property.asset_lot_depth ?? null,
+                  // Derived acreage using centralized calculator (returns numeric acres or null)
+                  calculated_lot_acre: (() => {
+                    try {
+                      const vendor = (jobData && (jobData.vendor_source || jobData.vendor)) || 'BRT';
+                      const val = interpretCodes.getCalculatedAcreage(propertyData, vendor);
+                      const num = parseFloat(val);
+                      return !isNaN(num) && num > 0 ? num : null;
+                    } catch (e) {
+                      return null;
+                    }
+                  })()
                 };
               });
 
