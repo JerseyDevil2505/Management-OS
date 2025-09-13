@@ -4202,6 +4202,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             (rates[rates.length / 2 - 1] + rates[rates.length / 2]) / 2 :
             rates[Math.floor(rates.length / 2)];
 
+          // Prepare human-readable size unit for debugging
+          const sizeUnitLabel = valuationMode === 'acre' ? 'acres' : valuationMode === 'sf' ? 'sqft' : 'front ft';
           debug(`��� ${categoryType} paired analysis:`, {
             totalProperties: filtered.length,
             possiblePairs: (filtered.length * (filtered.length - 1)) / 2,
@@ -4210,34 +4212,29 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             rates: rates.map(r => Math.round(r)),
             medianRate: Math.round(medianRate),
             properties: pairedRates.map(p => p.properties),
-            acreageRanges: pairedRates.map(p => `${p.acreageDiff.toFixed(2)} acres`)
+            sizeRanges: pairedRates.map(p => `${p.sizeDiff.toFixed(2)} ${sizeUnitLabel}`)
           });
 
-          if (valuationMode === 'sf') {
-            return {
-              avg: (medianRate / 43560).toFixed(2),
-              count: filtered.length,
-              avgLotSize,
-              method: 'paired',
-              pairedAnalysis: {
-                pairs: pairedRates.length,
-                medianRate: Math.round(medianRate),
-                bestPair: pairedRates.sort((a, b) => Math.abs(a.acreageDiff - 1) - Math.abs(b.acreageDiff - 1))[0]
-              }
-            };
-          } else {
-            return {
-              avg: Math.round(medianRate),
-              count: filtered.length,
-              avgLotSize,
-              method: 'paired',
-              pairedAnalysis: {
-                pairs: pairedRates.length,
-                medianRate: Math.round(medianRate),
-                bestPair: pairedRates.sort((a, b) => Math.abs(a.acreageDiff - 1) - Math.abs(b.acreageDiff - 1))[0]
-              }
-            };
-          }
+          // Choose a target size for best-pair selection (1 acre or equivalent in SF). For FF default to smallest sizeDiff.
+          const targetSize = valuationMode === 'acre' ? 1 : valuationMode === 'sf' ? 43560 : 0;
+
+          const bestPair = pairedRates.sort((a, b) => {
+            if (targetSize > 0) return Math.abs(a.sizeDiff - targetSize) - Math.abs(b.sizeDiff - targetSize);
+            return Math.abs(a.sizeDiff) - Math.abs(b.sizeDiff);
+          })[0];
+
+          // Return rounded whole-number unit rates for all modes (user requested whole numbers only)
+          return {
+            avg: Math.round(medianRate),
+            count: filtered.length,
+            avgLotSize,
+            method: 'paired',
+            pairedAnalysis: {
+              pairs: pairedRates.length,
+              medianRate: Math.round(medianRate),
+              bestPair
+            }
+          };
         }
       }
 
