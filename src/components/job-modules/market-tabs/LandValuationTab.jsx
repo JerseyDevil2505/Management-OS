@@ -680,16 +680,17 @@ useEffect(() => {
 
   // ========== GET PRICE PER UNIT ==========
 const getPricePerUnit = useCallback((price, size) => {
+  // Always return whole numbers for unit rates per user request
   if (valuationMode === 'acre') {
     return size > 0 ? Math.round(price / size) : 0;
   } else if (valuationMode === 'sf') {
-    // size is already in acres, convert to SF then calculate price per SF
-    const sizeInSF = size * 43560;
-    return sizeInSF > 0 ? parseFloat(price / sizeInSF) : 0;
+    // size is provided in acres; convert to SF then calculate price per SF
+    const sizeInSF = (parseFloat(size) || 0) * 43560;
+    return sizeInSF > 0 ? Math.round(price / sizeInSF) : 0;
   } else if (valuationMode === 'ff') {
     // For front foot, 'size' is expected to be frontage in feet
     const frontage = parseFloat(size) || 0;
-    return frontage > 0 ? parseFloat(price / frontage) : 0;
+    return frontage > 0 ? Math.round(price / frontage) : 0;
   }
   return 0;
 }, [valuationMode]);
@@ -4161,18 +4162,33 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             const smaller = sortedSales[i];
             const larger = sortedSales[j];
 
-            const acreageDiff = larger.totalAcres - smaller.totalAcres;
+            // Determine size measure depending on valuation mode
+            let smallerSize = 0;
+            let largerSize = 0;
+            if (valuationMode === 'sf') {
+              smallerSize = (smaller.totalAcres || 0) * 43560;
+              largerSize = (larger.totalAcres || 0) * 43560;
+            } else if (valuationMode === 'ff') {
+              smallerSize = parseFloat(smaller.asset_lot_frontage) || 0;
+              largerSize = parseFloat(larger.asset_lot_frontage) || 0;
+            } else {
+              // default to acres
+              smallerSize = smaller.totalAcres || 0;
+              largerSize = larger.totalAcres || 0;
+            }
+
+            const sizeDiff = largerSize - smallerSize;
             const priceDiff = larger.sales_price - smaller.sales_price;
 
-            // Only exclude negative price differences - include all acreage differences
-            if (priceDiff > 0) {
-              const incrementalRate = priceDiff / acreageDiff;
+            // Only include positive price differences and positive size differences
+            if (priceDiff > 0 && sizeDiff > 0) {
+              const incrementalRate = priceDiff / sizeDiff;
               pairedRates.push({
                 rate: incrementalRate,
-                smallerAcres: smaller.totalAcres,
-                largerAcres: larger.totalAcres,
+                smallerSize,
+                largerSize,
                 priceDiff: priceDiff,
-                acreageDiff: acreageDiff,
+                sizeDiff: sizeDiff,
                 properties: `${smaller.property_block}/${smaller.property_lot} vs ${larger.property_block}/${larger.property_lot}`
               });
             }
