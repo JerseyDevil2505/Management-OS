@@ -496,7 +496,7 @@ useEffect(() => {
     const savedIncluded = new Set();
     const manuallyAddedIds = new Set();
 
-    debug('🔄 Loading saved Method 1 sales data:', {
+    debug('��� Loading saved Method 1 sales data:', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
@@ -1162,24 +1162,64 @@ const getPricePerUnit = useCallback((price, size) => {
             }, 0);
           }
 
-          const pricePerUnit = getPricePerUnit(totalPrice, totalAcres || 0);
+          let pricePerUnit;
+          let packageSale = null;
 
-          const packageSale = {
-            ...group[0],
-            id: `package_${key}`,
-            property_block: group[0].property_block,
-            property_lot: `${group[0].property_lot} (+${(packageData.package_count || group.length) - 1} more)`,
-            property_location: 'Multiple Properties',
-            sales_price: totalPrice,
-            totalAcres: totalAcres,
-            pricePerAcre: pricePerUnit,
-            packageData: {
-              is_package: true,
-              package_count: packageData.package_count || group.length,
-              properties: packageData.package_properties ? packageData.package_properties.map(p => p.composite_key) : group.map(p => p.property_composite_key)
-            },
-            autoCategory: 'package'
-          };
+          if (valuationMode === 'ff') {
+            // Sum frontage and compute average depth for display
+            const totalFrontage = packageData.package_properties.reduce((sum, pObj) => {
+              const compKey = (typeof pObj === 'string') ? pObj : (pObj.composite_key || pObj.compositeKey || pObj.property_composite_key || pObj.composite);
+              const p = group.find(g => g.property_composite_key === compKey) || properties.find(pp => pp.property_composite_key === compKey);
+              return sum + (parseFloat(p?.asset_lot_frontage) || 0);
+            }, 0);
+            const depthValues = packageData.package_properties.map(pObj => {
+              const compKey = (typeof pObj === 'string') ? pObj : (pObj.composite_key || pObj.compositeKey || pObj.property_composite_key || pObj.composite);
+              const p = group.find(g => g.property_composite_key === compKey) || properties.find(pp => pp.property_composite_key === compKey);
+              return parseFloat(p?.asset_lot_depth) || null;
+            }).filter(Boolean);
+            const avgDepth = depthValues.length > 0 ? (depthValues.reduce((s, v) => s + v, 0) / depthValues.length) : null;
+
+            pricePerUnit = getPricePerUnit(totalPrice, totalFrontage || 0);
+
+            packageSale = {
+              ...group[0],
+              id: `package_${key}`,
+              property_block: group[0].property_block,
+              property_lot: `${group[0].property_lot} (+${(packageData.package_count || group.length) - 1} more)`,
+              property_location: 'Multiple Properties',
+              sales_price: totalPrice,
+              // Keep totalAcres if available
+              totalAcres: totalAcres,
+              asset_lot_frontage: totalFrontage || null,
+              asset_lot_depth: avgDepth,
+              pricePerAcre: pricePerUnit,
+              packageData: {
+                is_package: true,
+                package_count: packageData.package_count || group.length,
+                properties: packageData.package_properties ? packageData.package_properties.map(p => p.composite_key) : group.map(p => p.property_composite_key)
+              },
+              autoCategory: 'package'
+            };
+          } else {
+            pricePerUnit = getPricePerUnit(totalPrice, totalAcres || 0);
+
+            packageSale = {
+              ...group[0],
+              id: `package_${key}`,
+              property_block: group[0].property_block,
+              property_lot: `${group[0].property_lot} (+${(packageData.package_count || group.length) - 1} more)`,
+              property_location: 'Multiple Properties',
+              sales_price: totalPrice,
+              totalAcres: totalAcres,
+              pricePerAcre: pricePerUnit,
+              packageData: {
+                is_package: true,
+                package_count: packageData.package_count || group.length,
+                properties: packageData.package_properties ? packageData.package_properties.map(p => p.composite_key) : group.map(p => p.property_composite_key)
+              },
+              autoCategory: 'package'
+            };
+          }
 
           finalSales.push(packageSale);
           setIncludedSales(prev => new Set([...prev, packageSale.id]));
@@ -2433,7 +2473,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const analyzeEconomicObsolescence = useCallback(() => {
     if (!properties) return;
 
-    debug('🔍 Economic Obsolescence Analysis Debug:', {
+    debug('���� Economic Obsolescence Analysis Debug:', {
       totalProperties: properties.length,
       withNewVCS: properties.filter(p => p.new_vcs).length,
       withLocationAnalysis: properties.filter(p => p.location_analysis).length,
