@@ -1104,14 +1104,72 @@ const getPricePerUnit = useCallback((price, size) => {
 
     // Process packages and standalone (add to existing finalSales that contains manually added)
 
-    // Consolidate package sales
+    // Consolidate package sales using centralized analyzer
     Object.entries(packageGroups).forEach(([key, group]) => {
+      // Use centralized package analyzer to determine exact package type
+      const packageData = interpretCodes.getPackageSaleData(properties, group[0]);
+
+      if (packageData) {
+        // If packageData indicates an additional cards scenario
+        if (packageData.is_additional_card) {
+          // When it's additional cards, present as single enriched property (do not aggregate multiple properties)
+          const enriched = enrichProperty(group[0]);
+          enriched.packageData = {
+            is_package: false,
+            package_type: 'additional_cards',
+            package_count: packageData.package_count || group.length,
+            properties: packageData.package_properties ? packageData.package_properties.map(p => p.composite_key) : group.map(p => p.property_composite_key)
+          };
+          finalSales.push(enriched);
+          if (enriched.autoCategory) setSaleCategories(prev => ({...prev, [enriched.id]: enriched.autoCategory}));
+          return;
+        }
+
+        // Multi-property package
+        if (packageData.is_package_sale || packageData.package_count > 1) {
+          const totalPrice = packageData.package_properties.reduce((sum, pKey) => {
+            const p = group.find(g => g.property_composite_key === pKey) || properties.find(pp => pp.property_composite_key === pKey);
+            return sum + (p?.sales_price || 0);
+          }, 0);
+
+          const totalAcres = packageData.package_properties.reduce((sum, pKey) => {
+            const p = group.find(g => g.property_composite_key === pKey) || properties.find(pp => pp.property_composite_key === pKey);
+            return sum + parseFloat(calculateAcreage(p) || 0);
+          }, 0);
+
+          const pricePerUnit = getPricePerUnit(totalPrice, totalAcres);
+
+          const packageSale = {
+            ...group[0],
+            id: `package_${key}`,
+            property_block: group[0].property_block,
+            property_lot: `${group[0].property_lot} (+${(packageData.package_count || group.length) - 1} more)`,
+            property_location: 'Multiple Properties',
+            sales_price: totalPrice,
+            totalAcres: totalAcres,
+            pricePerAcre: pricePerUnit,
+            packageData: {
+              is_package: true,
+              package_count: packageData.package_count || group.length,
+              properties: packageData.package_properties ? packageData.package_properties.map(p => p.composite_key) : group.map(p => p.property_composite_key)
+            },
+            autoCategory: 'package'
+          };
+
+          finalSales.push(packageSale);
+          setIncludedSales(prev => new Set([...prev, packageSale.id]));
+          if (packageSale.autoCategory) setSaleCategories(prev => ({...prev, [packageSale.id]: packageSale.autoCategory}));
+          return;
+        }
+      }
+
+      // Default: fall back to previous behavior
       if (group.length > 1) {
         // Sum up package totals
         const totalPrice = group.reduce((sum, p) => sum + p.sales_price, 0);
         const totalAcres = group.reduce((sum, p) => sum + calculateAcreage(p), 0);
         const pricePerUnit = getPricePerUnit(totalPrice, totalAcres);
-        
+
         // Create consolidated entry
         const packageSale = {
           ...group[0], // Use first property as base
@@ -1129,9 +1187,9 @@ const getPricePerUnit = useCallback((price, size) => {
           },
           autoCategory: 'package'
         };
-        
+
         finalSales.push(packageSale);
-        
+
         // Auto-include package in analysis
         setIncludedSales(prev => new Set([...prev, packageSale.id]));
 
