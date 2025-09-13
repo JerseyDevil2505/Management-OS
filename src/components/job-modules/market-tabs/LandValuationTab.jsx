@@ -687,9 +687,11 @@ const getPricePerUnit = useCallback((price, size) => {
     const sizeInSF = size * 43560;
     return sizeInSF > 0 ? parseFloat(price / sizeInSF) : 0;
   } else if (valuationMode === 'ff') {
-    // For front foot, need frontage
-    return 0; // Will be calculated differently
+    // For front foot, 'size' is expected to be frontage in feet
+    const frontage = parseFloat(size) || 0;
+    return frontage > 0 ? parseFloat(price / frontage) : 0;
   }
+  return 0;
 }, [valuationMode]);
 
   // ========== GET UNIT LABEL ==========
