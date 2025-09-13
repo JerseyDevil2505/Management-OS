@@ -1732,8 +1732,11 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
   },
   // ===== SMART ACREAGE CALCULATOR =====
   getCalculatedAcreage: function(property, vendorType) {
+    // Defensive: if property is falsy, return zero acres string
+    if (!property) return '0.00';
+
     // 1. Prefer a manual override field in property_market_analysis
-    const marketAnalysis = property.property_market_analysis || property.property_market_analysis_raw || null;
+    const marketAnalysis = (property && (property.property_market_analysis || property.property_market_analysis_raw)) || null;
 
     const manualAcre = marketAnalysis?.market_manual_lot_acre ?? marketAnalysis?.market_manual_acre ?? property.market_manual_lot_acre;
     if (manualAcre && parseFloat(manualAcre) > 0) {
