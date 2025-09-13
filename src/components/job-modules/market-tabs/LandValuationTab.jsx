@@ -1140,17 +1140,27 @@ const getPricePerUnit = useCallback((price, size) => {
 
         // Multi-property package
         if (packageData.is_package_sale || packageData.package_count > 1) {
-          const totalPrice = packageData.package_properties.reduce((sum, pKey) => {
-            const p = group.find(g => g.property_composite_key === pKey) || properties.find(pp => pp.property_composite_key === pKey);
+            // Prefer any precomputed combined lot acres from the analyzer
+          const totalPrice = packageData.package_properties.reduce((sum, pObj) => {
+            const compKey = (typeof pObj === 'string') ? pObj : (pObj.composite_key || pObj.compositeKey || pObj.property_composite_key || pObj.composite);
+            const p = group.find(g => g.property_composite_key === compKey) || properties.find(pp => pp.property_composite_key === compKey);
             return sum + (p?.sales_price || 0);
           }, 0);
 
-          const totalAcres = packageData.package_properties.reduce((sum, pKey) => {
-            const p = group.find(g => g.property_composite_key === pKey) || properties.find(pp => pp.property_composite_key === pKey);
-            return sum + parseFloat(calculateAcreage(p) || 0);
-          }, 0);
+          let totalAcres = null;
+          if (packageData.combined_lot_acres && !isNaN(Number(packageData.combined_lot_acres)) && Number(packageData.combined_lot_acres) > 0) {
+            totalAcres = Number(packageData.combined_lot_acres);
+          } else if (packageData.combined_lot_sf && !isNaN(Number(packageData.combined_lot_sf)) && Number(packageData.combined_lot_sf) > 0) {
+            totalAcres = Number(packageData.combined_lot_sf) / 43560;
+          } else {
+            totalAcres = packageData.package_properties.reduce((sum, pObj) => {
+              const compKey = (typeof pObj === 'string') ? pObj : (pObj.composite_key || pObj.compositeKey || pObj.property_composite_key || pObj.composite);
+              const p = group.find(g => g.property_composite_key === compKey) || properties.find(pp => pp.property_composite_key === compKey);
+              return sum + parseFloat(calculateAcreage(p) || 0);
+            }, 0);
+          }
 
-          const pricePerUnit = getPricePerUnit(totalPrice, totalAcres);
+          const pricePerUnit = getPricePerUnit(totalPrice, totalAcres || 0);
 
           const packageSale = {
             ...group[0],
@@ -7944,7 +7954,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <option value="all">All</option>
                 <option value="1">1 — Single Family</option>
                 <option value="2">2 — Duplex / Semi-Detached</option>
-                <option value="3">3* — Row / Townhouse</option>
+                <option value="3">3* �� Row / Townhouse</option>
                 <option value="4">4* — MultiFamily</option>
                 <option value="5">5* — Conversions</option>
                 <option value="6">6 — Condominium</option>
