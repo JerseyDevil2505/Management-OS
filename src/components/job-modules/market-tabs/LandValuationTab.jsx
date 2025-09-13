@@ -3327,27 +3327,64 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const salePrice = sale.sales_price != null ? Number(sale.sales_price) : '';
       const pricePerAcre = sale.pricePerAcre != null ? Number(sale.pricePerAcre) : '';
 
-      salesRows.push([
-        included,
-        sale.property_block || '',
-        sale.property_lot || '',
-        qual,
-        sale.property_location || '',
-        sale.property_m4_class || '',
-        sale.asset_building_class || '',
-        sale.asset_type_use || '',
-        sale.asset_design_style || '',
-        sale.new_vcs || '',
-        sale.asset_zoning || '',
-        region,
-        category,
-        sale.sales_date || '',
-        salePrice ? `$${salePrice.toLocaleString()}` : '',
-        acres,
-        pricePerAcre ? `$${Number(pricePerAcre).toLocaleString()}` : '',
-        isPackage,
-        notes
-      ]);
+      if (valuationMode === 'ff') {
+        const frontage = sale.asset_lot_frontage || '';
+        const depth = sale.asset_lot_depth || '';
+        const ffPrice = sale.pricePerAcre || '';
+        salesRows.push([
+          included,
+          sale.property_block || '',
+          sale.property_lot || '',
+          qual,
+          sale.property_location || '',
+          sale.property_m4_class || '',
+          sale.asset_building_class || '',
+          sale.asset_type_use || '',
+          sale.asset_design_style || '',
+          sale.new_vcs || '',
+          sale.asset_zoning || '',
+          // Depth table name
+          (() => {
+            try {
+              const zoneKey = sale.asset_zoning || '';
+              const zcfg = marketLandData?.zoning_config || {};
+              const entry = zcfg[zoneKey] || zcfg[zoneKey?.toUpperCase?.()] || zcfg[zoneKey?.toLowerCase?.()] || null;
+              return entry ? (entry.depth_table || entry.depthTable || entry.depth_table_name || '') : '';
+            } catch (e) { return ''; }
+          })(),
+          region,
+          category,
+          sale.sales_date || '',
+          salePrice ? `$${salePrice.toLocaleString()}` : '',
+          frontage,
+          depth,
+          ffPrice ? `$${Number(ffPrice).toLocaleString()}` : '',
+          isPackage,
+          notes
+        ]);
+      } else {
+        salesRows.push([
+          included,
+          sale.property_block || '',
+          sale.property_lot || '',
+          qual,
+          sale.property_location || '',
+          sale.property_m4_class || '',
+          sale.asset_building_class || '',
+          sale.asset_type_use || '',
+          sale.asset_design_style || '',
+          sale.new_vcs || '',
+          sale.asset_zoning || '',
+          region,
+          category,
+          sale.sales_date || '',
+          salePrice ? `$${salePrice.toLocaleString()}` : '',
+          acres,
+          pricePerAcre ? `$${Number(pricePerAcre).toLocaleString()}` : '',
+          isPackage,
+          notes
+        ]);
+      }
     });
 
     const ws1 = XLSX.utils.aoa_to_sheet(salesRows);
@@ -4520,7 +4557,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         type="checkbox"
                         checked={includedSales.has(sale.id)}
                         onChange={(e) => {
-                          debug(`����� Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
+                          debug(`��� Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
                             checked: e.target.checked,
                             saleId: sale.id
                           });
