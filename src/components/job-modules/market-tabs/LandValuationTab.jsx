@@ -4952,13 +4952,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             <strong>Properties:</strong> {categoryAnalysis.buildingLot.pairedAnalysis.bestPair.properties}
                           </div>
                           <div style={{ marginBottom: '4px' }}>
-                            <strong>Acreage Difference:</strong> {categoryAnalysis.buildingLot.pairedAnalysis.bestPair.acreageDiff.toFixed(2)} acres
+                            <strong>Size Difference:</strong> {(() => {
+                              const bp = categoryAnalysis.buildingLot.pairedAnalysis.bestPair;
+                              if (!bp) return '';
+                              if (valuationMode === 'acre') return `${bp.sizeDiff.toFixed(2)} acres`;
+                              if (valuationMode === 'sf') return `${Math.round(bp.sizeDiff).toLocaleString()} sqft`;
+                              return `${Math.round(bp.sizeDiff).toLocaleString()} ft`;
+                            })()}
                           </div>
                           <div style={{ marginBottom: '4px' }}>
                             <strong>Price Difference:</strong> ${categoryAnalysis.buildingLot.pairedAnalysis.bestPair.priceDiff.toLocaleString()}
                           </div>
                           <div style={{ marginBottom: '4px' }}>
-                            <strong>Raw Land Rate:</strong> ${Math.round(categoryAnalysis.buildingLot.pairedAnalysis.bestPair.rate).toLocaleString()}/acre
+                            <strong>Raw Land Rate:</strong> ${Math.round(categoryAnalysis.buildingLot.pairedAnalysis.bestPair.rate).toLocaleString()} {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
                           </div>
                           <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '6px' }}>
                             Median of {categoryAnalysis.buildingLot.pairedAnalysis.pairs} paired comparisons from {categoryAnalysis.buildingLot.count} properties
@@ -5191,7 +5197,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           {data.totalSales} sales
                         </span>
-                        {` ��� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
+                        {` • Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
                       </span>
                     </div>
                     <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
@@ -6569,7 +6575,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'block' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '����') : ''}
+                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('lot')}
