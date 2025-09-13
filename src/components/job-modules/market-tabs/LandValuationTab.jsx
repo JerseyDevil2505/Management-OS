@@ -1277,7 +1277,7 @@ const getPricePerUnit = useCallback((price, size) => {
           vcsSales[vcs] = [];
         }
 
-        const acres = parseFloat(prop.asset_lot_acre || 0);
+        const acres = parseFloat(calculateAcreage(prop) || 0);
         const sfla = parseFloat(prop.asset_sfla || 0);
 
         vcsSales[vcs].push({
@@ -1589,8 +1589,8 @@ const getPricePerUnit = useCallback((price, size) => {
           bVal = b.normalizedTime || 0;
           break;
         case 'acres':
-          aVal = parseFloat(a.asset_lot_acre || 0);
-          bVal = parseFloat(b.asset_lot_acre || 0);
+          aVal = parseFloat(calculateAcreage(a) || 0);
+          bVal = parseFloat(calculateAcreage(b) || 0);
           break;
         case 'sfla':
           aVal = parseInt(a.asset_sfla || 0);
@@ -2916,7 +2916,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Get typical lot size
       const vcsProps = properties?.filter(p =>
-        p.new_vcs === vcs && p.asset_lot_acre && p.asset_lot_acre > 0
+        p.new_vcs === vcs && calculateAcreage(p) > 0
       ) || [];
 
       let typicalLot = '';
@@ -6475,7 +6475,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </thead>
                 <tbody>
                   {sortModalData(getMethod2SalesForVCS(method2ModalVCS)).map(prop => {
-                    const acres = parseFloat(prop.asset_lot_acre || 0);
+                    const acres = parseFloat(calculateAcreage(prop) || 0);
                     const isExcluded = method2ExcludedSales.has(prop.id);
 
                     // Check for pre-construction (sale before year built)
@@ -7220,7 +7220,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   // Get typical lot size for ALL properties in this VCS (for display purposes)
                   const vcsProps = properties?.filter(p =>
                     p.new_vcs === vcs &&
-                    p.asset_lot_acre && p.asset_lot_acre > 0 // Only properties with valid acreage
+                    calculateAcreage(p) > 0 // Only properties with valid acreage
                   ) || [];
                   const typicalLot = vcsProps.length > 0 ?
                     (vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length).toFixed(2) : '';
