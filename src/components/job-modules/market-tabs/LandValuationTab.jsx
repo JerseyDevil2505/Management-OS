@@ -170,6 +170,9 @@ const LandValuationTab = ({
   const [landNotes, setLandNotes] = useState({});
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCopiedNotification, setShowCopiedNotification] = useState(false);
+  // Notification for saved land rates
+  const [showSaveRatesNotification, setShowSaveRatesNotification] = useState(false);
+  const [saveRatesMessage, setSaveRatesMessage] = useState('');
   const [searchFilters, setSearchFilters] = useState({
     class: '',
     block: '',
@@ -4173,8 +4176,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       config.vcsList?.forEach(vcs => affectedVCS.add(vcs));
     });
 
-    // Additional notification that rates have been saved
-    alert(`Land rates have been saved for ${affectedVCS.size} VCS areas and are now available in the Allocation Study and VCS Sheet tabs.\\n\\nMethod: ${valuationMode.toUpperCase()}\\nNormal rates: ${Object.keys(cascadeConfig.normal).filter(k => cascadeConfig.normal[k]?.rate).length} tiers\\nSpecial regions: ${Object.keys(cascadeConfig.special || {}).length}\\nVCS-specific: ${Object.keys(cascadeConfig.vcsSpecific || {}).length}`);
+    // Additional notification that rates have been saved — show a concise toast instead of alert
+    const methodLabel = valuationMode ? valuationMode.toUpperCase() : 'N/A';
+    const normalTiers = Object.keys(cascadeConfig.normal || {}).filter(k => cascadeConfig.normal[k]?.rate).length;
+    const specialCount = Object.keys(cascadeConfig.special || {}).length;
+    const vcsSpecificCount = Object.keys(cascadeConfig.vcsSpecific || {}).length;
+
+    const message = `Land rates saved for ${affectedVCS.size} VCS areas. Available in Allocation Study and VCS Sheet.` +
+      `\n\nMethod: ${methodLabel}` +
+      `\nNormal rate tiers: ${normalTiers}` +
+      `\nSpecial regions: ${specialCount}` +
+      `\nVCS-specific configs: ${vcsSpecificCount}`;
+
+    setSaveRatesMessage(message);
+    setShowSaveRatesNotification(true);
+    setTimeout(() => {
+      setShowSaveRatesNotification(false);
+      setSaveRatesMessage('');
+    }, 7000);
   };
   // ========== RENDER LAND RATES TAB ==========
   const renderLandRatesTab = () => (
@@ -4193,6 +4212,26 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           animation: 'slideIn 0.3s ease'
         }}>
           ✓ Prompt copied! Paste into Claude AI
+        </div>
+      )}
+
+      {showSaveRatesNotification && saveRatesMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          backgroundColor: '#2563EB',
+          color: 'white',
+          padding: '12px 20px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+          zIndex: 9999,
+          animation: 'slideIn 0.3s ease',
+          maxWidth: '340px',
+          whiteSpace: 'pre-line'
+        }}>
+          <strong>Land rates saved</strong>
+          <div style={{ marginTop: '8px', fontSize: '13px' }}>{saveRatesMessage}</div>
         </div>
       )}
       {/* Mode Selection Buttons - TOP RIGHT */}
@@ -6332,7 +6371,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'address' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('saleDate')}
