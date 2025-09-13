@@ -4565,6 +4565,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
                       {sale.asset_zoning || '-'}
                     </td>
+                    {valuationMode === 'ff' && (
+                      <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', fontSize: '12px' }}>
+                        {(() => {
+                          try {
+                            const zoneKey = sale.asset_zoning || sale.asset_zoning_code || sale.asset_zoning_text || '';
+                            const zcfg = marketLandData?.zoning_config || {};
+                            const entry = zcfg[zoneKey] || zcfg[zoneKey?.toUpperCase?.()] || zcfg[zoneKey?.toLowerCase?.()] || null;
+                            return entry ? (entry.depth_table || entry.depthTable || entry.depth_table_name || '') : '';
+                          } catch (e) { return ''; }
+                        })()}
+                      </td>
+                    )}
+
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
                       <select
                         value={specialRegions[sale.id] || 'Normal'}
