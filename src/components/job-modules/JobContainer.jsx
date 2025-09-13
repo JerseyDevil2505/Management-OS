@@ -1172,19 +1172,9 @@ const JobContainer = ({
                 return (
                   <button
                     key={module.id}
-                    onClick={async () => {
+                    onClick={() => {
                       if (isAvailable) {
-                        // When switching modules, refresh parent job data (mount/switch rule)
-                        if (activeModule !== module.id) {
-                          try {
-                            console.log(`Module switch: reloading job data for module ${module.id}`);
-                            await loadLatestFileVersions();
-                          } catch (e) {
-                            console.warn('Module switch refresh failed:', e);
-                          }
-                        }
-
-                        // clear moduleHasChanges flag when leaving
+                        // Do not reload parent data on module switch. Initial load happens when job is opened.
                         if (moduleHasChanges && activeModule !== module.id) {
                           setModuleHasChanges(false);
                         }
