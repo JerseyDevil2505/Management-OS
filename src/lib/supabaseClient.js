@@ -1164,35 +1164,37 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
 getTotalLotSize: async function(property, vendorType, codeDefinitions) {
   if (!property) return null;
 
-  // If a manual/calculated lot acreage exists (from unit-rate calc), prefer it
-  const manualAcre = property.market_manual_lot_acre ?? property.market_manual_acre ?? property.market_manual_lot_acre;
+  // 1) Explicit manual acreage from unit-rate processing (preferred)
+  const manualAcre = property.market_manual_lot_acre ?? property.market_manual_acre ?? property.manual_lot_acre ?? null;
   if (manualAcre !== undefined && manualAcre !== null) {
     const num = parseFloat(manualAcre);
     if (!isNaN(num) && num > 0) return num;
   }
 
-  // First check direct acre/sf fields
+  // 2) Explicit asset acreage
   let totalAcres = parseFloat(property.asset_lot_acre) || 0;
-  let totalSf = parseFloat(property.asset_lot_sf) || 0;
-  
-  // If no direct values, calculate from frontage × depth (works for both vendors)
+
+  // 3) Explicit square feet fields (manual then asset) -> convert to acres
+  const sfCandidates = (property.market_manual_lot_sf && parseFloat(property.market_manual_lot_sf)) || (property.asset_lot_sf && parseFloat(property.asset_lot_sf)) || 0;
+  let totalSf = sfCandidates || 0;
+
+  // 4) If still nothing, compute from frontage × depth
   if (totalAcres === 0 && totalSf === 0) {
     const frontage = parseFloat(property.asset_lot_frontage) || 0;
     const depth = parseFloat(property.asset_lot_depth) || 0;
-    
     if (frontage > 0 && depth > 0) {
       totalSf = frontage * depth;
     }
   }
-  
-// BRT: Check LANDUR codes only if still no data
+
+  // 5) BRT: Check LANDUR codes only if still no data and code definitions are available
   if (totalAcres === 0 && totalSf === 0 && vendorType === 'BRT' && property.job_id && property.property_composite_key && codeDefinitions) {
     const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
     const propertyVCS = rawData?.VCS || property.property_vcs;
-    
+
     if (propertyVCS && codeDefinitions.sections?.VCS) {
       let vcsData = codeDefinitions.sections.VCS[propertyVCS];
-      
+
       if (!vcsData) {
         // Search for matching VCS
         for (const [key, value] of Object.entries(codeDefinitions.sections.VCS)) {
@@ -1202,27 +1204,27 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
           }
         }
       }
-      
+
       if (vcsData?.MAP?.["8"]?.MAP) {
         const urcMap = vcsData.MAP["8"].MAP;
-        
+
         for (let i = 1; i <= 6; i++) {
           const landCode = rawData?.[`LANDUR_${i}`];
           const landUnits = parseFloat(rawData?.[`LANDURUNITS_${i}`]) || 0;
-          
+
           // BRT stores single digit codes without leading zero, pad them
           const paddedCode = landCode ? String(landCode).padStart(2, '0') : null;
-          
+
           if (paddedCode && landUnits > 0) {
             // Find the matching code entry (they're numbered "1", "2", "3" etc)
             for (const key in urcMap) {
               if (urcMap[key].KEY === paddedCode && urcMap[key].MAP?.["1"]?.DATA?.VALUE) {
                 const description = urcMap[key].MAP["1"].DATA.VALUE.toUpperCase();
-                
-                if ((description.includes('ACRE') || description.includes('AC')) && 
+
+                if ((description.includes('ACRE') || description.includes('AC')) &&
                     !description.includes('SITE VALUE')) {
                   totalAcres += landUnits;
-                } else if ((description.includes('SF') || description.includes('SQUARE')) && 
+                } else if ((description.includes('SF') || description.includes('SQUARE')) &&
                            !description.includes('SITE VALUE')) {
                   totalSf += landUnits;
                 }
@@ -1234,9 +1236,10 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
       }
     }
   }
-  // Convert all to acres and return
-  const finalAcres = totalAcres + (totalSf / 43560);
-  return finalAcres > 0 ? finalAcres : null;
+
+  // Convert sf to acres and return the first positive result
+  const finalAcres = (totalAcres && totalAcres > 0) ? totalAcres : (totalSf && totalSf > 0 ? (totalSf / 43560) : null);
+  return finalAcres && finalAcres > 0 ? finalAcres : null;
 },
 // Get bathroom plumbing sum (BRT only)
   getBathroomPlumbingSum: async function(property, vendorType) {
