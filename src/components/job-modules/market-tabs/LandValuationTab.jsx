@@ -496,7 +496,7 @@ useEffect(() => {
     const savedIncluded = new Set();
     const manuallyAddedIds = new Set();
 
-    debug('��� Loading saved Method 1 sales data:', {
+    debug('🔄 Loading saved Method 1 sales data:', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
@@ -1064,8 +1064,17 @@ const getPricePerUnit = useCallback((price, size) => {
     // Helper function to enrich property with calculated fields
     const enrichProperty = (prop, isPackage = false) => {
       const acres = calculateAcreage(prop);
-      const pricePerUnit = getPricePerUnit(prop.sales_price, acres);
-      
+      // For front foot mode use frontage as size
+      let pricePerUnit;
+      if (valuationMode === 'ff') {
+        const frontage = parseFloat(prop.asset_lot_frontage) || 0;
+        pricePerUnit = getPricePerUnit(prop.sales_price, frontage);
+      } else {
+        pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+      }
+      // Ensure whole numbers for unit rates
+      const roundedUnitPrice = Math.round(pricePerUnit);
+
       // Auto-categorize teardowns and pre-construction
       let category = saleCategories[prop.id];
       // Determine additional-cards using centralized analyzer to avoid false positives
@@ -2473,7 +2482,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const analyzeEconomicObsolescence = useCallback(() => {
     if (!properties) return;
 
-    debug('���� Economic Obsolescence Analysis Debug:', {
+    debug('🔍 Economic Obsolescence Analysis Debug:', {
       totalProperties: properties.length,
       withNewVCS: properties.filter(p => p.new_vcs).length,
       withLocationAnalysis: properties.filter(p => p.location_analysis).length,
