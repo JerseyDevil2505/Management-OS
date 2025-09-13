@@ -1189,6 +1189,7 @@ const getPricePerUnit = useCallback((price, size) => {
             const avgDepth = depthValues.length > 0 ? (depthValues.reduce((s, v) => s + v, 0) / depthValues.length) : null;
 
             pricePerUnit = getPricePerUnit(totalPrice, totalFrontage || 0);
+            const roundedPkgUnitPrice = Math.round(pricePerUnit);
 
             packageSale = {
               ...group[0],
@@ -1201,7 +1202,7 @@ const getPricePerUnit = useCallback((price, size) => {
               totalAcres: totalAcres,
               asset_lot_frontage: totalFrontage || null,
               asset_lot_depth: avgDepth,
-              pricePerAcre: pricePerUnit,
+              pricePerAcre: roundedPkgUnitPrice,
               packageData: {
                 is_package: true,
                 package_count: packageData.package_count || group.length,
