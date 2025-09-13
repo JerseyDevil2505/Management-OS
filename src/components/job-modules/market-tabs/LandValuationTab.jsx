@@ -809,7 +809,7 @@ const getPricePerUnit = useCallback((price, size) => {
     });
 
     if (targetAllocation && cascadeConfig.normal.prime && properties?.length > 0) {
-      debug('��� CONDITIONS MET - CALLING calculateVCSRecommendedSitesWithTarget');
+      debug('✅ CONDITIONS MET - CALLING calculateVCSRecommendedSitesWithTarget');
       calculateVCSRecommendedSitesWithTarget();
     } else {
       debug('❌ CONDITIONS NOT MET FOR VCS CALCULATION:', {
@@ -4609,21 +4609,33 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right' }}>
                       ${sale.sales_price?.toLocaleString()}
                     </td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right' }}>
-                      {valuationMode === 'sf' ? 
-                        Math.round(sale.totalAcres * 43560).toLocaleString() : 
-                        sale.totalAcres?.toFixed(2)}
-                    </td>
-                    <td style={{ 
-                      padding: '8px', 
-                      borderBottom: '1px solid #E5E7EB', 
+                    {valuationMode === 'ff' ? (
+                      <>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right' }}>
+                          {sale.asset_lot_frontage != null ? String(sale.asset_lot_frontage) : ''}
+                        </td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right' }}>
+                          {sale.asset_lot_depth != null ? String(sale.asset_lot_depth) : ''}
+                        </td>
+                      </>
+                    ) : (
+                      <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'right' }}>
+                        {valuationMode === 'sf' ?
+                          Math.round(sale.totalAcres * 43560).toLocaleString() :
+                          sale.totalAcres?.toFixed(2)}
+                      </td>
+                    )}
+
+                    <td style={{
+                      padding: '8px',
+                      borderBottom: '1px solid #E5E7EB',
                       textAlign: 'right',
                       fontWeight: 'bold',
                       color: sale.pricePerAcre > 100000 ? '#EF4444' : '#10B981'
                     }}>
-                      {valuationMode === 'sf' ? 
-                        `$${(sale.sales_price / (sale.totalAcres * 43560)).toFixed(2)}` :
-                        `$${sale.pricePerAcre?.toLocaleString()}`}
+                      {valuationMode === 'ff' ?
+                        `$${sale.pricePerAcre?.toLocaleString()}` :
+                        (valuationMode === 'sf' ? `$${(sale.sales_price / (sale.totalAcres * 43560)).toFixed(2)}` : `$${sale.pricePerAcre?.toLocaleString()}`)}
                     </td>
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB', textAlign: 'center' }}>
                       {sale.packageData && (
