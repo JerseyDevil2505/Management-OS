@@ -3310,7 +3310,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const wb = XLSX.utils.book_new();
 
     // Sheet 1: Vacant Land Sales (Method 1) - include UI columns
-    const salesHeaders = ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Special Region','Category','Sale Date','$ Sale Price','Acres','$ / Acre','Package','Notes'];
+    const salesHeaders = valuationMode === 'ff'
+      ? ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Depth Table','Special Region','Category','Sale Date','$ Sale Price','Frontage','Depth','$ / FF','Package','Notes']
+      : ['Include','Block','Lot','Qual','Address','Class','Bldg','Type','Design','VCS','Zoning','Special Region','Category','Sale Date','$ Sale Price','Acres','$ / Acre','Package','Notes'];
     const salesRows = [salesHeaders];
 
     (vacantSales || []).forEach(sale => {
@@ -4518,7 +4520,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         type="checkbox"
                         checked={includedSales.has(sale.id)}
                         onChange={(e) => {
-                          debug(`��� Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
+                          debug(`����� Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
                             checked: e.target.checked,
                             saleId: sale.id
                           });
