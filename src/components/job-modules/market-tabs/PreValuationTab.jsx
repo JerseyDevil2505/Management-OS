@@ -135,6 +135,22 @@ const PreValuationTab = ({
     return () => setIsMounted(false);
   }, []);
 
+  // Listen for external navigation events to select a specific PreValuation subtab
+  useEffect(() => {
+    const handler = (e) => {
+      try {
+        const tabId = e?.detail?.tabId;
+        if (!tabId) return;
+        const valid = ['marketAnalysis', 'unitRates', 'worksheet', 'zoning', 'normalization'];
+        if (valid.includes(tabId)) setActiveSubTab(tabId);
+      } catch (err) {
+        console.error('navigate_prevaluation_subtab handler error', err);
+      }
+    };
+    window.addEventListener('navigate_prevaluation_subtab', handler);
+    return () => window.removeEventListener('navigate_prevaluation_subtab', handler);
+  }, []);
+
   // Import diagnostic state (paste CSV to diagnose unmatched vs exact keys)
   const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
   const [diagnosticCsvText, setDiagnosticCsvText] = useState('');
