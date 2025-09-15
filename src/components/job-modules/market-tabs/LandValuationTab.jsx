@@ -5482,7 +5482,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       if (zoneKeys.length === 0) {
                         return (
                           <tr>
-                            <td colSpan="7" style={{ padding: '8px', color: '#6B7280', border: '1px solid #E5E7EB' }}>
+                            <td colSpan="6" style={{ padding: '8px', color: '#6B7280', border: '1px solid #E5E7EB' }}>
                               No zoning with depth tables available.
                             </td>
                           </tr>
@@ -7022,7 +7022,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <span style={{ fontSize: '16px', fontWeight: 'bold' }}>%</span>
                     <button
                       onClick={() => {
-                        debug('���� Save button clicked for target allocation:', targetAllocation);
+                        debug('💾 Save button clicked for target allocation:', targetAllocation);
                         saveTargetAllocation();
                       }}
                       disabled={!targetAllocation || targetAllocation === ''}
