@@ -91,6 +91,31 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   // Helper: filter valid sales (values_norm_time primary)
   const getValidSales = (props) => props.filter(p => p && (p.values_norm_time !== undefined && p.values_norm_time !== null && Number(p.values_norm_time) > 0));
 
+  // Formatting helpers
+  const formatPrice = (val) => val ? `$${val.toLocaleString()}` : '—';
+  const formatSize = (val) => val ? val.toLocaleString() : '—';
+  const formatPct = (val) => val ? `${val.toFixed(1)}%` : '—';
+  const formatYear = (val) => val ? Math.round(val) : '—';
+
+  // Dynamic condition discovery
+  const getUniqueConditions = (properties, condField) => {
+    const conditions = new Set();
+    properties.forEach(p => {
+      const cond = normalizeCondition(p[condField]);
+      if (cond) conditions.add(cond);
+    });
+    return Array.from(conditions).sort();
+  };
+
+  // Size normalization using Jim's 50% formula
+  const calculateNormalizedValue = (salePrice, saleSize, targetSize) => {
+    if (!saleSize || !targetSize || Math.abs(saleSize - targetSize) < 100) {
+      return salePrice; // No adjustment needed if sizes are close
+    }
+    // Jim's 50% formula
+    return (((targetSize - saleSize) * ((salePrice / saleSize) * 0.50)) + salePrice);
+  };
+
   // Fixed entry filter logic
   const applyEntryFilter = (props) => {
     if (!entryFilter) return props; // If filter OFF, return all
@@ -675,7 +700,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                           <td className="px-2 py-2 border bg-blue-50">{avg.count || 0}</td>
                           <td className="px-2 py-2 border bg-green-50">{exc.avgPrice || '—'}</td>
                           <td className="px-2 py-2 border bg-green-50">{exc.avgAGI || '—'}</td>
-                          <td className="px-2 py-2 border bg-green-50">{exc.pctDiff ? `${exc.pctDiff}%` : '—'}</td>
+                          <td className="px-2 py-2 border bg-green-50">{exc.pctDiff ? `${exc.pctDiff}%` : '��'}</td>
                           <td className="px-2 py-2 border bg-yellow-50">{good.avgPrice || '—'}</td>
                           <td className="px-2 py-2 border bg-yellow-50">{good.avgAGI || '—'}</td>
                           <td className="px-2 py-2 border bg-yellow-50">{good.pctDiff ? `${good.pctDiff}%` : '—'}</td>
