@@ -9,6 +9,7 @@ import {
   ChevronLeft
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import './sharedTabNav.css';
 import { supabase, interpretCodes, propertyService, checklistService } from '../../../lib/supabaseClient';
 
 const DataQualityTab = ({ 
