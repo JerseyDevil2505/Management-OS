@@ -2480,22 +2480,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ...prev,
       [vcs]: description
     }));
+  };
 
-    // Debounce save to avoid spamming the server on every keystroke
+  // Persist descriptions (call on blur)
+  const persistVCSDescription = (vcs) => {
     try {
-      if (saveTimerRef && saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    } catch (e) {}
-
-    saveTimerRef.current = setTimeout(() => {
-      try {
-        if (window.landValuationSave) {
-          // call the central save which includes worksheet_data.descriptions
-          window.landValuationSave({ source: 'vcs-description' });
-        }
-      } catch (e) {
-        console.error('Failed to auto-save VCS description:', e);
+      if (window.landValuationSave) {
+        window.landValuationSave({ source: 'vcs-description' });
       }
-    }, 700);
+    } catch (e) {
+      console.error('Failed to persist VCS description:', e);
+    }
   };
 
   const updateVCSType = (vcs, type) => {
