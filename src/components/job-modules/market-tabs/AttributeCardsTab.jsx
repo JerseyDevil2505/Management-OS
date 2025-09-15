@@ -34,7 +34,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
   // Condition analysis UI state
   const [entryFilterEnabled, setEntryFilterEnabled] = useState(true); // renamed from entryFilter
-  const [typeUseFilter, setTypeUseFilter] = useState('all');
+  const [typeUseFilter, setTypeUseFilter] = useState('1'); // Default to Single Family
   const [interiorInspectionOnly, setInteriorInspectionOnly] = useState(false);
   const [conditionWorking, setConditionWorking] = useState(false);
   const [conditionResults, setConditionResults] = useState(marketLandData.condition_analysis_rollup || { exterior: {}, interior: {}, tested_adjustments: {} });
@@ -179,12 +179,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     return properties.filter(p => {
       const typeUse = getPropertyTypeUse(p).toString().trim();
 
+      // If typeUse is empty and we're filtering for residential types, include it
+      // Many properties might not have type_use populated but are residential
+      const isEmpty = !typeUse || typeUse === '';
+
       if (filterValue === 'all_residential') {
-        // All codes starting with 1-6 are residential
-        return ['1','2','3','4','5','6'].some(prefix => typeUse.startsWith(prefix));
+        // All codes starting with 1-6 are residential, or empty (assume residential)
+        return isEmpty || ['1','2','3','4','5','6'].some(prefix => typeUse.startsWith(prefix));
       } else if (filterValue === '1') {
-        // Single family: codes starting with '1' (10-19)
-        return typeUse.startsWith('1');
+        // Single family: codes starting with '1' (10-19), or empty (assume single family)
+        return isEmpty || typeUse.startsWith('1');
       } else if (filterValue === '2') {
         // Duplex/Semi: codes starting with '2' (20-29)
         return typeUse.startsWith('2');
@@ -242,6 +246,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
     // Clean the condition code - trim whitespace and convert to uppercase
     const cleanCode = condCode.toString().trim().toUpperCase();
+
+    // Treat "00" as null/empty
+    if (cleanCode === '00' || cleanCode === '') return null;
 
     if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
       // Microsystems: E=Excellent, G=Good, A=Average, F=Fair, P=Poor
@@ -304,7 +311,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       console.log('Exterior analysis properties:', exteriorProperties.length);
       console.log('Interior analysis properties:', interiorProperties.length);
 
-      // Debug field names
+      // Debug field names and filtering
       console.log('=== FIELD NAME CHECK ===');
       if (properties.length > 0) {
         const sample = properties[0];
@@ -312,6 +319,17 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         console.log('Looking for type_use, found:', getPropertyTypeUse(sample));
         console.log('Looking for ext_cond, found:', getPropertyCondition(sample, 'exterior'));
         console.log('Looking for int_cond, found:', getPropertyCondition(sample, 'interior'));
+        console.log('Current typeUseFilter:', typeUseFilter);
+
+        // Check how many properties have empty type_use
+        const emptyTypeUse = propertiesWithSales.filter(p => !getPropertyTypeUse(p).toString().trim()).length;
+        console.log(`Properties with empty type_use: ${emptyTypeUse} / ${propertiesWithSales.length}`);
+
+        // Check condition codes
+        const extConds = propertiesWithSales.map(p => getPropertyCondition(p, 'exterior')).filter(c => c);
+        const intConds = propertiesWithSales.map(p => getPropertyCondition(p, 'interior')).filter(c => c);
+        console.log('Sample exterior conditions:', [...new Set(extConds)].slice(0, 10));
+        console.log('Sample interior conditions:', [...new Set(intConds)].slice(0, 10));
       }
 
       // Discover actual conditions in data (dynamic)
@@ -844,6 +862,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                   ))}
                 </select>
               </div>
+
+              <span className="text-xs text-gray-500">
+                ({exteriorProperties?.length || 0} exterior / {interiorProperties?.length || 0} interior properties)
+              </span>
             </div>
 
             {/* Exterior Condition Table */}
