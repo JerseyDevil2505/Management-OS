@@ -163,11 +163,25 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       const interiorAnalysis = {};
 
       // Collect data grouped by VCS first, then by condition
+      // Debug: Check what condition fields are available
+      let extCondCount = 0, intCondCount = 0;
+      let sampleExtConds = new Set(), sampleIntConds = new Set();
+
       valid.forEach(p => {
         const vcs = p.new_vcs || p.property_vcs || p.vcs || p.asset_vcs || 'NO_VCS';
         const price = Number(p.values_norm_time || 0);
         const size = Number(p.asset_sfla || p.asset_sfla_calc || 0);
         const agi = size > 0 ? price / size : 0; // AGI = Average per sq ft
+
+        // Debug condition fields
+        if (p.asset_ext_cond) {
+          extCondCount++;
+          if (sampleExtConds.size < 10) sampleExtConds.add(p.asset_ext_cond);
+        }
+        if (p.asset_int_cond) {
+          intCondCount++;
+          if (sampleIntConds.size < 10) sampleIntConds.add(p.asset_int_cond);
+        }
 
         // Process exterior condition
         const extCondition = normalizeCondition(p.asset_ext_cond);
@@ -209,6 +223,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           bucket.totalAGI += agi;
         }
       });
+
+      console.log(`📊 Condition field analysis:`);
+      console.log(`  - Properties with exterior conditions: ${extCondCount}`);
+      console.log(`  - Properties with interior conditions: ${intCondCount}`);
+      console.log(`  - Sample exterior codes:`, Array.from(sampleExtConds));
+      console.log(`  - Sample interior codes:`, Array.from(sampleIntConds));
 
       // Calculate averages and percentage differences from AVERAGE baseline
       const calculateAverages = (analysis) => {
