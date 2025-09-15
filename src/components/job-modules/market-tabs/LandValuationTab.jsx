@@ -5568,10 +5568,36 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         }
 
                         const perAcre = chosenPerAcre != null ? chosenPerAcre : 'N/A';
-                        const perSqFt = perAcre && perAcre !== 'N/A' ? (parseFloat(perAcre) / 43560) : null;
 
-                        const landValue = (perSqFt && typicalLotSF) ? Math.round(perSqFt * typicalLotSF) : '';
+                        // Apply Jim's magic formula per-zone using LOT SF values when possible:
+                        // AdjustedLotValue = ((ZLS - GLS) * ((GP / GLS) * 0.50)) + GP
+                        // Where: ZLS = typicalLotSF (zone), GLS = summaryTypicalSF (global typical lot SF), GP = summaryLandValue (global lot land value)
+                        let landValue = '';
+                        if (summaryTypicalSF && summaryLandValue && typicalLotSF) {
+                          try {
+                            const ZLS = Number(typicalLotSF);
+                            const GLS = Number(summaryTypicalSF);
+                            const GP = Number(summaryLandValue);
+                            // Guard against division by zero
+                            if (GLS > 0) {
+                              const adjusted = ((ZLS - GLS) * ((GP / GLS) * 0.5)) + GP;
+                              landValue = Math.round(adjusted);
+                            } else {
+                              landValue = '';
+                            }
+                          } catch (e) {
+                            landValue = '';
+                          }
+                        } else {
+                          // Fallback: use top-level per-acre rate
+                          const perSqFt = perAcre && perAcre !== 'N/A' ? (parseFloat(perAcre) / 43560) : null;
+                          landValue = (perSqFt && typicalLotSF) ? Math.round(perSqFt * typicalLotSF) : '';
+                        }
 
+                        // Implied $/Acre for this zoning based on adjusted land value
+                        const impliedPerAcre = (landValue && typicalLotSF) ? Math.round(landValue / (typicalLotSF / 43560)) : 'N/A';
+
+                        // Standard FF: integer, Excess FF = half (integer)
                         const standardFF = (landValue && minFrontage) ? Math.round(landValue / minFrontage) : '';
                         const excessFF = standardFF ? Math.round(standardFF / 2) : '';
 
