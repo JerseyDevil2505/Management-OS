@@ -1935,7 +1935,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const loadAllocationStudyData = useCallback(() => {
     if (!cascadeConfig.normal.prime) return;
 
-    debug('🏠 Loading allocation study data - individual sale approach');
+    debug('���� Loading allocation study data - individual sale approach');
 
     // Process each individual vacant sale (no grouping)
     const processedVacantSales = [];
@@ -2472,10 +2472,27 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const updateVCSDescription = (vcs, description) => {
+    // Update local state immediately to allow freeform editing
     setVcsDescriptions(prev => ({
       ...prev,
       [vcs]: description
     }));
+
+    // Debounce save to avoid spamming the server on every keystroke
+    try {
+      if (saveTimerRef && saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    } catch (e) {}
+
+    saveTimerRef.current = setTimeout(() => {
+      try {
+        if (window.landValuationSave) {
+          // call the central save which includes worksheet_data.descriptions
+          window.landValuationSave({ source: 'vcs-description' });
+        }
+      } catch (e) {
+        console.error('Failed to auto-save VCS description:', e);
+      }
+    }, 700);
   };
 
   const updateVCSType = (vcs, type) => {
@@ -4115,7 +4132,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     debug('🔄 Recalculating category analysis');
     debug('���� Total vacant sales:', vacantSales.length);
-    debug('📊 Checked sales count:', checkedSales.length);
+    debug('���� Checked sales count:', checkedSales.length);
     debug('📋 Included sales IDs:', Array.from(includedSales));
     debug('📋 Sale categories state:', saleCategories);
     debug('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
@@ -6881,7 +6898,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'typeUse' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '����') : ''}
+                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '�����') : ''}
                     </th>
                   </tr>
                 </thead>
