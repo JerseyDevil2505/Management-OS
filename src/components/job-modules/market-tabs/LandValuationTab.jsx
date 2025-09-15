@@ -171,6 +171,7 @@ const LandValuationTab = ({
   const [includedSales, setIncludedSales] = useState(new Set());
   const [saleCategories, setSaleCategories] = useState({});
   const [specialRegions, setSpecialRegions] = useState({});
+  const [newSpecialRegionName, setNewSpecialRegionName] = useState('');
   const [landNotes, setLandNotes] = useState({});
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCopiedNotification, setShowCopiedNotification] = useState(false);
@@ -2103,6 +2104,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     Object.values(specialRegions).forEach(r => regions.add(r));
     return Array.from(regions);
   }, [specialRegions]);
+
+  // Available region options for dropdowns: built-in + custom special regions defined in cascadeConfig
+  const regionOptions = useMemo(() => {
+    const set = new Set(SPECIAL_REGIONS || []);
+    try {
+      Object.keys(cascadeConfig.special || {}).forEach(r => { if (r) set.add(r); });
+    } catch (e) {}
+    Object.values(specialRegions || {}).forEach(r => { if (r) set.add(r); });
+    return Array.from(set);
+  }, [cascadeConfig.special, specialRegions]);
 
   const getUniqueYears = useCallback(() => {
     const years = new Set();
@@ -4577,6 +4588,86 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       </div>
 
+      {/* Special Regions Configuration */}
+      <div className="special-regions-panel">
+        <div className="special-regions-header">
+          <h3 className="special-regions-title">Special Regions</h3>
+        </div>
+        <div className="special-regions-body">
+          <div className="special-regions-controls">
+            <input
+              type="text"
+              placeholder="New region name (e.g. Waterfront)"
+              value={newSpecialRegionName}
+              onChange={(e) => setNewSpecialRegionName(e.target.value)}
+              className="special-region-input"
+            />
+            <button
+              onClick={() => {
+                const name = (newSpecialRegionName || '').toString().trim();
+                if (!name) return alert('Enter a region name');
+                // Initialize with a copy of normal rates if not present
+                setCascadeConfig(prev => {
+                  if (!prev.special) prev.special = {};
+                  if (!prev.special[name]) {
+                    prev.special = { ...prev.special, [name]: JSON.parse(JSON.stringify(prev.normal || {})) };
+                  }
+                  return { ...prev };
+                });
+                setNewSpecialRegionName('');
+              }}
+              className="special-region-add"
+            >Add</button>
+            <button
+              onClick={async () => {
+                // Trigger a save to persist cascadeConfig with new regions
+                await saveAnalysis({ source: 'special-region-config' });
+                alert('Special regions saved');
+              }}
+              className="special-region-save"
+            >Save</button>
+          </div>
+
+          <div className="special-regions-list">
+            <div className="special-regions-list-row special-regions-list-header">
+              <div>Name</div>
+              <div>Actions</div>
+            </div>
+            {Object.keys(cascadeConfig.special || {}).length === 0 && (
+              <div className="special-regions-empty">No custom special regions configured</div>
+            )}
+            {Object.keys(cascadeConfig.special || {}).map(region => (
+              <div key={region} className="special-regions-list-row">
+                <div className="special-region-name">{region}</div>
+                <div>
+                  <button
+                    onClick={() => {
+                      // Remove this special region from cascadeConfig
+                      setCascadeConfig(prev => {
+                        const copy = { ...prev };
+                        if (copy.special && copy.special[region]) {
+                          const s = { ...copy.special };
+                          delete s[region];
+                          copy.special = s;
+                        }
+                        return copy;
+                      });
+                      // Also clear any sales that used this region
+                      setSpecialRegions(prev => {
+                        const next = { ...prev };
+                        Object.keys(next).forEach(k => { if (next[k] === region) next[k] = 'Normal'; });
+                        return next;
+                      });
+                    }}
+                    className="special-region-remove"
+                  >Remove</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* Method 1: Vacant Land Sales */}
       <div style={{ marginBottom: '30px', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB' }}>
         <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
@@ -4702,14 +4793,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <select
                         value={specialRegions[sale.id] || 'Normal'}
                         onChange={(e) => setSpecialRegions(prev => ({ ...prev, [sale.id]: e.target.value }))}
-                        style={{
-                          padding: '4px',
-                          border: '1px solid #D1D5DB',
-                          borderRadius: '4px',
-                          fontSize: '12px'
-                        }}
+                        className="special-region-select"
                       >
-                        {SPECIAL_REGIONS.map(region => (
+                        {regionOptions.map(region => (
                           <option key={region} value={region}>{region}</option>
                         ))}
                       </select>
