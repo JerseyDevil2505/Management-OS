@@ -137,11 +137,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     }
   };
 
-  // Dynamic condition discovery
-  const getUniqueConditions = (properties, condField) => {
+  // Dynamic condition discovery using updated helper function
+  const getUniqueConditions = (properties, condType) => {
     const conditions = new Set();
     properties.forEach(p => {
-      const cond = normalizeCondition(p[condField]);
+      const cond = normalizeCondition(getPropertyCondition(p, condType));
       if (cond) conditions.add(cond);
     });
     return Array.from(conditions).sort();
