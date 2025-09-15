@@ -694,7 +694,7 @@ useEffect(() => {
       
       // Get ALL inspection data with pagination
       const inspectionData = await getAllInspectionData(jobData.id);
-      console.log(`�� Found ${inspectionData.length} inspection records`);
+      console.log(`🔍 Found ${inspectionData.length} inspection records`);
       
       // Create a map of inspection data by composite key
       const inspectionMap = new Map();
@@ -1419,7 +1419,8 @@ useEffect(() => {
       Completed
     </button>
   ) : (
-    !item.is_analysis_item && (
+    // Allow Mark Complete for regular items OR ones specified to replace Go To with Complete
+    (!item.is_analysis_item || replaceGoToWithComplete.has(item.item_text)) && (
       <button
         onClick={() => handleItemStatusChange(item.id, 'completed')}
         className="px-3 py-1 rounded-md text-sm font-medium transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300"
