@@ -95,7 +95,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
   // Formatting helpers
   const formatPrice = (val) => val ? `$${val.toLocaleString()}` : '—';
-  const formatSize = (val) => val ? val.toLocaleString() : '���';
+  const formatSize = (val) => val ? val.toLocaleString() : '—';
   const formatPct = (val) => val ? `${val.toFixed(1)}%` : '—';
   const formatYear = (val) => val ? Math.round(val) : '—';
 
@@ -328,7 +328,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         // Group by VCS and condition
         filteredProperties.forEach(p => {
           const vcs = p.new_vcs || p.property_vcs || p.vcs || p.asset_vcs || 'NO_VCS';
-          const condition = normalizeCondition(p[conditionField]);
+          const condition = normalizeCondition(getPropertyCondition(p, conditionField === 'asset_ext_cond' ? 'exterior' : 'interior'));
           if (!condition) return;
 
           if (!analysis[vcs]) {
