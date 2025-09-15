@@ -1,0 +1,10 @@
+.vcs-description-input {
+  width: 100%;
+  padding: 2px;
+  border: 1px solid #D1D5DB;
+  border-radius: 4px;
+  font-size: 11px;
+  box-sizing: border-box;
+}
+
+/* Keep this file scoped to the VCS sheet styles - add more classes here if further conversions are made */

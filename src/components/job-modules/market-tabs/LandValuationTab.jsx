@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { supabase, interpretCodes, checklistService } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
+import './LandValuationTab.css';
 
 // Debug shim: replace console.log/debug calls with this noop in production
 const debug = () => {};
@@ -2482,16 +2483,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }));
   };
 
-  // Persist descriptions (call on blur)
-  const persistVCSDescription = (vcs) => {
-    try {
-      if (window.landValuationSave) {
-        window.landValuationSave({ source: 'vcs-description' });
-      }
-    } catch (e) {
-      console.error('Failed to persist VCS description:', e);
-    }
-  };
 
   const updateVCSType = (vcs, type) => {
     setVcsTypes(prev => ({
@@ -7713,14 +7704,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           type="text"
                           value={description}
                           onChange={(e) => updateVCSDescription(vcs, e.target.value)}
-                          onBlur={() => persistVCSDescription(vcs)}
-                          style={{
-                            width: '100%',
-                            padding: '2px',
-                            border: '1px solid #D1D5DB',
-                            borderRadius: '4px',
-                            fontSize: '11px'
-                          }}
+                          className="vcs-description-input"
                         />
                       </td>
                       <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{getMethodDisplay(type, description)}</td>
