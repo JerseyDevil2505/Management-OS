@@ -49,6 +49,9 @@ const LandValuationTab = ({
   const [isVcsSheetComplete, setIsVcsSheetComplete] = useState(false);
   const [isEcoObsComplete, setIsEcoObsComplete] = useState(false);
 
+  // Debounce timer ref for auto-saving VCS descriptions and similar UI edits
+  const saveTimerRef = useRef(null);
+
   // Load initial checklist item statuses for this job
   useEffect(() => {
     if (!jobData?.id) return;
@@ -1290,7 +1293,7 @@ const getPricePerUnit = useCallback((price, size) => {
       const enriched = enrichProperty(prop);
       finalSales.push(enriched);
       if (enriched.autoCategory) {
-        debug(`����� Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
+        debug(`���️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
         setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
       }
     });
