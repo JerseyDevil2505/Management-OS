@@ -666,8 +666,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 <label className="text-sm">Entry filter (01-04)</label>
                 <input type="checkbox" checked={entryFilter} onChange={() => setEntryFilter(v=>!v)} />
                 <button onClick={computeConditionAnalysis} className={CSV_BUTTON_CLASS}>{conditionWorking ? 'Working...' : 'Run Analysis'}</button>
-                <button onClick={() => downloadCsv(`${jobData.job_name || 'job'}-condition-exterior.csv`, ['VCS','AVG_Price','AVG_AGI','AVG_Size','AVG_N','EXC_Price','EXC_AGI','EXC_Size','EXC_N','EXC_%','GOOD_Price','GOOD_AGI','GOOD_Size','GOOD_N','GOOD_%','FAIR_Price','FAIR_AGI','FAIR_Size','FAIR_N','FAIR_%','POOR_Price','POOR_AGI','POOR_Size','POOR_N','POOR_%'], conditionExteriorRowsForCsv)} className={CSV_BUTTON_CLASS}><FileText size={14}/> Export Exterior CSV</button>
-                <button onClick={() => downloadCsv(`${jobData.job_name || 'job'}-condition-interior.csv`, ['VCS','AVG_Price','AVG_AGI','AVG_Size','AVG_N','EXC_Price','EXC_AGI','EXC_Size','EXC_N','EXC_%','GOOD_Price','GOOD_AGI','GOOD_Size','GOOD_N','GOOD_%','FAIR_Price','FAIR_AGI','FAIR_Size','FAIR_N','FAIR_%','POOR_Price','POOR_AGI','POOR_Size','POOR_N','POOR_%'], conditionInteriorRowsForCsv)} className={CSV_BUTTON_CLASS}><FileText size={14}/> Export Interior CSV</button>
+                <button onClick={() => downloadCsv(`${jobData.job_name || 'job'}-condition-exterior.csv`, getExteriorCsvHeaders(), conditionExteriorRowsForCsv)} className={CSV_BUTTON_CLASS}><FileText size={14}/> Export Exterior CSV</button>
+                <button onClick={() => downloadCsv(`${jobData.job_name || 'job'}-condition-interior.csv`, getInteriorCsvHeaders(), conditionInteriorRowsForCsv)} className={CSV_BUTTON_CLASS}><FileText size={14}/> Export Interior CSV</button>
               </div>
             </div>
 
