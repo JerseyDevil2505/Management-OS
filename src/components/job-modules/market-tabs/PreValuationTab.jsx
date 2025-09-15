@@ -2524,61 +2524,41 @@ const analyzeImportFile = async (file) => {
   return (
     <div className="w-full">
       {/* Sub-tab Navigation */}
-      <div className="flex gap-2 border-b border-gray-200">
-        <button
-          onClick={() => setActiveSubTab('normalization')}
-          className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-            activeSubTab === 'normalization'
-              ? 'border-blue-500 text-blue-600'
-              : 'border-transparent text-gray-600 hover:text-gray-800'
-          }`}
-        >
-          Normalization
-        </button>
-        <button
-          onClick={() => setActiveSubTab('marketAnalysis')}
-          disabled={!normalizationStats.sizeNormalized || normalizationStats.sizeNormalized === 0}
-          className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-            activeSubTab === 'marketAnalysis'
-              ? 'border-blue-500 text-blue-600'
-              : 'border-transparent text-gray-600 hover:text-gray-800'
-          } ${!normalizationStats.sizeNormalized ? 'opacity-50 cursor-not-allowed' : ''}`}
-        >
-          Market Analysis
-        </button>
-        <button
-          onClick={() => setActiveSubTab('unitRates')}
-          disabled={vendorType !== 'BRT'}
-          title={vendorType !== 'BRT' ? 'Unit Rate Configuration is only available for BRT jobs' : ''}
-          className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-            activeSubTab === 'unitRates'
-              ? 'border-blue-500 text-blue-600'
-              : 'border-transparent text-gray-600 hover:text-gray-800'
-          } ${vendorType !== 'BRT' ? 'opacity-50 cursor-not-allowed' : ''}`}
-        >
-          Unit Rate Configuration
-        </button>
-        <button
-          onClick={() => setActiveSubTab('worksheet')}
-          className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-            activeSubTab === 'worksheet'
-              ? 'border-blue-500 text-blue-600'
-              : 'border-transparent text-gray-600 hover:text-gray-800'
-          }`}
-        >
-          Page by Page Worksheet
-        </button>
-        <button
-          onClick={() => setActiveSubTab('zoning')}
-          className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-            activeSubTab === 'zoning'
-              ? 'border-blue-500 text-blue-600'
-              : 'border-transparent text-gray-600 hover:text-gray-800'
-          }`}
-        >
-          Zoning Requirements
-        </button>
-      </div>
+  <div className="mls-subtab-nav">
+    <button
+      onClick={() => setActiveSubTab('normalization')}
+      className={`mls-subtab-btn ${activeSubTab === 'normalization' ? 'mls-subtab-btn--active' : ''}`}
+    >
+      Normalization
+    </button>
+    <button
+      onClick={() => setActiveSubTab('marketAnalysis')}
+      disabled={!normalizationStats.sizeNormalized || normalizationStats.sizeNormalized === 0}
+      className={`mls-subtab-btn ${activeSubTab === 'marketAnalysis' ? 'mls-subtab-btn--active' : ''} ${!normalizationStats.sizeNormalized ? 'disabled' : ''}`}
+    >
+      Market Analysis
+    </button>
+    <button
+      onClick={() => setActiveSubTab('unitRates')}
+      disabled={vendorType !== 'BRT'}
+      title={vendorType !== 'BRT' ? 'Unit Rate Configuration is only available for BRT jobs' : ''}
+      className={`mls-subtab-btn ${activeSubTab === 'unitRates' ? 'mls-subtab-btn--active' : ''} ${vendorType !== 'BRT' ? 'disabled' : ''}`}
+    >
+      Unit Rate Configuration
+    </button>
+    <button
+      onClick={() => setActiveSubTab('worksheet')}
+      className={`mls-subtab-btn ${activeSubTab === 'worksheet' ? 'mls-subtab-btn--active' : ''}`}
+    >
+      Page by Page Worksheet
+    </button>
+    <button
+      onClick={() => setActiveSubTab('zoning')}
+      className={`mls-subtab-btn ${activeSubTab === 'zoning' ? 'mls-subtab-btn--active' : ''}`}
+    >
+      Zoning Requirements
+    </button>
+  </div>
 
       {/* Normalization Tab Content */}
       {activeSubTab === 'normalization' && (
