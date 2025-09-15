@@ -5463,16 +5463,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               Implied Front Foot Rates by Zoning
             </h4>
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', fontSize: '13px' }}>
+              <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse', border: '1px solid #E5E7EB' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#F9FAFB' }}>
-                    <th style={{ padding: '6px', textAlign: 'left' }}>Zoning</th>
-                    <th style={{ padding: '6px', textAlign: 'right' }}>Zoning Lot</th>
-                    <th style={{ padding: '6px', textAlign: 'right' }}>Implied $/Acre</th>
-                    <th style={{ padding: '6px', textAlign: 'right' }}>Land Value</th>
-                    <th style={{ padding: '6px', textAlign: 'right' }}>Min Frontage</th>
-                    <th style={{ padding: '6px', textAlign: 'right' }}>Standard FF</th>
-                    <th style={{ padding: '6px', textAlign: 'right' }}>Excess FF</th>
+                    <th style={{ padding: '6px', textAlign: 'left', border: '1px solid #E5E7EB' }}>Zoning</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Zoning Lot</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Implied $/Acre</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Land Value</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Min Frontage</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Standard FF</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Excess FF</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -5483,7 +5483,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       if (zoneKeys.length === 0) {
                         return (
                           <tr>
-                            <td colSpan="7" style={{ padding: '8px', color: '#6B7280' }}>
+                            <td colSpan="7" style={{ padding: '8px', color: '#6B7280', border: '1px solid #E5E7EB' }}>
                               No zoning with depth tables available.
                             </td>
                           </tr>
@@ -5519,13 +5519,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       // Top summary row showing overall average metrics (from chosen bracket)
                       rows.push(
                         <tr key="__summary__" style={{ fontWeight: '600', backgroundColor: '#F3F4F6' }}>
-                          <td style={{ padding: '6px' }}>Overall Average ({chosenBracketKey || 'N/A'})</td>
-                          <td style={{ padding: '6px', textAlign: 'right' }}>{overallAvgAcres != null ? `${(Math.round(overallAvgAcres*100)/100).toFixed(2)} / ${summaryTypicalSF.toLocaleString()} SF` : 'N/A'}</td>
-                          <td style={{ padding: '6px', textAlign: 'right' }}>{chosenPerAcre != null ? `$${Number(chosenPerAcre).toLocaleString()}` : 'N/A'}</td>
-                          <td style={{ padding: '6px', textAlign: 'right' }}>{summaryLandValue != null ? `$${Number(summaryLandValue).toLocaleString()}` : 'N/A'}</td>
-                          <td style={{ padding: '6px', textAlign: 'right' }}>-</td>
-                          <td style={{ padding: '6px', textAlign: 'right' }}>-</td>
-                          <td style={{ padding: '6px', textAlign: 'right' }}>-</td>
+                          <td style={{ padding: '6px', border: '1px solid #E5E7EB' }}>Overall Average ({chosenBracketKey || 'N/A'})</td>
+                          <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{overallAvgAcres != null ? `${(Math.round(overallAvgAcres*100)/100).toFixed(2)} / ${summaryTypicalSF.toLocaleString()} SF` : 'N/A'}</td>
+                          <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{chosenPerAcre != null ? `$${Number(chosenPerAcre).toLocaleString()}` : 'N/A'}</td>
+                          <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{summaryLandValue != null ? `$${Number(summaryLandValue).toLocaleString()}` : 'N/A'}</td>
+                          <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
+                          <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
+                          <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
                         </tr>
                       );
 
@@ -5572,21 +5572,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
                         const landValue = (perSqFt && typicalLotSF) ? Math.round(perSqFt * typicalLotSF) : '';
 
-                        const standardFF = (landValue && minFrontage) ? Number((landValue / minFrontage).toFixed(2)) : '';
-                        const excessFF = standardFF ? Number((standardFF / 2).toFixed(2)) : '';
+                        const standardFF = (landValue && minFrontage) ? Math.round(landValue / minFrontage) : '';
+                        const excessFF = standardFF ? Math.round(standardFF / 2) : '';
 
                         if (standardFF !== '') standardFFs.push(standardFF);
                         if (excessFF !== '') excessFFs.push(excessFF);
 
                         rows.push(
                           <tr key={zoneKey}>
-                            <td style={{ padding: '6px' }}>{zoneKey}</td>
-                            <td style={{ padding: '6px', textAlign: 'right' }}>{typicalLotAcres !== '' ? `${typicalLotAcres} / ${typicalLotSF.toLocaleString()} SF` : 'N/A'}</td>
-                            <td style={{ padding: '6px', textAlign: 'right' }}>{perAcre !== 'N/A' ? `$${Number(perAcre).toLocaleString()}` : 'N/A'}</td>
-                            <td style={{ padding: '6px', textAlign: 'right' }}>{landValue !== '' ? `$${Number(landValue).toLocaleString()}` : 'N/A'}</td>
-                            <td style={{ padding: '6px', textAlign: 'right' }}>{minFrontage}</td>
-                            <td style={{ padding: '6px', textAlign: 'right' }}>{standardFF !== '' ? `$${standardFF.toFixed(2)}` : 'N/A'}</td>
-                            <td style={{ padding: '6px', textAlign: 'right' }}>{excessFF !== '' ? `$${excessFF.toFixed(2)}` : 'N/A'}</td>
+                            <td style={{ padding: '6px', border: '1px solid #E5E7EB' }}>{zoneKey}</td>
+                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{typicalLotAcres !== '' ? `${typicalLotAcres} / ${typicalLotSF.toLocaleString()} SF` : 'N/A'}</td>
+                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{perAcre !== 'N/A' ? `$${Number(perAcre).toLocaleString()}` : 'N/A'}</td>
+                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{landValue !== '' ? `$${Number(landValue).toLocaleString()}` : 'N/A'}</td>
+                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{minFrontage}</td>
+                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{standardFF !== '' ? `$${standardFF.toLocaleString()}` : 'N/A'}</td>
+                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{excessFF !== '' ? `$${excessFF.toLocaleString()}` : 'N/A'}</td>
                           </tr>
                         );
                       });
@@ -5600,13 +5600,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
                         rows.push(
                           <tr key="__recommended__" style={{ fontWeight: '700', backgroundColor: '#ECFDF5' }}>
-                            <td style={{ padding: '6px' }}>Recommended Front Foot</td>
-                            <td style={{ padding: '6px', textAlign: 'right' }}>-</td>
-                            <td style={{ padding: '6px', textAlign: 'right' }}>-</td>
-                            <td style={{ padding: '6px', textAlign: 'right' }}>-</td>
-                            <td style={{ padding: '6px', textAlign: 'right' }}>-</td>
-                            <td style={{ padding: '6px', textAlign: 'right' }}>${recFF.toLocaleString()}</td>
-                            <td style={{ padding: '6px', textAlign: 'right' }}>-</td>
+                            <td style={{ padding: '6px', border: '1px solid #E5E7EB' }}>Recommended Front Foot</td>
+                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
+                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
+                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
+                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
+                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${recFF.toLocaleString()}</td>
+                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
                           </tr>
                         );
                       }
