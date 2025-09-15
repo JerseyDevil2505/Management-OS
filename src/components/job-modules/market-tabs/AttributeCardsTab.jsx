@@ -36,6 +36,24 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [entryFilter, setEntryFilter] = useState(true); // toggle for inspection_info_by 01-04
   const [conditionWorking, setConditionWorking] = useState(false);
   const [conditionResults, setConditionResults] = useState(marketLandData.condition_analysis_rollup || { exterior: {}, interior: {}, tested_adjustments: {} });
+  const [exteriorCascade, setExteriorCascade] = useState([
+    { name: 'EXCELLENT', tested: null, actual: null },
+    { name: 'VERY GOOD', tested: null, actual: null },
+    { name: 'GOOD', tested: null, actual: null },
+    { name: 'AVERAGE', tested: 0, actual: 0 }, // Always baseline
+    { name: 'FAIR', tested: null, actual: null },
+    { name: 'POOR', tested: null, actual: null },
+    { name: 'VERY POOR', tested: null, actual: null }
+  ]);
+  const [interiorCascade, setInteriorCascade] = useState([
+    { name: 'EXCELLENT', tested: null, actual: null },
+    { name: 'VERY GOOD', tested: null, actual: null },
+    { name: 'GOOD', tested: null, actual: null },
+    { name: 'AVERAGE', tested: 0, actual: 0 }, // Always baseline
+    { name: 'FAIR', tested: null, actual: null },
+    { name: 'POOR', tested: null, actual: null },
+    { name: 'VERY POOR', tested: null, actual: null }
+  ]);
 
   // Custom attribute UI state
   const [rawFields, setRawFields] = useState([]);
