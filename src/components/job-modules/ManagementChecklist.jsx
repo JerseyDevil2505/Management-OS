@@ -694,7 +694,7 @@ useEffect(() => {
       
       // Get ALL inspection data with pagination
       const inspectionData = await getAllInspectionData(jobData.id);
-      console.log(`🔍 Found ${inspectionData.length} inspection records`);
+      console.log(`�� Found ${inspectionData.length} inspection records`);
       
       // Create a map of inspection data by composite key
       const inspectionMap = new Map();
@@ -989,40 +989,56 @@ useEffect(() => {
     }
   };
 
-  // Navigate to analysis section: switch to Market Analysis module and select correct inner tab
+  // Items that should show a Mark Complete button instead of a Go to Section link
+  const replaceGoToWithComplete = new Set([
+    'Land Value Tables Built',
+    'Land Values Entered',
+    'Building Class Review/Updated'
+  ]);
+
+  // Navigate to analysis section with detailed mapping and subtab dispatching
   const navigateToAnalysisSection = (sectionName) => {
     try {
       console.log(`Navigate to analysis section: ${sectionName}`);
-      // Map checklist item text to MarketAnalysis inner tab ids
+
+      // Detailed mapping: for each checklist item determine which parent module and inner tab/subtab to open
       const mapping = {
-        'Data Quality Analysis': 'data-quality',
-        'Market Analysis': 'overall-analysis',
-        'Page by Page Analysis': 'pre-valuation',
-        'Land Value Tables Built': 'land-valuation',
-        'Land Values Entered': 'land-valuation',
-        'Economic Obsolescence Study': 'land-valuation',
-        'VCS Reviewed/Reset': 'land-valuation',
-        'Cost Conversion Factor Set': 'cost-valuation',
-        'Building Class Review/Updated': 'pre-valuation',
-        'Effective Age Loaded/Set': 'pre-valuation',
-        'Final Values Ready': 'final-valuation'
+        'Market Analysis': { module: 'market-analysis', tab: 'pre-valuation', subtabEvent: { name: 'navigate_prevaluation_subtab', tabId: 'marketAnalysis' } },
+        'Page by Page Analysis': { module: 'market-analysis', tab: 'pre-valuation', subtabEvent: { name: 'navigate_prevaluation_subtab', tabId: 'worksheet' } },
+        'VCS Reviewed/Reset': { module: 'market-analysis', tab: 'land-valuation', subtabEvent: { name: 'navigate_landvaluation_subtab', tabId: 'vcs-sheet' } },
+        'Cost Conversion Factor Set': { module: 'market-analysis', tab: 'cost-valuation' },
+        'Effective Age Loaded/Set': { module: 'final-valuation' },
+        'Final Values Ready': { module: 'final-valuation' },
+        // Fallback: open market-analysis data-quality
+        'Data Quality Analysis': { module: 'market-analysis', tab: 'data-quality' }
       };
 
-      const targetTab = mapping[sectionName] || 'data-quality';
+      const mapEntry = mapping[sectionName] || mapping['Data Quality Analysis'];
 
-      // First switch parent module to Market & Land Analysis
+      // If the target module is final-valuation, switch parent module to final-valuation
+      if (mapEntry.module === 'final-valuation') {
+        if (typeof onSubModuleChange === 'function') onSubModuleChange('final-valuation');
+        return;
+      }
+
+      // Otherwise switch to Market & Land Analysis module and select the specified inner tab
       if (typeof onSubModuleChange === 'function') {
         onSubModuleChange('market-analysis');
       }
 
-      // Give the parent a moment to render MarketAnalysis, then dispatch an event to select the inner tab
       setTimeout(() => {
         try {
-          window.dispatchEvent(new CustomEvent('navigate_market_analysis_tab', { detail: { tabId: targetTab } }));
+          if (mapEntry.tab) {
+            window.dispatchEvent(new CustomEvent('navigate_market_analysis_tab', { detail: { tabId: mapEntry.tab } }));
+          }
+          if (mapEntry.subtabEvent) {
+            window.dispatchEvent(new CustomEvent(mapEntry.subtabEvent.name, { detail: { tabId: mapEntry.subtabEvent.tabId } }));
+          }
         } catch (e) {
-          console.error('Failed to dispatch navigate_market_analysis_tab event', e);
+          console.error('Failed to dispatch navigation events', e);
         }
       }, 150);
+
     } catch (e) {
       console.error('navigateToAnalysisSection error:', e);
     }
