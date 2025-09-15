@@ -2054,6 +2054,7 @@ const editCustomCheck = (check) => {
     setDataQualityActiveSubTab('overview');
   };
   // RENDER
+  import './sharedTabNav.css';
   return (
     <div className="tab-content">
       {/* Sub-tab Navigation */}
