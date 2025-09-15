@@ -5592,9 +5592,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           landValue = (perSqFt && typicalLotSF) ? Math.round(perSqFt * typicalLotSF) : '';
                         }
 
-                        // Standard FF: rounded to 2 decimal places, Excess FF = half (rounded to 2 decimals)
-                        const standardFF = (landValue && minFrontage) ? Number((landValue / minFrontage).toFixed(2)) : '';
-                        const excessFF = standardFF !== '' ? Number((standardFF / 2).toFixed(2)) : '';
+                        // Standard FF: integer (no decimals), Excess FF = half (integer)
+                        const standardFF = (landValue && minFrontage) ? Math.round(landValue / minFrontage) : '';
+                        const excessFF = standardFF !== '' ? Math.round(standardFF / 2) : '';
 
                         if (standardFF !== '') standardFFs.push(standardFF);
                         if (excessFF !== '') excessFFs.push(excessFF);
@@ -5605,8 +5605,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{typicalLotAcres !== '' ? `${typicalLotAcres} / ${typicalLotSF.toLocaleString()} SF` : 'N/A'}</td>
                             <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{landValue !== '' ? `$${Number(landValue).toLocaleString()}` : 'N/A'}</td>
                             <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{minFrontage}</td>
-                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{standardFF !== '' ? `$${standardFF.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'N/A'}</td>
-                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{excessFF !== '' ? `$${excessFF.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'N/A'}</td>
+                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{standardFF !== '' ? `$${standardFF.toLocaleString()}` : 'N/A'}</td>
+                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{excessFF !== '' ? `$${excessFF.toLocaleString()}` : 'N/A'}</td>
                           </tr>
                         );
                       });
@@ -5617,6 +5617,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       if (standardFFs.length > 0 && excessFFs.length > 0) {
                         const avgStandard = standardFFs.reduce((s, v) => s + v, 0) / standardFFs.length;
                         const avgExcess = excessFFs.reduce((s, v) => s + v, 0) / excessFFs.length;
+                        // Round recommended to nearest hundredth (2 decimals)
                         recStandard = Number(avgStandard.toFixed(2));
                         recExcess = Number(avgExcess.toFixed(2));
 
@@ -7564,7 +7565,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     onClick={() => toggleFieldCollapse('zoning')}
                     title="Click to expand/collapse"
                   >
-                    Zoning {collapsedFields.zoning ? '▶' : '��'}
+                    Zoning {collapsedFields.zoning ? '▶' : '▼'}
                   </th>
                   {shouldShowKeyColumn && (
                     <th
