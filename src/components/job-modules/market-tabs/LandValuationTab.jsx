@@ -5608,7 +5608,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           <tr key={zoneKey}>
                             <td style={{ padding: '6px', border: '1px solid #E5E7EB' }}>{zoneKey}</td>
                             <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{typicalLotAcres !== '' ? `${typicalLotAcres} / ${typicalLotSF.toLocaleString()} SF` : 'N/A'}</td>
-                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{perAcre !== 'N/A' ? `$${Number(perAcre).toLocaleString()}` : 'N/A'}</td>
+                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{impliedPerAcre !== 'N/A' ? `$${Number(impliedPerAcre).toLocaleString()}` : 'N/A'}</td>
                             <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{landValue !== '' ? `$${Number(landValue).toLocaleString()}` : 'N/A'}</td>
                             <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{minFrontage}</td>
                             <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{standardFF !== '' ? `$${standardFF.toLocaleString()}` : 'N/A'}</td>
