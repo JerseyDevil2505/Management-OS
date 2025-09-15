@@ -430,9 +430,34 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       await saveRollupToDB(jobData.id, { condition_analysis_rollup: rollup });
       setConditionResults(rollup);
-      console.log('�� Condition adjustments saved');
+      console.log('✅ Condition adjustments saved');
     } catch (e) {
       console.error('Failed to save condition adjustments:', e);
+    }
+  };
+
+  // Save condition analysis with filter states
+  const saveConditionAnalysis = async () => {
+    try {
+      const rollup = {
+        filters_applied: {
+          entry_filter_enabled: entryFilterEnabled,
+          type_use_filter: typeUseFilter,
+          interior_inspection_only: interiorInspectionOnly
+        },
+        exterior_conditions: conditionResults.exterior_conditions,
+        interior_conditions: conditionResults.interior_conditions,
+        exterior_cascade: exteriorCascade,
+        interior_cascade: interiorCascade,
+        analysis_date: new Date().toISOString(),
+        ...conditionResults
+      };
+
+      await saveRollupToDB(jobData.id, { condition_analysis_rollup: rollup });
+      setConditionResults(rollup);
+      console.log('✅ Condition analysis and filters saved');
+    } catch (e) {
+      console.error('Failed to save condition analysis:', e);
     }
   };
 
