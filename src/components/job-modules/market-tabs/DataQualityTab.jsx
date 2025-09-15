@@ -2058,54 +2058,34 @@ const editCustomCheck = (check) => {
   return (
     <div className="tab-content">
       {/* Sub-tab Navigation */}
-      <div className="flex gap-1 border-b border-gray-300 mb-6">
+      <div className="mls-subtab-nav">
         <button
           onClick={() => setDataQualityActiveSubTab('overview')}
-          className={`px-4 py-2 font-medium text-sm transition-all ${
-            dataQualityActiveSubTab === 'overview'
-              ? 'border-b-2 border-blue-500 text-blue-600 -mb-[1px] bg-blue-50'
-              : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
-          }`}
+          className={`mls-subtab-btn ${dataQualityActiveSubTab === 'overview' ? 'mls-subtab-btn--active' : ''}`}
         >
           Overview
         </button>
         <button
           onClick={() => setDataQualityActiveSubTab('standard')}
-          className={`px-4 py-2 font-medium text-sm transition-all ${
-            dataQualityActiveSubTab === 'standard'
-              ? 'border-b-2 border-blue-500 text-blue-600 -mb-[1px] bg-blue-50'
-              : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
-          }`}
+          className={`mls-subtab-btn ${dataQualityActiveSubTab === 'standard' ? 'mls-subtab-btn--active' : ''}`}
         >
           Standard & Custom Check Results
         </button>
         <button
           onClick={() => setDataQualityActiveSubTab('custom')}
-          className={`px-4 py-2 font-medium text-sm transition-all ${
-            dataQualityActiveSubTab === 'custom'
-              ? 'border-b-2 border-blue-500 text-blue-600 -mb-[1px] bg-blue-50'
-              : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
-          }`}
+          className={`mls-subtab-btn ${dataQualityActiveSubTab === 'custom' ? 'mls-subtab-btn--active' : ''}`}
         >
           Custom Checks/Definitions
         </button>
         <button
           onClick={() => setDataQualityActiveSubTab('ignored')}
-          className={`px-4 py-2 font-medium text-sm transition-all ${
-            dataQualityActiveSubTab === 'ignored'
-              ? 'border-b-2 border-blue-500 text-blue-600 -mb-[1px] bg-blue-50'
-              : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
-          }`}
+          className={`mls-subtab-btn ${dataQualityActiveSubTab === 'ignored' ? 'mls-subtab-btn--active' : ''}`}
         >
           Ignored {ignoredIssues.size > 0 ? `(${ignoredIssues.size})` : ''}
         </button>
         <button
           onClick={() => setDataQualityActiveSubTab('history')}
-          className={`px-4 py-2 font-medium text-sm transition-all ${
-            dataQualityActiveSubTab === 'history'
-              ? 'border-b-2 border-blue-500 text-blue-600 -mb-[1px] bg-blue-50'
-              : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
-          }`}
+          className={`mls-subtab-btn ${dataQualityActiveSubTab === 'history' ? 'mls-subtab-btn--active' : ''}`}
         >
           Run History
         </button>
