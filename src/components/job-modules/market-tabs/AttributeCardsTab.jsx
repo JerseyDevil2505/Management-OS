@@ -99,6 +99,44 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const formatPct = (val) => val ? `${val.toFixed(1)}%` : '—';
   const formatYear = (val) => val ? Math.round(val) : '—';
 
+  // Get Type/Use options (exact copy from Land Valuation)
+  const getTypeUseOptions = () => [
+    { code: 'all', description: 'All Properties' },
+    { code: '1', description: '1 — Single Family' },
+    { code: '2', description: '2 — Duplex / Semi-Detached' },
+    { code: '3', description: '3* — Row / Townhouse (3E,3I,30,31)' },
+    { code: '4', description: '4* — MultiFamily (42,43,44)' },
+    { code: '5', description: '5* ◆◆ Conversions (51,52,53)' },
+    { code: '6', description: '6 — Condominium' },
+    { code: 'all_residential', description: 'All Residential' }
+  ];
+
+  // Helper function to get property type/use from various field names
+  const getPropertyTypeUse = (property) => {
+    return property.asset_type_use ||
+           property.asset_typeuse ||
+           property.typeuse ||
+           property.type_use ||
+           '';
+  };
+
+  // Helper function to get property condition from various field names
+  const getPropertyCondition = (property, type) => {
+    if (type === 'exterior') {
+      return property.asset_ext_cond ||
+             property.asset_exterior_condition ||
+             property.ext_cond ||
+             property.exterior_condition ||
+             '';
+    } else {
+      return property.asset_int_cond ||
+             property.asset_interior_condition ||
+             property.int_cond ||
+             property.interior_condition ||
+             '';
+    }
+  };
+
   // Dynamic condition discovery
   const getUniqueConditions = (properties, condField) => {
     const conditions = new Set();
