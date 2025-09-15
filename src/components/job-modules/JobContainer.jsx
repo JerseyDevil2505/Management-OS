@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Building, Factory, TrendingUp, DollarSign, Scale, Database, AlertCircle } from 'lucide-react';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase, interpretCodes } from '../../lib/supabaseClient';
 import ManagementChecklist from './ManagementChecklist';
 import ProductionTracker from './ProductionTracker';
 import MarketAnalysis from './MarketAnalysis';
@@ -47,6 +47,10 @@ const JobContainer = ({
     timestamp: null,
     source: null // 'file_upload', 'initial_load', etc
   });
+
+  // Rate-limit parent job refreshes requested by children to avoid interrupting user work
+  const lastJobRefreshAtRef = useRef(0);
+  const pendingRefreshRef = useRef(false);
 
   // Load latest file versions and properties
   useEffect(() => {
@@ -237,8 +241,20 @@ const JobContainer = ({
               }
               console.error(`  Full Error Object:`, batchError);
 
-              // CRITICAL FIX: Stop processing on first failure
-              if (batchError.message?.includes('timeout') || batchError.message?.includes('canceling statement')) {
+              // Retry transient/network failures up to maxRetries
+              const transient = (batchError.message && (batchError.message.toLowerCase().includes('failed to fetch') || batchError.message.toLowerCase().includes('network') || batchError.message.toLowerCase().includes('timeout')));
+              if (transient && retryCount < maxRetries) {
+                retryCount++;
+                const backoff = 500 * retryCount;
+                console.warn(`Transient batch error detected. Retrying batch ${batch + 1} (attempt ${retryCount}/${maxRetries}) after ${backoff}ms`);
+                await new Promise(r => setTimeout(r, backoff));
+                // decrement batch to retry same batch in next loop iteration
+                batch--;
+                continue;
+              }
+
+              // CRITICAL FIX: Stop processing on database timeouts or when retries exhausted
+              if (batchError.message?.toLowerCase().includes('timeout') || batchError.message?.toLowerCase().includes('canceling statement')) {
                 console.error(`🛑 DATABASE TIMEOUT ON BATCH ${batch + 1} - STOPPING ALL PROCESSING`);
                 throw new Error(`Database timeout on batch ${batch + 1}. Loaded ${allProperties.length} of ${count} records before failure.`);
               }
@@ -294,7 +310,28 @@ const JobContainer = ({
                   asset_zoning: marketAnalysis.asset_zoning || null,
                   values_norm_size: marketAnalysis.values_norm_size || null,
                   values_norm_time: marketAnalysis.values_norm_time || null,
-                  sales_history: marketAnalysis.sales_history || null
+                  sales_history: marketAnalysis.sales_history || null,
+                  // Ensure manual/calculated lot acreage and applied unit codes are available to UI
+                  market_manual_lot_acre: marketAnalysis.market_manual_lot_acre ?? property.market_manual_lot_acre ?? null,
+                  market_manual_acre: marketAnalysis.market_manual_acre ?? property.market_manual_acre ?? null,
+                  // Use job-level applied codes map stored in marketLandData; per-property column removed
+                  unit_rate_codes_applied: (marketLandData?.unit_rate_codes_applied ? marketLandData.unit_rate_codes_applied[property.property_composite_key] : null) ?? null,
+                  // Also expose common lot fields for fallbacks
+                  asset_lot_acre: marketAnalysis.asset_lot_acre ?? property.asset_lot_acre ?? null,
+                  asset_lot_sf: marketAnalysis.asset_lot_sf ?? property.asset_lot_sf ?? null,
+                  asset_lot_frontage: marketAnalysis.asset_lot_frontage ?? property.asset_lot_frontage ?? null,
+                  asset_lot_depth: marketAnalysis.asset_lot_depth ?? property.asset_lot_depth ?? null,
+                  // Derived acreage using centralized calculator (returns numeric acres or null)
+                  calculated_lot_acre: (() => {
+                    try {
+                      const vendor = (jobData && (jobData.vendor_source || jobData.vendor)) || 'BRT';
+                      const val = interpretCodes.getCalculatedAcreage(propertyData, vendor);
+                      const num = parseFloat(val);
+                      return !isNaN(num) && num > 0 ? num : null;
+                    } catch (e) {
+                      return null;
+                    }
+                  })()
                 };
               });
 
@@ -313,7 +350,7 @@ const JobContainer = ({
           } catch (error) {
             // ENHANCED: Comprehensive error logging for debugging
             console.error(`🚨 CRITICAL ERROR ON BATCH ${batch + 1}:`);
-            console.error(`  Error Type: ${error.constructor.name}`);
+            console.error(`  Error Type: ${error.constructor?.name || 'Unknown'}`);
             console.error(`  Error Message: ${error.message || 'Unknown error'}`);
             console.error(`  Error Code: ${error.code || 'No code'}`);
             console.error(`  Error Details: ${error.details || 'No details'}`);
@@ -336,6 +373,19 @@ const JobContainer = ({
               console.error(`    - This suggests database performance issues`);
               console.error(`    - Consider reducing batch size or optimizing query`);
               console.error(`    - Current batch size: ${batchSize} records`);
+            }
+
+            // Detect transient/network errors and retry the current batch up to maxRetries
+            const transientMessage = (error.message || '').toString().toLowerCase();
+            const isTransient = transientMessage.includes('failed to fetch') || transientMessage.includes('network') || transientMessage.includes('timeout') || error.name === 'TypeError';
+
+            if (isTransient && retryCount < maxRetries) {
+              retryCount++;
+              const backoff = 500 * retryCount;
+              console.warn(`Transient network error detected on batch ${batch + 1}. Retrying (attempt ${retryCount}/${maxRetries}) after ${backoff}ms`);
+              await new Promise(r => setTimeout(r, backoff));
+              batch--; // retry the same batch index on next loop iteration
+              continue;
             }
 
             // STOP PROCESSING - don't continue to next batches
@@ -365,7 +415,7 @@ const JobContainer = ({
         setLoadingProgress(100);
 
         if (allProperties.length !== count) {
-          console.warn(`⚠️ Expected ${count} properties but loaded ${allProperties.length}`);
+          console.warn(`��️ Expected ${count} properties but loaded ${allProperties.length}`);
         }
 
       } else {
@@ -379,32 +429,64 @@ const JobContainer = ({
       let hasMoreInspection = true;
       
       try {
+        const maxInspectionRetries = 3;
         while (hasMoreInspection) {
           const start = inspectionPage * 1000;
           const end = start + 999;
 
-          const { data: batch, error } = await withTimeout(
-            supabase
-              .from('inspection_data')
-              .select('*')
-              .eq('job_id', selectedJob.id)
-              .range(start, end),
-            20000,
-            `inspection data batch ${inspectionPage + 1}`
-          );
+          let attempt = 0;
+          let batch = null;
+          let batchError = null;
 
-          if (error) {
+          while (attempt <= maxInspectionRetries) {
+            attempt++;
+            try {
+              const res = await withTimeout(
+                supabase
+                  .from('inspection_data')
+                  .select('*')
+                  .eq('job_id', selectedJob.id)
+                  .range(start, end),
+                20000,
+                `inspection data batch ${inspectionPage + 1}`
+              );
+              batch = res.data;
+              batchError = res.error;
+
+              if (batchError) {
+                // If it's a network error (no code / failed to fetch) retry
+                const msg = (batchError && (batchError.message || '')).toString().toLowerCase();
+                if (attempt <= maxInspectionRetries && (msg.includes('failed to fetch') || msg.includes('network'))) {
+                  console.warn(`Inspection batch ${inspectionPage + 1} attempt ${attempt} failed with network error, retrying...`);
+                  await new Promise(r => setTimeout(r, 500 * attempt));
+                  continue;
+                }
+                break; // non-retriable or exhausted
+              }
+
+              break; // success
+            } catch (err) {
+              const msg = (err && (err.message || '')).toString().toLowerCase();
+              if (attempt <= maxInspectionRetries && (msg.includes('failed to fetch') || msg.includes('network') || msg.includes('timeout'))) {
+                console.warn(`Inspection batch ${inspectionPage + 1} attempt ${attempt} threw ${msg}. Retrying...`);
+                await new Promise(r => setTimeout(r, 500 * attempt));
+                continue;
+              }
+              // If we get here, it's a hard failure
+              batchError = err;
+              break;
+            }
+          }
+
+          if (batchError) {
             console.error('❌ INSPECTION DATA BATCH ERROR:');
             console.error(`  Batch: ${inspectionPage + 1}, Range: ${start}-${end}`);
-            console.error(`  Error Message: ${error.message || 'Unknown error'}`);
-            console.error(`  Error Code: ${error.code || 'No code'}`);
-            console.error(`  Error Details: ${error.details || 'No details'}`);
+            console.error(`  Error Message: ${batchError.message || batchError}`);
             console.error(`  Job ID: ${selectedJob.id}`);
-            if (error.stack) {
-              console.error(`  Stack: ${error.stack}`);
-            }
-            console.error(`  Full Error:`, error);
-            break; // Stop loading inspection data but continue with other data
+            if (batchError.stack) console.error(`  Stack: ${batchError.stack}`);
+            console.error(`  Full Error:`, batchError);
+            // stop loading inspection data but continue with other data
+            break;
           }
 
           if (batch && batch.length > 0) {
@@ -418,7 +500,7 @@ const JobContainer = ({
       } catch (inspectionError) {
         console.error('❌ INSPECTION DATA LOADING FAILED:');
         console.error(`  Error Message: ${inspectionError.message || 'Unknown error'}`);
-        console.error(`  Error Type: ${inspectionError.constructor.name}`);
+        console.error(`  Error Type: ${inspectionError.constructor?.name || 'Unknown'}`);
         console.error(`  Job ID: ${selectedJob.id}`);
         console.error(`  Pages Attempted: ${inspectionPage}`);
         console.error(`  Records Loaded: ${allInspectionData.length}`);
@@ -451,6 +533,15 @@ const JobContainer = ({
           console.error(`  Full Error:`, error);
         } else {
           marketData = data;
+
+        // Normalize unit_rate_codes_applied if it's stored as a JSON string
+        try {
+          if (marketData && marketData.unit_rate_codes_applied && typeof marketData.unit_rate_codes_applied === 'string') {
+            marketData.unit_rate_codes_applied = JSON.parse(marketData.unit_rate_codes_applied);
+          }
+        } catch (e) {
+          console.warn('Failed to parse marketData.unit_rate_codes_applied, leaving as-is:', e);
+        }
         }
 
         // Create if doesn't exist
@@ -466,6 +557,13 @@ const JobContainer = ({
               'market land valuation insert'
             );
             marketData = newMarket;
+            try {
+              if (marketData && marketData.unit_rate_codes_applied && typeof marketData.unit_rate_codes_applied === 'string') {
+                marketData.unit_rate_codes_applied = JSON.parse(marketData.unit_rate_codes_applied);
+              }
+            } catch (e) {
+              console.warn('Failed to parse marketData.unit_rate_codes_applied after insert:', e);
+            }
           } catch (createError) {
             console.error('❌ MARKET DATA CREATION ERROR:');
             console.error(`  Error Message: ${createError.message || 'Unknown error'}`);
@@ -632,6 +730,11 @@ const JobContainer = ({
         end_date: jobData?.end_date || selectedJob.end_date,
         workflow_stats: jobData?.workflow_stats || selectedJob.workflowStats || null,
 
+        // Preserve unit rate/staged mappings from DB so child components see them
+        unit_rate_config: (jobData && jobData.unit_rate_config && typeof jobData.unit_rate_config === 'string') ? (() => { try { return JSON.parse(jobData.unit_rate_config); } catch(e){ return jobData.unit_rate_config; } })() : (jobData?.unit_rate_config || selectedJob.unit_rate_config || null),
+        staged_unit_rate_config: (jobData && jobData.staged_unit_rate_config && typeof jobData.staged_unit_rate_config === 'string') ? (() => { try { return JSON.parse(jobData.staged_unit_rate_config); } catch(e){ return jobData.staged_unit_rate_config; } })() : (jobData?.staged_unit_rate_config || selectedJob.staged_unit_rate_config || null),
+        unit_rate_codes_applied: (jobData && jobData.unit_rate_codes_applied && typeof jobData.unit_rate_codes_applied === 'string') ? (() => { try { return JSON.parse(jobData.unit_rate_codes_applied); } catch(e){ return jobData.unit_rate_codes_applied; } })() : (jobData?.unit_rate_codes_applied || selectedJob.unit_rate_codes_applied || null),
+
         // ADD THESE TWO LINES:
         parsed_code_definitions: jobData?.parsed_code_definitions || null,
         vendor_type: jobData?.vendor_type || null,
@@ -639,6 +742,15 @@ const JobContainer = ({
       };
       
       setJobData(enrichedJobData);
+
+      // Debug: log unit-rate mappings that are passed to children
+      try {
+        console.log('🔁 Enriched job mappings:', {
+          unit_rate_config: enrichedJobData.unit_rate_config,
+          staged_unit_rate_config: enrichedJobData.staged_unit_rate_config,
+          unit_rate_codes_applied: enrichedJobData.unit_rate_codes_applied
+        });
+      } catch (e) { console.warn('Failed logging enriched job mappings', e); }
 
       console.log(`✅ Job data loaded: ${allProperties.length} properties`);
       
@@ -774,6 +886,52 @@ const JobContainer = ({
       propertyRecordsCount,
       onFileProcessed: handleFileProcessed,
       onDataRefresh: loadLatestFileVersions,  // FIXED: Pass data refresh function for modal close timing
+      // NEW: Provide a job-level refresh callback so children can request the parent to reload job data
+      // Rate-limited: ignore rapid repeat refreshes unless forced via opts.forceRefresh
+      onUpdateJobCache: async (jobId, opts = null) => {
+        try {
+          // Only allow explicit forced refreshes from children. Regular child calls must pass { forceRefresh: true }.
+          const force = opts && opts.forceRefresh;
+
+          // Ignore non-forced refresh requests to avoid interrupting user work
+          if (!force) {
+            console.log('Ignored child refresh request (require opts.forceRefresh === true)');
+            return;
+          }
+
+          const now = Date.now();
+          if (!lastJobRefreshAtRef.current) lastJobRefreshAtRef.current = 0;
+
+          const withinCooldown = (now - lastJobRefreshAtRef.current) < 30000; // 30s
+
+          // If not for current job, ignore
+          if (jobId && selectedJob && jobId !== selectedJob.id) return;
+
+          if (withinCooldown) {
+            // Schedule a single pending refresh if not already scheduled
+            if (!pendingRefreshRef.current) {
+              pendingRefreshRef.current = true;
+              setTimeout(async () => {
+                try {
+                  await loadLatestFileVersions();
+                } catch (e) {
+                  console.warn('Deferred onUpdateJobCache failed:', e);
+                } finally {
+                  pendingRefreshRef.current = false;
+                  lastJobRefreshAtRef.current = Date.now();
+                }
+              }, 30000); // run after cooldown
+            }
+            return;
+          }
+
+          // Perform refresh and update timestamp
+          await loadLatestFileVersions();
+          lastJobRefreshAtRef.current = Date.now();
+        } catch (e) {
+          console.warn('onUpdateJobCache failed:', e);
+        }
+      },
       dataUpdateNotification,  // Pass notification to all components
       clearDataNotification: () => setDataUpdateNotification({  // Way to clear it
         hasNewData: false,
@@ -1027,9 +1185,8 @@ const JobContainer = ({
                     key={module.id}
                     onClick={() => {
                       if (isAvailable) {
-                        // If leaving a module that made changes, refresh data
+                        // Do not reload parent data on module switch. Initial load happens when job is opened.
                         if (moduleHasChanges && activeModule !== module.id) {
-                          console.log(`Module ${activeModule} had changes, will reload fresh data`);
                           setModuleHasChanges(false);
                         }
                         setActiveModule(module.id);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
@@ -26,6 +26,7 @@ const ProductionTracker = ({
   const [missingPropertiesReport, setMissingPropertiesReport] = useState(null);
   const [sessionHistory, setSessionHistory] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const notificationCounterRef = useRef(0);
   const [externalInspectorsList, setExternalInspectorsList] = useState('');
 
   // NEW: Track properties going to external contractors
@@ -101,12 +102,12 @@ const ProductionTracker = ({
                      currentWorkflowStats?.lastFileUpdate > currentWorkflowStats?.lastProcessed;
 
   const addNotification = (message, type = 'info') => {
-    const id = Date.now();
+    const id = `${Date.now()}-${notificationCounterRef.current++}`;
     const notification = { id, message, type, timestamp: new Date() };
     setNotifications(prev => [...prev, notification]);
-    
+
     setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== notification.id));
+      setNotifications(prev => prev.filter(n => n.id !== id));
     }, 5000);
   };
 
@@ -926,7 +927,7 @@ const ProductionTracker = ({
       
       initializeData();
     }
-  }, [jobData?.id, properties, inspectionData, employees]); // Added employees to deps
+  }, [jobData?.id, properties, inspectionData, employees, latestFileVersion]); // Added employees and latestFileVersion to deps
 
   // Update employee data when external inspectors list changes
   useEffect(() => {

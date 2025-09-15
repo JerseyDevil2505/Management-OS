@@ -481,8 +481,8 @@ const App = () => {
 
     // For any billing-related updates, just reload fresh data
     if (type.includes('billing') || type.includes('event')) {
-      console.log('🔄 Billing data updated, reloading fresh data...');
-      await loadLiveData(['billing']);
+      console.log('🔄 Billing data updated, reloading fresh jobs + billing...');
+      await loadLiveData(['jobs', 'billing']);
       return;
     }
 
@@ -987,6 +987,7 @@ const App = () => {
                   💸 Payroll
                 </button>
               )}
+              {isAdmin && (
               <button
                 onClick={() => handleViewChange('users')}
                 className={`px-4 py-2 rounded-xl font-medium text-sm border ${
@@ -994,7 +995,7 @@ const App = () => {
                     ? 'text-blue-600 shadow-lg border-white'
                     : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
                 }`}
-                style={activeView === 'users' ? { 
+                style={activeView === 'users' ? {
                   backgroundColor: '#FFFFFF',
                   opacity: 1,
                   backdropFilter: 'none'
@@ -1002,6 +1003,7 @@ const App = () => {
               >
                 🔐 Users
               </button>
+              )}
             </nav>
           )}
           
@@ -1112,9 +1114,14 @@ const App = () => {
           </div>
         ))}
 
-        {activeView === 'users' && (
+        {activeView === 'users' && (isAdmin ? (
           <UserManagement />
-        )}
+        ) : (
+          <div className="p-6 bg-white rounded-lg shadow-sm border border-gray-200 text-center">
+            <h3 className="text-lg font-semibold">Access Denied</h3>
+            <p className="text-sm text-gray-600">You do not have permission to view Users.</p>
+          </div>
+        ))}
 
         {activeView === 'job-modules' && selectedJob && (
           <div>

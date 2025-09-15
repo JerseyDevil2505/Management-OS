@@ -222,3 +222,27 @@ h3, h4, h5, h6 {
   padding-right: 24px;
   box-sizing: border-box;
 }
+
+/* Modal text readability fixes: ensure modal dialogs use dark text regardless of page header styles */
+.fixed.inset-0.z-40,
+.fixed.inset-0.z-50,
+.fixed.inset-0[role="dialog"] {
+  color: #111827; /* Tailwind gray-900 */
+}
+
+/* Override accidental .text-white inside modals (common culprit when header styles bleed in) */
+.fixed.inset-0.z-40 .text-white,
+.fixed.inset-0.z-50 .text-white,
+.fixed.inset-0[role="dialog"] .text-white {
+  color: #111827 !important;
+}
+
+/* Ensure modal panels with light backgrounds show dark text */
+.fixed.inset-0 .bg-white,
+.fixed.inset-0 .bg-gray-50,
+.fixed.inset-0 .bg-blue-50,
+.fixed.inset-0 .bg-purple-50,
+.fixed.inset-0 .bg-yellow-50,
+.fixed.inset-0 .bg-green-50 {
+  color: #111827 !important;
+}

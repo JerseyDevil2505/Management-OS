@@ -186,7 +186,6 @@ const DataQualityTab = ({
           if (rawData && typeof rawData === 'object') {
             const fieldNames = Object.keys(rawData).sort();
             setAllRawDataFields(fieldNames);
-            console.log(`📋 Discovered ${fieldNames.length} raw data fields for custom checks`);
           }
         } catch (error) {
           console.error('Error loading raw data fields:', error);
@@ -673,7 +672,6 @@ const generateQCFormPDF = () => {
 
       // Create cache for raw data to avoid repeated RPC calls
       const rawDataCache = new Map();
-      console.log('🔄 Starting quality checks with job-level raw data access...');
 
       const pageSize = 100; // Process data in batches of 100
       const totalPages = Math.ceil(properties.length / pageSize);
@@ -1007,12 +1005,42 @@ const generateQCFormPDF = () => {
   // LOT SIZE CHECKS - Use the enhanced getTotalLotSize function
     const totalLotSize = await interpretCodes.getTotalLotSize(property, vendor, codeDefinitions);
     const lotFrontage = property.asset_lot_frontage || 0;
-    
-    // Check if we truly have zero lot size (getTotalLotSize returns acres or null)
-    if ((!totalLotSize || parseFloat(totalLotSize) === 0) && lotFrontage === 0) {
+
+    // Determine a usable lot acreage from multiple sources before flagging zero lot size
+    let computedLotAcres = null;
+
+    // Primary: interpretCodes.getTotalLotSize (returns acres or null)
+    if (totalLotSize !== null && totalLotSize !== undefined && totalLotSize !== '') {
+      const parsed = parseFloat(totalLotSize);
+      if (!isNaN(parsed) && parsed !== 0) computedLotAcres = parsed;
+    }
+
+    // Fallback: explicit acreage fields (market_manual_lot_acre then asset_lot_acre)
+    const manualAcre = property.market_manual_lot_acre || property.asset_lot_acre;
+    if (!computedLotAcres && manualAcre && parseFloat(manualAcre) !== 0) {
+      computedLotAcres = parseFloat(manualAcre);
+    }
+
+    // Fallback: explicit square feet fields -> convert to acres
+    const manualSf = property.market_manual_lot_sf || property.asset_lot_sf;
+    if (!computedLotAcres && manualSf && parseFloat(manualSf) !== 0) {
+      computedLotAcres = parseFloat(manualSf) / 43560;
+    }
+
+    // Fallback: compute from frontage * depth if both present
+    const lotDepth = property.asset_lot_depth || 0;
+    if (!computedLotAcres && lotFrontage && lotDepth && parseFloat(lotFrontage) !== 0 && parseFloat(lotDepth) !== 0) {
+      const sf = parseFloat(lotFrontage) * parseFloat(lotDepth);
+      if (!isNaN(sf) && sf !== 0) {
+        computedLotAcres = sf / 43560;
+      }
+    }
+
+    // Check if we truly have zero lot size (computedLotAcres is acres or null)
+    if ((!computedLotAcres || parseFloat(computedLotAcres) === 0) && lotFrontage === 0) {
       // Skip condos with only site value
       let skipError = false;
-      
+
       if (typeUseStr && (typeUseStr.startsWith('6') || typeUseStr.startsWith('60'))) {
         // It's a condo - check if it only has site value in BRT
         if (vendor === 'BRT' && rawData) {
@@ -1028,7 +1056,7 @@ const generateQCFormPDF = () => {
           skipError = hasSiteOnly;
         }
       }
-      
+
       if (!skipError) {
         results.characteristics.push({
           check: 'zero_lot_size',
@@ -1631,11 +1659,7 @@ const generateQCFormPDF = () => {
         if (error) throw error;
       }
 
-      //Clear cache after saving quality results
-      if (onUpdateJobCache && jobData?.id) {
-        console.log('🗑️ Clearing cache after saving quality check results');
-        onUpdateJobCache(jobData.id, null);
-      }
+      // Cache refresh removed to avoid disrupting active analysis
 
       setRunHistory(updatedHistory);
 
@@ -2341,9 +2365,6 @@ const editCustomCheck = (check) => {
                           updated_at: new Date().toISOString()
                         })
                         .eq('job_id', jobData.id);
-                      if (onUpdateJobCache && jobData?.id) {
-                        onUpdateJobCache(jobData.id, null);
-                      }
                       // Recompute displayed results after clearing ignored
                       applyAndSetResults(rawResults || {} , emptySet);
                     } catch (error) {
@@ -2898,11 +2919,6 @@ const editCustomCheck = (check) => {
                                   })
                                   .eq('job_id', jobData.id);
 
-                                // Clear cache after update
-                                if (onUpdateJobCache && jobData?.id) {
-                                  onUpdateJobCache(jobData.id, null);
-                                }
-
                                 // Update displayed results/stats after toggling ignored
                                 applyAndSetResults(checkResults, newIgnored);
                               } catch (error) {
@@ -2958,7 +2974,6 @@ const editCustomCheck = (check) => {
                 const persistedStatus = updated?.status || newStatus;
                 setIsDataQualityComplete(persistedStatus === 'completed');
                 try { window.dispatchEvent(new CustomEvent('checklist_status_changed', { detail: { jobId: jobData.id, itemId: 'data-quality-analysis', status: persistedStatus } })); } catch(e){}
-                try { if (typeof onUpdateJobCache === 'function') onUpdateJobCache(jobData.id, null); } catch(e){}
               } catch (error) {
                 console.error('Data Quality checklist update failed:', error);
                 alert('Failed to update checklist. Please try again.');

@@ -117,28 +117,67 @@ const FileUploadButton = ({
   };
 
   // FIXED: Composite key generation that matches processors EXACTLY
+  // Added normalization for location to improve matching (e.g. "RT.39" vs "ROUTE 39")
+  const normalizeLocationForKey = (raw) => {
+    if (raw === null || raw === undefined) return 'NONE';
+    let s = String(raw).trim().toUpperCase();
+
+    // Replace dots and slashes with spaces
+    s = s.replace(/[\.\/]+/g, ' ');
+
+    // Insert space between letters and digits when missing (e.g. RT39 -> RT 39)
+    s = s.replace(/([A-Z])(?=\d)/g, '$1 ');
+
+    // Normalize common abbreviations
+    s = s.replace(/\bRTE\b/g, 'ROUTE');
+    s = s.replace(/\bRT\b/g, 'ROUTE');
+    s = s.replace(/\bHWY\b/g, 'HWY');
+    s = s.replace(/\bAVE\b/g, 'AVE');
+    s = s.replace(/\bST\b/g, 'ST');
+
+    // Remove any remaining non-alphanumeric characters (keep spaces)
+    s = s.replace(/[^0-9A-Z ]+/g, ' ');
+
+    // Collapse whitespace
+    s = s.replace(/\s+/g, ' ').trim();
+
+    return s || 'NONE';
+  };
+
+  const normalizeCompositeKeyString = (key) => {
+    if (!key) return null;
+    // Remove trailing -LETTER suffix appended to locations (e.g. -A)
+    let k = String(key).toUpperCase().replace(/-[A-Z]$/,'');
+    // Replace punctuation with spaces and collapse
+    k = k.replace(/[^0-9A-Z ]+/g, ' ');
+    k = k.replace(/\s+/g, ' ').trim();
+    return k;
+  };
+
   const generateCompositeKey = (record, vendor, yearCreated, ccddCode) => {
+    const year = String(yearCreated || '').trim();
+    const ccdd = String(ccddCode || '').trim();
+
     if (vendor === 'BRT') {
-      // BRT format: preserve string values exactly as processors do
       const blockValue = String(record.BLOCK || '').trim();
       const lotValue = String(record.LOT || '').trim();
       const qualifierValue = String(record.QUALIFIER || '').trim() || 'NONE';
       const cardValue = String(record.CARD || '').trim() || 'NONE';
-      const locationValue = String(record.PROPERTY_LOCATION || '').trim() || 'NONE';
-      
-      return `${yearCreated}${ccddCode}-${blockValue}-${lotValue}_${qualifierValue}-${cardValue}-${locationValue}`;
+      const locationRaw = String(record.PROPERTY_LOCATION || '').trim() || 'NONE';
+      const locationValue = locationRaw === 'NONE' ? 'NONE' : normalizeLocationForKey(locationRaw);
+
+      return `${year}${ccdd}-${blockValue}-${lotValue}_${qualifierValue}-${cardValue}-${locationValue}`;
     } else if (vendor === 'Microsystems') {
-      // FIXED: Microsystems format - EXACT MATCH to processor logic
       const blockValue = String(record['Block'] || '').trim();
       const lotValue = String(record['Lot'] || '').trim();
       const qualValue = String(record['Qual'] || '').trim() || 'NONE';
       const bldgValue = String(record['Bldg'] || '').trim() || 'NONE';
-      const locationValue = String(record['Location'] || '').trim() || 'NONE';
-      
-      // This EXACTLY matches the processor: property_composite_key: `${yearCreated}${ccddCode}-${rawRecord['Block']}-${rawRecord['Lot']}_${(rawRecord['Qual'] || '').trim() || 'NONE'}-${(rawRecord['Bldg'] || '').trim() || 'NONE'}-${(rawRecord['Location'] || '').trim() || 'NONE'}`
-      return `${yearCreated}${ccddCode}-${blockValue}-${lotValue}_${qualValue}-${bldgValue}-${locationValue}`;
+      const locationRaw = String(record['Location'] || '').trim() || 'NONE';
+      const locationValue = locationRaw === 'NONE' ? 'NONE' : normalizeLocationForKey(locationRaw);
+
+      return `${year}${ccdd}-${blockValue}-${lotValue}_${qualValue}-${bldgValue}-${locationValue}`;
     }
-    
+
     return null;
   };
 
@@ -561,17 +600,11 @@ const handleCodeFileUpdate = async () => {
           const cardField = job.vendor_type === 'BRT' ? 'CARD' : 'Bldg';
           const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
 
-          // Construct composite key similar to processors
+          // Construct composite key using generateCompositeKey to ensure normalization matches processors
           const year = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
           const ccddCode = job.ccdd_code || '';
-          const block = String(record[blockField] || '').trim();
-          const lot = String(record[lotField] || '').trim();
-          const qualifier = String(record[qualifierField] || '').trim() || 'NONE';
-          const card = String(record[cardField] || '').trim() || 'NONE';
-          const location = String(record[locationField] || '').trim() || 'NONE';
-
-          const compositeKey = `${year}${ccddCode}-${block}-${lot}_${qualifier}-${card}-${location}`;
-          propertiesAdded.push(compositeKey);
+          const compositeKey = generateCompositeKey(record, job.vendor_type, year, ccddCode);
+          if (compositeKey) propertiesAdded.push(compositeKey);
         });
       }
 
@@ -649,8 +682,8 @@ const handleCodeFileUpdate = async () => {
     if (!comparisonResults) return;
 
     // Create CSV content matching old format
-    let csvContent = "Report_Date,Change_Type,Block,Lot,Qualifier,Property_Location,Old_Value,New_Value,Status,Reviewed_By,Reviewed_Date\n";
-    
+    let csvContent = "Report_Date,Composite_Key,Change_Type,Block,Lot,Qualifier,Property_Location,Old_Value,New_Value,Status,Reviewed_By,Reviewed_Date\n";
+
     const reportDate = new Date().toLocaleDateString();
     
     // Add new records
@@ -660,8 +693,14 @@ const handleCodeFileUpdate = async () => {
         const lotField = job.vendor_type === 'BRT' ? 'LOT' : 'Lot';
         const qualifierField = job.vendor_type === 'BRT' ? 'QUALIFIER' : 'Qual';
         const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
-        
-        csvContent += `"${reportDate}","Property_Added","${record[blockField]}","${record[lotField]}","${record[qualifierField] || ''}","${record[locationField] || ''}","Property_Not_Existed","Property_Added","pending_review","",""\n`;
+
+        // Build composite key using same generator to ensure normalization matches processors
+        const year = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
+        const ccddCode = job.ccdd_code || '';
+        const compositeKey = generateCompositeKey(record, job.vendor_type, year, ccddCode) || '';
+        const locationVal = String(record[locationField] || '') || '';
+
+        csvContent += `"${reportDate}","${compositeKey}","Property_Added","${record[blockField]}","${record[lotField]}","${record[qualifierField] || ''}","${locationVal}","Property_Not_Existed","Property_Added","pending_review","",""\n`;
       });
     }
 
@@ -676,7 +715,7 @@ const handleCodeFileUpdate = async () => {
           `$${change.differences.sales_price.new.toLocaleString()} (${change.differences.sales_date.new || 'No Date'})` : 
           'No_Sale';
           
-        csvContent += `"${reportDate}","Sales_Change","${change.property_block}","${change.property_lot}","${change.property_qualifier || ''}","${change.property_location || ''}","${oldSaleValue}","${newSaleValue}","reviewed","user","${reportDate}"\n`;
+        csvContent += `"${reportDate}","${change.property_composite_key}","Sales_Change","${change.property_block}","${change.property_lot}","${change.property_qualifier || ''}","${change.property_location || ''}","${oldSaleValue}","${newSaleValue}","reviewed","user","${reportDate}"\n`;
       });
     }
 
@@ -760,32 +799,49 @@ const handleCodeFileUpdate = async () => {
       setProcessingStatus('Generating composite keys...');
       const yearCreated = job.year_created || new Date().getFullYear();
       const ccddCode = job.ccdd_code || job.ccddCode;
-      
+
       const sourceKeys = new Set();
       const sourceKeyMap = new Map();
-      
+      const sourceNormMap = new Map(); // normalized -> original key
+
       sourceRecords.forEach(record => {
         const compositeKey = generateCompositeKey(record, job.vendor_type, yearCreated, ccddCode);
         if (compositeKey) {
           sourceKeys.add(compositeKey);
           sourceKeyMap.set(compositeKey, record);
+          const norm = normalizeCompositeKeyString(compositeKey);
+          if (norm) sourceNormMap.set(norm, compositeKey);
         }
       });
-      
-      
+
       // Create database key sets
       const dbKeys = new Set(dbRecords.map(r => r.property_composite_key));
       const dbKeyMap = new Map(dbRecords.map(r => [r.property_composite_key, r]));
-      
-      
+      const dbNormMap = new Map(); // normalized -> dbKey
+      dbRecords.forEach(r => {
+        const norm = normalizeCompositeKeyString(r.property_composite_key);
+        if (norm && !dbNormMap.has(norm)) dbNormMap.set(norm, r.property_composite_key);
+      });
+
+
       // Find differences
       setProcessingStatus('Comparing records...');
-      
+
       // Missing records (in source but not in database)
       const missingKeys = [...sourceKeys].filter(key => !dbKeys.has(key));
       const missing = missingKeys.map(key => sourceKeyMap.get(key));
-      
-      // Extra records (in database but not in source) 
+
+      // Fuzzy matches: source missing but matches DB after normalization
+      const fuzzyMatches = [];
+      missingKeys.forEach(srcKey => {
+        const norm = normalizeCompositeKeyString(srcKey);
+        const matchedDbKey = dbNormMap.get(norm);
+        if (matchedDbKey) {
+          fuzzyMatches.push({ source: srcKey, dbMatch: matchedDbKey, reason: 'normalized_match' });
+        }
+      });
+
+      // Extra records (in database but not in source)
       const extraKeys = [...dbKeys].filter(key => !sourceKeys.has(key));
       const deletions = extraKeys.map(key => dbKeyMap.get(key));
       
@@ -910,6 +966,7 @@ const handleCodeFileUpdate = async () => {
       const results = {
         summary: {
           missing: missing.length,
+          fuzzyMatches: typeof fuzzyMatches !== 'undefined' ? fuzzyMatches.length : 0,
           changes: changes.length,
           deletions: deletions.length,
           salesChanges: salesChanges.length,
@@ -917,6 +974,7 @@ const handleCodeFileUpdate = async () => {
         },
         details: {
           missing,
+          fuzzyMatches: typeof fuzzyMatches !== 'undefined' ? fuzzyMatches : [],
           changes,
           deletions,
           salesChanges,
@@ -1337,12 +1395,22 @@ const handleCodeFileUpdate = async () => {
           const deletionsList = comparisonResults?.details?.deletions || [];
           addBatchLog(`🎯 DELETION OPTIMIZATION: Passing ${deletionsList.length} properties for targeted deletion`, 'info');
 
+          // Prefer Year/CCDD from CSV when present, otherwise fall back to job values
+          const parsedForYear = parseSourceFile(sourceFileContent, job.vendor_type);
+          let csvYear = job.year_created || new Date().getFullYear();
+          let csvCcdd = job.ccdd_code || job.ccddCode || '';
+          if (parsedForYear && parsedForYear.length > 0) {
+            const firstRow = parsedForYear[0];
+            if (firstRow.Year && String(firstRow.Year).trim() !== '') csvYear = String(firstRow.Year).trim();
+            if (firstRow.CCDD && String(firstRow.CCDD).trim() !== '') csvCcdd = String(firstRow.CCDD).trim();
+          }
+
           const result = await propertyService.updateCSVData(
             sourceFileContent,
             codeFileContent,
             job.id,
-            job.year_created || new Date().getFullYear(),
-            job.ccdd_code || job.ccddCode,
+            csvYear,
+            csvCcdd,
             job.vendor_type,
             {
               source_file_name: sourceFile?.name,
@@ -1386,7 +1454,7 @@ const handleCodeFileUpdate = async () => {
         .eq('id', job.id);
 
       if (jobUpdateError) {
-        console.error('❌ Failed to update job validation_status:', jobUpdateError);
+        console.error('�� Failed to update job validation_status:', jobUpdateError);
         addBatchLog('⚠️ Warning: Could not update job validation status', 'warning');
       } else {
         addBatchLog('✅ Job validation status set to "updated"', 'success');
@@ -1680,7 +1748,7 @@ const handleCodeFileUpdate = async () => {
       
       // Use vendor type from job data
       if (job.vendor_type) {
-        addNotification(`✅ Detected ${job.vendor_type} code file`, 'success');
+        addNotification(`��� Detected ${job.vendor_type} code file`, 'success');
       }
     } catch (error) {
       console.error('Error reading code file:', error);

@@ -26,7 +26,7 @@ import LandValuationTab from './market-tabs/LandValuationTab';
 import CostValuationTab from './market-tabs/CostValuationTab';
 import AttributeCardsTab from './market-tabs/AttributeCardsTab';
 
-const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache }) => {
+const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache, onDataChange }) => {
   // ==================== STATE MANAGEMENT ====================
   const [activeTab, setActiveTab] = useState('data-quality');
   
@@ -47,7 +47,6 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
       // For now, return empty array - this functionality would need job context for source file access
       const rawDataFields = [];
 
-      console.log(`📋 Raw data fields now accessed via source file content (job context required)`);
       return rawDataFields;
     }
     return [];
@@ -164,26 +163,26 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
             )}    
             
             {activeTab === 'pre-valuation' && (
-              <PreValuationTab 
-                jobData={jobData} 
+              <PreValuationTab
+                jobData={jobData}
                 properties={properties}
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
                 hpiData={hpiData}
-                onUpdateJobCache={onUpdateJobCache}
+                onUpdateJobCache={(...args) => { console.log('Child requested parent refresh — suppressed in MarketAnalysis'); if (typeof onDataChange === 'function') onDataChange(); }}
               />
             )}
             
             {activeTab === 'overall-analysis' && (
-              <OverallAnalysisTab 
-                jobData={jobData} 
+              <OverallAnalysisTab
+                jobData={jobData}
                 properties={properties}
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
                 hpiData={hpiData}
-                onUpdateJobCache={onUpdateJobCache}
+                onUpdateJobCache={(...args) => { console.log('Child requested parent refresh — suppressed in MarketAnalysis'); if (typeof onDataChange === 'function') onDataChange(); }}
               />
             )}      
             
@@ -194,34 +193,33 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
-                onAnalysisUpdate={(data) => {
-                  // Invalidate cache when land valuation data changes
-                  if (onUpdateJobCache) {
-                    onUpdateJobCache(jobData.id, null);
-                  }
+                onAnalysisUpdate={(data, opts) => {
+                  // Do NOT trigger a parent reload here. Mark module dirty instead so parent can refresh on switch.
+                  console.log('LandValuation reported analysis update; marking module dirty');
+                  if (typeof onDataChange === 'function') onDataChange();
                 }}
               />
             )}
             
             {activeTab === 'cost-valuation' && (
-              <CostValuationTab 
-                jobData={jobData} 
+              <CostValuationTab
+                jobData={jobData}
                 properties={properties}
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
-                onUpdateJobCache={onUpdateJobCache}
+                onUpdateJobCache={(...args) => { console.log('Child requested parent refresh — suppressed in MarketAnalysis'); if (typeof onDataChange === 'function') onDataChange(); }}
               />
             )}
             
             {activeTab === 'attribute-cards' && (
-              <AttributeCardsTab 
-                jobData={jobData} 
+              <AttributeCardsTab
+                jobData={jobData}
                 properties={properties}
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
-                onUpdateJobCache={onUpdateJobCache}
+                onUpdateJobCache={(...args) => { console.log('Child requested parent refresh — suppressed in MarketAnalysis'); if (typeof onDataChange === 'function') onDataChange(); }}
               />
             )}
           </>
