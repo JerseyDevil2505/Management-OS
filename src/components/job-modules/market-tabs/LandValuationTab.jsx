@@ -5458,7 +5458,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <thead>
                   <tr style={{ backgroundColor: '#F9FAFB' }}>
                     <th style={{ padding: '6px', textAlign: 'left' }}>Zoning</th>
-                    <th style={{ padding: '6px', textAlign: 'right' }}>Typical Lot</th>
+                    <th style={{ padding: '6px', textAlign: 'right' }}>Zoning Lot</th>
                     <th style={{ padding: '6px', textAlign: 'right' }}>Implied $/Acre</th>
                     <th style={{ padding: '6px', textAlign: 'right' }}>Land Value</th>
                     <th style={{ padding: '6px', textAlign: 'right' }}>Min Frontage</th>
@@ -5481,32 +5481,82 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         );
                       }
 
-                      // Choose lowest bracket with data from Method 2 summary
-                      const chosenPerAcre = (() => {
-                        if (method2Summary?.mediumRange?.perAcre && method2Summary.mediumRange.perAcre !== 'N/A') return method2Summary.mediumRange.perAcre;
-                        if (method2Summary?.largeRange?.perAcre && method2Summary.largeRange.perAcre !== 'N/A') return method2Summary.largeRange.perAcre;
-                        if (method2Summary?.xlargeRange?.perAcre && method2Summary.xlargeRange.perAcre !== 'N/A') return method2Summary.xlargeRange.perAcre;
-                        return null;
-                      })();
+                      // Choose lowest bracket with data from Method 2 summary and determine bracket key
+                      let chosenPerAcre = null;
+                      let chosenBracketKey = null;
+                      if (method2Summary?.mediumRange?.perAcre && method2Summary.mediumRange.perAcre !== 'N/A') { chosenPerAcre = method2Summary.mediumRange.perAcre; chosenBracketKey = 'medium'; }
+                      else if (method2Summary?.largeRange?.perAcre && method2Summary.largeRange.perAcre !== 'N/A') { chosenPerAcre = method2Summary.largeRange.perAcre; chosenBracketKey = 'large'; }
+                      else if (method2Summary?.xlargeRange?.perAcre && method2Summary.xlargeRange.perAcre !== 'N/A') { chosenPerAcre = method2Summary.xlargeRange.perAcre; chosenBracketKey = 'xlarge'; }
 
-                      return zoneKeys.map(zoneKey => {
+                      // Compute overall average lot size (acres) from bracketAnalysis for chosen bracket
+                      let overallAvgAcres = null;
+                      if (chosenBracketKey && typeof bracketAnalysis === 'object') {
+                        const vals = Object.values(bracketAnalysis).map(a => {
+                          try {
+                            const b = a.brackets && a.brackets[chosenBracketKey];
+                            return b && b.avgAcres ? b.avgAcres : null;
+                          } catch (e) { return null; }
+                        }).filter(v => v != null);
+                        if (vals.length > 0) overallAvgAcres = vals.reduce((s, v) => s + v, 0) / vals.length;
+                      }
+
+                      const summaryTypicalSF = overallAvgAcres != null ? Math.round(overallAvgAcres * 43560) : null;
+                      const perSqFtSummary = (chosenPerAcre != null && chosenPerAcre !== 'N/A') ? (parseFloat(chosenPerAcre) / 43560) : null;
+                      const summaryLandValue = (perSqFtSummary && summaryTypicalSF) ? Math.round(perSqFtSummary * summaryTypicalSF) : null;
+
+                      // Build rows array so we can append summary and recommended rows
+                      const rows = [];
+
+                      // Top summary row showing overall average metrics (from chosen bracket)
+                      rows.push(
+                        <tr key="__summary__" style={{ fontWeight: '600', backgroundColor: '#F3F4F6' }}>
+                          <td style={{ padding: '6px' }}>Overall Average ({chosenBracketKey || 'N/A'})</td>
+                          <td style={{ padding: '6px', textAlign: 'right' }}>{overallAvgAcres != null ? `${(Math.round(overallAvgAcres*100)/100).toFixed(2)} / ${summaryTypicalSF.toLocaleString()} SF` : 'N/A'}</td>
+                          <td style={{ padding: '6px', textAlign: 'right' }}>{chosenPerAcre != null ? `$${Number(chosenPerAcre).toLocaleString()}` : 'N/A'}</td>
+                          <td style={{ padding: '6px', textAlign: 'right' }}>{summaryLandValue != null ? `$${Number(summaryLandValue).toLocaleString()}` : 'N/A'}</td>
+                          <td style={{ padding: '6px', textAlign: 'right' }}>-</td>
+                          <td style={{ padding: '6px', textAlign: 'right' }}>-</td>
+                          <td style={{ padding: '6px', textAlign: 'right' }}>-</td>
+                        </tr>
+                      );
+
+                      // Collect FF arrays for recommended summary
+                      const standardFFs = [];
+                      const excessFFs = [];
+
+                      zoneKeys.forEach(zoneKey => {
                         const entry = zcfg[zoneKey] || zcfg[zoneKey?.toUpperCase?.()] || zcfg[zoneKey?.toLowerCase?.()] || null;
-                        if (!entry) return null;
+                        if (!entry) return;
                         const depthTable = entry.depth_table || entry.depthTable || entry.depth_table_name || '';
                         const minFrontage = entry.min_frontage || entry.minFrontage || null;
 
                         // Only include zones with an assigned depth table AND a min frontage
-                        if (!depthTable || !minFrontage) return null;
+                        if (!depthTable || !minFrontage) return;
 
-                        // Typical lot: average lot size for properties with this zoning
-                        const propsForZone = (properties || []).filter(p => p.asset_zoning && p.asset_zoning.toString().trim().toLowerCase() === zoneKey.toString().trim().toLowerCase());
-                        let avgAcres = null;
-                        if (propsForZone.length > 0) {
-                          avgAcres = propsForZone.reduce((s, p) => s + (calculateAcreage(p) || 0), 0) / propsForZone.length;
+                        // Determine zoning lot from config if present, otherwise fallback to property average
+                        let typicalLotAcres = '';
+                        let typicalLotSF = '';
+                        const cfgSize = entry.min_size || entry.minSize || entry.typical_lot || null;
+                        const cfgUnit = (entry.min_size_unit || entry.minSizeUnit || '').toString().toUpperCase();
+                        if (cfgSize) {
+                          if (cfgUnit === 'SF') {
+                            typicalLotSF = Math.round(Number(cfgSize));
+                            typicalLotAcres = Number((typicalLotSF / 43560).toFixed(2));
+                          } else {
+                            // assume acres
+                            typicalLotAcres = Number(Number(cfgSize).toFixed(2));
+                            typicalLotSF = Math.round(typicalLotAcres * 43560);
+                          }
+                        } else {
+                          // fallback: average from properties
+                          const propsForZone = (properties || []).filter(p => p.asset_zoning && p.asset_zoning.toString().trim().toLowerCase() === zoneKey.toString().trim().toLowerCase());
+                          let avgAcres = null;
+                          if (propsForZone.length > 0) {
+                            avgAcres = propsForZone.reduce((s, p) => s + (calculateAcreage(p) || 0), 0) / propsForZone.length;
+                          }
+                          typicalLotAcres = avgAcres !== null ? Number(avgAcres.toFixed(2)) : '';
+                          typicalLotSF = avgAcres !== null ? Math.round(avgAcres * 43560) : '';
                         }
-
-                        const typicalLotAcres = avgAcres !== null ? Number(avgAcres.toFixed(2)) : '';
-                        const typicalLotSF = avgAcres !== null ? Math.round(avgAcres * 43560) : '';
 
                         const perAcre = chosenPerAcre != null ? chosenPerAcre : 'N/A';
                         const perSqFt = perAcre && perAcre !== 'N/A' ? (parseFloat(perAcre) / 43560) : null;
@@ -5516,7 +5566,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         const standardFF = (landValue && minFrontage) ? Number((landValue / minFrontage).toFixed(2)) : '';
                         const excessFF = standardFF ? Number((standardFF / 2).toFixed(2)) : '';
 
-                        return (
+                        if (standardFF !== '') standardFFs.push(standardFF);
+                        if (excessFF !== '') excessFFs.push(excessFF);
+
+                        rows.push(
                           <tr key={zoneKey}>
                             <td style={{ padding: '6px' }}>{zoneKey}</td>
                             <td style={{ padding: '6px', textAlign: 'right' }}>{typicalLotAcres !== '' ? `${typicalLotAcres} / ${typicalLotSF.toLocaleString()} SF` : 'N/A'}</td>
@@ -5528,6 +5581,29 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           </tr>
                         );
                       });
+
+                      // Recommended rounded summary from averages of standardFF and excessFF
+                      let recFF = null;
+                      if (standardFFs.length > 0 && excessFFs.length > 0) {
+                        const avgStandard = standardFFs.reduce((s, v) => s + v, 0) / standardFFs.length;
+                        const avgExcess = excessFFs.reduce((s, v) => s + v, 0) / excessFFs.length;
+                        recFF = Math.round((avgStandard + avgExcess) / 2);
+
+                        rows.push(
+                          <tr key="__recommended__" style={{ fontWeight: '700', backgroundColor: '#ECFDF5' }}>
+                            <td style={{ padding: '6px' }}>Recommended Front Foot</td>
+                            <td style={{ padding: '6px', textAlign: 'right' }}>-</td>
+                            <td style={{ padding: '6px', textAlign: 'right' }}>-</td>
+                            <td style={{ padding: '6px', textAlign: 'right' }}>-</td>
+                            <td style={{ padding: '6px', textAlign: 'right' }}>-</td>
+                            <td style={{ padding: '6px', textAlign: 'right' }}>${recFF.toLocaleString()}</td>
+                            <td style={{ padding: '6px', textAlign: 'right' }}>-</td>
+                          </tr>
+                        );
+                      }
+
+                      return rows;
+
                     } catch (e) {
                       debug('Failed to render implied front foot rates:', e);
                       return (
