@@ -476,29 +476,37 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     setAdditionalWorking(false);
   };
 
-  // CSV helpers for condition tables
+  // CSV helpers for condition tables - Excel format
   const conditionExteriorRowsForCsv = useMemo(() => {
     const rows = [];
     const ext = conditionResults.exterior || {};
-    Object.keys(ext.byVCS || {}).forEach(vcs=>{
-      const buckets = ext.byVCS[vcs];
-      Object.keys(buckets).forEach(rating=>{
-        const b = buckets[rating];
-        rows.push([vcs, rating, b.n, b.avg_price, b.avg_size, b.price_per_sf]);
-      });
+    Object.keys(ext).forEach(vcs => {
+      const vcsData = ext[vcs];
+      rows.push([
+        vcs,
+        vcsData.AVERAGE.avgPrice, vcsData.AVERAGE.avgAGI, vcsData.AVERAGE.avgSize, vcsData.AVERAGE.count,
+        vcsData.EXCELLENT.avgPrice, vcsData.EXCELLENT.avgAGI, vcsData.EXCELLENT.avgSize, vcsData.EXCELLENT.count, vcsData.EXCELLENT.pctDiff + '%',
+        vcsData.GOOD.avgPrice, vcsData.GOOD.avgAGI, vcsData.GOOD.avgSize, vcsData.GOOD.count, vcsData.GOOD.pctDiff + '%',
+        vcsData.FAIR.avgPrice, vcsData.FAIR.avgAGI, vcsData.FAIR.avgSize, vcsData.FAIR.count, vcsData.FAIR.pctDiff + '%',
+        vcsData.POOR.avgPrice, vcsData.POOR.avgAGI, vcsData.POOR.avgSize, vcsData.POOR.count, vcsData.POOR.pctDiff + '%'
+      ]);
     });
     return rows;
   }, [conditionResults]);
 
   const conditionInteriorRowsForCsv = useMemo(() => {
     const rows = [];
-    const it = conditionResults.interior || {};
-    Object.keys(it.byVCS || {}).forEach(vcs=>{
-      const buckets = it.byVCS[vcs];
-      Object.keys(buckets).forEach(rating=>{
-        const b = buckets[rating];
-        rows.push([vcs, rating, b.n, b.avg_price, b.avg_size, b.price_per_sf]);
-      });
+    const int = conditionResults.interior || {};
+    Object.keys(int).forEach(vcs => {
+      const vcsData = int[vcs];
+      rows.push([
+        vcs,
+        vcsData.AVERAGE.avgPrice, vcsData.AVERAGE.avgAGI, vcsData.AVERAGE.avgSize, vcsData.AVERAGE.count,
+        vcsData.EXCELLENT.avgPrice, vcsData.EXCELLENT.avgAGI, vcsData.EXCELLENT.avgSize, vcsData.EXCELLENT.count, vcsData.EXCELLENT.pctDiff + '%',
+        vcsData.GOOD.avgPrice, vcsData.GOOD.avgAGI, vcsData.GOOD.avgSize, vcsData.GOOD.count, vcsData.GOOD.pctDiff + '%',
+        vcsData.FAIR.avgPrice, vcsData.FAIR.avgAGI, vcsData.FAIR.avgSize, vcsData.FAIR.count, vcsData.FAIR.pctDiff + '%',
+        vcsData.POOR.avgPrice, vcsData.POOR.avgAGI, vcsData.POOR.avgSize, vcsData.POOR.count, vcsData.POOR.pctDiff + '%'
+      ]);
     });
     return rows;
   }, [conditionResults]);
