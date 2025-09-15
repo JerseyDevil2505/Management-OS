@@ -559,75 +559,142 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 <label className="text-sm">Entry filter (01-04)</label>
                 <input type="checkbox" checked={entryFilter} onChange={() => setEntryFilter(v=>!v)} />
                 <button onClick={computeConditionAnalysis} className={CSV_BUTTON_CLASS}>{conditionWorking ? 'Working...' : 'Run Analysis'}</button>
-                <button onClick={() => downloadCsv(`${jobData.job_name || 'job'}-condition-exterior.csv`, ['VCS','Rating','N','AvgPrice','AvgSize','PricePerSF'], conditionExteriorRowsForCsv)} className={CSV_BUTTON_CLASS}><FileText size={14}/> Export Exterior CSV</button>
-                <button onClick={() => downloadCsv(`${jobData.job_name || 'job'}-condition-interior.csv`, ['VCS','Rating','N','AvgPrice','AvgSize','PricePerSF'], conditionInteriorRowsForCsv)} className={CSV_BUTTON_CLASS}><FileText size={14}/> Export Interior CSV</button>
+                <button onClick={() => downloadCsv(`${jobData.job_name || 'job'}-condition-exterior.csv`, ['VCS','AVG_Price','AVG_AGI','AVG_Size','AVG_N','EXC_Price','EXC_AGI','EXC_Size','EXC_N','EXC_%','GOOD_Price','GOOD_AGI','GOOD_Size','GOOD_N','GOOD_%','FAIR_Price','FAIR_AGI','FAIR_Size','FAIR_N','FAIR_%','POOR_Price','POOR_AGI','POOR_Size','POOR_N','POOR_%'], conditionExteriorRowsForCsv)} className={CSV_BUTTON_CLASS}><FileText size={14}/> Export Exterior CSV</button>
+                <button onClick={() => downloadCsv(`${jobData.job_name || 'job'}-condition-interior.csv`, ['VCS','AVG_Price','AVG_AGI','AVG_Size','AVG_N','EXC_Price','EXC_AGI','EXC_Size','EXC_N','EXC_%','GOOD_Price','GOOD_AGI','GOOD_Size','GOOD_N','GOOD_%','FAIR_Price','FAIR_AGI','FAIR_Size','FAIR_N','FAIR_%','POOR_Price','POOR_AGI','POOR_Size','POOR_N','POOR_%'], conditionInteriorRowsForCsv)} className={CSV_BUTTON_CLASS}><FileText size={14}/> Export Interior CSV</button>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <h4 className="font-medium mb-2">Exterior Condition (by VCS)</h4>
-                <div className="overflow-auto border rounded">
-                  <table className="min-w-full table-auto text-sm border-collapse">
-                    <thead>
-                      <tr className="bg-gray-100 text-left"><th className="px-2 py-2">VCS</th><th className="px-2 py-2">Rating</th><th className="px-2 py-2">N</th><th className="px-2 py-2">Avg Price</th><th className="px-2 py-2">Avg Size</th><th className="px-2 py-2">$/SF</th></tr>
-                    </thead>
-                    <tbody>
-                      {Object.keys(conditionResults.exterior?.byVCS || {}).length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-500">No exterior rollup yet.</td></tr>}
-                      {Object.entries(conditionResults.exterior?.byVCS || {}).map(([vcs, ratings]) => (
-                        Object.entries(ratings).map(([rating, b], idx) => (
-                          <tr key={`${vcs}-${rating}`} className={idx%2? 'bg-white':'bg-gray-50'}>
-                            <td className="px-2 py-2 border-t">{vcs}</td>
-                            <td className="px-2 py-2 border-t">{rating}</td>
-                            <td className="px-2 py-2 border-t">{b.n}</td>
-                            <td className="px-2 py-2 border-t">{b.avg_price ?? '—'}</td>
-                            <td className="px-2 py-2 border-t">{b.avg_size ?? '—'}</td>
-                            <td className="px-2 py-2 border-t">{b.price_per_sf ?? '—'}</td>
-                          </tr>
-                        ))
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="font-medium mb-2">Interior Condition (by VCS)</h4>
-                <div className="overflow-auto border rounded">
-                  <table className="min-w-full table-auto text-sm border-collapse">
-                    <thead>
-                      <tr className="bg-gray-100 text-left"><th className="px-2 py-2">VCS</th><th className="px-2 py-2">Rating</th><th className="px-2 py-2">N</th><th className="px-2 py-2">Avg Price</th><th className="px-2 py-2">Avg Size</th><th className="px-2 py-2">$/SF</th></tr>
-                    </thead>
-                    <tbody>
-                      {Object.keys(conditionResults.interior?.byVCS || {}).length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-500">No interior rollup yet.</td></tr>}
-                      {Object.entries(conditionResults.interior?.byVCS || {}).map(([vcs, ratings]) => (
-                        Object.entries(ratings).map(([rating, b], idx) => (
-                          <tr key={`${vcs}-${rating}`} className={idx%2? 'bg-white':'bg-gray-50'}>
-                            <td className="px-2 py-2 border-t">{vcs}</td>
-                            <td className="px-2 py-2 border-t">{rating}</td>
-                            <td className="px-2 py-2 border-t">{b.n}</td>
-                            <td className="px-2 py-2 border-t">{b.avg_price ?? '—'}</td>
-                            <td className="px-2 py-2 border-t">{b.avg_size ?? '—'}</td>
-                            <td className="px-2 py-2 border-t">{b.price_per_sf ?? '—'}</td>
-                          </tr>
-                        ))
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+            {/* Exterior Condition Table */}
+            <div className="mb-6">
+              <h4 className="font-medium mb-2">Exterior Condition Analysis (AVERAGE = Baseline)</h4>
+              <div className="overflow-auto border rounded">
+                <table className="min-w-full table-auto text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-gray-100 text-left">
+                      <th className="px-2 py-2 border">VCS</th>
+                      <th className="px-2 py-2 border bg-blue-50">AVG Price</th>
+                      <th className="px-2 py-2 border bg-blue-50">AVG AGI</th>
+                      <th className="px-2 py-2 border bg-blue-50">AVG Size</th>
+                      <th className="px-2 py-2 border bg-blue-50">AVG N</th>
+                      <th className="px-2 py-2 border bg-green-50">EXC Price</th>
+                      <th className="px-2 py-2 border bg-green-50">EXC AGI</th>
+                      <th className="px-2 py-2 border bg-green-50">EXC %</th>
+                      <th className="px-2 py-2 border bg-yellow-50">GOOD Price</th>
+                      <th className="px-2 py-2 border bg-yellow-50">GOOD AGI</th>
+                      <th className="px-2 py-2 border bg-yellow-50">GOOD %</th>
+                      <th className="px-2 py-2 border bg-orange-50">FAIR Price</th>
+                      <th className="px-2 py-2 border bg-orange-50">FAIR AGI</th>
+                      <th className="px-2 py-2 border bg-orange-50">FAIR %</th>
+                      <th className="px-2 py-2 border bg-red-50">POOR Price</th>
+                      <th className="px-2 py-2 border bg-red-50">POOR AGI</th>
+                      <th className="px-2 py-2 border bg-red-50">POOR %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.keys(conditionResults.exterior || {}).length === 0 && <tr><td colSpan={17} className="px-3 py-6 text-center text-gray-500">No exterior analysis yet.</td></tr>}
+                    {Object.entries(conditionResults.exterior || {}).map(([vcs, vcsData], idx) => (
+                      <tr key={vcs} className={idx%2? 'bg-white':'bg-gray-50'}>
+                        <td className="px-2 py-2 border font-medium">{vcs}</td>
+                        <td className="px-2 py-2 border bg-blue-50">{vcsData.AVERAGE.avgPrice || '—'}</td>
+                        <td className="px-2 py-2 border bg-blue-50">{vcsData.AVERAGE.avgAGI || '—'}</td>
+                        <td className="px-2 py-2 border bg-blue-50">{vcsData.AVERAGE.avgSize || '—'}</td>
+                        <td className="px-2 py-2 border bg-blue-50">{vcsData.AVERAGE.count || 0}</td>
+                        <td className="px-2 py-2 border bg-green-50">{vcsData.EXCELLENT.avgPrice || '—'}</td>
+                        <td className="px-2 py-2 border bg-green-50">{vcsData.EXCELLENT.avgAGI || '—'}</td>
+                        <td className="px-2 py-2 border bg-green-50">{vcsData.EXCELLENT.pctDiff ? `${vcsData.EXCELLENT.pctDiff}%` : '—'}</td>
+                        <td className="px-2 py-2 border bg-yellow-50">{vcsData.GOOD.avgPrice || '—'}</td>
+                        <td className="px-2 py-2 border bg-yellow-50">{vcsData.GOOD.avgAGI || '—'}</td>
+                        <td className="px-2 py-2 border bg-yellow-50">{vcsData.GOOD.pctDiff ? `${vcsData.GOOD.pctDiff}%` : '—'}</td>
+                        <td className="px-2 py-2 border bg-orange-50">{vcsData.FAIR.avgPrice || '—'}</td>
+                        <td className="px-2 py-2 border bg-orange-50">{vcsData.FAIR.avgAGI || '—'}</td>
+                        <td className="px-2 py-2 border bg-orange-50">{vcsData.FAIR.pctDiff ? `${vcsData.FAIR.pctDiff}%` : '—'}</td>
+                        <td className="px-2 py-2 border bg-red-50">{vcsData.POOR.avgPrice || '—'}</td>
+                        <td className="px-2 py-2 border bg-red-50">{vcsData.POOR.avgAGI || '—'}</td>
+                        <td className="px-2 py-2 border bg-red-50">{vcsData.POOR.pctDiff ? `${vcsData.POOR.pctDiff}%` : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
 
+            {/* Interior Condition Table */}
+            <div className="mb-6">
+              <h4 className="font-medium mb-2">Interior Condition Analysis (AVERAGE = Baseline)</h4>
+              <div className="overflow-auto border rounded">
+                <table className="min-w-full table-auto text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-gray-100 text-left">
+                      <th className="px-2 py-2 border">VCS</th>
+                      <th className="px-2 py-2 border bg-blue-50">AVG Price</th>
+                      <th className="px-2 py-2 border bg-blue-50">AVG AGI</th>
+                      <th className="px-2 py-2 border bg-blue-50">AVG Size</th>
+                      <th className="px-2 py-2 border bg-blue-50">AVG N</th>
+                      <th className="px-2 py-2 border bg-green-50">EXC Price</th>
+                      <th className="px-2 py-2 border bg-green-50">EXC AGI</th>
+                      <th className="px-2 py-2 border bg-green-50">EXC %</th>
+                      <th className="px-2 py-2 border bg-yellow-50">GOOD Price</th>
+                      <th className="px-2 py-2 border bg-yellow-50">GOOD AGI</th>
+                      <th className="px-2 py-2 border bg-yellow-50">GOOD %</th>
+                      <th className="px-2 py-2 border bg-orange-50">FAIR Price</th>
+                      <th className="px-2 py-2 border bg-orange-50">FAIR AGI</th>
+                      <th className="px-2 py-2 border bg-orange-50">FAIR %</th>
+                      <th className="px-2 py-2 border bg-red-50">POOR Price</th>
+                      <th className="px-2 py-2 border bg-red-50">POOR AGI</th>
+                      <th className="px-2 py-2 border bg-red-50">POOR %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.keys(conditionResults.interior || {}).length === 0 && <tr><td colSpan={17} className="px-3 py-6 text-center text-gray-500">No interior analysis yet.</td></tr>}
+                    {Object.entries(conditionResults.interior || {}).map(([vcs, vcsData], idx) => (
+                      <tr key={vcs} className={idx%2? 'bg-white':'bg-gray-50'}>
+                        <td className="px-2 py-2 border font-medium">{vcs}</td>
+                        <td className="px-2 py-2 border bg-blue-50">{vcsData.AVERAGE.avgPrice || '—'}</td>
+                        <td className="px-2 py-2 border bg-blue-50">{vcsData.AVERAGE.avgAGI || '—'}</td>
+                        <td className="px-2 py-2 border bg-blue-50">{vcsData.AVERAGE.avgSize || '—'}</td>
+                        <td className="px-2 py-2 border bg-blue-50">{vcsData.AVERAGE.count || 0}</td>
+                        <td className="px-2 py-2 border bg-green-50">{vcsData.EXCELLENT.avgPrice || '—'}</td>
+                        <td className="px-2 py-2 border bg-green-50">{vcsData.EXCELLENT.avgAGI || '—'}</td>
+                        <td className="px-2 py-2 border bg-green-50">{vcsData.EXCELLENT.pctDiff ? `${vcsData.EXCELLENT.pctDiff}%` : '—'}</td>
+                        <td className="px-2 py-2 border bg-yellow-50">{vcsData.GOOD.avgPrice || '—'}</td>
+                        <td className="px-2 py-2 border bg-yellow-50">{vcsData.GOOD.avgAGI || '—'}</td>
+                        <td className="px-2 py-2 border bg-yellow-50">{vcsData.GOOD.pctDiff ? `${vcsData.GOOD.pctDiff}%` : '—'}</td>
+                        <td className="px-2 py-2 border bg-orange-50">{vcsData.FAIR.avgPrice || '—'}</td>
+                        <td className="px-2 py-2 border bg-orange-50">{vcsData.FAIR.avgAGI || '—'}</td>
+                        <td className="px-2 py-2 border bg-orange-50">{vcsData.FAIR.pctDiff ? `${vcsData.FAIR.pctDiff}%` : '—'}</td>
+                        <td className="px-2 py-2 border bg-red-50">{vcsData.POOR.avgPrice || '—'}</td>
+                        <td className="px-2 py-2 border bg-red-50">{vcsData.POOR.avgAGI || '—'}</td>
+                        <td className="px-2 py-2 border bg-red-50">{vcsData.POOR.pctDiff ? `${vcsData.POOR.pctDiff}%` : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Tested vs Actual Adjustments */}
             <div className="mt-4">
-              <h4 className="font-medium">Tested vs Actual Adjustments (summary)</h4>
-              <div className="grid grid-cols-2 gap-4 mt-2">
+              <h4 className="font-medium mb-2">Tested vs Actual Adjustments (Overall Impact)</h4>
+              <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 border rounded">
-                  <div className="text-sm font-semibold">Exterior Tested Adjustments</div>
-                  <pre className="text-xs mt-2">{JSON.stringify(conditionResults.tested_adjustments?.exterior || {}, null, 2)}</pre>
+                  <div className="text-sm font-semibold mb-2">Exterior Condition Adjustments</div>
+                  <div className="space-y-1 text-xs">
+                    <div>Excellent: {conditionResults.tested_adjustments?.exterior?.excellent?.pctDiff || 0}% ({conditionResults.tested_adjustments?.exterior?.excellent?.count || 0} sales)</div>
+                    <div>Good: {conditionResults.tested_adjustments?.exterior?.good?.pctDiff || 0}% ({conditionResults.tested_adjustments?.exterior?.good?.count || 0} sales)</div>
+                    <div className="font-medium">Average: 0% (baseline) ({conditionResults.tested_adjustments?.exterior?.average?.count || 0} sales)</div>
+                    <div>Fair: {conditionResults.tested_adjustments?.exterior?.fair?.pctDiff || 0}% ({conditionResults.tested_adjustments?.exterior?.fair?.count || 0} sales)</div>
+                    <div>Poor: {conditionResults.tested_adjustments?.exterior?.poor?.pctDiff || 0}% ({conditionResults.tested_adjustments?.exterior?.poor?.count || 0} sales)</div>
+                  </div>
                 </div>
                 <div className="p-3 border rounded">
-                  <div className="text-sm font-semibold">Interior Tested Adjustments</div>
-                  <pre className="text-xs mt-2">{JSON.stringify(conditionResults.tested_adjustments?.interior || {}, null, 2)}</pre>
+                  <div className="text-sm font-semibold mb-2">Interior Condition Adjustments</div>
+                  <div className="space-y-1 text-xs">
+                    <div>Excellent: {conditionResults.tested_adjustments?.interior?.excellent?.pctDiff || 0}% ({conditionResults.tested_adjustments?.interior?.excellent?.count || 0} sales)</div>
+                    <div>Good: {conditionResults.tested_adjustments?.interior?.good?.pctDiff || 0}% ({conditionResults.tested_adjustments?.interior?.good?.count || 0} sales)</div>
+                    <div className="font-medium">Average: 0% (baseline) ({conditionResults.tested_adjustments?.interior?.average?.count || 0} sales)</div>
+                    <div>Fair: {conditionResults.tested_adjustments?.interior?.fair?.pctDiff || 0}% ({conditionResults.tested_adjustments?.interior?.fair?.count || 0} sales)</div>
+                    <div>Poor: {conditionResults.tested_adjustments?.interior?.poor?.pctDiff || 0}% ({conditionResults.tested_adjustments?.interior?.poor?.count || 0} sales)</div>
+                  </div>
                 </div>
               </div>
             </div>
