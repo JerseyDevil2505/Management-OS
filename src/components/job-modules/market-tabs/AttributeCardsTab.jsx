@@ -73,14 +73,23 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   // Helper: filter valid sales (values_norm_time primary)
   const getValidSales = (props) => props.filter(p => p && (p.values_norm_time !== undefined && p.values_norm_time !== null && Number(p.values_norm_time) > 0));
 
-  // Helper: entry filter check (inspection_info_by codes 01-04)
-  const passesEntryFilter = (p) => {
-    if (!entryFilter) return true;
-    const code = (p.inspection_info_by || p.info_by || p.raw_info_by || '').toString();
-    return ['01','02','03','04','140A','140O','140S','140T'].includes(code) || code.startsWith('140');
+  // Fixed entry filter logic
+  const applyEntryFilter = (props) => {
+    if (!entryFilter) return props; // If filter OFF, return all
+
+    return props.filter(p => {
+      const code = (p.inspection_info_by || '').toString().trim();
+      if (vendorType === 'Microsystems') {
+        // Microsystems: O=Owner, S=Spouse, T=Tenant, A=Agent
+        return ['O', 'S', 'T', 'A'].includes(code.toUpperCase());
+      } else {
+        // BRT: 01-04 are entry codes
+        return ['01', '02', '03', '04'].includes(code);
+      }
+    });
   };
 
-  // Compute Condition Analysis (exterior or interior)
+  // Compute Condition Analysis (exterior or interior) - COMPLETE REWRITE
   const computeConditionAnalysis = async () => {
     setConditionWorking(true);
     try {
@@ -146,40 +155,131 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       console.log('Final properties with sales and conditions:', propertiesWithSales.length);
 
-      const valid = propertiesWithSales.filter(p => passesEntryFilter(p));
+      const valid = applyEntryFilter(propertiesWithSales);
       console.log('After entry filter:', valid.length);
 
-      // We'll build: { exterior: { byVCS: { [vcs]: { EXCELLENT: {...}, GOOD: {...}, ... } } }, interior: {...}, tested_adjustments: { exterior: {EXCELLENT: {flat,pct}}, ...}, snapshots }
-      const exterior = { byVCS: {} };
-      const interior = { byVCS: {} };
+      // Build analysis structure matching Excel format: VCS as rows, conditions as columns
+      const exteriorAnalysis = {};
+      const interiorAnalysis = {};
 
-      const collect = (groupObj, vcs, rating, prop) => {
-        if (!rating) return; // Skip if no rating
-        groupObj.byVCS[vcs] = groupObj.byVCS[vcs] || {};
-        const bucket = groupObj.byVCS[vcs][rating] = groupObj.byVCS[vcs][rating] || { n:0, total_price:0, total_size:0, sample: [] };
-        const price = Number(prop.values_norm_time || 0);
-        const size = Number(prop.asset_sfla || prop.asset_sfla_calc || 0);
-        bucket.n += 1;
-        bucket.total_price += price;
-        bucket.total_size += size;
-        if (bucket.sample.length < 6) bucket.sample.push({ key: prop.property_composite_key, price, size, year_built: prop.asset_year_built || prop.property_year_built || null });
-      };
-
+      // Collect data grouped by VCS first, then by condition
       valid.forEach(p => {
-        // When grouping, use the vcs field from property_records
         const vcs = p.new_vcs || p.property_vcs || p.vcs || p.asset_vcs || 'NO_VCS';
-        const ext = p.asset_ext_cond;
-        const int = p.asset_int_cond;
+        const price = Number(p.values_norm_time || 0);
+        const size = Number(p.asset_sfla || p.asset_sfla_calc || 0);
+        const agi = size > 0 ? price / size : 0; // AGI = Average per sq ft
 
-        const extRating = normalizeCondition(ext);
-        const intRating = normalizeCondition(int);
+        // Process exterior condition
+        const extCondition = normalizeCondition(p.asset_ext_cond);
+        if (extCondition) {
+          if (!exteriorAnalysis[vcs]) {
+            exteriorAnalysis[vcs] = {
+              vcs,
+              EXCELLENT: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 },
+              GOOD: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 },
+              AVERAGE: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 },
+              FAIR: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 },
+              POOR: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 }
+            };
+          }
+          const bucket = exteriorAnalysis[vcs][extCondition];
+          bucket.count++;
+          bucket.totalPrice += price;
+          bucket.totalSize += size;
+          bucket.totalAGI += agi;
+        }
 
-        if (extRating) collect(exterior, vcs, extRating, p);
-        if (intRating) collect(interior, vcs, intRating, p);
+        // Process interior condition
+        const intCondition = normalizeCondition(p.asset_int_cond);
+        if (intCondition) {
+          if (!interiorAnalysis[vcs]) {
+            interiorAnalysis[vcs] = {
+              vcs,
+              EXCELLENT: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 },
+              GOOD: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 },
+              AVERAGE: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 },
+              FAIR: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 },
+              POOR: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 }
+            };
+          }
+          const bucket = interiorAnalysis[vcs][intCondition];
+          bucket.count++;
+          bucket.totalPrice += price;
+          bucket.totalSize += size;
+          bucket.totalAGI += agi;
+        }
       });
 
-      console.log('Exterior groups:', Object.keys(exterior.byVCS || {}));
-      console.log('Interior groups:', Object.keys(interior.byVCS || {}));
+      // Calculate averages and percentage differences from AVERAGE baseline
+      const calculateAverages = (analysis) => {
+        Object.keys(analysis).forEach(vcs => {
+          const vcsData = analysis[vcs];
+          ['EXCELLENT', 'GOOD', 'AVERAGE', 'FAIR', 'POOR'].forEach(condition => {
+            const bucket = vcsData[condition];
+            bucket.avgPrice = bucket.count > 0 ? Math.round(bucket.totalPrice / bucket.count) : 0;
+            bucket.avgSize = bucket.count > 0 ? Math.round(bucket.totalSize / bucket.count) : 0;
+            bucket.avgAGI = bucket.count > 0 ? Number((bucket.totalAGI / bucket.count).toFixed(2)) : 0;
+          });
+
+          // Calculate percentage differences from AVERAGE baseline
+          const baseline = vcsData.AVERAGE;
+          ['EXCELLENT', 'GOOD', 'FAIR', 'POOR'].forEach(condition => {
+            const bucket = vcsData[condition];
+            if (baseline.avgPrice > 0 && bucket.avgPrice > 0) {
+              bucket.pctDiff = Number(((bucket.avgPrice - baseline.avgPrice) / baseline.avgPrice * 100).toFixed(1));
+            } else {
+              bucket.pctDiff = 0;
+            }
+          });
+        });
+      };
+
+      calculateAverages(exteriorAnalysis);
+      calculateAverages(interiorAnalysis);
+
+      // Calculate overall tested adjustments across all VCS areas
+      const calculateOverallImpact = (condition, baseline, analysis) => {
+        let totalConditionPrice = 0, totalConditionCount = 0;
+        let totalBaselinePrice = 0, totalBaselineCount = 0;
+
+        Object.values(analysis).forEach(vcsData => {
+          const condBucket = vcsData[condition];
+          const baseBucket = vcsData[baseline];
+
+          totalConditionPrice += condBucket.totalPrice;
+          totalConditionCount += condBucket.count;
+          totalBaselinePrice += baseBucket.totalPrice;
+          totalBaselineCount += baseBucket.count;
+        });
+
+        const condAvg = totalConditionCount > 0 ? totalConditionPrice / totalConditionCount : 0;
+        const baseAvg = totalBaselineCount > 0 ? totalBaselinePrice / totalBaselineCount : 0;
+
+        return {
+          avg: Math.round(condAvg),
+          count: totalConditionCount,
+          pctDiff: baseAvg > 0 ? Number(((condAvg - baseAvg) / baseAvg * 100).toFixed(1)) : 0
+        };
+      };
+
+      const testedExterior = {
+        excellent: calculateOverallImpact('EXCELLENT', 'AVERAGE', exteriorAnalysis),
+        good: calculateOverallImpact('GOOD', 'AVERAGE', exteriorAnalysis),
+        average: calculateOverallImpact('AVERAGE', 'AVERAGE', exteriorAnalysis),
+        fair: calculateOverallImpact('FAIR', 'AVERAGE', exteriorAnalysis),
+        poor: calculateOverallImpact('POOR', 'AVERAGE', exteriorAnalysis)
+      };
+
+      const testedInterior = {
+        excellent: calculateOverallImpact('EXCELLENT', 'AVERAGE', interiorAnalysis),
+        good: calculateOverallImpact('GOOD', 'AVERAGE', interiorAnalysis),
+        average: calculateOverallImpact('AVERAGE', 'AVERAGE', interiorAnalysis),
+        fair: calculateOverallImpact('FAIR', 'AVERAGE', interiorAnalysis),
+        poor: calculateOverallImpact('POOR', 'AVERAGE', interiorAnalysis)
+      };
+
+      console.log('Exterior VCS count:', Object.keys(exteriorAnalysis).length);
+      console.log('Interior VCS count:', Object.keys(interiorAnalysis).length);
 
       // finalize averages
       const finalize = (groupObj) => {
@@ -508,7 +608,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                             <td className="px-2 py-2 border-t">{vcs}</td>
                             <td className="px-2 py-2 border-t">{rating}</td>
                             <td className="px-2 py-2 border-t">{b.n}</td>
-                            <td className="px-2 py-2 border-t">{b.avg_price ?? '���'}</td>
+                            <td className="px-2 py-2 border-t">{b.avg_price ?? '—'}</td>
                             <td className="px-2 py-2 border-t">{b.avg_size ?? '—'}</td>
                             <td className="px-2 py-2 border-t">{b.price_per_sf ?? '—'}</td>
                           </tr>
