@@ -610,27 +610,37 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                   </thead>
                   <tbody>
                     {Object.keys(conditionResults.exterior || {}).length === 0 && <tr><td colSpan={17} className="px-3 py-6 text-center text-gray-500">No exterior analysis yet.</td></tr>}
-                    {Object.entries(conditionResults.exterior || {}).map(([vcs, vcsData], idx) => (
-                      <tr key={vcs} className={idx%2? 'bg-white':'bg-gray-50'}>
-                        <td className="px-2 py-2 border font-medium">{vcs}</td>
-                        <td className="px-2 py-2 border bg-blue-50">{vcsData.AVERAGE.avgPrice || '—'}</td>
-                        <td className="px-2 py-2 border bg-blue-50">{vcsData.AVERAGE.avgAGI || '—'}</td>
-                        <td className="px-2 py-2 border bg-blue-50">{vcsData.AVERAGE.avgSize || '—'}</td>
-                        <td className="px-2 py-2 border bg-blue-50">{vcsData.AVERAGE.count || 0}</td>
-                        <td className="px-2 py-2 border bg-green-50">{vcsData.EXCELLENT.avgPrice || '—'}</td>
-                        <td className="px-2 py-2 border bg-green-50">{vcsData.EXCELLENT.avgAGI || '—'}</td>
-                        <td className="px-2 py-2 border bg-green-50">{vcsData.EXCELLENT.pctDiff ? `${vcsData.EXCELLENT.pctDiff}%` : '—'}</td>
-                        <td className="px-2 py-2 border bg-yellow-50">{vcsData.GOOD.avgPrice || '—'}</td>
-                        <td className="px-2 py-2 border bg-yellow-50">{vcsData.GOOD.avgAGI || '—'}</td>
-                        <td className="px-2 py-2 border bg-yellow-50">{vcsData.GOOD.pctDiff ? `${vcsData.GOOD.pctDiff}%` : '—'}</td>
-                        <td className="px-2 py-2 border bg-orange-50">{vcsData.FAIR.avgPrice || '—'}</td>
-                        <td className="px-2 py-2 border bg-orange-50">{vcsData.FAIR.avgAGI || '—'}</td>
-                        <td className="px-2 py-2 border bg-orange-50">{vcsData.FAIR.pctDiff ? `${vcsData.FAIR.pctDiff}%` : '—'}</td>
-                        <td className="px-2 py-2 border bg-red-50">{vcsData.POOR.avgPrice || '—'}</td>
-                        <td className="px-2 py-2 border bg-red-50">{vcsData.POOR.avgAGI || '—'}</td>
-                        <td className="px-2 py-2 border bg-red-50">{vcsData.POOR.pctDiff ? `${vcsData.POOR.pctDiff}%` : '—'}</td>
-                      </tr>
-                    ))}
+                    {Object.entries(conditionResults.exterior || {}).map(([vcs, vcsData], idx) => {
+                      // Safety check and defaults
+                      if (!vcsData || typeof vcsData !== 'object') return null;
+                      const avg = vcsData.AVERAGE || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0 };
+                      const exc = vcsData.EXCELLENT || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
+                      const good = vcsData.GOOD || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
+                      const fair = vcsData.FAIR || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
+                      const poor = vcsData.POOR || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
+
+                      return (
+                        <tr key={vcs} className={idx%2? 'bg-white':'bg-gray-50'}>
+                          <td className="px-2 py-2 border font-medium">{vcs}</td>
+                          <td className="px-2 py-2 border bg-blue-50">{avg.avgPrice || '—'}</td>
+                          <td className="px-2 py-2 border bg-blue-50">{avg.avgAGI || '—'}</td>
+                          <td className="px-2 py-2 border bg-blue-50">{avg.avgSize || '—'}</td>
+                          <td className="px-2 py-2 border bg-blue-50">{avg.count || 0}</td>
+                          <td className="px-2 py-2 border bg-green-50">{exc.avgPrice || '—'}</td>
+                          <td className="px-2 py-2 border bg-green-50">{exc.avgAGI || '—'}</td>
+                          <td className="px-2 py-2 border bg-green-50">{exc.pctDiff ? `${exc.pctDiff}%` : '—'}</td>
+                          <td className="px-2 py-2 border bg-yellow-50">{good.avgPrice || '—'}</td>
+                          <td className="px-2 py-2 border bg-yellow-50">{good.avgAGI || '—'}</td>
+                          <td className="px-2 py-2 border bg-yellow-50">{good.pctDiff ? `${good.pctDiff}%` : '—'}</td>
+                          <td className="px-2 py-2 border bg-orange-50">{fair.avgPrice || '—'}</td>
+                          <td className="px-2 py-2 border bg-orange-50">{fair.avgAGI || '—'}</td>
+                          <td className="px-2 py-2 border bg-orange-50">{fair.pctDiff ? `${fair.pctDiff}%` : '—'}</td>
+                          <td className="px-2 py-2 border bg-red-50">{poor.avgPrice || '—'}</td>
+                          <td className="px-2 py-2 border bg-red-50">{poor.avgAGI || '—'}</td>
+                          <td className="px-2 py-2 border bg-red-50">{poor.pctDiff ? `${poor.pctDiff}%` : '—'}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
