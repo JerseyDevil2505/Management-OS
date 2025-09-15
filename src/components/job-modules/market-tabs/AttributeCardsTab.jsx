@@ -33,7 +33,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [active, setActive] = useState('condition');
 
   // Condition analysis UI state
-  const [entryFilter, setEntryFilter] = useState(true); // toggle for inspection_info_by 01-04
+  const [entryFilterEnabled, setEntryFilterEnabled] = useState(true); // renamed from entryFilter
+  const [typeUseFilter, setTypeUseFilter] = useState('all');
+  const [interiorInspectionOnly, setInteriorInspectionOnly] = useState(false);
   const [conditionWorking, setConditionWorking] = useState(false);
   const [conditionResults, setConditionResults] = useState(marketLandData.condition_analysis_rollup || { exterior: {}, interior: {}, tested_adjustments: {} });
   const [exteriorCascade, setExteriorCascade] = useState([
@@ -116,9 +118,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     return (((targetSize - saleSize) * ((salePrice / saleSize) * 0.50)) + salePrice);
   };
 
-  // Fixed entry filter logic
+  // Helper: Entry filter check
   const applyEntryFilter = (props) => {
-    if (!entryFilter) return props; // If filter OFF, return all
+    if (!entryFilterEnabled) return props; // If filter OFF, return all
 
     return props.filter(p => {
       const code = (p.inspection_info_by || '').toString().trim();
@@ -130,6 +132,44 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         return ['01', '02', '03', '04'].includes(code);
       }
     });
+  };
+
+  // Helper: Apply base filters (entry, type/use)
+  const applyFilters = (properties) => {
+    let filtered = [...properties];
+
+    // Entry filter
+    filtered = applyEntryFilter(filtered);
+
+    // Type/Use filter
+    if (typeUseFilter !== 'all') {
+      if (typeUseFilter === 'residential') {
+        filtered = filtered.filter(p => ['2', '3A'].includes(p.asset_propclass));
+      } else if (typeUseFilter === 'commercial') {
+        filtered = filtered.filter(p => ['4A', '4B', '4C'].includes(p.asset_propclass));
+      } else {
+        const codes = typeUseFilter.split(',');
+        filtered = filtered.filter(p => codes.includes(p.asset_typeuse));
+      }
+    }
+    return filtered;
+  };
+
+  // For Interior table specifically: apply base filters + interior inspection filter
+  const applyInteriorFilters = (properties) => {
+    let filtered = applyFilters(properties); // Apply base filters first
+
+    if (interiorInspectionOnly) {
+      filtered = filtered.filter(p => {
+        const code = (p.inspection_info_by || '').toString().trim();
+        if (vendorType === 'Microsystems') {
+          return !['R', 'E'].includes(code); // Not refused (R) or estimated (E)
+        } else {
+          return !['06', '07'].includes(code); // Not refused (06) or estimated (07)
+        }
+      });
+    }
+    return filtered;
   };
 
   // Helper function to normalize condition codes based on vendor type
@@ -193,22 +233,26 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         });
       }
 
-      const valid = applyEntryFilter(propertiesWithSales);
-      console.log('Final valid properties:', valid.length);
+      // Apply filters for exterior and interior analyses
+      const exteriorProperties = applyFilters(propertiesWithSales);
+      const interiorProperties = applyInteriorFilters(propertiesWithSales);
+
+      console.log('Exterior analysis properties:', exteriorProperties.length);
+      console.log('Interior analysis properties:', interiorProperties.length);
 
       // Discover actual conditions in data (dynamic)
-      const exteriorConditions = getUniqueConditions(valid, 'asset_ext_cond');
-      const interiorConditions = getUniqueConditions(valid, 'asset_int_cond');
+      const exteriorConditions = getUniqueConditions(exteriorProperties, 'asset_ext_cond');
+      const interiorConditions = getUniqueConditions(interiorProperties, 'asset_int_cond');
 
       console.log('Found exterior conditions:', exteriorConditions);
       console.log('Found interior conditions:', interiorConditions);
 
       // Enhanced analysis builder with size normalization
-      const buildConditionAnalysis = (conditionField, conditionsList) => {
+      const buildConditionAnalysis = (conditionField, conditionsList, filteredProperties) => {
         const analysis = {};
 
         // Group by VCS and condition
-        valid.forEach(p => {
+        filteredProperties.forEach(p => {
           const vcs = p.new_vcs || p.property_vcs || p.vcs || p.asset_vcs || 'NO_VCS';
           const condition = normalizeCondition(p[conditionField]);
           if (!condition) return;
@@ -284,8 +328,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         return analysis;
       };
 
-      const exteriorAnalysis = buildConditionAnalysis('asset_ext_cond', exteriorConditions);
-      const interiorAnalysis = buildConditionAnalysis('asset_int_cond', interiorConditions);
+      const exteriorAnalysis = buildConditionAnalysis('asset_ext_cond', exteriorConditions, exteriorProperties);
+      const interiorAnalysis = buildConditionAnalysis('asset_int_cond', interiorConditions, interiorProperties);
 
       // Update cascades with tested values
       const updateCascade = (conditions, analysis, setCascade) => {
@@ -341,7 +385,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         interior: interiorAnalysis,
         exterior_conditions: exteriorConditions,
         interior_conditions: interiorConditions,
-        entry_filter_used: entryFilter,
+        filters_applied: {
+          entry_filter_enabled: entryFilterEnabled,
+          type_use_filter: typeUseFilter,
+          interior_inspection_only: interiorInspectionOnly
+        },
+        entry_filter_used: entryFilterEnabled,
         generated_at: new Date().toISOString()
       };
 
@@ -381,7 +430,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       await saveRollupToDB(jobData.id, { condition_analysis_rollup: rollup });
       setConditionResults(rollup);
-      console.log('✅ Condition adjustments saved');
+      console.log('�� Condition adjustments saved');
     } catch (e) {
       console.error('Failed to save condition adjustments:', e);
     }
@@ -663,11 +712,38 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-medium">Condition Analysis</h3>
               <div className="flex items-center gap-2">
-                <label className="text-sm">Entry filter (01-04)</label>
-                <input type="checkbox" checked={entryFilter} onChange={() => setEntryFilter(v=>!v)} />
                 <button onClick={computeConditionAnalysis} className={CSV_BUTTON_CLASS}>{conditionWorking ? 'Working...' : 'Run Analysis'}</button>
                 <button onClick={() => downloadCsv(`${jobData.job_name || 'job'}-condition-exterior.csv`, getExteriorCsvHeaders(), conditionExteriorRowsForCsv)} className={CSV_BUTTON_CLASS}><FileText size={14}/> Export Exterior CSV</button>
                 <button onClick={() => downloadCsv(`${jobData.job_name || 'job'}-condition-interior.csv`, getInteriorCsvHeaders(), conditionInteriorRowsForCsv)} className={CSV_BUTTON_CLASS}><FileText size={14}/> Export Interior CSV</button>
+              </div>
+            </div>
+
+            {/* Filter Controls */}
+            <div className="flex items-center gap-4 mb-4">
+              <label className="flex items-center gap-2">
+                <span className="text-sm font-medium">Entry filter (01-04)</span>
+                <input
+                  type="checkbox"
+                  checked={entryFilterEnabled}
+                  onChange={(e) => setEntryFilterEnabled(e.target.checked)}
+                />
+              </label>
+
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">Type/Use:</span>
+                <select
+                  value={typeUseFilter}
+                  onChange={(e) => setTypeUseFilter(e.target.value)}
+                  className="border rounded px-2 py-1 text-sm"
+                >
+                  <option value="all">All Properties</option>
+                  <option value="residential">Residential Only</option>
+                  <option value="commercial">Commercial Only</option>
+                  <option value="10">Single Family (10)</option>
+                  <option value="11">Two Family (11)</option>
+                  <option value="42,43,44">Multi-Family (42-44)</option>
+                  <option value="60,61,62">Commercial (60-62)</option>
+                </select>
               </div>
             </div>
 
@@ -736,6 +812,19 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             </div>
 
             {/* Interior Condition Table */}
+            <div className="flex items-center gap-2 mt-4 mb-2">
+              <label className="flex items-center gap-2">
+                <span className="text-sm font-medium">Interior Inspections Only</span>
+                <input
+                  type="checkbox"
+                  checked={interiorInspectionOnly}
+                  onChange={(e) => setInteriorInspectionOnly(e.target.checked)}
+                />
+              </label>
+              <span className="text-xs text-gray-500">
+                (Shows only properties where interior was inspected)
+              </span>
+            </div>
             <div className="mb-6">
               <h4 className="font-medium mb-2">Interior Condition Analysis (AVERAGE = Baseline)</h4>
               <div className="overflow-auto border rounded">
