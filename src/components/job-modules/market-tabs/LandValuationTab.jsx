@@ -3001,7 +3001,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         if (error) throw error;
       }
 
-      debug('��� Save completed successfully');
+      debug('✅ Save completed successfully');
       setLastSaved(new Date());
 
       // Notify parent component
@@ -5621,7 +5621,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         rows.push(
                           <tr key="__recommended__" style={{ fontWeight: '700', backgroundColor: '#ECFDF5' }}>
                             <td style={{ padding: '6px', border: '1px solid #E5E7EB' }}>Recommended Front Foot</td>
-                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
                             <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
                             <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
                             <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
