@@ -132,45 +132,37 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     });
   };
 
-  // Compute Condition Analysis (exterior or interior) - COMPLETE REWRITE
+  // Helper function to normalize condition codes based on vendor type
+  const normalizeCondition = (condCode) => {
+    if (!condCode) return null;
+
+    // Clean the condition code - trim whitespace and convert to uppercase
+    const cleanCode = condCode.toString().trim().toUpperCase();
+
+    if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
+      // Microsystems: E=Excellent, G=Good, A=Average, F=Fair, P=Poor
+      const condMap = {
+        'E': 'EXCELLENT', 'G': 'GOOD', 'A': 'AVERAGE',
+        'F': 'FAIR', 'P': 'POOR'
+      };
+      return condMap[cleanCode] || null;
+    } else {
+      // BRT: 01=Excellent, 02=Good, 03=Average, 04=Fair, 05=Poor
+      const condMap = {
+        '01': 'EXCELLENT', '02': 'GOOD', '03': 'AVERAGE',
+        '04': 'FAIR', '05': 'POOR'
+      };
+      return condMap[cleanCode] || null;
+    }
+  };
+
+  // ENHANCED Condition Analysis - Complete rewrite with all improvements
   const computeConditionAnalysis = async () => {
     setConditionWorking(true);
     try {
-      // Helper function to normalize condition codes based on vendor type
-      const normalizeCondition = (condCode) => {
-        if (!condCode) return null;
-
-        // Clean the condition code - trim whitespace and convert to uppercase
-        const cleanCode = condCode.toString().trim().toUpperCase();
-
-        console.log(`🔍 Normalizing condition: "${condCode}" -> "${cleanCode}" (vendor: ${vendorType})`);
-
-        if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
-          // Microsystems: E=Excellent, G=Good, A=Average, F=Fair, P=Poor
-          const condMap = {
-            'E': 'EXCELLENT', 'G': 'GOOD', 'A': 'AVERAGE',
-            'F': 'FAIR', 'P': 'POOR'
-          };
-          const result = condMap[cleanCode] || null;
-          console.log(`   Microsystems mapping: "${cleanCode}" -> ${result}`);
-          return result;
-        } else {
-          // BRT: 01=Excellent, 02=Good, 03=Average, 04=Fair, 05=Poor
-          const condMap = {
-            '01': 'EXCELLENT', '02': 'GOOD', '03': 'AVERAGE',
-            '04': 'FAIR', '05': 'POOR'
-          };
-          const result = condMap[cleanCode] || null;
-          console.log(`   BRT mapping: "${cleanCode}" -> ${result}`);
-          return result;
-        }
-      };
-
       // First, get properties with BOTH condition data and sales data
       let propertiesWithSales = properties.filter(p => {
-        // Check if property has market analysis data
         const hasMarketData = p.values_norm_time && Number(p.values_norm_time) > 0;
-        // Check if property has condition data
         const hasConditions = p.asset_ext_cond || p.asset_int_cond;
         return hasMarketData && hasConditions;
       });
@@ -185,15 +177,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           .select('property_composite_key, values_norm_time, values_norm_size')
           .eq('job_id', jobData.id);
 
-        // Create a map for quick lookup
         const marketMap = {};
         marketData?.forEach(m => {
           marketMap[m.property_composite_key] = m;
         });
 
-        console.log('Market data found for', Object.keys(marketMap).length, 'properties');
-
-        // Enhance properties with market data
         propertiesWithSales = properties.map(p => ({
           ...p,
           values_norm_time: marketMap[p.property_composite_key]?.values_norm_time,
@@ -205,167 +193,159 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         });
       }
 
-      console.log('Final properties with sales and conditions:', propertiesWithSales.length);
-
       const valid = applyEntryFilter(propertiesWithSales);
-      console.log('After entry filter:', valid.length);
+      console.log('Final valid properties:', valid.length);
 
-      // Build analysis structure matching Excel format: VCS as rows, conditions as columns
-      const exteriorAnalysis = {};
-      const interiorAnalysis = {};
+      // Discover actual conditions in data (dynamic)
+      const exteriorConditions = getUniqueConditions(valid, 'asset_ext_cond');
+      const interiorConditions = getUniqueConditions(valid, 'asset_int_cond');
 
-      // Collect data grouped by VCS first, then by condition
-      // Debug: Check what condition fields are available
-      let extCondCount = 0, intCondCount = 0;
-      let sampleExtConds = new Set(), sampleIntConds = new Set();
+      console.log('Found exterior conditions:', exteriorConditions);
+      console.log('Found interior conditions:', interiorConditions);
 
-      valid.forEach(p => {
-        const vcs = p.new_vcs || p.property_vcs || p.vcs || p.asset_vcs || 'NO_VCS';
-        const price = Number(p.values_norm_time || 0);
-        const size = Number(p.asset_sfla || p.asset_sfla_calc || 0);
-        const agi = size > 0 ? price / size : 0; // AGI = Average per sq ft
+      // Enhanced analysis builder with size normalization
+      const buildConditionAnalysis = (conditionField, conditionsList) => {
+        const analysis = {};
 
-        // Debug condition fields
-        if (p.asset_ext_cond) {
-          extCondCount++;
-          if (sampleExtConds.size < 10) sampleExtConds.add(p.asset_ext_cond);
-        }
-        if (p.asset_int_cond) {
-          intCondCount++;
-          if (sampleIntConds.size < 10) sampleIntConds.add(p.asset_int_cond);
-        }
+        // Group by VCS and condition
+        valid.forEach(p => {
+          const vcs = p.new_vcs || p.property_vcs || p.vcs || p.asset_vcs || 'NO_VCS';
+          const condition = normalizeCondition(p[conditionField]);
+          if (!condition) return;
 
-        // Process exterior condition
-        const extCondition = normalizeCondition(p.asset_ext_cond);
-        if (extCondition) {
-          if (!exteriorAnalysis[vcs]) {
-            exteriorAnalysis[vcs] = {
-              vcs,
-              EXCELLENT: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 },
-              GOOD: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 },
-              AVERAGE: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 },
-              FAIR: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 },
-              POOR: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 }
-            };
+          if (!analysis[vcs]) {
+            analysis[vcs] = { vcs };
+            // Initialize all found conditions
+            conditionsList.forEach(cond => {
+              analysis[vcs][cond] = {
+                properties: [],
+                count: 0,
+                totalPrice: 0,
+                totalSize: 0,
+                totalAge: 0,
+                price: 0,
+                size: 0,
+                age: 0,
+                normalizedPrice: 0,
+                percentDiff: 0
+              };
+            });
           }
-          const bucket = exteriorAnalysis[vcs][extCondition];
+
+          const bucket = analysis[vcs][condition];
+          const price = Number(p.values_norm_time || 0);
+          const size = Number(p.asset_sfla || p.asset_sfla_calc || 0);
+          const yearBuilt = Number(p.asset_year_built || p.property_year_built || 0);
+          const age = yearBuilt > 0 ? new Date().getFullYear() - yearBuilt : 0;
+
+          bucket.properties.push({ price, size, age, yearBuilt });
           bucket.count++;
           bucket.totalPrice += price;
           bucket.totalSize += size;
-          bucket.totalAGI += agi;
-        }
+          bucket.totalAge += age;
+        });
 
-        // Process interior condition
-        const intCondition = normalizeCondition(p.asset_int_cond);
-        if (intCondition) {
-          if (!interiorAnalysis[vcs]) {
-            interiorAnalysis[vcs] = {
-              vcs,
-              EXCELLENT: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 },
-              GOOD: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 },
-              AVERAGE: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 },
-              FAIR: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 },
-              POOR: { count: 0, totalPrice: 0, totalSize: 0, totalAGI: 0 }
-            };
-          }
-          const bucket = interiorAnalysis[vcs][intCondition];
-          bucket.count++;
-          bucket.totalPrice += price;
-          bucket.totalSize += size;
-          bucket.totalAGI += agi;
-        }
-      });
-
-      console.log(`📊 Condition field analysis:`);
-      console.log(`  - Properties with exterior conditions: ${extCondCount}`);
-      console.log(`  - Properties with interior conditions: ${intCondCount}`);
-      console.log(`  - Sample exterior codes:`, Array.from(sampleExtConds));
-      console.log(`  - Sample interior codes:`, Array.from(sampleIntConds));
-
-      // Calculate averages and percentage differences from AVERAGE baseline
-      const calculateAverages = (analysis) => {
+        // Calculate averages and apply size normalization
         Object.keys(analysis).forEach(vcs => {
           const vcsData = analysis[vcs];
-          ['EXCELLENT', 'GOOD', 'AVERAGE', 'FAIR', 'POOR'].forEach(condition => {
+
+          // Calculate basic averages first
+          conditionsList.forEach(condition => {
             const bucket = vcsData[condition];
-            bucket.avgPrice = bucket.count > 0 ? Math.round(bucket.totalPrice / bucket.count) : 0;
-            bucket.avgSize = bucket.count > 0 ? Math.round(bucket.totalSize / bucket.count) : 0;
-            bucket.avgAGI = bucket.count > 0 ? Number((bucket.totalAGI / bucket.count).toFixed(2)) : 0;
+            if (bucket.count > 0) {
+              bucket.price = Math.round(bucket.totalPrice / bucket.count);
+              bucket.size = Math.round(bucket.totalSize / bucket.count);
+              bucket.age = Math.round(bucket.totalAge / bucket.count);
+            }
           });
 
-          // Calculate percentage differences from AVERAGE baseline
-          const baseline = vcsData.AVERAGE;
-          ['EXCELLENT', 'GOOD', 'FAIR', 'POOR'].forEach(condition => {
+          // Find AVERAGE condition as baseline for size normalization
+          const baselineCondition = vcsData.AVERAGE || vcsData[conditionsList[0]];
+          const targetSize = baselineCondition ? baselineCondition.size : 0;
+
+          // Apply size normalization to each condition
+          conditionsList.forEach(condition => {
             const bucket = vcsData[condition];
-            if (baseline.avgPrice > 0 && bucket.avgPrice > 0) {
-              bucket.pctDiff = Number(((bucket.avgPrice - baseline.avgPrice) / baseline.avgPrice * 100).toFixed(1));
-            } else {
-              bucket.pctDiff = 0;
+            if (bucket.count > 0 && targetSize > 0) {
+              // Calculate normalized values using Jim's formula
+              const normalizedValues = bucket.properties.map(prop =>
+                calculateNormalizedValue(prop.price, prop.size, targetSize)
+              );
+              bucket.normalizedPrice = Math.round(normalizedValues.reduce((a,b) => a+b, 0) / normalizedValues.length);
+
+              // Calculate percent difference from AVERAGE baseline
+              if (baselineCondition && baselineCondition.normalizedPrice > 0) {
+                bucket.percentDiff = Number(((bucket.normalizedPrice - baselineCondition.normalizedPrice) / baselineCondition.normalizedPrice * 100).toFixed(1));
+              }
             }
           });
         });
+
+        return analysis;
       };
 
-      calculateAverages(exteriorAnalysis);
-      calculateAverages(interiorAnalysis);
+      const exteriorAnalysis = buildConditionAnalysis('asset_ext_cond', exteriorConditions);
+      const interiorAnalysis = buildConditionAnalysis('asset_int_cond', interiorConditions);
 
-      // Calculate overall tested adjustments across all VCS areas
-      const calculateOverallImpact = (condition, baseline, analysis) => {
-        let totalConditionPrice = 0, totalConditionCount = 0;
-        let totalBaselinePrice = 0, totalBaselineCount = 0;
+      // Update cascades with tested values
+      const updateCascade = (conditions, analysis, setCascade) => {
+        const newCascade = [];
+        const allConditions = ['EXCELLENT', 'VERY GOOD', 'GOOD', 'AVERAGE', 'FAIR', 'POOR', 'VERY POOR'];
 
-        Object.values(analysis).forEach(vcsData => {
-          const condBucket = vcsData[condition];
-          const baseBucket = vcsData[baseline];
+        allConditions.forEach(condName => {
+          let tested = null;
 
-          totalConditionPrice += condBucket.totalPrice;
-          totalConditionCount += condBucket.count;
-          totalBaselinePrice += baseBucket.totalPrice;
-          totalBaselineCount += baseBucket.count;
+          if (conditions.includes(condName)) {
+            // Calculate overall impact across all VCS
+            let totalNormPrice = 0, totalCount = 0, totalBaselinePrice = 0, totalBaselineCount = 0;
+
+            Object.values(analysis).forEach(vcsData => {
+              const condBucket = vcsData[condName];
+              const baseBucket = vcsData.AVERAGE || Object.values(vcsData)[0];
+
+              if (condBucket && baseBucket) {
+                totalNormPrice += condBucket.normalizedPrice * condBucket.count;
+                totalCount += condBucket.count;
+                totalBaselinePrice += baseBucket.normalizedPrice * baseBucket.count;
+                totalBaselineCount += baseBucket.count;
+              }
+            });
+
+            if (totalCount > 0 && totalBaselineCount > 0) {
+              const avgNormPrice = totalNormPrice / totalCount;
+              const avgBaselinePrice = totalBaselinePrice / totalBaselineCount;
+              tested = Number(((avgNormPrice - avgBaselinePrice) / avgBaselinePrice * 100).toFixed(1));
+
+              // Rule: If "above average" conditions show negative, set to 0
+              if (['EXCELLENT', 'VERY GOOD', 'GOOD'].includes(condName) && tested < 0) {
+                tested = 0;
+              }
+            }
+          }
+
+          newCascade.push({
+            name: condName,
+            tested,
+            actual: condName === 'AVERAGE' ? 0 : null
+          });
         });
 
-        const condAvg = totalConditionCount > 0 ? totalConditionPrice / totalConditionCount : 0;
-        const baseAvg = totalBaselineCount > 0 ? totalBaselinePrice / totalBaselineCount : 0;
-
-        return {
-          avg: Math.round(condAvg),
-          count: totalConditionCount,
-          pctDiff: baseAvg > 0 ? Number(((condAvg - baseAvg) / baseAvg * 100).toFixed(1)) : 0
-        };
+        setCascade(newCascade);
       };
 
-      const testedExterior = {
-        excellent: calculateOverallImpact('EXCELLENT', 'AVERAGE', exteriorAnalysis),
-        good: calculateOverallImpact('GOOD', 'AVERAGE', exteriorAnalysis),
-        average: calculateOverallImpact('AVERAGE', 'AVERAGE', exteriorAnalysis),
-        fair: calculateOverallImpact('FAIR', 'AVERAGE', exteriorAnalysis),
-        poor: calculateOverallImpact('POOR', 'AVERAGE', exteriorAnalysis)
-      };
-
-      const testedInterior = {
-        excellent: calculateOverallImpact('EXCELLENT', 'AVERAGE', interiorAnalysis),
-        good: calculateOverallImpact('GOOD', 'AVERAGE', interiorAnalysis),
-        average: calculateOverallImpact('AVERAGE', 'AVERAGE', interiorAnalysis),
-        fair: calculateOverallImpact('FAIR', 'AVERAGE', interiorAnalysis),
-        poor: calculateOverallImpact('POOR', 'AVERAGE', interiorAnalysis)
-      };
-
-      console.log('Exterior VCS count:', Object.keys(exteriorAnalysis).length);
-      console.log('Interior VCS count:', Object.keys(interiorAnalysis).length);
+      updateCascade(exteriorConditions, exteriorAnalysis, setExteriorCascade);
+      updateCascade(interiorConditions, interiorAnalysis, setInteriorCascade);
 
       const rollup = {
         exterior: exteriorAnalysis,
         interior: interiorAnalysis,
-        tested_adjustments: {
-          exterior: testedExterior,
-          interior: testedInterior
-        },
+        exterior_conditions: exteriorConditions,
+        interior_conditions: interiorConditions,
+        entry_filter_used: entryFilter,
         generated_at: new Date().toISOString()
       };
 
       setConditionResults(rollup);
-
-      // Save to DB
       await saveRollupToDB(jobData.id, { condition_analysis_rollup: rollup });
 
     } catch (e) {
