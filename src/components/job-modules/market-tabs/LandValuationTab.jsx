@@ -2884,7 +2884,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       if (cascadeConfig.normal.prime && properties?.length > 0) {
         calculateVCSRecommendedSitesWithTarget();
       } else {
-        debug('⚠️ Cannot calculate VCS recommended sites: missing cascade config or properties');
+        debug('⚠�� Cannot calculate VCS recommended sites: missing cascade config or properties');
       }
 
     } catch (error) {
@@ -7713,6 +7713,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           type="text"
                           value={description}
                           onChange={(e) => updateVCSDescription(vcs, e.target.value)}
+                          onBlur={() => persistVCSDescription(vcs)}
                           style={{
                             width: '100%',
                             padding: '2px',
