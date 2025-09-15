@@ -9,6 +9,7 @@ import {
 import { supabase, interpretCodes, checklistService } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 import './LandValuationTab.css';
+import './sharedTabNav.css';
 
 // Debug shim: replace console.log/debug calls with this noop in production
 const debug = () => {};
@@ -6961,7 +6962,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '��') : ''}
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('yearBuilt')}
