@@ -1452,7 +1452,12 @@ const getPricePerUnit = useCallback((price, size) => {
           residual: rMax ? sales.filter(s => s.acres >= rMax) : []
         };
 
-        // Calculate overall VCS average SFLA for size adjustment
+        // Calculate overall VCS average LOT SF for size adjustment (we'll keep avgSFLA for compatibility/display)
+        const allValidLotSF = sales.filter(s => s.acres > 0).map(s => (s.acres * 43560));
+        const overallAvgLotSF = allValidLotSF.length > 0 ?
+          allValidLotSF.reduce((sum, s) => sum + s, 0) / allValidLotSF.length : null;
+
+        // Also compute overall avg SFLA for display compatibility
         const allValidSFLA = sales.filter(s => s.sfla > 0);
         const overallAvgSFLA = allValidSFLA.length > 0 ?
           allValidSFLA.reduce((sum, s) => sum + s.sfla, 0) / allValidSFLA.length : null;
@@ -1475,12 +1480,16 @@ const getPricePerUnit = useCallback((price, size) => {
           const avgSFLA = validSFLA.length > 0 ?
             validSFLA.reduce((sum, s) => sum + s.sfla, 0) / validSFLA.length : null;
 
-          // Jim's Magic Formula for size adjustment (using time-normalized values)
+          // Compute average lot SF for this bracket
+          const validLotSF = arr.filter(s => s.acres > 0).map(s => (s.acres * 43560));
+          const avgLotSF = validLotSF.length > 0 ? validLotSF.reduce((sum, v) => sum + v, 0) / validLotSF.length : null;
+
+          // Jim's Magic Formula for size adjustment (using lot square footage now)
           let avgAdjusted = avgNormTime;
-          if (overallAvgSFLA && avgSFLA && avgSFLA > 0) {
-            const sflaDiff = overallAvgSFLA - avgSFLA;
-            const pricePerSqFt = avgNormTime / avgSFLA;
-            const sizeAdjustment = sflaDiff * (pricePerSqFt * 0.50);
+          if (overallAvgLotSF && avgLotSF && avgLotSF > 0) {
+            const lotSfDiff = overallAvgLotSF - avgLotSF;
+            const pricePerLotSqFt = avgNormTime / avgLotSF;
+            const sizeAdjustment = lotSfDiff * (pricePerLotSqFt * 0.50);
             avgAdjusted = avgNormTime + sizeAdjustment;
           }
 
