@@ -546,29 +546,29 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     setAdditionalWorking(false);
   };
 
-  // CSV helpers for condition tables - Excel format with safety checks
+  // Enhanced CSV helpers with all columns: Price, Size, Age, Count, Normalized Price, % Diff
   const conditionExteriorRowsForCsv = useMemo(() => {
     const rows = [];
     const ext = conditionResults.exterior || {};
+    const conditions = conditionResults.exterior_conditions || ['EXCELLENT', 'GOOD', 'AVERAGE', 'FAIR', 'POOR'];
+
     Object.keys(ext).forEach(vcs => {
       const vcsData = ext[vcs];
       if (!vcsData || typeof vcsData !== 'object') return;
 
-      // Ensure all condition buckets exist with defaults
-      const avg = vcsData.AVERAGE || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0 };
-      const exc = vcsData.EXCELLENT || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
-      const good = vcsData.GOOD || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
-      const fair = vcsData.FAIR || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
-      const poor = vcsData.POOR || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
-
-      rows.push([
-        vcs,
-        avg.avgPrice || 0, avg.avgAGI || 0, avg.avgSize || 0, avg.count || 0,
-        exc.avgPrice || 0, exc.avgAGI || 0, exc.avgSize || 0, exc.count || 0, (exc.pctDiff || 0) + '%',
-        good.avgPrice || 0, good.avgAGI || 0, good.avgSize || 0, good.count || 0, (good.pctDiff || 0) + '%',
-        fair.avgPrice || 0, fair.avgAGI || 0, fair.avgSize || 0, fair.count || 0, (fair.pctDiff || 0) + '%',
-        poor.avgPrice || 0, poor.avgAGI || 0, poor.avgSize || 0, poor.count || 0, (poor.pctDiff || 0) + '%'
-      ]);
+      const row = [vcs];
+      conditions.forEach(condition => {
+        const bucket = vcsData[condition] || { price: 0, size: 0, age: 0, count: 0, normalizedPrice: 0, percentDiff: 0 };
+        row.push(
+          formatPrice(bucket.price),
+          formatSize(bucket.size),
+          formatYear(bucket.age),
+          bucket.count,
+          formatPrice(bucket.normalizedPrice),
+          formatPct(bucket.percentDiff)
+        );
+      });
+      rows.push(row);
     });
     return rows;
   }, [conditionResults]);
@@ -576,28 +576,47 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const conditionInteriorRowsForCsv = useMemo(() => {
     const rows = [];
     const int = conditionResults.interior || {};
+    const conditions = conditionResults.interior_conditions || ['EXCELLENT', 'GOOD', 'AVERAGE', 'FAIR', 'POOR'];
+
     Object.keys(int).forEach(vcs => {
       const vcsData = int[vcs];
       if (!vcsData || typeof vcsData !== 'object') return;
 
-      // Ensure all condition buckets exist with defaults
-      const avg = vcsData.AVERAGE || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0 };
-      const exc = vcsData.EXCELLENT || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
-      const good = vcsData.GOOD || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
-      const fair = vcsData.FAIR || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
-      const poor = vcsData.POOR || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
-
-      rows.push([
-        vcs,
-        avg.avgPrice || 0, avg.avgAGI || 0, avg.avgSize || 0, avg.count || 0,
-        exc.avgPrice || 0, exc.avgAGI || 0, exc.avgSize || 0, exc.count || 0, (exc.pctDiff || 0) + '%',
-        good.avgPrice || 0, good.avgAGI || 0, good.avgSize || 0, good.count || 0, (good.pctDiff || 0) + '%',
-        fair.avgPrice || 0, fair.avgAGI || 0, fair.avgSize || 0, fair.count || 0, (fair.pctDiff || 0) + '%',
-        poor.avgPrice || 0, poor.avgAGI || 0, poor.avgSize || 0, poor.count || 0, (poor.pctDiff || 0) + '%'
-      ]);
+      const row = [vcs];
+      conditions.forEach(condition => {
+        const bucket = vcsData[condition] || { price: 0, size: 0, age: 0, count: 0, normalizedPrice: 0, percentDiff: 0 };
+        row.push(
+          formatPrice(bucket.price),
+          formatSize(bucket.size),
+          formatYear(bucket.age),
+          bucket.count,
+          formatPrice(bucket.normalizedPrice),
+          formatPct(bucket.percentDiff)
+        );
+      });
+      rows.push(row);
     });
     return rows;
   }, [conditionResults]);
+
+  // Dynamic CSV headers based on actual conditions found
+  const getExteriorCsvHeaders = () => {
+    const conditions = conditionResults.exterior_conditions || ['EXCELLENT', 'GOOD', 'AVERAGE', 'FAIR', 'POOR'];
+    const headers = ['VCS'];
+    conditions.forEach(cond => {
+      headers.push(`${cond}_Price`, `${cond}_Size`, `${cond}_Age`, `${cond}_Count`, `${cond}_NormPrice`, `${cond}_%`);
+    });
+    return headers;
+  };
+
+  const getInteriorCsvHeaders = () => {
+    const conditions = conditionResults.interior_conditions || ['EXCELLENT', 'GOOD', 'AVERAGE', 'FAIR', 'POOR'];
+    const headers = ['VCS'];
+    conditions.forEach(cond => {
+      headers.push(`${cond}_Price`, `${cond}_Size`, `${cond}_Age`, `${cond}_Count`, `${cond}_NormPrice`, `${cond}_%`);
+    });
+    return headers;
+  };
 
   // CSV for custom
   const customCsvRows = useMemo(() => {
