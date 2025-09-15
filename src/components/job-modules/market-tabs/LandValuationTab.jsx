@@ -5520,7 +5520,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         <tr key="__summary__" style={{ fontWeight: '600', backgroundColor: '#F3F4F6' }}>
                           <td style={{ padding: '6px', border: '1px solid #E5E7EB' }}>Overall Average ({chosenBracketKey || 'N/A'})</td>
                           <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{overallAvgAcres != null ? `${(Math.round(overallAvgAcres*100)/100).toFixed(2)} / ${summaryTypicalSF.toLocaleString()} SF` : 'N/A'}</td>
-                          <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{chosenPerAcre != null ? `$${Number(chosenPerAcre).toLocaleString()}` : 'N/A'}</td>
                           <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{summaryLandValue != null ? `$${Number(summaryLandValue).toLocaleString()}` : 'N/A'}</td>
                           <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
                           <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
@@ -7023,7 +7022,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <span style={{ fontSize: '16px', fontWeight: 'bold' }}>%</span>
                     <button
                       onClick={() => {
-                        debug('💾 Save button clicked for target allocation:', targetAllocation);
+                        debug('���� Save button clicked for target allocation:', targetAllocation);
                         saveTargetAllocation();
                       }}
                       disabled={!targetAllocation || targetAllocation === ''}
