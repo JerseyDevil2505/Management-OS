@@ -84,12 +84,77 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const computeConditionAnalysis = async () => {
     setConditionWorking(true);
     try {
-      const valid = getValidSales(properties).filter(p => passesEntryFilter(p));
-      // We'll build: { exterior: { byVCS: { [vcs]: { EXC: {...}, GOOD: {...}, ... } } }, interior: {...}, tested_adjustments: { exterior: {EXC: {flat,pct}}, ...}, snapshots }
+      // Helper function to normalize condition codes based on vendor type
+      const normalizeCondition = (condCode) => {
+        if (!condCode) return null;
+
+        if (vendorType === 'Microsystems') {
+          // Microsystems: E=Excellent, G=Good, A=Average, F=Fair, P=Poor
+          const condMap = {
+            'E': 'EXCELLENT', 'G': 'GOOD', 'A': 'AVERAGE',
+            'F': 'FAIR', 'P': 'POOR'
+          };
+          return condMap[condCode.toString().toUpperCase()] || null;
+        } else {
+          // BRT: 01=Excellent, 02=Good, 03=Average, 04=Fair, 05=Poor
+          const condMap = {
+            '01': 'EXCELLENT', '02': 'GOOD', '03': 'AVERAGE',
+            '04': 'FAIR', '05': 'POOR'
+          };
+          return condMap[condCode.toString()] || null;
+        }
+      };
+
+      // First, get properties with BOTH condition data and sales data
+      let propertiesWithSales = properties.filter(p => {
+        // Check if property has market analysis data
+        const hasMarketData = p.values_norm_time && Number(p.values_norm_time) > 0;
+        // Check if property has condition data
+        const hasConditions = p.asset_ext_cond || p.asset_int_cond;
+        return hasMarketData && hasConditions;
+      });
+
+      console.log('Properties with sales and conditions (initial):', propertiesWithSales.length);
+
+      // If values_norm_time is not on properties, fetch from property_market_analysis
+      if (propertiesWithSales.length === 0 || !properties[0]?.values_norm_time) {
+        console.log('Fetching market analysis data from property_market_analysis table...');
+        const { data: marketData } = await supabase
+          .from('property_market_analysis')
+          .select('property_composite_key, values_norm_time, values_norm_size')
+          .eq('job_id', jobData.id);
+
+        // Create a map for quick lookup
+        const marketMap = {};
+        marketData?.forEach(m => {
+          marketMap[m.property_composite_key] = m;
+        });
+
+        console.log('Market data found for', Object.keys(marketMap).length, 'properties');
+
+        // Enhance properties with market data
+        propertiesWithSales = properties.map(p => ({
+          ...p,
+          values_norm_time: marketMap[p.property_composite_key]?.values_norm_time,
+          values_norm_size: marketMap[p.property_composite_key]?.values_norm_size
+        })).filter(p => {
+          const hasMarketData = p.values_norm_time && Number(p.values_norm_time) > 0;
+          const hasConditions = p.asset_ext_cond || p.asset_int_cond;
+          return hasMarketData && hasConditions;
+        });
+      }
+
+      console.log('Final properties with sales and conditions:', propertiesWithSales.length);
+
+      const valid = propertiesWithSales.filter(p => passesEntryFilter(p));
+      console.log('After entry filter:', valid.length);
+
+      // We'll build: { exterior: { byVCS: { [vcs]: { EXCELLENT: {...}, GOOD: {...}, ... } } }, interior: {...}, tested_adjustments: { exterior: {EXCELLENT: {flat,pct}}, ...}, snapshots }
       const exterior = { byVCS: {} };
       const interior = { byVCS: {} };
 
       const collect = (groupObj, vcs, rating, prop) => {
+        if (!rating) return; // Skip if no rating
         groupObj.byVCS[vcs] = groupObj.byVCS[vcs] || {};
         const bucket = groupObj.byVCS[vcs][rating] = groupObj.byVCS[vcs][rating] || { n:0, total_price:0, total_size:0, sample: [] };
         const price = Number(prop.values_norm_time || 0);
@@ -101,26 +166,20 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       };
 
       valid.forEach(p => {
-        const vcs = p.new_vcs || p.property_vcs || p.property_vcs || 'UNSPEC';
-        const ext = (p.asset_ext_cond || p.asset_ext_cond === 0) ? String(p.asset_ext_cond).toUpperCase() : null;
-        const int = (p.asset_int_cond || p.asset_int_cond === 0) ? String(p.asset_int_cond).toUpperCase() : null;
+        // When grouping, use the vcs field from property_records
+        const vcs = p.new_vcs || p.property_vcs || p.vcs || p.asset_vcs || 'NO_VCS';
+        const ext = p.asset_ext_cond;
+        const int = p.asset_int_cond;
 
-        // normalize condition codes to EXC/GOOD/FAIR/POOR keywords if they are codes like G/F/P/E
-        const mapCond = (c) => {
-          if (!c) return 'UNKNOWN';
-          const v = c.toString().toUpperCase();
-          if (['E','EXC','EXCELLENT'].includes(v)) return 'EXC';
-          if (['G','GOOD'].includes(v)) return 'GOOD';
-          if (['F','FAIR'].includes(v)) return 'FAIR';
-          if (['P','POOR'].includes(v)) return 'POOR';
-          return v;
-        };
+        const extRating = normalizeCondition(ext);
+        const intRating = normalizeCondition(int);
 
-        const extR = mapCond(ext);
-        const intR = mapCond(int);
-        collect(exterior, vcs, extR, p);
-        collect(interior, vcs, intR, p);
+        if (extRating) collect(exterior, vcs, extRating, p);
+        if (intRating) collect(interior, vcs, intRating, p);
       });
+
+      console.log('Exterior groups:', Object.keys(exterior.byVCS || {}));
+      console.log('Interior groups:', Object.keys(interior.byVCS || {}));
 
       // finalize averages
       const finalize = (groupObj) => {
@@ -449,7 +508,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                             <td className="px-2 py-2 border-t">{vcs}</td>
                             <td className="px-2 py-2 border-t">{rating}</td>
                             <td className="px-2 py-2 border-t">{b.n}</td>
-                            <td className="px-2 py-2 border-t">{b.avg_price ?? '—'}</td>
+                            <td className="px-2 py-2 border-t">{b.avg_price ?? '���'}</td>
                             <td className="px-2 py-2 border-t">{b.avg_size ?? '—'}</td>
                             <td className="px-2 py-2 border-t">{b.price_per_sf ?? '—'}</td>
                           </tr>
