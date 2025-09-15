@@ -476,19 +476,28 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     setAdditionalWorking(false);
   };
 
-  // CSV helpers for condition tables - Excel format
+  // CSV helpers for condition tables - Excel format with safety checks
   const conditionExteriorRowsForCsv = useMemo(() => {
     const rows = [];
     const ext = conditionResults.exterior || {};
     Object.keys(ext).forEach(vcs => {
       const vcsData = ext[vcs];
+      if (!vcsData || typeof vcsData !== 'object') return;
+
+      // Ensure all condition buckets exist with defaults
+      const avg = vcsData.AVERAGE || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0 };
+      const exc = vcsData.EXCELLENT || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
+      const good = vcsData.GOOD || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
+      const fair = vcsData.FAIR || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
+      const poor = vcsData.POOR || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
+
       rows.push([
         vcs,
-        vcsData.AVERAGE.avgPrice, vcsData.AVERAGE.avgAGI, vcsData.AVERAGE.avgSize, vcsData.AVERAGE.count,
-        vcsData.EXCELLENT.avgPrice, vcsData.EXCELLENT.avgAGI, vcsData.EXCELLENT.avgSize, vcsData.EXCELLENT.count, vcsData.EXCELLENT.pctDiff + '%',
-        vcsData.GOOD.avgPrice, vcsData.GOOD.avgAGI, vcsData.GOOD.avgSize, vcsData.GOOD.count, vcsData.GOOD.pctDiff + '%',
-        vcsData.FAIR.avgPrice, vcsData.FAIR.avgAGI, vcsData.FAIR.avgSize, vcsData.FAIR.count, vcsData.FAIR.pctDiff + '%',
-        vcsData.POOR.avgPrice, vcsData.POOR.avgAGI, vcsData.POOR.avgSize, vcsData.POOR.count, vcsData.POOR.pctDiff + '%'
+        avg.avgPrice || 0, avg.avgAGI || 0, avg.avgSize || 0, avg.count || 0,
+        exc.avgPrice || 0, exc.avgAGI || 0, exc.avgSize || 0, exc.count || 0, (exc.pctDiff || 0) + '%',
+        good.avgPrice || 0, good.avgAGI || 0, good.avgSize || 0, good.count || 0, (good.pctDiff || 0) + '%',
+        fair.avgPrice || 0, fair.avgAGI || 0, fair.avgSize || 0, fair.count || 0, (fair.pctDiff || 0) + '%',
+        poor.avgPrice || 0, poor.avgAGI || 0, poor.avgSize || 0, poor.count || 0, (poor.pctDiff || 0) + '%'
       ]);
     });
     return rows;
@@ -499,13 +508,22 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     const int = conditionResults.interior || {};
     Object.keys(int).forEach(vcs => {
       const vcsData = int[vcs];
+      if (!vcsData || typeof vcsData !== 'object') return;
+
+      // Ensure all condition buckets exist with defaults
+      const avg = vcsData.AVERAGE || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0 };
+      const exc = vcsData.EXCELLENT || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
+      const good = vcsData.GOOD || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
+      const fair = vcsData.FAIR || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
+      const poor = vcsData.POOR || { avgPrice: 0, avgAGI: 0, avgSize: 0, count: 0, pctDiff: 0 };
+
       rows.push([
         vcs,
-        vcsData.AVERAGE.avgPrice, vcsData.AVERAGE.avgAGI, vcsData.AVERAGE.avgSize, vcsData.AVERAGE.count,
-        vcsData.EXCELLENT.avgPrice, vcsData.EXCELLENT.avgAGI, vcsData.EXCELLENT.avgSize, vcsData.EXCELLENT.count, vcsData.EXCELLENT.pctDiff + '%',
-        vcsData.GOOD.avgPrice, vcsData.GOOD.avgAGI, vcsData.GOOD.avgSize, vcsData.GOOD.count, vcsData.GOOD.pctDiff + '%',
-        vcsData.FAIR.avgPrice, vcsData.FAIR.avgAGI, vcsData.FAIR.avgSize, vcsData.FAIR.count, vcsData.FAIR.pctDiff + '%',
-        vcsData.POOR.avgPrice, vcsData.POOR.avgAGI, vcsData.POOR.avgSize, vcsData.POOR.count, vcsData.POOR.pctDiff + '%'
+        avg.avgPrice || 0, avg.avgAGI || 0, avg.avgSize || 0, avg.count || 0,
+        exc.avgPrice || 0, exc.avgAGI || 0, exc.avgSize || 0, exc.count || 0, (exc.pctDiff || 0) + '%',
+        good.avgPrice || 0, good.avgAGI || 0, good.avgSize || 0, good.count || 0, (good.pctDiff || 0) + '%',
+        fair.avgPrice || 0, fair.avgAGI || 0, fair.avgSize || 0, fair.count || 0, (fair.pctDiff || 0) + '%',
+        poor.avgPrice || 0, poor.avgAGI || 0, poor.avgSize || 0, poor.count || 0, (poor.pctDiff || 0) + '%'
       ]);
     });
     return rows;
