@@ -40,6 +40,22 @@ const LandValuationTab = ({
 }) => {
   // ========== MAIN TAB STATE ==========
   const [activeSubTab, setActiveSubTab] = useState('land-rates');
+
+  // Listen for external navigation events to set LandValuation inner subtab
+  useEffect(() => {
+    const handler = (e) => {
+      try {
+        const tabId = e?.detail?.tabId;
+        if (!tabId) return;
+        const valid = ['land-rates', 'allocation', 'vcs-sheet', 'eco-obs'];
+        if (valid.includes(tabId)) setActiveSubTab(tabId);
+      } catch (err) {
+        console.error('navigate_landvaluation_subtab handler error', err);
+      }
+    };
+    window.addEventListener('navigate_landvaluation_subtab', handler);
+    return () => window.removeEventListener('navigate_landvaluation_subtab', handler);
+  }, []);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
@@ -973,7 +989,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (newSales.length > 0) {
-        debug('🔄 Found new sales to add:', newSales.length);
+        debug('���� Found new sales to add:', newSales.length);
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
           const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
@@ -1900,7 +1916,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       
       setLandNotes(prev => ({
         ...prev, 
-        [property.id]: '📋 Prompt copied! Opening Claude... (paste response here when ready)'
+        [property.id]: '�� Prompt copied! Opening Claude... (paste response here when ready)'
       }));
       
       window.open('https://claude.ai/new', '_blank');
