@@ -830,19 +830,18 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               </label>
 
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">Type/Use:</span>
+                <span className="text-sm font-medium">Type & Use:</span>
                 <select
                   value={typeUseFilter}
                   onChange={(e) => setTypeUseFilter(e.target.value)}
-                  className="border rounded px-2 py-1 text-sm"
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  style={{ minWidth: '200px' }}
                 >
-                  <option value="all">All Properties</option>
-                  <option value="residential">Residential Only</option>
-                  <option value="commercial">Commercial Only</option>
-                  <option value="10">Single Family (10)</option>
-                  <option value="11">Two Family (11)</option>
-                  <option value="42,43,44">Multi-Family (42-44)</option>
-                  <option value="60,61,62">Commercial (60-62)</option>
+                  {getTypeUseOptions().map(option => (
+                    <option key={option.code} value={option.code}>
+                      {option.description}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
