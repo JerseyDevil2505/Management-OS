@@ -24,7 +24,7 @@ function downloadCsv(filename, headers, rows) {
 const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {} , onUpdateJobCache = () => {} }) => {
   const [active, setActive] = useState('condition');
 
-  const mlv = jobData.market_land_valuation || marketLandData || {};
+  const mlv = (jobData && jobData.market_land_valuation) || marketLandData || {};
 
   const conditionRollup = mlv.condition_analysis_rollup || {};
   const customRollup = mlv.custom_attribute_rollup || {};
@@ -32,7 +32,14 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {} 
   const propMap = mlv.attribute_card_property_map || {};
 
   // Editing state for condition rollup
-  const [editingCondition, setEditingCondition] = useState(null);
+  const [editingCondition, setEditingCondition] = useState(() => {
+    try {
+      return conditionRollup && conditionRollup.buckets ? JSON.parse(JSON.stringify(conditionRollup)) : { buckets: [] };
+    } catch (e) {
+      return { buckets: [] };
+    }
+  });
+
   // Raw fields and custom analysis state
   const [rawFields, setRawFields] = useState([]);
   const [selectedRawField, setSelectedRawField] = useState('');
@@ -41,29 +48,36 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {} 
   const [customAnalysisResults, setCustomAnalysisResults] = useState(null);
   const [statusMessage, setStatusMessage] = useState('');
 
+  // Discover raw fields when job changes or properties list changes
   useEffect(() => {
-    // Discover raw fields from the first property (same pattern as DataQualityTab)
+    let mounted = true;
     const populateRawDataFields = async () => {
       if (!jobData?.id || !Array.isArray(properties) || properties.length === 0) return;
       try {
         const sampleProperty = properties[0];
         const rawData = await propertyService.getRawDataForProperty(sampleProperty.job_id, sampleProperty.property_composite_key);
+        if (!mounted) return;
         if (rawData && typeof rawData === 'object') {
           const fieldNames = Object.keys(rawData).sort();
           setRawFields(fieldNames);
-          if (fieldNames.length) setSelectedRawField(fieldNames[0]);
+          if (fieldNames.length && !selectedRawField) setSelectedRawField(fieldNames[0]);
         }
       } catch (e) {
         console.error('Error loading raw data fields:', e);
       }
     };
     populateRawDataFields();
+    return () => { mounted = false; };
   }, [jobData?.id, properties]);
 
+  // Reset editingCondition only when job changes (prevent update-loop)
   useEffect(() => {
-    // Initialize editing state from existing rollup
-    setEditingCondition(conditionRollup && conditionRollup.buckets ? JSON.parse(JSON.stringify(conditionRollup)) : { buckets: [] });
-  }, [conditionRollup]);
+    try {
+      setEditingCondition(conditionRollup && conditionRollup.buckets ? JSON.parse(JSON.stringify(conditionRollup)) : { buckets: [] });
+    } catch (e) {
+      setEditingCondition({ buckets: [] });
+    }
+  }, [jobData?.id]);
 
   const conditionRows = useMemo(() => {
     const buckets = Array.isArray((editingCondition && editingCondition.buckets) || conditionRollup.buckets) ? (editingCondition && editingCondition.buckets) || conditionRollup.buckets : [];
@@ -86,12 +100,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {} 
       const payload = { condition_analysis_rollup: editingCondition };
       const { error } = await supabase.from('market_land_valuation').update(payload).eq('job_id', jobData.id);
       if (error) {
-        // Try insert if update failed because row doesn't exist
-        const insertErr = await supabase.from('market_land_valuation').insert({ job_id: jobData.id, ...payload });
-        if (insertErr.error) throw insertErr.error;
+        const ins = await supabase.from('market_land_valuation').insert({ job_id: jobData.id, ...payload });
+        if (ins.error) throw ins.error;
       }
       setStatusMessage('Condition rollup saved');
-      // Notify parent to refresh cache if provided
       onUpdateJobCache && onUpdateJobCache();
     } catch (e) {
       console.error('Save condition rollup error', e);
@@ -107,15 +119,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {} 
     setStatusMessage('Running custom attribute analysis...');
 
     try {
-      // Use propertyService client-side parsing to fetch source file map once for speed
-      // propertyService.getRawDataForProperty will fallback to client-side method efficiently
       const results = {
         overall: { n_with: 0, n_without: 0, avg_with: 0, avg_without: 0, flat_adj: 0, pct_adj: 0 },
         byVCS: {}
       };
 
       const valueMap = new Map();
-      // We'll batch fetch raw data per property with Promise.all but limit to 500 concurrent in small chunks to avoid overloading
       const chunkSize = 500;
       for (let i = 0; i < properties.length; i += chunkSize) {
         const chunk = properties.slice(i, i + chunkSize);
@@ -127,27 +136,22 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {} 
         resolved.forEach(({ p, raw }) => valueMap.set(p.property_composite_key, { property: p, raw }));
       }
 
-      // Evaluate match function
       const isMatch = (rawVal) => {
         if (matchValue === '') return rawVal !== undefined && rawVal !== null && String(rawVal).toString().trim() !== '';
-        // exact string match (case-insensitive) or numeric equality
         try {
           if (String(rawVal).trim().toUpperCase() === String(matchValue).trim().toUpperCase()) return true;
         } catch (e) {}
-        // numeric compare
         const numA = Number(rawVal);
         const numB = Number(matchValue);
         if (!Number.isNaN(numA) && !Number.isNaN(numB) && Math.abs(numA - numB) < 1e-6) return true;
         return false;
       };
 
-      // Aggregate
       for (const [key, { property: p, raw }] of valueMap.entries()) {
         const rawVal = raw ? raw[selectedRawField] : undefined;
         const hasAttr = isMatch(rawVal);
         const timePrice = (p.values_norm_time !== undefined && p.values_norm_time !== null && Number(p.values_norm_time) > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : null);
 
-        // global
         if (hasAttr) {
           results.overall.n_with++;
           if (timePrice) results.overall.avg_with += timePrice;
@@ -156,7 +160,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {} 
           if (timePrice) results.overall.avg_without += timePrice;
         }
 
-        // per VCS grouping
         const vcs = p.new_vcs || p.property_vcs || p.property_vcs || 'UNSPEC';
         results.byVCS[vcs] = results.byVCS[vcs] || { n_with: 0, n_without: 0, sum_with: 0, sum_without: 0 };
         if (hasAttr) {
@@ -168,7 +171,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {} 
         }
       }
 
-      // Finalize averages and adjustments
       if (results.overall.n_with > 0) results.overall.avg_with = Math.round(results.overall.avg_with / results.overall.n_with);
       else results.overall.avg_with = null;
       if (results.overall.n_without > 0) results.overall.avg_without = Math.round(results.overall.avg_without / results.overall.n_without);
@@ -181,7 +183,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {} 
         results.overall.flat_adj = null; results.overall.pct_adj = null;
       }
 
-      // per VCS finalize
       Object.keys(results.byVCS).forEach(v => {
         const g = results.byVCS[v];
         g.avg_with = g.n_with > 0 ? Math.round(g.sum_with / g.n_with) : null;
@@ -237,10 +238,30 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {} 
   function exportCustom() {
     if (!customAnalysisResults) return;
     const headers = ['Key','Val1','Val2','Val3','Val4','Flat_adj','Pct_adj'];
-    // Flatten rows
     const rows = customRows.map(r => r.map(c => c));
     downloadCsv(`${jobData.job_name || 'job'}-custom-attributes.csv`, headers, rows);
   }
+
+  // Additional cards rows
+  const addlRows = useMemo(() => {
+    const rows = [];
+    const micros = addlCards.microsystems || {};
+    if (micros && Object.keys(micros).length) {
+      rows.push(['Microsystems Card Summary', 'Card', 'Count']);
+      Object.keys(micros).forEach(k => rows.push(['', k, micros[k]]));
+    }
+    const brt = Array.isArray(addlCards.brt_card_counts) ? addlCards.brt_card_counts : [];
+    if (brt.length) {
+      rows.push(['BRT Card Counts', 'Count', 'Properties']);
+      brt.forEach(b => rows.push(['', b.count, b.n]));
+    }
+    const vcs = Array.isArray(addlCards.vcs_summary) ? addlCards.vcs_summary : [];
+    if (vcs.length) {
+      rows.push(['VCS Summary', 'VCS', 'Sample Properties (count)']);
+      vcs.forEach(v => rows.push(['', v.vcs, (Array.isArray(v.sample_properties) ? v.sample_properties.length : (v.n || 0))]));
+    }
+    return rows;
+  }, [addlCards]);
 
   // Additional card sample helper
   function getSampleProperties() {
@@ -255,7 +276,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {} 
       const next = JSON.parse(JSON.stringify(old || { buckets: [] }));
       if (!Array.isArray(next.buckets)) next.buckets = [];
       if (!next.buckets[idx]) next.buckets[idx] = {};
-      // try parse numeric
       const num = Number(val);
       next.buckets[idx][field] = (val === '' || val === null) ? null : (Number.isFinite(num) ? num : val);
       return next;
@@ -287,7 +307,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {} 
               <h3 id="condition-table" className="text-lg font-medium">Condition Analysis by bucket</h3>
               <div className="flex items-center gap-2">
                 <button onClick={() => downloadCsv(`${jobData.job_name || 'job'}-condition-analysis.csv`, ['Bucket','Type','Use','N','Avg_values_norm_time','Recommended_adj','Actual_adj','Delta%'], conditionRows.map(r => [r.key,r.type,r.use,r.n,r.avg_values_norm_time,r.recommended_adj,r.actual_adj,r.delta_pct ? `${Math.round(r.delta_pct)}%` : ''] ))} className={CSV_BUTTON_CLASS}><FileText size={14}/> Export CSV</button>
-                <button className={CSV_BUTTON_CLASS} onClick={() => { setEditingCondition(conditionRollup); setStatusMessage('Edit mode'); setTimeout(()=>setStatusMessage(''),1500); }}>Edit</button>
+                <button className={CSV_BUTTON_CLASS} onClick={() => { setEditingCondition(conditionRollup && conditionRollup.buckets ? JSON.parse(JSON.stringify(conditionRollup)) : { buckets: [] }); setStatusMessage('Edit mode'); setTimeout(()=>setStatusMessage(''),1500); }}>Edit</button>
                 <button className={CSV_BUTTON_CLASS} onClick={saveConditionRollup}>Save Changes</button>
               </div>
             </div>
