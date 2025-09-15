@@ -4,6 +4,7 @@ import {
   TrendingUp, RefreshCw, Download, Filter, ChevronDown, ChevronUp,
   AlertCircle, Home, Building, Calendar, MapPin, Layers, DollarSign
 } from 'lucide-react';
+import './sharedTabNav.css';
 
 const OverallAnalysisTab = ({ 
   properties = [], 
