@@ -3001,7 +3001,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         if (error) throw error;
       }
 
-      debug('✅ Save completed successfully');
+      debug('��� Save completed successfully');
       setLastSaved(new Date());
 
       // Notify parent component
@@ -5637,7 +5637,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       debug('Failed to render implied front foot rates:', e);
                       return (
                         <tr>
-                          <td colSpan="7" style={{ padding: '8px', color: '#EF4444' }}>Error rendering table</td>
+                          <td colSpan="6" style={{ padding: '8px', color: '#EF4444' }}>Error rendering table</td>
                         </tr>
                       );
                     }
