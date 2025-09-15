@@ -5468,7 +5468,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <tr style={{ backgroundColor: '#F9FAFB' }}>
                     <th style={{ padding: '6px', textAlign: 'left', border: '1px solid #E5E7EB' }}>Zoning</th>
                     <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Zoning Lot</th>
-                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Implied $/Acre</th>
                     <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Land Value</th>
                     <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Min Frontage</th>
                     <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Standard FF</th>
