@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase, interpretCodes, worksheetService, checklistService, runUnitRateLotCalculation, runUnitRateLotCalculation_v2, computeLotAcreForProperty, persistComputedLotAcre, normalizeSelectedCodes, saveUnitRateMappings, generateLotSizesForJob } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
+import './sharedTabNav.css';
 import { 
   TrendingUp, 
   Download, 
@@ -719,7 +720,7 @@ useEffect(() => {
     const eqRatio = config.equalizationRatio || '';
     const outThreshold = config.outlierThreshold || '';
 
-    if (false) console.log(`🔧 Setting equalizationRatio: "${eqRatio}" (was: "${equalizationRatio}")`);
+    if (false) console.log(`�� Setting equalizationRatio: "${eqRatio}" (was: "${equalizationRatio}")`);
     if (false) console.log(`🔧 Setting outlierThreshold: "${outThreshold}" (was: "${outlierThreshold}")`);
 
     setEqualizationRatio(eqRatio);
