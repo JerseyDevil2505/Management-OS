@@ -281,51 +281,15 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       console.log('Exterior VCS count:', Object.keys(exteriorAnalysis).length);
       console.log('Interior VCS count:', Object.keys(interiorAnalysis).length);
 
-      // finalize averages
-      const finalize = (groupObj) => {
-        const byVCS = groupObj.byVCS || {};
-        Object.keys(byVCS).forEach(vcs => {
-          Object.keys(byVCS[vcs]).forEach(rating => {
-            const b = byVCS[vcs][rating];
-            b.avg_price = b.n > 0 ? Math.round(b.total_price / b.n) : null;
-            b.avg_size = b.n > 0 ? Math.round(b.total_size / b.n) : null;
-            b.price_per_sf = (b.avg_price && b.avg_size) ? Number((b.avg_price / b.avg_size).toFixed(2)) : null;
-          });
-        });
+      const rollup = {
+        exterior: exteriorAnalysis,
+        interior: interiorAnalysis,
+        tested_adjustments: {
+          exterior: testedExterior,
+          interior: testedInterior
+        },
+        generated_at: new Date().toISOString()
       };
-
-      finalize(exterior);
-      finalize(interior);
-
-      // Compute tested adjustments: for each rating compute delta vs GOOD baseline across all VCS combined
-      const aggByRating = (groupObj) => {
-        const totals = {}; // rating -> {n, total_price}
-        Object.values(groupObj.byVCS || {}).forEach(vcsObj => {
-          Object.entries(vcsObj).forEach(([rating, b]) => {
-            totals[rating] = totals[rating] || { n:0, total_price:0 };
-            totals[rating].n += b.n || 0;
-            totals[rating].total_price += b.total_price || 0;
-          });
-        });
-        const baseline = totals['GOOD'] && totals['GOOD'].n > 0 ? (totals['GOOD'].total_price / totals['GOOD'].n) : null;
-        const tested = {};
-        Object.keys(totals).forEach(r => {
-          const avg = totals[r].n > 0 ? (totals[r].total_price / totals[r].n) : null;
-          if (avg != null && baseline != null) {
-            const flat = Math.round(avg - baseline);
-            const pct = baseline !== 0 ? (flat / baseline) * 100 : null;
-            tested[r] = { avg: Math.round(avg), flat_adj: flat, pct_adj: pct != null ? Number(pct.toFixed(1)) : null };
-          } else {
-            tested[r] = { avg: avg != null ? Math.round(avg) : null, flat_adj: null, pct_adj: null };
-          }
-        });
-        return { baseline: baseline ? Math.round(baseline) : null, tested };
-      };
-
-      const tested_exterior = aggByRating(exterior);
-      const tested_interior = aggByRating(interior);
-
-      const rollup = { exterior, interior, tested_adjustments: { exterior: tested_exterior, interior: tested_interior }, generated_at: new Date().toISOString() };
 
       setConditionResults(rollup);
 
