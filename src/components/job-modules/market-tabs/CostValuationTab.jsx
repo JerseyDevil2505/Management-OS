@@ -686,20 +686,6 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                     return val ? Number(val).toFixed(2) : '���';
                   })()}</td>
 
-                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
-                    const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
-                    const detItemsRow = (p.values_det_items !== undefined && p.values_det_items !== null) ? Number(p.values_det_items) : 0;
-                    const baseVal = (p.values_base_cost !== undefined && p.values_base_cost !== null) ? Number(p.values_base_cost) : 0;
-                    const yearBuiltRow = p.asset_year_built || '';
-                    const deprRow = yearBuiltRow ? (1 - ((currentYear - parseInt(yearBuiltRow, 10)) / 100)) : '';
-                    const replWithDeprRow = (deprRow !== '' ? Math.round((detItemsRow + baseVal) * deprRow) : null);
-                    const salePriceRow = basisPrice;
-                    const camaRow = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
-                    const improvRow = Math.round(salePriceRow - camaRow - detItemsRow);
-                    if (!replWithDeprRow) return '—';
-                    const val = (improvRow && replWithDeprRow) ? (improvRow / replWithDeprRow) : null;
-                    return val ? Number(val).toFixed(2) : '—';
-                  })()}</td>
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100 bg-yellow-50">{(() => {
                     const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
