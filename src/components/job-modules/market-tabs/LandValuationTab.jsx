@@ -1882,7 +1882,7 @@ Class: ${property.property_m4_class === '2' ? 'Residential (possible teardown)' 
 
 Find specific information about this property and sale. Include:
 
-��� Property ownership/seller details
+���� Property ownership/seller details
 • Tax assessment and classification details
 • Documented environmental constraints (wetlands, floodplains)
 • Municipality-specific land use characteristics
@@ -5592,9 +5592,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           const perSqFt = perAcre && perAcre !== 'N/A' ? (parseFloat(perAcre) / 43560) : null;
                           landValue = (perSqFt && typicalLotSF) ? Math.round(perSqFt * typicalLotSF) : '';
                         }
-
-                        // Implied $/Acre for this zoning based on adjusted land value
-                        const impliedPerAcre = (landValue && typicalLotSF) ? Math.round(landValue / (typicalLotSF / 43560)) : 'N/A';
 
                         // Standard FF: integer, Excess FF = half (integer)
                         const standardFF = (landValue && minFrontage) ? Math.round(landValue / minFrontage) : '';
