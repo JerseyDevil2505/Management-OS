@@ -369,6 +369,24 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     }
   };
 
+  // Save cascade adjustments
+  const saveConditionAdjustments = async () => {
+    try {
+      const rollup = {
+        ...conditionResults,
+        exterior_cascade: exteriorCascade,
+        interior_cascade: interiorCascade,
+        updated_at: new Date().toISOString()
+      };
+
+      await saveRollupToDB(jobData.id, { condition_analysis_rollup: rollup });
+      setConditionResults(rollup);
+      console.log('✅ Condition adjustments saved');
+    } catch (e) {
+      console.error('Failed to save condition adjustments:', e);
+    }
+  };
+
   // Custom attribute analysis enhanced to apply size-normalization when group sizes differ
   const runCustomAttributeAnalysis = async () => {
     if (!selectedRawField || !jobData?.id) return;
