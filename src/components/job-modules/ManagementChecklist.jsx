@@ -989,12 +989,43 @@ useEffect(() => {
     }
   };
 
-  // Navigate to analysis section (placeholder - implement based on your navigation)
+  // Navigate to analysis section: switch to Market Analysis module and select correct inner tab
   const navigateToAnalysisSection = (sectionName) => {
-    console.log(`Navigate to analysis section: ${sectionName}`);
-    // TODO: Implement navigation to the specific analysis component
-    // This might use onSubModuleChange or a router
-    alert(`This will navigate to the ${sectionName} section when implemented`);
+    try {
+      console.log(`Navigate to analysis section: ${sectionName}`);
+      // Map checklist item text to MarketAnalysis inner tab ids
+      const mapping = {
+        'Data Quality Analysis': 'data-quality',
+        'Market Analysis': 'overall-analysis',
+        'Page by Page Analysis': 'pre-valuation',
+        'Land Value Tables Built': 'land-valuation',
+        'Land Values Entered': 'land-valuation',
+        'Economic Obsolescence Study': 'land-valuation',
+        'VCS Reviewed/Reset': 'land-valuation',
+        'Cost Conversion Factor Set': 'cost-valuation',
+        'Building Class Review/Updated': 'pre-valuation',
+        'Effective Age Loaded/Set': 'pre-valuation',
+        'Final Values Ready': 'final-valuation'
+      };
+
+      const targetTab = mapping[sectionName] || 'data-quality';
+
+      // First switch parent module to Market & Land Analysis
+      if (typeof onSubModuleChange === 'function') {
+        onSubModuleChange('market-analysis');
+      }
+
+      // Give the parent a moment to render MarketAnalysis, then dispatch an event to select the inner tab
+      setTimeout(() => {
+        try {
+          window.dispatchEvent(new CustomEvent('navigate_market_analysis_tab', { detail: { tabId: targetTab } }));
+        } catch (e) {
+          console.error('Failed to dispatch navigate_market_analysis_tab event', e);
+        }
+      }, 150);
+    } catch (e) {
+      console.error('navigateToAnalysisSection error:', e);
+    }
   };
 
   if (!jobData) {
