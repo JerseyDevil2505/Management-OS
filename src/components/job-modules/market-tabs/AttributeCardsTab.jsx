@@ -97,20 +97,29 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       const normalizeCondition = (condCode) => {
         if (!condCode) return null;
 
-        if (vendorType === 'Microsystems') {
+        // Clean the condition code - trim whitespace and convert to uppercase
+        const cleanCode = condCode.toString().trim().toUpperCase();
+
+        console.log(`🔍 Normalizing condition: "${condCode}" -> "${cleanCode}" (vendor: ${vendorType})`);
+
+        if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
           // Microsystems: E=Excellent, G=Good, A=Average, F=Fair, P=Poor
           const condMap = {
             'E': 'EXCELLENT', 'G': 'GOOD', 'A': 'AVERAGE',
             'F': 'FAIR', 'P': 'POOR'
           };
-          return condMap[condCode.toString().toUpperCase()] || null;
+          const result = condMap[cleanCode] || null;
+          console.log(`   Microsystems mapping: "${cleanCode}" -> ${result}`);
+          return result;
         } else {
           // BRT: 01=Excellent, 02=Good, 03=Average, 04=Fair, 05=Poor
           const condMap = {
             '01': 'EXCELLENT', '02': 'GOOD', '03': 'AVERAGE',
             '04': 'FAIR', '05': 'POOR'
           };
-          return condMap[condCode.toString()] || null;
+          const result = condMap[cleanCode] || null;
+          console.log(`   BRT mapping: "${cleanCode}" -> ${result}`);
+          return result;
         }
       };
 
