@@ -5467,7 +5467,76 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   </tr>
                 </thead>
                 <tbody>
-                  {/* This would be populated with zoning-specific calculations */}
+                  {(() => {
+                    try {
+                      const zcfg = marketLandData?.zoning_config || {};
+                      const zoneKeys = Object.keys(zcfg || {}).sort();
+                      if (zoneKeys.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan="7" style={{ padding: '8px', color: '#6B7280' }}>
+                              No zoning with depth tables available.
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      // Choose lowest bracket with data from Method 2 summary
+                      const chosenPerAcre = (() => {
+                        if (method2Summary?.mediumRange?.perAcre && method2Summary.mediumRange.perAcre !== 'N/A') return method2Summary.mediumRange.perAcre;
+                        if (method2Summary?.largeRange?.perAcre && method2Summary.largeRange.perAcre !== 'N/A') return method2Summary.largeRange.perAcre;
+                        if (method2Summary?.xlargeRange?.perAcre && method2Summary.xlargeRange.perAcre !== 'N/A') return method2Summary.xlargeRange.perAcre;
+                        return null;
+                      })();
+
+                      return zoneKeys.map(zoneKey => {
+                        const entry = zcfg[zoneKey] || zcfg[zoneKey?.toUpperCase?.()] || zcfg[zoneKey?.toLowerCase?.()] || null;
+                        if (!entry) return null;
+                        const depthTable = entry.depth_table || entry.depthTable || entry.depth_table_name || '';
+                        const minFrontage = entry.min_frontage || entry.minFrontage || null;
+
+                        // Only include zones with an assigned depth table AND a min frontage
+                        if (!depthTable || !minFrontage) return null;
+
+                        // Typical lot: average lot size for properties with this zoning
+                        const propsForZone = (properties || []).filter(p => p.asset_zoning && p.asset_zoning.toString().trim().toLowerCase() === zoneKey.toString().trim().toLowerCase());
+                        let avgAcres = null;
+                        if (propsForZone.length > 0) {
+                          avgAcres = propsForZone.reduce((s, p) => s + (calculateAcreage(p) || 0), 0) / propsForZone.length;
+                        }
+
+                        const typicalLotAcres = avgAcres !== null ? Number(avgAcres.toFixed(2)) : '';
+                        const typicalLotSF = avgAcres !== null ? Math.round(avgAcres * 43560) : '';
+
+                        const perAcre = chosenPerAcre != null ? chosenPerAcre : 'N/A';
+                        const perSqFt = perAcre && perAcre !== 'N/A' ? (parseFloat(perAcre) / 43560) : null;
+
+                        const landValue = (perSqFt && typicalLotSF) ? Math.round(perSqFt * typicalLotSF) : '';
+
+                        const standardFF = (landValue && minFrontage) ? Number((landValue / minFrontage).toFixed(2)) : '';
+                        const excessFF = standardFF ? Number((standardFF / 2).toFixed(2)) : '';
+
+                        return (
+                          <tr key={zoneKey}>
+                            <td style={{ padding: '6px' }}>{zoneKey}</td>
+                            <td style={{ padding: '6px', textAlign: 'right' }}>{typicalLotAcres !== '' ? `${typicalLotAcres} / ${typicalLotSF.toLocaleString()} SF` : 'N/A'}</td>
+                            <td style={{ padding: '6px', textAlign: 'right' }}>{perAcre !== 'N/A' ? `$${Number(perAcre).toLocaleString()}` : 'N/A'}</td>
+                            <td style={{ padding: '6px', textAlign: 'right' }}>{landValue !== '' ? `$${Number(landValue).toLocaleString()}` : 'N/A'}</td>
+                            <td style={{ padding: '6px', textAlign: 'right' }}>{minFrontage}</td>
+                            <td style={{ padding: '6px', textAlign: 'right' }}>{standardFF !== '' ? `$${standardFF.toFixed(2)}` : 'N/A'}</td>
+                            <td style={{ padding: '6px', textAlign: 'right' }}>{excessFF !== '' ? `$${excessFF.toFixed(2)}` : 'N/A'}</td>
+                          </tr>
+                        );
+                      });
+                    } catch (e) {
+                      debug('Failed to render implied front foot rates:', e);
+                      return (
+                        <tr>
+                          <td colSpan="7" style={{ padding: '8px', color: '#EF4444' }}>Error rendering table</td>
+                        </tr>
+                      );
+                    }
+                  })()}
                 </tbody>
               </table>
             </div>
