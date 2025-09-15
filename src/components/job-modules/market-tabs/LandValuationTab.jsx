@@ -3557,7 +3557,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     Object.entries(bracketAnalysis || {}).sort(([a],[b]) => a.localeCompare(b)).forEach(([vcs, data]) => {
       // VCS header row
-      const vcsSummary = `${data.totalSales || 0} sales • Avg $${Math.round(data.avgPrice || 0).toLocaleString()} • ${data.avgAcres != null ? Number(data.avgAcres.toFixed(2)) : ''} acres • $${Math.round(data.avgAdjusted || 0).toLocaleString()}`;
+      const vcsSummary = `${data.totalSales || 0} sales • Avg $${Math.round(data.avgPrice || 0).toLocaleString()} • ${data.avgAcres != null ? Number(data.avgAcres.toFixed(2)) : ''} acres �� $${Math.round(data.avgAdjusted || 0).toLocaleString()}`;
       method2Rows.push([`${vcs} - ${vcsSummary}`]);
       method2Rows.push([]);
 
@@ -6962,7 +6962,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '��') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('yearBuilt')}
@@ -8696,7 +8696,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   return (
     <div style={{ padding: '20px' }}>
       {/* Tab Navigation - FIXED STYLE */}
-      <div style={{ display: 'flex', gap: '10px', borderBottom: '2px solid #E5E7EB', marginBottom: '20px' }}>
+  <div className="mls-subtab-nav">
         {[
           { id: 'land-rates', label: 'Land Rates', icon: <TrendingUp size={16} /> },
           { id: 'allocation', label: 'Allocation Study', icon: <Calculator size={16} />, disabled: !cascadeConfig.normal.prime },
@@ -8707,24 +8707,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             key={tab.id}
             onClick={() => !tab.disabled && setActiveSubTab(tab.id)}
             disabled={tab.disabled}
-            style={{
-              padding: '12px 24px',
-              backgroundColor: 'transparent',
-              color: activeSubTab === tab.id ? '#3B82F6' : tab.disabled ? '#9CA3AF' : '#6B7280',
-              border: 'none',
-              borderBottom: activeSubTab === tab.id ? '2px solid #3B82F6' : '2px solid transparent',
-              cursor: tab.disabled ? 'not-allowed' : 'pointer',
-              fontWeight: activeSubTab === tab.id ? '600' : '400',
-              fontSize: '14px',
-              opacity: tab.disabled ? 0.5 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              transition: 'all 0.2s'
-            }}
+            className={`mls-subtab-btn mls-subtab-btn-lg ${activeSubTab === tab.id ? 'mls-subtab-btn--active' : ''} ${tab.disabled ? 'disabled' : ''}`}
           >
             {tab.icon}
-            {tab.label}
+            <span style={{ marginLeft: 6 }}>{tab.label}</span>
           </button>
         ))}
 
@@ -8732,9 +8718,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           <button
             onClick={() => exportToExcel('complete')}
             style={{
-              backgroundColor: '#8B5CF6',
-              color: 'white',
-              padding: '8px 12px',
               borderRadius: '4px',
               border: 'none',
               cursor: 'pointer',
