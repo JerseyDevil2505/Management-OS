@@ -95,7 +95,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
   // Formatting helpers
   const formatPrice = (val) => val ? `$${val.toLocaleString()}` : '—';
-  const formatSize = (val) => val ? val.toLocaleString() : '—';
+  const formatSize = (val) => val ? val.toLocaleString() : '���';
   const formatPct = (val) => val ? `${val.toFixed(1)}%` : '—';
   const formatYear = (val) => val ? Math.round(val) : '—';
 
@@ -304,9 +304,19 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       console.log('Exterior analysis properties:', exteriorProperties.length);
       console.log('Interior analysis properties:', interiorProperties.length);
 
+      // Debug field names
+      console.log('=== FIELD NAME CHECK ===');
+      if (properties.length > 0) {
+        const sample = properties[0];
+        console.log('All fields on property:', Object.keys(sample));
+        console.log('Looking for type_use, found:', getPropertyTypeUse(sample));
+        console.log('Looking for ext_cond, found:', getPropertyCondition(sample, 'exterior'));
+        console.log('Looking for int_cond, found:', getPropertyCondition(sample, 'interior'));
+      }
+
       // Discover actual conditions in data (dynamic)
-      const exteriorConditions = getUniqueConditions(exteriorProperties, 'asset_ext_cond');
-      const interiorConditions = getUniqueConditions(interiorProperties, 'asset_int_cond');
+      const exteriorConditions = getUniqueConditions(exteriorProperties, 'exterior');
+      const interiorConditions = getUniqueConditions(interiorProperties, 'interior');
 
       console.log('Found exterior conditions:', exteriorConditions);
       console.log('Found interior conditions:', interiorConditions);
