@@ -172,6 +172,40 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     });
   };
 
+  // Type/Use filter logic (exact from Land Valuation)
+  const applyTypeUseFilter = (properties, filterValue) => {
+    if (!filterValue || filterValue === 'all') return properties;
+
+    return properties.filter(p => {
+      const typeUse = getPropertyTypeUse(p).toString().trim();
+
+      if (filterValue === 'all_residential') {
+        // All codes starting with 1-6 are residential
+        return ['1','2','3','4','5','6'].some(prefix => typeUse.startsWith(prefix));
+      } else if (filterValue === '1') {
+        // Single family: codes starting with '1' (10-19)
+        return typeUse.startsWith('1');
+      } else if (filterValue === '2') {
+        // Duplex/Semi: codes starting with '2' (20-29)
+        return typeUse.startsWith('2');
+      } else if (filterValue === '3') {
+        // Row/Townhouse: 3E, 3I, 30, 31
+        return ['3E','3I','30','31'].includes(typeUse);
+      } else if (filterValue === '4') {
+        // MultiFamily: 42, 43, 44
+        return ['42','43','44'].includes(typeUse);
+      } else if (filterValue === '5') {
+        // Conversions: 51, 52, 53
+        return ['51','52','53'].includes(typeUse);
+      } else if (filterValue === '6') {
+        // Condominium: codes starting with '6' (60-69)
+        return typeUse.startsWith('6');
+      }
+
+      return false;
+    });
+  };
+
   // Helper: Apply base filters (entry, type/use)
   const applyFilters = (properties) => {
     let filtered = [...properties];
@@ -180,16 +214,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     filtered = applyEntryFilter(filtered);
 
     // Type/Use filter
-    if (typeUseFilter !== 'all') {
-      if (typeUseFilter === 'residential') {
-        filtered = filtered.filter(p => ['2', '3A'].includes(p.asset_propclass));
-      } else if (typeUseFilter === 'commercial') {
-        filtered = filtered.filter(p => ['4A', '4B', '4C'].includes(p.asset_propclass));
-      } else {
-        const codes = typeUseFilter.split(',');
-        filtered = filtered.filter(p => codes.includes(p.asset_typeuse));
-      }
-    }
+    filtered = applyTypeUseFilter(filtered, typeUseFilter);
+
     return filtered;
   };
 
