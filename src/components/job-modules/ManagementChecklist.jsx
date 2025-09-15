@@ -1430,16 +1430,16 @@ useEffect(() => {
     )
   )}
                   
-                  {/* Show Go to Section button for analysis items */}
-                  {item.is_analysis_item && (
-                    <button
-                      onClick={() => navigateToAnalysisSection(item.item_text)}
-                      className="px-3 py-1 bg-purple-500 text-white rounded-md text-sm hover:bg-purple-600 flex items-center gap-1"
-                    >
-                      <ArrowRight className="w-4 h-4" />
-                      Go to Section
-                    </button>
-                  )}
+                  {/* Show Go to Section button for analysis items unless explicitly replaced with Mark Complete */}
+  {item.is_analysis_item && !replaceGoToWithComplete.has(item.item_text) && (
+    <button
+      onClick={() => navigateToAnalysisSection(item.item_text)}
+      className="px-3 py-1 bg-purple-500 text-white rounded-md text-sm hover:bg-purple-600 flex items-center gap-1"
+    >
+      <ArrowRight className="w-4 h-4" />
+      Go to Section
+    </button>
+  )}
                   
                   {item.requires_client_approval && (
                     <button
