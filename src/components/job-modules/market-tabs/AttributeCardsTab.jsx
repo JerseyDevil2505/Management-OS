@@ -738,6 +738,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               <h3 className="text-lg font-medium">Condition Analysis</h3>
               <div className="flex items-center gap-2">
                 <button onClick={computeConditionAnalysis} className={CSV_BUTTON_CLASS}>{conditionWorking ? 'Working...' : 'Run Analysis'}</button>
+                <button onClick={saveConditionAnalysis} className={CSV_BUTTON_CLASS}>Save Analysis & Filters</button>
                 <button onClick={() => downloadCsv(`${jobData.job_name || 'job'}-condition-exterior.csv`, getExteriorCsvHeaders(), conditionExteriorRowsForCsv)} className={CSV_BUTTON_CLASS}><FileText size={14}/> Export Exterior CSV</button>
                 <button onClick={() => downloadCsv(`${jobData.job_name || 'job'}-condition-interior.csv`, getInteriorCsvHeaders(), conditionInteriorRowsForCsv)} className={CSV_BUTTON_CLASS}><FileText size={14}/> Export Interior CSV</button>
               </div>
