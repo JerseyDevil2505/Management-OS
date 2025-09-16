@@ -809,11 +809,12 @@ const getPricePerUnit = useCallback((price, size) => {
 
   useEffect(() => {
     if (properties && properties.length > 0) {
+      console.log('🔄 Triggering fresh calculations with FIXED DELTA LOGIC');
       filterVacantSales();
       performBracketAnalysis();
       loadVCSPropertyCounts();
     }
-  }, [properties, dateRange, valuationMode, method2TypeFilter]);
+  }, [properties, dateRange, valuationMode, method2TypeFilter, method2ExcludedSales]);
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
@@ -1177,11 +1178,8 @@ const getPricePerUnit = useCallback((price, size) => {
         // Multi-property package
         if (packageData.is_package_sale || packageData.package_count > 1) {
             // Prefer any precomputed combined lot acres from the analyzer
-          const totalPrice = packageData.package_properties.reduce((sum, pObj) => {
-            const compKey = (typeof pObj === 'string') ? pObj : (pObj.composite_key || pObj.compositeKey || pObj.property_composite_key || pObj.composite);
-            const p = group.find(g => g.property_composite_key === compKey) || properties.find(pp => pp.property_composite_key === compKey);
-            return sum + (p?.sales_price || 0);
-          }, 0);
+          // Use original property sales_price (don't sum - each property already has full package price)
+          const totalPrice = group[0].sales_price;
 
           let totalAcres = null;
           if (packageData.combined_lot_acres && !isNaN(Number(packageData.combined_lot_acres)) && Number(packageData.combined_lot_acres) > 0) {
@@ -1265,8 +1263,8 @@ const getPricePerUnit = useCallback((price, size) => {
 
       // Default: fall back to previous behavior
       if (group.length > 1) {
-        // Sum up package totals
-        const totalPrice = group.reduce((sum, p) => sum + p.sales_price, 0);
+        // Use original sale price (don't sum - properties already contain full package price)
+        const totalPrice = group[0].sales_price;
         const totalAcres = group.reduce((sum, p) => sum + calculateAcreage(p), 0);
         const pricePerUnit = getPricePerUnit(totalPrice, totalAcres);
 
@@ -1319,12 +1317,37 @@ const getPricePerUnit = useCallback((price, size) => {
 
     // CRITICAL FIX: Filter out excluded sales from Method 1 before setting finalSales
     const activeExcluded = window._method1ExcludedSales || method1ExcludedSales;
-    const filteredSales = finalSales.filter(sale => !activeExcluded.has(sale.id));
+    let filteredSales = finalSales.filter(sale => !activeExcluded.has(sale.id));
+
+    // Filter out packages containing properties with restricted property classes (2, 3A, 4A, 4B, 4C)
+    const restrictedClasses = ['2', '3A', '4A', '4B', '4C'];
+    const salesBeforeClassFilter = filteredSales.length;
+    filteredSales = filteredSales.filter(sale => {
+      // If it's not a package, include it
+      if (!sale.packageData || !sale.packageData.is_package || !sale.packageData.properties) {
+        return true;
+      }
+
+      // Check if any property in the package has a restricted class
+      const hasRestrictedClass = sale.packageData.properties.some(propertyKey => {
+        const prop = properties.find(p => p.property_composite_key === propertyKey);
+        return prop && restrictedClasses.includes(String(prop.property_m4_class));
+      });
+
+      if (hasRestrictedClass) {
+        debug(`🚫 Excluding package ${sale.property_block}/${sale.property_lot} - contains restricted property class`);
+        return false;
+      }
+
+      return true;
+    });
 
     debug('🔄 Applying Method 1 exclusions:', {
       totalSalesBeforeExclusion: finalSales.length,
       excludedSalesCount: activeExcluded.size,
-      totalSalesAfterExclusion: filteredSales.length,
+      totalSalesAfterExclusion: salesBeforeClassFilter,
+      packagesWithRestrictedClasses: salesBeforeClassFilter - filteredSales.length,
+      finalSalesCount: filteredSales.length,
       excludedIds: Array.from(activeExcluded),
       filteredOutSales: finalSales.filter(sale => activeExcluded.has(sale.id)).map(s => ({id: s.id, block: s.property_block, lot: s.property_lot}))
     });
@@ -1371,6 +1394,7 @@ const getPricePerUnit = useCallback((price, size) => {
   const performBracketAnalysis = useCallback(async () => {
     if (!properties || !jobData?.id) return;
 
+    console.log('🔄 performBracketAnalysis - FIXED DELTA CALCULATION:', new Date().toISOString());
     try {
       // Build time-normalized dataset from already-loaded properties (avoids extra DB joins)
       const timeNormalizedData = properties
@@ -1474,15 +1498,15 @@ const getPricePerUnit = useCallback((price, size) => {
           residual: rMax ? sales.filter(s => s.acres >= rMax) : []
         };
 
-        // Calculate overall VCS average LOT SF for size adjustment (we'll keep avgSFLA for compatibility/display)
-        const allValidLotSF = sales.filter(s => s.acres > 0).map(s => (s.acres * 43560));
-        const overallAvgLotSF = allValidLotSF.length > 0 ?
-          allValidLotSF.reduce((sum, s) => sum + s, 0) / allValidLotSF.length : null;
-
-        // Also compute overall avg SFLA for display compatibility
+        // Calculate overall VCS average SFLA for size adjustment (Method 2 uses SFLA)
         const allValidSFLA = sales.filter(s => s.sfla > 0);
         const overallAvgSFLA = allValidSFLA.length > 0 ?
           allValidSFLA.reduce((sum, s) => sum + s.sfla, 0) / allValidSFLA.length : null;
+
+        // Also compute overall avg LOT SF for Front Foot Rates table only
+        const allValidLotSF = sales.filter(s => s.acres > 0).map(s => (s.acres * 43560));
+        const overallAvgLotSF = allValidLotSF.length > 0 ?
+          allValidLotSF.reduce((sum, s) => sum + s, 0) / allValidLotSF.length : null;
 
         // FIXED statistics calculation
         const calcBracketStats = (arr) => {
@@ -1502,16 +1526,16 @@ const getPricePerUnit = useCallback((price, size) => {
           const avgSFLA = validSFLA.length > 0 ?
             validSFLA.reduce((sum, s) => sum + s.sfla, 0) / validSFLA.length : null;
 
-          // Compute average lot SF for this bracket
+          // Compute average lot SF for this bracket (only used for Front Foot Rates table)
           const validLotSF = arr.filter(s => s.acres > 0).map(s => (s.acres * 43560));
           const avgLotSF = validLotSF.length > 0 ? validLotSF.reduce((sum, v) => sum + v, 0) / validLotSF.length : null;
 
-          // Jim's Magic Formula for size adjustment (using lot square footage now)
+          // Jim's Magic Formula for size adjustment - METHOD 2 USES SFLA, NOT LOT SIZE
           let avgAdjusted = avgNormTime;
-          if (overallAvgLotSF && avgLotSF && avgLotSF > 0) {
-            const lotSfDiff = overallAvgLotSF - avgLotSF;
-            const pricePerLotSqFt = avgNormTime / avgLotSF;
-            const sizeAdjustment = lotSfDiff * (pricePerLotSqFt * 0.50);
+          if (overallAvgSFLA && avgSFLA && avgSFLA > 0) {
+            const sflaDiff = overallAvgSFLA - avgSFLA;
+            const pricePerSfla = avgNormTime / avgSFLA;
+            const sizeAdjustment = sflaDiff * (pricePerSfla * 0.50);
             avgAdjusted = avgNormTime + sizeAdjustment;
           }
 
@@ -1555,9 +1579,9 @@ const getPricePerUnit = useCallback((price, size) => {
 
       // Calculate Method 2 Summary by bracket ranges with positive deltas only
       const bracketRates = {
-        mediumRange: [], // 1.00-4.99 acre rates (medium vs small)
-        largeRange: [],  // 5.00-9.99 acre rates (large vs medium)
-        xlargeRange: [] // 10.00+ acre rates (xlarge vs large)
+        mediumRange: [], // 1.00-4.99 acre rates
+        largeRange: [],  // 5.00-9.99 acre rates
+        xlargeRange: [] // 10.00+ acre rates
       };
 
       Object.keys(vcsSales).forEach(vcs => {
@@ -1565,34 +1589,63 @@ const getPricePerUnit = useCallback((price, size) => {
         if (!vcsAnalysis) return;
 
         const { brackets } = vcsAnalysis;
+        const allBrackets = [brackets.small, brackets.medium, brackets.large, brackets.xlarge];
 
-        // 1.00-4.99 range: medium vs small
-        if (brackets.small.count > 0 && brackets.medium.count > 0) {
-          const priceDiff = brackets.medium.avgAdjusted - brackets.small.avgAdjusted;
-          const acresDiff = brackets.medium.avgAcres - brackets.small.avgAcres;
-          if (acresDiff > 0 && priceDiff > 0) {
-            const rate = Math.round(priceDiff / acresDiff);
-            bracketRates.mediumRange.push(rate);
+        // For each bracket, find the best comparison bracket (highest valid one below it)
+        const findBestComparison = (targetBracket, targetIndex) => {
+          let bestBracket = null;
+          let highestValidAdjusted = 0;
+
+          for (let i = 0; i < targetIndex; i++) {
+            const candidate = allBrackets[i];
+            if (candidate &&
+                candidate.count > 0 &&
+                candidate.avgAdjusted &&
+                candidate.avgAdjusted < targetBracket.avgAdjusted &&
+                candidate.avgAdjusted > highestValidAdjusted) {
+              bestBracket = candidate;
+              highestValidAdjusted = candidate.avgAdjusted;
+            }
+          }
+          return bestBracket;
+        };
+
+        // Medium range (comparing medium bracket to best lower bracket)
+        if (brackets.medium.count > 0 && brackets.medium.avgAdjusted) {
+          const comparison = findBestComparison(brackets.medium, 1);
+          if (comparison) {
+            const priceDiff = brackets.medium.avgAdjusted - comparison.avgAdjusted;
+            const acresDiff = brackets.medium.avgAcres - comparison.avgAcres;
+            if (acresDiff > 0 && priceDiff > 0) {
+              const rate = Math.round(priceDiff / acresDiff);
+              bracketRates.mediumRange.push(rate);
+            }
           }
         }
 
-        // 5.00-9.99 range: large vs medium
-        if (brackets.medium.count > 0 && brackets.large.count > 0) {
-          const priceDiff = brackets.large.avgAdjusted - brackets.medium.avgAdjusted;
-          const acresDiff = brackets.large.avgAcres - brackets.medium.avgAcres;
-          if (acresDiff > 0 && priceDiff > 0) {
-            const rate = Math.round(priceDiff / acresDiff);
-            bracketRates.largeRange.push(rate);
+        // Large range (comparing large bracket to best lower bracket)
+        if (brackets.large.count > 0 && brackets.large.avgAdjusted) {
+          const comparison = findBestComparison(brackets.large, 2);
+          if (comparison) {
+            const priceDiff = brackets.large.avgAdjusted - comparison.avgAdjusted;
+            const acresDiff = brackets.large.avgAcres - comparison.avgAcres;
+            if (acresDiff > 0 && priceDiff > 0) {
+              const rate = Math.round(priceDiff / acresDiff);
+              bracketRates.largeRange.push(rate);
+            }
           }
         }
 
-        // 10.00+ range: xlarge vs large
-        if (brackets.large.count > 0 && brackets.xlarge.count > 0) {
-          const priceDiff = brackets.xlarge.avgAdjusted - brackets.large.avgAdjusted;
-          const acresDiff = brackets.xlarge.avgAcres - brackets.large.avgAcres;
-          if (acresDiff > 0 && priceDiff > 0) {
-            const rate = Math.round(priceDiff / acresDiff);
-            bracketRates.xlargeRange.push(rate);
+        // XLarge range (comparing xlarge bracket to best lower bracket)
+        if (brackets.xlarge.count > 0 && brackets.xlarge.avgAdjusted) {
+          const comparison = findBestComparison(brackets.xlarge, 3);
+          if (comparison) {
+            const priceDiff = brackets.xlarge.avgAdjusted - comparison.avgAdjusted;
+            const acresDiff = brackets.xlarge.avgAcres - comparison.avgAcres;
+            if (acresDiff > 0 && priceDiff > 0) {
+              const rate = Math.round(priceDiff / acresDiff);
+              bracketRates.xlargeRange.push(rate);
+            }
           }
         }
       });
@@ -3043,7 +3096,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         onAnalysisUpdate(analysisData, options);
       }
     } catch (error) {
-      console.error('��� Save failed:', error);
+      console.error('���� Save failed:', error);
       console.error('Error details:', {
         message: error.message,
         code: error.code,
@@ -3585,7 +3638,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       bracketList.forEach((row, rowIndex) => {
         if (!row.bracket || row.bracket.count === 0) return;
-        const prevBracket = rowIndex > 0 ? bracketList[rowIndex - 1].bracket : null;
+        // Find last valid bracket with positive avgAdjusted (skip negative rows)
+        let prevBracket = null;
+        for (let i = rowIndex - 1; i >= 0; i--) {
+          const candidateBracket = bracketList[i].bracket;
+          if (candidateBracket && candidateBracket.avgAdjusted && candidateBracket.avgAdjusted > 0) {
+            prevBracket = candidateBracket;
+            break;
+          }
+        }
         const adjustedDelta = prevBracket && prevBracket.avgAdjusted && row.bracket.avgAdjusted ? row.bracket.avgAdjusted - prevBracket.avgAdjusted : null;
         const lotDelta = prevBracket && prevBracket.avgAcres && row.bracket.avgAcres ? row.bracket.avgAcres - prevBracket.avgAcres : null;
         const perAcre = adjustedDelta && lotDelta && lotDelta > 0 && adjustedDelta > 0 ? adjustedDelta / lotDelta : null;
@@ -5274,7 +5335,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales • Avg $${Math.round(data.avgPrice).toLocaleString()} • ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales • Avg $${Math.round(data.avgPrice).toLocaleString()} ��� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{ marginBottom: '8px', border: '1px solid #E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
@@ -5351,58 +5412,98 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             const eMax = cascadeConfig.normal?.excess?.max ?? 10;
                             const rMax = cascadeConfig.normal?.residual?.max ?? null;
 
-                            return [
-                              { key: 'small', label: `<${pMax.toFixed(2)}`, bracket: data.brackets.small },
-                              { key: 'medium', label: `${pMax.toFixed(2)}-${sMax.toFixed(2)}`, bracket: data.brackets.medium },
-                              { key: 'large', label: `${sMax.toFixed(2)}-${eMax.toFixed(2)}`, bracket: data.brackets.large },
-                              { key: 'xlarge', label: rMax ? `${eMax.toFixed(2)}-${rMax.toFixed(2)}` : `>${eMax.toFixed(2)}`, bracket: data.brackets.xlarge }
+                            const brackets = [
+                              { key: 'small', label: `<${pMax.toFixed(2)}`, data: data.brackets.small },
+                              { key: 'medium', label: `${pMax.toFixed(2)}-${sMax.toFixed(2)}`, data: data.brackets.medium },
+                              { key: 'large', label: `${sMax.toFixed(2)}-${eMax.toFixed(2)}`, data: data.brackets.large },
+                              { key: 'xlarge', label: rMax ? `${eMax.toFixed(2)}-${rMax.toFixed(2)}` : `>${eMax.toFixed(2)}`, data: data.brackets.xlarge }
                             ];
-                          })().map((row, rowIndex) => {
-                            if (row.bracket.count === 0) return null;
 
-                            // Calculate deltas from previous bracket
-                            const prevBracket = rowIndex > 0 ?
-                              [data.brackets.small, data.brackets.medium, data.brackets.large, data.brackets.xlarge][rowIndex - 1]
-                              : null;
+                            return brackets.map((bracket, index) => {
+                              if (!bracket.data || bracket.data.count === 0) return null;
 
-                            const adjustedDelta = prevBracket && prevBracket.avgAdjusted && row.bracket.avgAdjusted ?
-                              row.bracket.avgAdjusted - prevBracket.avgAdjusted : null;
-                            const lotDelta = prevBracket && prevBracket.avgAcres && row.bracket.avgAcres ?
-                              row.bracket.avgAcres - prevBracket.avgAcres : null;
-                            const perAcre = adjustedDelta && lotDelta && lotDelta > 0 && adjustedDelta > 0 ? adjustedDelta / lotDelta : null;
-                            const perSqFt = perAcre ? perAcre / 43560 : null;
+                              console.log(`Row ${index} (${bracket.label}):`, {
+                                avgAdjusted: bracket.data.avgAdjusted,
+                                avgAcres: bracket.data.avgAcres
+                              });
 
-                            return (
-                              <tr key={row.key} style={{ backgroundColor: '#FFFFFF' }}>
-                                <td style={{ padding: '6px 8px', fontWeight: '500', borderBottom: '1px solid #F1F3F4' }}>{row.label}</td>
-                                <td style={{ padding: '6px 8px', textAlign: 'center', borderBottom: '1px solid #F1F3F4' }}>{row.bracket.count}</td>
-                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
-                                  {row.bracket.avgAcres ? row.bracket.avgAcres.toFixed(2) : '-'}
-                                </td>
-                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
-                                  {row.bracket.avgSalePrice ? `$${Math.round(row.bracket.avgSalePrice).toLocaleString()}` : '-'}
-                                </td>
-                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
-                                  {row.bracket.avgSFLA ? Math.round(row.bracket.avgSFLA).toLocaleString() : '-'}
-                                </td>
-                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
-                                  {row.bracket.avgAdjusted ? `$${Math.round(row.bracket.avgAdjusted).toLocaleString()}` : '-'}
-                                </td>
-                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
-                                  {adjustedDelta ? `$${Math.round(adjustedDelta).toLocaleString()}` : '-'}
-                                </td>
-                                <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
-                                  {lotDelta ? lotDelta.toFixed(2) : '-'}
-                                </td>
-                                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
-                                  {perAcre ? `$${Math.round(perAcre).toLocaleString()}` : (adjustedDelta !== null && adjustedDelta <= 0 ? 'N/A' : '-')}
-                                </td>
-                                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
-                                  {perSqFt ? `$${perSqFt.toFixed(2)}` : (adjustedDelta !== null && adjustedDelta <= 0 ? 'N/A' : '-')}
-                                </td>
-                              </tr>
-                            );
-                          })}
+                              // Find the bracket with the highest adjusted value that's still lower than current
+                              let comparisonBracket = null;
+                              let highestValidAdjusted = 0;
+
+                              for (let i = 0; i < index; i++) {
+                                const candidate = brackets[i].data;
+                                console.log(`  Checking row ${i}:`, {
+                                  hasData: !!candidate,
+                                  avgAdjusted: candidate?.avgAdjusted,
+                                  wouldBePositiveDelta: candidate && bracket.data.avgAdjusted > candidate.avgAdjusted,
+                                  isHigherThanCurrent: candidate?.avgAdjusted > highestValidAdjusted
+                                });
+
+                                if (candidate &&
+                                    candidate.count > 0 &&
+                                    candidate.avgAdjusted &&
+                                    candidate.avgAdjusted < bracket.data.avgAdjusted &&
+                                    candidate.avgAdjusted > highestValidAdjusted) {
+                                  comparisonBracket = candidate;
+                                  highestValidAdjusted = candidate.avgAdjusted;
+                                  console.log(`  ✓ New best comparison: row ${i} (${candidate.avgAdjusted})`);
+                                }
+                              }
+
+                              if (!comparisonBracket) {
+                                console.log(`  ✗ No valid comparison found`);
+                              } else {
+                                console.log(`  ✅ Final comparison: ${highestValidAdjusted}`);
+                              }
+
+                              let adjustedDelta = null;
+                              let lotDelta = null;
+                              let perAcre = null;
+                              let perSqFt = null;
+
+                              if (comparisonBracket) {
+                                adjustedDelta = bracket.data.avgAdjusted - comparisonBracket.avgAdjusted;
+                                lotDelta = bracket.data.avgAcres - comparisonBracket.avgAcres;
+
+                                if (adjustedDelta > 0 && lotDelta > 0) {
+                                  perAcre = adjustedDelta / lotDelta;
+                                  perSqFt = perAcre / 43560;
+                                }
+                              }
+
+                              return (
+                                <tr key={bracket.key} style={{ backgroundColor: '#FFFFFF' }}>
+                                  <td style={{ padding: '6px 8px', fontWeight: '500', borderBottom: '1px solid #F1F3F4' }}>{bracket.label}</td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'center', borderBottom: '1px solid #F1F3F4' }}>{bracket.data.count}</td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                    {bracket.data.avgAcres ? bracket.data.avgAcres.toFixed(2) : '-'}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                    {bracket.data.avgSalePrice ? `$${Math.round(bracket.data.avgSalePrice).toLocaleString()}` : '-'}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                    {bracket.data.avgSFLA ? Math.round(bracket.data.avgSFLA).toLocaleString() : '-'}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                    {bracket.data.avgAdjusted ? `$${Math.round(bracket.data.avgAdjusted).toLocaleString()}` : '-'}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                    {adjustedDelta !== null ? `$${Math.round(adjustedDelta).toLocaleString()}` : '-'}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
+                                    {lotDelta !== null ? lotDelta.toFixed(2) : '-'}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
+                                    {perAcre !== null ? `$${Math.round(perAcre).toLocaleString()}` : 'N/A'}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
+                                    {perSqFt !== null ? `$${perSqFt.toFixed(2)}` : '-'}
+                                  </td>
+                                </tr>
+                              );
+                            });
+                          })()}
                         </tbody>
                       </table>
                     </div>
@@ -6920,7 +7021,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'salePrice' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
+                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '��' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('normTime')}
