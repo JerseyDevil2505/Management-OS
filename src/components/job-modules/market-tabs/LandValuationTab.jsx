@@ -1471,15 +1471,15 @@ const getPricePerUnit = useCallback((price, size) => {
           residual: rMax ? sales.filter(s => s.acres >= rMax) : []
         };
 
-        // Calculate overall VCS average LOT SF for size adjustment (we'll keep avgSFLA for compatibility/display)
-        const allValidLotSF = sales.filter(s => s.acres > 0).map(s => (s.acres * 43560));
-        const overallAvgLotSF = allValidLotSF.length > 0 ?
-          allValidLotSF.reduce((sum, s) => sum + s, 0) / allValidLotSF.length : null;
-
-        // Also compute overall avg SFLA for display compatibility
+        // Calculate overall VCS average SFLA for size adjustment (Method 2 uses SFLA)
         const allValidSFLA = sales.filter(s => s.sfla > 0);
         const overallAvgSFLA = allValidSFLA.length > 0 ?
           allValidSFLA.reduce((sum, s) => sum + s.sfla, 0) / allValidSFLA.length : null;
+
+        // Also compute overall avg LOT SF for Front Foot Rates table only
+        const allValidLotSF = sales.filter(s => s.acres > 0).map(s => (s.acres * 43560));
+        const overallAvgLotSF = allValidLotSF.length > 0 ?
+          allValidLotSF.reduce((sum, s) => sum + s, 0) / allValidLotSF.length : null;
 
         // FIXED statistics calculation
         const calcBracketStats = (arr) => {
@@ -4144,7 +4144,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Calculate average rate for checked items by category
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
-    debug('🔄 Recalculating category analysis');
+    debug('���� Recalculating category analysis');
     debug('���� Total vacant sales:', vacantSales.length);
     debug('���� Checked sales count:', checkedSales.length);
     debug('📋 Included sales IDs:', Array.from(includedSales));
