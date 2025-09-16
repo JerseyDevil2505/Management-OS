@@ -2500,7 +2500,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }));
 
     // Immediate save to prevent data loss when navigating away
-    debug('���� Triggering immediate save for Act Site change');
+    debug('💾 Triggering immediate save for Act Site change');
     setTimeout(() => {
       if (window.landValuationSave) {
         window.landValuationSave({ source: 'autosave' });
@@ -5374,20 +5374,33 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             return brackets.map((bracket, index) => {
                               if (!bracket.data || bracket.data.count === 0) return null;
 
-                              // Find the last bracket with a HIGHER adjusted value than current
-                              let comparisonBracket = null;
-                              let comparisonIndex = -1;
+                              console.log(`Row ${index} (${bracket.label}):`, {
+                                avgAdjusted: bracket.data.avgAdjusted,
+                                avgAcres: bracket.data.avgAcres
+                              });
 
+                              // Find previous valid bracket
+                              let comparisonBracket = null;
                               for (let i = index - 1; i >= 0; i--) {
-                                if (brackets[i].data &&
-                                    brackets[i].data.count > 0 &&
-                                    brackets[i].data.avgAdjusted &&
-                                    bracket.data.avgAdjusted &&
-                                    brackets[i].data.avgAdjusted < bracket.data.avgAdjusted) {
-                                  comparisonBracket = brackets[i].data;
-                                  comparisonIndex = i;
+                                const candidate = brackets[i].data;
+                                console.log(`  Checking row ${i}:`, {
+                                  hasData: !!candidate,
+                                  avgAdjusted: candidate?.avgAdjusted,
+                                  wouldBePositiveDelta: candidate && bracket.data.avgAdjusted > candidate.avgAdjusted
+                                });
+
+                                if (candidate &&
+                                    candidate.count > 0 &&
+                                    candidate.avgAdjusted &&
+                                    bracket.data.avgAdjusted > candidate.avgAdjusted) {
+                                  comparisonBracket = candidate;
+                                  console.log(`  ✓ Using row ${i} for comparison`);
                                   break;
                                 }
+                              }
+
+                              if (!comparisonBracket) {
+                                console.log(`  ✗ No valid comparison found`);
                               }
 
                               let adjustedDelta = null;
@@ -7167,7 +7180,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <span style={{ fontSize: '16px', fontWeight: 'bold' }}>%</span>
                     <button
                       onClick={() => {
-                        debug('💾 Save button clicked for target allocation:', targetAllocation);
+                        debug('��� Save button clicked for target allocation:', targetAllocation);
                         saveTargetAllocation();
                       }}
                       disabled={!targetAllocation || targetAllocation === ''}
