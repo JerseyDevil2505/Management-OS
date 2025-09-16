@@ -1499,16 +1499,16 @@ const getPricePerUnit = useCallback((price, size) => {
           const avgSFLA = validSFLA.length > 0 ?
             validSFLA.reduce((sum, s) => sum + s.sfla, 0) / validSFLA.length : null;
 
-          // Compute average lot SF for this bracket
+          // Compute average lot SF for this bracket (only used for Front Foot Rates table)
           const validLotSF = arr.filter(s => s.acres > 0).map(s => (s.acres * 43560));
           const avgLotSF = validLotSF.length > 0 ? validLotSF.reduce((sum, v) => sum + v, 0) / validLotSF.length : null;
 
-          // Jim's Magic Formula for size adjustment (using lot square footage now)
+          // Jim's Magic Formula for size adjustment - METHOD 2 USES SFLA, NOT LOT SIZE
           let avgAdjusted = avgNormTime;
-          if (overallAvgLotSF && avgLotSF && avgLotSF > 0) {
-            const lotSfDiff = overallAvgLotSF - avgLotSF;
-            const pricePerLotSqFt = avgNormTime / avgLotSF;
-            const sizeAdjustment = lotSfDiff * (pricePerLotSqFt * 0.50);
+          if (overallAvgSFLA && avgSFLA && avgSFLA > 0) {
+            const sflaDiff = overallAvgSFLA - avgSFLA;
+            const pricePerSfla = avgNormTime / avgSFLA;
+            const sizeAdjustment = sflaDiff * (pricePerSfla * 0.50);
             avgAdjusted = avgNormTime + sizeAdjustment;
           }
 
@@ -4144,7 +4144,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Calculate average rate for checked items by category
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
-    debug('���� Recalculating category analysis');
+    debug('🔄 Recalculating category analysis');
     debug('���� Total vacant sales:', vacantSales.length);
     debug('���� Checked sales count:', checkedSales.length);
     debug('📋 Included sales IDs:', Array.from(includedSales));
