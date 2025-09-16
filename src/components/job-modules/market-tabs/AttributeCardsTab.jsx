@@ -55,7 +55,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     { code: 'all', description: 'All Properties' },
     { code: '1', description: '1 — Single Family' },
     { code: '2', description: '2 — Duplex / Semi-Detached' },
-    { code: '3', description: '3* — Row / Townhouse (3E,3I,30,31)' },
+    { code: '3', description: '3* ��� Row / Townhouse (3E,3I,30,31)' },
     { code: '4', description: '4* — MultiFamily (42,43,44)' },
     { code: '5', description: '5* — Conversions (51,52,53)' },
     { code: '6', description: '6 — Condominium' },
@@ -922,7 +922,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                             </tr>
                             {/* Condition Code Rows */}
                             {availableConditions.interior.map((cond, condIdx) => {
-                              const condData = vcsData.conditions[cond.description];
+                              const condData = vcsData.conditions[cond.code];
                               if (!condData) return null;
 
                               return (
