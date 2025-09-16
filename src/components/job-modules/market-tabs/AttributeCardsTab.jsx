@@ -263,7 +263,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       // BRT: Uses section 60 for both exterior and interior conditions
       // Common BRT condition codes (check with parsed_code_definitions if available)
       const condMap = {
-        '00': 'NOT_APPLICABLE', // Don't skip 00 - might be valid
         '01': 'EXCELLENT',
         '02': 'VERY_GOOD',
         '03': 'GOOD',
