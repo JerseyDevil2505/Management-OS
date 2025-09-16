@@ -1030,7 +1030,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             {/* Filter Controls */}
             <div className="flex items-center gap-4 mb-4">
               <label className="flex items-center gap-2">
-                <span className="text-sm font-medium">Entry filter (01-04)</span>
+                <span className="text-sm font-medium">
+                  Entry filter {infoByCategoryConfig.entry.length > 0 ?
+                    `(${infoByCategoryConfig.entry.join(',')})` :
+                    '(not configured)'
+                  }
+                </span>
                 <input
                   type="checkbox"
                   checked={entryFilterEnabled}
