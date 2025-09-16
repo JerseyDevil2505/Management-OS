@@ -231,10 +231,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     if (interiorInspectionOnly) {
       filtered = filtered.filter(p => {
         const code = (p.inspection_info_by || '').toString().trim();
-        if (vendorType === 'Microsystems') {
+        if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
           return !['R', 'E'].includes(code); // Not refused (R) or estimated (E)
         } else {
-          return !['06', '07'].includes(code); // Not refused (06) or estimated (07)
+          // BRT: 06=refused, 07=estimated (no interior inspection)
+          return !['06', '07'].includes(code);
         }
       });
     }
