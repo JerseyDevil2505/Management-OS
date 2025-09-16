@@ -249,8 +249,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     // Clean the condition code - trim whitespace and convert to uppercase
     const cleanCode = condCode.toString().trim().toUpperCase();
 
-    // Only treat empty string as null, NOT "00" - it might be valid for BRT
-    if (cleanCode === '') return null;
+    // Treat "00" as null/empty - it's lazy vendor coding, not a real condition
+    if (cleanCode === '00' || cleanCode === '') return null;
 
     if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
       // Microsystems: E=Excellent, G=Good, A=Average, F=Fair, P=Poor
