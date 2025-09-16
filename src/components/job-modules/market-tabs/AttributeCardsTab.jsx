@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useEffect, Fragment } from 'react';
-import { Layers, FileText } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { Layers, FileText, ChevronDown, ChevronRight, Info } from 'lucide-react';
 import './sharedTabNav.css';
-import { supabase, propertyService } from '../../../lib/supabaseClient';
+import { supabase, propertyService, interpretCodes } from '../../../lib/supabaseClient';
 
 const CSV_BUTTON_CLASS = 'inline-flex items-center gap-2 px-3 py-1.5 border rounded bg-white text-sm text-gray-700 hover:bg-gray-50';
 
@@ -14,6 +14,24 @@ function sizeNormalize(salePrice, saleSize, targetSize) {
   return Math.round(repl + adj);
 }
 
+// Helper to format currency
+function formatCurrency(value) {
+  if (value === null || value === undefined || isNaN(value)) return '-';
+  return new Intl.NumberFormat('en-US', { 
+    style: 'currency', 
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0 
+  }).format(value);
+}
+
+// Helper to format percentage
+function formatPercent(value) {
+  if (value === null || value === undefined || isNaN(value)) return '-';
+  return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
+}
+
+// Helper to download CSV
 function downloadCsv(filename, headers, rows) {
   const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','))].join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -29,28 +47,38 @@ function downloadCsv(filename, headers, rows) {
 
 const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {}, onUpdateJobCache = () => {} }) => {
   const vendorType = jobData?.vendor_type || jobData?.vendor_source || 'BRT';
+  const parsedCodeDefinitions = jobData?.parsed_code_definitions || {};
 
+  // Main tab state
   const [active, setActive] = useState('condition');
 
-  // Condition analysis state - simplified and dynamic
+  // ============ CONDITION ANALYSIS STATE ============
   const [typeUseFilter, setTypeUseFilter] = useState('1'); // Default to Single Family
-  const [conditionData, setConditionData] = useState(null);
-  const [conditionAnalysis, setConditionAnalysis] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [availableConditions, setAvailableConditions] = useState({ exterior: [], interior: [] });
+  const [useInteriorInspections, setUseInteriorInspections] = useState(false);
+  const [expandedVCS, setExpandedVCS] = useState(new Set()); // Track which VCS sections are expanded
+  const [conditionData, setConditionData] = useState({
+    exterior: {},
+    interior: {},
+    loading: true,
+    error: null
+  });
+  const [availableConditionCodes, setAvailableConditionCodes] = useState({
+    exterior: {},
+    interior: {}
+  });
 
-  // Custom attribute UI state
+  // ============ CUSTOM ATTRIBUTE STATE ============
   const [rawFields, setRawFields] = useState([]);
   const [selectedRawField, setSelectedRawField] = useState('');
   const [matchValue, setMatchValue] = useState('');
   const [customWorking, setCustomWorking] = useState(false);
   const [customResults, setCustomResults] = useState(marketLandData.custom_attribute_rollup || null);
 
-  // Additional cards
+  // ============ ADDITIONAL CARDS STATE ============
   const [additionalWorking, setAdditionalWorking] = useState(false);
   const [additionalResults, setAdditionalResults] = useState(marketLandData.additional_cards_rollup || null);
 
-  // Get Type/Use options (exact copy from Land Valuation)
+  // Get Type/Use options - CORRECTED based on actual codebase patterns
   const getTypeUseOptions = () => [
     { code: 'all', description: 'All Properties' },
     { code: '1', description: '1 — Single Family' },
@@ -62,108 +90,28 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     { code: 'all_residential', description: 'All Residential' }
   ];
 
-  // Helper function to get property type/use from various field names
-  const getPropertyTypeUse = (property) => {
-    return property.asset_type_use ||
-           property.asset_typeuse ||
-           property.typeuse ||
-           property.type_use ||
-           '';
-  };
-
-  // Helper function to get property condition from various field names
-  const getPropertyCondition = (property, type) => {
-    if (type === 'exterior') {
-      return property.asset_ext_cond ||
-             property.asset_exterior_condition ||
-             property.ext_cond ||
-             property.exterior_condition ||
-             '';
+  // Toggle VCS expansion
+  const toggleVCS = (vcs) => {
+    const newExpanded = new Set(expandedVCS);
+    if (newExpanded.has(vcs)) {
+      newExpanded.delete(vcs);
     } else {
-      return property.asset_int_cond ||
-             property.asset_interior_condition ||
-             property.int_cond ||
-             property.interior_condition ||
-             '';
+      newExpanded.add(vcs);
     }
+    setExpandedVCS(newExpanded);
   };
 
-  // Get available conditions from parsed_code_definitions
-  const getAvailableConditions = () => {
-    const codeDefs = jobData?.parsed_code_definitions || {};
-    const conditions = { exterior: [], interior: [] };
-
-    console.log('🔍 Getting available conditions for vendor:', vendorType);
-    console.log('📊 Available code definitions sections:', Object.keys(codeDefs));
-
-    if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
-      // Microsystems: 490 = exterior, 491 = interior
-      const extSection = codeDefs['490'] || {};
-      const intSection = codeDefs['491'] || {};
-
-      console.log('🏗️ Microsystems exterior section 490:', extSection);
-      console.log('🏗️ Microsystems interior section 491:', intSection);
-
-      Object.entries(extSection).forEach(([code, info]) => {
-        if (code && code !== '00' && code !== '0') {
-          conditions.exterior.push({
-            code,
-            description: info.description || info.name || code,
-            normalized: (info.description || info.name || code)?.toUpperCase().replace(/\s+/g, '_')
-          });
-        }
-      });
-
-      Object.entries(intSection).forEach(([code, info]) => {
-        if (code && code !== '00' && code !== '0') {
-          conditions.interior.push({
-            code,
-            description: info.description || info.name || code,
-            normalized: (info.description || info.name || code)?.toUpperCase().replace(/\s+/g, '_')
-          });
-        }
-      });
-    } else {
-      // BRT: Section 60 for both exterior and interior
-      const section = codeDefs['60'] || {};
-
-      console.log('🏗️ BRT section 60:', section);
-
-      Object.entries(section).forEach(([code, info]) => {
-        if (code && code !== '00' && code !== '0') {
-          const condition = {
-            code,
-            description: info.description || info.name || code,
-            normalized: (info.description || info.name || code)?.toUpperCase().replace(/\s+/g, '_')
-          };
-          conditions.exterior.push(condition);
-          conditions.interior.push(condition);
-        }
-      });
-    }
-
-    console.log('✅ Found conditions:', conditions);
-    return conditions;
-  };
-
-  // Normalize condition codes - just return the code itself since we're using actual data
-  const normalizeCondition = (condCode, conditionType = 'exterior') => {
-    if (!condCode || condCode === '00' || condCode === '0') return null;
-    return condCode.toString().trim();
-  };
-
-  // Type/Use filter logic (exact from Land Valuation)
-  const applyTypeUseFilter = (properties, filterValue) => {
-    if (!filterValue || filterValue === 'all') return properties;
-
-    return properties.filter(p => {
-      const typeUse = getPropertyTypeUse(p).toString().trim();
-      const isEmpty = !typeUse || typeUse === '';
-
+  // Helper function to filter properties by type/use
+  const filterPropertiesByType = (props, filterValue) => {
+    if (filterValue === 'all') return props;
+    
+    return props.filter(p => {
+      const typeUse = (p.asset_type_use || '').toString().trim();
+      
       if (filterValue === 'all_residential') {
-        return isEmpty || ['1','2','3','4','5','6'].some(prefix => typeUse.startsWith(prefix));
+        return typeUse === '' || ['1','2','3','4','5','6'].some(prefix => typeUse.startsWith(prefix));
       } else if (filterValue === '1') {
-        return isEmpty || typeUse.startsWith('1');
+        return typeUse === '' || typeUse.startsWith('1');
       } else if (filterValue === '2') {
         return typeUse.startsWith('2');
       } else if (filterValue === '3') {
@@ -175,659 +123,583 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       } else if (filterValue === '6') {
         return typeUse.startsWith('6');
       }
-
+      
       return false;
     });
   };
-
-  // Load data on mount
-  useEffect(() => {
-    loadConditionData();
-  }, [jobData?.id, typeUseFilter]);
-
-  // Load actual condition codes from property records
-  useEffect(() => {
-    loadActualConditionCodes();
-  }, [jobData?.id]);
-
-  // Load actual condition codes from property records
-  const loadActualConditionCodes = async () => {
-    if (!jobData?.id) return;
-
+  // ============ DETECT ACTUAL CONDITION CODES FROM DATA ============
+  const detectActualConditionCodes = useCallback(async () => {
     try {
-      console.log('🔍 Loading actual condition codes from property records for job:', jobData.id);
-
-      // Query property records to get all unique condition codes
-      const { data: propertyRecords, error } = await supabase
-        .from('property_records')
-        .select('asset_ext_cond, asset_int_cond, asset_exterior_condition, asset_interior_condition, ext_cond, int_cond')
-        .eq('job_id', jobData.id);
-
-      if (error) {
-        console.error('❌ Database query error:', error);
-        throw error;
-      }
-
-      console.log('📊 Raw property records:', propertyRecords?.length);
-      console.log('📊 Sample property record:', propertyRecords?.[0]);
-
-      // Extract unique condition codes
-      const exteriorCodes = new Set();
-      const interiorCodes = new Set();
-
-      propertyRecords?.forEach((record, index) => {
-        try {
-          // Check multiple possible field names for exterior conditions
-          const extCond = record?.asset_ext_cond || record?.asset_exterior_condition || record?.ext_cond;
-          if (extCond && extCond !== '00' && extCond !== '0' && String(extCond).trim() !== '') {
-            exteriorCodes.add(String(extCond).trim());
-          }
-
-          // Check multiple possible field names for interior conditions
-          const intCond = record?.asset_int_cond || record?.asset_interior_condition || record?.int_cond;
-          if (intCond && intCond !== '00' && intCond !== '0' && String(intCond).trim() !== '') {
-            interiorCodes.add(String(intCond).trim());
-          }
-        } catch (recordError) {
-          console.error(`Error processing record ${index}:`, recordError, record);
+      // Get all unique condition codes from the actual property records
+      const uniqueExterior = new Set();
+      const uniqueInterior = new Set();
+      
+      // Scan through properties to find all unique codes
+      properties.forEach(prop => {
+        const extCond = prop.asset_ext_cond;
+        const intCond = prop.asset_int_cond;
+        
+        // BRT uses '00' as null/empty, skip it along with other empty values
+        if (extCond && extCond !== '00' && extCond !== '0' && extCond.trim() !== '') {
+          uniqueExterior.add(extCond.trim());
+        }
+        if (intCond && intCond !== '00' && intCond !== '0' && intCond.trim() !== '') {
+          uniqueInterior.add(intCond.trim());
         }
       });
 
-      // Convert to arrays and create condition objects
-      const conditions = {
-        exterior: Array.from(exteriorCodes).sort().map(code => ({
-          code,
-          description: code, // We'll just use the code as description for now
-          normalized: code.toUpperCase()
-        })),
-        interior: Array.from(interiorCodes).sort().map(code => ({
-          code,
-          description: code, // We'll just use the code as description for now
-          normalized: code.toUpperCase()
-        }))
-      };
+      // Now get descriptions for these codes FROM THE PARSED DEFINITIONS
+      const exterior = {};
+      const interior = {};
 
-      console.log('✅ Found actual condition codes:', {
-        exterior: Array.from(exteriorCodes),
-        interior: Array.from(interiorCodes)
-      });
+      // For each unique exterior code, get its description
+      for (const code of uniqueExterior) {
+        // Skip BRT null code
+        if (code === '00') continue;
+        
+        let description = `Condition ${code}`; // Default to generic label
+        
+        if (vendorType === 'BRT') {
+          // Try to get from parsed_code_definitions using interpretCodes
+          const translated = interpretCodes.getBRTValue(
+            { asset_ext_cond: code }, 
+            parsedCodeDefinitions, 
+            'asset_ext_cond'
+          );
+          
+          if (translated && translated !== code) {
+            // Found actual definition in the code file
+            description = translated;
+          }
+        } else if (vendorType === 'Microsystems') {
+          // For Microsystems, check the 490 section
+          const extSection = parsedCodeDefinitions['490'] || {};
+          if (extSection[code] && extSection[code].description) {
+            description = extSection[code].description;
+          } else if (extSection[code] && extSection[code].VALUE) {
+            description = extSection[code].VALUE;
+          }
+        }
+        
+        exterior[code] = description;
+      }
 
-      setAvailableConditions(conditions);
+      // For each unique interior code, get its description
+      for (const code of uniqueInterior) {
+        // Skip BRT null code
+        if (code === '00') continue;
+        
+        let description = `Condition ${code}`; // Default to generic label
+        
+        if (vendorType === 'BRT') {
+          // Try to get from parsed_code_definitions using interpretCodes
+          const translated = interpretCodes.getBRTValue(
+            { asset_int_cond: code }, 
+            parsedCodeDefinitions, 
+            'asset_int_cond'
+          );
+          
+          if (translated && translated !== code) {
+            // Found actual definition in the code file
+            description = translated;
+          }
+        } else if (vendorType === 'Microsystems') {
+          // For Microsystems, check the 491 section
+          const intSection = parsedCodeDefinitions['491'] || {};
+          if (intSection[code] && intSection[code].description) {
+            description = intSection[code].description;
+          } else if (intSection[code] && intSection[code].VALUE) {
+            description = intSection[code].VALUE;
+          }
+        }
+        
+        interior[code] = description;
+      }
 
+      console.log('Detected condition codes:', { exterior, interior });
+      return { exterior, interior };
     } catch (error) {
-      console.error('Error loading actual condition codes:', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-        fullError: error
-      });
+      console.error('Error detecting actual condition codes:', error);
+      return { exterior: {}, interior: {} };
     }
+  }, [properties, vendorType, parsedCodeDefinitions]);
+
+  // ============ PROCESS CONDITION STATISTICS ============
+  const processConditionStatistics = (dataByVCS) => {
+    const processed = {};
+
+    Object.entries(dataByVCS).forEach(([vcs, conditions]) => {
+      processed[vcs] = {};
+
+      // Calculate averages for each condition
+      Object.entries(conditions).forEach(([code, data]) => {
+        const count = data.values.length;
+        if (count === 0) return;
+        
+        const avgValue = data.values.reduce((a, b) => a + b, 0) / count;
+        const validSizes = data.sizes.filter(s => s > 0);
+        const avgSize = validSizes.length > 0 ? 
+          validSizes.reduce((a, b) => a + b, 0) / validSizes.length : 0;
+        const validYears = data.years.filter(y => y > 1900 && y < 2030);
+        const avgYear = validYears.length > 0 ?
+          Math.round(validYears.reduce((a, b) => a + b, 0) / validYears.length) : null;
+
+        processed[vcs][code] = {
+          ...data,
+          count,
+          avgValue: Math.round(avgValue),
+          avgSize: Math.round(avgSize),
+          avgYear
+        };
+      });
+
+      // Find baseline - look for Average/Normal or code '03' or 'A', otherwise use most common
+      let baseline = null;
+      
+      // Try to find average condition first
+      Object.entries(processed[vcs]).forEach(([code, data]) => {
+        const desc = data.description.toUpperCase();
+        if (desc.includes('AVERAGE') || desc.includes('NORMAL') || code === '03' || code === 'A') {
+          baseline = data;
+        }
+      });
+      
+      // If no average found, use the condition with most properties
+      if (!baseline) {
+        let maxCount = 0;
+        Object.values(processed[vcs]).forEach(data => {
+          if (data.count > maxCount) {
+            maxCount = data.count;
+            baseline = data;
+          }
+        });
+      }
+      
+      // Calculate size-normalized values and adjustments
+      if (baseline && baseline.avgSize > 0) {
+        Object.values(processed[vcs]).forEach(condData => {
+          condData.adjustedValue = sizeNormalize(condData.avgValue, condData.avgSize, baseline.avgSize);
+          condData.adjustment = condData.adjustedValue - baseline.avgValue;
+          condData.adjustmentPct = ((condData.adjustedValue - baseline.avgValue) / baseline.avgValue) * 100;
+        });
+      } else {
+        // No baseline or size, just use raw differences
+        Object.values(processed[vcs]).forEach(condData => {
+          condData.adjustedValue = condData.avgValue;
+          condData.adjustment = 0;
+          condData.adjustmentPct = 0;
+        });
+      }
+    });
+
+    return processed;
   };
 
-  // Load condition data from values_norm_time
-  const loadConditionData = async () => {
-    if (!jobData?.id) return;
-    
-    setLoading(true);
+  // ============ MAIN DATA LOADING FUNCTION ============
+  const loadConditionAnalysisData = useCallback(async () => {
     try {
-      // Get all values_norm_time items for this job
-      const { data: marketData, error } = await supabase
+      setConditionData(prev => ({ ...prev, loading: true, error: null }));
+
+      // Detect actual codes from the property data
+      const codes = await detectActualConditionCodes();
+      setAvailableConditionCodes(codes);
+
+      // Load property market analysis data for values_norm_time
+      const { data: marketData, error: marketError } = await supabase
         .from('property_market_analysis')
-        .select('*')
+        .select('property_composite_key, values_norm_time')
         .eq('job_id', jobData.id)
         .not('values_norm_time', 'is', null)
         .gt('values_norm_time', 0);
 
-      if (error) throw error;
+      if (marketError) throw marketError;
 
-      // Merge with properties data
-      const propertiesMap = {};
-      properties.forEach(p => {
-        propertiesMap[p.property_composite_key] = p;
+      const marketMap = new Map(
+        (marketData || []).map(m => [m.property_composite_key, m.values_norm_time])
+      );
+
+      // Load inspection data if filtering by interior inspections
+      let inspectionMap = new Map();
+      if (useInteriorInspections) {
+        const { data: inspections, error: inspError } = await supabase
+          .from('inspection_data')
+          .select('property_composite_key, entry_type, inspection_info_by')
+          .eq('job_id', jobData.id);
+
+        if (inspError) throw inspError;
+
+        // Check InfoBy codes from the job's parsed definitions to identify entry vs estimation
+        const infoByCodes = parsedCodeDefinitions?.infoby_category_config || {};
+        const entryInfoByCodes = infoByCodes.entry || [];
+        
+        inspectionMap = new Map(
+          (inspections || []).filter(i => {
+            // Entry type explicitly marked
+            if (i.entry_type === 'entry') return true;
+            // Or InfoBy code indicates actual entry (not estimation/refusal)
+            return entryInfoByCodes.includes(i.inspection_info_by);
+          }).map(i => [i.property_composite_key, true])
+        );
+      }
+
+      // Filter properties by type/use
+      const filteredProps = filterPropertiesByType(properties, typeUseFilter);
+
+      // Process properties by VCS and condition
+      const exteriorByVCS = {};
+      const interiorByVCS = {};
+
+      for (const prop of filteredProps) {
+        const vcs = prop.new_vcs || prop.property_vcs || 'UNKNOWN';
+        const extCond = prop.asset_ext_cond || '';
+        const intCond = prop.asset_int_cond || '';
+        const valueNormTime = marketMap.get(prop.property_composite_key);
+
+        // Skip if no sale value
+        if (!valueNormTime || valueNormTime <= 0) continue;
+
+        // Process exterior condition (skip '00' for BRT)
+        if (extCond && extCond !== '00' && extCond !== '0' && extCond.trim() !== '') {
+          if (!exteriorByVCS[vcs]) exteriorByVCS[vcs] = {};
+          if (!exteriorByVCS[vcs][extCond]) {
+            exteriorByVCS[vcs][extCond] = {
+              description: codes.exterior[extCond] || `Condition ${extCond}`,
+              properties: [],
+              values: [],
+              sizes: [],
+              years: []
+            };
+          }
+          
+          exteriorByVCS[vcs][extCond].properties.push(prop);
+          exteriorByVCS[vcs][extCond].values.push(valueNormTime);
+          exteriorByVCS[vcs][extCond].sizes.push(prop.sfla || prop.property_sfla || 0);
+          exteriorByVCS[vcs][extCond].years.push(prop.year_built || prop.property_year_built || 0);
+        }
+
+        // Process interior condition
+        const shouldIncludeInterior = !useInteriorInspections || inspectionMap.has(prop.property_composite_key);
+        
+        if (intCond && intCond !== '00' && intCond !== '0' && intCond.trim() !== '' && shouldIncludeInterior) {
+          if (!interiorByVCS[vcs]) interiorByVCS[vcs] = {};
+          if (!interiorByVCS[vcs][intCond]) {
+            interiorByVCS[vcs][intCond] = {
+              description: codes.interior[intCond] || `Condition ${intCond}`,
+              properties: [],
+              values: [],
+              sizes: [],
+              years: []
+            };
+          }
+          
+          interiorByVCS[vcs][intCond].properties.push(prop);
+          interiorByVCS[vcs][intCond].values.push(valueNormTime);
+          interiorByVCS[vcs][intCond].sizes.push(prop.sfla || prop.property_sfla || 0);
+          interiorByVCS[vcs][intCond].years.push(prop.year_built || prop.property_year_built || 0);
+        }
+      }
+
+      // Calculate statistics and adjustments
+      const processedExterior = processConditionStatistics(exteriorByVCS);
+      const processedInterior = processConditionStatistics(interiorByVCS);
+
+      setConditionData({
+        exterior: processedExterior,
+        interior: processedInterior,
+        loading: false,
+        error: null
       });
-
-      const mergedData = marketData
-        .map(m => ({
-          ...propertiesMap[m.property_composite_key],
-          ...m
-        }))
-        .filter(p => p.property_composite_key); // Ensure we have property data
-
-      // Apply type/use filter
-      const filteredData = applyTypeUseFilter(mergedData, typeUseFilter);
-
-      console.log('📊 Loaded condition data:', {
-        totalMarketData: marketData.length,
-        mergedProperties: mergedData.length,
-        afterTypeFilter: filteredData.length,
-        typeFilter: typeUseFilter
-      });
-
-      setConditionData(filteredData);
-      
-      // Analyze conditions
-      analyzeConditions(filteredData);
 
     } catch (error) {
-      console.error('Error loading condition data:', error);
+      console.error('Error loading condition analysis data:', error);
+      setConditionData(prev => ({ 
+        ...prev, 
+        loading: false, 
+        error: 'Failed to load condition data' 
+      }));
     }
-    setLoading(false);
-  };
+  }, [jobData.id, properties, typeUseFilter, useInteriorInspections, detectActualConditionCodes, processConditionStatistics]);
 
-  // Analyze conditions similar to land valuation method 2
-  const analyzeConditions = (data) => {
-    if (!data || data.length === 0) return;
-
-    const analysis = {
-      exterior: {},
-      interior: {},
-      summary: { exterior: {}, interior: {} }
-    };
-
-    // Group by VCS
-    const vcsBuckets = {};
-    data.forEach(prop => {
-      const vcs = prop.new_vcs || prop.property_vcs || prop.vcs || prop.asset_vcs || 'NO_VCS';
-      if (!vcsBuckets[vcs]) {
-        vcsBuckets[vcs] = [];
-      }
-      vcsBuckets[vcs].push(prop);
-    });
-
-    // Analyze each VCS
-    Object.keys(vcsBuckets).forEach(vcs => {
-      const vcsProperties = vcsBuckets[vcs];
-
-      console.log(`🏗️ Analyzing VCS: ${vcs} with ${vcsProperties.length} properties`);
-
-      analysis.exterior[vcs] = analyzeVCSConditions(vcsProperties, 'exterior');
-      analysis.interior[vcs] = analyzeVCSConditions(vcsProperties, 'interior');
-
-      console.log(`✅ VCS ${vcs} analysis complete:`, {
-        exterior: analysis.exterior[vcs],
-        interior: analysis.interior[vcs]
-      });
-    });
-
-    // Calculate overall summary (similar to Method 2 Summary)
-    calculateConditionSummary(analysis);
-
-    console.log('🎯 Final condition analysis:', analysis);
-    setConditionAnalysis(analysis);
-  };
-
-  // Analyze conditions for a single VCS (similar to bracket analysis)
-  const analyzeVCSConditions = (properties, conditionType) => {
-    const conditionBuckets = {};
-
-    console.log(`🔍 Analyzing ${conditionType} conditions for ${properties.length} properties`);
-
-    // Group properties by condition
-    properties.forEach(prop => {
-      const conditionCode = getPropertyCondition(prop, conditionType);
-      const condition = normalizeCondition(conditionCode, conditionType);
-
-      console.log(`Property ${prop.property_composite_key}: ${conditionType} code = "${conditionCode}" -> normalized = "${condition}"`);
-
-      if (!condition) return;
-
-      if (!conditionBuckets[condition]) {
-        conditionBuckets[condition] = [];
-      }
-      conditionBuckets[condition].push(prop);
-    });
-
-    console.log(`📊 ${conditionType} condition buckets:`, Object.keys(conditionBuckets));
-
-    // Calculate statistics for each condition
-    const conditionStats = {};
-    Object.keys(conditionBuckets).forEach(condition => {
-      const bucket = conditionBuckets[condition];
-
-      console.log(`📊 Processing condition "${condition}" with ${bucket.length} properties`);
-
-      const prices = bucket.map(p => p.values_norm_time).filter(Boolean);
-      const sizes = bucket.map(p => p.asset_sfla || p.values_norm_size).filter(Boolean);
-      const ages = bucket.map(p => {
-        const yearBuilt = p.asset_year_built || p.property_year_built;
-        return yearBuilt ? new Date().getFullYear() - yearBuilt : null;
-      }).filter(Boolean);
-
-      if (prices.length > 0) {
-        conditionStats[condition] = {
-          count: bucket.length,
-          avgPrice: Math.round(prices.reduce((a, b) => a + b, 0) / prices.length),
-          avgSize: sizes.length > 0 ? Math.round(sizes.reduce((a, b) => a + b, 0) / sizes.length) : 0,
-          avgAge: ages.length > 0 ? Math.round(ages.reduce((a, b) => a + b, 0) / ages.length) : 0,
-          properties: bucket
-        };
-        console.log(`✅ Created stats for condition "${condition}":`, conditionStats[condition]);
-      } else {
-        console.log(`❌ No valid prices found for condition "${condition}"`);
-      }
-    });
-
-    console.log(`📈 Final condition stats for ${conditionType}:`, conditionStats);
-
-    // Find baseline (AVERAGE condition or most common)
-    let baseline = conditionStats['AVERAGE'] || conditionStats['Average'];
-    if (!baseline) {
-      // Find condition with most properties as baseline
-      const sortedConditions = Object.keys(conditionStats).sort((a, b) => 
-        conditionStats[b].count - conditionStats[a].count
-      );
-      baseline = conditionStats[sortedConditions[0]];
-    }
-
-    // Calculate adjustments similar to method 2 brackets
-    if (baseline && baseline.avgSize > 0) {
-      Object.keys(conditionStats).forEach(condition => {
-        const stats = conditionStats[condition];
-        
-        // Apply size normalization using Jim's formula
-        const normalizedPrices = stats.properties.map(prop => 
-          sizeNormalize(prop.values_norm_time, prop.asset_sfla || prop.values_norm_size || 0, baseline.avgSize)
-        );
-        
-        stats.normalizedPrice = Math.round(normalizedPrices.reduce((a, b) => a + b, 0) / normalizedPrices.length);
-        
-        // Calculate percentage difference from baseline
-        if (baseline.normalizedPrice) {
-          stats.percentDiff = ((stats.normalizedPrice - baseline.normalizedPrice) / baseline.normalizedPrice * 100);
-        } else {
-          stats.percentDiff = 0;
-        }
-      });
-      
-      // Set baseline normalization
-      if (baseline) {
-        baseline.normalizedPrice = baseline.avgPrice;
-        baseline.percentDiff = 0;
-      }
-    }
-
-    return {
-      conditions: conditionStats,
-      baseline: baseline ? Object.keys(conditionStats).find(k => conditionStats[k] === baseline) : null,
-      totalProperties: properties.length
-    };
-  };
-
-  // Calculate overall condition summary
-  const calculateConditionSummary = (analysis) => {
-    ['exterior', 'interior'].forEach(type => {
-      const summary = {};
-      const allConditions = new Set();
-      
-      // Collect all conditions across VCS
-      Object.values(analysis[type]).forEach(vcsData => {
-        Object.keys(vcsData.conditions || {}).forEach(condition => {
-          allConditions.add(condition);
-        });
-      });
-
-      // Calculate weighted averages for each condition
-      allConditions.forEach(condition => {
-        let totalAdjustedPrice = 0;
-        let totalCount = 0;
-        let totalBaselinePrice = 0;
-        let totalBaselineCount = 0;
-
-        Object.values(analysis[type]).forEach(vcsData => {
-          const conditionData = vcsData.conditions[condition];
-          const baselineData = vcsData.conditions[vcsData.baseline];
-          
-          if (conditionData && baselineData) {
-            totalAdjustedPrice += (conditionData.normalizedPrice || conditionData.avgPrice) * conditionData.count;
-            totalCount += conditionData.count;
-            totalBaselinePrice += (baselineData.normalizedPrice || baselineData.avgPrice) * baselineData.count;
-            totalBaselineCount += baselineData.count;
-          }
-        });
-
-        if (totalCount > 0 && totalBaselineCount > 0) {
-          const avgAdjustedPrice = totalAdjustedPrice / totalCount;
-          const avgBaselinePrice = totalBaselinePrice / totalBaselineCount;
-          
-          summary[condition] = {
-            count: totalCount,
-            avgPrice: Math.round(avgAdjustedPrice),
-            percentDiff: ((avgAdjustedPrice - avgBaselinePrice) / avgBaselinePrice * 100)
-          };
-        }
-      });
-
-      analysis.summary[type] = summary;
-    });
-  };
-
-  // Discover raw fields once
+  // Load data on component mount and when filters change
   useEffect(() => {
-    let mounted = true;
-    async function discover() {
-      if (!jobData?.id || !properties || properties.length === 0) return;
-      try {
-        const sample = properties[0];
-        const raw = await propertyService.getRawDataForProperty(sample.job_id, sample.property_composite_key);
-        if (!mounted) return;
-        if (raw && typeof raw === 'object') {
-          const keys = Object.keys(raw).sort();
-          setRawFields(keys);
-          if (!selectedRawField && keys.length) setSelectedRawField(keys[0]);
-        }
-      } catch (e) {
-        console.error('discover raw fields', e);
-      }
+    if (jobData?.id && properties.length > 0) {
+      loadConditionAnalysisData();
     }
-    discover();
-    return () => { mounted = false; };
-  }, [jobData?.id, properties]);
-
-  // Save helper
-  const saveRollupToDB = async (jobId, payloadObj) => {
-    try {
-      const { error } = await supabase.from('market_land_valuation').update(payloadObj).eq('job_id', jobId);
-      if (error) {
-        const ins = await supabase.from('market_land_valuation').insert({ job_id: jobId, ...payloadObj });
-        if (ins.error) throw ins.error;
-      }
-      onUpdateJobCache && onUpdateJobCache();
-    } catch (e) {
-      console.error('saveRollupToDB', e);
-      throw e;
-    }
-  };
-
-  // Save condition analysis
-  const saveConditionAnalysis = async () => {
-    try {
-      const rollup = {
-        condition_analysis: conditionAnalysis,
-        available_conditions: availableConditions,
-        type_use_filter: typeUseFilter,
-        vendor_type: vendorType,
-        generated_at: new Date().toISOString()
-      };
-
-      await saveRollupToDB(jobData.id, { condition_analysis_rollup: rollup });
-      console.log('✅ Condition analysis saved');
-    } catch (e) {
-      console.error('Failed to save condition analysis:', e);
-    }
-  };
-
-  // Custom attribute analysis enhanced to apply size-normalization when group sizes differ
-  const runCustomAttributeAnalysis = async () => {
-    if (!selectedRawField || !jobData?.id) return;
-    setCustomWorking(true);
-    try {
-      const valid = conditionData || [];
-      // We'll need raw values - batch fetch raw using propertyService.getRawDataForProperty
-      const lookup = new Map();
-      const chunk = 500;
-      for (let i=0;i<valid.length;i+=chunk) {
-        const slice = valid.slice(i,i+chunk);
-        const resolved = await Promise.all(slice.map(p => propertyService.getRawDataForProperty(p.job_id, p.property_composite_key).then(raw=>({p,raw}), ()=>({p,raw:null}))));
-        resolved.forEach(({p,raw}) => lookup.set(p.property_composite_key, { p, raw }));
-      }
-
-      const withList = [];
-      const withoutList = [];
-
-      lookup.forEach(({p,raw}) => {
-        const rawVal = raw ? (raw[selectedRawField] ?? raw[selectedRawField.toUpperCase()]) : undefined;
-        const has = (() => {
-          if (matchValue === '') return rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '';
-          try { if (String(rawVal).trim().toUpperCase() === String(matchValue).trim().toUpperCase()) return true; } catch(e){}
-          const a = Number(rawVal); const b = Number(matchValue);
-          if (!Number.isNaN(a) && !Number.isNaN(b) && Math.abs(a-b) < 1e-6) return true;
-          return false;
-        })();
-        if (has) withList.push(p); else withoutList.push(p);
-      });
-
-      const agg = (arr) => {
-        const n = arr.length;
-        const total = arr.reduce((s,p)=>s + Number(p.values_norm_time || 0),0);
-        const totalSize = arr.reduce((s,p)=>s + Number(p.asset_sfla || 0),0);
-        return { n, avg_price: n>0?Math.round(total/n):null, avg_size: n>0?Math.round(totalSize/n):null };
-      };
-
-      const w = agg(withList);
-      const wo = agg(withoutList);
-
-      // Apply size normalization if sizes differ by >10%
-      if (w.avg_price != null && wo.avg_price != null && w.avg_size && wo.avg_size) {
-        const diff = Math.abs(w.avg_size - wo.avg_size) / ((w.avg_size + wo.avg_size)/2);
-        if (diff > 0.10) {
-          // normalize withList prices to withoutList avg_size for fair comparison
-          const adjustedWithPrices = withList.map(p => sizeNormalize(Number(p.values_norm_time || 0), Number(p.asset_sfla || 0) || 0, wo.avg_size || 0));
-          const adjustedAvgWith = adjustedWithPrices.length ? Math.round(adjustedWithPrices.reduce((a,b)=>a+(b||0),0)/adjustedWithPrices.length) : w.avg_price;
-          w.adj_avg_price = adjustedAvgWith;
-        }
-      }
-
-      const flat = (w.adj_avg_price || w.avg_price || 0) - (wo.avg_price || 0);
-      const pct = (wo.avg_price && wo.avg_price !== 0) ? (flat / wo.avg_price) * 100 : null;
-
-      const results = { field: selectedRawField, matchValue, overall: { with: w, without: wo, flat_adj: Math.round(flat), pct_adj: pct != null ? Number(pct.toFixed(1)) : null } };
-
-      // group by VCS as well
-      const byVCS = {};
-      lookup.forEach(({p,raw}) => {
-        const vcs = p.new_vcs || p.property_vcs || 'UNSPEC';
-        byVCS[vcs] = byVCS[vcs] || { with: [], without: [] };
-        const rawVal = raw ? (raw[selectedRawField] ?? raw[selectedRawField.toUpperCase()]) : undefined;
-        const has = (() => {
-          if (matchValue === '') return rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '';
-          try { if (String(rawVal).trim().toUpperCase() === String(matchValue).trim().toUpperCase()) return true; } catch(e){}
-          const a = Number(rawVal); const b = Number(matchValue);
-          if (!Number.isNaN(a) && !Number.isNaN(b) && Math.abs(a-b) < 1e-6) return true;
-          return false;
-        })();
-        if (has) byVCS[vcs].with.push(p); else byVCS[vcs].without.push(p);
-      });
-
-      const byVCSResults = {};
-      Object.keys(byVCS).forEach(v => {
-        const wa = agg(byVCS[v].with);
-        const woa = agg(byVCS[v].without);
-        byVCSResults[v] = { with: wa, without: woa };
-      });
-
-      const rollup = { results, byVCS: byVCSResults, generated_at: new Date().toISOString() };
-      setCustomResults(rollup);
-      await saveRollupToDB(jobData.id, { custom_attribute_rollup: rollup });
-
-    } catch (e) {
-      console.error('runCustomAttributeAnalysis', e);
-    }
-    setCustomWorking(false);
-  };
-
-  // Additional card analysis
-  const runAdditionalCardAnalysis = async () => {
-    setAdditionalWorking(true);
-    try {
-      const valid = conditionData || [];
-      const lookup = new Map();
-      const chunk = 500;
-      for (let i=0;i<valid.length;i+=chunk) {
-        const slice = valid.slice(i,i+chunk);
-        const resolved = await Promise.all(slice.map(p => propertyService.getRawDataForProperty(p.job_id, p.property_composite_key).then(raw=>({p,raw}), ()=>({p,raw:null}))));
-        resolved.forEach(({p,raw}) => lookup.set(p.property_composite_key, { p, raw }));
-      }
-
-      const byVCS = {};
-      lookup.forEach(({p,raw}) => {
-        const vcs = p.new_vcs || p.property_vcs || 'UNSPEC';
-        byVCS[vcs] = byVCS[vcs] || { with_addl: [], without_addl: [] };
-        // Detect additional cards
-        let hasAddl = false;
-        // BRT style: property_addl_card exists and not 'M' and not '1'
-        if (p.property_addl_card) {
-          const v = String(p.property_addl_card).trim().toUpperCase();
-          if (v && v !== 'NONE' && v !== 'M' && v !== '1') hasAddl = true;
-        }
-        // or microsystems raw has building indicators: look for keys like 'BLDG2','Bldg2','BUILDING_2' or numeric BLDG count
-        if (!hasAddl && raw && typeof raw === 'object') {
-          const keys = Object.keys(raw).map(k=>k.toUpperCase());
-          const bldgKeys = keys.filter(k => /BLDG|BLD|BUILDING/.test(k));
-          if (bldgKeys.length) {
-            for (const bk of bldgKeys) {
-              const val = raw[bk] || raw[bk.toLowerCase()];
-              if (val && Number(val) > 1) { hasAddl = true; break; }
-              if (typeof val === 'string' && /BLDG\s*2|BLDG2|BLD2|2ND/.test(String(val).toUpperCase())) { hasAddl = true; break; }
-            }
-          }
-        }
-
-        if (hasAddl) byVCS[vcs].with_addl.push(p);
-        else byVCS[vcs].without_addl.push(p);
-      });
-
-      // aggregate
-      const aggStats = (arr) => {
-        const n = arr.length;
-        if (n === 0) return { n:0, avg_price:null, avg_size:null, avg_age:null };
-        const totalPrice = arr.reduce((s,p)=>s + Number(p.values_norm_time || 0),0);
-        const totalSize = arr.reduce((s,p)=>s + Number(p.asset_sfla || 0),0);
-        const totalAge = arr.reduce((s,p)=>s + (p.asset_year_built ? (new Date().getFullYear() - Number(p.asset_year_built)) : 0),0);
-        return { n, avg_price: Math.round(totalPrice/n), avg_size: Math.round(totalSize/n), avg_age: Math.round(totalAge/n) };
-      };
-
-      const vcsResults = {};
-      Object.keys(byVCS).forEach(v => {
-        const withStats = aggStats(byVCS[v].with_addl);
-        const withoutStats = aggStats(byVCS[v].without_addl);
-        const flat = (withStats.avg_price || 0) - (withoutStats.avg_price || 0);
-        const pct = (withoutStats.avg_price && withoutStats.avg_price !== 0) ? (flat / withoutStats.avg_price) * 100 : null;
-        vcsResults[v] = { with: withStats, without: withoutStats, flat_adj: Math.round(flat), pct_adj: pct != null ? Number(pct.toFixed(1)) : null };
-      });
-
-      const rollup = { byVCS: vcsResults, generated_at: new Date().toISOString() };
-      setAdditionalResults(rollup);
-      await saveRollupToDB(jobData.id, { additional_cards_rollup: rollup });
-
-    } catch (e) {
-      console.error('runAdditionalCardAnalysis', e);
-    }
-    setAdditionalWorking(false);
-  };
-
-  // Format helpers
-  const formatPrice = (val) => val ? `$${val.toLocaleString()}` : '—';
-  const formatPct = (val) => val ? `${val.toFixed(1)}%` : '—';
-
-  // CSV export preparation
-  const getConditionCsvData = (type) => {
-    const headers = ['VCS'];
-    const rows = [];
+  }, [jobData?.id, properties.length, typeUseFilter, useInteriorInspections]);
+  // ============ BUILD CONDITION CASCADE TABLE ============
+  const renderConditionTable = (data, type) => {
+    const vcsKeys = Object.keys(data).sort();
     
-    if (!conditionAnalysis[type]) return { headers, rows };
-
-    // Get all unique conditions from available conditions for this type
-    const conditionsList = availableConditions[type]?.map(c => c.code).sort() || [];
-
-    // Build headers
-    conditionsList.forEach(condition => {
-      headers.push(`${condition}_Count`, `${condition}_Price`, `${condition}_Size`, `${condition}_Age`, `${condition}_Norm_Price`, `${condition}_%_Diff`);
-    });
-
-    // Build rows
-    Object.keys(conditionAnalysis[type]).forEach(vcs => {
-      const vcsData = conditionAnalysis[type][vcs];
-      const row = [vcs];
-
-      conditionsList.forEach(condition => {
-        const condData = vcsData.conditions[condition];
-        if (condData) {
-          row.push(
-            condData.count,
-            condData.avgPrice,
-            condData.avgSize,
-            condData.avgAge,
-            condData.normalizedPrice || condData.avgPrice,
-            condData.percentDiff ? condData.percentDiff.toFixed(1) : '0'
-          );
-        } else {
-          row.push('', '', '', '', '', '');
-        }
-      });
-
-      rows.push(row);
-    });
-
-    return { headers, rows };
-  };
-
-  // Custom CSV helpers
-  const customCsvRows = useMemo(() => {
-    if (!customResults) return [];
-    const rows = [];
-    rows.push(['Overall', customResults.results?.overall?.with?.n ?? '', customResults.results?.overall?.with?.avg_price ?? '', customResults.results?.overall?.without?.n ?? '', customResults.results?.overall?.without?.avg_price ?? '', customResults.results?.overall?.flat_adj ?? '', customResults.results?.overall?.pct_adj ?? '']);
-    Object.keys(customResults.byVCS || {}).forEach(v => {
-      const g = customResults.byVCS[v];
-      rows.push([v, g.with.n, g.with.avg_price, g.without.n, g.without.avg_price]);
-    });
-    return rows;
-  }, [customResults]);
-
-  // Additional CSV helpers
-  const additionalCsvRows = useMemo(() => {
-    if (!additionalResults) return [];
-    const rows = [];
-    Object.keys(additionalResults.byVCS || {}).forEach(v => {
-      const g = additionalResults.byVCS[v];
-      rows.push([v, g.with.n, g.with.avg_size, g.with.avg_price, g.with.avg_age, g.without.n, g.without.avg_price, g.flat_adj, g.pct_adj]);
-    });
-    return rows;
-  }, [additionalResults]);
-
-  return (
-    <div className="bg-white rounded-lg p-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-xl font-semibold mb-1">Attribute & Card Analytics</h2>
-          <p className="text-gray-600">Condition, custom attribute, and additional card analysis using values_norm_time data.</p>
+    if (vcsKeys.length === 0) {
+      return (
+        <div style={{ padding: '20px', textAlign: 'center', color: '#6B7280' }}>
+          No data available for {type} condition analysis
         </div>
-        <div className="text-gray-400"><Layers size={36} /></div>
-      </div>
+      );
+    }
 
-      <div className="mt-6 mls-subtab-nav" role="tablist" aria-label="Attribute sub tabs">
-        <button onClick={() => setActive('condition')} className={`mls-subtab-btn ${active === 'condition' ? 'mls-subtab-btn--active' : ''}`}>Condition Analysis</button>
-        <button onClick={() => setActive('custom')} className={`mls-subtab-btn ${active === 'custom' ? 'mls-subtab-btn--active' : ''}`}>Custom Attribute Analysis</button>
-        <button onClick={() => setActive('additional')} className={`mls-subtab-btn ${active === 'additional' ? 'mls-subtab-btn--active' : ''}`}>Additional Card Analysis</button>
-      </div>
+    // Calculate overall summary across all VCS
+    const overallSummary = calculateOverallSummary(data);
 
-      <div className="mt-4">
-        {active === 'condition' && (
-          <section>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium">Condition Analysis - VCS Cascade Design</h3>
-              <div className="flex items-center gap-2">
-                <button onClick={saveConditionAnalysis} className={CSV_BUTTON_CLASS}>Save Analysis</button>
-                <button onClick={() => {
-                  const extData = getConditionCsvData('exterior');
-                  downloadCsv(`${jobData.job_name || 'job'}-condition-exterior.csv`, extData.headers, extData.rows);
-                }} className={CSV_BUTTON_CLASS}><FileText size={14}/> Export Exterior CSV</button>
-                <button onClick={() => {
-                  const intData = getConditionCsvData('interior');
-                  downloadCsv(`${jobData.job_name || 'job'}-condition-interior.csv`, intData.headers, intData.rows);
-                }} className={CSV_BUTTON_CLASS}><FileText size={14}/> Export Interior CSV</button>
+    return (
+      <div style={{ marginBottom: '20px' }}>
+        {vcsKeys.map(vcs => {
+          const conditions = data[vcs];
+          const isExpanded = expandedVCS.has(`${type}-${vcs}`);
+          const conditionCodes = Object.keys(conditions).sort();
+          
+          // Find the baseline condition for this VCS
+          let baselineCode = null;
+          Object.entries(conditions).forEach(([code, condData]) => {
+            if (condData.adjustmentPct === 0 || 
+                condData.description.toUpperCase().includes('AVERAGE') ||
+                condData.description.toUpperCase().includes('NORMAL')) {
+              baselineCode = code;
+            }
+          });
+
+          return (
+            <div key={vcs} style={{ marginBottom: '15px', border: '1px solid #E5E7EB', borderRadius: '6px' }}>
+              {/* VCS Header Row */}
+              <div 
+                onClick={() => toggleVCS(`${type}-${vcs}`)}
+                style={{ 
+                  padding: '12px 15px', 
+                  backgroundColor: '#F9FAFB',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  borderBottom: isExpanded ? '1px solid #E5E7EB' : 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  <span style={{ fontWeight: '600', fontSize: '14px' }}>{vcs}</span>
+                  <span style={{ fontSize: '12px', color: '#6B7280' }}>
+                    ({conditionCodes.length} conditions, {
+                      conditionCodes.reduce((sum, code) => sum + conditions[code].count, 0)
+                    } properties)
+                  </span>
+                </div>
+                {!isExpanded && (
+                  <span style={{ fontSize: '12px', color: '#6B7280' }}>
+                    Click to expand
+                  </span>
+                )}
+              </div>
+
+              {/* Condition Details (when expanded) */}
+              {isExpanded && (
+                <div style={{ padding: '0' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#F3F4F6' }}>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>
+                          Condition
+                        </th>
+                        <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
+                          Count
+                        </th>
+                        <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
+                          Avg Value
+                        </th>
+                        <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
+                          Avg SFLA
+                        </th>
+                        <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
+                          Avg Year
+                        </th>
+                        <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
+                          Adjusted
+                        </th>
+                        <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
+                          Impact
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {conditionCodes.map((code, idx) => {
+                        const cond = conditions[code];
+                        const isBaseline = code === baselineCode;
+                        
+                        return (
+                          <tr 
+                            key={code}
+                            style={{ 
+                              backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB',
+                              fontWeight: isBaseline ? '600' : 'normal'
+                            }}
+                          >
+                            <td style={{ padding: '8px 12px', fontSize: '13px' }}>
+                              <span style={{ fontWeight: '500' }}>{code}</span> - {cond.description}
+                              {isBaseline && (
+                                <span style={{ 
+                                  marginLeft: '8px', 
+                                  fontSize: '11px', 
+                                  color: '#10B981',
+                                  fontWeight: 'normal'
+                                }}>
+                                  (baseline)
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
+                              {cond.count}
+                            </td>
+                            <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
+                              {formatCurrency(cond.avgValue)}
+                            </td>
+                            <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
+                              {cond.avgSize > 0 ? `${cond.avgSize.toLocaleString()} sf` : '-'}
+                            </td>
+                            <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
+                              {cond.avgYear || '-'}
+                            </td>
+                            <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
+                              {formatCurrency(cond.adjustedValue)}
+                            </td>
+                            <td style={{ 
+                              padding: '8px 12px', 
+                              textAlign: 'right', 
+                              fontSize: '13px',
+                              color: cond.adjustmentPct > 0 ? '#059669' : 
+                                     cond.adjustmentPct < 0 ? '#DC2626' : '#6B7280'
+                            }}>
+                              {formatPercent(cond.adjustmentPct)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Overall Summary */}
+        {overallSummary && (
+          <div style={{ 
+            marginTop: '20px', 
+            padding: '15px', 
+            backgroundColor: '#F0F9FF', 
+            borderRadius: '6px',
+            border: '1px solid #BFDBFE'
+          }}>
+            <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: '600', color: '#1E40AF' }}>
+              {type} Condition Summary
+            </h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
+              <div>
+                <div style={{ fontSize: '12px', color: '#64748B' }}>Total Properties</div>
+                <div style={{ fontSize: '16px', fontWeight: '600' }}>{overallSummary.totalProperties}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', color: '#64748B' }}>Adjustment Range</div>
+                <div style={{ fontSize: '16px', fontWeight: '600' }}>
+                  {formatPercent(overallSummary.minAdjustment)} to {formatPercent(overallSummary.maxAdjustment)}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', color: '#64748B' }}>Baseline Condition</div>
+                <div style={{ fontSize: '16px', fontWeight: '600' }}>{overallSummary.baselineCondition}</div>
               </div>
             </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
-            {/* Filter Controls */}
-            <div className="flex items-center gap-4 mb-4 p-3 bg-gray-50 rounded">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">Type & Use:</span>
+  // ============ CALCULATE OVERALL SUMMARY ============
+  const calculateOverallSummary = (data) => {
+    let totalProperties = 0;
+    let minAdjustment = null;
+    let maxAdjustment = null;
+    let baselineCondition = null;
+
+    Object.values(data).forEach(vcsConditions => {
+      Object.values(vcsConditions).forEach(cond => {
+        totalProperties += cond.count;
+        
+        if (minAdjustment === null || cond.adjustmentPct < minAdjustment) {
+          minAdjustment = cond.adjustmentPct;
+        }
+        if (maxAdjustment === null || cond.adjustmentPct > maxAdjustment) {
+          maxAdjustment = cond.adjustmentPct;
+        }
+        
+        if (cond.adjustmentPct === 0 || 
+            cond.description.toUpperCase().includes('AVERAGE') ||
+            cond.description.toUpperCase().includes('NORMAL')) {
+          baselineCondition = cond.description;
+        }
+      });
+    });
+
+    return {
+      totalProperties,
+      minAdjustment,
+      maxAdjustment,
+      baselineCondition: baselineCondition || 'Not Identified'
+    };
+  };
+
+  // ============ CSV EXPORT FUNCTIONS ============
+  const exportConditionDataToCSV = (data, type) => {
+    const headers = ['VCS', 'Code', 'Description', 'Count', 'Avg_Value', 'Avg_SFLA', 'Avg_Year', 'Adjusted_Value', 'Adjustment_Pct'];
+    const rows = [];
+
+    Object.entries(data).forEach(([vcs, conditions]) => {
+      Object.entries(conditions).forEach(([code, cond]) => {
+        rows.push([
+          vcs,
+          code,
+          cond.description,
+          cond.count,
+          cond.avgValue,
+          cond.avgSize || '',
+          cond.avgYear || '',
+          cond.adjustedValue,
+          cond.adjustmentPct.toFixed(1)
+        ]);
+      });
+    });
+
+    const filename = `${jobData.job_name || 'job'}_${type}_condition_analysis.csv`;
+    downloadCsv(filename, headers, rows);
+  };
+  // ============ RENDER CONDITION ANALYSIS TAB ============
+  const renderConditionAnalysis = () => {
+    return (
+      <div>
+        {/* Type/Use Filter and Interior Inspection Toggle */}
+        <div style={{ 
+          marginBottom: '20px', 
+          padding: '15px', 
+          backgroundColor: '#F9FAFB', 
+          borderRadius: '6px',
+          border: '1px solid #E5E7EB'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+              <div>
+                <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                  Property Type Filter
+                </label>
                 <select
                   value={typeUseFilter}
                   onChange={(e) => setTypeUseFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  style={{ minWidth: '200px' }}
+                  style={{
+                    padding: '6px 10px',
+                    border: '1px solid #D1D5DB',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    backgroundColor: 'white',
+                    minWidth: '200px'
+                  }}
                 >
                   {getTypeUseOptions().map(option => (
                     <option key={option.code} value={option.code}>
@@ -836,256 +708,1170 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                   ))}
                 </select>
               </div>
-
-              <span className="text-xs text-gray-500">
-                {conditionData ? `${conditionData.length} properties loaded` : 'Loading...'}
-              </span>
-
-              {availableConditions.exterior.length > 0 && (
-                <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
-                  ✓ {availableConditions.exterior.length} exterior conditions available
-                </span>
-              )}
+              
+              <div style={{ 
+                padding: '8px 12px', 
+                backgroundColor: '#EBF8FF',
+                borderRadius: '4px',
+                fontSize: '13px',
+                color: '#2563EB'
+              }}>
+                <Info size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'text-bottom' }} />
+                Analyzing {filterPropertiesByType(properties, typeUseFilter).length.toLocaleString()} properties
+              </div>
             </div>
 
-            {loading && (
-              <div className="text-center py-8">
-                <div className="text-gray-500">Loading condition data...</div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => exportConditionDataToCSV(conditionData.exterior, 'exterior')}
+                className={CSV_BUTTON_CLASS}
+                disabled={conditionData.loading || Object.keys(conditionData.exterior).length === 0}
+              >
+                <FileText size={14} /> Export Exterior CSV
+              </button>
+              <button
+                onClick={() => exportConditionDataToCSV(conditionData.interior, 'interior')}
+                className={CSV_BUTTON_CLASS}
+                disabled={conditionData.loading || Object.keys(conditionData.interior).length === 0}
+              >
+                <FileText size={14} /> Export Interior CSV
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Loading State */}
+        {conditionData.loading && (
+          <div style={{ padding: '40px', textAlign: 'center' }}>
+            <div style={{ marginBottom: '10px' }}>Loading condition analysis data...</div>
+            <div style={{ display: 'inline-block', width: '40px', height: '40px', border: '3px solid #E5E7EB', borderTop: '3px solid #3B82F6', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+          </div>
+        )}
+
+        {/* Error State */}
+        {conditionData.error && (
+          <div style={{ 
+            padding: '15px', 
+            backgroundColor: '#FEF2F2', 
+            borderRadius: '6px',
+            border: '1px solid #FECACA',
+            color: '#991B1B',
+            marginBottom: '20px'
+          }}>
+            {conditionData.error}
+          </div>
+        )}
+
+        {/* Exterior Condition Analysis */}
+        {!conditionData.loading && !conditionData.error && (
+          <>
+            <div style={{ marginBottom: '30px' }}>
+              <h3 style={{ 
+                fontSize: '16px', 
+                fontWeight: '600', 
+                marginBottom: '15px',
+                padding: '10px 15px',
+                backgroundColor: '#F0F9FF',
+                borderRadius: '6px',
+                color: '#1E40AF'
+              }}>
+                Exterior Condition Analysis
+              </h3>
+              {renderConditionTable(conditionData.exterior, 'Exterior')}
+            </div>
+
+            {/* Interior Condition Analysis */}
+            <div style={{ marginBottom: '30px' }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                padding: '10px 15px',
+                backgroundColor: '#F0F9FF',
+                borderRadius: '6px',
+                marginBottom: '15px'
+              }}>
+                <h3 style={{ 
+                  fontSize: '16px', 
+                  fontWeight: '600', 
+                  margin: '0',
+                  color: '#1E40AF'
+                }}>
+                  Interior Condition Analysis
+                </h3>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    id="useInteriorInspections"
+                    checked={useInteriorInspections}
+                    onChange={(e) => setUseInteriorInspections(e.target.checked)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <label 
+                    htmlFor="useInteriorInspections" 
+                    style={{ 
+                      fontSize: '13px', 
+                      cursor: 'pointer',
+                      color: '#1E40AF'
+                    }}
+                  >
+                    Use Interior Inspections Only
+                  </label>
+                  <div
+                    style={{
+                      display: 'inline-block',
+                      position: 'relative',
+                      cursor: 'help'
+                    }}
+                    title="When enabled, only includes properties where inspectors had actual interior access (not estimations or refusals)"
+                  >
+                    <Info size={14} style={{ color: '#6B7280' }} />
+                  </div>
+                </div>
               </div>
+
+              {useInteriorInspections && (
+                <div style={{ 
+                  padding: '10px 15px', 
+                  backgroundColor: '#FEF3C7', 
+                  borderRadius: '4px',
+                  marginBottom: '15px',
+                  fontSize: '13px',
+                  color: '#92400E'
+                }}>
+                  <Info size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'text-bottom' }} />
+                  Filtering to properties with confirmed interior inspections only. This may significantly reduce the sample size.
+                </div>
+              )}
+
+              {renderConditionTable(conditionData.interior, 'Interior')}
+            </div>
+          </>
+        )}
+
+        {/* No Data Message */}
+        {!conditionData.loading && !conditionData.error && 
+         Object.keys(conditionData.exterior).length === 0 && 
+         Object.keys(conditionData.interior).length === 0 && (
+          <div style={{ 
+            padding: '40px', 
+            textAlign: 'center',
+            backgroundColor: '#F9FAFB',
+            borderRadius: '6px',
+            color: '#6B7280'
+          }}>
+            <div style={{ fontSize: '16px', marginBottom: '10px' }}>
+              No condition data available for analysis
+            </div>
+            <div style={{ fontSize: '14px' }}>
+              Properties may be missing condition codes or normalized sale values
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ============ ADD SPINNER ANIMATION TO STYLES ============
+  // Add this to your component or in a <style> tag
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
+  // ============ CUSTOM ATTRIBUTE ANALYSIS FUNCTIONS ============
+  const detectRawFields = useCallback(async () => {
+    try {
+      const fields = new Set();
+      const sampleSize = Math.min(100, properties.length);
+      
+      // Sample some properties to detect available raw fields
+      for (let i = 0; i < sampleSize; i++) {
+        const prop = properties[i];
+        if (!prop.job_id || !prop.property_composite_key) continue;
+        
+        const rawData = await propertyService.getRawDataForProperty(
+          prop.job_id, 
+          prop.property_composite_key
+        );
+        
+        if (rawData) {
+          Object.keys(rawData).forEach(key => {
+            // Filter out obvious non-analysis fields
+            if (!key.startsWith('_') && 
+                !key.includes('DATE') && 
+                !key.includes('OWNER') &&
+                !key.includes('ADDRESS') &&
+                key !== 'job_id' &&
+                key !== 'property_composite_key') {
+              fields.add(key);
+            }
+          });
+        }
+      }
+      
+      const sortedFields = Array.from(fields).sort();
+      setRawFields(sortedFields);
+      if (sortedFields.length > 0 && !selectedRawField) {
+        setSelectedRawField(sortedFields[0]);
+      }
+    } catch (error) {
+      console.error('Error detecting raw fields:', error);
+      setRawFields([]);
+    }
+  }, [properties]);
+
+  // Load raw fields when switching to custom attribute tab
+  useEffect(() => {
+    if (active === 'custom' && rawFields.length === 0 && properties.length > 0) {
+      detectRawFields();
+    }
+  }, [active, properties.length, detectRawFields]);
+
+  // Run custom attribute analysis
+  const runCustomAttributeAnalysis = async () => {
+    if (!selectedRawField) return;
+    
+    setCustomWorking(true);
+    try {
+      // Get properties with normalized values
+      const validProps = properties.filter(p => {
+        const marketData = propertyMarketData.find(
+          m => m.property_composite_key === p.property_composite_key
+        );
+        return marketData?.values_norm_time > 0;
+      });
+
+      // Build lookup with raw data
+      const lookup = [];
+      const chunkSize = 100;
+      
+      for (let i = 0; i < validProps.length; i += chunkSize) {
+        const chunk = validProps.slice(i, i + chunkSize);
+        const rawDataPromises = chunk.map(async p => {
+          const raw = await propertyService.getRawDataForProperty(p.job_id, p.property_composite_key);
+          return { p, raw };
+        });
+        
+        const results = await Promise.all(rawDataPromises);
+        lookup.push(...results);
+      }
+
+      // Helper to check if property has the attribute
+      const hasAttribute = (rawData) => {
+        if (!rawData || !rawData[selectedRawField]) return false;
+        const value = rawData[selectedRawField];
+        
+        if (matchValue === '') {
+          // Just check if field exists and has value
+          return value !== null && value !== undefined && String(value).trim() !== '';
+        } else {
+          // Check for specific match
+          const strValue = String(value).trim().toUpperCase();
+          const strMatch = String(matchValue).trim().toUpperCase();
+          
+          // Try exact match first
+          if (strValue === strMatch) return true;
+          
+          // Try numeric comparison if both are numbers
+          const numValue = Number(value);
+          const numMatch = Number(matchValue);
+          if (!isNaN(numValue) && !isNaN(numMatch)) {
+            return Math.abs(numValue - numMatch) < 0.0001;
+          }
+          
+          return false;
+        }
+      };
+
+      // Group properties with/without attribute
+      const withAttr = [];
+      const withoutAttr = [];
+      
+      lookup.forEach(({ p, raw }) => {
+        const marketData = propertyMarketData.find(
+          m => m.property_composite_key === p.property_composite_key
+        );
+        if (marketData?.values_norm_time > 0) {
+          const propData = {
+            ...p,
+            values_norm_time: marketData.values_norm_time
+          };
+          
+          if (hasAttribute(raw)) {
+            withAttr.push(propData);
+          } else {
+            withoutAttr.push(propData);
+          }
+        }
+      });
+
+      // Calculate overall statistics
+      const calculateStats = (props) => {
+        if (props.length === 0) return { n: 0, avg_price: null, avg_size: null };
+        
+        const avgPrice = props.reduce((sum, p) => sum + p.values_norm_time, 0) / props.length;
+        const validSizes = props.filter(p => (p.sfla || p.property_sfla) > 0);
+        const avgSize = validSizes.length > 0 ?
+          validSizes.reduce((sum, p) => sum + (p.sfla || p.property_sfla || 0), 0) / validSizes.length : null;
+        
+        return {
+          n: props.length,
+          avg_price: Math.round(avgPrice),
+          avg_size: avgSize ? Math.round(avgSize) : null
+        };
+      };
+
+      const withStats = calculateStats(withAttr);
+      const withoutStats = calculateStats(withoutAttr);
+      
+      // Calculate adjustments
+      let flatAdj = null;
+      let pctAdj = null;
+      
+      if (withStats.avg_price && withoutStats.avg_price) {
+        flatAdj = Math.round(withStats.avg_price - withoutStats.avg_price);
+        pctAdj = ((withStats.avg_price - withoutStats.avg_price) / withoutStats.avg_price) * 100;
+      }
+
+      // Group by VCS
+      const byVCS = {};
+      lookup.forEach(({ p, raw }) => {
+        const vcs = p.new_vcs || p.property_vcs || 'UNKNOWN';
+        if (!byVCS[vcs]) byVCS[vcs] = { with: [], without: [] };
+        
+        const marketData = propertyMarketData.find(
+          m => m.property_composite_key === p.property_composite_key
+        );
+        
+        if (marketData?.values_norm_time > 0) {
+          const propData = {
+            ...p,
+            values_norm_time: marketData.values_norm_time
+          };
+          
+          if (hasAttribute(raw)) {
+            byVCS[vcs].with.push(propData);
+          } else {
+            byVCS[vcs].without.push(propData);
+          }
+        }
+      });
+
+      // Calculate VCS-level statistics
+      const byVCSResults = {};
+      Object.entries(byVCS).forEach(([vcs, data]) => {
+        const vcsWithStats = calculateStats(data.with);
+        const vcsWithoutStats = calculateStats(data.without);
+        
+        let vcsFlat = null;
+        let vcsPct = null;
+        
+        if (vcsWithStats.avg_price && vcsWithoutStats.avg_price) {
+          vcsFlat = Math.round(vcsWithStats.avg_price - vcsWithoutStats.avg_price);
+          vcsPct = ((vcsWithStats.avg_price - vcsWithoutStats.avg_price) / vcsWithoutStats.avg_price) * 100;
+        }
+        
+        byVCSResults[vcs] = {
+          with: vcsWithStats,
+          without: vcsWithoutStats,
+          flat_adj: vcsFlat,
+          pct_adj: vcsPct
+        };
+      });
+
+      // Build results
+      const results = {
+        field: selectedRawField,
+        matchValue: matchValue || '(exists)',
+        overall: {
+          with: withStats,
+          without: withoutStats,
+          flat_adj: flatAdj,
+          pct_adj: pctAdj
+        },
+        byVCS: byVCSResults,
+        generated_at: new Date().toISOString()
+      };
+
+      setCustomResults(results);
+      
+      // Save to database
+      await saveCustomResultsToDB(results);
+      
+    } catch (error) {
+      console.error('Error running custom attribute analysis:', error);
+    } finally {
+      setCustomWorking(false);
+    }
+  };
+
+  // Save custom results to database
+  const saveCustomResultsToDB = async (results) => {
+    try {
+      const { error } = await supabase
+        .from('market_land_valuation')
+        .upsert({
+          job_id: jobData.id,
+          custom_attribute_rollup: results,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'job_id'
+        });
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error saving custom results:', error);
+    }
+  };
+
+  // Export custom results to CSV
+  const exportCustomResultsToCSV = () => {
+    if (!customResults) return;
+    
+    const headers = ['Group', 'With_Count', 'With_Avg', 'Without_Count', 'Without_Avg', 'Flat_Adj', 'Pct_Adj'];
+    const rows = [];
+    
+    // Add overall row
+    rows.push([
+      'OVERALL',
+      customResults.overall.with.n,
+      customResults.overall.with.avg_price || '',
+      customResults.overall.without.n,
+      customResults.overall.without.avg_price || '',
+      customResults.overall.flat_adj || '',
+      customResults.overall.pct_adj ? customResults.overall.pct_adj.toFixed(1) : ''
+    ]);
+    
+    // Add VCS rows
+    Object.entries(customResults.byVCS || {}).forEach(([vcs, data]) => {
+      rows.push([
+        vcs,
+        data.with.n,
+        data.with.avg_price || '',
+        data.without.n,
+        data.without.avg_price || '',
+        data.flat_adj || '',
+        data.pct_adj ? data.pct_adj.toFixed(1) : ''
+      ]);
+    });
+    
+    const filename = `${jobData.job_name || 'job'}_custom_attribute_${customResults.field}.csv`;
+    downloadCsv(filename, headers, rows);
+  };
+  // ============ RENDER CUSTOM ATTRIBUTE ANALYSIS ============
+  const renderCustomAttributeAnalysis = () => {
+    return (
+      <div>
+        {/* Controls */}
+        <div style={{ 
+          marginBottom: '20px', 
+          padding: '15px', 
+          backgroundColor: '#F9FAFB', 
+          borderRadius: '6px',
+          border: '1px solid #E5E7EB'
+        }}>
+          <div style={{ marginBottom: '12px' }}>
+            <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>
+              Select Field and Value to Analyze
+            </h4>
+            <p style={{ fontSize: '12px', color: '#6B7280', marginBottom: '12px' }}>
+              Compare properties with vs without specific attributes to determine value impact
+            </p>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+            <div style={{ flex: '1' }}>
+              <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                Raw Data Field
+              </label>
+              <select
+                value={selectedRawField}
+                onChange={(e) => setSelectedRawField(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '6px 10px',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  backgroundColor: 'white'
+                }}
+                disabled={customWorking}
+              >
+                <option value="">Select a field...</option>
+                {rawFields.map(field => (
+                  <option key={field} value={field}>{field}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div style={{ flex: '1' }}>
+              <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                Match Value (leave empty = field exists)
+              </label>
+              <input
+                type="text"
+                value={matchValue}
+                onChange={(e) => setMatchValue(e.target.value)}
+                placeholder="e.g., Y, 1, POOL, etc."
+                style={{
+                  width: '100%',
+                  padding: '6px 10px',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: '4px',
+                  fontSize: '14px'
+                }}
+                disabled={customWorking}
+              />
+            </div>
+            
+            <button
+              onClick={runCustomAttributeAnalysis}
+              disabled={customWorking || !selectedRawField}
+              style={{
+                padding: '6px 16px',
+                backgroundColor: customWorking || !selectedRawField ? '#E5E7EB' : '#3B82F6',
+                color: customWorking || !selectedRawField ? '#9CA3AF' : 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: customWorking || !selectedRawField ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {customWorking ? 'Analyzing...' : 'Run Analysis'}
+            </button>
+            
+            {customResults && (
+              <button
+                onClick={exportCustomResultsToCSV}
+                className={CSV_BUTTON_CLASS}
+              >
+                <FileText size={14} /> Export CSV
+              </button>
             )}
+          </div>
+        </div>
 
-            {!loading && conditionData && (
-              <>
-                {/* Exterior Condition Analysis */}
-                <div className="mb-6">
-                  <h4 className="font-medium mb-3">Exterior Condition Analysis - VCS Cascade View</h4>
-                  <div className="overflow-auto border rounded">
-                    <table className="min-w-full table-auto text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-gray-100 text-left">
-                          <th className="px-3 py-2 border font-semibold">VCS / Condition</th>
-                          <th className="px-3 py-2 border font-semibold text-center">Count</th>
-                          <th className="px-3 py-2 border font-semibold text-center">Avg Price</th>
-                          <th className="px-3 py-2 border font-semibold text-center">Avg Size</th>
-                          <th className="px-3 py-2 border font-semibold text-center">Norm Price</th>
-                          <th className="px-3 py-2 border font-semibold text-center">% Impact</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {Object.keys(conditionAnalysis.exterior || {}).length === 0 && (
-                          <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-500">No exterior condition data found.</td></tr>
-                        )}
-                        {Object.entries(conditionAnalysis.exterior || {}).map(([vcs, vcsData], vcsIdx) => (
-                          <Fragment key={vcs}>
-                            {/* VCS Header Row */}
-                            <tr className="bg-blue-50 font-semibold">
-                              <td className="px-3 py-2 border font-bold text-blue-800">{vcs}</td>
-                              <td className="px-3 py-2 border text-center text-blue-700">{vcsData.totalProperties}</td>
-                              <td className="px-3 py-2 border text-center text-blue-700">—</td>
-                              <td className="px-3 py-2 border text-center text-blue-700">—</td>
-                              <td className="px-3 py-2 border text-center text-blue-700">—</td>
-                              <td className="px-3 py-2 border text-center text-blue-700">Baseline: {vcsData.baseline || 'Auto'}</td>
-                            </tr>
-                            {/* Condition Code Rows */}
-                            {availableConditions.exterior.map((cond, condIdx) => {
-                              console.log(`🔍 Looking for condition "${cond.code}" in VCS "${vcs}" conditions:`, Object.keys(vcsData.conditions || {}));
-                              const condData = vcsData.conditions[cond.code];
-                              console.log(`📊 Found condData for ${cond.code}:`, condData);
-
-                              // Show the row even if no data, for debugging
-                              const hasData = !!condData;
-
-                              return (
-                                <tr key={`${vcs}-${cond.code}`} className={condIdx % 2 ? 'bg-white' : 'bg-gray-50'}>
-                                  <td className="px-6 py-2 border text-sm">
-                                    <span className="font-medium text-gray-700">{cond.code}</span>
-                                    <span className="text-gray-500 ml-2">— {cond.description}</span>
-                                    {!hasData && <span className="text-red-500 ml-2">[NO DATA]</span>}
-                                  </td>
-                                  <td className="px-3 py-2 border text-center">{hasData ? condData.count : '—'}</td>
-                                  <td className="px-3 py-2 border text-center">{hasData ? formatPrice(condData.avgPrice) : '—'}</td>
-                                  <td className="px-3 py-2 border text-center">{hasData ? (condData.avgSize?.toLocaleString() || '—') : '—'}</td>
-                                  <td className="px-3 py-2 border text-center font-medium">{hasData ? formatPrice(condData.normalizedPrice || condData.avgPrice) : '—'}</td>
-                                  <td className="px-3 py-2 border text-center">
-                                    {hasData ? (
-                                      <span className={`font-medium ${condData.percentDiff > 0 ? 'text-green-600' : condData.percentDiff < 0 ? 'text-red-600' : 'text-gray-600'}`}>
-                                        {formatPct(condData.percentDiff)}
-                                      </span>
-                                    ) : '—'}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </Fragment>
-                        ))}
-                      </tbody>
-                    </table>
+        {/* Results */}
+        {customResults && (
+          <div>
+            {/* Overall Results */}
+            <div style={{ 
+              marginBottom: '20px',
+              padding: '15px',
+              backgroundColor: '#EFF6FF',
+              borderRadius: '6px',
+              border: '1px solid #BFDBFE'
+            }}>
+              <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1E40AF' }}>
+                Overall Analysis: {customResults.field} {customResults.matchValue !== '(exists)' && `= "${customResults.matchValue}"`}
+              </h4>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
+                <div>
+                  <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px' }}>With Attribute</div>
+                  <div style={{ fontSize: '20px', fontWeight: '600', color: '#1E40AF' }}>
+                    {customResults.overall.with.n}
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#64748B' }}>
+                    {customResults.overall.with.avg_price ? formatCurrency(customResults.overall.with.avg_price) : '-'}
                   </div>
                 </div>
-
-                {/* Interior Condition Analysis */}
-                <div className="mb-6">
-                  <h4 className="font-medium mb-3">Interior Condition Analysis - VCS Cascade View</h4>
-                  <div className="overflow-auto border rounded">
-                    <table className="min-w-full table-auto text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-gray-100 text-left">
-                          <th className="px-3 py-2 border font-semibold">VCS / Condition</th>
-                          <th className="px-3 py-2 border font-semibold text-center">Count</th>
-                          <th className="px-3 py-2 border font-semibold text-center">Avg Price</th>
-                          <th className="px-3 py-2 border font-semibold text-center">Avg Size</th>
-                          <th className="px-3 py-2 border font-semibold text-center">Norm Price</th>
-                          <th className="px-3 py-2 border font-semibold text-center">% Impact</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {Object.keys(conditionAnalysis.interior || {}).length === 0 && (
-                          <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-500">No interior condition data found.</td></tr>
-                        )}
-                        {Object.entries(conditionAnalysis.interior || {}).map(([vcs, vcsData], vcsIdx) => (
-                          <Fragment key={vcs}>
-                            {/* VCS Header Row */}
-                            <tr className="bg-purple-50 font-semibold">
-                              <td className="px-3 py-2 border font-bold text-purple-800">{vcs}</td>
-                              <td className="px-3 py-2 border text-center text-purple-700">{vcsData.totalProperties}</td>
-                              <td className="px-3 py-2 border text-center text-purple-700">—</td>
-                              <td className="px-3 py-2 border text-center text-purple-700">—</td>
-                              <td className="px-3 py-2 border text-center text-purple-700">—</td>
-                              <td className="px-3 py-2 border text-center text-purple-700">Baseline: {vcsData.baseline || 'Auto'}</td>
-                            </tr>
-                            {/* Condition Code Rows */}
-                            {availableConditions.interior.map((cond, condIdx) => {
-                              console.log(`🔍 Interior - Looking for condition "${cond.code}" in VCS "${vcs}" conditions:`, Object.keys(vcsData.conditions || {}));
-                              const condData = vcsData.conditions[cond.code];
-                              console.log(`📊 Interior - Found condData for ${cond.code}:`, condData);
-
-                              // Show the row even if no data, for debugging
-                              const hasData = !!condData;
-
-                              return (
-                                <tr key={`${vcs}-${cond.code}`} className={condIdx % 2 ? 'bg-white' : 'bg-gray-50'}>
-                                  <td className="px-6 py-2 border text-sm">
-                                    <span className="font-medium text-gray-700">{cond.code}</span>
-                                    <span className="text-gray-500 ml-2">— {cond.description}</span>
-                                    {!hasData && <span className="text-red-500 ml-2">[NO DATA]</span>}
-                                  </td>
-                                  <td className="px-3 py-2 border text-center">{hasData ? condData.count : '—'}</td>
-                                  <td className="px-3 py-2 border text-center">{hasData ? formatPrice(condData.avgPrice) : '—'}</td>
-                                  <td className="px-3 py-2 border text-center">{hasData ? (condData.avgSize?.toLocaleString() || '—') : '—'}</td>
-                                  <td className="px-3 py-2 border text-center font-medium">{hasData ? formatPrice(condData.normalizedPrice || condData.avgPrice) : '—'}</td>
-                                  <td className="px-3 py-2 border text-center">
-                                    {hasData ? (
-                                      <span className={`font-medium ${condData.percentDiff > 0 ? 'text-green-600' : condData.percentDiff < 0 ? 'text-red-600' : 'text-gray-600'}`}>
-                                        {formatPct(condData.percentDiff)}
-                                      </span>
-                                    ) : '—'}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </Fragment>
-                        ))}
-                      </tbody>
-                    </table>
+                
+                <div>
+                  <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px' }}>Without Attribute</div>
+                  <div style={{ fontSize: '20px', fontWeight: '600', color: '#1E40AF' }}>
+                    {customResults.overall.without.n}
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#64748B' }}>
+                    {customResults.overall.without.avg_price ? formatCurrency(customResults.overall.without.avg_price) : '-'}
                   </div>
                 </div>
-
-                {/* Overall Summary */}
-                {conditionAnalysis.summary && (
-                  <div className="mt-6 p-4 bg-blue-50 rounded">
-                    <h4 className="font-medium mb-3">Overall Condition Impact Summary</h4>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <h5 className="font-medium text-sm mb-2">Exterior Conditions</h5>
-                        <div className="space-y-1 text-xs">
-                          {Object.entries(conditionAnalysis.summary.exterior || {}).map(([condition, data]) => (
-                            <div key={condition} className="flex justify-between">
-                              <span>{condition}:</span>
-                              <span className={`font-medium ${data.percentDiff > 0 ? 'text-green-600' : data.percentDiff < 0 ? 'text-red-600' : 'text-gray-600'}`}>
-                                {formatPct(data.percentDiff)} ({data.count} props)
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <h5 className="font-medium text-sm mb-2">Interior Conditions</h5>
-                        <div className="space-y-1 text-xs">
-                          {Object.entries(conditionAnalysis.summary.interior || {}).map(([condition, data]) => (
-                            <div key={condition} className="flex justify-between">
-                              <span>{condition}:</span>
-                              <span className={`font-medium ${data.percentDiff > 0 ? 'text-green-600' : data.percentDiff < 0 ? 'text-red-600' : 'text-gray-600'}`}>
-                                {formatPct(data.percentDiff)} ({data.count} props)
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
+                
+                <div>
+                  <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px' }}>Dollar Impact</div>
+                  <div style={{ 
+                    fontSize: '20px', 
+                    fontWeight: '600',
+                    color: customResults.overall.flat_adj > 0 ? '#059669' : 
+                           customResults.overall.flat_adj < 0 ? '#DC2626' : '#6B7280'
+                  }}>
+                    {customResults.overall.flat_adj ? formatCurrency(customResults.overall.flat_adj) : '-'}
                   </div>
-                )}
-              </>
-            )}
+                </div>
+                
+                <div>
+                  <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px' }}>Percent Impact</div>
+                  <div style={{ 
+                    fontSize: '20px', 
+                    fontWeight: '600',
+                    color: customResults.overall.pct_adj > 0 ? '#059669' : 
+                           customResults.overall.pct_adj < 0 ? '#DC2626' : '#6B7280'
+                  }}>
+                    {customResults.overall.pct_adj ? formatPercent(customResults.overall.pct_adj) : '-'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* VCS Breakdown */}
+            <div style={{ 
+              border: '1px solid #E5E7EB',
+              borderRadius: '6px',
+              overflow: 'hidden'
+            }}>
+              <div style={{ 
+                padding: '12px 15px',
+                backgroundColor: '#F9FAFB',
+                borderBottom: '1px solid #E5E7EB'
+              }}>
+                <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0' }}>
+                  Analysis by VCS
+                </h4>
+              </div>
+              
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F3F4F6' }}>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>
+                      VCS
+                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>
+                      With (n)
+                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
+                      With Avg
+                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>
+                      Without (n)
+                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
+                      Without Avg
+                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
+                      $ Impact
+                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
+                      % Impact
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(customResults.byVCS || {}).map(([vcs, data], idx) => (
+                    <tr key={vcs} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                      <td style={{ padding: '8px 12px', fontSize: '13px', fontWeight: '500' }}>
+                        {vcs}
+                      </td>
+                      <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
+                        {data.with.n}
+                      </td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
+                        {data.with.avg_price ? formatCurrency(data.with.avg_price) : '-'}
+                      </td>
+                      <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
+                        {data.without.n}
+                      </td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
+                        {data.without.avg_price ? formatCurrency(data.without.avg_price) : '-'}
+                      </td>
+                      <td style={{ 
+                        padding: '8px 12px', 
+                        textAlign: 'right', 
+                        fontSize: '13px',
+                        color: data.flat_adj > 0 ? '#059669' : 
+                               data.flat_adj < 0 ? '#DC2626' : '#6B7280'
+                      }}>
+                        {data.flat_adj ? formatCurrency(data.flat_adj) : '-'}
+                      </td>
+                      <td style={{ 
+                        padding: '8px 12px', 
+                        textAlign: 'right', 
+                        fontSize: '13px',
+                        color: data.pct_adj > 0 ? '#059669' : 
+                               data.pct_adj < 0 ? '#DC2626' : '#6B7280'
+                      }}>
+                        {data.pct_adj ? formatPercent(data.pct_adj) : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* No Results Yet */}
+        {!customResults && !customWorking && (
+          <div style={{ 
+            padding: '40px',
+            textAlign: 'center',
+            backgroundColor: '#F9FAFB',
+            borderRadius: '6px',
+            color: '#6B7280'
+          }}>
+            <div style={{ fontSize: '14px' }}>
+              Select a field and run analysis to see attribute value impacts
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+  // ============ ADDITIONAL CARDS ANALYSIS ============
+  const runAdditionalCardAnalysis = async () => {
+    setAdditionalWorking(true);
+    try {
+      // Get properties with normalized values
+      const validProps = properties.filter(p => {
+        const marketData = propertyMarketData.find(
+          m => m.property_composite_key === p.property_composite_key
+        );
+        return marketData?.values_norm_time > 0;
+      });
+
+      // Build lookup with raw data
+      const lookup = [];
+      const chunkSize = 100;
+      
+      for (let i = 0; i < validProps.length; i += chunkSize) {
+        const chunk = validProps.slice(i, i + chunkSize);
+        const rawDataPromises = chunk.map(async p => {
+          const raw = await propertyService.getRawDataForProperty(p.job_id, p.property_composite_key);
+          return { p, raw };
+        });
+        
+        const results = await Promise.all(rawDataPromises);
+        lookup.push(...results);
+      }
+
+      // Detect additional cards based on vendor type
+      const hasAdditionalCard = (prop, raw) => {
+        if (vendorType === 'BRT') {
+          // BRT: Check property_addl_card field
+          const addlCard = prop.property_addl_card;
+          if (addlCard && addlCard !== 'M' && addlCard !== '1' && addlCard !== 'NONE' && addlCard.trim() !== '') {
+            return true;
+          }
+        } else if (vendorType === 'Microsystems') {
+          // Microsystems: Check for multiple building indicators
+          if (raw) {
+            // Check for building 2, building 3, etc. in raw data
+            const hasBuilding2 = raw['Building 2'] || raw['Building2'] || raw['BLDG2'];
+            const hasBuilding3 = raw['Building 3'] || raw['Building3'] || raw['BLDG3'];
+            if (hasBuilding2 || hasBuilding3) return true;
+            
+            // Check for additional card indicator
+            const addlCard = raw['Additional Card'] || raw['ADDL_CARD'] || raw['AddlCard'];
+            if (addlCard && addlCard !== 'N' && addlCard !== 'NO' && addlCard.trim() !== '') {
+              return true;
+            }
+          }
+        }
+        return false;
+      };
+
+      // Group by VCS
+      const byVCS = {};
+      
+      lookup.forEach(({ p, raw }) => {
+        const vcs = p.new_vcs || p.property_vcs || 'UNKNOWN';
+        const hasCard = hasAdditionalCard(p, raw);
+        
+        const marketData = propertyMarketData.find(
+          m => m.property_composite_key === p.property_composite_key
+        );
+        
+        if (marketData?.values_norm_time > 0) {
+          if (!byVCS[vcs]) {
+            byVCS[vcs] = { with_card: [], without_card: [] };
+          }
+          
+          const propData = {
+            ...p,
+            values_norm_time: marketData.values_norm_time,
+            sfla: p.sfla || p.property_sfla || 0,
+            year_built: p.year_built || p.property_year_built || null
+          };
+          
+          if (hasCard) {
+            byVCS[vcs].with_card.push(propData);
+          } else {
+            byVCS[vcs].without_card.push(propData);
+          }
+        }
+      });
+
+      // Calculate statistics for each VCS
+      const calculateGroupStats = (props) => {
+        if (props.length === 0) {
+          return { n: 0, avg_price: null, avg_size: null, avg_age: null };
+        }
+        
+        const avgPrice = props.reduce((sum, p) => sum + p.values_norm_time, 0) / props.length;
+        
+        const validSizes = props.filter(p => p.sfla > 0);
+        const avgSize = validSizes.length > 0 ?
+          validSizes.reduce((sum, p) => sum + p.sfla, 0) / validSizes.length : null;
+        
+        const validYears = props.filter(p => p.year_built && p.year_built > 1900 && p.year_built < 2030);
+        const avgAge = validYears.length > 0 ?
+          new Date().getFullYear() - Math.round(validYears.reduce((sum, p) => sum + p.year_built, 0) / validYears.length) : null;
+        
+        return {
+          n: props.length,
+          avg_price: Math.round(avgPrice),
+          avg_size: avgSize ? Math.round(avgSize) : null,
+          avg_age: avgAge
+        };
+      };
+
+      const results = {
+        byVCS: {},
+        overall: { with: { n: 0 }, without: { n: 0 } },
+        generated_at: new Date().toISOString()
+      };
+
+      // Process each VCS
+      Object.entries(byVCS).forEach(([vcs, data]) => {
+        const withStats = calculateGroupStats(data.with_card);
+        const withoutStats = calculateGroupStats(data.without_card);
+        
+        let flatAdj = null;
+        let pctAdj = null;
+        
+        if (withStats.avg_price && withoutStats.avg_price) {
+          flatAdj = Math.round(withStats.avg_price - withoutStats.avg_price);
+          pctAdj = ((withStats.avg_price - withoutStats.avg_price) / withoutStats.avg_price) * 100;
+        }
+        
+        results.byVCS[vcs] = {
+          with: withStats,
+          without: withoutStats,
+          flat_adj: flatAdj,
+          pct_adj: pctAdj
+        };
+        
+        // Add to overall totals
+        results.overall.with.n += withStats.n;
+        results.overall.without.n += withoutStats.n;
+      });
+
+      setAdditionalResults(results);
+      
+      // Save to database
+      await saveAdditionalResultsToDB(results);
+      
+    } catch (error) {
+      console.error('Error running additional card analysis:', error);
+    } finally {
+      setAdditionalWorking(false);
+    }
+  };
+
+  // Save additional results to database
+  const saveAdditionalResultsToDB = async (results) => {
+    try {
+      const { error } = await supabase
+        .from('market_land_valuation')
+        .upsert({
+          job_id: jobData.id,
+          additional_cards_rollup: results,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'job_id'
+        });
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error saving additional card results:', error);
+    }
+  };
+
+  // Export additional cards results to CSV
+  const exportAdditionalResultsToCSV = () => {
+    if (!additionalResults) return;
+    
+    const headers = ['VCS', 'With_Cards_N', 'With_Size', 'With_Price', 'With_Age', 'Without_N', 'Without_Price', 'Flat_Adj', 'Pct_Adj'];
+    const rows = [];
+    
+    Object.entries(additionalResults.byVCS || {}).forEach(([vcs, data]) => {
+      rows.push([
+        vcs,
+        data.with.n,
+        data.with.avg_size || '',
+        data.with.avg_price || '',
+        data.with.avg_age || '',
+        data.without.n,
+        data.without.avg_price || '',
+        data.flat_adj || '',
+        data.pct_adj ? data.pct_adj.toFixed(1) : ''
+      ]);
+    });
+    
+    const filename = `${jobData.job_name || 'job'}_additional_cards_analysis.csv`;
+    downloadCsv(filename, headers, rows);
+  };
+
+  // ============ RENDER ADDITIONAL CARDS ANALYSIS ============
+  const renderAdditionalCardsAnalysis = () => {
+    return (
+      <div>
+        {/* Controls */}
+        <div style={{ 
+          marginBottom: '20px', 
+          padding: '15px', 
+          backgroundColor: '#F9FAFB', 
+          borderRadius: '6px',
+          border: '1px solid #E5E7EB'
+        }}>
+          <div style={{ marginBottom: '12px' }}>
+            <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>
+              Additional Assessment Cards Analysis
+            </h4>
+            <p style={{ fontSize: '12px', color: '#6B7280' }}>
+              Analyzes the value impact of properties with additional assessment cards (multiple buildings, accessory structures, etc.)
+            </p>
+          </div>
+          
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: '13px', color: '#6B7280' }}>
+              {vendorType === 'BRT' ? 
+                'Detecting additional cards from property_addl_card field' :
+                'Detecting additional buildings from raw data indicators'
+              }
+            </div>
+            
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={runAdditionalCardAnalysis}
+                disabled={additionalWorking}
+                style={{
+                  padding: '6px 16px',
+                  backgroundColor: additionalWorking ? '#E5E7EB' : '#3B82F6',
+                  color: additionalWorking ? '#9CA3AF' : 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: additionalWorking ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {additionalWorking ? 'Analyzing...' : 'Run Analysis'}
+              </button>
+              
+              {additionalResults && (
+                <button
+                  onClick={exportAdditionalResultsToCSV}
+                  className={CSV_BUTTON_CLASS}
+                >
+                  <FileText size={14} /> Export CSV
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Results */}
+        {additionalResults && (
+          <div>
+            {/* Summary */}
+            <div style={{ 
+              marginBottom: '20px',
+              padding: '15px',
+              backgroundColor: '#FEF3C7',
+              borderRadius: '6px',
+              border: '1px solid #FCD34D'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>
+                    Properties with Additional Cards
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#92400E' }}>
+                    {additionalResults.overall.with.n}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>
+                    Properties without Additional Cards
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#92400E' }}>
+                    {additionalResults.overall.without.n}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* VCS Table */}
+            <div style={{ 
+              border: '1px solid #E5E7EB',
+              borderRadius: '6px',
+              overflow: 'hidden'
+            }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F9FAFB' }}>
+                    <th style={{ padding: '10px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>VCS</th>
+                    <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>With Cards</th>
+                    <th style={{ padding: '10px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>Avg Size</th>
+                    <th style={{ padding: '10px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>Avg Price</th>
+                    <th style={{ padding: '10px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>Avg Age</th>
+                    <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>Without Cards</th>
+                    <th style={{ padding: '10px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>Avg Price</th>
+                    <th style={{ padding: '10px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>$ Impact</th>
+                    <th style={{ padding: '10px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>% Impact</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(additionalResults.byVCS || {}).map(([vcs, data], idx) => (
+                    <tr key={vcs} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                      <td style={{ padding: '10px', fontSize: '13px', fontWeight: '500' }}>{vcs}</td>
+                      <td style={{ padding: '10px', textAlign: 'center', fontSize: '13px' }}>{data.with.n}</td>
+                      <td style={{ padding: '10px', textAlign: 'right', fontSize: '13px' }}>
+                        {data.with.avg_size ? `${data.with.avg_size.toLocaleString()} sf` : '-'}
+                      </td>
+                      <td style={{ padding: '10px', textAlign: 'right', fontSize: '13px' }}>
+                        {data.with.avg_price ? formatCurrency(data.with.avg_price) : '-'}
+                      </td>
+                      <td style={{ padding: '10px', textAlign: 'right', fontSize: '13px' }}>
+                        {data.with.avg_age ? `${data.with.avg_age} yrs` : '-'}
+                      </td>
+                      <td style={{ padding: '10px', textAlign: 'center', fontSize: '13px' }}>{data.without.n}</td>
+                      <td style={{ padding: '10px', textAlign: 'right', fontSize: '13px' }}>
+                        {data.without.avg_price ? formatCurrency(data.without.avg_price) : '-'}
+                      </td>
+                      <td style={{ 
+                        padding: '10px', 
+                        textAlign: 'right', 
+                        fontSize: '13px',
+                        color: data.flat_adj > 0 ? '#059669' : data.flat_adj < 0 ? '#DC2626' : '#6B7280'
+                      }}>
+                        {data.flat_adj ? formatCurrency(data.flat_adj) : '-'}
+                      </td>
+                      <td style={{ 
+                        padding: '10px', 
+                        textAlign: 'right', 
+                        fontSize: '13px',
+                        color: data.pct_adj > 0 ? '#059669' : data.pct_adj < 0 ? '#DC2626' : '#6B7280'
+                      }}>
+                        {data.pct_adj ? formatPercent(data.pct_adj) : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+  // ============ LOAD PROPERTY MARKET DATA ON MOUNT ============
+  useEffect(() => {
+    if (jobData?.id) {
+      // Load property market analysis data once
+      const loadMarketData = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('property_market_analysis')
+            .select('property_composite_key, values_norm_time')
+            .eq('job_id', jobData.id);
+          
+          if (!error && data) {
+            setPropertyMarketData(data);
+          }
+        } catch (err) {
+          console.error('Error loading property market data:', err);
+        }
+      };
+      
+      loadMarketData();
+    }
+  }, [jobData?.id]);
+
+  // Load existing results from marketLandData on mount
+  useEffect(() => {
+    if (marketLandData) {
+      if (marketLandData.custom_attribute_rollup) {
+        setCustomResults(marketLandData.custom_attribute_rollup);
+      }
+      if (marketLandData.additional_cards_rollup) {
+        setAdditionalResults(marketLandData.additional_cards_rollup);
+      }
+    }
+  }, [marketLandData]);
+
+  // ============ MAIN COMPONENT RENDER ============
+  return (
+    <div className="bg-white rounded-lg p-6">
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-xl font-semibold mb-1">Attribute & Card Analytics</h2>
+          <p className="text-gray-600">
+            Condition, custom attribute, and additional card analysis using normalized sale values.
+          </p>
+        </div>
+        <div className="text-gray-400">
+          <Layers size={36} />
+        </div>
+      </div>
+
+      {/* Sub-navigation tabs */}
+      <div className="mt-6 mls-subtab-nav" role="tablist" aria-label="Attribute sub tabs">
+        <button 
+          onClick={() => setActive('condition')} 
+          className={`mls-subtab-btn ${active === 'condition' ? 'mls-subtab-btn--active' : ''}`}
+          role="tab"
+          aria-selected={active === 'condition'}
+          aria-controls="condition-panel"
+        >
+          Condition Analysis
+        </button>
+        <button 
+          onClick={() => setActive('custom')} 
+          className={`mls-subtab-btn ${active === 'custom' ? 'mls-subtab-btn--active' : ''}`}
+          role="tab"
+          aria-selected={active === 'custom'}
+          aria-controls="custom-panel"
+        >
+          Custom Attribute Analysis
+        </button>
+        <button 
+          onClick={() => setActive('additional')} 
+          className={`mls-subtab-btn ${active === 'additional' ? 'mls-subtab-btn--active' : ''}`}
+          role="tab"
+          aria-selected={active === 'additional'}
+          aria-controls="additional-panel"
+        >
+          Additional Card Analysis
+        </button>
+      </div>
+
+      {/* Tab content panels */}
+      <div className="mt-6">
+        {active === 'condition' && (
+          <section role="tabpanel" id="condition-panel" aria-labelledby="condition-tab">
+            {renderConditionAnalysis()}
           </section>
         )}
 
         {active === 'custom' && (
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-medium">Custom Attribute Analysis</h3>
-              <div className="flex items-center gap-2">
-                <select value={selectedRawField} onChange={(e)=>setSelectedRawField(e.target.value)} className="border px-2 py-1 rounded text-sm">
-                  {rawFields.map(f=> <option key={f} value={f}>{f}</option>)}
-                </select>
-                <input placeholder="match value (leave empty = present)" value={matchValue} onChange={(e)=>setMatchValue(e.target.value)} className="border px-2 py-1 rounded text-sm" />
-                <button onClick={runCustomAttributeAnalysis} disabled={customWorking} className={CSV_BUTTON_CLASS}>{customWorking ? 'Working...' : 'Run Analysis'}</button>
-                <button onClick={() => downloadCsv(`${jobData.job_name || 'job'}-custom-attributes.csv`, ['Key','With_N','With_Avg','Without_N','Without_Avg','FlatAdj','PctAdj'], customCsvRows)} className={CSV_BUTTON_CLASS}><FileText size={14}/> Export CSV</button>
-              </div>
-            </div>
-
-            <div className="overflow-auto border rounded">
-              <table className="min-w-full table-auto text-sm border-collapse">
-                <thead>
-                  <tr className="bg-gray-100 text-left"><th className="px-2 py-2">Group</th><th className="px-2 py-2">N with</th><th className="px-2 py-2">Avg with</th><th className="px-2 py-2">N without</th><th className="px-2 py-2">Avg without</th><th className="px-2 py-2">Flat Adj</th><th className="px-2 py-2">% Adj</th></tr>
-                </thead>
-                <tbody>
-                  {!customResults && <tr><td colSpan={7} className="px-3 py-6 text-center text-gray-500">Run an analysis to populate results.</td></tr>}
-                  {customResults && (
-                    <>
-                      <tr className="bg-white"><td className="px-2 py-2">Overall</td><td className="px-2 py-2">{customResults.results?.overall?.with?.n}</td><td className="px-2 py-2">{customResults.results?.overall?.with?.avg_price}</td><td className="px-2 py-2">{customResults.results?.overall?.without?.n}</td><td className="px-2 py-2">{customResults.results?.overall?.without?.avg_price}</td><td className="px-2 py-2">{customResults.results?.overall?.flat_adj}</td><td className="px-2 py-2">{customResults.results?.overall?.pct_adj}</td></tr>
-                      {Object.keys(customResults.byVCS || {}).map((v, i) => (<tr key={v} className={i%2? 'bg-white':'bg-gray-50'}><td className="px-2 py-2">{v}</td><td className="px-2 py-2">{customResults.byVCS[v].with.n}</td><td className="px-2 py-2">{customResults.byVCS[v].with.avg_price}</td><td className="px-2 py-2">{customResults.byVCS[v].without.n}</td><td className="px-2 py-2">{customResults.byVCS[v].without.avg_price}</td><td className="px-2 py-2">—</td><td className="px-2 py-2">—</td></tr>))}
-                    </>
-                  )}
-                </tbody>
-              </table>
-            </div>
+          <section role="tabpanel" id="custom-panel" aria-labelledby="custom-tab">
+            {renderCustomAttributeAnalysis()}
           </section>
         )}
 
         {active === 'additional' && (
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-medium">Additional Card Analysis</h3>
-              <div className="flex items-center gap-2">
-                <button onClick={runAdditionalCardAnalysis} className={CSV_BUTTON_CLASS}>{additionalWorking ? 'Working...' : 'Run Analysis'}</button>
-                <button onClick={() => downloadCsv(`${jobData.job_name || 'job'}-additional-cards.csv`, ['VCS','WithN','WithSize','WithPrice','WithAge','WithoutN','WithoutPrice','FlatAdj','PctAdj'], additionalCsvRows)} className={CSV_BUTTON_CLASS}><FileText size={14}/> Export CSV</button>
-              </div>
-            </div>
-
-            <div className="overflow-auto border rounded mb-4">
-              <table className="min-w-full table-auto text-sm border-collapse">
-                <thead>
-                  <tr className="bg-gray-100 text-left"><th className="px-2 py-2">VCS</th><th className="px-2 py-2">With N</th><th className="px-2 py-2">With Size</th><th className="px-2 py-2">With Price</th><th className="px-2 py-2">With Age</th><th className="px-2 py-2">Without N</th><th className="px-2 py-2">Without Price</th><th className="px-2 py-2">FlatAdj</th><th className="px-2 py-2">%Adj</th></tr>
-                </thead>
-                <tbody>
-                  {!additionalResults && <tr><td colSpan={9} className="px-3 py-6 text-center text-gray-500">Run analysis to populate results.</td></tr>}
-                  {additionalResults && Object.keys(additionalResults.byVCS || {}).map((v, i) => {
-                    const g = additionalResults.byVCS[v];
-                    return (<tr key={v} className={i%2? 'bg-white':'bg-gray-50'}><td className="px-2 py-2">{v}</td><td className="px-2 py-2">{g.with.n}</td><td className="px-2 py-2">{g.with.avg_size}</td><td className="px-2 py-2">{g.with.avg_price}</td><td className="px-2 py-2">{g.with.avg_age}</td><td className="px-2 py-2">{g.without.n}</td><td className="px-2 py-2">{g.without.avg_price}</td><td className="px-2 py-2">{g.flat_adj}</td><td className="px-2 py-2">{g.pct_adj}</td></tr>);
-                  })}
-                </tbody>
-              </table>
-            </div>
+          <section role="tabpanel" id="additional-panel" aria-labelledby="additional-tab">
+            {renderAdditionalCardsAnalysis()}
           </section>
         )}
       </div>
@@ -1094,3 +1880,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 };
 
 export default AttributeCardsTab;
+  
+  
+  
+  
