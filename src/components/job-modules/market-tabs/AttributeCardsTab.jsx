@@ -215,17 +215,21 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       const exteriorCodes = new Set();
       const interiorCodes = new Set();
 
-      propertyRecords?.forEach(record => {
-        // Check multiple possible field names for exterior conditions
-        const extCond = record.asset_ext_cond || record.asset_exterior_condition || record.ext_cond;
-        if (extCond && extCond !== '00' && extCond !== '0' && extCond.toString().trim() !== '') {
-          exteriorCodes.add(extCond.toString().trim());
-        }
+      propertyRecords?.forEach((record, index) => {
+        try {
+          // Check multiple possible field names for exterior conditions
+          const extCond = record?.asset_ext_cond || record?.asset_exterior_condition || record?.ext_cond;
+          if (extCond && extCond !== '00' && extCond !== '0' && String(extCond).trim() !== '') {
+            exteriorCodes.add(String(extCond).trim());
+          }
 
-        // Check multiple possible field names for interior conditions
-        const intCond = record.asset_int_cond || record.asset_interior_condition || record.int_cond;
-        if (intCond && intCond !== '00' && intCond !== '0' && intCond.toString().trim() !== '') {
-          interiorCodes.add(intCond.toString().trim());
+          // Check multiple possible field names for interior conditions
+          const intCond = record?.asset_int_cond || record?.asset_interior_condition || record?.int_cond;
+          if (intCond && intCond !== '00' && intCond !== '0' && String(intCond).trim() !== '') {
+            interiorCodes.add(String(intCond).trim());
+          }
+        } catch (recordError) {
+          console.error(`Error processing record ${index}:`, recordError, record);
         }
       });
 
