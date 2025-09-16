@@ -78,6 +78,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [additionalWorking, setAdditionalWorking] = useState(false);
   const [additionalResults, setAdditionalResults] = useState(marketLandData.additional_cards_rollup || null);
 
+  // ============ PROPERTY MARKET DATA STATE ============
+  const [propertyMarketData, setPropertyMarketData] = useState([]);
+
   // Get Type/Use options - CORRECTED based on actual codebase patterns
   const getTypeUseOptions = () => [
     { code: 'all', description: 'All Properties' },
