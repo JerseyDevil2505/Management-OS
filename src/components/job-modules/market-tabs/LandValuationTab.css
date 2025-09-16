@@ -1,0 +1,64 @@
+.vcs-description-input {
+  width: 100%;
+  padding: 2px;
+  border: 1px solid #D1D5DB;
+  border-radius: 4px;
+  font-size: 11px;
+  box-sizing: border-box;
+}
+
+.special-regions-panel {
+  margin-bottom: 20px;
+  background: white;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.special-regions-header {
+  padding: 12px 15px;
+  background: #F9FAFB;
+  border-bottom: 1px solid #E5E7EB;
+}
+.special-regions-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.special-regions-body {
+  padding: 12px 15px;
+}
+.special-regions-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.special-region-input {
+  padding: 8px;
+  border: 1px solid #D1D5DB;
+  border-radius: 4px;
+  width: 280px;
+}
+.special-region-add, .special-region-save {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+}
+.special-region-add { background: #3B82F6; color: white; }
+.special-region-save { background: #10B981; color: white; }
+.special-regions-list { border-top: 1px dashed #E5E7EB; padding-top: 8px; }
+.special-regions-list-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; }
+.special-regions-list-header { font-weight: 600; color: #374151; font-size: 13px; }
+.special-regions-empty { color: #6B7280; font-size: 13px; padding: 8px 0; }
+.special-region-name { font-weight: 500; color: #111827; }
+.special-region-remove { background: #EF4444; color: white; padding: 6px 10px; border-radius: 6px; border: none; cursor: pointer; }
+
+/* Select styling used for special region dropdown in table */
+.special-region-select {
+  padding: 4px;
+  border: 1px solid #D1D5DB;
+  border-radius: 4px;
+  font-size: 12px;
+}

@@ -989,12 +989,59 @@ useEffect(() => {
     }
   };
 
-  // Navigate to analysis section (placeholder - implement based on your navigation)
+  // Items that should show a Mark Complete button instead of a Go to Section link
+  const replaceGoToWithComplete = new Set([
+    'Land Value Tables Built',
+    'Land Values Entered',
+    'Building Class Review/Updated'
+  ]);
+
+  // Navigate to analysis section with detailed mapping and subtab dispatching
   const navigateToAnalysisSection = (sectionName) => {
-    console.log(`Navigate to analysis section: ${sectionName}`);
-    // TODO: Implement navigation to the specific analysis component
-    // This might use onSubModuleChange or a router
-    alert(`This will navigate to the ${sectionName} section when implemented`);
+    try {
+      console.log(`Navigate to analysis section: ${sectionName}`);
+
+      // Detailed mapping: for each checklist item determine which parent module and inner tab/subtab to open
+      const mapping = {
+        'Market Analysis': { module: 'market-analysis', tab: 'pre-valuation', subtabEvent: { name: 'navigate_prevaluation_subtab', tabId: 'marketAnalysis' } },
+        'Page by Page Analysis': { module: 'market-analysis', tab: 'pre-valuation', subtabEvent: { name: 'navigate_prevaluation_subtab', tabId: 'worksheet' } },
+        'VCS Reviewed/Reset': { module: 'market-analysis', tab: 'land-valuation', subtabEvent: { name: 'navigate_landvaluation_subtab', tabId: 'vcs-sheet' } },
+        'Cost Conversion Factor Set': { module: 'market-analysis', tab: 'cost-valuation' },
+        'Effective Age Loaded/Set': { module: 'final-valuation' },
+        'Final Values Ready': { module: 'final-valuation' },
+        // Fallback: open market-analysis data-quality
+        'Data Quality Analysis': { module: 'market-analysis', tab: 'data-quality' }
+      };
+
+      const mapEntry = mapping[sectionName] || mapping['Data Quality Analysis'];
+
+      // If the target module is final-valuation, switch parent module to final-valuation
+      if (mapEntry.module === 'final-valuation') {
+        if (typeof onSubModuleChange === 'function') onSubModuleChange('final-valuation');
+        return;
+      }
+
+      // Otherwise switch to Market & Land Analysis module and select the specified inner tab
+      if (typeof onSubModuleChange === 'function') {
+        onSubModuleChange('market-analysis');
+      }
+
+      setTimeout(() => {
+        try {
+          if (mapEntry.tab) {
+            window.dispatchEvent(new CustomEvent('navigate_market_analysis_tab', { detail: { tabId: mapEntry.tab } }));
+          }
+          if (mapEntry.subtabEvent) {
+            window.dispatchEvent(new CustomEvent(mapEntry.subtabEvent.name, { detail: { tabId: mapEntry.subtabEvent.tabId } }));
+          }
+        } catch (e) {
+          console.error('Failed to dispatch navigation events', e);
+        }
+      }, 150);
+
+    } catch (e) {
+      console.error('navigateToAnalysisSection error:', e);
+    }
   };
 
   if (!jobData) {
@@ -1372,7 +1419,8 @@ useEffect(() => {
       Completed
     </button>
   ) : (
-    !item.is_analysis_item && (
+    // Allow Mark Complete for regular items OR ones specified to replace Go To with Complete
+    (!item.is_analysis_item || replaceGoToWithComplete.has(item.item_text)) && (
       <button
         onClick={() => handleItemStatusChange(item.id, 'completed')}
         className="px-3 py-1 rounded-md text-sm font-medium transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300"
@@ -1382,16 +1430,16 @@ useEffect(() => {
     )
   )}
                   
-                  {/* Show Go to Section button for analysis items */}
-                  {item.is_analysis_item && (
-                    <button
-                      onClick={() => navigateToAnalysisSection(item.item_text)}
-                      className="px-3 py-1 bg-purple-500 text-white rounded-md text-sm hover:bg-purple-600 flex items-center gap-1"
-                    >
-                      <ArrowRight className="w-4 h-4" />
-                      Go to Section
-                    </button>
-                  )}
+                  {/* Show Go to Section button for analysis items unless explicitly replaced with Mark Complete */}
+  {item.is_analysis_item && !replaceGoToWithComplete.has(item.item_text) && (
+    <button
+      onClick={() => navigateToAnalysisSection(item.item_text)}
+      className="px-3 py-1 bg-purple-500 text-white rounded-md text-sm hover:bg-purple-600 flex items-center gap-1"
+    >
+      <ArrowRight className="w-4 h-4" />
+      Go to Section
+    </button>
+  )}
                   
                   {item.requires_client_approval && (
                     <button

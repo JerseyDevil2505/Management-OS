@@ -4,6 +4,7 @@ import {
   TrendingUp, RefreshCw, Download, Filter, ChevronDown, ChevronUp,
   AlertCircle, Home, Building, Calendar, MapPin, Layers, DollarSign
 } from 'lucide-react';
+import './sharedTabNav.css';
 
 const OverallAnalysisTab = ({ 
   properties = [], 
@@ -1391,24 +1392,16 @@ const OverallAnalysisTab = ({
         </div>
 
         {/* Tabs */}
-        <div className="flex space-x-1 border-b mt-4">
+        <div className="mls-subtab-nav">
           <button
             onClick={() => setActiveTab('market')}
-            className={`px-4 py-2 font-medium ${
-              activeTab === 'market'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
+            className={`mls-subtab-btn ${activeTab === 'market' ? 'mls-subtab-btn--active' : ''}`}
           >
             Market Analysis
           </button>
           <button
             onClick={() => setActiveTab('condo')}
-            className={`px-4 py-2 font-medium ${
-              activeTab === 'condo'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
+            className={`mls-subtab-btn ${activeTab === 'condo' ? 'mls-subtab-btn--active' : ''}`}
           >
             Condo Analysis
           </button>
