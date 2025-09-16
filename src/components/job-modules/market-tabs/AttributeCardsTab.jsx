@@ -396,10 +396,21 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       const afterEntryFilter = applyEntryFilter(propertiesWithSales);
       console.log('2. After entry filter:', afterEntryFilter.length);
       console.log('   Entry filter enabled:', entryFilterEnabled);
+      console.log('   Configured entry codes:', infoByCategoryConfig.entry);
+      console.log('   Configured refusal codes:', infoByCategoryConfig.refusal);
+      console.log('   Configured estimation codes:', infoByCategoryConfig.estimation);
+
       if (afterEntryFilter.length < propertiesWithSales.length) {
         const sample = propertiesWithSales[0];
         console.log('   Sample inspection_info_by:', sample?.inspection_info_by);
-        console.log('   Expected BRT entry codes: 01,02,03,04');
+
+        // Show a few sample inspection_info_by values
+        const sampleCodes = propertiesWithSales.slice(0, 10).map(p => p.inspection_info_by).filter(c => c);
+        console.log('   Sample inspection_info_by codes:', [...new Set(sampleCodes)]);
+
+        if (infoByCategoryConfig.entry.length === 0) {
+          console.log('   ⚠️ NO ENTRY CODES CONFIGURED - this might be the problem!');
+        }
       }
 
       // Test type/use filter
