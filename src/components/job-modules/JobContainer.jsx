@@ -205,7 +205,9 @@ const JobContainer = ({
                   asset_zoning,
                   values_norm_size,
                   values_norm_time,
-                  sales_history
+                  sales_history,
+                  market_manual_lot_acre,
+                  market_manual_lot_sf
                 )
               `)
               .eq('job_id', selectedJob.id)
