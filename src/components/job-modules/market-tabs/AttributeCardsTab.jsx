@@ -372,7 +372,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     const conditionStats = {};
     Object.keys(conditionBuckets).forEach(condition => {
       const bucket = conditionBuckets[condition];
-      
+
+      console.log(`📊 Processing condition "${condition}" with ${bucket.length} properties`);
+
       const prices = bucket.map(p => p.values_norm_time).filter(Boolean);
       const sizes = bucket.map(p => p.asset_sfla || p.values_norm_size).filter(Boolean);
       const ages = bucket.map(p => {
@@ -388,8 +390,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           avgAge: ages.length > 0 ? Math.round(ages.reduce((a, b) => a + b, 0) / ages.length) : 0,
           properties: bucket
         };
+        console.log(`✅ Created stats for condition "${condition}":`, conditionStats[condition]);
+      } else {
+        console.log(`❌ No valid prices found for condition "${condition}"`);
       }
     });
+
+    console.log(`📈 Final condition stats for ${conditionType}:`, conditionStats);
 
     // Find baseline (AVERAGE condition or most common)
     let baseline = conditionStats['AVERAGE'] || conditionStats['Average'];
