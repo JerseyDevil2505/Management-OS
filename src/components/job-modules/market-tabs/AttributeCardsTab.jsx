@@ -194,18 +194,31 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     return (((targetSize - saleSize) * ((salePrice / saleSize) * 0.50)) + salePrice);
   };
 
-  // Helper: Entry filter check
+  // Helper: Entry filter check (using infoByCategoryConfig like ProductionTracker)
   const applyEntryFilter = (props) => {
     if (!entryFilterEnabled) return props; // If filter OFF, return all
 
     return props.filter(p => {
-      const code = (p.inspection_info_by || '').toString().trim();
-      if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
-        // Microsystems: O=Owner, S=Spouse, T=Tenant, A=Agent
-        return ['O', 'S', 'T', 'A'].includes(code.toUpperCase());
+      const infoByCode = (p.inspection_info_by || '').toString().trim();
+      const normalizedInfoBy = infoByCode.toUpperCase(); // Normalize for comparison
+
+      // Use infoByCategoryConfig.entry array like ProductionTracker
+      const entryCodesList = infoByCategoryConfig.entry || [];
+
+      if (entryCodesList.length > 0) {
+        // Use configured entry codes
+        const isEntryCode = entryCodesList.includes(normalizedInfoBy) || entryCodesList.includes(infoByCode);
+        return isEntryCode;
       } else {
-        // BRT: 01-04 are entry codes (gained entry to property)
-        return ['01', '02', '03', '04'].includes(code);
+        // Fallback to hardcoded logic if no config available
+        console.log('⚠️ No entry codes configured, using fallback logic');
+        if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
+          // Microsystems: O=Owner, S=Spouse, T=Tenant, A=Agent
+          return ['O', 'S', 'T', 'A'].includes(normalizedInfoBy);
+        } else {
+          // BRT: 01-04 are entry codes (gained entry to property)
+          return ['01', '02', '03', '04'].includes(infoByCode);
+        }
       }
     });
   };
