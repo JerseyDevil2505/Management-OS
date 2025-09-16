@@ -1790,6 +1790,32 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
         if (acresFromLandur > 0) return acresFromLandur.toFixed(2);
       }
 
+      // 5a. FALLBACK: For BRT jobs, try database LANDUR fields if raw_data didn't work
+      if (vendorType === 'BRT') {
+        let totalAcres = 0;
+        let totalSf = 0;
+
+        for (let i = 1; i <= 6; i++) {
+          const unitsRaw = property[`landurunits_${i}`];
+          const codeRaw = property[`landur_${i}`];
+
+          const units = unitsRaw !== undefined && unitsRaw !== null ? parseFloat(String(unitsRaw).replace(/[,\s\"]/g, '')) : NaN;
+          const code = codeRaw !== undefined && codeRaw !== null ? String(codeRaw).trim() : null;
+
+          if (!isNaN(units) && units > 0) {
+            // Heuristic: large numbers are SF, small numbers are acres
+            if (units >= 1000) {
+              totalSf += units;
+            } else {
+              totalAcres += units;
+            }
+          }
+        }
+
+        const acresFromLandur = totalAcres + (totalSf / 43560);
+        if (acresFromLandur > 0) return acresFromLandur.toFixed(2);
+      }
+
       // Microsystems vendor check using attached raw_data
       if (vendorType === 'Microsystems' && property.raw_data) {
         const lotArea = property.raw_data['Lot Area'] || property.raw_data['Site Area'] || property.raw_data['Acreage'] || property.raw_data['Acres'];
