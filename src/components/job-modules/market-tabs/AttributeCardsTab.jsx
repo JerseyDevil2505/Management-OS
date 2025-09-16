@@ -92,6 +92,18 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     return () => { mounted = false; };
   }, [jobData?.id, properties]);
 
+  // Update property counts when filters change
+  useEffect(() => {
+    if (properties && properties.length > 0) {
+      const propertiesWithSales = getValidSales(properties);
+      if (propertiesWithSales.length > 0) {
+        const exteriorCount = applyFilters(propertiesWithSales).length;
+        const interiorCount = applyInteriorFilters(propertiesWithSales).length;
+        setFilteredPropertyCounts({ exterior: exteriorCount, interior: interiorCount });
+      }
+    }
+  }, [entryFilterEnabled, typeUseFilter, interiorInspectionOnly, properties]);
+
   // Helper: filter valid sales (values_norm_time primary)
   const getValidSales = (props) => props.filter(p => p && (p.values_norm_time !== undefined && p.values_norm_time !== null && Number(p.values_norm_time) > 0));
 
