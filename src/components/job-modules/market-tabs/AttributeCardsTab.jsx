@@ -888,15 +888,18 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                                   <td className="px-6 py-2 border text-sm">
                                     <span className="font-medium text-gray-700">{cond.code}</span>
                                     <span className="text-gray-500 ml-2">— {cond.description}</span>
+                                    {!hasData && <span className="text-red-500 ml-2">[NO DATA]</span>}
                                   </td>
-                                  <td className="px-3 py-2 border text-center">{condData.count}</td>
-                                  <td className="px-3 py-2 border text-center">{formatPrice(condData.avgPrice)}</td>
-                                  <td className="px-3 py-2 border text-center">{condData.avgSize?.toLocaleString() || '—'}</td>
-                                  <td className="px-3 py-2 border text-center font-medium">{formatPrice(condData.normalizedPrice || condData.avgPrice)}</td>
+                                  <td className="px-3 py-2 border text-center">{hasData ? condData.count : '—'}</td>
+                                  <td className="px-3 py-2 border text-center">{hasData ? formatPrice(condData.avgPrice) : '—'}</td>
+                                  <td className="px-3 py-2 border text-center">{hasData ? (condData.avgSize?.toLocaleString() || '—') : '—'}</td>
+                                  <td className="px-3 py-2 border text-center font-medium">{hasData ? formatPrice(condData.normalizedPrice || condData.avgPrice) : '—'}</td>
                                   <td className="px-3 py-2 border text-center">
-                                    <span className={`font-medium ${condData.percentDiff > 0 ? 'text-green-600' : condData.percentDiff < 0 ? 'text-red-600' : 'text-gray-600'}`}>
-                                      {formatPct(condData.percentDiff)}
-                                    </span>
+                                    {hasData ? (
+                                      <span className={`font-medium ${condData.percentDiff > 0 ? 'text-green-600' : condData.percentDiff < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                                        {formatPct(condData.percentDiff)}
+                                      </span>
+                                    ) : '—'}
                                   </td>
                                 </tr>
                               );
