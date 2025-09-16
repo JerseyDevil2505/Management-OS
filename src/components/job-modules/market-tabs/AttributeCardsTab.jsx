@@ -102,6 +102,20 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     return () => { mounted = false; };
   }, [jobData?.id, properties]);
 
+  // Load infoByCategoryConfig from job data (same logic as ProductionTracker)
+  useEffect(() => {
+    if (jobData?.infoby_category_config && Object.keys(jobData.infoby_category_config).length > 0) {
+      setInfoByCategoryConfig(jobData.infoby_category_config);
+      console.log('📋 Loaded infoByCategoryConfig:', jobData.infoby_category_config);
+    } else if (jobData?.workflow_stats?.infoByCategoryConfig) {
+      // Fallback to workflow_stats
+      setInfoByCategoryConfig(jobData.workflow_stats.infoByCategoryConfig);
+      console.log('📋 Loaded infoByCategoryConfig from workflow_stats:', jobData.workflow_stats.infoByCategoryConfig);
+    } else {
+      console.log('⚠️ No infoByCategoryConfig found in job data - entry filter may not work correctly');
+    }
+  }, [jobData]);
+
   // Update property counts when filters change
   useEffect(() => {
     if (properties && properties.length > 0) {
@@ -112,7 +126,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         setFilteredPropertyCounts({ exterior: exteriorCount, interior: interiorCount });
       }
     }
-  }, [entryFilterEnabled, typeUseFilter, interiorInspectionOnly, properties]);
+  }, [entryFilterEnabled, typeUseFilter, interiorInspectionOnly, properties, infoByCategoryConfig]);
 
   // Helper: filter valid sales (values_norm_time primary)
   const getValidSales = (props) => props.filter(p => p && (p.values_norm_time !== undefined && p.values_norm_time !== null && Number(p.values_norm_time) > 0));
