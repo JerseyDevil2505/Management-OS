@@ -852,42 +852,53 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                     <table className="min-w-full table-auto text-xs border-collapse">
                       <thead>
                         <tr className="bg-gray-100 text-left">
-                          <th className="px-3 py-2 border font-semibold">VCS</th>
-                          <th className="px-3 py-2 border font-semibold">Total</th>
-                          <th className="px-3 py-2 border font-semibold">Baseline</th>
-                          {availableConditions.interior.map(cond => (
-                            <th key={cond.code} className="px-2 py-2 border font-semibold text-center" title={cond.description}>
-                              {cond.description}
-                            </th>
-                          ))}
+                          <th className="px-3 py-2 border font-semibold">VCS / Condition</th>
+                          <th className="px-3 py-2 border font-semibold text-center">Count</th>
+                          <th className="px-3 py-2 border font-semibold text-center">Avg Price</th>
+                          <th className="px-3 py-2 border font-semibold text-center">Avg Size</th>
+                          <th className="px-3 py-2 border font-semibold text-center">Norm Price</th>
+                          <th className="px-3 py-2 border font-semibold text-center">% Impact</th>
                         </tr>
                       </thead>
                       <tbody>
                         {Object.keys(conditionAnalysis.interior || {}).length === 0 && (
-                          <tr><td colSpan={3 + availableConditions.interior.length} className="px-3 py-6 text-center text-gray-500">No interior condition data found.</td></tr>
+                          <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-500">No interior condition data found.</td></tr>
                         )}
-                        {Object.entries(conditionAnalysis.interior || {}).map(([vcs, vcsData], idx) => (
-                          <tr key={vcs} className={idx % 2 ? 'bg-white' : 'bg-gray-50'}>
-                            <td className="px-3 py-2 border font-medium">{vcs}</td>
-                            <td className="px-3 py-2 border">{vcsData.totalProperties}</td>
-                            <td className="px-3 py-2 border text-sm">{vcsData.baseline || '—'}</td>
-                            {availableConditions.interior.map(cond => {
+                        {Object.entries(conditionAnalysis.interior || {}).map(([vcs, vcsData], vcsIdx) => (
+                          <React.Fragment key={vcs}>
+                            {/* VCS Header Row */}
+                            <tr className="bg-purple-50 font-semibold">
+                              <td className="px-3 py-2 border font-bold text-purple-800">{vcs}</td>
+                              <td className="px-3 py-2 border text-center text-purple-700">{vcsData.totalProperties}</td>
+                              <td className="px-3 py-2 border text-center text-purple-700">—</td>
+                              <td className="px-3 py-2 border text-center text-purple-700">—</td>
+                              <td className="px-3 py-2 border text-center text-purple-700">—</td>
+                              <td className="px-3 py-2 border text-center text-purple-700">Baseline: {vcsData.baseline || 'Auto'}</td>
+                            </tr>
+                            {/* Condition Code Rows */}
+                            {availableConditions.interior.map((cond, condIdx) => {
                               const condData = vcsData.conditions[cond.description];
+                              if (!condData) return null;
+
                               return (
-                                <td key={cond.code} className="px-2 py-2 border text-center">
-                                  {condData ? (
-                                    <div className="text-xs">
-                                      <div className="font-medium">{formatPrice(condData.normalizedPrice || condData.avgPrice)}</div>
-                                      <div className="text-gray-500">({condData.count})</div>
-                                      <div className={`font-medium ${condData.percentDiff > 0 ? 'text-green-600' : condData.percentDiff < 0 ? 'text-red-600' : 'text-gray-600'}`}>
-                                        {formatPct(condData.percentDiff)}
-                                      </div>
-                                    </div>
-                                  ) : '—'}
-                                </td>
+                                <tr key={`${vcs}-${cond.code}`} className={condIdx % 2 ? 'bg-white' : 'bg-gray-50'}>
+                                  <td className="px-6 py-2 border text-sm">
+                                    <span className="font-medium text-gray-700">{cond.code}</span>
+                                    <span className="text-gray-500 ml-2">— {cond.description}</span>
+                                  </td>
+                                  <td className="px-3 py-2 border text-center">{condData.count}</td>
+                                  <td className="px-3 py-2 border text-center">{formatPrice(condData.avgPrice)}</td>
+                                  <td className="px-3 py-2 border text-center">{condData.avgSize?.toLocaleString() || '—'}</td>
+                                  <td className="px-3 py-2 border text-center font-medium">{formatPrice(condData.normalizedPrice || condData.avgPrice)}</td>
+                                  <td className="px-3 py-2 border text-center">
+                                    <span className={`font-medium ${condData.percentDiff > 0 ? 'text-green-600' : condData.percentDiff < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                                      {formatPct(condData.percentDiff)}
+                                    </span>
+                                  </td>
+                                </tr>
                               );
                             })}
-                          </tr>
+                          </React.Fragment>
                         ))}
                       </tbody>
                     </table>
