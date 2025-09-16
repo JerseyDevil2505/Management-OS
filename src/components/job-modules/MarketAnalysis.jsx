@@ -79,6 +79,28 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
     { id: 'attribute-cards', label: 'Attribute & Card Analytics', icon: '🎯' }
   ];
 
+  // Listen for external navigation events to select an inner tab (from ManagementChecklist)
+  useEffect(() => {
+    const handler = (e) => {
+      try {
+        const tabId = e?.detail?.tabId;
+        if (!tabId) return;
+        const validTabs = tabs.map(t => t.id);
+        if (validTabs.includes(tabId)) {
+          setActiveTab(tabId);
+          // Scroll to top for visibility
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          console.warn('navigate_market_analysis_tab: unknown tabId', tabId);
+        }
+      } catch (err) {
+        console.error('navigate_market_analysis_tab handler error', err);
+      }
+    };
+    window.addEventListener('navigate_market_analysis_tab', handler);
+    return () => window.removeEventListener('navigate_market_analysis_tab', handler);
+  }, [tabs]);
+
   // ==================== MAIN RENDER ====================
   return (
     <div className="min-h-screen bg-gray-50">
