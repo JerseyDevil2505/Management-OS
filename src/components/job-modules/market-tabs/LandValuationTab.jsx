@@ -1554,9 +1554,9 @@ const getPricePerUnit = useCallback((price, size) => {
 
       // Calculate Method 2 Summary by bracket ranges with positive deltas only
       const bracketRates = {
-        mediumRange: [], // 1.00-4.99 acre rates (medium vs small)
-        largeRange: [],  // 5.00-9.99 acre rates (large vs medium)
-        xlargeRange: [] // 10.00+ acre rates (xlarge vs large)
+        mediumRange: [], // 1.00-4.99 acre rates
+        largeRange: [],  // 5.00-9.99 acre rates
+        xlargeRange: [] // 10.00+ acre rates
       };
 
       Object.keys(vcsSales).forEach(vcs => {
@@ -1564,40 +1564,63 @@ const getPricePerUnit = useCallback((price, size) => {
         if (!vcsAnalysis) return;
 
         const { brackets } = vcsAnalysis;
+        const allBrackets = [brackets.small, brackets.medium, brackets.large, brackets.xlarge];
 
-        // 1.00-4.99 range: medium vs small
-        if (brackets.small.count > 0 && brackets.medium.count > 0 &&
-            brackets.small.avgAdjusted && brackets.small.avgAdjusted > 0 &&
-            brackets.medium.avgAdjusted && brackets.medium.avgAdjusted > 0) {
-          const priceDiff = brackets.medium.avgAdjusted - brackets.small.avgAdjusted;
-          const acresDiff = brackets.medium.avgAcres - brackets.small.avgAcres;
-          if (acresDiff > 0 && priceDiff > 0) {
-            const rate = Math.round(priceDiff / acresDiff);
-            bracketRates.mediumRange.push(rate);
+        // For each bracket, find the best comparison bracket (highest valid one below it)
+        const findBestComparison = (targetBracket, targetIndex) => {
+          let bestBracket = null;
+          let highestValidAdjusted = 0;
+
+          for (let i = 0; i < targetIndex; i++) {
+            const candidate = allBrackets[i];
+            if (candidate &&
+                candidate.count > 0 &&
+                candidate.avgAdjusted &&
+                candidate.avgAdjusted < targetBracket.avgAdjusted &&
+                candidate.avgAdjusted > highestValidAdjusted) {
+              bestBracket = candidate;
+              highestValidAdjusted = candidate.avgAdjusted;
+            }
+          }
+          return bestBracket;
+        };
+
+        // Medium range (comparing medium bracket to best lower bracket)
+        if (brackets.medium.count > 0 && brackets.medium.avgAdjusted) {
+          const comparison = findBestComparison(brackets.medium, 1);
+          if (comparison) {
+            const priceDiff = brackets.medium.avgAdjusted - comparison.avgAdjusted;
+            const acresDiff = brackets.medium.avgAcres - comparison.avgAcres;
+            if (acresDiff > 0 && priceDiff > 0) {
+              const rate = Math.round(priceDiff / acresDiff);
+              bracketRates.mediumRange.push(rate);
+            }
           }
         }
 
-        // 5.00-9.99 range: large vs medium
-        if (brackets.medium.count > 0 && brackets.large.count > 0 &&
-            brackets.medium.avgAdjusted && brackets.medium.avgAdjusted > 0 &&
-            brackets.large.avgAdjusted && brackets.large.avgAdjusted > 0) {
-          const priceDiff = brackets.large.avgAdjusted - brackets.medium.avgAdjusted;
-          const acresDiff = brackets.large.avgAcres - brackets.medium.avgAcres;
-          if (acresDiff > 0 && priceDiff > 0) {
-            const rate = Math.round(priceDiff / acresDiff);
-            bracketRates.largeRange.push(rate);
+        // Large range (comparing large bracket to best lower bracket)
+        if (brackets.large.count > 0 && brackets.large.avgAdjusted) {
+          const comparison = findBestComparison(brackets.large, 2);
+          if (comparison) {
+            const priceDiff = brackets.large.avgAdjusted - comparison.avgAdjusted;
+            const acresDiff = brackets.large.avgAcres - comparison.avgAcres;
+            if (acresDiff > 0 && priceDiff > 0) {
+              const rate = Math.round(priceDiff / acresDiff);
+              bracketRates.largeRange.push(rate);
+            }
           }
         }
 
-        // 10.00+ range: xlarge vs large
-        if (brackets.large.count > 0 && brackets.xlarge.count > 0 &&
-            brackets.large.avgAdjusted && brackets.large.avgAdjusted > 0 &&
-            brackets.xlarge.avgAdjusted && brackets.xlarge.avgAdjusted > 0) {
-          const priceDiff = brackets.xlarge.avgAdjusted - brackets.large.avgAdjusted;
-          const acresDiff = brackets.xlarge.avgAcres - brackets.large.avgAcres;
-          if (acresDiff > 0 && priceDiff > 0) {
-            const rate = Math.round(priceDiff / acresDiff);
-            bracketRates.xlargeRange.push(rate);
+        // XLarge range (comparing xlarge bracket to best lower bracket)
+        if (brackets.xlarge.count > 0 && brackets.xlarge.avgAdjusted) {
+          const comparison = findBestComparison(brackets.xlarge, 3);
+          if (comparison) {
+            const priceDiff = brackets.xlarge.avgAdjusted - comparison.avgAdjusted;
+            const acresDiff = brackets.xlarge.avgAcres - comparison.avgAcres;
+            if (acresDiff > 0 && priceDiff > 0) {
+              const rate = Math.round(priceDiff / acresDiff);
+              bracketRates.xlargeRange.push(rate);
+            }
           }
         }
       });
