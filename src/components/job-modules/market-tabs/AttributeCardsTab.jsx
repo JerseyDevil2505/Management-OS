@@ -865,7 +865,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                           <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-500">No interior condition data found.</td></tr>
                         )}
                         {Object.entries(conditionAnalysis.interior || {}).map(([vcs, vcsData], vcsIdx) => (
-                          <React.Fragment key={vcs}>
+                          <Fragment key={vcs}>
                             {/* VCS Header Row */}
                             <tr className="bg-purple-50 font-semibold">
                               <td className="px-3 py-2 border font-bold text-purple-800">{vcs}</td>
@@ -898,7 +898,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                                 </tr>
                               );
                             })}
-                          </React.Fragment>
+                          </Fragment>
                         ))}
                       </tbody>
                     </table>
