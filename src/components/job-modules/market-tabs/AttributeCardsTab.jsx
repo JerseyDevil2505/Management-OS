@@ -546,6 +546,26 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         console.log('Normalized interior conditions:', [...new Set(intConds.map(c => normalizeCondition(c)).filter(Boolean))]);
       }
 
+      // DEBUG: Show parsed_code_definitions structure
+      console.log('=== PARSED CODE DEFINITIONS DEBUG ===');
+      const codeDefs = jobData?.parsed_code_definitions || {};
+      console.log('Available sections in parsed_code_definitions:', Object.keys(codeDefs));
+
+      if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
+        console.log('Microsystems sections 490 (ext) and 491 (int):');
+        console.log('  Section 490 keys:', Object.keys(codeDefs['490'] || {}));
+        console.log('  Section 491 keys:', Object.keys(codeDefs['491'] || {}));
+        if (codeDefs['490']) {
+          console.log('  Sample 490 entries:', Object.entries(codeDefs['490']).slice(0, 5));
+        }
+      } else {
+        console.log('BRT section 60 for conditions:');
+        console.log('  Section 60 keys:', Object.keys(codeDefs['60'] || {}));
+        if (codeDefs['60']) {
+          console.log('  Sample 60 entries:', Object.entries(codeDefs['60']).slice(0, 10));
+        }
+      }
+
       // TEMPORARY TEST: Try with NO filters to see if we can find conditions
       console.log('=== TESTING WITHOUT FILTERS ===');
       const testExteriorConditions = getUniqueConditions(propertiesWithSales, 'exterior');
