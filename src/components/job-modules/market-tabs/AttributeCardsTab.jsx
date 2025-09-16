@@ -280,12 +280,26 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
     if (interiorInspectionOnly) {
       filtered = filtered.filter(p => {
-        const code = (p.inspection_info_by || '').toString().trim();
-        if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
-          return !['R', 'E'].includes(code); // Not refused (R) or estimated (E)
+        const infoByCode = (p.inspection_info_by || '').toString().trim();
+        const normalizedInfoBy = infoByCode.toUpperCase();
+
+        // Use infoByCategoryConfig like ProductionTracker
+        const refusalCodes = infoByCategoryConfig.refusal || [];
+        const estimationCodes = infoByCategoryConfig.estimation || [];
+
+        if (refusalCodes.length > 0 || estimationCodes.length > 0) {
+          // Use configured refusal/estimation codes
+          const isRefusal = refusalCodes.includes(normalizedInfoBy) || refusalCodes.includes(infoByCode);
+          const isEstimation = estimationCodes.includes(normalizedInfoBy) || estimationCodes.includes(infoByCode);
+          return !isRefusal && !isEstimation; // Include only if NOT refused or estimated
         } else {
-          // BRT: 06=refused, 07=estimated (no interior inspection)
-          return !['06', '07'].includes(code);
+          // Fallback to hardcoded logic if no config available
+          if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
+            return !['R', 'E'].includes(normalizedInfoBy); // Not refused (R) or estimated (E)
+          } else {
+            // BRT: 06=refused, 07=estimated (no interior inspection)
+            return !['06', '07'].includes(infoByCode);
+          }
         }
       });
     }
