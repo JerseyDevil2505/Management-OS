@@ -542,8 +542,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         const intConds = propertiesWithSales.map(p => getPropertyCondition(p, 'interior')).filter(c => c);
         console.log('Raw exterior condition codes:', [...new Set(extConds)].slice(0, 20));
         console.log('Raw interior condition codes:', [...new Set(intConds)].slice(0, 20));
-        console.log('Normalized exterior conditions:', [...new Set(extConds.map(c => normalizeCondition(c)).filter(Boolean))]);
-        console.log('Normalized interior conditions:', [...new Set(intConds.map(c => normalizeCondition(c)).filter(Boolean))]);
+        console.log('Normalized exterior conditions:', [...new Set(extConds.map(c => normalizeCondition(c, 'exterior')).filter(Boolean))]);
+        console.log('Normalized interior conditions:', [...new Set(intConds.map(c => normalizeCondition(c, 'interior')).filter(Boolean))]);
       }
 
       // DEBUG: Show parsed_code_definitions structure
