@@ -2500,7 +2500,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }));
 
     // Immediate save to prevent data loss when navigating away
-    debug('💾 Triggering immediate save for Act Site change');
+    debug('���� Triggering immediate save for Act Site change');
     setTimeout(() => {
       if (window.landValuationSave) {
         window.landValuationSave({ source: 'autosave' });
@@ -5364,61 +5364,74 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             const eMax = cascadeConfig.normal?.excess?.max ?? 10;
                             const rMax = cascadeConfig.normal?.residual?.max ?? null;
 
-                            const bracketList = [
-                              { key: 'small', label: `<${pMax.toFixed(2)}`, bracket: data.brackets.small },
-                              { key: 'medium', label: `${pMax.toFixed(2)}-${sMax.toFixed(2)}`, bracket: data.brackets.medium },
-                              { key: 'large', label: `${sMax.toFixed(2)}-${eMax.toFixed(2)}`, bracket: data.brackets.large },
-                              { key: 'xlarge', label: rMax ? `${eMax.toFixed(2)}-${rMax.toFixed(2)}` : `>${eMax.toFixed(2)}`, bracket: data.brackets.xlarge }
+                            const brackets = [
+                              { key: 'small', label: `<${pMax.toFixed(2)}`, data: data.brackets.small },
+                              { key: 'medium', label: `${pMax.toFixed(2)}-${sMax.toFixed(2)}`, data: data.brackets.medium },
+                              { key: 'large', label: `${sMax.toFixed(2)}-${eMax.toFixed(2)}`, data: data.brackets.large },
+                              { key: 'xlarge', label: rMax ? `${eMax.toFixed(2)}-${rMax.toFixed(2)}` : `>${eMax.toFixed(2)}`, data: data.brackets.xlarge }
                             ];
 
-                            return bracketList.map((row, rowIndex) => {
-                              if (row.bracket.count === 0) return null;
+                            return brackets.map((bracket, index) => {
+                              if (!bracket.data || bracket.data.count === 0) return null;
 
-                              // Find last valid bracket with positive avgAdjusted (skip negative rows)
-                              let prevBracket = null;
-                              for (let i = rowIndex - 1; i >= 0; i--) {
-                                const candidateBracket = bracketList[i].bracket;
-                                if (candidateBracket && candidateBracket.avgAdjusted && candidateBracket.avgAdjusted > 0) {
-                                  prevBracket = candidateBracket;
+                              // Find the last bracket with a HIGHER adjusted value than current
+                              let comparisonBracket = null;
+                              let comparisonIndex = -1;
+
+                              for (let i = index - 1; i >= 0; i--) {
+                                if (brackets[i].data &&
+                                    brackets[i].data.count > 0 &&
+                                    brackets[i].data.avgAdjusted &&
+                                    bracket.data.avgAdjusted &&
+                                    brackets[i].data.avgAdjusted < bracket.data.avgAdjusted) {
+                                  comparisonBracket = brackets[i].data;
+                                  comparisonIndex = i;
                                   break;
                                 }
                               }
 
-                              const adjustedDelta = prevBracket && prevBracket.avgAdjusted && row.bracket.avgAdjusted ?
-                                row.bracket.avgAdjusted - prevBracket.avgAdjusted : null;
-                              const lotDelta = prevBracket && prevBracket.avgAcres && row.bracket.avgAcres ?
-                                row.bracket.avgAcres - prevBracket.avgAcres : null;
-                              const perAcre = adjustedDelta && lotDelta && lotDelta > 0 && adjustedDelta > 0 ?
-                                adjustedDelta / lotDelta : null;
-                              const perSqFt = perAcre ? perAcre / 43560 : null;
+                              let adjustedDelta = null;
+                              let lotDelta = null;
+                              let perAcre = null;
+                              let perSqFt = null;
+
+                              if (comparisonBracket) {
+                                adjustedDelta = bracket.data.avgAdjusted - comparisonBracket.avgAdjusted;
+                                lotDelta = bracket.data.avgAcres - comparisonBracket.avgAcres;
+
+                                if (adjustedDelta > 0 && lotDelta > 0) {
+                                  perAcre = adjustedDelta / lotDelta;
+                                  perSqFt = perAcre / 43560;
+                                }
+                              }
 
                               return (
-                                <tr key={row.key} style={{ backgroundColor: '#FFFFFF' }}>
-                                  <td style={{ padding: '6px 8px', fontWeight: '500', borderBottom: '1px solid #F1F3F4' }}>{row.label}</td>
-                                  <td style={{ padding: '6px 8px', textAlign: 'center', borderBottom: '1px solid #F1F3F4' }}>{row.bracket.count}</td>
+                                <tr key={bracket.key} style={{ backgroundColor: '#FFFFFF' }}>
+                                  <td style={{ padding: '6px 8px', fontWeight: '500', borderBottom: '1px solid #F1F3F4' }}>{bracket.label}</td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'center', borderBottom: '1px solid #F1F3F4' }}>{bracket.data.count}</td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
-                                    {row.bracket.avgAcres ? row.bracket.avgAcres.toFixed(2) : '-'}
+                                    {bracket.data.avgAcres ? bracket.data.avgAcres.toFixed(2) : '-'}
                                   </td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
-                                    {row.bracket.avgSalePrice ? `$${Math.round(row.bracket.avgSalePrice).toLocaleString()}` : '-'}
+                                    {bracket.data.avgSalePrice ? `$${Math.round(bracket.data.avgSalePrice).toLocaleString()}` : '-'}
                                   </td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
-                                    {row.bracket.avgSFLA ? Math.round(row.bracket.avgSFLA).toLocaleString() : '-'}
+                                    {bracket.data.avgSFLA ? Math.round(bracket.data.avgSFLA).toLocaleString() : '-'}
                                   </td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
-                                    {row.bracket.avgAdjusted ? `$${Math.round(row.bracket.avgAdjusted).toLocaleString()}` : '-'}
+                                    {bracket.data.avgAdjusted ? `$${Math.round(bracket.data.avgAdjusted).toLocaleString()}` : '-'}
                                   </td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
-                                    {adjustedDelta ? `$${Math.round(adjustedDelta).toLocaleString()}` : '-'}
+                                    {adjustedDelta !== null ? `$${Math.round(adjustedDelta).toLocaleString()}` : '-'}
                                   </td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right', borderBottom: '1px solid #F1F3F4' }}>
-                                    {lotDelta ? lotDelta.toFixed(2) : '-'}
+                                    {lotDelta !== null ? lotDelta.toFixed(2) : '-'}
                                   </td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
-                                    {perAcre ? `$${Math.round(perAcre).toLocaleString()}` : (adjustedDelta !== null && adjustedDelta <= 0 ? 'N/A' : '-')}
+                                    {perAcre !== null ? `$${Math.round(perAcre).toLocaleString()}` : 'N/A'}
                                   </td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #F1F3F4' }}>
-                                    {perSqFt ? `$${perSqFt.toFixed(2)}` : (adjustedDelta !== null && adjustedDelta <= 0 ? 'N/A' : '-')}
+                                    {perSqFt !== null ? `$${perSqFt.toFixed(2)}` : '-'}
                                   </td>
                                 </tr>
                               );
