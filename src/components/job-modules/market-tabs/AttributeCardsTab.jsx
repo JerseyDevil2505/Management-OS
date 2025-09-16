@@ -332,24 +332,61 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       console.log('Interior analysis properties:', interiorProperties.length);
 
       // Debug field names and filtering
-      console.log('=== FIELD NAME CHECK ===');
+      console.log('=== DETAILED FIELD ANALYSIS ===');
       if (properties.length > 0) {
         const sample = properties[0];
+        console.log('Vendor Type Detection:', vendorType);
+        console.log('JobData vendor fields:', {
+          vendor_type: jobData?.vendor_type,
+          vendor_source: jobData?.vendor_source
+        });
+
         console.log('All fields on property:', Object.keys(sample));
-        console.log('Looking for type_use, found:', getPropertyTypeUse(sample));
-        console.log('Looking for ext_cond, found:', getPropertyCondition(sample, 'exterior'));
-        console.log('Looking for int_cond, found:', getPropertyCondition(sample, 'interior'));
+        console.log('Type/Use field values:');
+        console.log('  asset_type_use:', sample.asset_type_use);
+        console.log('  asset_typeuse:', sample.asset_typeuse);
+        console.log('  typeuse:', sample.typeuse);
+        console.log('  type_use:', sample.type_use);
+        console.log('  getPropertyTypeUse result:', getPropertyTypeUse(sample));
+
+        console.log('Condition field values:');
+        console.log('  asset_ext_cond:', sample.asset_ext_cond);
+        console.log('  asset_int_cond:', sample.asset_int_cond);
+        console.log('  getPropertyCondition(exterior):', getPropertyCondition(sample, 'exterior'));
+        console.log('  getPropertyCondition(interior):', getPropertyCondition(sample, 'interior'));
+        console.log('  normalizeCondition(ext):', normalizeCondition(getPropertyCondition(sample, 'exterior')));
+        console.log('  normalizeCondition(int):', normalizeCondition(getPropertyCondition(sample, 'interior')));
+
         console.log('Current typeUseFilter:', typeUseFilter);
 
-        // Check how many properties have empty type_use
-        const emptyTypeUse = propertiesWithSales.filter(p => !getPropertyTypeUse(p).toString().trim()).length;
-        console.log(`Properties with empty type_use: ${emptyTypeUse} / ${propertiesWithSales.length}`);
+        // Check BRT code definitions
+        if (jobData?.parsed_code_definitions?.['60']) {
+          console.log('BRT Section 60 (Condition) codes available:',
+            jobData.parsed_code_definitions['60'].slice(0, 10).map(c => `${c.code}: ${c.description}`));
+        }
+
+        // Check how many properties have populated type_use
+        const typeUseStats = {
+          total: propertiesWithSales.length,
+          with_asset_type_use: propertiesWithSales.filter(p => p.asset_type_use && p.asset_type_use.toString().trim()).length,
+          with_any_typeuse: propertiesWithSales.filter(p => getPropertyTypeUse(p).toString().trim()).length
+        };
+        console.log('Type/Use field population:', typeUseStats);
+
+        // Sample type_use values
+        const sampleTypeUse = propertiesWithSales
+          .map(p => getPropertyTypeUse(p))
+          .filter(t => t && t.toString().trim())
+          .slice(0, 20);
+        console.log('Sample type_use values:', [...new Set(sampleTypeUse)]);
 
         // Check condition codes
         const extConds = propertiesWithSales.map(p => getPropertyCondition(p, 'exterior')).filter(c => c);
         const intConds = propertiesWithSales.map(p => getPropertyCondition(p, 'interior')).filter(c => c);
-        console.log('Sample exterior conditions:', [...new Set(extConds)].slice(0, 10));
-        console.log('Sample interior conditions:', [...new Set(intConds)].slice(0, 10));
+        console.log('Raw exterior condition codes:', [...new Set(extConds)].slice(0, 20));
+        console.log('Raw interior condition codes:', [...new Set(intConds)].slice(0, 20));
+        console.log('Normalized exterior conditions:', [...new Set(extConds.map(c => normalizeCondition(c)).filter(Boolean))]);
+        console.log('Normalized interior conditions:', [...new Set(intConds.map(c => normalizeCondition(c)).filter(Boolean))]);
       }
 
       // Discover actual conditions in data (dynamic)
