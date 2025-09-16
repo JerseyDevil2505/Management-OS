@@ -1794,6 +1794,7 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
       if (vendorType === 'BRT') {
         let totalAcres = 0;
         let totalSf = 0;
+        let foundAnyUnits = false;
 
         for (let i = 1; i <= 6; i++) {
           const unitsRaw = property[`landurunits_${i}`];
@@ -1803,6 +1804,7 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
           const code = codeRaw !== undefined && codeRaw !== null ? String(codeRaw).trim() : null;
 
           if (!isNaN(units) && units > 0) {
+            foundAnyUnits = true;
             // Heuristic: large numbers are SF, small numbers are acres
             if (units >= 1000) {
               totalSf += units;
@@ -1813,7 +1815,43 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
         }
 
         const acresFromLandur = totalAcres + (totalSf / 43560);
-        if (acresFromLandur > 0) return acresFromLandur.toFixed(2);
+        if (acresFromLandur > 0) {
+          console.log(`��� BRT lot size calculated from database LANDUR fields: ${acresFromLandur.toFixed(2)} acres`, {
+            property_key: property.property_composite_key,
+            totalAcres,
+            totalSf,
+            finalAcres: acresFromLandur.toFixed(2)
+          });
+          return acresFromLandur.toFixed(2);
+        }
+
+        // Debug: Log when BRT calculation fails
+        if (foundAnyUnits) {
+          console.warn(`⚠️ BRT property has LANDUR units but calculated 0 acres:`, {
+            property_key: property.property_composite_key,
+            totalAcres,
+            totalSf,
+            landur_fields: {
+              landur_1: property.landur_1, landurunits_1: property.landurunits_1,
+              landur_2: property.landur_2, landurunits_2: property.landurunits_2,
+              landur_3: property.landur_3, landurunits_3: property.landurunits_3,
+              landur_4: property.landur_4, landurunits_4: property.landurunits_4,
+              landur_5: property.landur_5, landurunits_5: property.landurunits_5,
+              landur_6: property.landur_6, landurunits_6: property.landurunits_6
+            }
+          });
+        } else {
+          console.warn(`⚠️ BRT property has no LANDUR units in database fields:`, {
+            property_key: property.property_composite_key,
+            available_fields: Object.keys(property).filter(k => k.includes('landur') || k.includes('lot') || k.includes('acre')),
+            asset_fields: {
+              asset_lot_acre: property.asset_lot_acre,
+              asset_lot_sf: property.asset_lot_sf,
+              asset_lot_frontage: property.asset_lot_frontage,
+              asset_lot_depth: property.asset_lot_depth
+            }
+          });
+        }
       }
 
       // Microsystems vendor check using attached raw_data
