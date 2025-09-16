@@ -337,18 +337,43 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         });
       }
 
+      // Debug filtering step by step
+      console.log('=== FILTERING DEBUG ===');
+      console.log('1. Properties with sales:', propertiesWithSales.length);
+
+      // Test entry filter
+      const afterEntryFilter = applyEntryFilter(propertiesWithSales);
+      console.log('2. After entry filter:', afterEntryFilter.length);
+      console.log('   Entry filter enabled:', entryFilterEnabled);
+      if (afterEntryFilter.length < propertiesWithSales.length) {
+        const sample = propertiesWithSales[0];
+        console.log('   Sample inspection_info_by:', sample?.inspection_info_by);
+        console.log('   Expected BRT entry codes: 01,02,03,04');
+      }
+
+      // Test type/use filter
+      const afterTypeUseFilter = applyTypeUseFilter(afterEntryFilter, typeUseFilter);
+      console.log('3. After type/use filter:', afterTypeUseFilter.length);
+      console.log('   Type/use filter:', typeUseFilter);
+      if (afterTypeUseFilter.length < afterEntryFilter.length) {
+        console.log('   Sample type_use values from remaining properties:');
+        afterEntryFilter.slice(0, 5).forEach((p, i) => {
+          console.log(`     Property ${i}: type_use="${getPropertyTypeUse(p)}" (would include: ${typeUseFilter === '1' ? (!getPropertyTypeUse(p) || getPropertyTypeUse(p).startsWith('1')) : 'other logic'})`);
+        });
+      }
+
       // Apply filters for exterior and interior analyses
       const exteriorProperties = applyFilters(propertiesWithSales);
       const interiorProperties = applyInteriorFilters(propertiesWithSales);
+
+      console.log('4. Final exterior properties:', exteriorProperties.length);
+      console.log('5. Final interior properties:', interiorProperties.length);
 
       // Update property counts in state for UI display
       setFilteredPropertyCounts({
         exterior: exteriorProperties.length,
         interior: interiorProperties.length
       });
-
-      console.log('Exterior analysis properties:', exteriorProperties.length);
-      console.log('Interior analysis properties:', interiorProperties.length);
 
       // Debug field names and filtering
       console.log('=== DETAILED FIELD ANALYSIS ===');
