@@ -203,9 +203,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         .select('asset_ext_cond, asset_int_cond, asset_exterior_condition, asset_interior_condition, ext_cond, int_cond')
         .eq('job_id', jobData.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Database query error:', error);
+        throw error;
+      }
 
       console.log('📊 Raw property records:', propertyRecords?.length);
+      console.log('📊 Sample property record:', propertyRecords?.[0]);
 
       // Extract unique condition codes
       const exteriorCodes = new Set();
