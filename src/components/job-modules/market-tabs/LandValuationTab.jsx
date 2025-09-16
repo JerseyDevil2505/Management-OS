@@ -5379,28 +5379,34 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                                 avgAcres: bracket.data.avgAcres
                               });
 
-                              // Find previous valid bracket
+                              // Find the bracket with the highest adjusted value that's still lower than current
                               let comparisonBracket = null;
-                              for (let i = index - 1; i >= 0; i--) {
+                              let highestValidAdjusted = 0;
+
+                              for (let i = 0; i < index; i++) {
                                 const candidate = brackets[i].data;
                                 console.log(`  Checking row ${i}:`, {
                                   hasData: !!candidate,
                                   avgAdjusted: candidate?.avgAdjusted,
-                                  wouldBePositiveDelta: candidate && bracket.data.avgAdjusted > candidate.avgAdjusted
+                                  wouldBePositiveDelta: candidate && bracket.data.avgAdjusted > candidate.avgAdjusted,
+                                  isHigherThanCurrent: candidate?.avgAdjusted > highestValidAdjusted
                                 });
 
                                 if (candidate &&
                                     candidate.count > 0 &&
                                     candidate.avgAdjusted &&
-                                    bracket.data.avgAdjusted > candidate.avgAdjusted) {
+                                    candidate.avgAdjusted < bracket.data.avgAdjusted &&
+                                    candidate.avgAdjusted > highestValidAdjusted) {
                                   comparisonBracket = candidate;
-                                  console.log(`  ✓ Using row ${i} for comparison`);
-                                  break;
+                                  highestValidAdjusted = candidate.avgAdjusted;
+                                  console.log(`  ✓ New best comparison: row ${i} (${candidate.avgAdjusted})`);
                                 }
                               }
 
                               if (!comparisonBracket) {
                                 console.log(`  ✗ No valid comparison found`);
+                              } else {
+                                console.log(`  ✅ Final comparison: ${highestValidAdjusted}`);
                               }
 
                               let adjustedDelta = null;
@@ -7180,7 +7186,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <span style={{ fontSize: '16px', fontWeight: 'bold' }}>%</span>
                     <button
                       onClick={() => {
-                        debug('��� Save button clicked for target allocation:', targetAllocation);
+                        debug('💾 Save button clicked for target allocation:', targetAllocation);
                         saveTargetAllocation();
                       }}
                       disabled={!targetAllocation || targetAllocation === ''}
