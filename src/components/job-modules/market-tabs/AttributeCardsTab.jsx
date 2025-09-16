@@ -94,7 +94,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     const conditions = { exterior: [], interior: [] };
 
     console.log('🔍 Getting available conditions for vendor:', vendorType);
-    console.log('�� Available code definitions sections:', Object.keys(codeDefs));
+    console.log('📊 Available code definitions sections:', Object.keys(codeDefs));
 
     if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
       // Microsystems: 490 = exterior, 491 = interior
@@ -869,7 +869,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                             </tr>
                             {/* Condition Code Rows */}
                             {availableConditions.exterior.map((cond, condIdx) => {
+                              console.log(`🔍 Looking for condition "${cond.code}" in VCS "${vcs}" conditions:`, Object.keys(vcsData.conditions || {}));
                               const condData = vcsData.conditions[cond.code];
+                              console.log(`📊 Found condData for ${cond.code}:`, condData);
                               if (!condData) return null;
 
                               return (
