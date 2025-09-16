@@ -202,16 +202,40 @@ const ProductionTracker = ({
     }
   };
 
-  // Calculate validation overrides from passed inspection data
-  const calculateValidationOverrides = () => {
-    if (!inspectionData || inspectionData.length === 0) return;
-    
-    const overrides = inspectionData.filter(d => 
-      d.override_applied === true
-    );
-    
+  // Calculate validation overrides - fetch fresh data from database for immediate updates
+  const calculateValidationOverrides = async (useFreshData = false) => {
+    let overrideSource = inspectionData;
+
+    // If requested or if no inspection data available, fetch fresh from database
+    if (useFreshData || !inspectionData || inspectionData.length === 0) {
+      if (!jobData?.id || !latestFileVersion) return;
+
+      try {
+        const { data: freshInspectionData, error } = await supabase
+          .from('inspection_data')
+          .select('*')
+          .eq('job_id', jobData.id)
+          .eq('file_version', latestFileVersion)
+          .eq('override_applied', true);
+
+        if (error) {
+          console.error('Error fetching fresh overrides:', error);
+          return;
+        }
+
+        overrideSource = freshInspectionData || [];
+        debugLog('VALIDATION_OVERRIDES', `✅ Fetched ${overrideSource.length} fresh overrides from database`);
+      } catch (error) {
+        console.error('Error in calculateValidationOverrides:', error);
+        return;
+      }
+    } else {
+      // Use prop data and filter for overrides
+      overrideSource = inspectionData.filter(d => d.override_applied === true);
+    }
+
     // Process overrides to ensure block/lot/qualifier are populated
-    const processedOverrides = overrides.map(override => {
+    const processedOverrides = overrideSource.map(override => {
       if (!override.block || !override.lot) {
         // Parse from composite key format: "YEAR+CCDD-BLOCK-LOT_QUALIFIER-CARD-LOCATION"
         const keyParts = override.property_composite_key.split('-');
@@ -219,7 +243,7 @@ const ProductionTracker = ({
           const blockPart = keyParts[1]; // After first dash is block
           const lotQualPart = keyParts[2]; // After second dash is lot_qualifier
           const [lot, qualifier] = lotQualPart ? lotQualPart.split('_') : ['', ''];
-          
+
           return {
             ...override,
             block: override.block || blockPart || '',
@@ -230,9 +254,9 @@ const ProductionTracker = ({
       }
       return override;
     });
-    
+
     setValidationOverrides(processedOverrides);
-    
+
     // Build override map for quick lookup
     const overrideMapData = {};
     processedOverrides.forEach(override => {
@@ -244,7 +268,8 @@ const ProductionTracker = ({
       };
     });
     setOverrideMap(overrideMapData);
-    
+
+    return processedOverrides;
   };
 
   // Enhanced InfoBy code loading with proper Microsystems cleaning
@@ -751,7 +776,7 @@ const ProductionTracker = ({
       setCustomOverrideReason('');
       
       // Immediately reload validation overrides to get fresh data with all fields
-      calculateValidationOverrides();
+      await calculateValidationOverrides(true); // Force fresh data fetch
       
       // Update App.js state immediately with the new override
       if (onUpdateWorkflowStats && analytics) {
@@ -915,7 +940,7 @@ const ProductionTracker = ({
         
         // Process from props instead of loading
         processEmployeeData();  // Uses employees prop
-        calculateValidationOverrides();  // Uses inspectionData prop
+        await calculateValidationOverrides();  // Uses inspectionData prop initially
         calculateCommercialCounts();     // Uses inspectionData prop
         calculateUnassignedPropertyCount(); // Uses properties prop
         
@@ -1719,7 +1744,7 @@ const ProductionTracker = ({
             addNotification(`✅ Successfully saved ${inspectionDataBatch.length} records to inspection_data`, 'success');
             
              // Recalculate override and commercial data after successful save
-            calculateValidationOverrides();
+            await calculateValidationOverrides(true); // Force fresh data fetch
             calculateCommercialCounts();
             
             // Log override success if any were applied
@@ -1926,7 +1951,7 @@ const ProductionTracker = ({
       setMissingPropertiesReport(missingPropertiesReportData);
       
       // Recalculate validation overrides to show the new ones from processing modal
-      calculateValidationOverrides();
+      await calculateValidationOverrides(true); // Force fresh data fetch
 
       // DON'T clear modal state here - wait for user to close it
       // setPendingValidations([]);
