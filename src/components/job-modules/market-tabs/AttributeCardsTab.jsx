@@ -93,13 +93,19 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     const codeDefs = jobData?.parsed_code_definitions || {};
     const conditions = { exterior: [], interior: [] };
 
+    console.log('🔍 Getting available conditions for vendor:', vendorType);
+    console.log('📊 Available code definitions sections:', Object.keys(codeDefs));
+
     if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
       // Microsystems: 490 = exterior, 491 = interior
       const extSection = codeDefs['490'] || {};
       const intSection = codeDefs['491'] || {};
 
+      console.log('🏗️ Microsystems exterior section 490:', extSection);
+      console.log('🏗️ Microsystems interior section 491:', intSection);
+
       Object.entries(extSection).forEach(([code, info]) => {
-        if (code && code !== '00') {
+        if (code && code !== '00' && code !== '0') {
           conditions.exterior.push({
             code,
             description: info.description || info.name || code,
@@ -109,7 +115,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       });
 
       Object.entries(intSection).forEach(([code, info]) => {
-        if (code && code !== '00') {
+        if (code && code !== '00' && code !== '0') {
           conditions.interior.push({
             code,
             description: info.description || info.name || code,
@@ -121,8 +127,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       // BRT: Section 60 for both exterior and interior
       const section = codeDefs['60'] || {};
 
+      console.log('🏗️ BRT section 60:', section);
+
       Object.entries(section).forEach(([code, info]) => {
-        if (code && code !== '00') {
+        if (code && code !== '00' && code !== '0') {
           const condition = {
             code,
             description: info.description || info.name || code,
@@ -134,6 +142,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       });
     }
 
+    console.log('✅ Found conditions:', conditions);
     return conditions;
   };
 
