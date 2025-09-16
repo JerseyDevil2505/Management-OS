@@ -928,7 +928,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               </div>
 
               <span className="text-xs text-gray-500">
-                ({exteriorProperties?.length || 0} exterior / {interiorProperties?.length || 0} interior properties)
+                ({filteredPropertyCounts.exterior} exterior / {filteredPropertyCounts.interior} interior properties)
               </span>
             </div>
 
