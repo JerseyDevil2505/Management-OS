@@ -1262,8 +1262,8 @@ const getPricePerUnit = useCallback((price, size) => {
 
       // Default: fall back to previous behavior
       if (group.length > 1) {
-        // Sum up package totals
-        const totalPrice = group.reduce((sum, p) => sum + p.sales_price, 0);
+        // Use original sale price (don't sum - properties already contain full package price)
+        const totalPrice = group[0].sales_price;
         const totalAcres = group.reduce((sum, p) => sum + calculateAcreage(p), 0);
         const pricePerUnit = getPricePerUnit(totalPrice, totalAcres);
 
