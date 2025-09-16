@@ -809,11 +809,12 @@ const getPricePerUnit = useCallback((price, size) => {
 
   useEffect(() => {
     if (properties && properties.length > 0) {
+      console.log('🔄 Triggering fresh calculations with FIXED DELTA LOGIC');
       filterVacantSales();
       performBracketAnalysis();
       loadVCSPropertyCounts();
     }
-  }, [properties, dateRange, valuationMode, method2TypeFilter]);
+  }, [properties, dateRange, valuationMode, method2TypeFilter, method2ExcludedSales]);
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
