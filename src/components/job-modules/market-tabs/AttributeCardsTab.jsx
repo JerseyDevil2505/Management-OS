@@ -56,7 +56,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     { code: '1', description: '1 — Single Family' },
     { code: '2', description: '2 — Duplex / Semi-Detached' },
     { code: '3', description: '3* — Row / Townhouse (3E,3I,30,31)' },
-    { code: '4', description: '4* — MultiFamily (42,43,44)' },
+    { code: '4', description: '4* �� MultiFamily (42,43,44)' },
     { code: '5', description: '5* — Conversions (51,52,53)' },
     { code: '6', description: '6 — Condominium' },
     { code: 'all_residential', description: 'All Residential' }
@@ -340,12 +340,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   // Analyze conditions for a single VCS (similar to bracket analysis)
   const analyzeVCSConditions = (properties, conditionType) => {
     const conditionBuckets = {};
-    
+
+    console.log(`🔍 Analyzing ${conditionType} conditions for ${properties.length} properties`);
+
     // Group properties by condition
     properties.forEach(prop => {
       const conditionCode = getPropertyCondition(prop, conditionType);
       const condition = normalizeCondition(conditionCode, conditionType);
-      
+
+      console.log(`Property ${prop.property_composite_key}: ${conditionType} code = "${conditionCode}" -> normalized = "${condition}"`);
+
       if (!condition) return;
 
       if (!conditionBuckets[condition]) {
@@ -353,6 +357,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       }
       conditionBuckets[condition].push(prop);
     });
+
+    console.log(`📊 ${conditionType} condition buckets:`, Object.keys(conditionBuckets));
 
     // Calculate statistics for each condition
     const conditionStats = {};
