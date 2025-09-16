@@ -28,7 +28,8 @@ function downloadCsv(filename, headers, rows) {
 }
 
 const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {}, onUpdateJobCache = () => {} }) => {
-  const vendorType = jobData?.vendor_type || jobData?.vendor_source || '';
+  const vendorType = jobData?.vendor_type || jobData?.vendor_source || 'BRT';
+  console.log('Detected vendor type:', vendorType, 'from jobData:', { vendor_type: jobData?.vendor_type, vendor_source: jobData?.vendor_source });
 
   const [active, setActive] = useState('condition');
 
@@ -247,8 +248,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     // Clean the condition code - trim whitespace and convert to uppercase
     const cleanCode = condCode.toString().trim().toUpperCase();
 
-    // Treat "00" as null/empty
-    if (cleanCode === '00' || cleanCode === '') return null;
+    // Only treat empty string as null, NOT "00" - it might be valid for BRT
+    if (cleanCode === '') return null;
 
     if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
       // Microsystems: E=Excellent, G=Good, A=Average, F=Fair, P=Poor
@@ -258,12 +259,31 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       };
       return condMap[cleanCode] || null;
     } else {
-      // BRT: 01=Excellent, 02=Good, 03=Average, 04=Fair, 05=Poor
+      // BRT: Uses section 60 for both exterior and interior conditions
+      // Common BRT condition codes (check with parsed_code_definitions if available)
       const condMap = {
-        '01': 'EXCELLENT', '02': 'GOOD', '03': 'AVERAGE',
-        '04': 'FAIR', '05': 'POOR'
+        '00': 'NOT_APPLICABLE', // Don't skip 00 - might be valid
+        '01': 'EXCELLENT',
+        '02': 'VERY_GOOD',
+        '03': 'GOOD',
+        '04': 'AVERAGE',
+        '05': 'FAIR',
+        '06': 'POOR',
+        '07': 'VERY_POOR'
       };
-      return condMap[cleanCode] || null;
+
+      // Check if we have parsed code definitions for this job
+      const codeDefinitions = jobData?.parsed_code_definitions || {};
+      if (codeDefinitions['60']) {
+        // Use actual BRT condition definitions from section 60
+        const section60 = codeDefinitions['60'];
+        const foundCode = section60.find(def => def.code === cleanCode);
+        if (foundCode) {
+          return foundCode.description.toUpperCase().replace(/\s+/g, '_');
+        }
+      }
+
+      return condMap[cleanCode] || cleanCode; // Return original code if not mapped
     }
   };
 
