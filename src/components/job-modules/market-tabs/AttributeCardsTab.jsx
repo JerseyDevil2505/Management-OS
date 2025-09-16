@@ -204,6 +204,69 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     loadActualConditionCodes();
   }, [jobData?.id]);
 
+  // Load actual condition codes from property records
+  const loadActualConditionCodes = async () => {
+    if (!jobData?.id) return;
+
+    try {
+      console.log('🔍 Loading actual condition codes from property records for job:', jobData.id);
+
+      // Query property records to get all unique condition codes
+      const { data: propertyRecords, error } = await supabase
+        .from('property_records')
+        .select('asset_ext_cond, asset_int_cond, asset_exterior_condition, asset_interior_condition, ext_cond, int_cond')
+        .eq('job_id', jobData.id)
+        .not('asset_ext_cond', 'is', null)
+        .not('asset_int_cond', 'is', null);
+
+      if (error) throw error;
+
+      console.log('📊 Raw property records:', propertyRecords?.length);
+
+      // Extract unique condition codes
+      const exteriorCodes = new Set();
+      const interiorCodes = new Set();
+
+      propertyRecords?.forEach(record => {
+        // Check multiple possible field names for exterior conditions
+        const extCond = record.asset_ext_cond || record.asset_exterior_condition || record.ext_cond;
+        if (extCond && extCond !== '00' && extCond !== '0' && extCond.toString().trim() !== '') {
+          exteriorCodes.add(extCond.toString().trim());
+        }
+
+        // Check multiple possible field names for interior conditions
+        const intCond = record.asset_int_cond || record.asset_interior_condition || record.int_cond;
+        if (intCond && intCond !== '00' && intCond !== '0' && intCond.toString().trim() !== '') {
+          interiorCodes.add(intCond.toString().trim());
+        }
+      });
+
+      // Convert to arrays and create condition objects
+      const conditions = {
+        exterior: Array.from(exteriorCodes).sort().map(code => ({
+          code,
+          description: code, // We'll just use the code as description for now
+          normalized: code.toUpperCase()
+        })),
+        interior: Array.from(interiorCodes).sort().map(code => ({
+          code,
+          description: code, // We'll just use the code as description for now
+          normalized: code.toUpperCase()
+        }))
+      };
+
+      console.log('✅ Found actual condition codes:', {
+        exterior: Array.from(exteriorCodes),
+        interior: Array.from(interiorCodes)
+      });
+
+      setAvailableConditions(conditions);
+
+    } catch (error) {
+      console.error('Error loading actual condition codes:', error);
+    }
+  };
+
   // Load condition data from values_norm_time
   const loadConditionData = async () => {
     if (!jobData?.id) return;
@@ -806,7 +869,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                             <tr className="bg-blue-50 font-semibold">
                               <td className="px-3 py-2 border font-bold text-blue-800">{vcs}</td>
                               <td className="px-3 py-2 border text-center text-blue-700">{vcsData.totalProperties}</td>
-                              <td className="px-3 py-2 border text-center text-blue-700">���</td>
+                              <td className="px-3 py-2 border text-center text-blue-700">—</td>
                               <td className="px-3 py-2 border text-center text-blue-700">—</td>
                               <td className="px-3 py-2 border text-center text-blue-700">—</td>
                               <td className="px-3 py-2 border text-center text-blue-700">Baseline: {vcsData.baseline || 'Auto'}</td>
