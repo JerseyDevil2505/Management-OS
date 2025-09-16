@@ -433,8 +433,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         console.log('Normalized interior conditions:', [...new Set(intConds.map(c => normalizeCondition(c)).filter(Boolean))]);
       }
 
+      // TEMPORARY TEST: Try with NO filters to see if we can find conditions
+      console.log('=== TESTING WITHOUT FILTERS ===');
+      const testExteriorConditions = getUniqueConditions(propertiesWithSales, 'exterior');
+      const testInteriorConditions = getUniqueConditions(propertiesWithSales, 'interior');
+      console.log('Conditions found WITHOUT any filters:');
+      console.log('  Test exterior:', testExteriorConditions);
+      console.log('  Test interior:', testInteriorConditions);
+
       // Discover actual conditions in data (dynamic)
-      console.log('=== CONDITION DISCOVERY ===');
+      console.log('=== CONDITION DISCOVERY WITH FILTERS ===');
       console.log('About to discover conditions from:');
       console.log('  Exterior properties:', exteriorProperties.length);
       console.log('  Interior properties:', interiorProperties.length);
@@ -446,12 +454,14 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           const normalized = normalizeCondition(rawCond);
           console.log(`  Property ${i}: raw="${rawCond}" -> normalized="${normalized}"`);
         });
+      } else {
+        console.log('NO EXTERIOR PROPERTIES after filtering - this is the problem!');
       }
 
       const exteriorConditions = getUniqueConditions(exteriorProperties, 'exterior');
       const interiorConditions = getUniqueConditions(interiorProperties, 'interior');
 
-      console.log('Discovered conditions:');
+      console.log('Discovered conditions WITH filters:');
       console.log('  Exterior:', exteriorConditions);
       console.log('  Interior:', interiorConditions);
 
