@@ -434,8 +434,26 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       }
 
       // Discover actual conditions in data (dynamic)
+      console.log('=== CONDITION DISCOVERY ===');
+      console.log('About to discover conditions from:');
+      console.log('  Exterior properties:', exteriorProperties.length);
+      console.log('  Interior properties:', interiorProperties.length);
+
+      if (exteriorProperties.length > 0) {
+        console.log('Sample exterior property conditions:');
+        exteriorProperties.slice(0, 3).forEach((p, i) => {
+          const rawCond = getPropertyCondition(p, 'exterior');
+          const normalized = normalizeCondition(rawCond);
+          console.log(`  Property ${i}: raw="${rawCond}" -> normalized="${normalized}"`);
+        });
+      }
+
       const exteriorConditions = getUniqueConditions(exteriorProperties, 'exterior');
       const interiorConditions = getUniqueConditions(interiorProperties, 'interior');
+
+      console.log('Discovered conditions:');
+      console.log('  Exterior:', exteriorConditions);
+      console.log('  Interior:', interiorConditions);
 
       console.log('Found exterior conditions:', exteriorConditions);
       console.log('Found interior conditions:', interiorConditions);
