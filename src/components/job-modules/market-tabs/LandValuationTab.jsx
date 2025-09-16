@@ -3046,7 +3046,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         onAnalysisUpdate(analysisData, options);
       }
     } catch (error) {
-      console.error('��� Save failed:', error);
+      console.error('���� Save failed:', error);
       console.error('Error details:', {
         message: error.message,
         code: error.code,
@@ -5377,7 +5377,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             // Look backwards for the last valid bracket with positive avgAdjusted
                             for (let i = rowIndex - 1; i >= 0; i--) {
                               const candidateBracket = allBrackets[i];
-                              if (candidateBracket && candidateBracket.avgAdjusted && candidateBracket.avgAdjusted > 0) {
+                              if (candidateBracket && candidateBracket.count > 0 && candidateBracket.avgAdjusted && candidateBracket.avgAdjusted > 0) {
                                 prevBracket = candidateBracket;
                                 break;
                               }
