@@ -39,6 +39,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [interiorInspectionOnly, setInteriorInspectionOnly] = useState(false);
   const [conditionWorking, setConditionWorking] = useState(false);
   const [conditionResults, setConditionResults] = useState(marketLandData.condition_analysis_rollup || { exterior: {}, interior: {}, tested_adjustments: {} });
+  const [filteredPropertyCounts, setFilteredPropertyCounts] = useState({ exterior: 0, interior: 0 });
   const [exteriorCascade, setExteriorCascade] = useState([
     { name: 'EXCELLENT', tested: null, actual: null },
     { name: 'VERY GOOD', tested: null, actual: null },
