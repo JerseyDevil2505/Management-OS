@@ -1062,6 +1062,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               <span className="text-xs text-gray-500">
                 ({filteredPropertyCounts.exterior} exterior / {filteredPropertyCounts.interior} interior properties)
               </span>
+
+              {infoByCategoryConfig.entry.length === 0 && (
+                <span className="text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
+                  ⚠️ No entry codes configured - go to Production Tracker to set up filters
+                </span>
+              )}
             </div>
 
             {/* Exterior Condition Table */}
