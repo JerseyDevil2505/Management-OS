@@ -1735,9 +1735,84 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
     // Defensive: if property is falsy, return zero acres string
     if (!property) return '0.00';
 
-    // 1. Prefer a manual override field in property_market_analysis
     const marketAnalysis = (property && (property.property_market_analysis || property.property_market_analysis_raw)) || null;
 
+    // ===== NEW CORRECT WORKFLOW FOR BRT =====
+    if (vendorType === 'BRT') {
+      // 1. FIRST: Check for lot dimensions (frontage × depth)
+      const frontage = marketAnalysis?.asset_lot_frontage ?? property.asset_lot_frontage;
+      const depth = marketAnalysis?.asset_lot_depth ?? property.asset_lot_depth;
+
+      if (frontage && depth && parseFloat(frontage) > 0 && parseFloat(depth) > 0) {
+        const sf = parseFloat(frontage) * parseFloat(depth);
+        const acres = (sf / 43560).toFixed(2);
+        console.log(`✅ BRT lot size calculated from frontage × depth: ${acres} acres`, {
+          property_key: property.property_composite_key,
+          frontage: parseFloat(frontage),
+          depth: parseFloat(depth),
+          sf: sf
+        });
+        return acres;
+      }
+
+      // 2. FALLBACK: Use Unit Rate Config results (market_manual_lot_acre)
+      const manualAcre = marketAnalysis?.market_manual_lot_acre ?? property.market_manual_lot_acre;
+      if (manualAcre && parseFloat(manualAcre) > 0) {
+        console.log(`✅ BRT lot size from Unit Rate Config: ${parseFloat(manualAcre).toFixed(2)} acres`, {
+          property_key: property.property_composite_key,
+          source: 'market_manual_lot_acre'
+        });
+        return parseFloat(manualAcre).toFixed(2);
+      }
+
+      // 3. Check if we can derive from market_manual_lot_sf
+      const manualSf = marketAnalysis?.market_manual_lot_sf ?? property.market_manual_lot_sf;
+      if (manualSf && parseFloat(manualSf) > 0) {
+        const acres = (parseFloat(manualSf) / 43560).toFixed(2);
+        console.log(`✅ BRT lot size calculated from Unit Rate Config SF: ${acres} acres`, {
+          property_key: property.property_composite_key,
+          sf: parseFloat(manualSf),
+          source: 'market_manual_lot_sf'
+        });
+        return acres;
+      }
+
+      // 4. Final fallback: Check for pre-calculated fields (unlikely for BRT but just in case)
+      const acreField = marketAnalysis?.asset_lot_acre ?? property.asset_lot_acre;
+      if (acreField && parseFloat(acreField) > 0) {
+        console.log(`✅ BRT lot size from asset_lot_acre field: ${parseFloat(acreField).toFixed(2)} acres`, {
+          property_key: property.property_composite_key
+        });
+        return parseFloat(acreField).toFixed(2);
+      }
+
+      const sfField = marketAnalysis?.asset_lot_sf ?? property.asset_lot_sf;
+      if (sfField && parseFloat(sfField) > 0) {
+        const acres = (parseFloat(sfField) / 43560).toFixed(2);
+        console.log(`✅ BRT lot size from asset_lot_sf field: ${acres} acres`, {
+          property_key: property.property_composite_key,
+          sf: parseFloat(sfField)
+        });
+        return acres;
+      }
+
+      // BRT: No more LANDUR summation - that was the old incorrect way
+      console.warn(`❌ BRT property lot size calculation failed - no valid source found:`, {
+        property_key: property.property_composite_key,
+        checked_sources: ['frontage_x_depth', 'market_manual_lot_acre', 'market_manual_lot_sf', 'asset_lot_acre', 'asset_lot_sf'],
+        available_fields: {
+          frontage: frontage || 'missing',
+          depth: depth || 'missing',
+          manual_acre: manualAcre || 'missing',
+          manual_sf: manualSf || 'missing'
+        }
+      });
+      return '0.00';
+    }
+
+    // ===== NON-BRT VENDORS (existing logic) =====
+
+    // 1. Prefer a manual override field in property_market_analysis
     const manualAcre = marketAnalysis?.market_manual_lot_acre ?? marketAnalysis?.market_manual_acre ?? property.market_manual_lot_acre;
     if (manualAcre && parseFloat(manualAcre) > 0) {
       return parseFloat(manualAcre).toFixed(2);
@@ -1763,98 +1838,8 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
       return (sf / 43560).toFixed(2);
     }
 
-    // 5. Try to use raw_data attached to property (non-async fallback)
+    // 5. Microsystems vendor check using attached raw_data
     try {
-      if (vendorType === 'BRT' && property.raw_data) {
-        let totalAcres = 0;
-        let totalSf = 0;
-
-        for (let i = 1; i <= 6; i++) {
-          const unitsRaw = property.raw_data[`LANDURUNITS_${i}`] || property.raw_data[`LANDURUNITS_${i}`.replace(/_/g, '_')];
-          const codeRaw = property.raw_data[`LANDUR_${i}`] || property.raw_data[`LANDUR_${i}`.replace(/_/g, '_')];
-
-          const units = unitsRaw !== undefined && unitsRaw !== null ? parseFloat(String(unitsRaw).replace(/[,\s\"]/g, '')) : NaN;
-          const code = codeRaw !== undefined && codeRaw !== null ? String(codeRaw).trim() : null;
-
-          if (!isNaN(units) && units > 0) {
-            // Heuristic: large numbers are SF, small numbers are acres
-            if (units >= 1000) {
-              totalSf += units;
-            } else {
-              totalAcres += units;
-            }
-          }
-        }
-
-        const acresFromLandur = totalAcres + (totalSf / 43560);
-        if (acresFromLandur > 0) return acresFromLandur.toFixed(2);
-      }
-
-      // 5a. FALLBACK: For BRT jobs, try database LANDUR fields if raw_data didn't work
-      if (vendorType === 'BRT') {
-        let totalAcres = 0;
-        let totalSf = 0;
-        let foundAnyUnits = false;
-
-        for (let i = 1; i <= 6; i++) {
-          const unitsRaw = property[`landurunits_${i}`];
-          const codeRaw = property[`landur_${i}`];
-
-          const units = unitsRaw !== undefined && unitsRaw !== null ? parseFloat(String(unitsRaw).replace(/[,\s\"]/g, '')) : NaN;
-          const code = codeRaw !== undefined && codeRaw !== null ? String(codeRaw).trim() : null;
-
-          if (!isNaN(units) && units > 0) {
-            foundAnyUnits = true;
-            // Heuristic: large numbers are SF, small numbers are acres
-            if (units >= 1000) {
-              totalSf += units;
-            } else {
-              totalAcres += units;
-            }
-          }
-        }
-
-        const acresFromLandur = totalAcres + (totalSf / 43560);
-        if (acresFromLandur > 0) {
-          console.log(`✅ BRT lot size calculated from database LANDUR fields: ${acresFromLandur.toFixed(2)} acres`, {
-            property_key: property.property_composite_key,
-            totalAcres,
-            totalSf,
-            finalAcres: acresFromLandur.toFixed(2)
-          });
-          return acresFromLandur.toFixed(2);
-        }
-
-        // Debug: Log when BRT calculation fails
-        if (foundAnyUnits) {
-          console.warn(`⚠️ BRT property has LANDUR units but calculated 0 acres:`, {
-            property_key: property.property_composite_key,
-            totalAcres,
-            totalSf,
-            landur_fields: {
-              landur_1: property.landur_1, landurunits_1: property.landurunits_1,
-              landur_2: property.landur_2, landurunits_2: property.landurunits_2,
-              landur_3: property.landur_3, landurunits_3: property.landurunits_3,
-              landur_4: property.landur_4, landurunits_4: property.landurunits_4,
-              landur_5: property.landur_5, landurunits_5: property.landurunits_5,
-              landur_6: property.landur_6, landurunits_6: property.landurunits_6
-            }
-          });
-        } else {
-          console.warn(`⚠️ BRT property has no LANDUR units in database fields:`, {
-            property_key: property.property_composite_key,
-            available_fields: Object.keys(property).filter(k => k.includes('landur') || k.includes('lot') || k.includes('acre')),
-            asset_fields: {
-              asset_lot_acre: property.asset_lot_acre,
-              asset_lot_sf: property.asset_lot_sf,
-              asset_lot_frontage: property.asset_lot_frontage,
-              asset_lot_depth: property.asset_lot_depth
-            }
-          });
-        }
-      }
-
-      // Microsystems vendor check using attached raw_data
       if (vendorType === 'Microsystems' && property.raw_data) {
         const lotArea = property.raw_data['Lot Area'] || property.raw_data['Site Area'] || property.raw_data['Acreage'] || property.raw_data['Acres'];
         if (lotArea) {
@@ -1869,63 +1854,14 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
       console.error('Error while parsing raw_data for acreage calculation fallback:', e);
     }
 
-    // 6. Fall back to PROPERTY_ACREAGE (divide by 10000) if present — skip for BRT (we prefer stricter BRT logic)
-  if (vendorType !== 'BRT' && (property.PROPERTY_ACREAGE || property.property_acreage)) {
-    const propAcreage = parseFloat(property.PROPERTY_ACREAGE ?? property.property_acreage);
-    if (!isNaN(propAcreage) && propAcreage > 0) {
-      const acres = propAcreage / 10000;
-      return acres.toFixed(2);
-    }
-  }
-
-  // 7. BRT final fallback: check for any lot size fields at all
-  if (vendorType === 'BRT') {
-    // Check for any uppercase LANDUR fields in case they're stored differently
-    let totalAcres = 0;
-    let totalSf = 0;
-
-    for (let i = 1; i <= 6; i++) {
-      const upperUnits = property[`LANDURUNITS_${i}`];
-      const upperCode = property[`LANDUR_${i}`];
-
-      const units = upperUnits !== undefined && upperUnits !== null ? parseFloat(String(upperUnits).replace(/[,\s\"]/g, '')) : NaN;
-
-      if (!isNaN(units) && units > 0) {
-        if (units >= 1000) {
-          totalSf += units;
-        } else {
-          totalAcres += units;
-        }
+    // 6. Fall back to PROPERTY_ACREAGE (divide by 10000) if present
+    if (property.PROPERTY_ACREAGE || property.property_acreage) {
+      const propAcreage = parseFloat(property.PROPERTY_ACREAGE ?? property.property_acreage);
+      if (!isNaN(propAcreage) && propAcreage > 0) {
+        const acres = propAcreage / 10000;
+        return acres.toFixed(2);
       }
     }
-
-    const acresFromUppercase = totalAcres + (totalSf / 43560);
-    if (acresFromUppercase > 0) {
-      console.log(`✅ BRT lot size calculated from uppercase LANDUR fields: ${acresFromUppercase.toFixed(2)} acres`, {
-        property_key: property.property_composite_key
-      });
-      return acresFromUppercase.toFixed(2);
-    }
-
-    // Last resort: check for any property record field that might contain lot size
-    const possibleAcreFields = ['lot_acres', 'lot_acreage', 'acreage', 'acres', 'site_acres'];
-    for (const field of possibleAcreFields) {
-      const value = property[field];
-      if (value && parseFloat(value) > 0) {
-        console.log(`✅ BRT lot size calculated from field ${field}: ${parseFloat(value).toFixed(2)} acres`, {
-          property_key: property.property_composite_key
-        });
-        return parseFloat(value).toFixed(2);
-      }
-    }
-
-    // Log when all BRT fallbacks fail
-    console.warn(`❌ BRT property lot size calculation failed - no valid fields found:`, {
-      property_key: property.property_composite_key,
-      checked_fields: ['asset_lot_acre', 'asset_lot_sf', 'asset_lot_frontage', 'asset_lot_depth', 'landur_1-6', 'landurunits_1-6', 'LANDUR_1-6', 'LANDURUNITS_1-6'],
-      available_fields: Object.keys(property).filter(k => k.toLowerCase().includes('lot') || k.toLowerCase().includes('acre') || k.toLowerCase().includes('land')).slice(0, 10)
-    });
-  }
 
     // Default return if no acreage can be calculated
     return '0.00';
