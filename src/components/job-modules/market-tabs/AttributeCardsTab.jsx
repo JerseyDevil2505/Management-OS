@@ -589,6 +589,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         });
       } else {
         console.log('NO EXTERIOR PROPERTIES after filtering - this is the problem!');
+
+        // Show what conditions would be available from code definitions
+        const availableExt = getAvailableConditions('exterior');
+        const availableInt = getAvailableConditions('interior');
+        console.log('Available conditions from code definitions:');
+        console.log('  Exterior from definitions:', availableExt);
+        console.log('  Interior from definitions:', availableInt);
       }
 
       const exteriorConditions = getUniqueConditions(exteriorProperties, 'exterior');
