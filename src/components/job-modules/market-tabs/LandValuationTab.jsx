@@ -3582,7 +3582,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       bracketList.forEach((row, rowIndex) => {
         if (!row.bracket || row.bracket.count === 0) return;
-        const prevBracket = rowIndex > 0 ? bracketList[rowIndex - 1].bracket : null;
+        // Find last valid bracket with positive avgAdjusted (skip negative rows)
+        let prevBracket = null;
+        for (let i = rowIndex - 1; i >= 0; i--) {
+          const candidateBracket = bracketList[i].bracket;
+          if (candidateBracket && candidateBracket.avgAdjusted && candidateBracket.avgAdjusted > 0) {
+            prevBracket = candidateBracket;
+            break;
+          }
+        }
         const adjustedDelta = prevBracket && prevBracket.avgAdjusted && row.bracket.avgAdjusted ? row.bracket.avgAdjusted - prevBracket.avgAdjusted : null;
         const lotDelta = prevBracket && prevBracket.avgAcres && row.bracket.avgAcres ? row.bracket.avgAcres - prevBracket.avgAcres : null;
         const perAcre = adjustedDelta && lotDelta && lotDelta > 0 && adjustedDelta > 0 ? adjustedDelta / lotDelta : null;
@@ -6924,7 +6932,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'salePrice' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
+                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '��' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('normTime')}
