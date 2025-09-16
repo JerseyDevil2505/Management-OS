@@ -879,7 +879,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                               console.log(`🔍 Looking for condition "${cond.code}" in VCS "${vcs}" conditions:`, Object.keys(vcsData.conditions || {}));
                               const condData = vcsData.conditions[cond.code];
                               console.log(`📊 Found condData for ${cond.code}:`, condData);
-                              if (!condData) return null;
+
+                              // Show the row even if no data, for debugging
+                              const hasData = !!condData;
 
                               return (
                                 <tr key={`${vcs}-${cond.code}`} className={condIdx % 2 ? 'bg-white' : 'bg-gray-50'}>
