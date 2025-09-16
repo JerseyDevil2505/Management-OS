@@ -5357,10 +5357,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           })().map((row, rowIndex) => {
                             if (row.bracket.count === 0) return null;
 
-                            // Calculate deltas from previous bracket
-                            const prevBracket = rowIndex > 0 ?
-                              [data.brackets.small, data.brackets.medium, data.brackets.large, data.brackets.xlarge][rowIndex - 1]
-                              : null;
+                            // Calculate deltas from previous bracket - SKIP NEGATIVE ROWS
+                            let prevBracket = null;
+                            const allBrackets = [data.brackets.small, data.brackets.medium, data.brackets.large, data.brackets.xlarge];
+                            // Look backwards for the last valid bracket with positive avgAdjusted
+                            for (let i = rowIndex - 1; i >= 0; i--) {
+                              const candidateBracket = allBrackets[i];
+                              if (candidateBracket && candidateBracket.avgAdjusted && candidateBracket.avgAdjusted > 0) {
+                                prevBracket = candidateBracket;
+                                break;
+                              }
+                            }
 
                             const adjustedDelta = prevBracket && prevBracket.avgAdjusted && row.bracket.avgAdjusted ?
                               row.bracket.avgAdjusted - prevBracket.avgAdjusted : null;
