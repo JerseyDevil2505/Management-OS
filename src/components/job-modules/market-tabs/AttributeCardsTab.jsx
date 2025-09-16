@@ -179,7 +179,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const getUniqueConditions = (properties, condType) => {
     const conditions = new Set();
     properties.forEach(p => {
-      const cond = normalizeCondition(getPropertyCondition(p, condType));
+      const cond = normalizeCondition(getPropertyCondition(p, condType), condType);
       if (cond) conditions.add(cond);
     });
     return Array.from(conditions).sort();
@@ -306,49 +306,70 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     return filtered;
   };
 
-  // Helper function to normalize condition codes based on vendor type
-  const normalizeCondition = (condCode) => {
-    if (!condCode) return null;
+  // Helper function to normalize condition codes using parsed_code_definitions
+  const normalizeCondition = (condCode, conditionType = 'exterior') => {
+    if (!condCode || condCode === '00') return null; // Still ignore '00'
 
-    // Clean the condition code - trim whitespace and convert to uppercase
-    const cleanCode = condCode.toString().trim().toUpperCase();
+    const cleanCode = condCode.toString().trim();
 
-    // Treat "00" as null/empty - it's lazy vendor coding, not a real condition
-    if (cleanCode === '00' || cleanCode === '') return null;
+    // Get the condition codes from parsed_code_definitions
+    const codeDefs = jobData?.parsed_code_definitions || {};
 
     if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
-      // Microsystems: E=Excellent, G=Good, A=Average, F=Fair, P=Poor
-      const condMap = {
-        'E': 'EXCELLENT', 'G': 'GOOD', 'A': 'AVERAGE',
-        'F': 'FAIR', 'P': 'POOR'
-      };
-      return condMap[cleanCode] || null;
+      // For Microsystems, codes are in the 490 (exterior) and 491 (interior) sections
+      const sectionCode = conditionType === 'exterior' ? '490' : '491';
+      const conditionMap = codeDefs[sectionCode] || {};
+
+      // Find the description for this code
+      const codeKey = cleanCode.toUpperCase();
+      const codeInfo = conditionMap[codeKey];
+      return codeInfo?.description || codeInfo?.name || null;
+
     } else {
-      // BRT: Uses section 60 for both exterior and interior conditions
-      // Common BRT condition codes (check with parsed_code_definitions if available)
-      const condMap = {
-        '01': 'EXCELLENT',
-        '02': 'VERY_GOOD',
-        '03': 'GOOD',
-        '04': 'AVERAGE',
-        '05': 'FAIR',
-        '06': 'POOR',
-        '07': 'VERY_POOR'
-      };
+      // For BRT, look in section 60 (per the OS guide)
+      const conditionSection = codeDefs['60'] || {};
 
-      // Check if we have parsed code definitions for this job
-      const codeDefinitions = jobData?.parsed_code_definitions || {};
-      if (codeDefinitions['60']) {
-        // Use actual BRT condition definitions from section 60
-        const section60 = codeDefinitions['60'];
-        const foundCode = section60.find(def => def.code === cleanCode);
-        if (foundCode) {
-          return foundCode.description.toUpperCase().replace(/\s+/g, '_');
-        }
-      }
-
-      return condMap[cleanCode] || cleanCode; // Return original code if not mapped
+      // BRT uses numeric codes (01, 02, 03, etc.)
+      const codeInfo = conditionSection[cleanCode];
+      return codeInfo?.description || codeInfo?.name || null;
     }
+  };
+
+  // Get ALL available conditions dynamically from parsed_code_definitions
+  const getAvailableConditions = (conditionType) => {
+    const codeDefs = jobData?.parsed_code_definitions || {};
+    const conditions = [];
+
+    if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
+      // Microsystems: 490 = exterior, 491 = interior
+      const sectionCode = conditionType === 'exterior' ? '490' : '491';
+      const section = codeDefs[sectionCode] || {};
+
+      Object.entries(section).forEach(([code, info]) => {
+        if (code && code !== '00') {
+          conditions.push({
+            code: code,
+            description: info.description || info.name || code,
+            normalized: (info.description || info.name || code)?.toUpperCase().replace(/\s+/g, '_')
+          });
+        }
+      });
+    } else {
+      // BRT: Section 60 for both exterior and interior
+      const section = codeDefs['60'] || {};
+
+      Object.entries(section).forEach(([code, info]) => {
+        if (code && code !== '00') {
+          conditions.push({
+            code: code,
+            description: info.description || info.name || code,
+            normalized: (info.description || info.name || code)?.toUpperCase().replace(/\s+/g, '_')
+          });
+        }
+      });
+    }
+
+    return conditions;
   };
 
   // ENHANCED Condition Analysis - Complete rewrite with all improvements
@@ -513,7 +534,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         console.log('Sample exterior property conditions:');
         exteriorProperties.slice(0, 3).forEach((p, i) => {
           const rawCond = getPropertyCondition(p, 'exterior');
-          const normalized = normalizeCondition(rawCond);
+          const normalized = normalizeCondition(rawCond, 'exterior');
           console.log(`  Property ${i}: raw="${rawCond}" -> normalized="${normalized}"`);
         });
       } else {
@@ -537,7 +558,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         // Group by VCS and condition
         filteredProperties.forEach(p => {
           const vcs = p.new_vcs || p.property_vcs || p.vcs || p.asset_vcs || 'NO_VCS';
-          const condition = normalizeCondition(getPropertyCondition(p, conditionField === 'asset_ext_cond' ? 'exterior' : 'interior'));
+          const condType = conditionField === 'asset_ext_cond' ? 'exterior' : 'interior';
+          const condition = normalizeCondition(getPropertyCondition(p, condType), condType);
           if (!condition) return;
 
           if (!analysis[vcs]) {
