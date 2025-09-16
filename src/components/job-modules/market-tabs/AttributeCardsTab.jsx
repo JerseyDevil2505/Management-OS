@@ -116,6 +116,36 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     }
   }, [jobData]);
 
+  // Build cascades from actual available conditions in parsed_code_definitions
+  useEffect(() => {
+    if (jobData?.parsed_code_definitions) {
+      const extConditions = getAvailableConditions('exterior');
+      const intConditions = getAvailableConditions('interior');
+
+      console.log('🎯 Available exterior conditions from code definitions:', extConditions);
+      console.log('🎯 Available interior conditions from code definitions:', intConditions);
+
+      // Build cascade from actual available conditions
+      const buildCascade = (conditions) => {
+        return conditions.map(c => ({
+          name: c.normalized || c.description?.toUpperCase().replace(/\\s+/g, '_') || c.code,
+          condition: c.normalized || c.description?.toUpperCase().replace(/\\s+/g, '_') || c.code,
+          description: c.description,
+          code: c.code,
+          tested: null,
+          actual: null
+        }));
+      };
+
+      if (extConditions.length > 0) {
+        setExteriorCascade(buildCascade(extConditions));
+      }
+      if (intConditions.length > 0) {
+        setInteriorCascade(buildCascade(intConditions));
+      }
+    }
+  }, [jobData?.parsed_code_definitions, vendorType]);
+
   // Update property counts when filters change
   useEffect(() => {
     if (properties && properties.length > 0) {
