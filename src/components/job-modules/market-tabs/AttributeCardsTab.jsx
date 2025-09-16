@@ -475,9 +475,14 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         });
       }
 
-      // Apply filters for exterior and interior analyses
-      const exteriorProperties = applyFilters(propertiesWithSales);
-      const interiorProperties = applyInteriorFilters(propertiesWithSales);
+      // TEMPORARY: Disable all filters to get data flowing
+      console.log('🚨 TEMPORARILY DISABLING ALL FILTERS FOR DEBUGGING');
+      const exteriorProperties = propertiesWithSales; // No filtering
+      const interiorProperties = propertiesWithSales; // No filtering
+
+      // TODO: Re-enable after fixing
+      // const exteriorProperties = applyFilters(propertiesWithSales);
+      // const interiorProperties = applyInteriorFilters(propertiesWithSales);
 
       console.log('4. Final exterior properties:', exteriorProperties.length);
       console.log('5. Final interior properties:', interiorProperties.length);
