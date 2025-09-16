@@ -862,7 +862,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                             </tr>
                             {/* Condition Code Rows */}
                             {availableConditions.exterior.map((cond, condIdx) => {
-                              const condData = vcsData.conditions[cond.description];
+                              const condData = vcsData.conditions[cond.code];
                               if (!condData) return null;
 
                               return (
