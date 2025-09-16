@@ -1156,7 +1156,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
             {/* Exterior Condition Table */}
             <div className="mb-6">
-              <h4 className="font-medium mb-2">Exterior Condition Analysis (AVERAGE = Baseline)</h4>
+              <h4 className="font-medium mb-4">Exterior Condition Analysis - VCS Cascade View</h4>
               <div className="overflow-auto border rounded">
                 <table className="min-w-full table-auto text-xs border-collapse">
                   <thead>
@@ -1348,7 +1348,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                   {customResults && (
                     <>
                       <tr className="bg-white"><td className="px-2 py-2">Overall</td><td className="px-2 py-2">{customResults.results?.overall?.with?.n}</td><td className="px-2 py-2">{customResults.results?.overall?.with?.avg_price}</td><td className="px-2 py-2">{customResults.results?.overall?.without?.n}</td><td className="px-2 py-2">{customResults.results?.overall?.without?.avg_price}</td><td className="px-2 py-2">{customResults.results?.overall?.flat_adj}</td><td className="px-2 py-2">{customResults.results?.overall?.pct_adj}</td></tr>
-                      {Object.keys(customResults.byVCS || {}).map((v, i) => (<tr key={v} className={i%2? 'bg-white':'bg-gray-50'}><td className="px-2 py-2">{v}</td><td className="px-2 py-2">{customResults.byVCS[v].with.n}</td><td className="px-2 py-2">{customResults.byVCS[v].with.avg_price}</td><td className="px-2 py-2">{customResults.byVCS[v].without.n}</td><td className="px-2 py-2">{customResults.byVCS[v].without.avg_price}</td><td className="px-2 py-2">—</td><td className="px-2 py-2">—</td></tr>))}
+                      {Object.keys(customResults.byVCS || {}).map((v, i) => (<tr key={v} className={i%2? 'bg-white':'bg-gray-50'}><td className="px-2 py-2">{v}</td><td className="px-2 py-2">{customResults.byVCS[v].with.n}</td><td className="px-2 py-2">{customResults.byVCS[v].with.avg_price}</td><td className="px-2 py-2">{customResults.byVCS[v].without.n}</td><td className="px-2 py-2">{customResults.byVCS[v].without.avg_price}</td><td className="px-2 py-2">��</td><td className="px-2 py-2">—</td></tr>))}
                     </>
                   )}
                 </tbody>
