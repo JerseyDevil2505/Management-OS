@@ -163,11 +163,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
     return props.filter(p => {
       const code = (p.inspection_info_by || '').toString().trim();
-      if (vendorType === 'Microsystems') {
+      if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
         // Microsystems: O=Owner, S=Spouse, T=Tenant, A=Agent
         return ['O', 'S', 'T', 'A'].includes(code.toUpperCase());
       } else {
-        // BRT: 01-04 are entry codes
+        // BRT: 01-04 are entry codes (gained entry to property)
         return ['01', '02', '03', '04'].includes(code);
       }
     });
