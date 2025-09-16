@@ -511,8 +511,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         console.log('  asset_int_cond:', sample.asset_int_cond);
         console.log('  getPropertyCondition(exterior):', getPropertyCondition(sample, 'exterior'));
         console.log('  getPropertyCondition(interior):', getPropertyCondition(sample, 'interior'));
-        console.log('  normalizeCondition(ext):', normalizeCondition(getPropertyCondition(sample, 'exterior')));
-        console.log('  normalizeCondition(int):', normalizeCondition(getPropertyCondition(sample, 'interior')));
+        console.log('  normalizeCondition(ext):', normalizeCondition(getPropertyCondition(sample, 'exterior'), 'exterior'));
+        console.log('  normalizeCondition(int):', normalizeCondition(getPropertyCondition(sample, 'interior'), 'interior'));
 
         console.log('Current typeUseFilter:', typeUseFilter);
 
