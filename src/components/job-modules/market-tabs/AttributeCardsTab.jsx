@@ -40,6 +40,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [conditionWorking, setConditionWorking] = useState(false);
   const [conditionResults, setConditionResults] = useState(marketLandData.condition_analysis_rollup || { exterior: {}, interior: {}, tested_adjustments: {} });
   const [filteredPropertyCounts, setFilteredPropertyCounts] = useState({ exterior: 0, interior: 0 });
+
+  // Load entry filter configuration from job (same as ProductionTracker)
+  const [infoByCategoryConfig, setInfoByCategoryConfig] = useState({
+    entry: [],
+    refusal: [],
+    estimation: [],
+    invalid: [],
+    priced: [],
+    special: []
+  });
   const [exteriorCascade, setExteriorCascade] = useState([
     { name: 'EXCELLENT', tested: null, actual: null },
     { name: 'VERY GOOD', tested: null, actual: null },
