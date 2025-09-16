@@ -1564,7 +1564,9 @@ const getPricePerUnit = useCallback((price, size) => {
         const { brackets } = vcsAnalysis;
 
         // 1.00-4.99 range: medium vs small
-        if (brackets.small.count > 0 && brackets.medium.count > 0) {
+        if (brackets.small.count > 0 && brackets.medium.count > 0 &&
+            brackets.small.avgAdjusted && brackets.small.avgAdjusted > 0 &&
+            brackets.medium.avgAdjusted && brackets.medium.avgAdjusted > 0) {
           const priceDiff = brackets.medium.avgAdjusted - brackets.small.avgAdjusted;
           const acresDiff = brackets.medium.avgAcres - brackets.small.avgAcres;
           if (acresDiff > 0 && priceDiff > 0) {
@@ -1574,7 +1576,9 @@ const getPricePerUnit = useCallback((price, size) => {
         }
 
         // 5.00-9.99 range: large vs medium
-        if (brackets.medium.count > 0 && brackets.large.count > 0) {
+        if (brackets.medium.count > 0 && brackets.large.count > 0 &&
+            brackets.medium.avgAdjusted && brackets.medium.avgAdjusted > 0 &&
+            brackets.large.avgAdjusted && brackets.large.avgAdjusted > 0) {
           const priceDiff = brackets.large.avgAdjusted - brackets.medium.avgAdjusted;
           const acresDiff = brackets.large.avgAcres - brackets.medium.avgAcres;
           if (acresDiff > 0 && priceDiff > 0) {
@@ -1584,7 +1588,9 @@ const getPricePerUnit = useCallback((price, size) => {
         }
 
         // 10.00+ range: xlarge vs large
-        if (brackets.large.count > 0 && brackets.xlarge.count > 0) {
+        if (brackets.large.count > 0 && brackets.xlarge.count > 0 &&
+            brackets.large.avgAdjusted && brackets.large.avgAdjusted > 0 &&
+            brackets.xlarge.avgAdjusted && brackets.xlarge.avgAdjusted > 0) {
           const priceDiff = brackets.xlarge.avgAdjusted - brackets.large.avgAdjusted;
           const acresDiff = brackets.xlarge.avgAcres - brackets.large.avgAcres;
           if (acresDiff > 0 && priceDiff > 0) {
