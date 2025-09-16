@@ -1368,6 +1368,7 @@ const getPricePerUnit = useCallback((price, size) => {
   const performBracketAnalysis = useCallback(async () => {
     if (!properties || !jobData?.id) return;
 
+    console.log('🔄 performBracketAnalysis - FIXED DELTA CALCULATION:', new Date().toISOString());
     try {
       // Build time-normalized dataset from already-loaded properties (avoids extra DB joins)
       const timeNormalizedData = properties
