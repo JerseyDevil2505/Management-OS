@@ -55,7 +55,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     { code: 'all', description: 'All Properties' },
     { code: '1', description: '1 — Single Family' },
     { code: '2', description: '2 — Duplex / Semi-Detached' },
-    { code: '3', description: '3* ��� Row / Townhouse (3E,3I,30,31)' },
+    { code: '3', description: '3* — Row / Townhouse (3E,3I,30,31)' },
     { code: '4', description: '4* — MultiFamily (42,43,44)' },
     { code: '5', description: '5* — Conversions (51,52,53)' },
     { code: '6', description: '6 — Condominium' },
@@ -694,16 +694,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     
     if (!conditionAnalysis[type]) return { headers, rows };
 
-    // Get all unique conditions
-    const allConditions = new Set();
-    Object.values(conditionAnalysis[type]).forEach(vcsData => {
-      Object.keys(vcsData.conditions || {}).forEach(condition => {
-        allConditions.add(condition);
-      });
-    });
+    // Get all unique conditions from available conditions for this type
+    const conditionsList = availableConditions[type]?.map(c => c.code).sort() || [];
 
-    const conditionsList = Array.from(allConditions).sort();
-    
     // Build headers
     conditionsList.forEach(condition => {
       headers.push(`${condition}_Count`, `${condition}_Price`, `${condition}_Size`, `${condition}_Age`, `${condition}_Norm_Price`, `${condition}_%_Diff`);
@@ -713,7 +706,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     Object.keys(conditionAnalysis[type]).forEach(vcs => {
       const vcsData = conditionAnalysis[type][vcs];
       const row = [vcs];
-      
+
       conditionsList.forEach(condition => {
         const condData = vcsData.conditions[condition];
         if (condData) {
@@ -729,7 +722,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           row.push('', '', '', '', '', '');
         }
       });
-      
+
       rows.push(row);
     });
 
