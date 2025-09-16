@@ -56,7 +56,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     { code: '1', description: '1 — Single Family' },
     { code: '2', description: '2 — Duplex / Semi-Detached' },
     { code: '3', description: '3* — Row / Townhouse (3E,3I,30,31)' },
-    { code: '4', description: '4* �� MultiFamily (42,43,44)' },
+    { code: '4', description: '4* — MultiFamily (42,43,44)' },
     { code: '5', description: '5* — Conversions (51,52,53)' },
     { code: '6', description: '6 — Condominium' },
     { code: 'all_residential', description: 'All Residential' }
@@ -94,7 +94,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     const conditions = { exterior: [], interior: [] };
 
     console.log('🔍 Getting available conditions for vendor:', vendorType);
-    console.log('📊 Available code definitions sections:', Object.keys(codeDefs));
+    console.log('�� Available code definitions sections:', Object.keys(codeDefs));
 
     if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
       // Microsystems: 490 = exterior, 491 = interior
@@ -326,14 +326,22 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     // Analyze each VCS
     Object.keys(vcsBuckets).forEach(vcs => {
       const vcsProperties = vcsBuckets[vcs];
-      
+
+      console.log(`🏗️ Analyzing VCS: ${vcs} with ${vcsProperties.length} properties`);
+
       analysis.exterior[vcs] = analyzeVCSConditions(vcsProperties, 'exterior');
       analysis.interior[vcs] = analyzeVCSConditions(vcsProperties, 'interior');
+
+      console.log(`✅ VCS ${vcs} analysis complete:`, {
+        exterior: analysis.exterior[vcs],
+        interior: analysis.interior[vcs]
+      });
     });
 
     // Calculate overall summary (similar to Method 2 Summary)
     calculateConditionSummary(analysis);
 
+    console.log('🎯 Final condition analysis:', analysis);
     setConditionAnalysis(analysis);
   };
 
