@@ -1177,11 +1177,8 @@ const getPricePerUnit = useCallback((price, size) => {
         // Multi-property package
         if (packageData.is_package_sale || packageData.package_count > 1) {
             // Prefer any precomputed combined lot acres from the analyzer
-          const totalPrice = packageData.package_properties.reduce((sum, pObj) => {
-            const compKey = (typeof pObj === 'string') ? pObj : (pObj.composite_key || pObj.compositeKey || pObj.property_composite_key || pObj.composite);
-            const p = group.find(g => g.property_composite_key === compKey) || properties.find(pp => pp.property_composite_key === compKey);
-            return sum + (p?.sales_price || 0);
-          }, 0);
+          // Use original property sales_price (don't sum - each property already has full package price)
+          const totalPrice = group[0].sales_price;
 
           let totalAcres = null;
           if (packageData.combined_lot_acres && !isNaN(Number(packageData.combined_lot_acres)) && Number(packageData.combined_lot_acres) > 0) {
