@@ -696,6 +696,9 @@ const ProductionTracker = ({
         debugLog('OVERRIDE', `✅ Override removed and App.js notified - new total: ${adjustedAnalytics.validInspections}`);
       }
       
+      // Update component state immediately
+      await calculateValidationOverrides(true);
+
       addNotification(`✅ Override removed - ${propertyKey} deleted from inspection_data`, 'success');
       addNotification('🔄 Reprocessing analytics to reflect changes...', 'info');
 
