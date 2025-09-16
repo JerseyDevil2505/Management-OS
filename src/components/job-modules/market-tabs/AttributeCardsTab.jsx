@@ -199,14 +199,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     loadConditionData();
   }, [jobData?.id, typeUseFilter]);
 
-  // Load available conditions from parsed_code_definitions
+  // Load actual condition codes from property records
   useEffect(() => {
-    if (jobData?.parsed_code_definitions) {
-      const conditions = getAvailableConditions();
-      setAvailableConditions(conditions);
-      console.log('📋 Available conditions:', conditions);
-    }
-  }, [jobData?.parsed_code_definitions, vendorType]);
+    loadActualConditionCodes();
+  }, [jobData?.id]);
 
   // Load condition data from values_norm_time
   const loadConditionData = async () => {
@@ -810,7 +806,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                             <tr className="bg-blue-50 font-semibold">
                               <td className="px-3 py-2 border font-bold text-blue-800">{vcs}</td>
                               <td className="px-3 py-2 border text-center text-blue-700">{vcsData.totalProperties}</td>
-                              <td className="px-3 py-2 border text-center text-blue-700">—</td>
+                              <td className="px-3 py-2 border text-center text-blue-700">���</td>
                               <td className="px-3 py-2 border text-center text-blue-700">—</td>
                               <td className="px-3 py-2 border text-center text-blue-700">—</td>
                               <td className="px-3 py-2 border text-center text-blue-700">Baseline: {vcsData.baseline || 'Auto'}</td>
