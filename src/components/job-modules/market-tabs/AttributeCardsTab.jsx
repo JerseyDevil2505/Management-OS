@@ -201,9 +201,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       const { data: propertyRecords, error } = await supabase
         .from('property_records')
         .select('asset_ext_cond, asset_int_cond, asset_exterior_condition, asset_interior_condition, ext_cond, int_cond')
-        .eq('job_id', jobData.id)
-        .not('asset_ext_cond', 'is', null)
-        .not('asset_int_cond', 'is', null);
+        .eq('job_id', jobData.id);
 
       if (error) throw error;
 
