@@ -329,6 +329,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       const exteriorProperties = applyFilters(propertiesWithSales);
       const interiorProperties = applyInteriorFilters(propertiesWithSales);
 
+      // Update property counts in state for UI display
+      setFilteredPropertyCounts({
+        exterior: exteriorProperties.length,
+        interior: interiorProperties.length
+      });
+
       console.log('Exterior analysis properties:', exteriorProperties.length);
       console.log('Interior analysis properties:', interiorProperties.length);
 
