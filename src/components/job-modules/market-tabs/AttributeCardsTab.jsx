@@ -146,24 +146,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     return conditions;
   };
 
-  // Normalize condition codes using parsed_code_definitions
+  // Normalize condition codes - just return the code itself since we're using actual data
   const normalizeCondition = (condCode, conditionType = 'exterior') => {
-    if (!condCode || condCode === '00') return null;
-
-    const cleanCode = condCode.toString().trim();
-    const codeDefs = jobData?.parsed_code_definitions || {};
-
-    if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
-      const sectionCode = conditionType === 'exterior' ? '490' : '491';
-      const conditionMap = codeDefs[sectionCode] || {};
-      const codeKey = cleanCode.toUpperCase();
-      const codeInfo = conditionMap[codeKey];
-      return codeInfo?.description || codeInfo?.name || null;
-    } else {
-      const conditionSection = codeDefs['60'] || {};
-      const codeInfo = conditionSection[cleanCode];
-      return codeInfo?.description || codeInfo?.name || null;
-    }
+    if (!condCode || condCode === '00' || condCode === '0') return null;
+    return condCode.toString().trim();
   };
 
   // Type/Use filter logic (exact from Land Valuation)
