@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, Fragment } from 'react';
 import { Layers, FileText } from 'lucide-react';
 import './sharedTabNav.css';
 import { supabase, propertyService } from '../../../lib/supabaseClient';
