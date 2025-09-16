@@ -1317,12 +1317,37 @@ const getPricePerUnit = useCallback((price, size) => {
 
     // CRITICAL FIX: Filter out excluded sales from Method 1 before setting finalSales
     const activeExcluded = window._method1ExcludedSales || method1ExcludedSales;
-    const filteredSales = finalSales.filter(sale => !activeExcluded.has(sale.id));
+    let filteredSales = finalSales.filter(sale => !activeExcluded.has(sale.id));
+
+    // Filter out packages containing properties with restricted property classes (2, 3A, 4A, 4B, 4C)
+    const restrictedClasses = ['2', '3A', '4A', '4B', '4C'];
+    const salesBeforeClassFilter = filteredSales.length;
+    filteredSales = filteredSales.filter(sale => {
+      // If it's not a package, include it
+      if (!sale.packageData || !sale.packageData.is_package || !sale.packageData.properties) {
+        return true;
+      }
+
+      // Check if any property in the package has a restricted class
+      const hasRestrictedClass = sale.packageData.properties.some(propertyKey => {
+        const prop = properties.find(p => p.property_composite_key === propertyKey);
+        return prop && restrictedClasses.includes(String(prop.property_m4_class));
+      });
+
+      if (hasRestrictedClass) {
+        debug(`🚫 Excluding package ${sale.property_block}/${sale.property_lot} - contains restricted property class`);
+        return false;
+      }
+
+      return true;
+    });
 
     debug('🔄 Applying Method 1 exclusions:', {
       totalSalesBeforeExclusion: finalSales.length,
       excludedSalesCount: activeExcluded.size,
-      totalSalesAfterExclusion: filteredSales.length,
+      totalSalesAfterExclusion: salesBeforeClassFilter,
+      packagesWithRestrictedClasses: salesBeforeClassFilter - filteredSales.length,
+      finalSalesCount: filteredSales.length,
       excludedIds: Array.from(activeExcluded),
       filteredOutSales: finalSales.filter(sale => activeExcluded.has(sale.id)).map(s => ({id: s.id, block: s.property_block, lot: s.property_lot}))
     });
