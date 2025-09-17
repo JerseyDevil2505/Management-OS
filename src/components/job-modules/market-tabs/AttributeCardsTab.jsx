@@ -346,30 +346,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       }
 
       // Filter properties by type/use
-      const typeFilteredProps = filterPropertiesByType(properties, typeUseFilter);
-
-      // Get properties with valid normalized values (matching Land Valuation pattern)
-      const validProps = typeFilteredProps.filter(p => {
-        const marketData = propertyMarketData.find(
-          m => m.property_composite_key === p.property_composite_key
-        );
-        // Must have positive normalized value to be included
-        return marketData && marketData.values_norm_time > 0;
-      });
-
-      // Enrich with all needed fields
-      const enrichedProperties = validProps.map(p => {
-        const marketData = propertyMarketData.find(
-          m => m.property_composite_key === p.property_composite_key
-        );
-        return {
-          ...p,
-          values_norm_time: marketData.values_norm_time,
-          // Include SFLA and year for aggregation
-          asset_sfla: p.asset_sfla || p.property_sfla || 0,
-          asset_year_built: p.asset_year_built || 0
-        };
-      });
+      const filteredProps = filterPropertiesByType(properties, typeUseFilter);
 
       // Process properties by VCS and condition
       const exteriorByVCS = {};
