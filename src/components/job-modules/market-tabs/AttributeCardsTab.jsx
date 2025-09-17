@@ -352,12 +352,14 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       const exteriorByVCS = {};
       const interiorByVCS = {};
 
-      for (const prop of enrichedProperties) {
+      for (const prop of filteredProps) {
         const vcs = prop.new_vcs || prop.property_vcs || 'UNKNOWN';
         const extCond = prop.asset_ext_cond || '';
         const intCond = prop.asset_int_cond || '';
+        const valueNormTime = marketMap.get(prop.property_composite_key);
 
-        // Properties are already filtered for valid values_norm_time > 0
+        // Skip if no sale value
+        if (!valueNormTime || valueNormTime <= 0) continue;
 
         // Process exterior condition (skip '00' for BRT)
         if (extCond && extCond !== '00' && extCond !== '0' && extCond.trim() !== '') {
