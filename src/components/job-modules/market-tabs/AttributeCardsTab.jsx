@@ -408,8 +408,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
           interiorByVCS[vcs][intCond].properties.push(prop);
           interiorByVCS[vcs][intCond].values.push(valueNormTime);
-          exteriorByVCS[vcs][extCond].sizes.push(prop.sfla || prop.property_sfla || 0);
-          exteriorByVCS[vcs][extCond].years.push(prop.year_built || prop.property_year_built || 0);
+          interiorByVCS[vcs][intCond].sizes.push(prop.sfla || prop.property_sfla || 0);
+          interiorByVCS[vcs][intCond].years.push(prop.year_built || prop.property_year_built || 0);
         }
       }
 
