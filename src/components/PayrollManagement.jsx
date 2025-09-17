@@ -598,7 +598,7 @@ const loadInitialData = async () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `LOJIK_payroll_${payrollPeriod.endDate}_ADP.csv`;
+    a.download = `payroll_${payrollPeriod.endDate}_ADP.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
