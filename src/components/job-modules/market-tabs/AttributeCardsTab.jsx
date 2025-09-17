@@ -449,12 +449,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           return (
             <div key={vcs} style={{ marginBottom: '15px', border: '1px solid #E5E7EB', borderRadius: '6px' }}>
               {/* VCS Header Row */}
-              <div 
-                onClick={() => toggleVCS(`${type}-${vcs}`)}
-                style={{ 
-                  padding: '12px 15px', 
+              <div
+                style={{
+                  padding: '12px 15px',
                   backgroundColor: '#F9FAFB',
-                  cursor: 'pointer',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
