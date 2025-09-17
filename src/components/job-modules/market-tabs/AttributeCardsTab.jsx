@@ -174,31 +174,14 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       for (const code of uniqueInterior) {
         // Skip BRT null code
         if (code === '00') continue;
-        
-        let description = `Condition ${code}`; // Default to generic label
-        
-        if (vendorType === 'BRT') {
-          // Try to get from parsed_code_definitions using interpretCodes
-          const translated = interpretCodes.getBRTValue(
-            { asset_int_cond: code }, 
-            parsedCodeDefinitions, 
-            'asset_int_cond'
-          );
-          
-          if (translated && translated !== code) {
-            // Found actual definition in the code file
-            description = translated;
-          }
-        } else if (vendorType === 'Microsystems') {
-          // For Microsystems, check the 491 section
-          const intSection = parsedCodeDefinitions['491'] || {};
-          if (intSection[code] && intSection[code].description) {
-            description = intSection[code].description;
-          } else if (intSection[code] && intSection[code].VALUE) {
-            description = intSection[code].VALUE;
-          }
-        }
-        
+
+        // Use interpretCodes function for vendor-agnostic lookup
+        const description = interpretCodes.getInteriorConditionName(
+          { asset_int_cond: code },
+          parsedCodeDefinitions,
+          vendorType
+        ) || `Condition ${code}`;
+
         interior[code] = description;
       }
 
