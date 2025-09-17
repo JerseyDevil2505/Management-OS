@@ -225,26 +225,42 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         };
       });
 
-      // Find baseline - look for Average/Normal or code '03' or 'A', otherwise use most common
+      // Find baseline - use manual selection or auto-detect
       let baseline = null;
-      
-      // Try to find average condition first
-      Object.entries(processed[vcs]).forEach(([code, data]) => {
-        const desc = data.description.toUpperCase();
-        if (desc.includes('AVERAGE') || desc.includes('NORMAL') || code === '03' || code === 'A') {
-          baseline = data;
-        }
-      });
-      
-      // If no average found, use the condition with most properties
-      if (!baseline) {
-        let maxCount = 0;
-        Object.values(processed[vcs]).forEach(data => {
-          if (data.count > maxCount) {
-            maxCount = data.count;
+
+      // Determine if this is exterior or interior analysis
+      const isExteriorAnalysis = Object.values(processed[vcs]).some(data =>
+        data.properties?.some(prop => prop.asset_ext_cond)
+      );
+      const isInteriorAnalysis = Object.values(processed[vcs]).some(data =>
+        data.properties?.some(prop => prop.asset_int_cond)
+      );
+
+      const manualBaseline = isExteriorAnalysis ? manualExteriorBaseline :
+                           isInteriorAnalysis ? manualInteriorBaseline : '';
+
+      // Use manual baseline if set
+      if (manualBaseline && processed[vcs][manualBaseline]) {
+        baseline = processed[vcs][manualBaseline];
+      } else {
+        // Auto-detect baseline condition
+        Object.entries(processed[vcs]).forEach(([code, data]) => {
+          const desc = data.description.toUpperCase();
+          if (desc.includes('AVERAGE') || desc.includes('NORMAL') || code === '03' || code === 'A') {
             baseline = data;
           }
         });
+
+        // If no average found, use the condition with most properties
+        if (!baseline) {
+          let maxCount = 0;
+          Object.values(processed[vcs]).forEach(data => {
+            if (data.count > maxCount) {
+              maxCount = data.count;
+              baseline = data;
+            }
+          });
+        }
       }
       
       // Calculate size-normalized values and adjustments
