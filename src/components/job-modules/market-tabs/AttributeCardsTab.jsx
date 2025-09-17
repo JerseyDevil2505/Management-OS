@@ -460,7 +460,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                   <span style={{ fontWeight: '600', fontSize: '14px' }}>{vcs}</span>
                   <span style={{ fontSize: '12px', color: '#6B7280' }}>
                     ({conditionCodes.length} conditions, {
@@ -468,11 +467,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                     } properties)
                   </span>
                 </div>
-                {!isExpanded && (
-                  <span style={{ fontSize: '12px', color: '#6B7280' }}>
-                    Click to expand
-                  </span>
-                )}
               </div>
 
               {/* Condition Details (when expanded) */}
