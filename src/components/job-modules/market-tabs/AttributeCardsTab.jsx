@@ -96,16 +96,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     { code: 'all_residential', description: 'All Residential' }
   ];
 
-  // Toggle VCS expansion
-  const toggleVCS = (vcs) => {
-    const newExpanded = new Set(expandedVCS);
-    if (newExpanded.has(vcs)) {
-      newExpanded.delete(vcs);
-    } else {
-      newExpanded.add(vcs);
-    }
-    setExpandedVCS(newExpanded);
-  };
 
   // Helper function to filter properties by type/use
   const filterPropertiesByType = (props, filterValue) => {
