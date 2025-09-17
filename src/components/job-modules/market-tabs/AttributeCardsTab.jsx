@@ -754,17 +754,77 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         {!conditionData.loading && !conditionData.error && (
           <>
             <div style={{ marginBottom: '30px' }}>
-              <h3 style={{ 
-                fontSize: '16px', 
-                fontWeight: '600', 
-                marginBottom: '15px',
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
                 padding: '10px 15px',
                 backgroundColor: '#F0F9FF',
                 borderRadius: '6px',
-                color: '#1E40AF'
+                marginBottom: '15px'
               }}>
-                Exterior Condition Analysis
-              </h3>
+                <h3 style={{
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  margin: '0',
+                  color: '#1E40AF'
+                }}>
+                  Exterior Condition Analysis
+                </h3>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                  {/* Baseline Selection */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ fontSize: '13px', color: '#1E40AF', fontWeight: '500' }}>
+                      Set Baseline:
+                    </label>
+                    <select
+                      value={manualExteriorBaseline}
+                      onChange={(e) => setManualExteriorBaseline(e.target.value)}
+                      style={{
+                        padding: '4px 8px',
+                        border: '1px solid #3B82F6',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        backgroundColor: 'white',
+                        minWidth: '120px'
+                      }}
+                    >
+                      <option value="">Auto-detect</option>
+                      {Object.entries(availableConditionCodes.exterior).map(([code, description]) => (
+                        <option key={code} value={code}>
+                          {code} - {description}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Expand/Collapse Button */}
+                  <button
+                    onClick={() => setConditionAnalysisExpanded(!conditionAnalysisExpanded)}
+                    style={{
+                      padding: '6px 12px',
+                      backgroundColor: '#3B82F6',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    {conditionAnalysisExpanded ? 'Collapse All' : 'Expand All'}
+                    <span style={{
+                      transform: conditionAnalysisExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.2s'
+                    }}>
+                      ▼
+                    </span>
+                  </button>
+                </div>
+              </div>
               {renderConditionTable(conditionData.exterior, 'Exterior')}
             </div>
 
