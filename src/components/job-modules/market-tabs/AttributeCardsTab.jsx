@@ -848,33 +848,62 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                   Interior Condition Analysis
                 </h3>
                 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input
-                    type="checkbox"
-                    id="useInteriorInspections"
-                    checked={useInteriorInspections}
-                    onChange={(e) => setUseInteriorInspections(e.target.checked)}
-                    style={{ cursor: 'pointer' }}
-                  />
-                  <label 
-                    htmlFor="useInteriorInspections" 
-                    style={{ 
-                      fontSize: '13px', 
-                      cursor: 'pointer',
-                      color: '#1E40AF'
-                    }}
-                  >
-                    Use Interior Inspections Only
-                  </label>
-                  <div
-                    style={{
-                      display: 'inline-block',
-                      position: 'relative',
-                      cursor: 'help'
-                    }}
-                    title="When enabled, only includes properties where inspectors had actual interior access (not estimations or refusals)"
-                  >
-                    <Info size={14} style={{ color: '#6B7280' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                  {/* Baseline Selection */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ fontSize: '13px', color: '#1E40AF', fontWeight: '500' }}>
+                      Set Baseline:
+                    </label>
+                    <select
+                      value={manualInteriorBaseline}
+                      onChange={(e) => setManualInteriorBaseline(e.target.value)}
+                      style={{
+                        padding: '4px 8px',
+                        border: '1px solid #3B82F6',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        backgroundColor: 'white',
+                        minWidth: '120px'
+                      }}
+                    >
+                      <option value="">Auto-detect</option>
+                      {Object.entries(availableConditionCodes.interior).map(([code, description]) => (
+                        <option key={code} value={code}>
+                          {code} - {description}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Interior Inspections Toggle */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="checkbox"
+                      id="useInteriorInspections"
+                      checked={useInteriorInspections}
+                      onChange={(e) => setUseInteriorInspections(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <label
+                      htmlFor="useInteriorInspections"
+                      style={{
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        color: '#1E40AF'
+                      }}
+                    >
+                      Use Interior Inspections Only
+                    </label>
+                    <div
+                      style={{
+                        display: 'inline-block',
+                        position: 'relative',
+                        cursor: 'help'
+                      }}
+                      title="When enabled, only includes properties where inspectors had actual interior access (not estimations or refusals)"
+                    >
+                      <Info size={14} style={{ color: '#6B7280' }} />
+                    </div>
                   </div>
                 </div>
               </div>
