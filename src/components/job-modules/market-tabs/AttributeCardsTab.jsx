@@ -231,39 +231,28 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const processConditionStatistics = (dataByVCS) => {
     const processed = {};
 
-    // Helper aggregation function
-    const agg = (list) => {
-      if (!list.length) return { n: 0, avg_price: null, avg_sfla: null, avg_year: null };
-
-      const validPrices = list.filter(p => p.values_norm_time > 0);
-      const validSizes = list.filter(p => (p.sfla || p.property_sfla) > 0);
-      const validYears = list.filter(p => p.year_built > 0);
-
-      return {
-        n: list.length,
-        avg_price: validPrices.length ? Math.round(validPrices.reduce((sum, p) => sum + p.values_norm_time, 0) / validPrices.length) : null,
-        avg_sfla: validSizes.length ? Math.round(validSizes.reduce((sum, p) => sum + (p.sfla || p.property_sfla || 0), 0) / validSizes.length) : null,
-        avg_year: validYears.length ? Math.round(validYears.reduce((sum, p) => sum + p.year_built, 0) / validYears.length) : null
-      };
-    };
-
     Object.entries(dataByVCS).forEach(([vcs, conditions]) => {
       processed[vcs] = {};
 
-      // Calculate averages for each condition using the agg function
+      // Calculate averages for each condition
       Object.entries(conditions).forEach(([code, data]) => {
-        const count = data.properties.length;
+        const count = data.values.length;
         if (count === 0) return;
 
-        // Use agg function to calculate statistics from properties
-        const stats = agg(data.properties);
+        const avgValue = data.values.reduce((a, b) => a + b, 0) / count;
+        const validSizes = data.sizes.filter(s => s > 0);
+        const avgSize = validSizes.length > 0 ?
+          validSizes.reduce((a, b) => a + b, 0) / validSizes.length : 0;
+        const validYears = data.years.filter(y => y > 1900 && y < 2030);
+        const avgYear = validYears.length > 0 ?
+          Math.round(validYears.reduce((a, b) => a + b, 0) / validYears.length) : null;
 
         processed[vcs][code] = {
           ...data,
-          count: stats.n,
-          avgValue: stats.avg_price,
-          avgSize: stats.avg_sfla || 0,
-          avgYear: stats.avg_year
+          count,
+          avgValue: Math.round(avgValue),
+          avgSize: Math.round(avgSize),
+          avgYear
         };
       });
 
