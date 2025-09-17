@@ -359,30 +359,18 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       // Filter properties by type/use
       const filteredProps = filterPropertiesByType(properties, typeUseFilter);
 
-      // Enrich properties with market data and ensure SFLA and year_built are available
-      const enrichedProperties = filteredProps.map(p => {
-        const marketData = propertyMarketData.find(
-          m => m.property_composite_key === p.property_composite_key
-        );
-        return {
-          ...p,
-          values_norm_time: marketData?.values_norm_time || null,
-          sfla: p.sfla || p.property_sfla || 0,  // Add SFLA
-          year_built: p.year_built || 0          // Add year_built
-        };
-      });
-
       // Process properties by VCS and condition
       const exteriorByVCS = {};
       const interiorByVCS = {};
 
-      for (const prop of enrichedProperties) {
+      for (const prop of filteredProps) {
         const vcs = prop.new_vcs || prop.property_vcs || 'UNKNOWN';
         const extCond = prop.asset_ext_cond || '';
         const intCond = prop.asset_int_cond || '';
+        const valueNormTime = marketMap.get(prop.property_composite_key);
 
         // Skip if no sale value
-        if (!prop.values_norm_time || prop.values_norm_time <= 0) continue;
+        if (!valueNormTime || valueNormTime <= 0) continue;
 
         // Process exterior condition (skip '00' for BRT)
         if (extCond && extCond !== '00' && extCond !== '0' && extCond.trim() !== '') {
@@ -390,11 +378,17 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           if (!exteriorByVCS[vcs][extCond]) {
             exteriorByVCS[vcs][extCond] = {
               description: codes.exterior[extCond] || `Condition ${extCond}`,
-              properties: []
+              properties: [],
+              values: [],
+              sizes: [],
+              years: []
             };
           }
 
           exteriorByVCS[vcs][extCond].properties.push(prop);
+          exteriorByVCS[vcs][extCond].values.push(valueNormTime);
+          exteriorByVCS[vcs][extCond].sizes.push(prop.sfla || prop.property_sfla || 0);
+          exteriorByVCS[vcs][extCond].years.push(prop.year_built || prop.property_year_built || 0);
         }
 
         // Process interior condition
@@ -405,11 +399,17 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           if (!interiorByVCS[vcs][intCond]) {
             interiorByVCS[vcs][intCond] = {
               description: codes.interior[intCond] || `Condition ${intCond}`,
-              properties: []
+              properties: [],
+              values: [],
+              sizes: [],
+              years: []
             };
           }
 
           interiorByVCS[vcs][intCond].properties.push(prop);
+          interiorByVCS[vcs][intCond].values.push(valueNormTime);
+          exteriorByVCS[vcs][extCond].sizes.push(prop.sfla || prop.property_sfla || 0);
+          exteriorByVCS[vcs][extCond].years.push(prop.year_built || prop.property_year_built || 0);
         }
       }
 
