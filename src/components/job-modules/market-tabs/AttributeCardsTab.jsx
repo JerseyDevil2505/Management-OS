@@ -380,10 +380,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         const vcs = prop.new_vcs || prop.property_vcs || 'UNKNOWN';
         const extCond = prop.asset_ext_cond || '';
         const intCond = prop.asset_int_cond || '';
-        const valueNormTime = marketMap.get(prop.property_composite_key);
 
         // Skip if no sale value
-        if (!valueNormTime || valueNormTime <= 0) continue;
+        if (!prop.values_norm_time || prop.values_norm_time <= 0) continue;
 
         // Process exterior condition (skip '00' for BRT)
         if (extCond && extCond !== '00' && extCond !== '0' && extCond.trim() !== '') {
@@ -391,38 +390,26 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           if (!exteriorByVCS[vcs][extCond]) {
             exteriorByVCS[vcs][extCond] = {
               description: codes.exterior[extCond] || `Condition ${extCond}`,
-              properties: [],
-              values: [],
-              sizes: [],
-              years: []
+              properties: []
             };
           }
-          
+
           exteriorByVCS[vcs][extCond].properties.push(prop);
-          exteriorByVCS[vcs][extCond].values.push(valueNormTime);
-          exteriorByVCS[vcs][extCond].sizes.push(prop.sfla || prop.property_sfla || 0);
-          exteriorByVCS[vcs][extCond].years.push(prop.year_built || prop.property_year_built || 0);
         }
 
         // Process interior condition
         const shouldIncludeInterior = !useInteriorInspections || inspectionMap.has(prop.property_composite_key);
-        
+
         if (intCond && intCond !== '00' && intCond !== '0' && intCond.trim() !== '' && shouldIncludeInterior) {
           if (!interiorByVCS[vcs]) interiorByVCS[vcs] = {};
           if (!interiorByVCS[vcs][intCond]) {
             interiorByVCS[vcs][intCond] = {
               description: codes.interior[intCond] || `Condition ${intCond}`,
-              properties: [],
-              values: [],
-              sizes: [],
-              years: []
+              properties: []
             };
           }
-          
+
           interiorByVCS[vcs][intCond].properties.push(prop);
-          interiorByVCS[vcs][intCond].values.push(valueNormTime);
-          interiorByVCS[vcs][intCond].sizes.push(prop.sfla || prop.property_sfla || 0);
-          interiorByVCS[vcs][intCond].years.push(prop.year_built || prop.property_year_built || 0);
         }
       }
 
