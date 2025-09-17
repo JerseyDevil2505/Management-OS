@@ -359,11 +359,24 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       // Filter properties by type/use
       const filteredProps = filterPropertiesByType(properties, typeUseFilter);
 
+      // Enrich properties with market data and ensure SFLA and year_built are available
+      const enrichedProperties = filteredProps.map(p => {
+        const marketData = propertyMarketData.find(
+          m => m.property_composite_key === p.property_composite_key
+        );
+        return {
+          ...p,
+          values_norm_time: marketData?.values_norm_time || null,
+          sfla: p.sfla || p.property_sfla || 0,  // Add SFLA
+          year_built: p.year_built || 0          // Add year_built
+        };
+      });
+
       // Process properties by VCS and condition
       const exteriorByVCS = {};
       const interiorByVCS = {};
 
-      for (const prop of filteredProps) {
+      for (const prop of enrichedProperties) {
         const vcs = prop.new_vcs || prop.property_vcs || 'UNKNOWN';
         const extCond = prop.asset_ext_cond || '';
         const intCond = prop.asset_int_cond || '';
