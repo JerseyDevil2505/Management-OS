@@ -2471,7 +2471,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
       // Calculate average sale price from relevant sales
-      const avgSalePrice = relevantSales.reduce((sum, p) => sum + p.sales_price, 0) / relevantSales.length;
+      const avgSalePrice = relevantSales.reduce((sum, p) => sum + (p.values_norm_time || p.sales_price), 0) / relevantSales.length;
 
       // Check if this VCS is a condo type
       const vcsType = vcsTypes[vcs] || 'Residential-Typical';
