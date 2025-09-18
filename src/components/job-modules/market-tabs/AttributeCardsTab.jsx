@@ -1836,9 +1836,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         byVCS: {},
         summary: {
           vendorType,
-          totalPropertiesAnalyzed: propertyGroups.size,
-          propertiesWithCards: groupsWithCards.length,
-          propertiesWithoutCards: groupsWithoutCards.length
+          totalPropertiesAnalyzed: allPropertyGroups.size,
+          propertiesWithCards: allGroupsWithCards.length,
+          propertiesWithoutCards: allGroupsWithoutCards.length
         },
         additionalCardsList: additionalCardProperties.sort((a, b) => {
           // Sort by VCS, then by address
@@ -1906,7 +1906,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       setAdditionalResults(results);
 
 
-      console.log('��� Additional card analysis completed successfully');
+      console.log('����� Additional card analysis completed successfully');
       
     } catch (error) {
       console.error('❌ Error running additional cards analysis:', error);
