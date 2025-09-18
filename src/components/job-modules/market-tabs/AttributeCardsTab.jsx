@@ -364,8 +364,18 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         if (extCond && extCond !== '00' && extCond !== '0' && extCond.trim() !== '') {
           if (!exteriorByVCS[vcs]) exteriorByVCS[vcs] = {};
           if (!exteriorByVCS[vcs][extCond]) {
+            // Get exterior condition description using interpretCodes function directly if not in codes object
+            let description = codes.exterior[extCond];
+            if (!description) {
+              description = interpretCodes.getExteriorConditionName(
+                { asset_ext_cond: extCond },
+                parsedCodeDefinitions,
+                vendorType
+              ) || `Condition ${extCond}`;
+            }
+
             exteriorByVCS[vcs][extCond] = {
-              description: codes.exterior[extCond] || `Condition ${extCond}`,
+              description,
               properties: [],
               values: [],
               sizes: [],
