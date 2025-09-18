@@ -991,7 +991,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (newSales.length > 0) {
-        debug('���� Found new sales to add:', newSales.length);
+        debug('������ Found new sales to add:', newSales.length);
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
           const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
@@ -4807,7 +4807,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         type="checkbox"
                         checked={includedSales.has(sale.id)}
                         onChange={(e) => {
-                          debug(`��� Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
+                          debug(`����� Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
                             checked: e.target.checked,
                             saleId: sale.id
                           });
@@ -6829,7 +6829,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         : prop.asset_design_style || '-';
                       const acres = calculateAcreage(prop);
                       const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
-                      const pricePerUnit = getPricePerUnit(prop.sales_price, sizeForUnit);
+                      const pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, sizeForUnit);
                       
                       return (
                         <tr key={prop.id}>
