@@ -2125,7 +2125,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                           </td>
                           <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.asset_type_use || '-'}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
-                            {prop.property_m4_class || prop.property_cama_class || '-'}
+                            {prop.asset_building_class || '-'}
                           </td>
                           <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
                             {prop.sales_price ? formatCurrency(prop.sales_price) : '-'}
