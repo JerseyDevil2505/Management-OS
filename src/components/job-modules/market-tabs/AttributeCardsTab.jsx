@@ -1990,7 +1990,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
             {additionalResults && (
               <button
-                onClick={exportAdditionalResultsToCSV}
+                onClick={exportAdditionalCardsCSV}
                 className={CSV_BUTTON_CLASS}
               >
                 <FileText size={14} /> Export CSV
