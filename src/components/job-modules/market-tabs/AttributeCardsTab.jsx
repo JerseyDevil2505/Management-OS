@@ -88,6 +88,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
   // ============ ADDITIONAL CARDS STATE ============
   const [additionalResults, setAdditionalResults] = useState(marketLandData.additional_cards_rollup || null);
+  const [sortField, setSortField] = useState('property_vcs'); // Default sort by VCS
+  const [sortDirection, setSortDirection] = useState('asc');
 
   // ============ PROPERTY MARKET DATA STATE ============
   const [propertyMarketData, setPropertyMarketData] = useState([]);
@@ -1938,6 +1940,55 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     URL.revokeObjectURL(url);
   };
 
+  // ============ ADDITIONAL CARDS SORTING ============
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortedAdditionalCards = () => {
+    if (!additionalResults?.additionalCardsList) return [];
+
+    return [...additionalResults.additionalCardsList].sort((a, b) => {
+      let aVal = a[sortField];
+      let bVal = b[sortField];
+
+      // Handle null/undefined values
+      if (aVal === null || aVal === undefined) aVal = '';
+      if (bVal === null || bVal === undefined) bVal = '';
+
+      // Convert to string for comparison, except for numeric fields
+      if (['sales_price', 'asset_sfla', 'asset_year_built', 'values_norm_time'].includes(sortField)) {
+        aVal = parseFloat(aVal) || 0;
+        bVal = parseFloat(bVal) || 0;
+      } else {
+        aVal = String(aVal).toLowerCase();
+        bVal = String(bVal).toLowerCase();
+      }
+
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  };
+
+  const renderSortIcon = (field) => {
+    if (sortField !== field) {
+      return (
+        <span style={{ marginLeft: '4px', color: '#9CA3AF', fontSize: '10px' }}>↕</span>
+      );
+    }
+    return (
+      <span style={{ marginLeft: '4px', color: '#374151', fontSize: '10px' }}>
+        {sortDirection === 'asc' ? '↑' : '↓'}
+      </span>
+    );
+  };
+
   // ============ RENDER ADDITIONAL CARDS ANALYSIS ============
   const renderAdditionalCardsAnalysis = () => {
     return (
@@ -2093,24 +2144,89 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
                   <thead>
                     <tr style={{ backgroundColor: '#F3F4F6' }}>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Block</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Lot</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Qualifier</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Card</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Address</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>VCS</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Class</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Type/Use</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Building Class</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Sales Price</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>SFLA</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Year Built</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Norm Time</th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('property_block')}
+                      >
+                        Block{renderSortIcon('property_block')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('property_lot')}
+                      >
+                        Lot{renderSortIcon('property_lot')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('property_qualifier')}
+                      >
+                        Qualifier{renderSortIcon('property_qualifier')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('property_addl_card')}
+                      >
+                        Card{renderSortIcon('property_addl_card')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('property_location')}
+                      >
+                        Address{renderSortIcon('property_location')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('property_vcs')}
+                      >
+                        VCS{renderSortIcon('property_vcs')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('property_m4_class')}
+                      >
+                        Class{renderSortIcon('property_m4_class')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('asset_type_use')}
+                      >
+                        Type/Use{renderSortIcon('asset_type_use')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('asset_building_class')}
+                      >
+                        Building Class{renderSortIcon('asset_building_class')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('sales_price')}
+                      >
+                        Sales Price{renderSortIcon('sales_price')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('asset_sfla')}
+                      >
+                        SFLA{renderSortIcon('asset_sfla')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('asset_year_built')}
+                      >
+                        Year Built{renderSortIcon('asset_year_built')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('values_norm_time')}
+                      >
+                        Norm Time{renderSortIcon('values_norm_time')}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(additionalResults.additionalCardsList || []).length > 0 ? (
-                      additionalResults.additionalCardsList.map((prop, idx) => (
+                    {getSortedAdditionalCards().length > 0 ? (
+                      getSortedAdditionalCards().map((prop, idx) => (
                         <tr key={`${prop.property_composite_key}-${idx}`} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
                           <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.property_block || '-'}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.property_lot || '-'}</td>
