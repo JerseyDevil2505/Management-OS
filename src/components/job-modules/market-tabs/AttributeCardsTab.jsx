@@ -2123,19 +2123,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                         {data.with.n}
                       </td>
                       <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
-                        {data.with.avg_size ? `${data.with.avg_size.toLocaleString()} sf` : '-'}
-                      </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
-                        {data.with.avg_price ? formatCurrency(data.with.avg_price) : '-'}
+                        {data.with.avg_norm_time ? formatCurrency(data.with.avg_norm_time) : '-'}
                       </td>
                       <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
                         {data.without.n}
                       </td>
                       <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
-                        {data.without.avg_size ? `${data.without.avg_size.toLocaleString()} sf` : '-'}
-                      </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
-                        {data.without.avg_price ? formatCurrency(data.without.avg_price) : '-'}
+                        {data.without.avg_norm_time ? formatCurrency(data.without.avg_norm_time) : '-'}
                       </td>
                       <td style={{
                         padding: '8px 12px',
