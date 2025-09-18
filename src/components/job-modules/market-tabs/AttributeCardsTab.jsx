@@ -1964,6 +1964,31 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           ? withoutValidYears.reduce((sum, d) => sum + d.year_built, 0) / withoutValidYears.length
           : null;
 
+        // Calculate Year Built and SFLA for ALL properties without additional cards
+        const allWithoutCardsGroups = allGroupsWithoutCards.filter(group => {
+          const groupVcs = group[0].new_vcs || group[0].property_vcs;
+          return groupVcs === vcs;
+        });
+
+        let allWithoutTotalSFLA = 0;
+        let allWithoutYearBuiltSum = 0;
+        let allWithoutYearBuiltCount = 0;
+
+        allWithoutCardsGroups.forEach(group => {
+          const prop = group[0]; // Single card properties
+          const sfla = parseInt(prop.asset_sfla) || 0;
+          allWithoutTotalSFLA += sfla;
+
+          const year = parseInt(prop.asset_year_built);
+          if (year && year > 1800 && year <= new Date().getFullYear()) {
+            allWithoutYearBuiltSum += year;
+            allWithoutYearBuiltCount++;
+          }
+        });
+
+        const allWithoutAvgSFLA = allWithoutCardsGroups.length > 0 ? allWithoutTotalSFLA / allWithoutCardsGroups.length : null;
+        const allWithoutAvgYearBuilt = allWithoutYearBuiltCount > 0 ? allWithoutYearBuiltSum / allWithoutYearBuiltCount : null;
+
         // Calculate adjustments
         let flatAdj = null;
         let pctAdj = null;
