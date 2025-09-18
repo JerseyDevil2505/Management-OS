@@ -4347,7 +4347,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Fallback to simple calculation if paired analysis fails
       if (valuationMode === 'sf') {
-        const totalPrice = filtered.reduce((sum, s) => sum + s.sales_price, 0);
+        const totalPrice = filtered.reduce((sum, s) => sum + (s.values_norm_time || s.sales_price), 0);
         const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
         return {
           avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
@@ -5007,7 +5007,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '15px' }}>
               <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                 <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                  Raw Land {categoryAnalysis.rawLand.method === 'paired' && <span style={{ color: '#10B981' }}>✓ Paired</span>}
+                  Raw Land {categoryAnalysis.rawLand.method === 'paired' && <span style={{ color: '#10B981' }}>��� Paired</span>}
                 </div>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#10B981' }}>
                   {valuationMode === 'sf' ? `$${categoryAnalysis.rawLand.avg}` : `$${categoryAnalysis.rawLand.avg.toLocaleString()}`}
