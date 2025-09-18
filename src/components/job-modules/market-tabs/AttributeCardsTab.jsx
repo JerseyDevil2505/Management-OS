@@ -1959,6 +1959,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       let aVal = a[sortField];
       let bVal = b[sortField];
 
+      // Special handling for VCS field to use new_vcs || property_vcs fallback
+      if (sortField === 'new_vcs') {
+        aVal = a.new_vcs || a.property_vcs;
+        bVal = b.new_vcs || b.property_vcs;
+      }
+
       // Handle null/undefined values
       if (aVal === null || aVal === undefined) aVal = '';
       if (bVal === null || bVal === undefined) bVal = '';
