@@ -1708,14 +1708,14 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       console.log(`🔄 Starting SIMPLIFIED additional card analysis for ${validProps.length} properties with sales data`);
 
-      // First, let's examine what's actually in the property_addl_card column
-      const cardValues = validProps.map(p => p.property_addl_card).filter(card => card !== null && card !== undefined);
+      // First, let's examine what's actually in the additional_card column
+      const cardValues = validProps.map(p => p.additional_card).filter(card => card !== null && card !== undefined);
       const uniqueCards = [...new Set(cardValues)];
-      console.log('📋 All unique property_addl_card values found:', uniqueCards);
+      console.log('📋 All unique additional_card values found:', uniqueCards);
       console.log('📋 Sample of properties with their card values:',
         validProps.slice(0, 10).map(p => ({
           address: p.property_location,
-          card: p.property_addl_card,
+          card: p.additional_card,
           vcs: p.new_vcs || p.property_vcs
         }))
       );
