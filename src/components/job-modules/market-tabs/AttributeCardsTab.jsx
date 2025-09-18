@@ -90,6 +90,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [additionalResults, setAdditionalResults] = useState(marketLandData.additional_cards_rollup || null);
   const [sortField, setSortField] = useState('new_vcs'); // Default sort by VCS
   const [sortDirection, setSortDirection] = useState('asc');
+  const [expandedAdditionalVCS, setExpandedAdditionalVCS] = useState(new Set()); // Track which additional cards VCS sections are expanded
 
   // ============ PROPERTY MARKET DATA STATE ============
   const [propertyMarketData, setPropertyMarketData] = useState([]);
@@ -1790,7 +1791,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         }
       });
 
-      // Analyze by VCS
+      // Analyze by VCS with detailed property tracking for granular comparison
       const byVCS = {};
 
       // Process groups with additional cards
@@ -1801,7 +1802,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         if (!byVCS[vcs]) {
           byVCS[vcs] = {
             with_cards: [],
-            without_cards: []
+            without_cards: [],
+            with_cards_properties: [], // Store detailed property info for expandable view
+            without_cards_properties: [] // Store detailed property info for expandable view
           };
         }
 
@@ -1830,6 +1833,18 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             avg_year_built: avgYearBuilt,
             property_count: group.length
           });
+
+          // Store detailed property info for expandable view
+          byVCS[vcs].with_cards_properties.push({
+            properties: group,
+            norm_time: maxNormTime,
+            total_sfla: totalSFLA,
+            avg_year_built: avgYearBuilt,
+            address: group[0].property_location,
+            block: group[0].property_block,
+            lot: group[0].property_lot,
+            qualifier: group[0].property_qualifier
+          });
         }
       });
 
@@ -1841,7 +1856,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         if (!byVCS[vcs]) {
           byVCS[vcs] = {
             with_cards: [],
-            without_cards: []
+            without_cards: [],
+            with_cards_properties: [],
+            without_cards_properties: []
           };
         }
 
@@ -1856,6 +1873,18 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             norm_time: normTime,
             sfla: sfla,
             year_built: yearBuilt
+          });
+
+          // Store detailed property info for expandable view
+          byVCS[vcs].without_cards_properties.push({
+            property: group[0],
+            norm_time: normTime,
+            sfla: sfla,
+            year_built: yearBuilt,
+            address: group[0].property_location,
+            block: group[0].property_block,
+            lot: group[0].property_lot,
+            qualifier: group[0].property_qualifier
           });
         }
       });
@@ -2275,87 +2304,60 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               </div>
             </div>
 
-            {/* VCS Analysis Table */}
-            <div style={{
-              border: '1px solid #E5E7EB',
-              borderRadius: '6px',
-              overflow: 'auto',
-              marginBottom: '30px'
-            }}>
+            {/* VCS Analysis with Expandable Sections */}
+            <div style={{ marginBottom: '30px' }}>
               <div style={{
-                padding: '12px 15px',
-                backgroundColor: '#F9FAFB',
-                borderBottom: '1px solid #E5E7EB'
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '10px 15px',
+                backgroundColor: '#F0F9FF',
+                borderRadius: '6px',
+                marginBottom: '15px'
               }}>
-                <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0' }}>
-                  Impact Analysis by VCS (Using Normalized Time Values)
-                </h4>
-              </div>
+                <h3 style={{
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  margin: '0',
+                  color: '#1E40AF'
+                }}>
+                  VCS Analysis - Property Comparison
+                </h3>
 
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#F3F4F6' }}>
-                    <th style={{ padding: '6px 8px', textAlign: 'left', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>VCS</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'center', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>With Cards (n)</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Sum SFLA</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Year Built</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Avg Norm Time</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'center', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Without Cards (n)</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Avg SFLA</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Year Built</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Avg Norm Time</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Adjusted</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Impact ($)</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Impact (%)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(additionalResults.byVCS || {}).map(([vcs, data], idx) => (
-                    <tr key={vcs} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                      <td style={{ padding: '6px 8px', fontSize: '12px', fontWeight: '500' }}>{vcs}</td>
-                      <td style={{ padding: '6px 8px', textAlign: 'center', fontSize: '12px' }}>{data.with.n}</td>
-                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
-                        {data.with.total_sfla ? data.with.total_sfla.toLocaleString() : '-'}
-                      </td>
-                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
-                        {data.with.avg_year_built || '-'}
-                      </td>
-                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
-                        {data.with.avg_norm_time ? formatCurrency(data.with.avg_norm_time) : '-'}
-                      </td>
-                      <td style={{ padding: '6px 8px', textAlign: 'center', fontSize: '12px' }}>{data.without.n}</td>
-                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
-                        {data.without.avg_sfla ? data.without.avg_sfla.toLocaleString() : '-'}
-                      </td>
-                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
-                        {data.without.avg_year_built || '-'}
-                      </td>
-                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
-                        {data.without.avg_norm_time ? formatCurrency(data.without.avg_norm_time) : '-'}
-                      </td>
-                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px', fontWeight: '500' }}>
-                        {data.adjusted ? formatCurrency(data.adjusted) : '-'}
-                      </td>
-                      <td style={{
-                        padding: '6px 8px',
-                        textAlign: 'right',
-                        fontSize: '12px',
-                        color: data.flat_adj > 0 ? '#059669' : data.flat_adj < 0 ? '#DC2626' : '#6B7280'
-                      }}>
-                        {data.flat_adj ? formatCurrency(data.flat_adj) : '-'}
-                      </td>
-                      <td style={{
-                        padding: '6px 8px',
-                        textAlign: 'right',
-                        fontSize: '12px',
-                        color: data.pct_adj > 0 ? '#059669' : data.pct_adj < 0 ? '#DC2626' : '#6B7280'
-                      }}>
-                        {data.pct_adj ? `${data.pct_adj.toFixed(1)}%` : '-'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <button
+                    onClick={() => setExpandedAdditionalVCS(new Set(Object.keys(additionalResults.byVCS || {})))}
+                    style={{
+                      padding: '6px 12px',
+                      backgroundColor: '#10B981',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      fontWeight: '500'
+                    }}
+                  >
+                    Expand All
+                  </button>
+                  <button
+                    onClick={() => setExpandedAdditionalVCS(new Set())}
+                    style={{
+                      padding: '6px 12px',
+                      backgroundColor: '#EF4444',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      fontWeight: '500'
+                    }}
+                  >
+                    Collapse All
+                  </button>
+                </div>
+              </div>
+              {renderVCSAnalysisTable(additionalResults.byVCS || {})}
             </div>
 
             {/* Additional Cards Detail Table */}
