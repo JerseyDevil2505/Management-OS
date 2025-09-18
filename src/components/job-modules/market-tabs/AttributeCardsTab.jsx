@@ -1931,11 +1931,18 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         let jimAdjusted = null;
 
         if (withAvgNormTime !== null && withoutAvgNormTime !== null && withoutAvgNormTime > 0) {
-          flatAdj = Math.round(withAvgNormTime - withoutAvgNormTime);
-          pctAdj = ((withAvgNormTime - withoutAvgNormTime) / withoutAvgNormTime) * 100;
+          // Jim's size normalization formula: Adjust "without cards" value to "with cards" size
+          const withAvgSFLA = withTotalSFLA && data.with_cards.length > 0 ?
+            withTotalSFLA / data.with_cards.length : null;
 
-          // Jim's formula: Apply percentage adjustment to without average
-          jimAdjusted = Math.round(withoutAvgNormTime * (1 + (pctAdj / 100)));
+          if (withAvgSFLA && withoutAvgSFLA && withAvgSFLA > 0 && withoutAvgSFLA > 0) {
+            jimAdjusted = sizeNormalize(withoutAvgNormTime, withoutAvgSFLA, withAvgSFLA);
+          } else {
+            jimAdjusted = withoutAvgNormTime;
+          }
+
+          flatAdj = Math.round(withAvgNormTime - jimAdjusted);
+          pctAdj = jimAdjusted > 0 ? ((withAvgNormTime - jimAdjusted) / jimAdjusted) * 100 : 0;
         }
 
         results.byVCS[vcs] = {
