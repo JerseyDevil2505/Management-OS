@@ -602,38 +602,71 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     );
   };
 
-  // ============ CALCULATE OVERALL SUMMARY ============
-  const calculateOverallSummary = (data) => {
-    let totalProperties = 0;
-    let minAdjustment = null;
-    let maxAdjustment = null;
-    let baselineCondition = null;
+  // ============ CALCULATE NON-BASELINE SUMMARY ============
+  const calculateNonBaselineSummary = (data, type) => {
+    const conditionAdjustments = {}; // Track adjustments by condition code
+
+    // Determine which baseline is being used
+    const manualBaseline = type === 'Exterior' ? manualExteriorBaseline : manualInteriorBaseline;
 
     Object.values(data).forEach(vcsConditions => {
-      Object.values(vcsConditions).forEach(cond => {
-        totalProperties += cond.count;
-        
-        if (minAdjustment === null || cond.adjustmentPct < minAdjustment) {
-          minAdjustment = cond.adjustmentPct;
+      Object.entries(vcsConditions).forEach(([code, cond]) => {
+        // Skip baseline condition
+        const isBaseline = manualBaseline ? (code === manualBaseline) :
+                          (cond.adjustmentPct === 0 ||
+                           cond.description.toUpperCase().includes('AVERAGE') ||
+                           cond.description.toUpperCase().includes('NORMAL'));
+
+        if (isBaseline) return;
+
+        // Initialize condition tracking if not exists
+        if (!conditionAdjustments[code]) {
+          conditionAdjustments[code] = {
+            description: cond.description,
+            adjustments: [],
+            totalProperties: 0
+          };
         }
-        if (maxAdjustment === null || cond.adjustmentPct > maxAdjustment) {
-          maxAdjustment = cond.adjustmentPct;
+
+        // Apply logic filtering for illogical adjustments
+        const desc = cond.description.toUpperCase();
+        const isGoodCondition = desc.includes('EXCELLENT') || desc.includes('GOOD') || desc.includes('SUPERIOR');
+        const isPoorCondition = desc.includes('POOR') || desc.includes('FAIR') || desc.includes('UNSOUND');
+
+        let adjustmentToUse = cond.adjustmentPct;
+
+        // Filter illogical adjustments
+        if (isGoodCondition && cond.adjustmentPct < 0) {
+          adjustmentToUse = null; // Good condition with negative adjustment = illogical
+        } else if (isPoorCondition && cond.adjustmentPct > 0) {
+          adjustmentToUse = null; // Poor condition with positive adjustment = illogical
         }
-        
-        if (cond.adjustmentPct === 0 || 
-            cond.description.toUpperCase().includes('AVERAGE') ||
-            cond.description.toUpperCase().includes('NORMAL')) {
-          baselineCondition = cond.description;
+
+        if (adjustmentToUse !== null) {
+          conditionAdjustments[code].adjustments.push(adjustmentToUse);
         }
+        conditionAdjustments[code].totalProperties += cond.count;
       });
     });
 
-    return {
-      totalProperties,
-      minAdjustment,
-      maxAdjustment,
-      baselineCondition: baselineCondition || 'Not Identified'
-    };
+    // Calculate averages for each condition
+    const summary = [];
+    Object.entries(conditionAdjustments).forEach(([code, data]) => {
+      const validAdjustments = data.adjustments;
+      const avgAdjustment = validAdjustments.length > 0 ?
+        validAdjustments.reduce((sum, adj) => sum + adj, 0) / validAdjustments.length : null;
+
+      summary.push({
+        code,
+        description: data.description,
+        avgAdjustment,
+        totalProperties: data.totalProperties,
+        validVCSCount: validAdjustments.length
+      });
+    });
+
+    // Sort by condition code
+    return summary.sort((a, b) => a.code.localeCompare(b.code));
   };
 
   // ============ CSV EXPORT FUNCTIONS ============
