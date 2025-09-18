@@ -991,7 +991,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (newSales.length > 0) {
-        debug('������ Found new sales to add:', newSales.length);
+        debug('���� Found new sales to add:', newSales.length);
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
           const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
@@ -1179,7 +1179,7 @@ const getPricePerUnit = useCallback((price, size) => {
         if (packageData.is_package_sale || packageData.package_count > 1) {
             // Prefer any precomputed combined lot acres from the analyzer
           // Use original property sales_price (don't sum - each property already has full package price)
-          const totalPrice = group[0].sales_price;
+          const totalPrice = group[0].values_norm_time || group[0].sales_price;
 
           let totalAcres = null;
           if (packageData.combined_lot_acres && !isNaN(Number(packageData.combined_lot_acres)) && Number(packageData.combined_lot_acres) > 0) {
