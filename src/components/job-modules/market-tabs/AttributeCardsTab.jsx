@@ -1972,19 +1972,18 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <button
               onClick={runAdditionalCardsAnalysis}
-              disabled={additionalWorking}
               style={{
                 padding: '6px 16px',
-                backgroundColor: additionalWorking ? '#E5E7EB' : '#3B82F6',
-                color: additionalWorking ? '#9CA3AF' : 'white',
+                backgroundColor: '#3B82F6',
+                color: 'white',
                 border: 'none',
                 borderRadius: '4px',
                 fontSize: '14px',
                 fontWeight: '500',
-                cursor: additionalWorking ? 'not-allowed' : 'pointer'
+                cursor: 'pointer'
               }}
             >
-              {additionalWorking ? 'Analyzing...' : 'Run Analysis'}
+              Run Analysis
             </button>
 
             {additionalResults && (
