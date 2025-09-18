@@ -1770,105 +1770,93 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         }
       });
 
-      console.log(`Grouped ${validProps.length} properties into ${propertyGroups.size} unique property groups`);
-
-      // Calculate averages for each group and categorize by VCS
+      // Analyze by VCS
       const byVCS = {};
 
-      propertyGroups.forEach((group, baseKey) => {
-        // Calculate group averages
-        const totalValue = group.cards.reduce((sum, card) => sum + card.values_norm_time, 0);
-        group.avgValue = Math.round(totalValue / group.cards.length);
+      // Process groups with additional cards
+      groupsWithCards.forEach(group => {
+        const vcs = group[0].property_vcs;
+        if (!vcs) return;
 
-        const validYears = group.cards.filter(card => card.year_built && card.year_built > 1900 && card.year_built < 2030);
-        group.avgYear = validYears.length > 0 ?
-          Math.round(validYears.reduce((sum, card) => sum + card.year_built, 0) / validYears.length) : null;
-
-        // Use improved logic to determine if group has additional cards
-        const hasAdditionalCards = groupHasAdditionalCards(group);
-
-        // Initialize VCS group if needed
-        if (!byVCS[group.vcs]) {
-          byVCS[group.vcs] = { with_cards: [], without_cards: [] };
+        if (!byVCS[vcs]) {
+          byVCS[vcs] = {
+            with_cards: [],
+            without_cards: []
+          };
         }
 
-        // Create summary data for this property group
-        const groupData = {
-          baseKey,
-          address: group.cards[0]?.address || 'Unknown',
-          cardCount: group.cards.length,
-          cards: group.cards.map(c => c.card_code || 'M').join(', '),
-          totalSfla: group.totalSfla,
-          avgValue: group.avgValue,
-          avgYear: group.avgYear,
-          avgAge: group.avgYear ? new Date().getFullYear() - group.avgYear : null,
-          // For debugging - show all card codes found
-          cardCodes: group.cards.map(c => c.card_code).join(', ')
-        };
-
-        // Categorize based on whether it has additional cards
-        if (hasAdditionalCards) {
-          byVCS[group.vcs].with_cards.push(groupData);
-        } else {
-          byVCS[group.vcs].without_cards.push(groupData);
+        // Use the highest values_norm_time from the group
+        const maxNormTime = Math.max(...group.map(p => p.values_norm_time || 0));
+        if (maxNormTime > 0) {
+          byVCS[vcs].with_cards.push(maxNormTime);
         }
       });
 
-      // Calculate statistics for grouped properties
-      const calculateGroupStats = (groups) => {
-        if (groups.length === 0) {
-          return { n: 0, avg_price: null, avg_size: null, avg_age: null, total_cards: 0 };
+      // Process groups without additional cards
+      groupsWithoutCards.forEach(group => {
+        const vcs = group[0].property_vcs;
+        if (!vcs) return;
+
+        if (!byVCS[vcs]) {
+          byVCS[vcs] = {
+            with_cards: [],
+            without_cards: []
+          };
         }
 
-        const avgPrice = groups.reduce((sum, g) => sum + g.avgValue, 0) / groups.length;
+        // Use values_norm_time from the main card
+        const normTime = group[0].values_norm_time;
+        if (normTime && normTime > 0) {
+          byVCS[vcs].without_cards.push(normTime);
+        }
+      });
 
-        const validSizes = groups.filter(g => g.totalSfla > 0);
-        const avgSize = validSizes.length > 0 ?
-          validSizes.reduce((sum, g) => sum + g.totalSfla, 0) / validSizes.length : null;
-
-        const validAges = groups.filter(g => g.avgAge && g.avgAge > 0);
-        const avgAge = validAges.length > 0 ?
-          Math.round(validAges.reduce((sum, g) => sum + g.avgAge, 0) / validAges.length) : null;
-
-        const totalCards = groups.reduce((sum, g) => sum + g.cardCount, 0);
-
-        return {
-          n: groups.length,
-          avg_price: Math.round(avgPrice),
-          avg_size: avgSize ? Math.round(avgSize) : null,
-          avg_age: avgAge,
-          total_cards: totalCards
-        };
-      };
-
+      // Calculate statistics for each VCS
       const results = {
         byVCS: {},
-        overall: { with: { n: 0 }, without: { n: 0 } },
         summary: {
           vendorType,
           totalPropertiesAnalyzed: propertyGroups.size,
-          propertiesWithCards: 0,
-          propertiesWithoutCards: 0
+          propertiesWithCards: groupsWithCards.length,
+          propertiesWithoutCards: groupsWithoutCards.length
         },
+        additionalCardsList: additionalCardProperties.sort((a, b) => {
+          // Sort by VCS, then by address
+          if (a.property_vcs !== b.property_vcs) {
+            return (a.property_vcs || '').localeCompare(b.property_vcs || '');
+          }
+          return (a.property_location || '').localeCompare(b.property_location || '');
+        }),
         generated_at: new Date().toISOString()
       };
 
-      // Process each VCS
+      // Calculate averages and impacts for each VCS
       Object.entries(byVCS).forEach(([vcs, data]) => {
-        const withStats = calculateGroupStats(data.with_cards);
-        const withoutStats = calculateGroupStats(data.without_cards);
+        const withAvg = data.with_cards.length > 0
+          ? data.with_cards.reduce((sum, val) => sum + val, 0) / data.with_cards.length
+          : null;
+
+        const withoutAvg = data.without_cards.length > 0
+          ? data.without_cards.reduce((sum, val) => sum + val, 0) / data.without_cards.length
+          : null;
 
         let flatAdj = null;
         let pctAdj = null;
 
-        if (withStats.avg_price && withoutStats.avg_price) {
-          flatAdj = Math.round(withStats.avg_price - withoutStats.avg_price);
-          pctAdj = ((withStats.avg_price - withoutStats.avg_price) / withoutStats.avg_price) * 100;
+        if (withAvg !== null && withoutAvg !== null && withoutAvg > 0) {
+          flatAdj = Math.round(withAvg - withoutAvg);
+          pctAdj = ((withAvg - withoutAvg) / withoutAvg) * 100;
         }
 
         results.byVCS[vcs] = {
-          with: withStats,
-          without: withoutStats,
+          with: {
+            n: data.with_cards.length,
+            avg_norm_time: withAvg ? Math.round(withAvg) : null
+          },
+          without: {
+            n: data.without_cards.length,
+            avg_norm_time: withoutAvg ? Math.round(withoutAvg) : null
+          },
           flat_adj: flatAdj,
           pct_adj: pctAdj
         };
