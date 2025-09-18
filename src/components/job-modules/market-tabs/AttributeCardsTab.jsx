@@ -2174,6 +2174,43 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               </div>
             </div>
 
+            {/* Impact Summary */}
+            <div style={{
+              marginBottom: '20px',
+              padding: '15px',
+              backgroundColor: '#F8FAFC',
+              borderRadius: '6px',
+              border: '1px solid #E2E8F0'
+            }}>
+              <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0 0 10px 0', color: '#1E293B' }}>
+                Overall Impact Summary
+              </h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', fontSize: '13px' }}>
+                <div>
+                  <span style={{ color: '#64748B', fontWeight: '500' }}>Total Dollar Impact: </span>
+                  <span style={{ fontWeight: '600', color: '#059669' }}>
+                    {(() => {
+                      const totalImpact = Object.values(additionalResults.byVCS || {}).reduce((sum, data) => {
+                        return sum + (data.flat_adj || 0);
+                      }, 0);
+                      return totalImpact !== 0 ? formatCurrency(totalImpact) : 'No valid comparisons';
+                    })()}
+                  </span>
+                </div>
+                <div>
+                  <span style={{ color: '#64748B', fontWeight: '500' }}>Average % Impact: </span>
+                  <span style={{ fontWeight: '600', color: '#059669' }}>
+                    {(() => {
+                      const impacts = Object.values(additionalResults.byVCS || {}).filter(data => data.pct_adj !== null && data.pct_adj !== undefined);
+                      if (impacts.length === 0) return 'No valid comparisons';
+                      const avgPct = impacts.reduce((sum, data) => sum + data.pct_adj, 0) / impacts.length;
+                      return `${avgPct.toFixed(1)}%`;
+                    })()}
+                  </span>
+                </div>
+              </div>
+            </div>
+
             {/* VCS Analysis Table */}
             <div style={{
               border: '1px solid #E5E7EB',
