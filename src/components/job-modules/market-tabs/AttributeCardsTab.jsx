@@ -1835,10 +1835,18 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           };
         }
 
-        // Use values_norm_time from the main card
+        // Calculate metrics for properties without additional cards
         const normTime = group[0].values_norm_time;
         if (normTime && normTime > 0) {
-          byVCS[vcs].without_cards.push(normTime);
+          const sfla = parseInt(group[0].asset_sfla) || 0;
+          const yearBuilt = group[0].asset_year_built && group[0].asset_year_built > 0 ?
+            group[0].asset_year_built : null;
+
+          byVCS[vcs].without_cards.push({
+            norm_time: normTime,
+            sfla: sfla,
+            year_built: yearBuilt
+          });
         }
       });
 
