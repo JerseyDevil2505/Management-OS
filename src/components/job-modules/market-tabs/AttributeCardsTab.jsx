@@ -1045,19 +1045,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 </div>
               </div>
 
-              {useInteriorInspections && (
-                <div style={{ 
-                  padding: '10px 15px', 
-                  backgroundColor: '#FEF3C7', 
-                  borderRadius: '4px',
-                  marginBottom: '15px',
-                  fontSize: '13px',
-                  color: '#92400E'
-                }}>
-                  <Info size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'text-bottom' }} />
-                  Filtering to properties with confirmed interior inspections only. This may significantly reduce the sample size.
-                </div>
-              )}
 
               {renderConditionTable(conditionData.interior, 'Interior', expandedInteriorVCS, setExpandedInteriorVCS)}
             </div>
