@@ -444,6 +444,15 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     loadConditionAnalysisData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id, properties.length, typeUseFilter, useInteriorInspections, manualExteriorBaseline, manualInteriorBaseline]);
+
+  // Load additional card analysis on mount (like condition analysis)
+  useEffect(() => {
+    if (!jobData?.id || properties.length === 0 || propertyMarketData.length === 0) return;
+
+    console.log('Auto-running additional card analysis on mount...');
+    runAdditionalCardAnalysis();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobData?.id, properties.length, propertyMarketData.length]);
   // ============ BUILD CONDITION CASCADE TABLE ============
   const renderConditionTable = (data, type, expandedVCS, setExpandedVCS) => {
     const vcsKeys = Object.keys(data).sort();
