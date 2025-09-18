@@ -423,8 +423,19 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       <div style={{ marginBottom: '20px' }}>
         {vcsKeys.map(vcs => {
           const conditions = data[vcs];
-          const isExpanded = conditionAnalysisExpanded;
+          const isExpanded = expandedVCS.has(vcs);
           const conditionCodes = Object.keys(conditions).sort();
+
+          // Toggle VCS expansion function
+          const toggleVCS = () => {
+            const newExpanded = new Set(expandedVCS);
+            if (newExpanded.has(vcs)) {
+              newExpanded.delete(vcs);
+            } else {
+              newExpanded.add(vcs);
+            }
+            setExpandedVCS(newExpanded);
+          };
           
           // Find the baseline condition for this VCS
           let baselineCode = null;
