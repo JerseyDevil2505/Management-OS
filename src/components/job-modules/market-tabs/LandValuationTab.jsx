@@ -2086,7 +2086,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         region,
         block: sale.property_block,
         lot: sale.property_lot,
-        vacantPrice: sale.sales_price,
+        vacantPrice: sale.values_norm_time || sale.sales_price,
         acres,
         rawLandValue,
         siteValue,
