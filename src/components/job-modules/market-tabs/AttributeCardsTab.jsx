@@ -1849,8 +1849,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         const normTime = group[0].values_norm_time;
         if (normTime && normTime > 0) {
           const sfla = parseInt(group[0].asset_sfla) || 0;
-          const yearBuilt = group[0].asset_year_built && group[0].asset_year_built > 0 ?
-            group[0].asset_year_built : null;
+          const year = parseInt(group[0].asset_year_built);
+          const yearBuilt = year && year > 1800 && year <= new Date().getFullYear() ? year : null;
 
           byVCS[vcs].without_cards.push({
             norm_time: normTime,
