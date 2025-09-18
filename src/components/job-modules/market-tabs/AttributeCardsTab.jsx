@@ -2177,13 +2177,18 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#F3F4F6' }}>
-                    <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>VCS</th>
-                    <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>With Cards (n)</th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>Avg Norm Time</th>
-                    <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>Without Cards (n)</th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>Avg Norm Time</th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>$ Impact</th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>% Impact</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'left', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>VCS</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'center', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>With Cards (n)</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Sum SFLA</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Avg Year</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Avg Norm Time</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'center', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Without Cards (n)</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Avg SFLA</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Avg Year</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Avg Norm Time</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Adjusted</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Impact ($)</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Impact (%)</th>
                   </tr>
                 </thead>
                 <tbody>
