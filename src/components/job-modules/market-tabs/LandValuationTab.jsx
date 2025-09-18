@@ -4415,7 +4415,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           id: s.id,
           category: saleCategories[s.id],
           isInBuildingLot: isInCategory,
-          price: s.sales_price,
+          price: s.values_norm_time || s.sales_price,
           acres: s.totalAcres
         });
       }
