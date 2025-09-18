@@ -595,13 +595,22 @@ useEffect(() => {
     debug('�� LOADING TARGET ALLOCATION FROM ALLOCATION STUDY:', loadedTargetAllocation);
   }
 
-  // Only set if we found a valid value
+  // Only set if we found a valid value AND current state is null/empty to prevent overwrites
   if (loadedTargetAllocation !== null) {
     // Ensure it's a number to prevent caching issues
     const numericValue = typeof loadedTargetAllocation === 'string' ?
       parseFloat(loadedTargetAllocation) : loadedTargetAllocation;
-    setTargetAllocation(numericValue);
-    debug('✅ Target allocation set to:', numericValue, typeof numericValue);
+
+    // DEFENSIVE FIX: Only update if current targetAllocation is null/empty to prevent overwrites
+    setTargetAllocation(prev => {
+      if (prev === null || prev === undefined || prev === '') {
+        debug('✅ Target allocation set to:', numericValue, typeof numericValue);
+        return numericValue;
+      } else {
+        debug('🛡️ Preserving existing target allocation:', prev, 'instead of overwriting with:', numericValue);
+        return prev;
+      }
+    });
   } else {
     debug('ℹ️ No target allocation found in database');
   }
@@ -2429,7 +2438,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return;
     }
 
-    debug('🎯 Calculating VCS recommended site values with target allocation:', targetAllocation + '%');
+    debug('���� Calculating VCS recommended site values with target allocation:', targetAllocation + '%');
 
     const recommendedSites = {};
     const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
@@ -4334,7 +4343,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
           // Prepare human-readable size unit for debugging
           const sizeUnitLabel = valuationMode === 'acre' ? 'acres' : valuationMode === 'sf' ? 'sqft' : 'front ft';
-          debug(`����� ${categoryType} paired analysis:`, {
+          debug(`��� ${categoryType} paired analysis:`, {
             totalProperties: filtered.length,
             possiblePairs: (filtered.length * (filtered.length - 1)) / 2,
             validPairs: pairedRates.length,
