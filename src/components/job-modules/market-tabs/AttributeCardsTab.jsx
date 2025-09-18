@@ -1696,17 +1696,34 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   };
   // ============ ADDITIONAL CARDS ANALYSIS ============
   const runAdditionalCardsAnalysis = () => {
-    setAdditionalWorking(true);
+    console.log('🔄 Running Additional Cards Analysis...');
+    console.log('Vendor Type:', vendorType);
+    console.log('Total Properties:', properties?.length);
+
+    if (!properties || properties.length === 0) {
+      console.log('❌ No property records available');
+      setAdditionalResults(null);
+      return;
+    }
+
     try {
-      // Get properties with normalized values
-      const validProps = properties.filter(p => {
-        const marketData = propertyMarketData.find(
-          m => m.property_composite_key === p.property_composite_key
-        );
-        return marketData?.values_norm_time > 0;
+      // Filter for properties with additional cards based on vendor type
+      const additionalCardProperties = properties.filter(prop => {
+        const card = prop.property_addl_card || prop.additional_card || '';
+
+        if (vendorType === 'BRT' || vendorType === 'brt') {
+          // BRT: Cards 2, 3, 4, etc. (numeric > 1, excluding 'M' and '1')
+          const cardNum = parseInt(card);
+          return !isNaN(cardNum) && cardNum > 1;
+        } else if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
+          // Microsystems: Cards A-Z (excluding 'M' which is Main)
+          const cardUpper = card.toString().trim().toUpperCase();
+          return cardUpper && cardUpper !== 'M' && cardUpper !== 'MAIN' && /^[A-Z]$/.test(cardUpper);
+        }
+        return false;
       });
 
-      console.log(`🔄 Starting SIMPLIFIED additional card analysis for ${validProps.length} properties with sales data`);
+      console.log(`✅ Found ${additionalCardProperties.length} properties with additional cards`);
 
       // First, let's examine what's actually in the additional_card column
       const cardValues = validProps.map(p => p.additional_card).filter(card => card !== null && card !== undefined);
@@ -1960,7 +1977,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       // Save to database
       saveAdditionalResultsToDB(results);
 
-      console.log('✅ Additional card analysis completed successfully');
+      console.log('��� Additional card analysis completed successfully');
       
     } catch (error) {
       console.error('Error running additional card analysis:', error);
