@@ -1970,7 +1970,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       if (bVal === null || bVal === undefined) bVal = '';
 
       // Convert to string for comparison, except for numeric fields
-      if (['sales_price', 'asset_sfla', 'asset_year_built', 'values_norm_time'].includes(sortField)) {
+      if (['property_block', 'property_lot', 'sales_price', 'asset_sfla', 'asset_year_built', 'values_norm_time'].includes(sortField)) {
         aVal = parseFloat(aVal) || 0;
         bVal = parseFloat(bVal) || 0;
       } else {
