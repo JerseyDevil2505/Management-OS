@@ -604,6 +604,10 @@ useEffect(() => {
 
     // DEFENSIVE FIX: Only update if current targetAllocation is null/empty to prevent overwrites
     setTargetAllocation(prev => {
+      if (targetAllocationJustSaved) {
+        debug('🛡️ Target allocation just saved - skipping reload to prevent overwrite');
+        return prev;
+      }
       if (prev === null || prev === undefined || prev === '') {
         debug('✅ Target allocation set to:', numericValue, typeof numericValue);
         return numericValue;
@@ -5416,7 +5420,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           {data.totalSales} sales
                         </span>
-                        {` • Avg $${Math.round(data.avgPrice).toLocaleString()} ��� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
+                        {` • Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
                       </span>
                     </div>
                     <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
