@@ -2203,12 +2203,15 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
   // ============ RENDER VCS ANALYSIS TABLE WITH EXPANDABLE SECTIONS ============
   const renderVCSAnalysisTable = (vcsData) => {
-    const vcsKeys = Object.keys(vcsData).sort();
+    // Filter to only show VCS that have properties with additional cards
+    const vcsKeys = Object.keys(vcsData)
+      .filter(vcs => (vcsData[vcs]?.with?.n || 0) > 0)
+      .sort();
 
     if (vcsKeys.length === 0) {
       return (
         <div style={{ padding: '20px', textAlign: 'center', color: '#6B7280' }}>
-          No VCS data available for analysis
+          No VCS with additional cards available for detailed analysis
         </div>
       );
     }
