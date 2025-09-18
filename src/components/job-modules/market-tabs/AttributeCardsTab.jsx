@@ -1916,16 +1916,14 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       // Identify package pairs using package sale identification logic
       const packagePairs = [];
 
-      // Group properties by package (sales_date, sales_book, sales_page)
-      const packageGroups = new Map();
-      validPropsForAnalysis.forEach(prop => {
-        if (prop.sales_date && prop.sales_book && prop.sales_page) {
-          const packageKey = `${prop.sales_date}-${prop.sales_book}-${prop.sales_page}`;
-          if (!packageGroups.has(packageKey)) {
-            packageGroups.set(packageKey, []);
-          }
-          packageGroups.get(packageKey).push(prop);
+      // Group ALL properties by location (not requiring sales data)
+      const locationGroups = new Map();
+      properties.forEach(prop => {
+        const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
+        if (!locationGroups.has(baseKey)) {
+          locationGroups.set(baseKey, []);
         }
+        locationGroups.get(baseKey).push(prop);
       });
 
       // Identify additional card packages and create pairs
