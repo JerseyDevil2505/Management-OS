@@ -4285,7 +4285,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             }
 
             const sizeDiff = largerSize - smallerSize;
-            const priceDiff = larger.sales_price - smaller.sales_price;
+            const priceDiff = (larger.values_norm_time || larger.sales_price) - (smaller.values_norm_time || smaller.sales_price);
 
             // Only include positive price differences and positive size differences
             if (priceDiff > 0 && sizeDiff > 0) {
@@ -5007,7 +5007,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '15px' }}>
               <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
                 <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                  Raw Land {categoryAnalysis.rawLand.method === 'paired' && <span style={{ color: '#10B981' }}>��� Paired</span>}
+                  Raw Land {categoryAnalysis.rawLand.method === 'paired' && <span style={{ color: '#10B981' }}>✓ Paired</span>}
                 </div>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#10B981' }}>
                   {valuationMode === 'sf' ? `$${categoryAnalysis.rawLand.avg}` : `$${categoryAnalysis.rawLand.avg.toLocaleString()}`}
