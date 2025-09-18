@@ -1919,6 +1919,35 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           ? withValidYears.reduce((sum, d) => sum + d.avg_year_built, 0) / withValidYears.length
           : null;
 
+        // Calculate Year Built and SFLA for ALL properties with additional cards (not just those with sales)
+        const allWithCardsGroups = allGroupsWithCards.filter(group => {
+          const groupVcs = group[0].new_vcs || group[0].property_vcs;
+          return groupVcs === vcs;
+        });
+
+        let allWithTotalSFLA = 0;
+        let allWithYearBuiltSum = 0;
+        let allWithYearBuiltCount = 0;
+
+        allWithCardsGroups.forEach(group => {
+          // Sum SFLA across all cards in each group
+          const groupSFLA = group.reduce((sum, p) => sum + (parseInt(p.asset_sfla) || 0), 0);
+          allWithTotalSFLA += groupSFLA;
+
+          // Average year built for this group
+          const validYears = group.filter(p => {
+            const year = parseInt(p.asset_year_built);
+            return year && year > 1800 && year <= new Date().getFullYear();
+          });
+          if (validYears.length > 0) {
+            const groupAvgYear = validYears.reduce((sum, p) => sum + parseInt(p.asset_year_built), 0) / validYears.length;
+            allWithYearBuiltSum += groupAvgYear;
+            allWithYearBuiltCount++;
+          }
+        });
+
+        const allWithAvgYearBuilt = allWithYearBuiltCount > 0 ? allWithYearBuiltSum / allWithYearBuiltCount : null;
+
         // Calculate WITHOUT cards metrics
         const withoutNormTimes = data.without_cards.map(d => d.norm_time);
         const withoutAvgNormTime = withoutNormTimes.length > 0
