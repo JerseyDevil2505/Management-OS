@@ -416,8 +416,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       );
     }
 
-    // Calculate overall summary across all VCS
-    const overallSummary = calculateOverallSummary(data);
+    // Calculate non-baseline summary across all VCS
+    const nonBaselineSummary = calculateNonBaselineSummary(data, type);
 
     return (
       <div style={{ marginBottom: '20px' }}>
