@@ -2399,7 +2399,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                     {/* Properties WITH Additional Cards */}
                     <div>
-                      <h5 style={{ fontSize: '13px', fontWeight: '600', marginBottom: '10px', color: '#059669' }}>
+                      <h5 style={{ fontSize: '13px', fontWeight: '600', marginBottom: '10px', color: '#1E293B' }}>
                         Properties WITH Additional Cards ({withCardsProperties.length})
                       </h5>
                       {withCardsProperties.length > 0 ? (
