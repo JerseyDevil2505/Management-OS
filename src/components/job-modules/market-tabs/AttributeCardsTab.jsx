@@ -1696,7 +1696,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   };
   // ============ ADDITIONAL CARDS ANALYSIS ============
   const runAdditionalCardsAnalysis = () => {
-    console.log('��� Running Additional Cards Analysis...');
+    console.log('🔄 Running Additional Cards Analysis...');
     console.log('Vendor Type:', vendorType);
     console.log('Total Properties:', properties?.length);
 
@@ -2375,9 +2375,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                           <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
                             {withoutValidYears.length > 0 ? Math.round(withoutValidYears.reduce((sum, p) => sum + p.year_built, 0) / withoutValidYears.length) : '-'}
                           </td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                            {data.without.avg_norm_time ? formatCurrency(data.without.avg_norm_time) : '-'}
+                          </td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>-</td>
                           <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>Baseline</td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>-</td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>-</td>
                         </tr>
                       </tbody>
                     </table>
