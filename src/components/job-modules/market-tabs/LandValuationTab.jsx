@@ -1891,7 +1891,7 @@ const getPricePerUnit = useCallback((price, size) => {
     const enriched = toAdd.map(prop => {
       const acres = calculateAcreage(prop);
       const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
-      const pricePerUnit = getPricePerUnit(prop.sales_price, sizeForUnit);
+      const pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, sizeForUnit);
       return {
         ...prop,
         totalAcres: acres,
