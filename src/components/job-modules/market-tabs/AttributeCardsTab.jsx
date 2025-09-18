@@ -2076,22 +2076,32 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               <div style={{
                 padding: '12px 15px',
                 backgroundColor: '#F9FAFB',
-                borderBottom: '1px solid #E5E7EB'
+                borderBottom: '1px solid #E5E7EB',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
               }}>
                 <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0' }}>
                   All Additional Cards Detail
                 </h4>
+                <span style={{ fontSize: '12px', color: '#6B7280', fontWeight: '500' }}>
+                  ({(additionalResults.additionalCardsList || []).length} cards)
+                </span>
               </div>
 
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
                   <thead>
                     <tr style={{ backgroundColor: '#F3F4F6' }}>
-                      <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Address</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Block</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Lot</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Qualifier</th>
                       <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Card</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Address</th>
                       <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>VCS</th>
                       <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Class</th>
                       <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Type/Use</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Building Class</th>
                       <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Sales Price</th>
                       <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>SFLA</th>
                       <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Year Built</th>
@@ -2102,15 +2112,21 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                     {(additionalResults.additionalCardsList || []).length > 0 ? (
                       additionalResults.additionalCardsList.map((prop, idx) => (
                         <tr key={`${prop.property_composite_key}-${idx}`} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                          <td style={{ padding: '8px 12px', fontSize: '13px' }}>{prop.property_location}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.property_block || '-'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.property_lot || '-'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.property_qualifier || '-'}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px', fontWeight: '500' }}>
                             {prop.property_addl_card || prop.additional_card}
                           </td>
+                          <td style={{ padding: '8px 12px', fontSize: '13px' }}>{prop.property_location}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.property_vcs || '-'}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
                             {prop.property_m4_class || prop.property_cama_class || '-'}
                           </td>
                           <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.asset_type_use || '-'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
+                            {prop.property_m4_class || prop.property_cama_class || '-'}
+                          </td>
                           <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
                             {prop.sales_price ? formatCurrency(prop.sales_price) : '-'}
                           </td>
@@ -2123,7 +2139,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="9" style={{ padding: '20px', textAlign: 'center', color: '#6B7280', fontSize: '13px' }}>
+                        <td colSpan="13" style={{ padding: '20px', textAlign: 'center', color: '#6B7280', fontSize: '13px' }}>
                           No additional cards found in this dataset
                         </td>
                       </tr>
