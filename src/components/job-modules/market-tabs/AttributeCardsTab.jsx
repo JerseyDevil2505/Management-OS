@@ -2021,6 +2021,31 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     }
   }, [marketLandData]);
 
+  // Persist state changes to localStorage
+  useEffect(() => {
+    if (jobData?.id) {
+      localStorage.setItem(`attr-cards-type-filter-${jobData.id}`, typeUseFilter);
+    }
+  }, [typeUseFilter, jobData?.id]);
+
+  useEffect(() => {
+    if (jobData?.id) {
+      localStorage.setItem(`attr-cards-interior-inspections-${jobData.id}`, useInteriorInspections.toString());
+    }
+  }, [useInteriorInspections, jobData?.id]);
+
+  useEffect(() => {
+    if (jobData?.id) {
+      localStorage.setItem(`attr-cards-exterior-baseline-${jobData.id}`, manualExteriorBaseline);
+    }
+  }, [manualExteriorBaseline, jobData?.id]);
+
+  useEffect(() => {
+    if (jobData?.id) {
+      localStorage.setItem(`attr-cards-interior-baseline-${jobData.id}`, manualInteriorBaseline);
+    }
+  }, [manualInteriorBaseline, jobData?.id]);
+
   // ============ MAIN COMPONENT RENDER ============
   return (
     <div className="bg-white rounded-lg p-6">
