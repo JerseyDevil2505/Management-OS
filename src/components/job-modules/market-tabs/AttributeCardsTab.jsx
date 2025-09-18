@@ -1788,16 +1788,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           values_norm_time: marketData.values_norm_time,
           sfla: p.asset_sfla || p.sfla || p.property_sfla || 0,
           year_built: p.asset_year_built || p.year_built || p.property_year_built || null,
-          card_code: p.property_addl_card
+          card_code: p.property_addl_card,
+          address: p.property_location // For debugging/display
         });
 
         // Update group totals
         group.totalSfla += (p.asset_sfla || p.sfla || p.property_sfla || 0);
-
-        // Check if any card in this group is additional
-        if (hasAdditionalCard(p)) {
-          group.hasAdditionalCards = true;
-        }
       });
 
       console.log(`Grouped ${validProps.length} properties into ${propertyGroups.size} unique property groups`);
