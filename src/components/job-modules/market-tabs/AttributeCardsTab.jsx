@@ -1810,6 +1810,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         group.avgYear = validYears.length > 0 ?
           Math.round(validYears.reduce((sum, card) => sum + card.year_built, 0) / validYears.length) : null;
 
+        // Use improved logic to determine if group has additional cards
+        const hasAdditionalCards = groupHasAdditionalCards(group);
+
         // Initialize VCS group if needed
         if (!byVCS[group.vcs]) {
           byVCS[group.vcs] = { with_cards: [], without_cards: [] };
@@ -1818,16 +1821,19 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         // Create summary data for this property group
         const groupData = {
           baseKey,
+          address: group.cards[0]?.address || 'Unknown',
           cardCount: group.cards.length,
           cards: group.cards.map(c => c.card_code || 'M').join(', '),
           totalSfla: group.totalSfla,
           avgValue: group.avgValue,
           avgYear: group.avgYear,
-          avgAge: group.avgYear ? new Date().getFullYear() - group.avgYear : null
+          avgAge: group.avgYear ? new Date().getFullYear() - group.avgYear : null,
+          // For debugging - show all card codes found
+          cardCodes: group.cards.map(c => c.card_code).join(', ')
         };
 
         // Categorize based on whether it has additional cards
-        if (group.hasAdditionalCards) {
+        if (hasAdditionalCards) {
           byVCS[group.vcs].with_cards.push(groupData);
         } else {
           byVCS[group.vcs].without_cards.push(groupData);
