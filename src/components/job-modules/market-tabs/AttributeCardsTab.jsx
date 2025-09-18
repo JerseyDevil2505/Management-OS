@@ -302,7 +302,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         try {
           const { data: inspections, error: inspError } = await supabase
             .from('inspection_data')
-            .select('property_composite_key, entry_type, inspection_info_by')
+            .select('property_composite_key, inspection_info_by')
             .eq('job_id', jobData.id);
 
           if (inspError) {
@@ -310,22 +310,20 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             throw new Error(`Failed to load inspection data: ${inspError.message || inspError}`);
           }
 
-          // Check InfoBy codes from the job's parsed definitions to identify entry vs estimation
-          const infoByCodes = parsedCodeDefinitions?.infoby_category_config || {};
+          // Use the InfoBy configuration that the user already defined in the jobs table
+          const infoByCodes = jobData?.info_by_config || {};
           const entryInfoByCodes = Array.isArray(infoByCodes.entry) ? infoByCodes.entry : [];
 
           if (entryInfoByCodes.length === 0) {
-            console.warn('No entry InfoBy codes found in job configuration. Using entry_type field only for interior filtering.');
-            console.log('Available infoby_category_config:', infoByCodes);
+            console.warn('No entry InfoBy codes found in job.info_by_config. All inspections will be excluded from interior analysis.');
+            console.log('Available info_by_config:', infoByCodes);
           } else {
-            console.log('Entry InfoBy codes found:', entryInfoByCodes);
+            console.log('Entry InfoBy codes from job config:', entryInfoByCodes);
           }
 
           inspectionMap = new Map(
             (inspections || []).filter(i => {
-              // Entry type explicitly marked
-              if (i.entry_type === 'entry') return true;
-              // Or InfoBy code indicates actual entry (not estimation/refusal)
+              // Use InfoBy code to determine if it's an actual entry (not estimation/refusal)
               return entryInfoByCodes.length > 0 && entryInfoByCodes.includes(i.inspection_info_by);
             }).map(i => [i.property_composite_key, true])
           );
