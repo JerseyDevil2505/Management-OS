@@ -915,6 +915,40 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                       <Info size={14} style={{ color: '#6B7280' }} />
                     </div>
                   </div>
+
+                  {/* Expand/Collapse Buttons - Match Land Valuation Style */}
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <button
+                      onClick={() => setExpandedInteriorVCS(new Set(Object.keys(conditionData.interior)))}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: '#10B981',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        fontWeight: '500'
+                      }}
+                    >
+                      Expand All
+                    </button>
+                    <button
+                      onClick={() => setExpandedInteriorVCS(new Set())}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: '#EF4444',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        fontWeight: '500'
+                      }}
+                    >
+                      Collapse All
+                    </button>
+                  </div>
                 </div>
               </div>
 
