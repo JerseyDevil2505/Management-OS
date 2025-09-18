@@ -2336,13 +2336,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                             {data.with.avg_year_built || '-'}
                           </td>
                           <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>
-                            {withCardsProperties.length}
+                            {withSalesCount}
                           </td>
                           <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
-                            {withAvgSFLA ? Math.round(withAvgSFLA).toLocaleString() : '-'}
+                            {withSalesAvgSFLA ? Math.round(withSalesAvgSFLA).toLocaleString() : '-'}
                           </td>
                           <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
-                            {withValidYears.length > 0 ? Math.round(withValidYears.reduce((sum, p) => sum + p.avg_year_built, 0) / withValidYears.length) : '-'}
+                            {withSalesAvgYear ? Math.round(withSalesAvgYear) : '-'}
                           </td>
                           <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px', fontWeight: '500' }}>
                             {data.adjusted ? formatCurrency(data.adjusted) : '-'}
