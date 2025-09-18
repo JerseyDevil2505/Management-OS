@@ -2842,7 +2842,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                     <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Sum SFLA (w)</th>
                     <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Year (w)</th>
                     <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Price (w)</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: '11px', fontWeight: '600' }}>Count (w/o)</th>
                     <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg SFLA (w/o)</th>
                     <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Year (w/o)</th>
                     <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Price (w/o)</th>
