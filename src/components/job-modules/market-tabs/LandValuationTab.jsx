@@ -519,7 +519,7 @@ useEffect(() => {
     const savedIncluded = new Set();
     const manuallyAddedIds = new Set();
 
-    debug('������ Loading saved Method 1 metadata (SKIPPING cached sales for fresh calculation):', {
+    debug('���� Loading saved Method 1 metadata (SKIPPING cached sales for fresh calculation):', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
@@ -2975,6 +2975,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Update last saved timestamp
       setLastSaved(new Date());
 
+      // Set flag to prevent overwrites during re-initialization
+      setTargetAllocationJustSaved(true);
+      setTimeout(() => setTargetAllocationJustSaved(false), 5000); // Clear flag after 5 seconds
+
       // Show success feedback
       alert(`Target allocation ${targetValue}% saved successfully!`);
 
@@ -4202,7 +4206,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           [category]: rate ? parseFloat(rate) : null
         }
       };
-      debug('���� New cascade config special categories:', newConfig.specialCategories);
+      debug('🔧 New cascade config special categories:', newConfig.specialCategories);
       return newConfig;
     });
   };
@@ -5412,7 +5416,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           {data.totalSales} sales
                         </span>
-                        {` • Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
+                        {` • Avg $${Math.round(data.avgPrice).toLocaleString()} ��� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
                       </span>
                     </div>
                     <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
