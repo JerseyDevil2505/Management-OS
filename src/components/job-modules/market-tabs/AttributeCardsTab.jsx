@@ -1696,7 +1696,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   };
   // ============ ADDITIONAL CARDS ANALYSIS ============
   const runAdditionalCardsAnalysis = () => {
-    console.log('🔄 Running Additional Cards Analysis...');
+    console.log('��� Running Additional Cards Analysis...');
     console.log('Vendor Type:', vendorType);
     console.log('Total Properties:', properties?.length);
 
@@ -2333,7 +2333,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                             {withAvgSFLA ? Math.round(withAvgSFLA).toLocaleString() : '-'}
                           </td>
                           <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
-                            {data.with.avg_norm_time ? Math.round(withValidYears.reduce((sum, d) => sum + d.avg_year_built, 0) / withValidYears.length) || '-' : '-'}
+                            {withValidYears.length > 0 ? Math.round(withValidYears.reduce((sum, p) => sum + p.avg_year_built, 0) / withValidYears.length) : '-'}
                           </td>
                           <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px', fontWeight: '500' }}>
                             {data.adjusted ? formatCurrency(data.adjusted) : '-'}
@@ -2373,7 +2373,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                             {withoutAvgSFLA ? Math.round(withoutAvgSFLA).toLocaleString() : '-'}
                           </td>
                           <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
-                            {data.without.avg_norm_time ? Math.round(withoutValidYears.reduce((sum, d) => sum + d.year_built, 0) / withoutValidYears.length) || '-' : '-'}
+                            {withoutValidYears.length > 0 ? Math.round(withoutValidYears.reduce((sum, p) => sum + p.year_built, 0) / withoutValidYears.length) : '-'}
                           </td>
                           <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>Baseline</td>
                           <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>-</td>
