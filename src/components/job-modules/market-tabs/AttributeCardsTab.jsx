@@ -125,7 +125,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     });
   };
   // ============ DETECT ACTUAL CONDITION CODES FROM DATA ============
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const detectActualConditionCodes = useCallback(async () => {
     try {
       // Get all unique condition codes from the actual property records
@@ -186,6 +185,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       console.error('Error detecting actual condition codes:', error);
       return { exterior: {}, interior: {} };
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [properties.length, vendorType]);
 
   // ============ PROCESS CONDITION STATISTICS ============
@@ -420,11 +420,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   };
 
   // Load data on component mount and when filters change
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!jobData?.id || properties.length === 0) return;
 
     loadConditionAnalysisData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id, properties.length, typeUseFilter, useInteriorInspections, manualExteriorBaseline, manualInteriorBaseline]);
   // ============ BUILD CONDITION CASCADE TABLE ============
   const renderConditionTable = (data, type, expandedVCS, setExpandedVCS) => {
