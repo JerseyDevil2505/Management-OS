@@ -2238,24 +2238,24 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           const withCardsProperties = data.with_cards_properties || [];
           const withoutCardsProperties = data.without_cards_properties || [];
 
-          // Calculate sales-only averages for the summary table
-          const withAvgSFLA = withCardsProperties.length > 0 ?
-            withCardsProperties.reduce((sum, p) => sum + p.total_sfla, 0) / withCardsProperties.length : null;
+          // Calculate sales-only statistics using the same pattern as condition analysis
+          // Get sales data for WITH cards properties in this VCS
+          const withCardsSales = data.with_cards || [];
+          const withSalesCount = withCardsSales.length;
+          const withSalesAvgSFLA = withSalesCount > 0 ?
+            withCardsSales.reduce((sum, d) => sum + d.total_sfla, 0) / withSalesCount : null;
+          const withSalesAvgYear = withSalesCount > 0 ?
+            withCardsSales.filter(d => d.avg_year_built).reduce((sum, d) => sum + d.avg_year_built, 0) /
+            withCardsSales.filter(d => d.avg_year_built).length : null;
 
-          const withoutAvgSFLA = withoutCardsProperties.length > 0 ?
-            withoutCardsProperties.reduce((sum, p) => sum + p.sfla, 0) / withoutCardsProperties.length : null;
-
-          const withValidYears = withCardsProperties.filter(p => p.avg_year_built);
-          const withoutValidYears = withoutCardsProperties.filter(p => p.year_built);
-
-          // Debug logging to verify data
-          console.log(`VCS ${vcs} Debug:`, {
-            withCardsProperties: withCardsProperties.length,
-            withoutCardsProperties: withoutCardsProperties.length,
-            withoutAvgSFLA,
-            dataWithoutAvgNormTime: data.without.avg_norm_time,
-            dataWithoutN: data.without.n
-          });
+          // Get sales data for WITHOUT cards properties in this VCS
+          const withoutCardsSales = data.without_cards || [];
+          const withoutSalesCount = withoutCardsSales.length;
+          const withoutSalesAvgSFLA = withoutSalesCount > 0 ?
+            withoutCardsSales.reduce((sum, d) => sum + d.sfla, 0) / withoutSalesCount : null;
+          const withoutSalesAvgYear = withoutSalesCount > 0 ?
+            withoutCardsSales.filter(d => d.year_built).reduce((sum, d) => sum + d.year_built, 0) /
+            withoutCardsSales.filter(d => d.year_built).length : null;
 
           return (
             <div key={vcs} style={{ marginBottom: '15px', border: '1px solid #E5E7EB', borderRadius: '6px' }}>
