@@ -2968,6 +2968,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Show success feedback
       alert(`Target allocation ${targetValue}% saved successfully!`);
 
+      // CRITICAL FIX: Trigger parent component data refresh to update marketLandData prop
+      if (typeof onDataRefresh === 'function') {
+        debug('🔄 Triggering parent component data refresh...');
+        onDataRefresh();
+      }
+
       // Trigger VCS recommended sites calculation
       debug('🔄 Triggering VCS recommended sites calculation...');
       if (cascadeConfig.normal.prime && properties?.length > 0) {
@@ -4328,7 +4334,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
           // Prepare human-readable size unit for debugging
           const sizeUnitLabel = valuationMode === 'acre' ? 'acres' : valuationMode === 'sf' ? 'sqft' : 'front ft';
-          debug(`��� ${categoryType} paired analysis:`, {
+          debug(`����� ${categoryType} paired analysis:`, {
             totalProperties: filtered.length,
             possiblePairs: (filtered.length * (filtered.length - 1)) / 2,
             validPairs: pairedRates.length,
