@@ -835,7 +835,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                   </div>
                 </div>
               </div>
-              {renderConditionTable(conditionData.exterior, 'Exterior')}
+              {renderConditionTable(conditionData.exterior, 'Exterior', expandedExteriorVCS, setExpandedExteriorVCS)}
             </div>
 
             {/* Interior Condition Analysis */}
