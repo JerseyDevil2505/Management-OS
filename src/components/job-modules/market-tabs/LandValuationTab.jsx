@@ -2602,10 +2602,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       totalProperties: properties.length,
       withNewVCS: properties.filter(p => p.new_vcs).length,
       withLocationAnalysis: properties.filter(p => p.location_analysis).length,
-      withSalesData: properties.filter(p => p.sales_price > 0).length,
+      withSalesData: properties.filter(p => p.values_norm_time && p.values_norm_time > 0).length,  // FIXED: Use values_norm_time
       withVCSOnly: properties.filter(p => p.new_vcs && !p.location_analysis).length,
       withVCSAndLocation: properties.filter(p => p.new_vcs && p.location_analysis).length,
-      withAllThree: properties.filter(p => p.new_vcs && p.location_analysis && p.sales_price > 0).length,
+      withAllThree: properties.filter(p => p.new_vcs && p.location_analysis && p.values_norm_time && p.values_norm_time > 0).length,  // FIXED: Use values_norm_time
       uniqueVCSCodes: [...new Set(properties.filter(p => p.new_vcs).map(p => p.new_vcs))],
       samplePropertiesWithVCS: properties.filter(p => p.new_vcs).slice(0, 5).map(p => ({
         new_vcs: p.new_vcs,
