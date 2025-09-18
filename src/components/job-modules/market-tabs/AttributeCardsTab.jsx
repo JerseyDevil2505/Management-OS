@@ -1942,10 +1942,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         cardDefinition: vendorType === 'BRT' ? 'Numeric cards other than 1' : 'Alphabetical cards (A-Z), M=Main'
       });
 
+      console.log('✅ Setting additional card analysis results:', results);
       setAdditionalResults(results);
-      
+
       // Save to database
       await saveAdditionalResultsToDB(results);
+
+      console.log('✅ Additional card analysis completed successfully');
       
     } catch (error) {
       console.error('Error running additional card analysis:', error);
