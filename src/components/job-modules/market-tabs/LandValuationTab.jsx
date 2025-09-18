@@ -991,7 +991,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (newSales.length > 0) {
-        debug('���� Found new sales to add:', newSales.length);
+        debug('������ Found new sales to add:', newSales.length);
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
           const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
@@ -1094,9 +1094,9 @@ const getPricePerUnit = useCallback((price, size) => {
       let pricePerUnit;
       if (valuationMode === 'ff') {
         const frontage = parseFloat(prop.asset_lot_frontage) || 0;
-        pricePerUnit = getPricePerUnit(prop.sales_price, frontage);
+        pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, frontage);
       } else {
-        pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+        pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, acres);
       }
       // Ensure whole numbers for unit rates
       const roundedUnitPrice = Math.round(pricePerUnit);
@@ -1335,7 +1335,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (hasRestrictedClass) {
-        debug(`��� Excluding package ${sale.property_block}/${sale.property_lot} - contains restricted property class`);
+        debug(`🚫 Excluding package ${sale.property_block}/${sale.property_lot} - contains restricted property class`);
         return false;
       }
 
