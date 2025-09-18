@@ -1883,8 +1883,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       console.log('✅ Setting additional card analysis results:', results);
       setAdditionalResults(results);
 
-      // Save to database
-      saveAdditionalResultsToDB(results);
 
       console.log('��� Additional card analysis completed successfully');
       
