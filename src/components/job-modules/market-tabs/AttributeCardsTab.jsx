@@ -2022,21 +2022,21 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         const allWithoutAvgSFLA = allWithoutCardsGroups.length > 0 ? allWithoutTotalSFLA / allWithoutCardsGroups.length : null;
         const allWithoutAvgYearBuilt = allWithoutYearBuiltCount > 0 ? allWithoutYearBuiltSum / allWithoutYearBuiltCount : null;
 
-        // Calculate adjustments
+        // Calculate adjustments - Using "Without Cards" as baseline
         let flatAdj = null;
         let pctAdj = null;
         let jimAdjusted = null;
 
-        if (withAvgNormTime !== null && withoutAvgNormTime !== null && withoutAvgNormTime > 0) {
-          // Jim's size normalization formula: Adjust "without cards" value to "with cards" size
+        if (withAvgNormTime !== null && withoutAvgNormTime !== null && withAvgNormTime > 0) {
+          // Jim's size normalization formula: Adjust "with cards" value to "without cards" size (baseline)
           if (allWithAvgSFLA && allWithoutAvgSFLA && allWithAvgSFLA > 0 && allWithoutAvgSFLA > 0) {
-            jimAdjusted = sizeNormalize(withoutAvgNormTime, allWithoutAvgSFLA, allWithAvgSFLA);
+            jimAdjusted = sizeNormalize(withAvgNormTime, allWithAvgSFLA, allWithoutAvgSFLA);
           } else {
-            jimAdjusted = withoutAvgNormTime;
+            jimAdjusted = withAvgNormTime;
           }
 
-          flatAdj = Math.round(withAvgNormTime - jimAdjusted);
-          pctAdj = jimAdjusted > 0 ? ((withAvgNormTime - jimAdjusted) / jimAdjusted) * 100 : 0;
+          flatAdj = Math.round(jimAdjusted - withoutAvgNormTime);
+          pctAdj = withoutAvgNormTime > 0 ? ((jimAdjusted - withoutAvgNormTime) / withoutAvgNormTime) * 100 : 0;
         }
 
         results.byVCS[vcs] = {
@@ -2238,6 +2238,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           const withCardsProperties = data.with_cards_properties || [];
           const withoutCardsProperties = data.without_cards_properties || [];
 
+          // Calculate sales-only averages for the summary table
+          const withAvgSFLA = withCardsProperties.length > 0 ?
+            withCardsProperties.reduce((sum, p) => sum + p.total_sfla, 0) / withCardsProperties.length : null;
+
+          const withoutAvgSFLA = withoutCardsProperties.length > 0 ?
+            withoutCardsProperties.reduce((sum, p) => sum + p.sfla, 0) / withoutCardsProperties.length : null;
+
+          const withValidYears = withCardsProperties.filter(p => p.avg_year_built);
+          const withoutValidYears = withoutCardsProperties.filter(p => p.year_built);
+
           return (
             <div key={vcs} style={{ marginBottom: '15px', border: '1px solid #E5E7EB', borderRadius: '6px' }}>
               {/* VCS Header Row */}
@@ -2294,55 +2304,80 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
                         <tr style={{ backgroundColor: '#F3F4F6' }}>
-                          <th style={{ padding: '6px 8px', textAlign: 'left', fontSize: '11px', fontWeight: '600' }}>Type</th>
-                          <th style={{ padding: '6px 8px', textAlign: 'center', fontSize: '11px', fontWeight: '600' }}>Count</th>
-                          <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg SFLA</th>
-                          <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Year</th>
-                          <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Value</th>
-                          <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Adjusted</th>
-                          <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Impact</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'left', fontSize: '10px', fontWeight: '600' }}>Type</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'center', fontSize: '10px', fontWeight: '600' }}>Count(all)</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Avg SFLA(all)</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Avg YearBuilt(all)</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'center', fontSize: '10px', fontWeight: '600' }}>Count(sales)</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Avg SFLA(sales)</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Avg Year Built(sales)</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Adjusted</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Impact $</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Impact %</th>
                         </tr>
                       </thead>
                       <tbody>
-                        <tr style={{ backgroundColor: '#F0FDF4' }}>
-                          <td style={{ padding: '6px 8px', fontSize: '12px', fontWeight: '500', color: '#059669' }}>With Cards</td>
-                          <td style={{ padding: '6px 8px', textAlign: 'center', fontSize: '12px' }}>{data.with.n}</td>
-                          <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
+                        <tr style={{ backgroundColor: '#F8FAFC' }}>
+                          <td style={{ padding: '4px 6px', fontSize: '11px', fontWeight: '500', color: '#1E293B' }}>With Cards</td>
+                          <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>{data.with.n}</td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
                             {data.with.avg_sfla ? data.with.avg_sfla.toLocaleString() : '-'}
                           </td>
-                          <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
                             {data.with.avg_year_built || '-'}
                           </td>
-                          <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
-                            {data.with.avg_norm_time ? formatCurrency(data.with.avg_norm_time) : '-'}
+                          <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>
+                            {withCardsProperties.length}
                           </td>
-                          <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>-</td>
-                          <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>Baseline</td>
-                        </tr>
-                        <tr style={{ backgroundColor: '#FEF2F2' }}>
-                          <td style={{ padding: '6px 8px', fontSize: '12px', fontWeight: '500', color: '#DC2626' }}>Without Cards</td>
-                          <td style={{ padding: '6px 8px', textAlign: 'center', fontSize: '12px' }}>{data.without.n}</td>
-                          <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
-                            {data.without.avg_sfla ? data.without.avg_sfla.toLocaleString() : '-'}
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                            {withAvgSFLA ? Math.round(withAvgSFLA).toLocaleString() : '-'}
                           </td>
-                          <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
-                            {data.without.avg_year_built || '-'}
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                            {data.with.avg_norm_time ? Math.round(withValidYears.reduce((sum, d) => sum + d.avg_year_built, 0) / withValidYears.length) || '-' : '-'}
                           </td>
-                          <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
-                            {data.without.avg_norm_time ? formatCurrency(data.without.avg_norm_time) : '-'}
-                          </td>
-                          <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px', fontWeight: '500' }}>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px', fontWeight: '500' }}>
                             {data.adjusted ? formatCurrency(data.adjusted) : '-'}
                           </td>
                           <td style={{
-                            padding: '6px 8px',
+                            padding: '4px 6px',
                             textAlign: 'right',
-                            fontSize: '12px',
+                            fontSize: '11px',
                             fontWeight: '500',
-                            color: data.pct_adj > 0 ? '#059669' : data.pct_adj < 0 ? '#DC2626' : '#6B7280'
+                            color: data.flat_adj > 0 ? '#059669' : data.flat_adj < 0 ? '#B45309' : '#6B7280'
+                          }}>
+                            {data.flat_adj ? formatCurrency(data.flat_adj) : '-'}
+                          </td>
+                          <td style={{
+                            padding: '4px 6px',
+                            textAlign: 'right',
+                            fontSize: '11px',
+                            fontWeight: '500',
+                            color: data.pct_adj > 0 ? '#059669' : data.pct_adj < 0 ? '#B45309' : '#6B7280'
                           }}>
                             {data.pct_adj ? `${data.pct_adj.toFixed(1)}%` : '-'}
                           </td>
+                        </tr>
+                        <tr style={{ backgroundColor: '#F0F9FF' }}>
+                          <td style={{ padding: '4px 6px', fontSize: '11px', fontWeight: '500', color: '#1E40AF' }}>Without Cards (Baseline)</td>
+                          <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>{data.without.n}</td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                            {data.without.avg_sfla ? data.without.avg_sfla.toLocaleString() : '-'}
+                          </td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                            {data.without.avg_year_built || '-'}
+                          </td>
+                          <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>
+                            {withoutCardsProperties.length}
+                          </td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                            {withoutAvgSFLA ? Math.round(withoutAvgSFLA).toLocaleString() : '-'}
+                          </td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                            {data.without.avg_norm_time ? Math.round(withoutValidYears.reduce((sum, d) => sum + d.year_built, 0) / withoutValidYears.length) || '-' : '-'}
+                          </td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>Baseline</td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>-</td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>-</td>
                         </tr>
                       </tbody>
                     </table>
