@@ -312,7 +312,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           }
 
           // Use the InfoBy configuration that the user already defined in the jobs table
-          const infoByCodes = jobData?.info_by_config || {};
           const entryInfoByCodes = Array.isArray(infoByCodes.entry) ? infoByCodes.entry : [];
 
           if (entryInfoByCodes.length === 0) {
