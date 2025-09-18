@@ -1712,22 +1712,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       const getBasePropertyKey = (compositeKey) => {
         if (!compositeKey) return null;
 
-        if (vendorType === 'BRT') {
-          // BRT format: YEAR+CCDD-BLOCK-LOT_QUALIFIER-CARD-LOCATION
-          // Remove the CARD part (second to last segment)
-          const parts = compositeKey.split('-');
-          if (parts.length >= 4) {
-            // Remove card (second to last) and rebuild: YEAR+CCDD-BLOCK-LOT_QUALIFIER-LOCATION
-            return parts.slice(0, -2).join('-') + '-' + parts[parts.length - 1];
-          }
-        } else if (vendorType === 'Microsystems') {
-          // Microsystems format: YEAR+CCDD-Block-Lot_Qual-Bldg-Location
-          // Remove the Bldg part (second to last segment)
-          const parts = compositeKey.split('-');
-          if (parts.length >= 4) {
-            // Remove Bldg (second to last) and rebuild: YEAR+CCDD-Block-Lot_Qual-Location
-            return parts.slice(0, -2).join('-') + '-' + parts[parts.length - 1];
-          }
+        // Use the same logic as package sale detection to group by base location
+        const parts = compositeKey.split('-');
+        if (parts.length >= 4) {
+          // Remove card (second to last segment) and rebuild
+          return parts.slice(0, -2).join('-') + '-' + parts[parts.length - 1];
         }
         return compositeKey; // fallback
       };
@@ -1738,13 +1727,31 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         if (!addlCard || addlCard.trim() === '') return false;
 
         if (vendorType === 'BRT') {
-          // BRT: numeric, anything other than card 1
+          // BRT: numeric, anything other than card 1 or M
           const cardNum = addlCard.toString().trim();
-          return cardNum !== '1' && cardNum !== 'M' && cardNum !== 'NONE';
+          return cardNum !== '1' && cardNum !== 'M' && cardNum !== 'NONE' && cardNum !== '';
         } else if (vendorType === 'Microsystems') {
           // Microsystems: alphabetical, cards A through Z, M is reserved for Main
           const cardCode = addlCard.toString().trim().toUpperCase();
-          return cardCode !== 'M' && cardCode !== 'MAIN' && cardCode.match(/^[A-Z]$/);
+          return cardCode !== 'M' && cardCode !== 'MAIN' && cardCode !== '' && cardCode.match(/^[A-Z]$/);
+        }
+        return false;
+      };
+
+      // Helper to determine if property group contains additional cards
+      const groupHasAdditionalCards = (group) => {
+        // Check if any card in this group is an additional card
+        const cardCodes = group.cards.map(c => (c.card_code || '').toString().trim().toUpperCase());
+
+        if (vendorType === 'BRT') {
+          // For BRT: if any numeric card > 1, it has additional cards
+          return cardCodes.some(code => {
+            const num = parseInt(code);
+            return !isNaN(num) && num > 1;
+          });
+        } else if (vendorType === 'Microsystems') {
+          // For Microsystems: if any card is A-Z (not M), it has additional cards
+          return cardCodes.some(code => code.match(/^[A-Z]$/) && code !== 'M');
         }
         return false;
       };
