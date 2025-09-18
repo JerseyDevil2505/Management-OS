@@ -2636,7 +2636,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       if (hasSalesData) {
         factors[vcs][locationAnalysis].withFactor.push({
           id: prop.id,
-          price: prop.sales_price,
+          price: prop.values_norm_time || prop.sales_price,
           normalizedTime: prop.values_norm_time || prop.sales_price,
           normalizedSize: prop.values_norm_size || prop.sales_price,
           acres: parseFloat(calculateAcreage(prop)),
@@ -2661,7 +2661,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         prop.sales_price > 0
       ).map(prop => ({
         id: prop.id,
-        price: prop.sales_price,
+        price: prop.values_norm_time || prop.sales_price,
         normalizedTime: prop.values_norm_time || prop.sales_price,
         normalizedSize: prop.values_norm_size || prop.sales_price,
         acres: parseFloat(calculateAcreage(prop)),
