@@ -1697,75 +1697,128 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         return marketData?.values_norm_time > 0;
       });
 
-      // Build lookup with raw data
-      const lookup = [];
-      const chunkSize = 100;
-      
-      for (let i = 0; i < validProps.length; i += chunkSize) {
-        const chunk = validProps.slice(i, i + chunkSize);
-        const rawDataPromises = chunk.map(async p => {
-          const raw = await propertyService.getRawDataForProperty(p.job_id, p.property_composite_key);
-          return { p, raw };
-        });
-        
-        const results = await Promise.all(rawDataPromises);
-        lookup.push(...results);
-      }
+      console.log(`Starting additional card analysis for ${validProps.length} properties with sales data`);
 
-      // Detect additional cards based on vendor type
-      const hasAdditionalCard = (prop, raw) => {
+      // Helper function to extract base property key (without card suffix)
+      const getBasePropertyKey = (compositeKey) => {
+        if (!compositeKey) return null;
+
         if (vendorType === 'BRT') {
-          // BRT: Check property_addl_card field
-          const addlCard = prop.property_addl_card;
-          if (addlCard && addlCard !== 'M' && addlCard !== '1' && addlCard !== 'NONE' && addlCard.trim() !== '') {
-            return true;
+          // BRT format: YEAR+CCDD-BLOCK-LOT_QUALIFIER-CARD-LOCATION
+          // Remove the CARD part (second to last segment)
+          const parts = compositeKey.split('-');
+          if (parts.length >= 4) {
+            // Remove card (second to last) and rebuild: YEAR+CCDD-BLOCK-LOT_QUALIFIER-LOCATION
+            return parts.slice(0, -2).join('-') + '-' + parts[parts.length - 1];
           }
         } else if (vendorType === 'Microsystems') {
-          // Microsystems: Check for multiple building indicators
-          if (raw) {
-            // Check for building 2, building 3, etc. in raw data
-            const hasBuilding2 = raw['Building 2'] || raw['Building2'] || raw['BLDG2'];
-            const hasBuilding3 = raw['Building 3'] || raw['Building3'] || raw['BLDG3'];
-            if (hasBuilding2 || hasBuilding3) return true;
-            
-            // Check for additional card indicator
-            const addlCard = raw['Additional Card'] || raw['ADDL_CARD'] || raw['AddlCard'];
-            if (addlCard && addlCard !== 'N' && addlCard !== 'NO' && addlCard.trim() !== '') {
-              return true;
-            }
+          // Microsystems format: YEAR+CCDD-Block-Lot_Qual-Bldg-Location
+          // Remove the Bldg part (second to last segment)
+          const parts = compositeKey.split('-');
+          if (parts.length >= 4) {
+            // Remove Bldg (second to last) and rebuild: YEAR+CCDD-Block-Lot_Qual-Location
+            return parts.slice(0, -2).join('-') + '-' + parts[parts.length - 1];
           }
+        }
+        return compositeKey; // fallback
+      };
+
+      // Helper function to check if property has additional cards
+      const hasAdditionalCard = (prop) => {
+        const addlCard = prop.property_addl_card;
+        if (!addlCard || addlCard.trim() === '') return false;
+
+        if (vendorType === 'BRT') {
+          // BRT: numeric, anything other than card 1
+          const cardNum = addlCard.toString().trim();
+          return cardNum !== '1' && cardNum !== 'M' && cardNum !== 'NONE';
+        } else if (vendorType === 'Microsystems') {
+          // Microsystems: alphabetical, cards A through Z, M is reserved for Main
+          const cardCode = addlCard.toString().trim().toUpperCase();
+          return cardCode !== 'M' && cardCode !== 'MAIN' && cardCode.match(/^[A-Z]$/);
         }
         return false;
       };
 
-      // Group by VCS
-      const byVCS = {};
-      
-      lookup.forEach(({ p, raw }) => {
-        const vcs = p.new_vcs || p.property_vcs || 'UNKNOWN';
-        const hasCard = hasAdditionalCard(p, raw);
-        
+      // Group properties by base key to handle multiple cards for same property
+      const propertyGroups = new Map();
+
+      validProps.forEach(p => {
+        const baseKey = getBasePropertyKey(p.property_composite_key);
+        if (!baseKey) return;
+
         const marketData = propertyMarketData.find(
           m => m.property_composite_key === p.property_composite_key
         );
-        
-        if (marketData?.values_norm_time > 0) {
-          if (!byVCS[vcs]) {
-            byVCS[vcs] = { with_card: [], without_card: [] };
-          }
-          
-          const propData = {
-            ...p,
-            values_norm_time: marketData.values_norm_time,
-            sfla: p.sfla || p.property_sfla || 0,
-            year_built: p.year_built || p.property_year_built || null
-          };
-          
-          if (hasCard) {
-            byVCS[vcs].with_card.push(propData);
-          } else {
-            byVCS[vcs].without_card.push(propData);
-          }
+
+        if (!marketData?.values_norm_time) return;
+
+        if (!propertyGroups.has(baseKey)) {
+          propertyGroups.set(baseKey, {
+            cards: [],
+            totalSfla: 0,
+            avgValue: 0,
+            avgYear: null,
+            vcs: p.new_vcs || p.property_vcs || 'UNKNOWN',
+            hasAdditionalCards: false
+          });
+        }
+
+        const group = propertyGroups.get(baseKey);
+
+        // Add this card to the group
+        group.cards.push({
+          ...p,
+          values_norm_time: marketData.values_norm_time,
+          sfla: p.asset_sfla || p.sfla || p.property_sfla || 0,
+          year_built: p.asset_year_built || p.year_built || p.property_year_built || null,
+          card_code: p.property_addl_card
+        });
+
+        // Update group totals
+        group.totalSfla += (p.asset_sfla || p.sfla || p.property_sfla || 0);
+
+        // Check if any card in this group is additional
+        if (hasAdditionalCard(p)) {
+          group.hasAdditionalCards = true;
+        }
+      });
+
+      console.log(`Grouped ${validProps.length} properties into ${propertyGroups.size} unique property groups`);
+
+      // Calculate averages for each group and categorize by VCS
+      const byVCS = {};
+
+      propertyGroups.forEach((group, baseKey) => {
+        // Calculate group averages
+        const totalValue = group.cards.reduce((sum, card) => sum + card.values_norm_time, 0);
+        group.avgValue = Math.round(totalValue / group.cards.length);
+
+        const validYears = group.cards.filter(card => card.year_built && card.year_built > 1900 && card.year_built < 2030);
+        group.avgYear = validYears.length > 0 ?
+          Math.round(validYears.reduce((sum, card) => sum + card.year_built, 0) / validYears.length) : null;
+
+        // Initialize VCS group if needed
+        if (!byVCS[group.vcs]) {
+          byVCS[group.vcs] = { with_cards: [], without_cards: [] };
+        }
+
+        // Create summary data for this property group
+        const groupData = {
+          baseKey,
+          cardCount: group.cards.length,
+          cards: group.cards.map(c => c.card_code || 'M').join(', '),
+          totalSfla: group.totalSfla,
+          avgValue: group.avgValue,
+          avgYear: group.avgYear,
+          avgAge: group.avgYear ? new Date().getFullYear() - group.avgYear : null
+        };
+
+        // Categorize based on whether it has additional cards
+        if (group.hasAdditionalCards) {
+          byVCS[group.vcs].with_cards.push(groupData);
+        } else {
+          byVCS[group.vcs].without_cards.push(groupData);
         }
       });
 
