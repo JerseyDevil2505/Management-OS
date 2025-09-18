@@ -450,7 +450,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     if (!jobData?.id || properties.length === 0 || propertyMarketData.length === 0) return;
 
     console.log('Auto-running additional card analysis on mount...');
-    runAdditionalCardAnalysis();
+    runAdditionalCardsAnalysis();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id, properties.length, propertyMarketData.length]);
   // ============ BUILD CONDITION CASCADE TABLE ============
@@ -1695,7 +1695,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     );
   };
   // ============ ADDITIONAL CARDS ANALYSIS ============
-  const runAdditionalCardAnalysis = async () => {
+  const runAdditionalCardsAnalysis = () => {
     setAdditionalWorking(true);
     try {
       // Get properties with normalized values
@@ -1958,7 +1958,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       setAdditionalResults(results);
 
       // Save to database
-      await saveAdditionalResultsToDB(results);
+      saveAdditionalResultsToDB(results);
 
       console.log('✅ Additional card analysis completed successfully');
       
@@ -2096,7 +2096,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <button
-              onClick={runAdditionalCardAnalysis}
+              onClick={runAdditionalCardsAnalysis}
               disabled={additionalWorking}
               style={{
                 padding: '6px 16px',
