@@ -1926,26 +1926,17 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         locationGroups.get(baseKey).push(prop);
       });
 
-      // Identify additional card packages and create pairs
-      packageGroups.forEach((packageProps, packageKey) => {
-        if (packageProps.length <= 1) return; // Skip single property sales
+      // Identify properties with additional cards and create pairs
+      locationGroups.forEach((locationProps, locationKey) => {
+        if (locationProps.length <= 1) return; // Skip single card properties
 
-        // Use package identification logic from supabaseClient
-        const vcs = packageProps[0].new_vcs || packageProps[0].property_vcs;
+        const vcs = locationProps[0].new_vcs || locationProps[0].property_vcs;
         if (!vcs) return;
 
-        // Check if this is an additional card package
-        const baseKeys = new Set();
+        // Check if this location has additional cards
         const cardIds = new Set();
-
-        packageProps.forEach(p => {
-          const block = (p.property_block || '').toString().trim();
-          const lot = (p.property_lot || '').toString().trim();
-          const qual = (p.property_qualifier || '').toString().trim();
-          const baseKey = `${block}-${lot}-${qual}`;
-          baseKeys.add(baseKey);
-
-          let card = p.property_card || p.property_addl_card || null;
+        locationProps.forEach(p => {
+          let card = p.property_addl_card || p.additional_card || p.property_card || null;
           if (!card && p.property_composite_key) {
             const parts = p.property_composite_key.split('-').map(s => s.trim());
             card = parts[4] || parts[3] || null;
@@ -1953,63 +1944,68 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           if (card) cardIds.add(String(card).trim().toUpperCase());
         });
 
-        // Check if it's an additional card package (same base property, different cards)
-        let isAdditionalCard = false;
-        if (baseKeys.size === 1 && cardIds.size > 1) {
-          if (vendorType === 'BRT' || vendorType === 'brt') {
-            const numericCards = Array.from(cardIds).map(c => parseInt(c)).filter(n => !isNaN(n));
-            if (numericCards.length > 1 && numericCards.some(n => n > 1)) {
-              isAdditionalCard = true;
-            }
-          } else {
-            const nonMain = Array.from(cardIds).filter(c => c !== 'M');
-            if (nonMain.length > 0 && cardIds.size > 1) {
-              isAdditionalCard = true;
-            }
-          }
+        // Check if it has additional cards using vendor logic
+        let hasAdditionalCards = false;
+        if (vendorType === 'BRT' || vendorType === 'brt') {
+          const numericCards = Array.from(cardIds).map(c => parseInt(c)).filter(n => !isNaN(n));
+          hasAdditionalCards = numericCards.some(n => n > 1);
+        } else {
+          const nonMain = Array.from(cardIds).filter(c => c !== 'M' && c !== 'MAIN');
+          hasAdditionalCards = nonMain.length > 0;
         }
 
-        if (isAdditionalCard) {
+        if (hasAdditionalCards) {
+          console.log(`Found additional cards at ${locationKey}:`, Array.from(cardIds));
+
           // Calculate package metrics
-          const totalSFLA = packageProps.reduce((sum, p) => sum + (parseInt(p.asset_sfla) || 0), 0);
-          const validYears = packageProps.filter(p => {
+          const totalSFLA = locationProps.reduce((sum, p) => sum + (parseInt(p.asset_sfla) || 0), 0);
+          const validYears = locationProps.filter(p => {
             const year = parseInt(p.asset_year_built);
             return year && year > 1800 && year <= new Date().getFullYear();
           });
           const avgYearBuilt = validYears.length > 0 ?
             Math.round(validYears.reduce((sum, p) => sum + parseInt(p.asset_year_built), 0) / validYears.length) : null;
-          const packagePrice = Math.max(...packageProps.map(p => p.values_norm_time || 0));
 
-          // Find baseline comparisons (properties without additional cards in same VCS)
-          const baselineComparisons = validPropsForAnalysis.filter(p => {
+          // Get sales price if available (prioritize the latest or highest)
+          const propsWithSales = locationProps.filter(p => p.values_norm_time && p.values_norm_time > 0);
+          const packagePrice = propsWithSales.length > 0 ?
+            Math.max(...propsWithSales.map(p => p.values_norm_time)) : null;
+
+          // Find baseline comparisons (ALL properties without additional cards in same VCS)
+          const baselineComparisons = properties.filter(p => {
             if ((p.new_vcs || p.property_vcs) !== vcs) return false;
-            if (!p.values_norm_time || p.values_norm_time <= 0) return false;
 
-            // Check if this property has additional cards
-            const card = p.property_addl_card || p.additional_card || '';
+            // Check if this property does NOT have additional cards
+            const card = p.property_addl_card || p.additional_card || p.property_card || '';
+            let isMainCardOnly = false;
+
             if (vendorType === 'BRT' || vendorType === 'brt') {
               const cardNum = parseInt(card);
-              return isNaN(cardNum) || cardNum <= 1; // Main card only
+              isMainCardOnly = isNaN(cardNum) || cardNum <= 1; // Main card or no card
             } else {
               const cardUpper = card.toString().trim().toUpperCase();
-              return !cardUpper || cardUpper === 'M' || cardUpper === 'MAIN'; // Main card only
+              isMainCardOnly = !cardUpper || cardUpper === 'M' || cardUpper === 'MAIN'; // Main card only
             }
-          }).map(p => ({
+
+            return isMainCardOnly;
+          }).filter(p => p.values_norm_time && p.values_norm_time > 0) // Only include baseline props with sales for comparison
+          .map(p => ({
             sfla: parseInt(p.asset_sfla) || 0,
             year_built: parseInt(p.asset_year_built) || null,
             norm_time: p.values_norm_time
           }));
 
           packagePairs.push({
-            packageKey,
+            locationKey,
             withCardsPackage: {
-              address: packageProps[0].property_location,
-              block: packageProps[0].property_block,
-              lot: packageProps[0].property_lot,
+              address: locationProps[0].property_location,
+              block: locationProps[0].property_block,
+              lot: locationProps[0].property_lot,
               vcs: vcs,
               total_sfla: totalSFLA,
               avg_year_built: avgYearBuilt,
-              norm_time: packagePrice
+              norm_time: packagePrice, // May be null if no sales
+              has_sales: packagePrice !== null
             },
             baselineComparisons: baselineComparisons
           });
