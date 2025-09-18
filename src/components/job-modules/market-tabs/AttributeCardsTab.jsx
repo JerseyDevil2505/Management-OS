@@ -2248,6 +2248,15 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           const withValidYears = withCardsProperties.filter(p => p.avg_year_built);
           const withoutValidYears = withoutCardsProperties.filter(p => p.year_built);
 
+          // Debug logging to verify data
+          console.log(`VCS ${vcs} Debug:`, {
+            withCardsProperties: withCardsProperties.length,
+            withoutCardsProperties: withoutCardsProperties.length,
+            withoutAvgSFLA,
+            dataWithoutAvgNormTime: data.without.avg_norm_time,
+            dataWithoutN: data.without.n
+          });
+
           return (
             <div key={vcs} style={{ marginBottom: '15px', border: '1px solid #E5E7EB', borderRadius: '6px' }}>
               {/* VCS Header Row */}
