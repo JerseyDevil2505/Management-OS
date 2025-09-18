@@ -1872,8 +1872,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         generated_at: new Date().toISOString()
       };
 
-      // Calculate averages and impacts for each VCS
-      Object.entries(byVCS).forEach(([vcs, data]) => {
+      // Calculate averages and impacts for each VCS (combine both impact data and all counts)
+      const allVCSKeys = new Set([...Object.keys(byVCS), ...Object.keys(allVCSCounts)]);
+
+      allVCSKeys.forEach(vcs => {
+        const data = byVCS[vcs] || { with_cards: [], without_cards: [] };
         const withAvg = data.with_cards.length > 0
           ? data.with_cards.reduce((sum, val) => sum + val, 0) / data.with_cards.length
           : null;
