@@ -54,12 +54,20 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [active, setActive] = useState('condition');
 
   // ============ CONDITION ANALYSIS STATE ============
-  const [typeUseFilter, setTypeUseFilter] = useState('1'); // Default to Single Family
-  const [useInteriorInspections, setUseInteriorInspections] = useState(false);
+  const [typeUseFilter, setTypeUseFilter] = useState(() => {
+    return localStorage.getItem(`attr-cards-type-filter-${jobData?.id}`) || '1';
+  });
+  const [useInteriorInspections, setUseInteriorInspections] = useState(() => {
+    return localStorage.getItem(`attr-cards-interior-inspections-${jobData?.id}`) === 'true';
+  });
   const [expandedExteriorVCS, setExpandedExteriorVCS] = useState(new Set()); // Track which exterior VCS sections are expanded
   const [expandedInteriorVCS, setExpandedInteriorVCS] = useState(new Set()); // Track which interior VCS sections are expanded
-  const [manualExteriorBaseline, setManualExteriorBaseline] = useState(''); // Manual baseline selection for exterior
-  const [manualInteriorBaseline, setManualInteriorBaseline] = useState(''); // Manual baseline selection for interior
+  const [manualExteriorBaseline, setManualExteriorBaseline] = useState(() => {
+    return localStorage.getItem(`attr-cards-exterior-baseline-${jobData?.id}`) || '';
+  });
+  const [manualInteriorBaseline, setManualInteriorBaseline] = useState(() => {
+    return localStorage.getItem(`attr-cards-interior-baseline-${jobData?.id}`) || '';
+  });
   const [conditionData, setConditionData] = useState({
     exterior: {},
     interior: {},
@@ -600,7 +608,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             border: '1px solid #BFDBFE'
           }}>
             <h4 style={{ margin: '0 0 15px 0', fontSize: '14px', fontWeight: '600', color: '#1E40AF' }}>
-              {type} Condition Summary - Town-wide Average Impacts
+              {type} Condition Summary
             </h4>
             <div style={{
               border: '1px solid #E5E7EB',
@@ -688,14 +696,17 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           };
         }
 
-        // Apply logic filtering for illogical adjustments
+        // Apply NULL policy for illogical adjustments (both exterior and interior)
         const desc = cond.description.toUpperCase();
-        const isGoodCondition = desc.includes('EXCELLENT') || desc.includes('GOOD') || desc.includes('SUPERIOR') || desc.includes('VERY GOOD');
-        const isPoorCondition = desc.includes('POOR') || desc.includes('FAIR') || desc.includes('UNSOUND') || desc.includes('VERY POOR') || desc.includes('DETERIORATED');
+        const isGoodCondition = desc.includes('EXCELLENT') || desc.includes('GOOD') || desc.includes('SUPERIOR') ||
+                               desc.includes('VERY GOOD') || desc.includes('MODERN') || code === 'G';
+        const isPoorCondition = desc.includes('POOR') || desc.includes('FAIR') || desc.includes('UNSOUND') ||
+                               desc.includes('VERY POOR') || desc.includes('DETERIORATED') ||
+                               desc.includes('BELOW AVERAGE') || desc.includes('DILAPIDATED') || code === 'P' || code === 'F';
 
         let adjustmentToUse = cond.adjustmentPct;
 
-        // Filter illogical adjustments
+        // Filter illogical adjustments - apply NULL policy
         if (isGoodCondition && cond.adjustmentPct < 0) {
           adjustmentToUse = null; // Good condition with negative adjustment = illogical
         } else if (isPoorCondition && cond.adjustmentPct > 0) {
