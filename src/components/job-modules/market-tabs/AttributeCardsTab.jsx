@@ -2504,6 +2504,91 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               </div>
             </div>
 
+            {/* VCS Analysis Summary Table */}
+            <div style={{
+              border: '1px solid #E5E7EB',
+              borderRadius: '6px',
+              overflow: 'auto',
+              marginBottom: '30px'
+            }}>
+              <div style={{
+                padding: '12px 15px',
+                backgroundColor: '#F9FAFB',
+                borderBottom: '1px solid #E5E7EB'
+              }}>
+                <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0' }}>
+                  Impact Analysis by VCS (Using Normalized Time Values)
+                </h4>
+              </div>
+
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F3F4F6' }}>
+                    <th style={{ padding: '6px 8px', textAlign: 'left', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>VCS</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'center', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>With Cards (n)</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Sum SFLA</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Year Built</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Avg Norm Time</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'center', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Without Cards (n)</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Avg SFLA</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Year Built</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Avg Norm Time</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Adjusted</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Impact ($)</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>Impact (%)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(additionalResults.byVCS || {})
+                    .filter(([vcs, data]) => data.with.n > 0) // Only show VCS with additional cards
+                    .map(([vcs, data], idx) => (
+                    <tr key={vcs} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                      <td style={{ padding: '6px 8px', fontSize: '12px', fontWeight: '500' }}>{vcs}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'center', fontSize: '12px' }}>{data.with.n}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
+                        {data.with.total_sfla ? data.with.total_sfla.toLocaleString() : '-'}
+                      </td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
+                        {data.with.avg_year_built || '-'}
+                      </td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
+                        {data.with.avg_norm_time ? formatCurrency(data.with.avg_norm_time) : '-'}
+                      </td>
+                      <td style={{ padding: '6px 8px', textAlign: 'center', fontSize: '12px' }}>{data.without.n}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
+                        {data.without.avg_sfla ? data.without.avg_sfla.toLocaleString() : '-'}
+                      </td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
+                        {data.without.avg_year_built || '-'}
+                      </td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
+                        {data.without.avg_norm_time ? formatCurrency(data.without.avg_norm_time) : '-'}
+                      </td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px', fontWeight: '500' }}>
+                        {data.adjusted ? formatCurrency(data.adjusted) : '-'}
+                      </td>
+                      <td style={{
+                        padding: '6px 8px',
+                        textAlign: 'right',
+                        fontSize: '12px',
+                        color: data.flat_adj > 0 ? '#059669' : data.flat_adj < 0 ? '#DC2626' : '#6B7280'
+                      }}>
+                        {data.flat_adj ? formatCurrency(data.flat_adj) : '-'}
+                      </td>
+                      <td style={{
+                        padding: '6px 8px',
+                        textAlign: 'right',
+                        fontSize: '12px',
+                        color: data.pct_adj > 0 ? '#059669' : data.pct_adj < 0 ? '#DC2626' : '#6B7280'
+                      }}>
+                        {data.pct_adj ? `${data.pct_adj.toFixed(1)}%` : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
             {/* VCS Analysis with Expandable Sections */}
             <div style={{ marginBottom: '30px' }}>
               <div style={{
@@ -2521,12 +2606,17 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                   margin: '0',
                   color: '#1E40AF'
                 }}>
-                  VCS Analysis - Property Comparison
+                  VCS Analysis - Property Details
                 </h3>
 
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                   <button
-                    onClick={() => setExpandedAdditionalVCS(new Set(Object.keys(additionalResults.byVCS || {})))}
+                    onClick={() => {
+                      const vcsWithCards = Object.keys(additionalResults.byVCS || {}).filter(vcs =>
+                        (additionalResults.byVCS[vcs]?.with?.n || 0) > 0
+                      );
+                      setExpandedAdditionalVCS(new Set(vcsWithCards));
+                    }}
                     style={{
                       padding: '6px 12px',
                       backgroundColor: '#10B981',
