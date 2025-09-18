@@ -2034,7 +2034,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                     Properties with Additional Cards
                   </div>
                   <div style={{ fontSize: '24px', fontWeight: '700', color: '#92400E' }}>
-                    {additionalResults.overall.with.n}
+                    {additionalResults.summary?.propertiesWithCards || 0}
                   </div>
                 </div>
                 <div>
@@ -2042,7 +2042,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                     Properties without Additional Cards
                   </div>
                   <div style={{ fontSize: '24px', fontWeight: '700', color: '#92400E' }}>
-                    {additionalResults.overall.without.n}
+                    {additionalResults.summary?.propertiesWithoutCards || 0}
                   </div>
                 </div>
                 <div>
