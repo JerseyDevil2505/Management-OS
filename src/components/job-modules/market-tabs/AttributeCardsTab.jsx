@@ -1927,7 +1927,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           .slice(0, 5)
           .map(p => ({
             address: p.property_location,
-            card: p.property_addl_card,
+            card: p.additional_card,
             composite_key: p.property_composite_key
           }))
       );
