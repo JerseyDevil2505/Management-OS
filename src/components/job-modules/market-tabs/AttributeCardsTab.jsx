@@ -2379,7 +2379,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                             {data.without.avg_norm_time ? formatCurrency(data.without.avg_norm_time) : '-'}
                           </td>
                           <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>-</td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>Baseline</td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>-</td>
                         </tr>
                       </tbody>
                     </table>
