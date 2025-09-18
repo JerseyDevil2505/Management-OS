@@ -2376,13 +2376,19 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                             {data.without.avg_year_built || '-'}
                           </td>
                           <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>
-                            {withoutCardsProperties.length}
+                            {data.without_cards ? data.without_cards.length : (withoutCardsProperties.length || 0)}
                           </td>
                           <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
-                            {withoutAvgSFLA ? Math.round(withoutAvgSFLA).toLocaleString() : '-'}
+                            {data.without_cards && data.without_cards.length > 0 ?
+                              Math.round(data.without_cards.reduce((sum, p) => sum + p.sfla, 0) / data.without_cards.length).toLocaleString() :
+                              (withoutAvgSFLA ? Math.round(withoutAvgSFLA).toLocaleString() : '-')
+                            }
                           </td>
                           <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
-                            {withoutValidYears.length > 0 ? Math.round(withoutValidYears.reduce((sum, p) => sum + p.year_built, 0) / withoutValidYears.length) : '-'}
+                            {data.without_cards && data.without_cards.length > 0 ?
+                              Math.round(data.without_cards.filter(p => p.year_built).reduce((sum, p) => sum + p.year_built, 0) / data.without_cards.filter(p => p.year_built).length) || '-' :
+                              (withoutValidYears.length > 0 ? Math.round(withoutValidYears.reduce((sum, p) => sum + p.year_built, 0) / withoutValidYears.length) : '-')
+                            }
                           </td>
                           <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
                             {data.without.avg_norm_time ? formatCurrency(data.without.avg_norm_time) : '-'}
