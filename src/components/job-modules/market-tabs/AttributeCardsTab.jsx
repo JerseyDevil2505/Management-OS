@@ -299,25 +299,37 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       // Load inspection data if filtering by interior inspections
       let inspectionMap = new Map();
       if (useInteriorInspections) {
-        const { data: inspections, error: inspError } = await supabase
-          .from('inspection_data')
-          .select('property_composite_key, entry_type, inspection_info_by')
-          .eq('job_id', jobData.id);
+        try {
+          const { data: inspections, error: inspError } = await supabase
+            .from('inspection_data')
+            .select('property_composite_key, entry_type, inspection_info_by')
+            .eq('job_id', jobData.id);
 
-        if (inspError) throw inspError;
+          if (inspError) {
+            console.error('Inspection data query error:', inspError);
+            throw new Error(`Failed to load inspection data: ${inspError.message || inspError}`);
+          }
 
-        // Check InfoBy codes from the job's parsed definitions to identify entry vs estimation
-        const infoByCodes = parsedCodeDefinitions?.infoby_category_config || {};
-        const entryInfoByCodes = infoByCodes.entry || [];
-        
-        inspectionMap = new Map(
-          (inspections || []).filter(i => {
-            // Entry type explicitly marked
-            if (i.entry_type === 'entry') return true;
-            // Or InfoBy code indicates actual entry (not estimation/refusal)
-            return entryInfoByCodes.includes(i.inspection_info_by);
-          }).map(i => [i.property_composite_key, true])
-        );
+          // Check InfoBy codes from the job's parsed definitions to identify entry vs estimation
+          const infoByCodes = parsedCodeDefinitions?.infoby_category_config || {};
+          const entryInfoByCodes = Array.isArray(infoByCodes.entry) ? infoByCodes.entry : [];
+
+          console.log('Entry InfoBy codes:', entryInfoByCodes);
+
+          inspectionMap = new Map(
+            (inspections || []).filter(i => {
+              // Entry type explicitly marked
+              if (i.entry_type === 'entry') return true;
+              // Or InfoBy code indicates actual entry (not estimation/refusal)
+              return entryInfoByCodes.length > 0 && entryInfoByCodes.includes(i.inspection_info_by);
+            }).map(i => [i.property_composite_key, true])
+          );
+
+          console.log(`Interior inspections filter: ${inspectionMap.size} properties have actual interior access`);
+        } catch (inspectionError) {
+          console.error('Error processing inspection data:', inspectionError);
+          throw new Error(`Inspection data processing failed: ${inspectionError.message || inspectionError}`);
+        }
       }
 
       // Filter properties by type/use
