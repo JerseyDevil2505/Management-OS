@@ -1923,7 +1923,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       console.log('Vendor Type:', vendorType);
       console.log('Total property groups found:', propertyGroups.size);
       console.log('Sample properties with addl cards:',
-        validProps.filter(p => p.property_addl_card && p.property_addl_card !== 'M' && p.property_addl_card !== '1')
+        validProps.filter(p => p.additional_card && p.additional_card !== 'M' && p.additional_card !== '1')
           .slice(0, 5)
           .map(p => ({
             address: p.property_location,
