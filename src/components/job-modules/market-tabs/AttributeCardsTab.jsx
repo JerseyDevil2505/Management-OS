@@ -1934,7 +1934,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       });
 
       // Log analysis summary
-      console.log('📊 Additional Card Analysis Summary:', {
+      console.log('��� Additional Card Analysis Summary:', {
         vendorType,
         totalProperties: results.summary.totalPropertiesAnalyzed,
         withCards: results.summary.propertiesWithCards,
@@ -2277,6 +2277,24 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* No Results Yet */}
+        {!additionalResults && !additionalWorking && (
+          <div style={{
+            padding: '40px',
+            textAlign: 'center',
+            backgroundColor: '#F9FAFB',
+            borderRadius: '6px',
+            color: '#6B7280'
+          }}>
+            <div style={{ fontSize: '14px' }}>
+              Additional card analysis will run automatically when data is loaded.
+            </div>
+            <div style={{ fontSize: '12px', marginTop: '8px' }}>
+              Properties with multiple cards (A cards, Card 2+) will be compared to single-card properties.
             </div>
           </div>
         )}
