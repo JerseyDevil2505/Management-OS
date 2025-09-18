@@ -1892,11 +1892,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
         results.byVCS[vcs] = {
           with: {
-            n: data.with_cards.length,
+            n: allVCSCounts[vcs]?.with_cards || 0,  // Use actual count of ALL properties
             avg_norm_time: withAvg ? Math.round(withAvg) : null
           },
           without: {
-            n: data.without_cards.length,
+            n: allVCSCounts[vcs]?.without_cards || 0,  // Use actual count of ALL properties
             avg_norm_time: withoutAvg ? Math.round(withoutAvg) : null
           },
           flat_adj: flatAdj,
