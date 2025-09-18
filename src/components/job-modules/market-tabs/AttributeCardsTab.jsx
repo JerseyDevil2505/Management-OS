@@ -1751,24 +1751,38 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         validPropertyGroups.get(baseKey).push(prop);
       });
 
-      // Separate groups into those with and without additional cards
+      // Function to check if a property has additional cards
+      const hasAdditionalCards = (prop) => {
+        const card = prop.property_addl_card || prop.additional_card || '';
+        if (vendorType === 'BRT' || vendorType === 'brt') {
+          const cardNum = parseInt(card);
+          return !isNaN(cardNum) && cardNum > 1;
+        } else if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
+          const cardUpper = card.toString().trim().toUpperCase();
+          return cardUpper && cardUpper !== 'M' && cardUpper !== 'MAIN' && /^[A-Z]$/.test(cardUpper);
+        }
+        return false;
+      };
+
+      // Count ALL properties with and without additional cards (for summary stats)
+      const allGroupsWithCards = [];
+      const allGroupsWithoutCards = [];
+
+      allPropertyGroups.forEach((props, baseKey) => {
+        const hasAdditional = props.some(hasAdditionalCards);
+        if (hasAdditional) {
+          allGroupsWithCards.push(props);
+        } else {
+          allGroupsWithoutCards.push(props);
+        }
+      });
+
+      // Separate VALID properties into groups (for impact analysis)
       const groupsWithCards = [];
       const groupsWithoutCards = [];
 
-      propertyGroups.forEach((props, baseKey) => {
-        const hasAdditional = props.some(prop => {
-          const card = prop.property_addl_card || prop.additional_card || '';
-
-          if (vendorType === 'BRT' || vendorType === 'brt') {
-            const cardNum = parseInt(card);
-            return !isNaN(cardNum) && cardNum > 1;
-          } else if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
-            const cardUpper = card.toString().trim().toUpperCase();
-            return cardUpper && cardUpper !== 'M' && cardUpper !== 'MAIN' && /^[A-Z]$/.test(cardUpper);
-          }
-          return false;
-        });
-
+      validPropertyGroups.forEach((props, baseKey) => {
+        const hasAdditional = props.some(hasAdditionalCards);
         if (hasAdditional) {
           groupsWithCards.push(props);
         } else {
