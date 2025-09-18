@@ -2141,7 +2141,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         )}
 
         {/* No Results Yet */}
-        {!additionalResults && !additionalWorking && (
+        {!additionalResults && (
           <div style={{
             padding: '40px',
             textAlign: 'center',
