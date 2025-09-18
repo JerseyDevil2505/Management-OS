@@ -895,13 +895,11 @@ brtParsedStructureMap: {
   // Get decoded value for Microsystems property field
   getMicrosystemsValue: function(property, codeDefinitions, fieldName) {
     if (!property || !codeDefinitions) {
-      console.debug('❌ getMicrosystemsValue: Missing property or codeDefinitions');
       return null;
     }
 
     const prefix = this.microsystemsPrefixMap[fieldName];
     if (!prefix) {
-      console.debug(`❌ getMicrosystemsValue: No prefix mapping for field ${fieldName}`);
       return null;
     }
 
@@ -913,43 +911,40 @@ brtParsedStructureMap: {
 
     if (!code || code.trim() === '') return null;
 
-    // FIXED: Access the flat_lookup structure where definitions are actually stored
+    // FIXED: Only look up codes within the correct prefix category to prevent cross-contamination
+    const fieldCodes = codeDefinitions.field_codes;
+    if (!fieldCodes || !fieldCodes[prefix]) {
+      return code; // Return original code if no definitions found for this prefix
+    }
+
+    // Look up the code ONLY within the correct prefix category
+    const categoryData = fieldCodes[prefix];
+    const cleanCode = code.trim().toUpperCase();
+
+    // First try exact match
+    if (categoryData[cleanCode] && categoryData[cleanCode].description) {
+      return categoryData[cleanCode].description;
+    }
+
+    // If not found, try looking for codes that might have the prefix stripped
+    // e.g., looking for "CL" in the 520 category
+    for (const [storedCode, codeData] of Object.entries(categoryData)) {
+      if (storedCode === cleanCode && codeData.description) {
+        return codeData.description;
+      }
+    }
+
+    // Fallback to flat_lookup only as last resort, but verify it belongs to the right category
     const flatLookup = codeDefinitions.flat_lookup || {};
+    const paddedCode = cleanCode.padEnd(4);
+    const lookupKey = `${prefix}${paddedCode}9999`;
 
-    // Debug info for troubleshooting
-    if (Object.keys(flatLookup).length === 0) {
-      console.debug('⚠️ getMicrosystemsValue: flat_lookup is empty. Available keys in codeDefinitions:', Object.keys(codeDefinitions));
+    if (flatLookup[lookupKey]) {
+      return flatLookup[lookupKey];
     }
 
-    // Try multiple lookup strategies:
-    // 1. Direct code lookup (for clean codes like "R", "CL", etc.)
-    let description = flatLookup[code.trim()];
-
-    // 2. If not found, try with prefix (legacy format)
-    if (!description) {
-      const paddedCode = code.trim().padEnd(4);
-      const lookupKey = `${prefix}${paddedCode}9999`;
-      description = flatLookup[lookupKey];
-    }
-
-    // 3. If still not found, try structured lookup in field_codes
-    if (!description && codeDefinitions.field_codes && codeDefinitions.field_codes[prefix]) {
-      const fieldGroup = codeDefinitions.field_codes[prefix];
-      description = fieldGroup[code.trim()]?.description;
-    }
-
-    // 4. Final fallback - try looking directly in codeDefinitions (legacy structure)
-    if (!description) {
-      const legacyKey = `${prefix}${code.trim().padEnd(4)}9999`;
-      description = codeDefinitions[legacyKey];
-    }
-
-    if (!description) {
-      console.debug(`⚠️ getMicrosystemsValue: Could not find description for ${fieldName}="${code}" (prefix: ${prefix})`);
-    }
-
-    // Return decoded value or original code if not found
-    return description || code;
+    // Return original code if no valid description found in the correct category
+    return code;
   },
 // Core BRT lookup function - FIXED to handle the actual structure
 getBRTValue: function(property, codeDefinitions, fieldName) {
