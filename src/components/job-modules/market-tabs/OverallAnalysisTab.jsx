@@ -44,6 +44,36 @@ const OverallAnalysisTab = ({
   const vendorType = jobData?.vendor_type || 'BRT';
   const codeDefinitions = jobData?.parsed_code_definitions || {};
 
+  // Microsystems diagnostic state
+  const [diagnosticStatus, setDiagnosticStatus] = useState(null);
+  const [isRunningDiagnostic, setIsRunningDiagnostic] = useState(false);
+
+  // Check if Microsystems definitions need repair
+  const needsRepair = vendorType === 'Microsystems' && codeDefinitions && !codeDefinitions.flat_lookup;
+
+  // Function to run diagnostic and repair
+  const runMicrosystemsDiagnostic = async () => {
+    if (!jobData?.id) return;
+
+    setIsRunningDiagnostic(true);
+    try {
+      const result = await interpretCodes.diagnoseMicrosystemsDefinitions(jobData.id);
+      setDiagnosticStatus(result);
+
+      // If repair was successful, trigger a page refresh to reload the updated definitions
+      if (result.status === 'repaired') {
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      }
+    } catch (error) {
+      console.error('Failed to run diagnostic:', error);
+      setDiagnosticStatus({ status: 'error', message: error.message });
+    } finally {
+      setIsRunningDiagnostic(false);
+    }
+  };
+
   // ==================== CME BRACKET DEFINITIONS ====================
   const CME_BRACKETS = [
     { min: 0, max: 99999, label: 'up to $99,999', color: '#FF9999', textColor: 'black' },          // Light red/pink
