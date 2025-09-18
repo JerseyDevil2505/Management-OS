@@ -1996,11 +1996,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
         if (withAvgNormTime !== null && withoutAvgNormTime !== null && withoutAvgNormTime > 0) {
           // Jim's size normalization formula: Adjust "without cards" value to "with cards" size
-          const withAvgSFLA = withTotalSFLA && data.with_cards.length > 0 ?
-            withTotalSFLA / data.with_cards.length : null;
+          const withAvgSFLA = allWithTotalSFLA && allWithCardsGroups.length > 0 ?
+            allWithTotalSFLA / allWithCardsGroups.length : null;
 
-          if (withAvgSFLA && withoutAvgSFLA && withAvgSFLA > 0 && withoutAvgSFLA > 0) {
-            jimAdjusted = sizeNormalize(withoutAvgNormTime, withoutAvgSFLA, withAvgSFLA);
+          if (withAvgSFLA && allWithoutAvgSFLA && withAvgSFLA > 0 && allWithoutAvgSFLA > 0) {
+            jimAdjusted = sizeNormalize(withoutAvgNormTime, allWithoutAvgSFLA, withAvgSFLA);
           } else {
             jimAdjusted = withoutAvgNormTime;
           }
