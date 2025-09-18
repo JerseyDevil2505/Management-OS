@@ -385,8 +385,18 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         if (intCond && intCond !== '00' && intCond !== '0' && intCond.trim() !== '' && shouldIncludeInterior) {
           if (!interiorByVCS[vcs]) interiorByVCS[vcs] = {};
           if (!interiorByVCS[vcs][intCond]) {
+            // Get interior condition description using interpretCodes function directly if not in codes object
+            let description = codes.interior[intCond];
+            if (!description) {
+              description = interpretCodes.getInteriorConditionName(
+                { asset_int_cond: intCond },
+                parsedCodeDefinitions,
+                vendorType
+              ) || `Condition ${intCond}`;
+            }
+
             interiorByVCS[vcs][intCond] = {
-              description: codes.interior[intCond] || `Condition ${intCond}`,
+              description,
               properties: [],
               values: [],
               sizes: [],
