@@ -1809,10 +1809,20 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         const validProps = group.filter(p => p.values_norm_time && p.values_norm_time > 0);
         if (validProps.length > 0) {
           const maxNormTime = Math.max(...validProps.map(p => p.values_norm_time));
-          const totalSFLA = group.reduce((sum, p) => sum + (parseInt(p.asset_sfla) || 0), 0);
-          const validYears = group.filter(p => p.asset_year_built && p.asset_year_built > 0);
+
+          // Sum SFLA across all cards in the group (main + additional)
+          const totalSFLA = group.reduce((sum, p) => {
+            const sfla = parseInt(p.asset_sfla) || 0;
+            return sum + sfla;
+          }, 0);
+
+          // Calculate average year built across all cards in the group
+          const validYears = group.filter(p => {
+            const year = parseInt(p.asset_year_built);
+            return year && year > 1800 && year <= new Date().getFullYear();
+          });
           const avgYearBuilt = validYears.length > 0 ?
-            validYears.reduce((sum, p) => sum + p.asset_year_built, 0) / validYears.length : null;
+            Math.round(validYears.reduce((sum, p) => sum + parseInt(p.asset_year_built), 0) / validYears.length) : null;
 
           byVCS[vcs].with_cards.push({
             norm_time: maxNormTime,
