@@ -2016,15 +2016,15 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         {/* Results */}
         {additionalResults && (
           <div>
-            {/* Summary */}
-            <div style={{ 
+            {/* Analysis Summary - Enhanced */}
+            <div style={{
               marginBottom: '20px',
               padding: '15px',
               backgroundColor: '#FEF3C7',
               borderRadius: '6px',
               border: '1px solid #FCD34D'
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>
                     Properties with Additional Cards
@@ -2041,60 +2041,119 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                     {additionalResults.overall.without.n}
                   </div>
                 </div>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>
+                    Total Properties Analyzed
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#92400E' }}>
+                    {additionalResults.summary?.totalPropertiesAnalyzed || 0}
+                  </div>
+                </div>
+              </div>
+
+              {/* Analysis Method Info */}
+              <div style={{
+                padding: '8px 12px',
+                backgroundColor: 'rgba(146, 64, 14, 0.1)',
+                borderRadius: '4px',
+                fontSize: '12px',
+                color: '#92400E'
+              }}>
+                <strong>Analysis Method:</strong> Properties grouped by base location, SFLA summed across all cards.
+                {vendorType === 'BRT'
+                  ? ' Additional = Cards 2, 3, 4+ (excluding Card 1 and Main)'
+                  : ' Additional = Cards A-Z (excluding Card M/Main)'
+                }
               </div>
             </div>
 
-            {/* VCS Table */}
-            <div style={{ 
+            {/* VCS Analysis Table */}
+            <div style={{
               border: '1px solid #E5E7EB',
               borderRadius: '6px',
               overflow: 'hidden'
             }}>
+              <div style={{
+                padding: '12px 15px',
+                backgroundColor: '#F9FAFB',
+                borderBottom: '1px solid #E5E7EB'
+              }}>
+                <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0' }}>
+                  Analysis by VCS
+                </h4>
+              </div>
+
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ backgroundColor: '#F9FAFB' }}>
-                    <th style={{ padding: '10px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>VCS</th>
-                    <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>With Cards</th>
-                    <th style={{ padding: '10px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>Avg Size</th>
-                    <th style={{ padding: '10px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>Avg Price</th>
-                    <th style={{ padding: '10px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>Avg Age</th>
-                    <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>Without Cards</th>
-                    <th style={{ padding: '10px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>Avg Price</th>
-                    <th style={{ padding: '10px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>$ Impact</th>
-                    <th style={{ padding: '10px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>% Impact</th>
+                  <tr style={{ backgroundColor: '#F3F4F6' }}>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>
+                      VCS
+                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>
+                      With Cards (n)
+                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
+                      Avg Total SFLA
+                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
+                      Avg Price
+                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>
+                      Without Cards (n)
+                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
+                      Avg SFLA
+                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
+                      Avg Price
+                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
+                      $ Impact
+                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
+                      % Impact
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {Object.entries(additionalResults.byVCS || {}).map(([vcs, data], idx) => (
                     <tr key={vcs} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                      <td style={{ padding: '10px', fontSize: '13px', fontWeight: '500' }}>{vcs}</td>
-                      <td style={{ padding: '10px', textAlign: 'center', fontSize: '13px' }}>{data.with.n}</td>
-                      <td style={{ padding: '10px', textAlign: 'right', fontSize: '13px' }}>
+                      <td style={{ padding: '8px 12px', fontSize: '13px', fontWeight: '500' }}>
+                        {vcs}
+                      </td>
+                      <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
+                        {data.with.n}
+                      </td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
                         {data.with.avg_size ? `${data.with.avg_size.toLocaleString()} sf` : '-'}
                       </td>
-                      <td style={{ padding: '10px', textAlign: 'right', fontSize: '13px' }}>
+                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
                         {data.with.avg_price ? formatCurrency(data.with.avg_price) : '-'}
                       </td>
-                      <td style={{ padding: '10px', textAlign: 'right', fontSize: '13px' }}>
-                        {data.with.avg_age ? `${data.with.avg_age} yrs` : '-'}
+                      <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
+                        {data.without.n}
                       </td>
-                      <td style={{ padding: '10px', textAlign: 'center', fontSize: '13px' }}>{data.without.n}</td>
-                      <td style={{ padding: '10px', textAlign: 'right', fontSize: '13px' }}>
+                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
+                        {data.without.avg_size ? `${data.without.avg_size.toLocaleString()} sf` : '-'}
+                      </td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
                         {data.without.avg_price ? formatCurrency(data.without.avg_price) : '-'}
                       </td>
-                      <td style={{ 
-                        padding: '10px', 
-                        textAlign: 'right', 
+                      <td style={{
+                        padding: '8px 12px',
+                        textAlign: 'right',
                         fontSize: '13px',
-                        color: data.flat_adj > 0 ? '#059669' : data.flat_adj < 0 ? '#DC2626' : '#6B7280'
+                        color: data.flat_adj > 0 ? '#059669' :
+                               data.flat_adj < 0 ? '#DC2626' : '#6B7280'
                       }}>
                         {data.flat_adj ? formatCurrency(data.flat_adj) : '-'}
                       </td>
-                      <td style={{ 
-                        padding: '10px', 
-                        textAlign: 'right', 
+                      <td style={{
+                        padding: '8px 12px',
+                        textAlign: 'right',
                         fontSize: '13px',
-                        color: data.pct_adj > 0 ? '#059669' : data.pct_adj < 0 ? '#DC2626' : '#6B7280'
+                        color: data.pct_adj > 0 ? '#059669' :
+                               data.pct_adj < 0 ? '#DC2626' : '#6B7280'
                       }}>
                         {data.pct_adj ? formatPercent(data.pct_adj) : '-'}
                       </td>
