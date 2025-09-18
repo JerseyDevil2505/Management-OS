@@ -2367,9 +2367,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px', fontWeight: '500' }}>
             {withCardsPackage.norm_time ? formatCurrency(withCardsPackage.norm_time) : '-'}
           </td>
-          <td style={{ padding: '8px 10px', textAlign: 'center', fontSize: '12px' }}>
-            {baselineCount}
-          </td>
           <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
             {baselineAvgSFLA ? baselineAvgSFLA.toLocaleString() : '-'}
           </td>
