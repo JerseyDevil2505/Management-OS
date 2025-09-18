@@ -2646,14 +2646,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
       // Add all properties to build VCS structure, but only include sales data if available
-      const hasSalesData = prop.sales_price && prop.sales_price > 0;
+      // FIXED: Use values_norm_time instead of sales_price to include $1 sales
+      const hasSalesData = prop.values_norm_time && prop.values_norm_time > 0;
 
       if (hasSalesData) {
         factors[vcs][locationAnalysis].withFactor.push({
           id: prop.id,
-          price: prop.values_norm_time || prop.sales_price,
-          normalizedTime: prop.values_norm_time || prop.sales_price,
-          normalizedSize: prop.values_norm_size || prop.sales_price,
+          price: prop.values_norm_time,  // Use values_norm_time as primary price
+          normalizedTime: prop.values_norm_time,
+          normalizedSize: prop.values_norm_size || prop.values_norm_time,  // fallback to norm_time if norm_size missing,
           acres: parseFloat(calculateAcreage(prop)),
           address: prop.property_location,
           year: prop.asset_year_built,
@@ -2668,17 +2669,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Find comparable sales without location factors for each VCS
     Object.keys(factors).forEach(vcs => {
       // Get baseline sales (no location factors - properties with same VCS but no location_analysis)
+      // CRITICAL FIX: Use values_norm_time > 0 instead of sales_price > 0 to include $1 sales
       const baselineSales = properties.filter(prop =>
         prop.new_vcs === vcs &&
         (!prop.location_analysis || prop.location_analysis.trim() === '' ||
          prop.location_analysis.toLowerCase().includes('none') ||
          prop.location_analysis.toLowerCase().includes('no analysis')) &&
-        prop.sales_price > 0
+        prop.values_norm_time && prop.values_norm_time > 0  // FIXED: Check values_norm_time instead of sales_price
       ).map(prop => ({
         id: prop.id,
-        price: prop.values_norm_time || prop.sales_price,
-        normalizedTime: prop.values_norm_time || prop.sales_price,
-        normalizedSize: prop.values_norm_size || prop.sales_price,
+        price: prop.values_norm_time,  // USE values_norm_time as primary price
+        normalizedTime: prop.values_norm_time,
+        normalizedSize: prop.values_norm_size || prop.values_norm_time,  // fallback to norm_time
         acres: parseFloat(calculateAcreage(prop)),
         year: prop.asset_year_built,
         yearSold: new Date(prop.sales_date).getFullYear(),
