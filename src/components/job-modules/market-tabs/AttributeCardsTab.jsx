@@ -2161,7 +2161,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             <div style={{
               border: '1px solid #E5E7EB',
               borderRadius: '6px',
-              overflow: 'hidden',
+              overflow: 'auto',
               marginBottom: '30px'
             }}>
               <div style={{
