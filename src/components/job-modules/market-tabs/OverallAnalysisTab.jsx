@@ -1358,6 +1358,57 @@ const OverallAnalysisTab = ({
   
   return (
     <div className="max-w-full mx-auto space-y-6">
+      {/* Microsystems Code Definitions Diagnostic Banner */}
+      {(needsRepair || diagnosticStatus) && (
+        <div className={`rounded-lg p-4 border ${
+          diagnosticStatus?.status === 'repaired' ? 'bg-green-50 border-green-200' :
+          diagnosticStatus?.status === 'error' ? 'bg-red-50 border-red-200' :
+          'bg-orange-50 border-orange-200'
+        }`}>
+          <div className="flex items-start gap-3">
+            <AlertCircle className={`h-5 w-5 mt-0.5 ${
+              diagnosticStatus?.status === 'repaired' ? 'text-green-600' :
+              diagnosticStatus?.status === 'error' ? 'text-red-600' :
+              'text-orange-600'
+            }`} />
+            <div className="flex-1">
+              <div className={`font-medium ${
+                diagnosticStatus?.status === 'repaired' ? 'text-green-900' :
+                diagnosticStatus?.status === 'error' ? 'text-red-900' :
+                'text-orange-900'
+              }`}>
+                {diagnosticStatus?.status === 'repaired' ? 'Code Definitions Repaired!' :
+                 diagnosticStatus?.status === 'error' ? 'Code Definitions Error' :
+                 'Code Definitions Issue Detected'}
+              </div>
+              <div className={`text-sm mt-1 ${
+                diagnosticStatus?.status === 'repaired' ? 'text-green-800' :
+                diagnosticStatus?.status === 'error' ? 'text-red-800' :
+                'text-orange-800'
+              }`}>
+                {diagnosticStatus?.message ||
+                 'Microsystems code definitions are missing or corrupted. This will cause raw codes to display instead of descriptions.'}
+              </div>
+              {diagnosticStatus?.status === 'repaired' && (
+                <div className="text-sm text-green-700 mt-2">
+                  Page will refresh automatically to load the updated definitions...
+                </div>
+              )}
+              {!diagnosticStatus && (
+                <div className="mt-3">
+                  <button
+                    onClick={runMicrosystemsDiagnostic}
+                    disabled={isRunningDiagnostic}
+                    className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    {isRunningDiagnostic ? 'Diagnosing...' : 'Fix Code Definitions'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="bg-white rounded-lg shadow-sm p-6">
         {/* Normalization Warning Banner */}
