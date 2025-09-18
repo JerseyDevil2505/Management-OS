@@ -1725,6 +1725,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       console.log(`✅ Found ${additionalCardProperties.length} properties with additional cards`);
 
+      // Debug: check for sales data
+      const allSalesProps = properties.filter(p => p.values_norm_time && p.values_norm_time > 0);
+      console.log(`🔍 DEBUG: Found ${allSalesProps.length} total properties with sales data (should be 105)`);
+
       // Group ALL properties by base location (for counting purposes)
       const allPropertyGroups = new Map();
       properties.forEach(prop => {
