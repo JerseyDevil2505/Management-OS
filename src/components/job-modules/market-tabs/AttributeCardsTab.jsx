@@ -2000,21 +2000,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         {/* Debug Info */}
         {console.log('🔍 additionalResults state:', additionalResults)}
 
-        {/* Working Status */}
-        {additionalWorking && (
-          <div style={{
-            padding: '20px',
-            textAlign: 'center',
-            backgroundColor: '#F3F4F6',
-            borderRadius: '6px',
-            marginBottom: '15px'
-          }}>
-            <div style={{ fontSize: '14px', color: '#6B7280' }}>
-              Running additional card analysis...
-            </div>
-          </div>
-        )}
-
         {/* Results */}
         {additionalResults && (
           <div>
