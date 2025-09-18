@@ -1706,7 +1706,19 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         return marketData?.values_norm_time > 0;
       });
 
-      console.log(`Starting additional card analysis for ${validProps.length} properties with sales data`);
+      console.log(`🔄 Starting SIMPLIFIED additional card analysis for ${validProps.length} properties with sales data`);
+
+      // First, let's examine what's actually in the property_addl_card column
+      const cardValues = validProps.map(p => p.property_addl_card).filter(card => card !== null && card !== undefined);
+      const uniqueCards = [...new Set(cardValues)];
+      console.log('📋 All unique property_addl_card values found:', uniqueCards);
+      console.log('📋 Sample of properties with their card values:',
+        validProps.slice(0, 10).map(p => ({
+          address: p.property_location,
+          card: p.property_addl_card,
+          vcs: p.new_vcs || p.property_vcs
+        }))
+      );
 
       // Helper function to extract base property key (without card suffix)
       const getBasePropertyKey = (compositeKey) => {
