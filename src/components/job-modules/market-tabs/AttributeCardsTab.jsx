@@ -2206,6 +2206,99 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     );
   };
 
+  // ============ RENDER PACKAGE PAIRS USING PACKAGE SALE IDENTIFICATION ============
+  const renderPackagePairs = (additionalResults) => {
+    if (!additionalResults?.packagePairs) {
+      return (
+        <tr>
+          <td colSpan="12" style={{ padding: '20px', textAlign: 'center', color: '#6B7280', fontStyle: 'italic' }}>
+            No package pairs identified for analysis
+          </td>
+        </tr>
+      );
+    }
+
+    return additionalResults.packagePairs.map((pair, idx) => {
+      const withCardsPackage = pair.withCardsPackage;
+      const baselineComparisons = pair.baselineComparisons || [];
+
+      // Calculate baseline metrics from comparable sales without additional cards in same VCS
+      const baselineCount = baselineComparisons.length;
+      const baselineAvgSFLA = baselineCount > 0 ?
+        Math.round(baselineComparisons.reduce((sum, p) => sum + (p.sfla || 0), 0) / baselineCount) : null;
+      const baselineAvgYear = baselineCount > 0 ?
+        Math.round(baselineComparisons.filter(p => p.year_built).reduce((sum, p) => sum + p.year_built, 0) /
+        baselineComparisons.filter(p => p.year_built).length) : null;
+      const baselineAvgPrice = baselineCount > 0 ?
+        baselineComparisons.reduce((sum, p) => sum + p.norm_time, 0) / baselineCount : null;
+
+      // Apply Jim's size normalization formula
+      const packageSFLA = withCardsPackage.total_sfla;
+      let adjustedBaseline = baselineAvgPrice;
+      if (packageSFLA && baselineAvgSFLA && baselineAvgPrice) {
+        // Jim's formula: adjust baseline to package size
+        adjustedBaseline = sizeNormalize(baselineAvgPrice, baselineAvgSFLA, packageSFLA);
+      }
+
+      // Calculate impact
+      const flatImpact = adjustedBaseline && withCardsPackage.norm_time ?
+        withCardsPackage.norm_time - adjustedBaseline : null;
+      const pctImpact = adjustedBaseline && flatImpact ?
+        (flatImpact / adjustedBaseline) * 100 : null;
+
+      return (
+        <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+          <td style={{ padding: '8px 10px', fontSize: '12px' }}>
+            {withCardsPackage.address || `${withCardsPackage.block}-${withCardsPackage.lot}`}
+          </td>
+          <td style={{ padding: '8px 10px', fontSize: '12px', fontWeight: '500' }}>
+            {withCardsPackage.vcs}
+          </td>
+          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+            {withCardsPackage.total_sfla ? withCardsPackage.total_sfla.toLocaleString() : '-'}
+          </td>
+          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+            {withCardsPackage.avg_year_built || '-'}
+          </td>
+          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px', fontWeight: '500' }}>
+            {withCardsPackage.norm_time ? formatCurrency(withCardsPackage.norm_time) : '-'}
+          </td>
+          <td style={{ padding: '8px 10px', textAlign: 'center', fontSize: '12px' }}>
+            {baselineCount}
+          </td>
+          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+            {baselineAvgSFLA ? baselineAvgSFLA.toLocaleString() : '-'}
+          </td>
+          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+            {baselineAvgYear || '-'}
+          </td>
+          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+            {baselineAvgPrice ? formatCurrency(baselineAvgPrice) : '-'}
+          </td>
+          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+            {adjustedBaseline ? formatCurrency(adjustedBaseline) : '-'}
+          </td>
+          <td style={{
+            padding: '8px 10px',
+            textAlign: 'right',
+            fontSize: '12px',
+            color: (flatImpact || 0) > 0 ? '#059669' : (flatImpact || 0) < 0 ? '#B45309' : '#6B7280'
+          }}>
+            {flatImpact ? formatCurrency(flatImpact) : '-'}
+          </td>
+          <td style={{
+            padding: '8px 10px',
+            textAlign: 'right',
+            fontSize: '12px',
+            color: (pctImpact || 0) > 0 ? '#059669' : (pctImpact || 0) < 0 ? '#B45309' : '#6B7280'
+          }}>
+            {pctImpact ? `${pctImpact.toFixed(1)}%` : '-'}
+          </td>
+        </tr>
+      );
+    });
+  };
+
   // ============ RENDER VCS ANALYSIS TABLE WITH EXPANDABLE SECTIONS ============
   const renderVCSAnalysisTable = (vcsData) => {
     // Filter to only show VCS that have properties with additional cards
