@@ -2208,12 +2208,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                       </th>
                       <th
                         style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
-                        onClick={() => handleSort('sales_price')}
-                      >
-                        Sales Price{renderSortIcon('sales_price')}
-                      </th>
-                      <th
-                        style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
                         onClick={() => handleSort('asset_sfla')}
                       >
                         SFLA{renderSortIcon('asset_sfla')}
@@ -2226,9 +2220,15 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                       </th>
                       <th
                         style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('sales_price')}
+                      >
+                        Sales Price{renderSortIcon('sales_price')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
                         onClick={() => handleSort('values_norm_time')}
                       >
-                        Norm Time{renderSortIcon('values_norm_time')}
+                        Price Time{renderSortIcon('values_norm_time')}
                       </th>
                     </tr>
                   </thead>
@@ -2251,11 +2251,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                           <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
                             {prop.asset_building_class || '-'}
                           </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>{prop.asset_sfla || '-'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.asset_year_built || '-'}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
                             {prop.sales_price ? formatCurrency(prop.sales_price) : '-'}
                           </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>{prop.asset_sfla || '-'}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.asset_year_built || '-'}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
                             {prop.values_norm_time ? formatCurrency(prop.values_norm_time) : '-'}
                           </td>
