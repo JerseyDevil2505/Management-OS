@@ -48,6 +48,7 @@ function downloadCsv(filename, headers, rows) {
 const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {}, onUpdateJobCache = () => {} }) => {
   const vendorType = jobData?.vendor_type || jobData?.vendor_source || 'BRT';
   const parsedCodeDefinitions = useMemo(() => jobData?.parsed_code_definitions || {}, [jobData?.parsed_code_definitions]);
+  const infoByCodes = useMemo(() => jobData?.info_by_config || {}, [jobData?.info_by_config]);
 
   // Main tab state
   const [active, setActive] = useState('condition');
