@@ -420,9 +420,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
   // Load data on component mount and when filters change
   useEffect(() => {
-    if (jobData?.id && properties.length > 0) {
-      loadConditionAnalysisData();
-    }
+    if (!jobData?.id || properties.length === 0) return;
+
+    loadConditionAnalysisData();
   }, [jobData?.id, properties.length, typeUseFilter, useInteriorInspections, manualExteriorBaseline, manualInteriorBaseline]);
   // ============ BUILD CONDITION CASCADE TABLE ============
   const renderConditionTable = (data, type, expandedVCS, setExpandedVCS) => {
