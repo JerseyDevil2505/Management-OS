@@ -1831,6 +1831,26 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         }
       });
 
+      // Count ALL properties by VCS (for display counts, not impact calculations)
+      const allVCSCounts = {};
+      allGroupsWithCards.forEach(group => {
+        const vcs = group[0].new_vcs || group[0].property_vcs;
+        if (!vcs) return;
+        if (!allVCSCounts[vcs]) {
+          allVCSCounts[vcs] = { with_cards: 0, without_cards: 0 };
+        }
+        allVCSCounts[vcs].with_cards += 1;
+      });
+
+      allGroupsWithoutCards.forEach(group => {
+        const vcs = group[0].new_vcs || group[0].property_vcs;
+        if (!vcs) return;
+        if (!allVCSCounts[vcs]) {
+          allVCSCounts[vcs] = { with_cards: 0, without_cards: 0 };
+        }
+        allVCSCounts[vcs].without_cards += 1;
+      });
+
       // Calculate statistics for each VCS
       const results = {
         byVCS: {},
