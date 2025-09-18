@@ -800,30 +800,39 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                     </select>
                   </div>
 
-                  {/* Expand/Collapse Button */}
-                  <button
-                    onClick={() => setConditionAnalysisExpanded(!conditionAnalysisExpanded)}
-                    style={{
-                      padding: '6px 12px',
-                      backgroundColor: '#3B82F6',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    {conditionAnalysisExpanded ? 'Collapse All' : 'Expand All'}
-                    <span style={{
-                      transform: conditionAnalysisExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                      transition: 'transform 0.2s'
-                    }}>
-                      ▼
-                    </span>
-                  </button>
+                  {/* Expand/Collapse Buttons - Match Land Valuation Style */}
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <button
+                      onClick={() => setExpandedExteriorVCS(new Set(Object.keys(conditionData.exterior)))}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: '#10B981',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        fontWeight: '500'
+                      }}
+                    >
+                      Expand All
+                    </button>
+                    <button
+                      onClick={() => setExpandedExteriorVCS(new Set())}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: '#EF4444',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        fontWeight: '500'
+                      }}
+                    >
+                      Collapse All
+                    </button>
+                  </div>
                 </div>
               </div>
               {renderConditionTable(conditionData.exterior, 'Exterior')}
