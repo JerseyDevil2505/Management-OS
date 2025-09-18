@@ -2064,7 +2064,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       debug(`✅ Found ${improvedSalesForYear.length} improved sales for year ${year} with type_use starting with '1'`);
 
       // Calculate averages for this year's improved sales
-      const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + p.sales_price, 0) / improvedSalesForYear.length;
+      const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + (p.values_norm_time || p.sales_price), 0) / improvedSalesForYear.length;
       const avgImprovedAcres = improvedSalesForYear.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / improvedSalesForYear.length;
 
       // Calculate current allocation for this year
