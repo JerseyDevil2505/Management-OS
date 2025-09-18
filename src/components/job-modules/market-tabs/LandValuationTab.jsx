@@ -1264,7 +1264,7 @@ const getPricePerUnit = useCallback((price, size) => {
       // Default: fall back to previous behavior
       if (group.length > 1) {
         // Use original sale price (don't sum - properties already contain full package price)
-        const totalPrice = group[0].sales_price;
+        const totalPrice = group[0].values_norm_time || group[0].sales_price;
         const totalAcres = group.reduce((sum, p) => sum + calculateAcreage(p), 0);
         const pricePerUnit = getPricePerUnit(totalPrice, totalAcres);
 
@@ -4208,7 +4208,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Calculate average rate for checked items by category
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
-    debug('🔄 Recalculating category analysis');
+    debug('��� Recalculating category analysis');
     debug('���� Total vacant sales:', vacantSales.length);
     debug('���� Checked sales count:', checkedSales.length);
     debug('📋 Included sales IDs:', Array.from(includedSales));
