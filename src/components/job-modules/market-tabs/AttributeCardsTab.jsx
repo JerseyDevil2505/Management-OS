@@ -1861,11 +1861,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           pct_adj: pctAdj
         };
 
-        // Add to overall totals
-        results.overall.with.n += withStats.n;
-        results.overall.without.n += withoutStats.n;
-        results.summary.propertiesWithCards += withStats.n;
-        results.summary.propertiesWithoutCards += withoutStats.n;
       });
 
       // Add detailed logging for debugging
