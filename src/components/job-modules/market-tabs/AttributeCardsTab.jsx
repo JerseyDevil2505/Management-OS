@@ -403,7 +403,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     if (jobData?.id && properties.length > 0) {
       loadConditionAnalysisData();
     }
-  }, [jobData?.id, properties.length, typeUseFilter, useInteriorInspections, manualExteriorBaseline, manualInteriorBaseline, loadConditionAnalysisData]);
+  }, [jobData?.id, properties.length, typeUseFilter, useInteriorInspections, manualExteriorBaseline, manualInteriorBaseline]);
   // ============ BUILD CONDITION CASCADE TABLE ============
   const renderConditionTable = (data, type, expandedVCS, setExpandedVCS) => {
     const vcsKeys = Object.keys(data).sort();
