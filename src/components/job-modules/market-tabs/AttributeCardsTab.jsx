@@ -727,17 +727,55 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       const avgAdjustment = validAdjustments.length > 0 ?
         validAdjustments.reduce((sum, adj) => sum + adj, 0) / validAdjustments.length : null;
 
+      // Categorize condition quality for sorting
+      const desc = data.description.toUpperCase();
+      let category = 0; // 0 = average/unknown, 1 = above average, -1 = below average
+
+      // Above average conditions (should show positive adjustments)
+      if (desc.includes('EXCELLENT') || desc.includes('VERY GOOD') || desc.includes('GOOD') ||
+          desc.includes('SUPERIOR') || desc.includes('MODERN') || code === 'G') {
+        category = 1;
+      }
+      // Below average conditions (should show negative adjustments)
+      else if (desc.includes('FAIR') || desc.includes('POOR') || desc.includes('BELOW AVERAGE') ||
+               desc.includes('DILAPIDATED') || desc.includes('DETERIORATED') || desc.includes('UNSOUND') ||
+               desc.includes('VERY POOR') || code === 'P' || code === 'F') {
+        category = -1;
+      }
+
       summary.push({
         code,
         description: data.description,
         avgAdjustment,
         totalProperties: data.totalProperties,
-        validVCSCount: validAdjustments.length
+        validVCSCount: validAdjustments.length,
+        category
       });
     });
 
-    // Sort by condition code
-    return summary.sort((a, b) => a.code.localeCompare(b.code));
+    // Sort with above average conditions first (descending), then below average (ascending by adjustment)
+    return summary.sort((a, b) => {
+      // First sort by category (above average first)
+      if (a.category !== b.category) {
+        return b.category - a.category;
+      }
+
+      // Within same category, sort by adjustment value
+      if (a.category === 1) {
+        // Above average: highest positive adjustments first
+        const adjA = a.avgAdjustment || 0;
+        const adjB = b.avgAdjustment || 0;
+        return adjB - adjA;
+      } else if (a.category === -1) {
+        // Below average: lowest negative adjustments first
+        const adjA = a.avgAdjustment || 0;
+        const adjB = b.avgAdjustment || 0;
+        return adjA - adjB;
+      } else {
+        // Same category (average/unknown): sort by code
+        return a.code.localeCompare(b.code);
+      }
+    });
   };
 
   // ============ CSV EXPORT FUNCTIONS ============
