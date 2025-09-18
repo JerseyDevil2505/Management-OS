@@ -2442,7 +2442,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
                     {/* Properties WITHOUT Additional Cards */}
                     <div>
-                      <h5 style={{ fontSize: '13px', fontWeight: '600', marginBottom: '10px', color: '#DC2626' }}>
+                      <h5 style={{ fontSize: '13px', fontWeight: '600', marginBottom: '10px', color: '#1E293B' }}>
                         Properties WITHOUT Additional Cards ({withoutCardsProperties.length})
                       </h5>
                       {withoutCardsProperties.length > 0 ? (
