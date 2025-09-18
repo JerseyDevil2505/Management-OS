@@ -1868,18 +1868,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       console.log('Vendor Type:', vendorType);
       console.log('Total property groups found:', propertyGroups.size);
 
-      // Log VCS breakdown
-      Object.entries(byVCS).forEach(([vcs, data]) => {
-        console.log(`VCS ${vcs}:`, {
-          withCards: data.with_cards.length,
-          withoutCards: data.without_cards.length,
-          sampleWithCards: data.with_cards.slice(0, 2).map(g => ({
-            address: g.address,
-            cards: g.cardCodes,
-            totalSFLA: g.totalSfla
-          }))
-        });
-      });
 
       // Log analysis summary
       console.log('��� Additional Card Analysis Summary:', {
