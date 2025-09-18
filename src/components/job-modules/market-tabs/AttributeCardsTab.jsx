@@ -1805,10 +1805,21 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           };
         }
 
-        // Use the highest values_norm_time from the group
-        const maxNormTime = Math.max(...group.map(p => p.values_norm_time || 0));
-        if (maxNormTime > 0) {
-          byVCS[vcs].with_cards.push(maxNormTime);
+        // Calculate group metrics
+        const validProps = group.filter(p => p.values_norm_time && p.values_norm_time > 0);
+        if (validProps.length > 0) {
+          const maxNormTime = Math.max(...validProps.map(p => p.values_norm_time));
+          const totalSFLA = group.reduce((sum, p) => sum + (parseInt(p.asset_sfla) || 0), 0);
+          const validYears = group.filter(p => p.asset_year_built && p.asset_year_built > 0);
+          const avgYearBuilt = validYears.length > 0 ?
+            validYears.reduce((sum, p) => sum + p.asset_year_built, 0) / validYears.length : null;
+
+          byVCS[vcs].with_cards.push({
+            norm_time: maxNormTime,
+            total_sfla: totalSFLA,
+            avg_year_built: avgYearBuilt,
+            property_count: group.length
+          });
         }
       });
 
