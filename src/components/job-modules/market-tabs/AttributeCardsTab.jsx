@@ -314,7 +314,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           const infoByCodes = parsedCodeDefinitions?.infoby_category_config || {};
           const entryInfoByCodes = Array.isArray(infoByCodes.entry) ? infoByCodes.entry : [];
 
-          console.log('Entry InfoBy codes:', entryInfoByCodes);
+          if (entryInfoByCodes.length === 0) {
+            console.warn('No entry InfoBy codes found in job configuration. Using entry_type field only for interior filtering.');
+            console.log('Available infoby_category_config:', infoByCodes);
+          } else {
+            console.log('Entry InfoBy codes found:', entryInfoByCodes);
+          }
 
           inspectionMap = new Map(
             (inspections || []).filter(i => {
