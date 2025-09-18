@@ -1931,10 +1931,58 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   // Export additional cards results to CSV
   const exportAdditionalResultsToCSV = () => {
     if (!additionalResults) return;
-    
-    const headers = ['VCS', 'With_Cards_N', 'With_Size', 'With_Price', 'With_Age', 'Without_N', 'Without_Price', 'Flat_Adj', 'Pct_Adj'];
+
+    const headers = [
+      'VCS',
+      'With_Cards_N',
+      'With_Avg_Total_SFLA',
+      'With_Avg_Price',
+      'With_Avg_Age',
+      'Without_Cards_N',
+      'Without_Avg_SFLA',
+      'Without_Avg_Price',
+      'Without_Avg_Age',
+      'Flat_Impact',
+      'Pct_Impact'
+    ];
+
     const rows = [];
-    
+
+    // Add analysis summary row
+    rows.push([
+      '=== ANALYSIS SUMMARY ===',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      ''
+    ]);
+
+    rows.push([
+      'Analysis Method',
+      `${additionalResults.summary?.vendorType || vendorType} - Properties grouped by base location`,
+      'SFLA summed across all cards',
+      `Total Properties: ${additionalResults.summary?.totalPropertiesAnalyzed || 0}`,
+      `With Cards: ${additionalResults.summary?.propertiesWithCards || 0}`,
+      `Without Cards: ${additionalResults.summary?.propertiesWithoutCards || 0}`,
+      vendorType === 'BRT' ? 'Additional = Cards 2,3,4+ (not Card 1/Main)' : 'Additional = Cards A-Z (not Card M/Main)',
+      '',
+      '',
+      '',
+      ''
+    ]);
+
+    rows.push(['', '', '', '', '', '', '', '', '', '', '']); // Empty row
+
+    // Add headers again
+    rows.push(headers);
+
+    // Add VCS data
     Object.entries(additionalResults.byVCS || {}).forEach(([vcs, data]) => {
       rows.push([
         vcs,
@@ -1943,12 +1991,14 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         data.with.avg_price || '',
         data.with.avg_age || '',
         data.without.n,
+        data.without.avg_size || '',
         data.without.avg_price || '',
+        data.without.avg_age || '',
         data.flat_adj || '',
         data.pct_adj ? data.pct_adj.toFixed(1) : ''
       ]);
     });
-    
+
     const filename = `${jobData.job_name || 'job'}_additional_cards_analysis.csv`;
     downloadCsv(filename, headers, rows);
   };
