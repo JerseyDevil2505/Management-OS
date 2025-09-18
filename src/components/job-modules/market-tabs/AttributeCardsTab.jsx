@@ -401,11 +401,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       });
 
     } catch (error) {
-      console.error('Error loading condition analysis data:', error);
-      setConditionData(prev => ({ 
-        ...prev, 
-        loading: false, 
-        error: 'Failed to load condition data' 
+      console.error('Error loading condition analysis data:', {
+        message: error.message || error,
+        stack: error.stack,
+        error: error
+      });
+
+      setConditionData(prev => ({
+        ...prev,
+        loading: false,
+        error: `Failed to load condition data: ${error.message || error}`
       }));
     }
   }, [jobData.id, properties, typeUseFilter, useInteriorInspections, manualExteriorBaseline, manualInteriorBaseline]);
