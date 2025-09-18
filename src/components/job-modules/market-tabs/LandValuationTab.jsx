@@ -913,7 +913,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
     if (manuallyAddedIds.size > 0) {
       const manuallyAddedProps = properties.filter(prop => manuallyAddedIds.has(prop.id));
-      debug('��� Restoring manually added properties:', {
+      debug('🔄 Restoring manually added properties:', {
         found: manuallyAddedProps.length,
         expected: manuallyAddedIds.size,
         foundIds: manuallyAddedProps.map(p => p.id),
@@ -995,7 +995,7 @@ const getPricePerUnit = useCallback((price, size) => {
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
           const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
-          const pricePerUnit = getPricePerUnit(prop.sales_price, sizeForUnit);
+          const pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, sizeForUnit);
           return {
             ...prop,
             totalAcres: acres,
@@ -1335,7 +1335,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (hasRestrictedClass) {
-        debug(`🚫 Excluding package ${sale.property_block}/${sale.property_lot} - contains restricted property class`);
+        debug(`��� Excluding package ${sale.property_block}/${sale.property_lot} - contains restricted property class`);
         return false;
       }
 
@@ -2496,7 +2496,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         const rawLandValue = calculateRawLandValue(avgAcres, cascadeConfig.normal);
         siteValue = totalLandValue - rawLandValue;
 
-        debug(`�� VCS ${vcs} DETAILED DEBUG:`, {
+        debug(`🏠 VCS ${vcs} DETAILED DEBUG:`, {
           relevantSalesCount: relevantSales.length,
           avgSalePrice: Math.round(avgSalePrice),
           avgAcres: avgAcres.toFixed(2),
