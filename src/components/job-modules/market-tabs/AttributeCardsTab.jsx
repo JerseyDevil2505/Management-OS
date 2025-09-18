@@ -125,6 +125,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     });
   };
   // ============ DETECT ACTUAL CONDITION CODES FROM DATA ============
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const detectActualConditionCodes = useCallback(async () => {
     try {
       // Get all unique condition codes from the actual property records
