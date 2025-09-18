@@ -2097,19 +2097,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                       With Cards (n)
                     </th>
                     <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      Avg Total SFLA
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      Avg Price
+                      Avg Norm Time
                     </th>
                     <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>
                       Without Cards (n)
                     </th>
                     <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      Avg SFLA
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      Avg Price
+                      Avg Norm Time
                     </th>
                     <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
                       $ Impact
