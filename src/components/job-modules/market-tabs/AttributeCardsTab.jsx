@@ -668,8 +668,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
         // Apply logic filtering for illogical adjustments
         const desc = cond.description.toUpperCase();
-        const isGoodCondition = desc.includes('EXCELLENT') || desc.includes('GOOD') || desc.includes('SUPERIOR');
-        const isPoorCondition = desc.includes('POOR') || desc.includes('FAIR') || desc.includes('UNSOUND');
+        const isGoodCondition = desc.includes('EXCELLENT') || desc.includes('GOOD') || desc.includes('SUPERIOR') || desc.includes('VERY GOOD');
+        const isPoorCondition = desc.includes('POOR') || desc.includes('FAIR') || desc.includes('UNSOUND') || desc.includes('VERY POOR') || desc.includes('DETERIORATED');
 
         let adjustmentToUse = cond.adjustmentPct;
 
