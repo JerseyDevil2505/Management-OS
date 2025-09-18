@@ -817,24 +817,40 @@ brtParsedStructureMap: {
   // Get decoded value for Microsystems property field
   getMicrosystemsValue: function(property, codeDefinitions, fieldName) {
     if (!property || !codeDefinitions) return null;
-    
+
     const prefix = this.microsystemsPrefixMap[fieldName];
     if (!prefix) return null;
-    
+
     // Get the code value from property (check both column and raw_data)
     let code = property[fieldName];
     if (!code && property.raw_data) {
       code = property.raw_data[fieldName];
     }
-    
+
     if (!code || code.trim() === '') return null;
-    
-    // Build lookup key - Microsystems format: "PREFIX+CODE+SPACES+9999"
-    const paddedCode = code.padEnd(4);
-    const lookupKey = `${prefix}${paddedCode}9999`;
-    
+
+    // FIXED: Access the flat_lookup structure where definitions are actually stored
+    const flatLookup = codeDefinitions.flat_lookup || {};
+
+    // Try multiple lookup strategies:
+    // 1. Direct code lookup (for clean codes like "R", "CL", etc.)
+    let description = flatLookup[code.trim()];
+
+    // 2. If not found, try with prefix (legacy format)
+    if (!description) {
+      const paddedCode = code.trim().padEnd(4);
+      const lookupKey = `${prefix}${paddedCode}9999`;
+      description = flatLookup[lookupKey];
+    }
+
+    // 3. If still not found, try structured lookup in field_codes
+    if (!description && codeDefinitions.field_codes && codeDefinitions.field_codes[prefix]) {
+      const fieldGroup = codeDefinitions.field_codes[prefix];
+      description = fieldGroup[code.trim()]?.description;
+    }
+
     // Return decoded value or original code if not found
-    return codeDefinitions[lookupKey] || code;
+    return description || code;
   },
 // Core BRT lookup function - FIXED to handle the actual structure
 getBRTValue: function(property, codeDefinitions, fieldName) {
