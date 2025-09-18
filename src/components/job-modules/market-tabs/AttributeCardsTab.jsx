@@ -2312,7 +2312,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     if (!additionalResults?.packagePairs) {
       return (
         <tr>
-          <td colSpan="12" style={{ padding: '20px', textAlign: 'center', color: '#6B7280', fontStyle: 'italic' }}>
+          <td colSpan="11" style={{ padding: '20px', textAlign: 'center', color: '#6B7280', fontStyle: 'italic' }}>
             No package pairs identified for analysis
           </td>
         </tr>
