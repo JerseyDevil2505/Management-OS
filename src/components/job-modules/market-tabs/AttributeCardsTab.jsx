@@ -184,7 +184,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       console.error('Error detecting actual condition codes:', error);
       return { exterior: {}, interior: {} };
     }
-  }, [properties, vendorType, parsedCodeDefinitions]);
+  }, [properties.length, vendorType]);
 
   // ============ PROCESS CONDITION STATISTICS ============
   const processConditionStatistics = (dataByVCS) => {
