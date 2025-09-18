@@ -2068,7 +2068,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       });
 
       // Debug: Check sample property data
-      console.log('🔍 Sample Properties (first 5):', properties.slice(0, 5).map(p => ({
+      console.log('���� Sample Properties (first 5):', properties.slice(0, 5).map(p => ({
         location: p.property_location,
         sfla: p.asset_sfla,
         yearBuilt: p.asset_year_built,
@@ -2390,7 +2390,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                               (withoutValidYears.length > 0 ? Math.round(withoutValidYears.reduce((sum, p) => sum + p.year_built, 0) / withoutValidYears.length) : '-')
                             }
                           </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px', fontWeight: '500' }}>
                             {data.without.avg_norm_time ? formatCurrency(data.without.avg_norm_time) : '-'}
                           </td>
                           <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>-</td>
