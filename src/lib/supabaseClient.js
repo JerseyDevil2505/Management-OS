@@ -816,10 +816,16 @@ brtParsedStructureMap: {
 
   // Get decoded value for Microsystems property field
   getMicrosystemsValue: function(property, codeDefinitions, fieldName) {
-    if (!property || !codeDefinitions) return null;
+    if (!property || !codeDefinitions) {
+      console.debug('❌ getMicrosystemsValue: Missing property or codeDefinitions');
+      return null;
+    }
 
     const prefix = this.microsystemsPrefixMap[fieldName];
-    if (!prefix) return null;
+    if (!prefix) {
+      console.debug(`❌ getMicrosystemsValue: No prefix mapping for field ${fieldName}`);
+      return null;
+    }
 
     // Get the code value from property (check both column and raw_data)
     let code = property[fieldName];
@@ -831,6 +837,11 @@ brtParsedStructureMap: {
 
     // FIXED: Access the flat_lookup structure where definitions are actually stored
     const flatLookup = codeDefinitions.flat_lookup || {};
+
+    // Debug info for troubleshooting
+    if (Object.keys(flatLookup).length === 0) {
+      console.debug('⚠️ getMicrosystemsValue: flat_lookup is empty. Available keys in codeDefinitions:', Object.keys(codeDefinitions));
+    }
 
     // Try multiple lookup strategies:
     // 1. Direct code lookup (for clean codes like "R", "CL", etc.)
@@ -847,6 +858,16 @@ brtParsedStructureMap: {
     if (!description && codeDefinitions.field_codes && codeDefinitions.field_codes[prefix]) {
       const fieldGroup = codeDefinitions.field_codes[prefix];
       description = fieldGroup[code.trim()]?.description;
+    }
+
+    // 4. Final fallback - try looking directly in codeDefinitions (legacy structure)
+    if (!description) {
+      const legacyKey = `${prefix}${code.trim().padEnd(4)}9999`;
+      description = codeDefinitions[legacyKey];
+    }
+
+    if (!description) {
+      console.debug(`⚠️ getMicrosystemsValue: Could not find description for ${fieldName}="${code}" (prefix: ${prefix})`);
     }
 
     // Return decoded value or original code if not found
