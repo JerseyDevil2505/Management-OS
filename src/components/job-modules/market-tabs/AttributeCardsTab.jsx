@@ -1997,9 +1997,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           </div>
         </div>
 
-        {/* Debug Info */}
-        {console.log('🔍 additionalResults state:', additionalResults)}
-
         {/* Results */}
         {additionalResults && (
           <div>
