@@ -2333,19 +2333,22 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       const baselineAvgPrice = baselineCount > 0 ?
         baselineComparisons.reduce((sum, p) => sum + p.norm_time, 0) / baselineCount : null;
 
-      // Apply Jim's size normalization formula
+      // Apply Jim's size normalization formula - only if both with and without have valid prices
       const packageSFLA = withCardsPackage.total_sfla;
-      let adjustedBaseline = baselineAvgPrice;
-      if (packageSFLA && baselineAvgSFLA && baselineAvgPrice) {
-        // Jim's formula: adjust baseline to package size
-        adjustedBaseline = sizeNormalize(baselineAvgPrice, baselineAvgSFLA, packageSFLA);
-      }
+      const packagePrice = withCardsPackage.norm_time;
+      let adjustedBaseline = null;
+      let flatImpact = null;
+      let pctImpact = null;
 
-      // Calculate impact
-      const flatImpact = adjustedBaseline && withCardsPackage.norm_time ?
-        withCardsPackage.norm_time - adjustedBaseline : null;
-      const pctImpact = adjustedBaseline && flatImpact ?
-        (flatImpact / adjustedBaseline) * 100 : null;
+      // Only calculate if both sides have valid prices
+      if (packagePrice && baselineAvgPrice && packageSFLA && baselineAvgSFLA) {
+        // Jim's formula: adjust baseline price to package sum SFLA
+        adjustedBaseline = sizeNormalize(baselineAvgPrice, baselineAvgSFLA, packageSFLA);
+
+        // Calculate impact
+        flatImpact = packagePrice - adjustedBaseline;
+        pctImpact = (flatImpact / adjustedBaseline) * 100;
+      }
 
       return (
         <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
