@@ -2279,9 +2279,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             
             // Valid NU codes for actual price
             const nu = prop.sales_nu || '';
-            const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' || 
+            const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
                            nu === '7' || nu.charCodeAt(0) === 32;
-            if (validNu) avgActualPrice[prop.new_vcs].push(prop.sales_price);
+            if (validNu && prop.values_norm_time > 0) avgActualPrice[prop.new_vcs].push(prop.values_norm_time);
           }
         }
       } else if (prop.property_m4_class === '4A' || prop.property_m4_class === '4B' || prop.property_m4_class === '4C') {
