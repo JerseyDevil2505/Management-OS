@@ -1725,104 +1725,49 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       console.log(`✅ Found ${additionalCardProperties.length} properties with additional cards`);
 
-      // First, let's examine what's actually in the additional_card column
-      const cardValues = validProps.map(p => p.additional_card).filter(card => card !== null && card !== undefined);
-      const uniqueCards = [...new Set(cardValues)];
-      console.log('📋 All unique additional_card values found:', uniqueCards);
-      console.log('📋 Sample of properties with their card values:',
-        validProps.slice(0, 10).map(p => ({
-          address: p.property_location,
-          card: p.additional_card,
-          vcs: p.new_vcs || p.property_vcs
-        }))
+      // Get properties with valid sales data for comparison
+      const validPropsForAnalysis = properties.filter(p =>
+        p.values_norm_time &&
+        p.values_norm_time > 0 &&
+        p.property_vcs
       );
 
-      // Helper function to extract base property key (without card suffix)
-      const getBasePropertyKey = (compositeKey) => {
-        if (!compositeKey) return null;
-
-        // Use the same logic as package sale detection to group by base location
-        const parts = compositeKey.split('-');
-        if (parts.length >= 4) {
-          // Remove card (second to last segment) and rebuild
-          return parts.slice(0, -2).join('-') + '-' + parts[parts.length - 1];
-        }
-        return compositeKey; // fallback
-      };
-
-      // Helper function to check if property has additional cards
-      const hasAdditionalCard = (prop) => {
-        const addlCard = prop.additional_card;
-        if (!addlCard || addlCard.trim() === '') return false;
-
-        if (vendorType === 'BRT') {
-          // BRT: numeric, anything other than card 1 or M
-          const cardNum = addlCard.toString().trim();
-          return cardNum !== '1' && cardNum !== 'M' && cardNum !== 'NONE' && cardNum !== '';
-        } else if (vendorType === 'Microsystems') {
-          // Microsystems: alphabetical, cards A through Z, M is reserved for Main
-          const cardCode = addlCard.toString().trim().toUpperCase();
-          return cardCode !== 'M' && cardCode !== 'MAIN' && cardCode !== '' && cardCode.match(/^[A-Z]$/);
-        }
-        return false;
-      };
-
-      // Helper to determine if property group contains additional cards
-      const groupHasAdditionalCards = (group) => {
-        // Check if any card in this group is an additional card
-        const cardCodes = group.cards.map(c => (c.card_code || '').toString().trim().toUpperCase());
-
-        if (vendorType === 'BRT') {
-          // For BRT: if any numeric card > 1, it has additional cards
-          return cardCodes.some(code => {
-            const num = parseInt(code);
-            return !isNaN(num) && num > 1;
-          });
-        } else if (vendorType === 'Microsystems') {
-          // For Microsystems: if any card is A-Z (not M), it has additional cards
-          return cardCodes.some(code => code.match(/^[A-Z]$/) && code !== 'M');
-        }
-        return false;
-      };
-
-      // Group properties by base key to handle multiple cards for same property
+      // Group properties by base location (to identify main vs additional cards)
       const propertyGroups = new Map();
 
-      validProps.forEach(p => {
-        const baseKey = getBasePropertyKey(p.property_composite_key);
-        if (!baseKey) return;
-
-        const marketData = propertyMarketData.find(
-          m => m.property_composite_key === p.property_composite_key
-        );
-
-        if (!marketData?.values_norm_time) return;
+      validPropsForAnalysis.forEach(prop => {
+        // Create a base key from block, lot, qualifier (without card)
+        const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
 
         if (!propertyGroups.has(baseKey)) {
-          propertyGroups.set(baseKey, {
-            cards: [],
-            totalSfla: 0,
-            avgValue: 0,
-            avgYear: null,
-            vcs: p.new_vcs || p.property_vcs || 'UNKNOWN',
-            hasAdditionalCards: false
-          });
+          propertyGroups.set(baseKey, []);
         }
+        propertyGroups.get(baseKey).push(prop);
+      });
 
-        const group = propertyGroups.get(baseKey);
+      // Separate groups into those with and without additional cards
+      const groupsWithCards = [];
+      const groupsWithoutCards = [];
 
-        // Add this card to the group
-        group.cards.push({
-          ...p,
-          values_norm_time: marketData.values_norm_time,
-          sfla: p.asset_sfla || p.sfla || p.property_sfla || 0,
-          year_built: p.asset_year_built || p.year_built || p.property_year_built || null,
-          card_code: p.additional_card,
-          address: p.property_location // For debugging/display
+      propertyGroups.forEach((props, baseKey) => {
+        const hasAdditional = props.some(prop => {
+          const card = prop.property_addl_card || prop.additional_card || '';
+
+          if (vendorType === 'BRT' || vendorType === 'brt') {
+            const cardNum = parseInt(card);
+            return !isNaN(cardNum) && cardNum > 1;
+          } else if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
+            const cardUpper = card.toString().trim().toUpperCase();
+            return cardUpper && cardUpper !== 'M' && cardUpper !== 'MAIN' && /^[A-Z]$/.test(cardUpper);
+          }
+          return false;
         });
 
-        // Update group totals
-        group.totalSfla += (p.asset_sfla || p.sfla || p.property_sfla || 0);
+        if (hasAdditional) {
+          groupsWithCards.push(props);
+        } else {
+          groupsWithoutCards.push(props);
+        }
       });
 
       console.log(`Grouped ${validProps.length} properties into ${propertyGroups.size} unique property groups`);
