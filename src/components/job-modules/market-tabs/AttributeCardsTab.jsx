@@ -396,7 +396,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         error: 'Failed to load condition data' 
       }));
     }
-  }, [jobData.id, properties, typeUseFilter, useInteriorInspections, manualExteriorBaseline, manualInteriorBaseline, loadConditionAnalysisData]);
+  }, [jobData.id, properties, typeUseFilter, useInteriorInspections, manualExteriorBaseline, manualInteriorBaseline]);
 
   // Load data on component mount and when filters change
   useEffect(() => {
