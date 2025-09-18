@@ -1724,24 +1724,31 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       console.log(`✅ Found ${additionalCardProperties.length} properties with additional cards`);
 
-      // Get properties with valid sales data for comparison
+      // Group ALL properties by base location (for counting purposes)
+      const allPropertyGroups = new Map();
+      properties.forEach(prop => {
+        const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
+        if (!allPropertyGroups.has(baseKey)) {
+          allPropertyGroups.set(baseKey, []);
+        }
+        allPropertyGroups.get(baseKey).push(prop);
+      });
+
+      // Get properties with valid sales data for impact analysis
       const validPropsForAnalysis = properties.filter(p =>
         p.values_norm_time &&
         p.values_norm_time > 0 &&
         (p.new_vcs || p.property_vcs)
       );
 
-      // Group properties by base location (to identify main vs additional cards)
-      const propertyGroups = new Map();
-
+      // Group properties with valid sales data by base location (for impact calculations)
+      const validPropertyGroups = new Map();
       validPropsForAnalysis.forEach(prop => {
-        // Create a base key from block, lot, qualifier (without card)
         const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
-
-        if (!propertyGroups.has(baseKey)) {
-          propertyGroups.set(baseKey, []);
+        if (!validPropertyGroups.has(baseKey)) {
+          validPropertyGroups.set(baseKey, []);
         }
-        propertyGroups.get(baseKey).push(prop);
+        validPropertyGroups.get(baseKey).push(prop);
       });
 
       // Separate groups into those with and without additional cards
