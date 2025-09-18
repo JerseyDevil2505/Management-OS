@@ -1887,9 +1887,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       console.log('��� Additional card analysis completed successfully');
       
     } catch (error) {
-      console.error('Error running additional card analysis:', error);
-    } finally {
-      setAdditionalWorking(false);
+      console.error('❌ Error running additional cards analysis:', error);
+      setAdditionalResults(null);
     }
   };
 
