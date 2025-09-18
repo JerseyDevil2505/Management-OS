@@ -2822,68 +2822,48 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             </div>
 
 
-            {/* VCS Analysis with Expandable Sections */}
-            <div style={{ marginBottom: '30px' }}>
+            {/* Package Pair Analysis Table */}
+            <div style={{
+              border: '1px solid #E5E7EB',
+              borderRadius: '6px',
+              overflow: 'auto',
+              marginBottom: '30px'
+            }}>
               <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '10px 15px',
-                backgroundColor: '#F0F9FF',
-                borderRadius: '6px',
-                marginBottom: '15px'
+                padding: '12px 15px',
+                backgroundColor: '#F9FAFB',
+                borderBottom: '1px solid #E5E7EB'
               }}>
-                <h3 style={{
-                  fontSize: '16px',
-                  fontWeight: '600',
-                  margin: '0',
-                  color: '#1E40AF'
-                }}>
-                  VCS Property-by-Property Analysis
-                </h3>
-                <div style={{ fontSize: '12px', color: '#1E40AF', fontStyle: 'italic' }}>
-                  Click VCS sections to view individual property details and summary comparisons
-                </div>
-
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                  <button
-                    onClick={() => {
-                      const vcsWithCards = Object.keys(additionalResults.byVCS || {}).filter(vcs =>
-                        (additionalResults.byVCS[vcs]?.with?.n || 0) > 0
-                      );
-                      setExpandedAdditionalVCS(new Set(vcsWithCards));
-                    }}
-                    style={{
-                      padding: '6px 12px',
-                      backgroundColor: '#10B981',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      fontWeight: '500'
-                    }}
-                  >
-                    Expand All
-                  </button>
-                  <button
-                    onClick={() => setExpandedAdditionalVCS(new Set())}
-                    style={{
-                      padding: '6px 12px',
-                      backgroundColor: '#EF4444',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      fontWeight: '500'
-                    }}
-                  >
-                    Collapse All
-                  </button>
+                <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0' }}>
+                  Additional Cards Package Analysis
+                </h4>
+                <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>
+                  Each row shows a package with additional cards vs baseline properties without cards in the same VCS
                 </div>
               </div>
-              {renderVCSAnalysisTable(additionalResults.byVCS || {})}
+
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F3F4F6' }}>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: '600' }}>Package Location</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: '600' }}>VCS</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Sum SFLA</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Year</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Price</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: '11px', fontWeight: '600' }}>Baseline (n)</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg SFLA</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Year</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Price</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Adjusted</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Impact ($)</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Impact (%)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* Render individual package pairs */}
+                  {renderPackagePairs(additionalResults)}
+                </tbody>
+              </table>
             </div>
 
             {/* Additional Cards Detail Table */}
