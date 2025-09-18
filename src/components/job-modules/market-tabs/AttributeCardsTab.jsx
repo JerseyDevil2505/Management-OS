@@ -2059,7 +2059,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       });
 
-      console.log('📊 Analysis Results:', {
+      console.log('�� Analysis Results:', {
         totalAdditionalCards: additionalCardProperties.length,
         vcsCount: Object.keys(results.byVCS).length,
         propertiesWithCards: results.summary.propertiesWithCards,
@@ -2535,6 +2535,26 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             </div>
           </div>
         </div>
+
+        {/* Debug Sales Count */}
+        {additionalResults && (
+          <div style={{
+            marginBottom: '20px',
+            padding: '10px',
+            backgroundColor: '#FEF3C7',
+            borderRadius: '6px',
+            fontSize: '12px'
+          }}>
+            <strong>Debug Info:</strong> Total Sales Found: {(() => {
+              let totalSales = 0;
+              Object.values(additionalResults.byVCS || {}).forEach(vcsData => {
+                totalSales += (vcsData.with_cards || []).length;
+                totalSales += (vcsData.without_cards || []).length;
+              });
+              return totalSales;
+            })()} | Expected: 105
+          </div>
+        )}
 
         {/* Summary Stats */}
         {additionalResults ? (
