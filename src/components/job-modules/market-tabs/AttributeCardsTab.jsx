@@ -1735,7 +1735,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       // Helper function to check if property has additional cards
       const hasAdditionalCard = (prop) => {
-        const addlCard = prop.property_addl_card;
+        const addlCard = prop.additional_card;
         if (!addlCard || addlCard.trim() === '') return false;
 
         if (vendorType === 'BRT') {
