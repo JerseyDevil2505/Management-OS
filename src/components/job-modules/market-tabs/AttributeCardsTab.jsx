@@ -1957,58 +1957,59 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const renderAdditionalCardsAnalysis = () => {
     return (
       <div>
-        {/* Controls */}
-        <div style={{ 
-          marginBottom: '20px', 
-          padding: '15px', 
-          backgroundColor: '#F9FAFB', 
+        {/* Controls - Match condition analysis style */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '10px 15px',
+          backgroundColor: '#F0F9FF',
           borderRadius: '6px',
-          border: '1px solid #E5E7EB'
+          marginBottom: '15px'
         }}>
-          <div style={{ marginBottom: '12px' }}>
-            <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>
-              Additional Assessment Cards Analysis
-            </h4>
-            <p style={{ fontSize: '12px', color: '#6B7280' }}>
-              Analyzes the value impact of properties with additional assessment cards (multiple buildings, accessory structures, etc.)
+          <div>
+            <h3 style={{
+              fontSize: '16px',
+              fontWeight: '600',
+              margin: '0 0 4px 0',
+              color: '#1E40AF'
+            }}>
+              Additional Cards Analysis
+            </h3>
+            <p style={{ fontSize: '12px', color: '#1E40AF', margin: '0' }}>
+              {vendorType === 'BRT'
+                ? 'Analyzing properties with multiple cards (Card 2, 3, 4, etc. vs Card 1/Main)'
+                : 'Analyzing properties with additional buildings (Cards A-Z vs Card M/Main)'
+              }
             </p>
           </div>
-          
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontSize: '13px', color: '#6B7280' }}>
-              {vendorType === 'BRT' ? 
-                'Detecting additional cards from property_addl_card field' :
-                'Detecting additional buildings from raw data indicators'
-              }
-            </div>
-            
-            <div style={{ display: 'flex', gap: '10px' }}>
+
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <button
+              onClick={runAdditionalCardAnalysis}
+              disabled={additionalWorking}
+              style={{
+                padding: '6px 16px',
+                backgroundColor: additionalWorking ? '#E5E7EB' : '#3B82F6',
+                color: additionalWorking ? '#9CA3AF' : 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: additionalWorking ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {additionalWorking ? 'Analyzing...' : 'Run Analysis'}
+            </button>
+
+            {additionalResults && (
               <button
-                onClick={runAdditionalCardAnalysis}
-                disabled={additionalWorking}
-                style={{
-                  padding: '6px 16px',
-                  backgroundColor: additionalWorking ? '#E5E7EB' : '#3B82F6',
-                  color: additionalWorking ? '#9CA3AF' : 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  cursor: additionalWorking ? 'not-allowed' : 'pointer'
-                }}
+                onClick={exportAdditionalResultsToCSV}
+                className={CSV_BUTTON_CLASS}
               >
-                {additionalWorking ? 'Analyzing...' : 'Run Analysis'}
+                <FileText size={14} /> Export CSV
               </button>
-              
-              {additionalResults && (
-                <button
-                  onClick={exportAdditionalResultsToCSV}
-                  className={CSV_BUTTON_CLASS}
-                >
-                  <FileText size={14} /> Export CSV
-                </button>
-              )}
-            </div>
+            )}
           </div>
         </div>
 
