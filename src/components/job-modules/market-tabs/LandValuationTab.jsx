@@ -4237,7 +4237,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // For constrained land types (wetlands, landlocked, conservation), use simple $/acre
       if (categoryType === 'constrained') {
         if (valuationMode === 'sf') {
-          const totalPrice = filtered.reduce((sum, s) => sum + s.sales_price, 0);
+          const totalPrice = filtered.reduce((sum, s) => sum + (s.values_norm_time || s.sales_price), 0);
           const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
           return {
             avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
