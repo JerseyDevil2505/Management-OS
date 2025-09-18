@@ -2201,6 +2201,206 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     );
   };
 
+  // ============ RENDER VCS ANALYSIS TABLE WITH EXPANDABLE SECTIONS ============
+  const renderVCSAnalysisTable = (vcsData) => {
+    const vcsKeys = Object.keys(vcsData).sort();
+
+    if (vcsKeys.length === 0) {
+      return (
+        <div style={{ padding: '20px', textAlign: 'center', color: '#6B7280' }}>
+          No VCS data available for analysis
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ marginBottom: '20px' }}>
+        {vcsKeys.map(vcs => {
+          const data = vcsData[vcs];
+          const isExpanded = expandedAdditionalVCS.has(vcs);
+
+          // Toggle VCS expansion function
+          const toggleVCS = () => {
+            const newExpanded = new Set(expandedAdditionalVCS);
+            if (newExpanded.has(vcs)) {
+              newExpanded.delete(vcs);
+            } else {
+              newExpanded.add(vcs);
+            }
+            setExpandedAdditionalVCS(newExpanded);
+          };
+
+          // Get individual property pairs for comparison
+          const withCardsProperties = data.with_cards_properties || [];
+          const withoutCardsProperties = data.without_cards_properties || [];
+
+          return (
+            <div key={vcs} style={{ marginBottom: '15px', border: '1px solid #E5E7EB', borderRadius: '6px' }}>
+              {/* VCS Header Row */}
+              <div
+                onClick={toggleVCS}
+                style={{
+                  padding: '12px 15px',
+                  backgroundColor: '#F9FAFB',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  borderBottom: isExpanded ? '1px solid #E5E7EB' : 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  <span style={{ fontWeight: '600', fontSize: '14px' }}>{vcs}</span>
+                  <span style={{ fontSize: '12px', color: '#6B7280' }}>
+                    ({data.with.n} with cards, {data.without.n} without cards)
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                  <span style={{ fontSize: '12px', color: '#6B7280' }}>
+                    Impact: {data.flat_adj ? formatCurrency(data.flat_adj) : 'No comparison'}
+                  </span>
+                  {!isExpanded && (
+                    <span style={{ fontSize: '12px', color: '#6B7280' }}>
+                      Click to expand
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Property Details (when expanded) */}
+              {isExpanded && (
+                <div style={{ padding: '15px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                    {/* Properties WITH Additional Cards */}
+                    <div>
+                      <h5 style={{ fontSize: '13px', fontWeight: '600', marginBottom: '10px', color: '#059669' }}>
+                        Properties WITH Additional Cards ({withCardsProperties.length})
+                      </h5>
+                      {withCardsProperties.length > 0 ? (
+                        <div style={{ border: '1px solid #E5E7EB', borderRadius: '4px', overflow: 'hidden' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr style={{ backgroundColor: '#F3F4F6' }}>
+                                <th style={{ padding: '6px 8px', textAlign: 'left', fontSize: '11px', fontWeight: '600' }}>Address</th>
+                                <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>SFLA</th>
+                                <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Year</th>
+                                <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Value</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {withCardsProperties.map((prop, idx) => (
+                                <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                                  <td style={{ padding: '6px 8px', fontSize: '11px' }}>
+                                    {prop.block}-{prop.lot}{prop.qualifier ? `-${prop.qualifier}` : ''}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px' }}>
+                                    {prop.total_sfla ? prop.total_sfla.toLocaleString() : '-'}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px' }}>
+                                    {prop.avg_year_built || '-'}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px' }}>
+                                    {formatCurrency(prop.norm_time)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div style={{ padding: '15px', textAlign: 'center', color: '#6B7280', fontSize: '12px', fontStyle: 'italic' }}>
+                          No properties with additional cards sold in this VCS
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Properties WITHOUT Additional Cards */}
+                    <div>
+                      <h5 style={{ fontSize: '13px', fontWeight: '600', marginBottom: '10px', color: '#DC2626' }}>
+                        Properties WITHOUT Additional Cards ({withoutCardsProperties.length})
+                      </h5>
+                      {withoutCardsProperties.length > 0 ? (
+                        <div style={{ border: '1px solid #E5E7EB', borderRadius: '4px', overflow: 'hidden' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr style={{ backgroundColor: '#F3F4F6' }}>
+                                <th style={{ padding: '6px 8px', textAlign: 'left', fontSize: '11px', fontWeight: '600' }}>Address</th>
+                                <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>SFLA</th>
+                                <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Year</th>
+                                <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Value</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {withoutCardsProperties.map((prop, idx) => (
+                                <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                                  <td style={{ padding: '6px 8px', fontSize: '11px' }}>
+                                    {prop.block}-{prop.lot}{prop.qualifier ? `-${prop.qualifier}` : ''}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px' }}>
+                                    {prop.sfla ? prop.sfla.toLocaleString() : '-'}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px' }}>
+                                    {prop.year_built || '-'}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px' }}>
+                                    {formatCurrency(prop.norm_time)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div style={{ padding: '15px', textAlign: 'center', color: '#6B7280', fontSize: '12px', fontStyle: 'italic' }}>
+                          No properties without additional cards sold in this VCS
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* VCS Summary Stats */}
+                  {data.with.avg_norm_time && data.without.avg_norm_time && (
+                    <div style={{
+                      marginTop: '15px',
+                      padding: '10px',
+                      backgroundColor: '#F8FAFC',
+                      borderRadius: '4px',
+                      border: '1px solid #E2E8F0'
+                    }}>
+                      <div style={{ fontSize: '12px', fontWeight: '600', marginBottom: '8px', color: '#1E293B' }}>
+                        VCS {vcs} Comparison Summary:
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', fontSize: '11px' }}>
+                        <div>
+                          <span style={{ color: '#64748B' }}>Avg With Cards: </span>
+                          <span style={{ fontWeight: '600' }}>{formatCurrency(data.with.avg_norm_time)}</span>
+                        </div>
+                        <div>
+                          <span style={{ color: '#64748B' }}>Adj Without Cards: </span>
+                          <span style={{ fontWeight: '600' }}>{data.adjusted ? formatCurrency(data.adjusted) : '-'}</span>
+                        </div>
+                        <div>
+                          <span style={{ color: '#64748B' }}>Impact: </span>
+                          <span style={{
+                            fontWeight: '600',
+                            color: data.pct_adj > 0 ? '#059669' : data.pct_adj < 0 ? '#DC2626' : '#6B7280'
+                          }}>
+                            {data.pct_adj ? `${data.pct_adj.toFixed(1)}%` : 'No comparison'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   // ============ RENDER ADDITIONAL CARDS ANALYSIS ============
   const renderAdditionalCardsAnalysis = () => {
     return (
