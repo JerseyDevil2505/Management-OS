@@ -2194,27 +2194,42 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 <tbody>
                   {Object.entries(additionalResults.byVCS || {}).map(([vcs, data], idx) => (
                     <tr key={vcs} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                      <td style={{ padding: '8px 12px', fontSize: '13px', fontWeight: '500' }}>{vcs}</td>
-                      <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{data.with.n}</td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
+                      <td style={{ padding: '6px 8px', fontSize: '12px', fontWeight: '500' }}>{vcs}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'center', fontSize: '12px' }}>{data.with.n}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
+                        {data.with.total_sfla ? data.with.total_sfla.toLocaleString() : '-'}
+                      </td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
+                        {data.with.avg_year_built || '-'}
+                      </td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
                         {data.with.avg_norm_time ? formatCurrency(data.with.avg_norm_time) : '-'}
                       </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{data.without.n}</td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
+                      <td style={{ padding: '6px 8px', textAlign: 'center', fontSize: '12px' }}>{data.without.n}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
+                        {data.without.avg_sfla ? data.without.avg_sfla.toLocaleString() : '-'}
+                      </td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
+                        {data.without.avg_year_built || '-'}
+                      </td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px' }}>
                         {data.without.avg_norm_time ? formatCurrency(data.without.avg_norm_time) : '-'}
                       </td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '12px', fontWeight: '500' }}>
+                        {data.adjusted ? formatCurrency(data.adjusted) : '-'}
+                      </td>
                       <td style={{
-                        padding: '8px 12px',
+                        padding: '6px 8px',
                         textAlign: 'right',
-                        fontSize: '13px',
+                        fontSize: '12px',
                         color: data.flat_adj > 0 ? '#059669' : data.flat_adj < 0 ? '#DC2626' : '#6B7280'
                       }}>
                         {data.flat_adj ? formatCurrency(data.flat_adj) : '-'}
                       </td>
                       <td style={{
-                        padding: '8px 12px',
+                        padding: '6px 8px',
                         textAlign: 'right',
-                        fontSize: '13px',
+                        fontSize: '12px',
                         color: data.pct_adj > 0 ? '#059669' : data.pct_adj < 0 ? '#DC2626' : '#6B7280'
                       }}>
                         {data.pct_adj ? `${data.pct_adj.toFixed(1)}%` : '-'}
