@@ -2042,7 +2042,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Apply cascade calculation to get raw land value
       const rawLandValue = calculateRawLandValue(acres, cascadeRates);
-      const siteValue = sale.sales_price - rawLandValue;
+      const siteValue = (sale.values_norm_time || sale.sales_price) - rawLandValue;
 
       // Find improved sales for this sale's year
       const improvedSalesForYear = properties.filter(prop => {
@@ -4208,7 +4208,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Calculate average rate for checked items by category
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
-    debug('��� Recalculating category analysis');
+    debug('🔄 Recalculating category analysis');
     debug('���� Total vacant sales:', vacantSales.length);
     debug('���� Checked sales count:', checkedSales.length);
     debug('📋 Included sales IDs:', Array.from(includedSales));
