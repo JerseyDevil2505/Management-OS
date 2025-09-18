@@ -4403,7 +4403,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           category: saleCategories[s.id],
           isIncluded: includedSales.has(s.id),
           isInBuildingLot: isInCategory,
-          price: s.sales_price,
+          price: s.values_norm_time || s.sales_price,
           acres: s.totalAcres,
           pricePerAcre: s.pricePerAcre
         });
