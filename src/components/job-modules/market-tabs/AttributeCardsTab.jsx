@@ -2033,8 +2033,18 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         totalAdditionalCards: additionalCardProperties.length,
         vcsCount: Object.keys(results.byVCS).length,
         propertiesWithCards: results.summary.propertiesWithCards,
-        propertiesWithoutCards: results.summary.propertiesWithoutCards
+        propertiesWithoutCards: results.summary.propertiesWithoutCards,
+        sampleVCSData: Object.entries(results.byVCS).slice(0, 2)
       });
+
+      // Debug: Check sample property data
+      console.log('🔍 Sample Properties (first 5):', properties.slice(0, 5).map(p => ({
+        location: p.property_location,
+        sfla: p.asset_sfla,
+        yearBuilt: p.asset_year_built,
+        vcs: p.new_vcs || p.property_vcs,
+        card: p.property_addl_card || p.additional_card
+      })));
 
 
       // Log analysis summary
