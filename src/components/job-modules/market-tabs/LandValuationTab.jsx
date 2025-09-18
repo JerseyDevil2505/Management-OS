@@ -518,7 +518,7 @@ useEffect(() => {
     const savedIncluded = new Set();
     const manuallyAddedIds = new Set();
 
-    debug('🔄 Loading saved Method 1 metadata (SKIPPING cached sales for fresh calculation):', {
+    debug('���� Loading saved Method 1 metadata (SKIPPING cached sales for fresh calculation):', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
@@ -1394,6 +1394,17 @@ const getPricePerUnit = useCallback((price, size) => {
       return preservedIncluded;
     });
   }, [properties, dateRange, calculateAcreage, getPricePerUnit, saleCategories]);
+
+  // ========== FORCE FRESH CALCULATION AFTER LOAD ==========
+  useEffect(() => {
+    if (isInitialLoadComplete && properties && properties.length > 0) {
+      debug('🔄 Triggering fresh calculation after load complete to use values_norm_time');
+      // Short delay to ensure all state is loaded before recalculating
+      setTimeout(() => {
+        filterVacantSales();
+      }, 100);
+    }
+  }, [isInitialLoadComplete, properties, filterVacantSales]);
 
   const performBracketAnalysis = useCallback(async () => {
     if (!properties || !jobData?.id) return;
@@ -3054,7 +3065,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       };
 
       // Debug: Log the exact data being saved
-      debug('���� Data structure being saved:', {
+      debug('������ Data structure being saved:', {
         cascadeConfigLocation1: analysisData.raw_land_config.cascade_config.specialCategories,
         cascadeConfigLocation2: analysisData.cascade_rates.specialCategories,
         salesData: analysisData.vacant_sales_analysis.sales.slice(0, 3), // First 3 for brevity
