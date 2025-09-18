@@ -1942,116 +1942,132 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const renderAdditionalCardsAnalysis = () => {
     return (
       <div>
-        {/* Controls - Match condition analysis style */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '10px 15px',
-          backgroundColor: '#F0F9FF',
-          borderRadius: '6px',
-          marginBottom: '15px'
-        }}>
-          <div>
-            <h3 style={{
-              fontSize: '16px',
-              fontWeight: '600',
-              margin: '0 0 4px 0',
-              color: '#1E40AF'
-            }}>
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '600', margin: 0 }}>
               Additional Cards Analysis
             </h3>
-            <p style={{ fontSize: '12px', color: '#1E40AF', margin: '0' }}>
-              {vendorType === 'BRT'
-                ? 'Analyzing properties with multiple cards (Card 2, 3, 4, etc. vs Card 1/Main)'
-                : 'Analyzing properties with additional buildings (Cards A-Z vs Card M/Main)'
-              }
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <button
-              onClick={runAdditionalCardsAnalysis}
-              style={{
-                padding: '6px 16px',
-                backgroundColor: '#3B82F6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '14px',
-                fontWeight: '500',
-                cursor: 'pointer'
-              }}
-            >
-              Run Analysis
-            </button>
-
             {additionalResults && (
               <button
                 onClick={exportAdditionalCardsCSV}
-                className={CSV_BUTTON_CLASS}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: '#10B981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  cursor: 'pointer'
+                }}
               >
-                <FileText size={14} /> Export CSV
+                Export CSV
               </button>
             )}
           </div>
+
+          <div style={{
+            fontSize: '13px',
+            color: '#6B7280',
+            marginBottom: '20px',
+            padding: '12px',
+            backgroundColor: '#F3F4F6',
+            borderRadius: '6px'
+          }}>
+            <div style={{ marginBottom: '4px' }}>
+              Analyzing properties with multiple cards vs single card properties
+            </div>
+            <div style={{ fontStyle: 'italic' }}>
+              {vendorType === 'BRT' || vendorType === 'brt'
+                ? 'Additional = Cards 2, 3, 4+ (Card 1 is Main)'
+                : 'Additional = Cards A-Z (Card M is Main)'
+              }
+            </div>
+          </div>
         </div>
 
-        {/* Results */}
-        {additionalResults && (
-          <div>
-            {/* Analysis Summary - Enhanced */}
-            <div style={{
-              marginBottom: '20px',
-              padding: '15px',
-              backgroundColor: '#FEF3C7',
-              borderRadius: '6px',
-              border: '1px solid #FCD34D'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <div>
-                  <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>
-                    Properties with Additional Cards
-                  </div>
-                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#92400E' }}>
-                    {additionalResults.summary?.propertiesWithCards || 0}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>
-                    Properties without Additional Cards
-                  </div>
-                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#92400E' }}>
-                    {additionalResults.summary?.propertiesWithoutCards || 0}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>
-                    Total Properties Analyzed
-                  </div>
-                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#92400E' }}>
-                    {additionalResults.summary?.totalPropertiesAnalyzed || 0}
-                  </div>
-                </div>
+        {/* Summary Stats */}
+        {additionalResults ? (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '20px' }}>
+              <div style={{ padding: '15px', backgroundColor: '#F9FAFB', borderRadius: '6px', border: '1px solid #E5E7EB' }}>
+                <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>Properties with Additional Cards</div>
+                <div style={{ fontSize: '24px', fontWeight: '600', color: '#111827' }}>{additionalResults.summary?.propertiesWithCards || 0}</div>
               </div>
-
-              {/* Analysis Method Info */}
-              <div style={{
-                padding: '8px 12px',
-                backgroundColor: 'rgba(146, 64, 14, 0.1)',
-                borderRadius: '4px',
-                fontSize: '12px',
-                color: '#92400E'
-              }}>
-                <strong>Analysis Method:</strong> Properties grouped by base location, SFLA summed across all cards.
-                {vendorType === 'BRT'
-                  ? ' Additional = Cards 2, 3, 4+ (excluding Card 1 and Main)'
-                  : ' Additional = Cards A-Z (excluding Card M/Main)'
-                }
+              <div style={{ padding: '15px', backgroundColor: '#F9FAFB', borderRadius: '6px', border: '1px solid #E5E7EB' }}>
+                <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>Properties without Additional Cards</div>
+                <div style={{ fontSize: '24px', fontWeight: '600', color: '#111827' }}>{additionalResults.summary?.propertiesWithoutCards || 0}</div>
+              </div>
+              <div style={{ padding: '15px', backgroundColor: '#F9FAFB', borderRadius: '6px', border: '1px solid #E5E7EB' }}>
+                <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>Total Properties Analyzed</div>
+                <div style={{ fontSize: '24px', fontWeight: '600', color: '#111827' }}>{additionalResults.summary?.totalPropertiesAnalyzed || 0}</div>
               </div>
             </div>
 
             {/* VCS Analysis Table */}
+            <div style={{
+              border: '1px solid #E5E7EB',
+              borderRadius: '6px',
+              overflow: 'hidden',
+              marginBottom: '30px'
+            }}>
+              <div style={{
+                padding: '12px 15px',
+                backgroundColor: '#F9FAFB',
+                borderBottom: '1px solid #E5E7EB'
+              }}>
+                <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0' }}>
+                  Impact Analysis by VCS (Using Normalized Time Values)
+                </h4>
+              </div>
+
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F3F4F6' }}>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>VCS</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>With Cards (n)</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>Avg Norm Time</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>Without Cards (n)</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>Avg Norm Time</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>$ Impact</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>% Impact</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(additionalResults.byVCS || {}).map(([vcs, data], idx) => (
+                    <tr key={vcs} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                      <td style={{ padding: '8px 12px', fontSize: '13px', fontWeight: '500' }}>{vcs}</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{data.with.n}</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
+                        {data.with.avg_norm_time ? formatCurrency(data.with.avg_norm_time) : '-'}
+                      </td>
+                      <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{data.without.n}</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
+                        {data.without.avg_norm_time ? formatCurrency(data.without.avg_norm_time) : '-'}
+                      </td>
+                      <td style={{
+                        padding: '8px 12px',
+                        textAlign: 'right',
+                        fontSize: '13px',
+                        color: data.flat_adj > 0 ? '#059669' : data.flat_adj < 0 ? '#DC2626' : '#6B7280'
+                      }}>
+                        {data.flat_adj ? formatCurrency(data.flat_adj) : '-'}
+                      </td>
+                      <td style={{
+                        padding: '8px 12px',
+                        textAlign: 'right',
+                        fontSize: '13px',
+                        color: data.pct_adj > 0 ? '#059669' : data.pct_adj < 0 ? '#DC2626' : '#6B7280'
+                      }}>
+                        {data.pct_adj ? `${data.pct_adj.toFixed(1)}%` : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Additional Cards Detail Table */}
             <div style={{
               border: '1px solid #E5E7EB',
               borderRadius: '6px',
@@ -2063,95 +2079,68 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 borderBottom: '1px solid #E5E7EB'
               }}>
                 <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0' }}>
-                  Analysis by VCS
+                  All Additional Cards Detail
                 </h4>
               </div>
 
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#F3F4F6' }}>
-                    <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>
-                      VCS
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>
-                      With Cards (n)
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      Avg Norm Time
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>
-                      Without Cards (n)
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      Avg Norm Time
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      $ Impact
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      % Impact
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(additionalResults.byVCS || {}).map(([vcs, data], idx) => (
-                    <tr key={vcs} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                      <td style={{ padding: '8px 12px', fontSize: '13px', fontWeight: '500' }}>
-                        {vcs}
-                      </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
-                        {data.with.n}
-                      </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
-                        {data.with.avg_norm_time ? formatCurrency(data.with.avg_norm_time) : '-'}
-                      </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
-                        {data.without.n}
-                      </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
-                        {data.without.avg_norm_time ? formatCurrency(data.without.avg_norm_time) : '-'}
-                      </td>
-                      <td style={{
-                        padding: '8px 12px',
-                        textAlign: 'right',
-                        fontSize: '13px',
-                        color: data.flat_adj > 0 ? '#059669' :
-                               data.flat_adj < 0 ? '#DC2626' : '#6B7280'
-                      }}>
-                        {data.flat_adj ? formatCurrency(data.flat_adj) : '-'}
-                      </td>
-                      <td style={{
-                        padding: '8px 12px',
-                        textAlign: 'right',
-                        fontSize: '13px',
-                        color: data.pct_adj > 0 ? '#059669' :
-                               data.pct_adj < 0 ? '#DC2626' : '#6B7280'
-                      }}>
-                        {data.pct_adj ? formatPercent(data.pct_adj) : '-'}
-                      </td>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#F3F4F6' }}>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Address</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Card</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>VCS</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Class</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Type/Use</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Sales Price</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>SFLA</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Year Built</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>Norm Time</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(additionalResults.additionalCardsList || []).length > 0 ? (
+                      additionalResults.additionalCardsList.map((prop, idx) => (
+                        <tr key={`${prop.property_composite_key}-${idx}`} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                          <td style={{ padding: '8px 12px', fontSize: '13px' }}>{prop.property_location}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px', fontWeight: '500' }}>
+                            {prop.property_addl_card || prop.additional_card}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.property_vcs || '-'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
+                            {prop.property_m4_class || prop.property_cama_class || '-'}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.asset_type_use || '-'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
+                            {prop.sales_price ? formatCurrency(prop.sales_price) : '-'}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>{prop.asset_sfla || '-'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.asset_year_built || '-'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
+                            {prop.values_norm_time ? formatCurrency(prop.values_norm_time) : '-'}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="9" style={{ padding: '20px', textAlign: 'center', color: '#6B7280', fontSize: '13px' }}>
+                          No additional cards found in this dataset
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
-
-        {/* No Results Yet */}
-        {!additionalResults && (
-          <div style={{
-            padding: '40px',
-            textAlign: 'center',
-            backgroundColor: '#F9FAFB',
-            borderRadius: '6px',
-            color: '#6B7280'
-          }}>
-            <div style={{ fontSize: '14px' }}>
-              Additional card analysis will run automatically when data is loaded.
+          </>
+        ) : (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#6B7280' }}>
+            <div style={{ marginBottom: '10px' }}>
+              <svg style={{ width: '48px', height: '48px', margin: '0 auto', opacity: 0.3 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
             </div>
-            <div style={{ fontSize: '12px', marginTop: '8px' }}>
-              Properties with multiple cards (A cards, Card 2+) will be compared to single-card properties.
-            </div>
+            <div>Loading additional cards analysis...</div>
           </div>
         )}
       </div>
