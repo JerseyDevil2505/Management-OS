@@ -1863,10 +1863,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       });
 
-      // Add detailed logging for debugging
-      console.log('🔍 Additional Card Analysis Debug Info:');
-      console.log('Vendor Type:', vendorType);
-      console.log('Total property groups found:', propertyGroups.size);
+      console.log('📊 Analysis Results:', {
+        totalAdditionalCards: additionalCardProperties.length,
+        vcsCount: Object.keys(results.byVCS).length,
+        propertiesWithCards: results.summary.propertiesWithCards,
+        propertiesWithoutCards: results.summary.propertiesWithoutCards
+      });
 
 
       // Log analysis summary
