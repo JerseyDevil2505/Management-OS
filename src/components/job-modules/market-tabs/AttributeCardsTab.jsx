@@ -1867,15 +1867,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       console.log('🔍 Additional Card Analysis Debug Info:');
       console.log('Vendor Type:', vendorType);
       console.log('Total property groups found:', propertyGroups.size);
-      console.log('Sample properties with addl cards:',
-        validProps.filter(p => p.additional_card && p.additional_card !== 'M' && p.additional_card !== '1')
-          .slice(0, 5)
-          .map(p => ({
-            address: p.property_location,
-            card: p.additional_card,
-            composite_key: p.property_composite_key
-          }))
-      );
 
       // Log VCS breakdown
       Object.entries(byVCS).forEach(([vcs, data]) => {
