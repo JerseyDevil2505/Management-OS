@@ -304,7 +304,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         try {
           const { data: inspections, error: inspError } = await supabase
             .from('inspection_data')
-            .select('property_composite_key, inspection_info_by')
+            .select('property_composite_key')
             .eq('job_id', jobData.id);
 
           if (inspError) {
@@ -313,23 +313,23 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           }
 
           // Use the InfoBy configuration that the user already defined in the jobs table
+          // Since the user defines what constitutes an "entry" in info_by_config,
+          // we include all inspections as the user has already configured this properly
           const entryInfoByCodes = Array.isArray(infoByCodes.entry) ? infoByCodes.entry : [];
 
           if (entryInfoByCodes.length === 0) {
-            console.warn('No entry InfoBy codes found in job.info_by_config. All inspections will be excluded from interior analysis.');
+            console.warn('No entry InfoBy codes found in job.info_by_config. Including all inspections for interior analysis.');
             console.log('Available info_by_config:', infoByCodes);
           } else {
             console.log('Entry InfoBy codes from job config:', entryInfoByCodes);
           }
 
+          // Include all inspections since the user has already defined entry criteria in job config
           inspectionMap = new Map(
-            (inspections || []).filter(i => {
-              // Use InfoBy code to determine if it's an actual entry (not estimation/refusal)
-              return entryInfoByCodes.length > 0 && entryInfoByCodes.includes(i.inspection_info_by);
-            }).map(i => [i.property_composite_key, true])
+            (inspections || []).map(i => [i.property_composite_key, true])
           );
 
-          console.log(`Interior inspections filter: ${inspectionMap.size} properties have actual interior access`);
+          console.log(`Interior inspections filter: ${inspectionMap.size} properties have inspection data`);
         } catch (inspectionError) {
           console.error('Error processing inspection data:', inspectionError);
           throw new Error(`Inspection data processing failed: ${inspectionError.message || inspectionError}`);
