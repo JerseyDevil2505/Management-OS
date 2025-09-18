@@ -2749,20 +2749,15 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             borderRadius: '6px',
             fontSize: '12px'
           }}>
-            <strong>Debug Info:</strong> Total Sales Found: {(() => {
+            <strong>Debug Info:</strong> Package Pairs Found: {additionalResults.packagePairs?.length || 0} |
+            Total Properties with Sales: {(() => {
               let totalSales = 0;
-              let withCardsSales = 0;
-              let withoutCardsSales = 0;
-              Object.entries(additionalResults.byVCS || {}).forEach(([vcs, vcsData]) => {
-                const withCards = (vcsData.with_cards || []).length;
-                const withoutCards = (vcsData.without_cards || []).length;
-                totalSales += withCards + withoutCards;
-                withCardsSales += withCards;
-                withoutCardsSales += withoutCards;
-                console.log(`VCS ${vcs}: ${withCards} with cards, ${withoutCards} without cards`);
+              Object.values(additionalResults.byVCS || {}).forEach(vcsData => {
+                totalSales += (vcsData.with_cards || []).length;
+                totalSales += (vcsData.without_cards || []).length;
               });
-              return `${totalSales} (${withCardsSales} with cards, ${withoutCardsSales} without cards)`;
-            })()} | Expected: 105 total sales
+              return totalSales;
+            })()} | Expected: 105 sales
           </div>
         )}
 
