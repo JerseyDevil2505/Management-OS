@@ -509,7 +509,7 @@ useEffect(() => {
   //   setCascadeConfig(marketLandData.cascade_rates);
   // }
 
-  // Restore Method 1 state persistence (like Method 2)
+  // Restore Method 1 state persistence but SKIP cached sales data to force fresh calculation
   if (marketLandData.vacant_sales_analysis?.sales) {
     const savedCategories = {};
     const savedNotes = {};
@@ -518,7 +518,7 @@ useEffect(() => {
     const savedIncluded = new Set();
     const manuallyAddedIds = new Set();
 
-    debug('🔄 Loading saved Method 1 sales data:', {
+    debug('🔄 Loading saved Method 1 metadata (SKIPPING cached sales for fresh calculation):', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
@@ -535,7 +535,7 @@ useEffect(() => {
       if (s.manually_added) manuallyAddedIds.add(s.id);
     });
 
-    debug('🔄 Restored Method 1 states:', {
+    debug('🔄 Restored Method 1 metadata (sales data will be recalculated):', {
       excludedCount: savedExcluded.size,
       includedCount: savedIncluded.size,
       manuallyAddedCount: manuallyAddedIds.size,
@@ -557,6 +557,10 @@ useEffect(() => {
 
     setMethod1ExcludedSales(savedExcluded);
     setIncludedSales(savedIncluded);
+
+    // FORCE FRESH CALCULATION: Clear any cached sales data and force recalculation with new values_norm_time logic
+    debug('🧹 Clearing cached sales data to force fresh calculation with values_norm_time');
+    setVacantSales([]); // Clear cached sales to force recalculation
   }
 
   // Also restore Method 1 excluded sales from new field (like Method 2)
@@ -755,7 +759,7 @@ const getPricePerUnit = useCallback((price, size) => {
     const standard = [
       { code: '1', description: '1 — Single Family' },
       { code: '2', description: '2 — Duplex / Semi-Detached' },
-      { code: '3', description: '3* — Row / Townhouse (3E,3I,30,31)' },
+      { code: '3', description: '3* �� Row / Townhouse (3E,3I,30,31)' },
       { code: '4', description: '4* — MultiFamily (42,43,44)' },
       { code: '5', description: '5* �� Conversions (51,52,53)' },
       { code: '6', description: '6 — Condominium' },
@@ -3050,7 +3054,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       };
 
       // Debug: Log the exact data being saved
-      debug('��� Data structure being saved:', {
+      debug('���� Data structure being saved:', {
         cascadeConfigLocation1: analysisData.raw_land_config.cascade_config.specialCategories,
         cascadeConfigLocation2: analysisData.cascade_rates.specialCategories,
         salesData: analysisData.vacant_sales_analysis.sales.slice(0, 3), // First 3 for brevity
@@ -7035,7 +7039,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'normTime' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '���' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('acres')}
