@@ -735,6 +735,84 @@ const PRESERVED_FIELDS = [
 // ===== CODE INTERPRETATION UTILITIES =====
 // Utilities for interpreting vendor-specific codes in MarketLandAnalysis
 export const interpretCodes = {
+  // Utility function to diagnose and repair Microsystems code definitions
+  diagnoseMicrosystemsDefinitions: async function(jobId) {
+    try {
+      console.log('🔍 Diagnosing Microsystems code definitions for job:', jobId);
+
+      const { data: job, error } = await supabase
+        .from('jobs')
+        .select('parsed_code_definitions, code_file_content, vendor_type')
+        .eq('id', jobId)
+        .single();
+
+      if (error || !job) {
+        console.error('❌ Could not fetch job data:', error);
+        return { status: 'error', message: 'Could not fetch job data' };
+      }
+
+      if (job.vendor_type !== 'Microsystems') {
+        return { status: 'error', message: 'Job is not Microsystems vendor type' };
+      }
+
+      const definitions = job.parsed_code_definitions;
+      console.log('📊 Current parsed_code_definitions structure:', {
+        hasDefinitions: !!definitions,
+        vendorType: definitions?.vendor_type,
+        hasFieldCodes: !!definitions?.field_codes,
+        hasFlatLookup: !!definitions?.flat_lookup,
+        fieldCodesCount: definitions?.field_codes ? Object.keys(definitions.field_codes).length : 0,
+        flatLookupCount: definitions?.flat_lookup ? Object.keys(definitions.flat_lookup).length : 0,
+        rootKeysCount: definitions ? Object.keys(definitions).filter(k => k.match(/^\d/)).length : 0
+      });
+
+      // Check if we need to repair the structure
+      if (!definitions?.flat_lookup && definitions?.field_codes) {
+        console.log('🔧 Attempting to repair flat_lookup from field_codes...');
+
+        const flatLookup = {};
+        Object.entries(definitions.field_codes).forEach(([prefix, codes]) => {
+          Object.entries(codes).forEach(([code, codeData]) => {
+            // Store both the clean code and full code formats
+            flatLookup[code] = codeData.description;
+            if (codeData.full_code) {
+              flatLookup[codeData.full_code] = codeData.description;
+            }
+          });
+        });
+
+        const updatedDefinitions = {
+          ...definitions,
+          flat_lookup: flatLookup
+        };
+
+        // Update the database
+        const { error: updateError } = await supabase
+          .from('jobs')
+          .update({ parsed_code_definitions: updatedDefinitions })
+          .eq('id', jobId);
+
+        if (updateError) {
+          console.error('❌ Failed to repair definitions:', updateError);
+          return { status: 'error', message: 'Failed to repair definitions' };
+        }
+
+        console.log('✅ Successfully repaired flat_lookup structure');
+        return { status: 'repaired', message: 'Repaired flat_lookup structure', flatLookupCount: Object.keys(flatLookup).length };
+      }
+
+      return {
+        status: 'ok',
+        message: 'Code definitions appear to be properly structured',
+        flatLookupCount: definitions?.flat_lookup ? Object.keys(definitions.flat_lookup).length : 0
+      };
+
+    } catch (error) {
+      console.error('❌ Error diagnosing Microsystems definitions:', error);
+      return { status: 'error', message: error.message };
+    }
+  },
+
   // Microsystems field to prefix mapping
   microsystemsPrefixMap: {
     'inspection_info_by': '140',
