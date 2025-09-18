@@ -331,6 +331,7 @@ const LandValuationTab = ({
   const [actualAllocations, setActualAllocations] = useState({});
   const [vcsSiteValues, setVcsSiteValues] = useState({});
   const [targetAllocation, setTargetAllocation] = useState(null);
+  const [targetAllocationJustSaved, setTargetAllocationJustSaved] = useState(false);
   const [currentOverallAllocation, setCurrentOverallAllocation] = useState(0);
 
   // ========== VCS SHEET STATE - ENHANCED ==========
@@ -518,7 +519,7 @@ useEffect(() => {
     const savedIncluded = new Set();
     const manuallyAddedIds = new Set();
 
-    debug('���� Loading saved Method 1 metadata (SKIPPING cached sales for fresh calculation):', {
+    debug('������ Loading saved Method 1 metadata (SKIPPING cached sales for fresh calculation):', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
@@ -4201,7 +4202,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           [category]: rate ? parseFloat(rate) : null
         }
       };
-      debug('🔧 New cascade config special categories:', newConfig.specialCategories);
+      debug('���� New cascade config special categories:', newConfig.specialCategories);
       return newConfig;
     });
   };
