@@ -420,6 +420,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   };
 
   // Load data on component mount and when filters change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!jobData?.id || properties.length === 0) return;
 
