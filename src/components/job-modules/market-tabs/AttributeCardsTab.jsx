@@ -966,7 +966,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 </div>
               )}
 
-              {renderConditionTable(conditionData.interior, 'Interior')}
+              {renderConditionTable(conditionData.interior, 'Interior', expandedInteriorVCS, setExpandedInteriorVCS)}
             </div>
           </>
         )}
