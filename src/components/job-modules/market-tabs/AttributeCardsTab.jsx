@@ -2012,14 +2012,14 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         results.byVCS[vcs] = {
           with: {
             n: allVCSCounts[vcs]?.with_cards || 0,
-            total_sfla: withTotalSFLA,
-            avg_year_built: withAvgYearBuilt ? Math.round(withAvgYearBuilt) : null,
+            total_sfla: allWithTotalSFLA || 0,
+            avg_year_built: allWithAvgYearBuilt ? Math.round(allWithAvgYearBuilt) : null,
             avg_norm_time: withAvgNormTime ? Math.round(withAvgNormTime) : null
           },
           without: {
             n: allVCSCounts[vcs]?.without_cards || 0,
-            avg_sfla: withoutAvgSFLA ? Math.round(withoutAvgSFLA) : null,
-            avg_year_built: withoutAvgYearBuilt ? Math.round(withoutAvgYearBuilt) : null,
+            avg_sfla: allWithoutAvgSFLA ? Math.round(allWithoutAvgSFLA) : null,
+            avg_year_built: allWithoutAvgYearBuilt ? Math.round(allWithoutAvgYearBuilt) : null,
             avg_norm_time: withoutAvgNormTime ? Math.round(withoutAvgNormTime) : null
           },
           adjusted: jimAdjusted,
