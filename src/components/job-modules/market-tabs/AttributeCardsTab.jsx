@@ -1822,59 +1822,79 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         }
       });
 
-      // Calculate statistics for each VCS
-      const calculateGroupStats = (props) => {
-        if (props.length === 0) {
-          return { n: 0, avg_price: null, avg_size: null, avg_age: null };
+      // Calculate statistics for grouped properties
+      const calculateGroupStats = (groups) => {
+        if (groups.length === 0) {
+          return { n: 0, avg_price: null, avg_size: null, avg_age: null, total_cards: 0 };
         }
-        
-        const avgPrice = props.reduce((sum, p) => sum + p.values_norm_time, 0) / props.length;
-        
-        const validSizes = props.filter(p => p.sfla > 0);
+
+        const avgPrice = groups.reduce((sum, g) => sum + g.avgValue, 0) / groups.length;
+
+        const validSizes = groups.filter(g => g.totalSfla > 0);
         const avgSize = validSizes.length > 0 ?
-          validSizes.reduce((sum, p) => sum + p.sfla, 0) / validSizes.length : null;
-        
-        const validYears = props.filter(p => p.year_built && p.year_built > 1900 && p.year_built < 2030);
-        const avgAge = validYears.length > 0 ?
-          new Date().getFullYear() - Math.round(validYears.reduce((sum, p) => sum + p.year_built, 0) / validYears.length) : null;
-        
+          validSizes.reduce((sum, g) => sum + g.totalSfla, 0) / validSizes.length : null;
+
+        const validAges = groups.filter(g => g.avgAge && g.avgAge > 0);
+        const avgAge = validAges.length > 0 ?
+          Math.round(validAges.reduce((sum, g) => sum + g.avgAge, 0) / validAges.length) : null;
+
+        const totalCards = groups.reduce((sum, g) => sum + g.cardCount, 0);
+
         return {
-          n: props.length,
+          n: groups.length,
           avg_price: Math.round(avgPrice),
           avg_size: avgSize ? Math.round(avgSize) : null,
-          avg_age: avgAge
+          avg_age: avgAge,
+          total_cards: totalCards
         };
       };
 
       const results = {
         byVCS: {},
         overall: { with: { n: 0 }, without: { n: 0 } },
+        summary: {
+          vendorType,
+          totalPropertiesAnalyzed: propertyGroups.size,
+          propertiesWithCards: 0,
+          propertiesWithoutCards: 0
+        },
         generated_at: new Date().toISOString()
       };
 
       // Process each VCS
       Object.entries(byVCS).forEach(([vcs, data]) => {
-        const withStats = calculateGroupStats(data.with_card);
-        const withoutStats = calculateGroupStats(data.without_card);
-        
+        const withStats = calculateGroupStats(data.with_cards);
+        const withoutStats = calculateGroupStats(data.without_cards);
+
         let flatAdj = null;
         let pctAdj = null;
-        
+
         if (withStats.avg_price && withoutStats.avg_price) {
           flatAdj = Math.round(withStats.avg_price - withoutStats.avg_price);
           pctAdj = ((withStats.avg_price - withoutStats.avg_price) / withoutStats.avg_price) * 100;
         }
-        
+
         results.byVCS[vcs] = {
           with: withStats,
           without: withoutStats,
           flat_adj: flatAdj,
           pct_adj: pctAdj
         };
-        
+
         // Add to overall totals
         results.overall.with.n += withStats.n;
         results.overall.without.n += withoutStats.n;
+        results.summary.propertiesWithCards += withStats.n;
+        results.summary.propertiesWithoutCards += withoutStats.n;
+      });
+
+      // Log analysis summary
+      console.log('Additional Card Analysis Summary:', {
+        vendorType,
+        totalProperties: results.summary.totalPropertiesAnalyzed,
+        withCards: results.summary.propertiesWithCards,
+        withoutCards: results.summary.propertiesWithoutCards,
+        cardDefinition: vendorType === 'BRT' ? 'Numeric cards other than 1' : 'Alphabetical cards (A-Z), M=Main'
       });
 
       setAdditionalResults(results);
