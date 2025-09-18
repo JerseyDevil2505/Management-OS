@@ -405,7 +405,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     }
   }, [jobData?.id, properties.length, typeUseFilter, useInteriorInspections]);
   // ============ BUILD CONDITION CASCADE TABLE ============
-  const renderConditionTable = (data, type) => {
+  const renderConditionTable = (data, type, expandedVCS, setExpandedVCS) => {
     const vcsKeys = Object.keys(data).sort();
     
     if (vcsKeys.length === 0) {
