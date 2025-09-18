@@ -55,8 +55,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   // ============ CONDITION ANALYSIS STATE ============
   const [typeUseFilter, setTypeUseFilter] = useState('1'); // Default to Single Family
   const [useInteriorInspections, setUseInteriorInspections] = useState(false);
-  const [expandedVCS, setExpandedVCS] = useState(new Set()); // Track which VCS sections are expanded
-  const [conditionAnalysisExpanded, setConditionAnalysisExpanded] = useState(false); // Overall expand/collapse for condition analysis
+  const [expandedExteriorVCS, setExpandedExteriorVCS] = useState(new Set()); // Track which exterior VCS sections are expanded
+  const [expandedInteriorVCS, setExpandedInteriorVCS] = useState(new Set()); // Track which interior VCS sections are expanded
   const [manualExteriorBaseline, setManualExteriorBaseline] = useState(''); // Manual baseline selection for exterior
   const [manualInteriorBaseline, setManualInteriorBaseline] = useState(''); // Manual baseline selection for interior
   const [conditionData, setConditionData] = useState({
