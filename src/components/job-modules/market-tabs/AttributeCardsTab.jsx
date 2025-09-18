@@ -1896,31 +1896,62 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       allVCSKeys.forEach(vcs => {
         const data = byVCS[vcs] || { with_cards: [], without_cards: [] };
-        const withAvg = data.with_cards.length > 0
-          ? data.with_cards.reduce((sum, val) => sum + val, 0) / data.with_cards.length
+        // Calculate WITH cards metrics
+        const withNormTimes = data.with_cards.map(d => d.norm_time);
+        const withAvgNormTime = withNormTimes.length > 0
+          ? withNormTimes.reduce((sum, val) => sum + val, 0) / withNormTimes.length
           : null;
 
-        const withoutAvg = data.without_cards.length > 0
-          ? data.without_cards.reduce((sum, val) => sum + val, 0) / data.without_cards.length
+        const withTotalSFLA = data.with_cards.reduce((sum, d) => sum + d.total_sfla, 0);
+
+        const withValidYears = data.with_cards.filter(d => d.avg_year_built);
+        const withAvgYearBuilt = withValidYears.length > 0
+          ? withValidYears.reduce((sum, d) => sum + d.avg_year_built, 0) / withValidYears.length
           : null;
 
+        // Calculate WITHOUT cards metrics
+        const withoutNormTimes = data.without_cards.map(d => d.norm_time);
+        const withoutAvgNormTime = withoutNormTimes.length > 0
+          ? withoutNormTimes.reduce((sum, val) => sum + val, 0) / withoutNormTimes.length
+          : null;
+
+        const withoutSFLAs = data.without_cards.filter(d => d.sfla > 0).map(d => d.sfla);
+        const withoutAvgSFLA = withoutSFLAs.length > 0
+          ? withoutSFLAs.reduce((sum, val) => sum + val, 0) / withoutSFLAs.length
+          : null;
+
+        const withoutValidYears = data.without_cards.filter(d => d.year_built);
+        const withoutAvgYearBuilt = withoutValidYears.length > 0
+          ? withoutValidYears.reduce((sum, d) => sum + d.year_built, 0) / withoutValidYears.length
+          : null;
+
+        // Calculate adjustments
         let flatAdj = null;
         let pctAdj = null;
+        let jimAdjusted = null;
 
-        if (withAvg !== null && withoutAvg !== null && withoutAvg > 0) {
-          flatAdj = Math.round(withAvg - withoutAvg);
-          pctAdj = ((withAvg - withoutAvg) / withoutAvg) * 100;
+        if (withAvgNormTime !== null && withoutAvgNormTime !== null && withoutAvgNormTime > 0) {
+          flatAdj = Math.round(withAvgNormTime - withoutAvgNormTime);
+          pctAdj = ((withAvgNormTime - withoutAvgNormTime) / withoutAvgNormTime) * 100;
+
+          // Jim's formula: Apply percentage adjustment to without average
+          jimAdjusted = Math.round(withoutAvgNormTime * (1 + (pctAdj / 100)));
         }
 
         results.byVCS[vcs] = {
           with: {
-            n: allVCSCounts[vcs]?.with_cards || 0,  // Use actual count of ALL properties
-            avg_norm_time: withAvg ? Math.round(withAvg) : null
+            n: allVCSCounts[vcs]?.with_cards || 0,
+            total_sfla: withTotalSFLA,
+            avg_year_built: withAvgYearBuilt ? Math.round(withAvgYearBuilt) : null,
+            avg_norm_time: withAvgNormTime ? Math.round(withAvgNormTime) : null
           },
           without: {
-            n: allVCSCounts[vcs]?.without_cards || 0,  // Use actual count of ALL properties
-            avg_norm_time: withoutAvg ? Math.round(withoutAvg) : null
+            n: allVCSCounts[vcs]?.without_cards || 0,
+            avg_sfla: withoutAvgSFLA ? Math.round(withoutAvgSFLA) : null,
+            avg_year_built: withoutAvgYearBuilt ? Math.round(withoutAvgYearBuilt) : null,
+            avg_norm_time: withoutAvgNormTime ? Math.round(withoutAvgNormTime) : null
           },
+          adjusted: jimAdjusted,
           flat_adj: flatAdj,
           pct_adj: pctAdj
         };
