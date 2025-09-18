@@ -275,7 +275,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   };
 
   // ============ MAIN DATA LOADING FUNCTION ============
-  const loadConditionAnalysisData = useCallback(async () => {
+  const loadConditionAnalysisData = async () => {
     try {
       setConditionData(prev => ({ ...prev, loading: true, error: null }));
 
@@ -416,7 +416,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         error: `Failed to load condition data: ${error.message || error}`
       }));
     }
-  }, [jobData.id, properties, typeUseFilter, useInteriorInspections, manualExteriorBaseline, manualInteriorBaseline]);
+  };
 
   // Load data on component mount and when filters change
   useEffect(() => {
