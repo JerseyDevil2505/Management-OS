@@ -87,8 +87,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [customResults, setCustomResults] = useState(marketLandData.custom_attribute_rollup || null);
 
   // ============ ADDITIONAL CARDS STATE ============
-  const [additionalWorking, setAdditionalWorking] = useState(false);
   const [additionalResults, setAdditionalResults] = useState(marketLandData.additional_cards_rollup || null);
+  const [sortField, setSortField] = useState('new_vcs'); // Default sort by VCS
+  const [sortDirection, setSortDirection] = useState('asc');
+  const [expandedAdditionalVCS, setExpandedAdditionalVCS] = useState(new Set()); // Track which additional cards VCS sections are expanded
 
   // ============ PROPERTY MARKET DATA STATE ============
   const [propertyMarketData, setPropertyMarketData] = useState([]);
@@ -445,14 +447,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id, properties.length, typeUseFilter, useInteriorInspections, manualExteriorBaseline, manualInteriorBaseline]);
 
-  // Load additional card analysis on mount (like condition analysis)
+  // Add this useEffect to run the analysis on mount and when data changes
   useEffect(() => {
-    if (!jobData?.id || properties.length === 0 || propertyMarketData.length === 0) return;
-
-    console.log('Auto-running additional card analysis on mount...');
-    runAdditionalCardAnalysis();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobData?.id, properties.length, propertyMarketData.length]);
+    if (active === 'additional' && properties && properties.length > 0) {
+      runAdditionalCardsAnalysis();
+    }
+  }, [active, properties, vendorType]);
   // ============ BUILD CONDITION CASCADE TABLE ============
   const renderConditionTable = (data, type, expandedVCS, setExpandedVCS) => {
     const vcsKeys = Object.keys(data).sort();
@@ -1695,255 +1695,492 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     );
   };
   // ============ ADDITIONAL CARDS ANALYSIS ============
-  const runAdditionalCardAnalysis = async () => {
-    setAdditionalWorking(true);
+  const runAdditionalCardsAnalysis = () => {
+    console.log('🔄 Running Additional Cards Analysis...');
+    console.log('Vendor Type:', vendorType);
+    console.log('Total Properties:', properties?.length);
+
+    if (!properties || properties.length === 0) {
+      console.log('❌ No property records available');
+      setAdditionalResults(null);
+      return;
+    }
+
     try {
-      // Get properties with normalized values
-      const validProps = properties.filter(p => {
-        const marketData = propertyMarketData.find(
-          m => m.property_composite_key === p.property_composite_key
-        );
-        return marketData?.values_norm_time > 0;
+      // Filter for properties with additional cards based on vendor type
+      const additionalCardProperties = properties.filter(prop => {
+        const card = prop.property_addl_card || prop.additional_card || '';
+
+        if (vendorType === 'BRT' || vendorType === 'brt') {
+          // BRT: Cards 2, 3, 4, etc. (numeric > 1, excluding 'M' and '1')
+          const cardNum = parseInt(card);
+          return !isNaN(cardNum) && cardNum > 1;
+        } else if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
+          // Microsystems: Cards A-Z (excluding 'M' which is Main)
+          const cardUpper = card.toString().trim().toUpperCase();
+          return cardUpper && cardUpper !== 'M' && cardUpper !== 'MAIN' && /^[A-Z]$/.test(cardUpper);
+        }
+        return false;
       });
 
-      console.log(`🔄 Starting SIMPLIFIED additional card analysis for ${validProps.length} properties with sales data`);
+      console.log(`✅ Found ${additionalCardProperties.length} properties with additional cards`);
 
-      // First, let's examine what's actually in the additional_card column
-      const cardValues = validProps.map(p => p.additional_card).filter(card => card !== null && card !== undefined);
-      const uniqueCards = [...new Set(cardValues)];
-      console.log('📋 All unique additional_card values found:', uniqueCards);
-      console.log('📋 Sample of properties with their card values:',
-        validProps.slice(0, 10).map(p => ({
-          address: p.property_location,
-          card: p.additional_card,
-          vcs: p.new_vcs || p.property_vcs
-        }))
+      // Debug: check for sales data
+      const allSalesProps = properties.filter(p => p.values_norm_time && p.values_norm_time > 0);
+      console.log(`🔍 DEBUG: Found ${allSalesProps.length} total properties with sales data (should be 105)`);
+
+      // Group ALL properties by base location (for counting purposes)
+      const allPropertyGroups = new Map();
+      properties.forEach(prop => {
+        const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
+        if (!allPropertyGroups.has(baseKey)) {
+          allPropertyGroups.set(baseKey, []);
+        }
+        allPropertyGroups.get(baseKey).push(prop);
+      });
+
+      // Get properties with valid sales data for impact analysis
+      const validPropsForAnalysis = properties.filter(p =>
+        p.values_norm_time &&
+        p.values_norm_time > 0 &&
+        (p.new_vcs || p.property_vcs)
       );
 
-      // Helper function to extract base property key (without card suffix)
-      const getBasePropertyKey = (compositeKey) => {
-        if (!compositeKey) return null;
-
-        // Use the same logic as package sale detection to group by base location
-        const parts = compositeKey.split('-');
-        if (parts.length >= 4) {
-          // Remove card (second to last segment) and rebuild
-          return parts.slice(0, -2).join('-') + '-' + parts[parts.length - 1];
+      // Group properties with valid sales data by base location (for impact calculations)
+      const validPropertyGroups = new Map();
+      validPropsForAnalysis.forEach(prop => {
+        const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
+        if (!validPropertyGroups.has(baseKey)) {
+          validPropertyGroups.set(baseKey, []);
         }
-        return compositeKey; // fallback
-      };
-
-      // Helper function to check if property has additional cards
-      const hasAdditionalCard = (prop) => {
-        const addlCard = prop.additional_card;
-        if (!addlCard || addlCard.trim() === '') return false;
-
-        if (vendorType === 'BRT') {
-          // BRT: numeric, anything other than card 1 or M
-          const cardNum = addlCard.toString().trim();
-          return cardNum !== '1' && cardNum !== 'M' && cardNum !== 'NONE' && cardNum !== '';
-        } else if (vendorType === 'Microsystems') {
-          // Microsystems: alphabetical, cards A through Z, M is reserved for Main
-          const cardCode = addlCard.toString().trim().toUpperCase();
-          return cardCode !== 'M' && cardCode !== 'MAIN' && cardCode !== '' && cardCode.match(/^[A-Z]$/);
-        }
-        return false;
-      };
-
-      // Helper to determine if property group contains additional cards
-      const groupHasAdditionalCards = (group) => {
-        // Check if any card in this group is an additional card
-        const cardCodes = group.cards.map(c => (c.card_code || '').toString().trim().toUpperCase());
-
-        if (vendorType === 'BRT') {
-          // For BRT: if any numeric card > 1, it has additional cards
-          return cardCodes.some(code => {
-            const num = parseInt(code);
-            return !isNaN(num) && num > 1;
-          });
-        } else if (vendorType === 'Microsystems') {
-          // For Microsystems: if any card is A-Z (not M), it has additional cards
-          return cardCodes.some(code => code.match(/^[A-Z]$/) && code !== 'M');
-        }
-        return false;
-      };
-
-      // Group properties by base key to handle multiple cards for same property
-      const propertyGroups = new Map();
-
-      validProps.forEach(p => {
-        const baseKey = getBasePropertyKey(p.property_composite_key);
-        if (!baseKey) return;
-
-        const marketData = propertyMarketData.find(
-          m => m.property_composite_key === p.property_composite_key
-        );
-
-        if (!marketData?.values_norm_time) return;
-
-        if (!propertyGroups.has(baseKey)) {
-          propertyGroups.set(baseKey, {
-            cards: [],
-            totalSfla: 0,
-            avgValue: 0,
-            avgYear: null,
-            vcs: p.new_vcs || p.property_vcs || 'UNKNOWN',
-            hasAdditionalCards: false
-          });
-        }
-
-        const group = propertyGroups.get(baseKey);
-
-        // Add this card to the group
-        group.cards.push({
-          ...p,
-          values_norm_time: marketData.values_norm_time,
-          sfla: p.asset_sfla || p.sfla || p.property_sfla || 0,
-          year_built: p.asset_year_built || p.year_built || p.property_year_built || null,
-          card_code: p.additional_card,
-          address: p.property_location // For debugging/display
-        });
-
-        // Update group totals
-        group.totalSfla += (p.asset_sfla || p.sfla || p.property_sfla || 0);
+        validPropertyGroups.get(baseKey).push(prop);
       });
 
-      console.log(`Grouped ${validProps.length} properties into ${propertyGroups.size} unique property groups`);
+      // Function to check if a property has additional cards
+      const hasAdditionalCards = (prop) => {
+        const card = prop.property_addl_card || prop.additional_card || '';
+        if (vendorType === 'BRT' || vendorType === 'brt') {
+          const cardNum = parseInt(card);
+          return !isNaN(cardNum) && cardNum > 1;
+        } else if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
+          const cardUpper = card.toString().trim().toUpperCase();
+          return cardUpper && cardUpper !== 'M' && cardUpper !== 'MAIN' && /^[A-Z]$/.test(cardUpper);
+        }
+        return false;
+      };
 
-      // Calculate averages for each group and categorize by VCS
+      // Count ALL properties with and without additional cards (for summary stats)
+      const allGroupsWithCards = [];
+      const allGroupsWithoutCards = [];
+
+      allPropertyGroups.forEach((props, baseKey) => {
+        const hasAdditional = props.some(hasAdditionalCards);
+        if (hasAdditional) {
+          allGroupsWithCards.push(props);
+        } else {
+          allGroupsWithoutCards.push(props);
+        }
+      });
+
+      // Separate VALID properties into groups (for impact analysis)
+      const groupsWithCards = [];
+      const groupsWithoutCards = [];
+
+      validPropertyGroups.forEach((props, baseKey) => {
+        const hasAdditional = props.some(hasAdditionalCards);
+        if (hasAdditional) {
+          groupsWithCards.push(props);
+        } else {
+          groupsWithoutCards.push(props);
+        }
+      });
+
+      // Analyze by VCS with detailed property tracking for granular comparison
       const byVCS = {};
 
-      propertyGroups.forEach((group, baseKey) => {
-        // Calculate group averages
-        const totalValue = group.cards.reduce((sum, card) => sum + card.values_norm_time, 0);
-        group.avgValue = Math.round(totalValue / group.cards.length);
+      // Process groups with additional cards
+      groupsWithCards.forEach(group => {
+        const vcs = group[0].new_vcs || group[0].property_vcs;
+        if (!vcs) return;
 
-        const validYears = group.cards.filter(card => card.year_built && card.year_built > 1900 && card.year_built < 2030);
-        group.avgYear = validYears.length > 0 ?
-          Math.round(validYears.reduce((sum, card) => sum + card.year_built, 0) / validYears.length) : null;
-
-        // Use improved logic to determine if group has additional cards
-        const hasAdditionalCards = groupHasAdditionalCards(group);
-
-        // Initialize VCS group if needed
-        if (!byVCS[group.vcs]) {
-          byVCS[group.vcs] = { with_cards: [], without_cards: [] };
+        if (!byVCS[vcs]) {
+          byVCS[vcs] = {
+            with_cards: [],
+            without_cards: [],
+            with_cards_properties: [], // Store detailed property info for expandable view
+            without_cards_properties: [] // Store detailed property info for expandable view
+          };
         }
 
-        // Create summary data for this property group
-        const groupData = {
-          baseKey,
-          address: group.cards[0]?.address || 'Unknown',
-          cardCount: group.cards.length,
-          cards: group.cards.map(c => c.card_code || 'M').join(', '),
-          totalSfla: group.totalSfla,
-          avgValue: group.avgValue,
-          avgYear: group.avgYear,
-          avgAge: group.avgYear ? new Date().getFullYear() - group.avgYear : null,
-          // For debugging - show all card codes found
-          cardCodes: group.cards.map(c => c.card_code).join(', ')
-        };
+        // Calculate group metrics
+        const validProps = group.filter(p => p.values_norm_time && p.values_norm_time > 0);
+        if (validProps.length > 0) {
+          const maxNormTime = Math.max(...validProps.map(p => p.values_norm_time));
 
-        // Categorize based on whether it has additional cards
-        if (hasAdditionalCards) {
-          byVCS[group.vcs].with_cards.push(groupData);
-        } else {
-          byVCS[group.vcs].without_cards.push(groupData);
+          // Sum SFLA across all cards in the group (main + additional)
+          const totalSFLA = group.reduce((sum, p) => {
+            const sfla = parseInt(p.asset_sfla) || 0;
+            return sum + sfla;
+          }, 0);
+
+          // Calculate average year built across all cards in the group
+          const validYears = group.filter(p => {
+            const year = parseInt(p.asset_year_built);
+            return year && year > 1800 && year <= new Date().getFullYear();
+          });
+          const avgYearBuilt = validYears.length > 0 ?
+            Math.round(validYears.reduce((sum, p) => sum + parseInt(p.asset_year_built), 0) / validYears.length) : null;
+
+          byVCS[vcs].with_cards.push({
+            norm_time: maxNormTime,
+            total_sfla: totalSFLA,
+            avg_year_built: avgYearBuilt,
+            property_count: group.length
+          });
+
+          // Store detailed property info for expandable view
+          byVCS[vcs].with_cards_properties.push({
+            properties: group,
+            norm_time: maxNormTime,
+            total_sfla: totalSFLA,
+            avg_year_built: avgYearBuilt,
+            address: group[0].property_location,
+            block: group[0].property_block,
+            lot: group[0].property_lot,
+            qualifier: group[0].property_qualifier
+          });
         }
       });
 
-      // Calculate statistics for grouped properties
-      const calculateGroupStats = (groups) => {
-        if (groups.length === 0) {
-          return { n: 0, avg_price: null, avg_size: null, avg_age: null, total_cards: 0 };
+      // Process groups without additional cards
+      groupsWithoutCards.forEach(group => {
+        const vcs = group[0].new_vcs || group[0].property_vcs;
+        if (!vcs) return;
+
+        if (!byVCS[vcs]) {
+          byVCS[vcs] = {
+            with_cards: [],
+            without_cards: [],
+            with_cards_properties: [],
+            without_cards_properties: []
+          };
         }
 
-        const avgPrice = groups.reduce((sum, g) => sum + g.avgValue, 0) / groups.length;
+        // Calculate metrics for properties without additional cards
+        const normTime = group[0].values_norm_time;
+        if (normTime && normTime > 0) {
+          const sfla = parseInt(group[0].asset_sfla) || 0;
+          const year = parseInt(group[0].asset_year_built);
+          const yearBuilt = year && year > 1800 && year <= new Date().getFullYear() ? year : null;
 
-        const validSizes = groups.filter(g => g.totalSfla > 0);
-        const avgSize = validSizes.length > 0 ?
-          validSizes.reduce((sum, g) => sum + g.totalSfla, 0) / validSizes.length : null;
+          byVCS[vcs].without_cards.push({
+            norm_time: normTime,
+            sfla: sfla,
+            year_built: yearBuilt
+          });
 
-        const validAges = groups.filter(g => g.avgAge && g.avgAge > 0);
-        const avgAge = validAges.length > 0 ?
-          Math.round(validAges.reduce((sum, g) => sum + g.avgAge, 0) / validAges.length) : null;
+          // Store detailed property info for expandable view
+          byVCS[vcs].without_cards_properties.push({
+            property: group[0],
+            norm_time: normTime,
+            sfla: sfla,
+            year_built: yearBuilt,
+            address: group[0].property_location,
+            block: group[0].property_block,
+            lot: group[0].property_lot,
+            qualifier: group[0].property_qualifier
+          });
+        }
+      });
 
-        const totalCards = groups.reduce((sum, g) => sum + g.cardCount, 0);
+      // Count ALL properties by VCS (for display counts, not impact calculations)
+      const allVCSCounts = {};
+      allGroupsWithCards.forEach(group => {
+        const vcs = group[0].new_vcs || group[0].property_vcs;
+        if (!vcs) return;
+        if (!allVCSCounts[vcs]) {
+          allVCSCounts[vcs] = { with_cards: 0, without_cards: 0 };
+        }
+        allVCSCounts[vcs].with_cards += 1;
+      });
 
-        return {
-          n: groups.length,
-          avg_price: Math.round(avgPrice),
-          avg_size: avgSize ? Math.round(avgSize) : null,
-          avg_age: avgAge,
-          total_cards: totalCards
-        };
-      };
+      allGroupsWithoutCards.forEach(group => {
+        const vcs = group[0].new_vcs || group[0].property_vcs;
+        if (!vcs) return;
+        if (!allVCSCounts[vcs]) {
+          allVCSCounts[vcs] = { with_cards: 0, without_cards: 0 };
+        }
+        allVCSCounts[vcs].without_cards += 1;
+      });
 
+      // Identify package pairs using package sale identification logic
+      const packagePairs = [];
+
+      // Group ALL properties by location (not requiring sales data)
+      const locationGroups = new Map();
+      properties.forEach(prop => {
+        const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
+        if (!locationGroups.has(baseKey)) {
+          locationGroups.set(baseKey, []);
+        }
+        locationGroups.get(baseKey).push(prop);
+      });
+
+      // Identify properties with additional cards and create pairs
+      locationGroups.forEach((locationProps, locationKey) => {
+        if (locationProps.length <= 1) return; // Skip single card properties
+
+        const vcs = locationProps[0].new_vcs || locationProps[0].property_vcs;
+        if (!vcs) return;
+
+        // Check if this location has additional cards
+        const cardIds = new Set();
+        locationProps.forEach(p => {
+          let card = p.property_addl_card || p.additional_card || p.property_card || null;
+          if (!card && p.property_composite_key) {
+            const parts = p.property_composite_key.split('-').map(s => s.trim());
+            card = parts[4] || parts[3] || null;
+          }
+          if (card) cardIds.add(String(card).trim().toUpperCase());
+        });
+
+        // Check if it has additional cards using vendor logic
+        let hasAdditionalCards = false;
+        if (vendorType === 'BRT' || vendorType === 'brt') {
+          const numericCards = Array.from(cardIds).map(c => parseInt(c)).filter(n => !isNaN(n));
+          hasAdditionalCards = numericCards.some(n => n > 1);
+        } else {
+          const nonMain = Array.from(cardIds).filter(c => c !== 'M' && c !== 'MAIN');
+          hasAdditionalCards = nonMain.length > 0;
+        }
+
+        if (hasAdditionalCards) {
+          console.log(`Found additional cards at ${locationKey}:`, Array.from(cardIds));
+
+          // Calculate package metrics
+          const totalSFLA = locationProps.reduce((sum, p) => sum + (parseInt(p.asset_sfla) || 0), 0);
+          const validYears = locationProps.filter(p => {
+            const year = parseInt(p.asset_year_built);
+            return year && year > 1800 && year <= new Date().getFullYear();
+          });
+          const avgYearBuilt = validYears.length > 0 ?
+            Math.round(validYears.reduce((sum, p) => sum + parseInt(p.asset_year_built), 0) / validYears.length) : null;
+
+          // Get sales price if available (prioritize the latest or highest)
+          const propsWithSales = locationProps.filter(p => p.values_norm_time && p.values_norm_time > 0);
+          const packagePrice = propsWithSales.length > 0 ?
+            Math.max(...propsWithSales.map(p => p.values_norm_time)) : null;
+
+          // Find baseline comparisons (ALL properties without additional cards in same VCS)
+          const baselineComparisons = properties.filter(p => {
+            if ((p.new_vcs || p.property_vcs) !== vcs) return false;
+
+            // Check if this property does NOT have additional cards
+            const card = p.property_addl_card || p.additional_card || p.property_card || '';
+            let isMainCardOnly = false;
+
+            if (vendorType === 'BRT' || vendorType === 'brt') {
+              const cardNum = parseInt(card);
+              isMainCardOnly = isNaN(cardNum) || cardNum <= 1; // Main card or no card
+            } else {
+              const cardUpper = card.toString().trim().toUpperCase();
+              isMainCardOnly = !cardUpper || cardUpper === 'M' || cardUpper === 'MAIN'; // Main card only
+            }
+
+            return isMainCardOnly;
+          }).filter(p => p.values_norm_time && p.values_norm_time > 0) // Only include baseline props with sales for comparison
+          .map(p => ({
+            sfla: parseInt(p.asset_sfla) || 0,
+            year_built: parseInt(p.asset_year_built) || null,
+            norm_time: p.values_norm_time
+          }));
+
+          packagePairs.push({
+            locationKey,
+            withCardsPackage: {
+              address: locationProps[0].property_location,
+              block: locationProps[0].property_block,
+              lot: locationProps[0].property_lot,
+              vcs: vcs,
+              total_sfla: totalSFLA,
+              avg_year_built: avgYearBuilt,
+              norm_time: packagePrice, // May be null if no sales
+              has_sales: packagePrice !== null
+            },
+            baselineComparisons: baselineComparisons
+          });
+        }
+      });
+
+      // Calculate statistics for each VCS (keep existing for summary)
       const results = {
         byVCS: {},
-        overall: { with: { n: 0 }, without: { n: 0 } },
+        packagePairs: packagePairs,
         summary: {
           vendorType,
-          totalPropertiesAnalyzed: propertyGroups.size,
-          propertiesWithCards: 0,
-          propertiesWithoutCards: 0
+          totalPropertiesAnalyzed: allPropertyGroups.size,
+          propertiesWithCards: allGroupsWithCards.length,
+          propertiesWithoutCards: allGroupsWithoutCards.length,
+          packagePairsFound: packagePairs.length
         },
+        additionalCardsList: additionalCardProperties.sort((a, b) => {
+          // Sort by VCS, then by address
+          const aVcs = a.new_vcs || a.property_vcs || '';
+          const bVcs = b.new_vcs || b.property_vcs || '';
+          if (aVcs !== bVcs) {
+            return aVcs.localeCompare(bVcs);
+          }
+          return (a.property_location || '').localeCompare(b.property_location || '');
+        }),
         generated_at: new Date().toISOString()
       };
 
-      // Process each VCS
-      Object.entries(byVCS).forEach(([vcs, data]) => {
-        const withStats = calculateGroupStats(data.with_cards);
-        const withoutStats = calculateGroupStats(data.without_cards);
+      // Calculate averages and impacts for each VCS (combine both impact data and all counts)
+      const allVCSKeys = new Set([...Object.keys(byVCS), ...Object.keys(allVCSCounts)]);
 
+      allVCSKeys.forEach(vcs => {
+        const data = byVCS[vcs] || { with_cards: [], without_cards: [] };
+        // Calculate WITH cards metrics
+        const withNormTimes = data.with_cards.map(d => d.norm_time);
+        const withAvgNormTime = withNormTimes.length > 0
+          ? withNormTimes.reduce((sum, val) => sum + val, 0) / withNormTimes.length
+          : null;
+
+        // Calculate AVERAGE SFLA for properties with cards (not sum)
+        const withAvgSFLA = data.with_cards.length > 0
+          ? data.with_cards.reduce((sum, d) => sum + d.total_sfla, 0) / data.with_cards.length
+          : null;
+
+        const withValidYears = data.with_cards.filter(d => d.avg_year_built);
+        const withAvgYearBuilt = withValidYears.length > 0
+          ? withValidYears.reduce((sum, d) => sum + d.avg_year_built, 0) / withValidYears.length
+          : null;
+
+        // Calculate Year Built and AVERAGE SFLA for ALL properties with additional cards (not just those with sales)
+        const allWithCardsGroups = allGroupsWithCards.filter(group => {
+          const groupVcs = group[0].new_vcs || group[0].property_vcs;
+          return groupVcs === vcs;
+        });
+
+        let allWithTotalSFLA = 0;
+        let allWithYearBuiltSum = 0;
+        let allWithYearBuiltCount = 0;
+
+        allWithCardsGroups.forEach(group => {
+          // Calculate AVERAGE SFLA per property group (not sum)
+          const groupSFLA = group.reduce((sum, p) => sum + (parseInt(p.asset_sfla) || 0), 0);
+          allWithTotalSFLA += groupSFLA; // This will be divided by group count later
+
+          // Average year built for this group
+          const validYears = group.filter(p => {
+            const year = parseInt(p.asset_year_built);
+            return year && year > 1800 && year <= new Date().getFullYear();
+          });
+          if (validYears.length > 0) {
+            const groupAvgYear = validYears.reduce((sum, p) => sum + parseInt(p.asset_year_built), 0) / validYears.length;
+            allWithYearBuiltSum += groupAvgYear;
+            allWithYearBuiltCount++;
+          }
+        });
+
+        const allWithAvgSFLA = allWithCardsGroups.length > 0 ? allWithTotalSFLA / allWithCardsGroups.length : null;
+        const allWithAvgYearBuilt = allWithYearBuiltCount > 0 ? allWithYearBuiltSum / allWithYearBuiltCount : null;
+
+        // Calculate WITHOUT cards metrics
+        const withoutNormTimes = data.without_cards.map(d => d.norm_time);
+        const withoutAvgNormTime = withoutNormTimes.length > 0
+          ? withoutNormTimes.reduce((sum, val) => sum + val, 0) / withoutNormTimes.length
+          : null;
+
+        const withoutSFLAs = data.without_cards.filter(d => d.sfla > 0).map(d => d.sfla);
+        const withoutAvgSFLA = withoutSFLAs.length > 0
+          ? withoutSFLAs.reduce((sum, val) => sum + val, 0) / withoutSFLAs.length
+          : null;
+
+        const withoutValidYears = data.without_cards.filter(d => d.year_built);
+        const withoutAvgYearBuilt = withoutValidYears.length > 0
+          ? withoutValidYears.reduce((sum, d) => sum + d.year_built, 0) / withoutValidYears.length
+          : null;
+
+        // Calculate Year Built and SFLA for ALL properties without additional cards
+        const allWithoutCardsGroups = allGroupsWithoutCards.filter(group => {
+          const groupVcs = group[0].new_vcs || group[0].property_vcs;
+          return groupVcs === vcs;
+        });
+
+        let allWithoutTotalSFLA = 0;
+        let allWithoutYearBuiltSum = 0;
+        let allWithoutYearBuiltCount = 0;
+
+        allWithoutCardsGroups.forEach(group => {
+          const prop = group[0]; // Single card properties
+          const sfla = parseInt(prop.asset_sfla) || 0;
+          allWithoutTotalSFLA += sfla;
+
+          const year = parseInt(prop.asset_year_built);
+          if (year && year > 1800 && year <= new Date().getFullYear()) {
+            allWithoutYearBuiltSum += year;
+            allWithoutYearBuiltCount++;
+          }
+        });
+
+        const allWithoutAvgSFLA = allWithoutCardsGroups.length > 0 ? allWithoutTotalSFLA / allWithoutCardsGroups.length : null;
+        const allWithoutAvgYearBuilt = allWithoutYearBuiltCount > 0 ? allWithoutYearBuiltSum / allWithoutYearBuiltCount : null;
+
+        // Calculate adjustments - Using "Without Cards" as baseline
         let flatAdj = null;
         let pctAdj = null;
+        let jimAdjusted = null;
 
-        if (withStats.avg_price && withoutStats.avg_price) {
-          flatAdj = Math.round(withStats.avg_price - withoutStats.avg_price);
-          pctAdj = ((withStats.avg_price - withoutStats.avg_price) / withoutStats.avg_price) * 100;
+        if (withAvgNormTime !== null && withoutAvgNormTime !== null && withAvgNormTime > 0) {
+          // Jim's size normalization formula: Adjust "with cards" value to "without cards" size (baseline)
+          if (allWithAvgSFLA && allWithoutAvgSFLA && allWithAvgSFLA > 0 && allWithoutAvgSFLA > 0) {
+            jimAdjusted = sizeNormalize(withAvgNormTime, allWithAvgSFLA, allWithoutAvgSFLA);
+          } else {
+            jimAdjusted = withAvgNormTime;
+          }
+
+          flatAdj = Math.round(jimAdjusted - withoutAvgNormTime);
+          pctAdj = withoutAvgNormTime > 0 ? ((jimAdjusted - withoutAvgNormTime) / withoutAvgNormTime) * 100 : 0;
         }
 
         results.byVCS[vcs] = {
-          with: withStats,
-          without: withoutStats,
+          with: {
+            n: allVCSCounts[vcs]?.with_cards || 0,
+            avg_sfla: allWithAvgSFLA ? Math.round(allWithAvgSFLA) : null, // Changed from total_sfla to avg_sfla
+            avg_year_built: allWithAvgYearBuilt ? Math.round(allWithAvgYearBuilt) : null,
+            avg_norm_time: withAvgNormTime ? Math.round(withAvgNormTime) : null
+          },
+          without: {
+            n: allVCSCounts[vcs]?.without_cards || 0,
+            avg_sfla: allWithoutAvgSFLA ? Math.round(allWithoutAvgSFLA) : null,
+            avg_year_built: allWithoutAvgYearBuilt ? Math.round(allWithoutAvgYearBuilt) : null,
+            avg_norm_time: withoutAvgNormTime ? Math.round(withoutAvgNormTime) : null
+          },
+          adjusted: jimAdjusted,
           flat_adj: flatAdj,
           pct_adj: pctAdj
         };
 
-        // Add to overall totals
-        results.overall.with.n += withStats.n;
-        results.overall.without.n += withoutStats.n;
-        results.summary.propertiesWithCards += withStats.n;
-        results.summary.propertiesWithoutCards += withoutStats.n;
       });
 
-      // Add detailed logging for debugging
-      console.log('🔍 Additional Card Analysis Debug Info:');
-      console.log('Vendor Type:', vendorType);
-      console.log('Total property groups found:', propertyGroups.size);
-      console.log('Sample properties with addl cards:',
-        validProps.filter(p => p.additional_card && p.additional_card !== 'M' && p.additional_card !== '1')
-          .slice(0, 5)
-          .map(p => ({
-            address: p.property_location,
-            card: p.additional_card,
-            composite_key: p.property_composite_key
-          }))
-      );
-
-      // Log VCS breakdown
-      Object.entries(byVCS).forEach(([vcs, data]) => {
-        console.log(`VCS ${vcs}:`, {
-          withCards: data.with_cards.length,
-          withoutCards: data.without_cards.length,
-          sampleWithCards: data.with_cards.slice(0, 2).map(g => ({
-            address: g.address,
-            cards: g.cardCodes,
-            totalSFLA: g.totalSfla
-          }))
-        });
+      console.log('📊 Analysis Results:', {
+        totalAdditionalCards: additionalCardProperties.length,
+        vcsCount: Object.keys(results.byVCS).length,
+        propertiesWithCards: results.summary.propertiesWithCards,
+        propertiesWithoutCards: results.summary.propertiesWithoutCards,
+        sampleVCSData: Object.entries(results.byVCS).slice(0, 2)
       });
+
+      // Debug: Check sample property data
+      console.log('���� Sample Properties (first 5):', properties.slice(0, 5).map(p => ({
+        location: p.property_location,
+        sfla: p.asset_sfla,
+        yearBuilt: p.asset_year_built,
+        vcs: p.new_vcs || p.property_vcs,
+        card: p.property_addl_card || p.additional_card
+      })));
+
 
       // Log analysis summary
       console.log('��� Additional Card Analysis Summary:', {
@@ -1957,15 +2194,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       console.log('✅ Setting additional card analysis results:', results);
       setAdditionalResults(results);
 
-      // Save to database
-      await saveAdditionalResultsToDB(results);
 
-      console.log('✅ Additional card analysis completed successfully');
+      console.log('����� Additional card analysis completed successfully');
       
     } catch (error) {
-      console.error('Error running additional card analysis:', error);
-    } finally {
-      setAdditionalWorking(false);
+      console.error('❌ Error running additional cards analysis:', error);
+      setAdditionalResults(null);
     }
   };
 
@@ -1988,214 +2222,639 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     }
   };
 
-  // Export additional cards results to CSV
-  const exportAdditionalResultsToCSV = () => {
-    if (!additionalResults) return;
+  // Export function for the CSV
+  const exportAdditionalCardsCSV = () => {
+    if (!additionalResults || !additionalResults.additionalCardsList) {
+      alert('No additional cards data to export');
+      return;
+    }
 
-    const headers = [
-      'VCS',
-      'With_Cards_N',
-      'With_Avg_Total_SFLA',
-      'With_Avg_Price',
-      'With_Avg_Age',
-      'Without_Cards_N',
-      'Without_Avg_SFLA',
-      'Without_Avg_Price',
-      'Without_Avg_Age',
-      'Flat_Impact',
-      'Pct_Impact'
-    ];
+    let csv = 'Address,Card,VCS,Class,Type/Use,Sales Price,SFLA,Year Built,Norm Time\\n';
 
-    const rows = [];
-
-    // Add analysis summary row
-    rows.push([
-      '=== ANALYSIS SUMMARY ===',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      ''
-    ]);
-
-    rows.push([
-      'Analysis Method',
-      `${additionalResults.summary?.vendorType || vendorType} - Properties grouped by base location`,
-      'SFLA summed across all cards',
-      `Total Properties: ${additionalResults.summary?.totalPropertiesAnalyzed || 0}`,
-      `With Cards: ${additionalResults.summary?.propertiesWithCards || 0}`,
-      `Without Cards: ${additionalResults.summary?.propertiesWithoutCards || 0}`,
-      vendorType === 'BRT' ? 'Additional = Cards 2,3,4+ (not Card 1/Main)' : 'Additional = Cards A-Z (not Card M/Main)',
-      '',
-      '',
-      '',
-      ''
-    ]);
-
-    rows.push(['', '', '', '', '', '', '', '', '', '', '']); // Empty row
-
-    // Add headers again
-    rows.push(headers);
-
-    // Add VCS data
-    Object.entries(additionalResults.byVCS || {}).forEach(([vcs, data]) => {
-      rows.push([
-        vcs,
-        data.with.n,
-        data.with.avg_size || '',
-        data.with.avg_price || '',
-        data.with.avg_age || '',
-        data.without.n,
-        data.without.avg_size || '',
-        data.without.avg_price || '',
-        data.without.avg_age || '',
-        data.flat_adj || '',
-        data.pct_adj ? data.pct_adj.toFixed(1) : ''
-      ]);
+    additionalResults.additionalCardsList.forEach(prop => {
+      csv += `"${prop.property_location || ''}",`;
+      csv += `"${prop.property_addl_card || prop.additional_card || ''}",`;
+      csv += `"${prop.new_vcs || prop.property_vcs || ''}",`;
+      csv += `"${prop.property_m4_class || prop.property_cama_class || ''}",`;
+      csv += `"${prop.asset_type_use || ''}",`;
+      csv += `"${prop.sales_price || ''}",`;
+      csv += `"${prop.asset_sfla || ''}",`;
+      csv += `"${prop.asset_year_built || ''}",`;
+      csv += `"${prop.values_norm_time || ''}"}\\n`;
     });
 
-    const filename = `${jobData.job_name || 'job'}_additional_cards_analysis.csv`;
-    downloadCsv(filename, headers, rows);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Additional_Cards_${jobData?.job_name || 'Analysis'}_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ============ ADDITIONAL CARDS SORTING ============
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortedAdditionalCards = () => {
+    if (!additionalResults?.additionalCardsList) return [];
+
+    return [...additionalResults.additionalCardsList].sort((a, b) => {
+      let aVal = a[sortField];
+      let bVal = b[sortField];
+
+      // Special handling for VCS field to use new_vcs || property_vcs fallback
+      if (sortField === 'new_vcs') {
+        aVal = a.new_vcs || a.property_vcs;
+        bVal = b.new_vcs || b.property_vcs;
+      }
+
+      // Handle null/undefined values
+      if (aVal === null || aVal === undefined) aVal = '';
+      if (bVal === null || bVal === undefined) bVal = '';
+
+      // Convert to string for comparison, except for numeric fields
+      if (['property_block', 'property_lot', 'sales_price', 'asset_sfla', 'asset_year_built', 'values_norm_time'].includes(sortField)) {
+        aVal = parseFloat(aVal) || 0;
+        bVal = parseFloat(bVal) || 0;
+      } else {
+        aVal = String(aVal).toLowerCase();
+        bVal = String(bVal).toLowerCase();
+      }
+
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  };
+
+  const renderSortIcon = (field) => {
+    if (sortField !== field) {
+      return (
+        <span style={{ marginLeft: '4px', color: '#9CA3AF', fontSize: '10px' }}>↕</span>
+      );
+    }
+    return (
+      <span style={{ marginLeft: '4px', color: '#374151', fontSize: '10px' }}>
+        {sortDirection === 'asc' ? '↑' : '↓'}
+      </span>
+    );
+  };
+
+  // ============ RENDER PACKAGE PAIRS USING PACKAGE SALE IDENTIFICATION ============
+  const renderPackagePairs = (additionalResults) => {
+    if (!additionalResults?.packagePairs) {
+      return (
+        <tr>
+          <td colSpan="11" style={{ padding: '20px', textAlign: 'center', color: '#6B7280', fontStyle: 'italic' }}>
+            No package pairs identified for analysis
+          </td>
+        </tr>
+      );
+    }
+
+    return additionalResults.packagePairs.map((pair, idx) => {
+      const withCardsPackage = pair.withCardsPackage;
+      const baselineComparisons = pair.baselineComparisons || [];
+
+      // Calculate baseline metrics from comparable sales without additional cards in same VCS
+      const baselineCount = baselineComparisons.length;
+      const baselineAvgSFLA = baselineCount > 0 ?
+        Math.round(baselineComparisons.reduce((sum, p) => sum + (p.sfla || 0), 0) / baselineCount) : null;
+      const baselineAvgYear = baselineCount > 0 ?
+        Math.round(baselineComparisons.filter(p => p.year_built).reduce((sum, p) => sum + p.year_built, 0) /
+        baselineComparisons.filter(p => p.year_built).length) : null;
+      const baselineAvgPrice = baselineCount > 0 ?
+        baselineComparisons.reduce((sum, p) => sum + p.norm_time, 0) / baselineCount : null;
+
+      // Apply Jim's size normalization formula - only if both with and without have valid prices
+      const packageSFLA = withCardsPackage.total_sfla;
+      const packagePrice = withCardsPackage.norm_time;
+      let adjustedBaseline = null;
+      let flatImpact = null;
+      let pctImpact = null;
+
+      // Only calculate if both sides have valid prices
+      if (packagePrice && baselineAvgPrice && packageSFLA && baselineAvgSFLA) {
+        // Jim's formula: adjust baseline price to package sum SFLA
+        adjustedBaseline = sizeNormalize(baselineAvgPrice, baselineAvgSFLA, packageSFLA);
+
+        // Calculate impact
+        flatImpact = packagePrice - adjustedBaseline;
+        pctImpact = (flatImpact / adjustedBaseline) * 100;
+      }
+
+      return (
+        <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+          <td style={{ padding: '8px 10px', fontSize: '12px' }}>
+            {withCardsPackage.address || `${withCardsPackage.block}-${withCardsPackage.lot}`}
+          </td>
+          <td style={{ padding: '8px 10px', fontSize: '12px', fontWeight: '500' }}>
+            {withCardsPackage.vcs}
+          </td>
+          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+            {withCardsPackage.total_sfla ? withCardsPackage.total_sfla.toLocaleString() : '-'}
+          </td>
+          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+            {withCardsPackage.avg_year_built || '-'}
+          </td>
+          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px', fontWeight: '500' }}>
+            {withCardsPackage.norm_time ? formatCurrency(withCardsPackage.norm_time) : '-'}
+          </td>
+          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+            {baselineAvgSFLA ? baselineAvgSFLA.toLocaleString() : '-'}
+          </td>
+          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+            {baselineAvgYear || '-'}
+          </td>
+          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+            {baselineAvgPrice ? formatCurrency(baselineAvgPrice) : '-'}
+          </td>
+          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+            {adjustedBaseline ? formatCurrency(adjustedBaseline) : '-'}
+          </td>
+          <td style={{
+            padding: '8px 10px',
+            textAlign: 'right',
+            fontSize: '12px',
+            color: (flatImpact || 0) > 0 ? '#059669' : (flatImpact || 0) < 0 ? '#B45309' : '#6B7280'
+          }}>
+            {flatImpact ? formatCurrency(flatImpact) : '-'}
+          </td>
+          <td style={{
+            padding: '8px 10px',
+            textAlign: 'right',
+            fontSize: '12px',
+            color: (pctImpact || 0) > 0 ? '#059669' : (pctImpact || 0) < 0 ? '#B45309' : '#6B7280'
+          }}>
+            {pctImpact ? `${pctImpact.toFixed(1)}%` : '-'}
+          </td>
+        </tr>
+      );
+    });
+  };
+
+  // ============ RENDER VCS ANALYSIS TABLE WITH EXPANDABLE SECTIONS ============
+  const renderVCSAnalysisTable = (vcsData) => {
+    // Filter to only show VCS that have properties with additional cards
+    const vcsKeys = Object.keys(vcsData)
+      .filter(vcs => (vcsData[vcs]?.with?.n || 0) > 0)
+      .sort();
+
+    if (vcsKeys.length === 0) {
+      return (
+        <div style={{ padding: '20px', textAlign: 'center', color: '#6B7280' }}>
+          No VCS with additional cards available for detailed analysis
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ marginBottom: '20px' }}>
+        {vcsKeys.map(vcs => {
+          const data = vcsData[vcs];
+          const isExpanded = expandedAdditionalVCS.has(vcs);
+
+          // Toggle VCS expansion function
+          const toggleVCS = () => {
+            const newExpanded = new Set(expandedAdditionalVCS);
+            if (newExpanded.has(vcs)) {
+              newExpanded.delete(vcs);
+            } else {
+              newExpanded.add(vcs);
+            }
+            setExpandedAdditionalVCS(newExpanded);
+          };
+
+          // Get individual property pairs for comparison
+          const withCardsProperties = data.with_cards_properties || [];
+          const withoutCardsProperties = data.without_cards_properties || [];
+
+          // Calculate sales-only statistics from actual sales arrays
+          // WITH cards sales data (each record is a property group that sold)
+          const withCardsSales = data.with_cards || [];
+          const withSalesCount = withCardsSales.length;
+          const withSalesAvgSFLA = withSalesCount > 0 ?
+            withCardsSales.reduce((sum, record) => sum + record.total_sfla, 0) / withSalesCount : null;
+          const withSalesAvgYear = withSalesCount > 0 ?
+            withCardsSales.filter(record => record.avg_year_built).reduce((sum, record) => sum + record.avg_year_built, 0) /
+            withCardsSales.filter(record => record.avg_year_built).length : null;
+
+          // WITHOUT cards sales data (each record is a single property that sold)
+          const withoutCardsSales = data.without_cards || [];
+          const withoutSalesCount = withoutCardsSales.length;
+          const withoutSalesAvgSFLA = withoutSalesCount > 0 ?
+            withoutCardsSales.reduce((sum, record) => sum + record.sfla, 0) / withoutSalesCount : null;
+          const withoutSalesAvgYear = withoutSalesCount > 0 ?
+            withoutCardsSales.filter(record => record.year_built).reduce((sum, record) => sum + record.year_built, 0) /
+            withoutCardsSales.filter(record => record.year_built).length : null;
+
+          return (
+            <div key={vcs} style={{ marginBottom: '15px', border: '1px solid #E5E7EB', borderRadius: '6px' }}>
+              {/* VCS Header Row */}
+              <div
+                onClick={toggleVCS}
+                style={{
+                  padding: '12px 15px',
+                  backgroundColor: '#F9FAFB',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  borderBottom: isExpanded ? '1px solid #E5E7EB' : 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  <span style={{ fontWeight: '600', fontSize: '14px' }}>{vcs}</span>
+                  <span style={{ fontSize: '12px', color: '#6B7280' }}>
+                    ({data.with.n} with cards, {data.without.n} without cards)
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                  <span style={{ fontSize: '12px', color: '#6B7280' }}>
+                    Impact: {data.flat_adj ? formatCurrency(data.flat_adj) : 'No comparison'}
+                  </span>
+                  {!isExpanded && (
+                    <span style={{ fontSize: '12px', color: '#6B7280' }}>
+                      Click to expand
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Property Details (when expanded) */}
+              {isExpanded && (
+                <div style={{ padding: '15px' }}>
+                  {/* VCS Summary Table - moved here from top level */}
+                  <div style={{
+                    marginBottom: '20px',
+                    border: '1px solid #E5E7EB',
+                    borderRadius: '6px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      padding: '10px 12px',
+                      backgroundColor: '#F9FAFB',
+                      borderBottom: '1px solid #E5E7EB'
+                    }}>
+                      <h4 style={{ fontSize: '13px', fontWeight: '600', margin: '0' }}>
+                        VCS {vcs} - Summary Comparison
+                      </h4>
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#F3F4F6' }}>
+                          <th style={{ padding: '4px 6px', textAlign: 'left', fontSize: '10px', fontWeight: '600' }}>Type</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'center', fontSize: '10px', fontWeight: '600' }}>Count(all)</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Avg SFLA(all)</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Avg YearBuilt(all)</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'center', fontSize: '10px', fontWeight: '600' }}>Count(sales)</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Avg SFLA(sales)</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Avg Year Built(sales)</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Adjusted</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Impact $</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Impact %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr style={{ backgroundColor: '#F8FAFC' }}>
+                          <td style={{ padding: '4px 6px', fontSize: '11px', fontWeight: '500', color: '#1E293B' }}>With Cards</td>
+                          <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>{data.with.n}</td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                            {data.with.avg_sfla ? data.with.avg_sfla.toLocaleString() : '-'}
+                          </td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                            {data.with.avg_year_built || '-'}
+                          </td>
+                          <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>
+                            {withSalesCount}
+                          </td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                            {withSalesAvgSFLA ? Math.round(withSalesAvgSFLA).toLocaleString() : '-'}
+                          </td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                            {withSalesAvgYear ? Math.round(withSalesAvgYear) : '-'}
+                          </td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px', fontWeight: '500' }}>
+                            {data.adjusted ? formatCurrency(data.adjusted) : '-'}
+                          </td>
+                          <td style={{
+                            padding: '4px 6px',
+                            textAlign: 'right',
+                            fontSize: '11px',
+                            fontWeight: '500',
+                            color: data.flat_adj > 0 ? '#059669' : data.flat_adj < 0 ? '#B45309' : '#6B7280'
+                          }}>
+                            {data.flat_adj ? formatCurrency(data.flat_adj) : '-'}
+                          </td>
+                          <td style={{
+                            padding: '4px 6px',
+                            textAlign: 'right',
+                            fontSize: '11px',
+                            fontWeight: '500',
+                            color: data.pct_adj > 0 ? '#059669' : data.pct_adj < 0 ? '#B45309' : '#6B7280'
+                          }}>
+                            {data.pct_adj ? `${data.pct_adj.toFixed(1)}%` : '-'}
+                          </td>
+                        </tr>
+                        <tr style={{ backgroundColor: '#F0F9FF' }}>
+                          <td style={{ padding: '4px 6px', fontSize: '11px', fontWeight: '500', color: '#1E40AF' }}>Without Cards (Baseline)</td>
+                          <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>{data.without.n}</td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                            {data.without.avg_sfla ? data.without.avg_sfla.toLocaleString() : '-'}
+                          </td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                            {data.without.avg_year_built || '-'}
+                          </td>
+                          <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>
+                            {withoutSalesCount}
+                          </td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                            {withoutSalesAvgSFLA ? Math.round(withoutSalesAvgSFLA).toLocaleString() : '-'}
+                          </td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                            {withoutSalesAvgYear ? Math.round(withoutSalesAvgYear) : '-'}
+                          </td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>Baseline</td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>-</td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>-</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                    {/* Properties WITH Additional Cards */}
+                    <div>
+                      <h5 style={{ fontSize: '13px', fontWeight: '600', marginBottom: '10px', color: '#1E293B' }}>
+                        Properties WITH Additional Cards ({withCardsProperties.length})
+                      </h5>
+                      {withCardsProperties.length > 0 ? (
+                        <div style={{ border: '1px solid #E5E7EB', borderRadius: '4px', overflow: 'hidden' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr style={{ backgroundColor: '#F3F4F6' }}>
+                                <th style={{ padding: '6px 8px', textAlign: 'left', fontSize: '11px', fontWeight: '600' }}>Block-Lot-Qual</th>
+                                <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Total SFLA</th>
+                                <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Year</th>
+                                <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Value</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {withCardsProperties.map((prop, idx) => (
+                                <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                                  <td style={{ padding: '6px 8px', fontSize: '11px' }}>
+                                    {prop.block}-{prop.lot}{prop.qualifier ? `-${prop.qualifier}` : ''}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px' }}>
+                                    {prop.total_sfla ? prop.total_sfla.toLocaleString() : '-'}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px' }}>
+                                    {prop.avg_year_built || '-'}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px' }}>
+                                    {formatCurrency(prop.norm_time)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div style={{ padding: '15px', textAlign: 'center', color: '#6B7280', fontSize: '12px', fontStyle: 'italic' }}>
+                          No properties with additional cards sold in this VCS
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Properties WITHOUT Additional Cards */}
+                    <div>
+                      <h5 style={{ fontSize: '13px', fontWeight: '600', marginBottom: '10px', color: '#1E293B' }}>
+                        Properties WITHOUT Additional Cards ({withoutCardsProperties.length})
+                      </h5>
+                      {withoutCardsProperties.length > 0 ? (
+                        <div style={{ border: '1px solid #E5E7EB', borderRadius: '4px', overflow: 'hidden' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr style={{ backgroundColor: '#F3F4F6' }}>
+                                <th style={{ padding: '6px 8px', textAlign: 'left', fontSize: '11px', fontWeight: '600' }}>Block-Lot-Qual</th>
+                                <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>SFLA</th>
+                                <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Year</th>
+                                <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Value</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {withoutCardsProperties.map((prop, idx) => (
+                                <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                                  <td style={{ padding: '6px 8px', fontSize: '11px' }}>
+                                    {prop.block}-{prop.lot}{prop.qualifier ? `-${prop.qualifier}` : ''}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px' }}>
+                                    {prop.sfla ? prop.sfla.toLocaleString() : '-'}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px' }}>
+                                    {prop.year_built || '-'}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px' }}>
+                                    {formatCurrency(prop.norm_time)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div style={{ padding: '15px', textAlign: 'center', color: '#6B7280', fontSize: '12px', fontStyle: 'italic' }}>
+                          No properties without additional cards sold in this VCS
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   // ============ RENDER ADDITIONAL CARDS ANALYSIS ============
   const renderAdditionalCardsAnalysis = () => {
     return (
       <div>
-        {/* Controls - Match condition analysis style */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '10px 15px',
-          backgroundColor: '#F0F9FF',
-          borderRadius: '6px',
-          marginBottom: '15px'
-        }}>
-          <div>
-            <h3 style={{
-              fontSize: '16px',
-              fontWeight: '600',
-              margin: '0 0 4px 0',
-              color: '#1E40AF'
-            }}>
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '600', margin: 0 }}>
               Additional Cards Analysis
             </h3>
-            <p style={{ fontSize: '12px', color: '#1E40AF', margin: '0' }}>
-              {vendorType === 'BRT'
-                ? 'Analyzing properties with multiple cards (Card 2, 3, 4, etc. vs Card 1/Main)'
-                : 'Analyzing properties with additional buildings (Cards A-Z vs Card M/Main)'
-              }
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <button
-              onClick={runAdditionalCardAnalysis}
-              disabled={additionalWorking}
-              style={{
-                padding: '6px 16px',
-                backgroundColor: additionalWorking ? '#E5E7EB' : '#3B82F6',
-                color: additionalWorking ? '#9CA3AF' : 'white',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '14px',
-                fontWeight: '500',
-                cursor: additionalWorking ? 'not-allowed' : 'pointer'
-              }}
-            >
-              {additionalWorking ? 'Analyzing...' : 'Run Analysis'}
-            </button>
-
             {additionalResults && (
               <button
-                onClick={exportAdditionalResultsToCSV}
-                className={CSV_BUTTON_CLASS}
+                onClick={exportAdditionalCardsCSV}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: '#10B981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  cursor: 'pointer'
+                }}
               >
-                <FileText size={14} /> Export CSV
+                Export CSV
               </button>
             )}
           </div>
+
+          <div style={{
+            fontSize: '13px',
+            color: '#6B7280',
+            marginBottom: '20px',
+            padding: '12px',
+            backgroundColor: '#F3F4F6',
+            borderRadius: '6px'
+          }}>
+            <div style={{ marginBottom: '4px' }}>
+              Analyzing properties with multiple cards vs single card properties
+            </div>
+            <div style={{ fontStyle: 'italic' }}>
+              {vendorType === 'BRT' || vendorType === 'brt'
+                ? 'Additional = Cards 2, 3, 4+ (Card 1 is Main)'
+                : 'Additional = Cards A-Z (Card M is Main)'
+              }
+            </div>
+          </div>
         </div>
 
-        {/* Debug Info */}
-        {console.log('🔍 additionalResults state:', additionalResults)}
-
-        {/* Working Status */}
-        {additionalWorking && (
+        {/* Debug Sales Count */}
+        {additionalResults && (
           <div style={{
-            padding: '20px',
-            textAlign: 'center',
-            backgroundColor: '#F3F4F6',
+            marginBottom: '20px',
+            padding: '10px',
+            backgroundColor: '#FEF3C7',
             borderRadius: '6px',
-            marginBottom: '15px'
+            fontSize: '12px'
           }}>
-            <div style={{ fontSize: '14px', color: '#6B7280' }}>
-              Running additional card analysis...
-            </div>
+            <strong>Debug Info:</strong> Package Pairs Found: {additionalResults.packagePairs?.length || 0} |
+            Total Properties with Sales: {(() => {
+              let totalSales = 0;
+              Object.values(additionalResults.byVCS || {}).forEach(vcsData => {
+                totalSales += (vcsData.with_cards || []).length;
+                totalSales += (vcsData.without_cards || []).length;
+              });
+              return totalSales;
+            })()} | Expected: 105 sales
           </div>
         )}
 
-        {/* Results */}
-        {additionalResults && (
-          <div>
-            {/* Analysis Summary - Enhanced */}
-            <div style={{
-              marginBottom: '20px',
-              padding: '15px',
-              backgroundColor: '#FEF3C7',
-              borderRadius: '6px',
-              border: '1px solid #FCD34D'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <div>
-                  <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>
-                    Properties with Additional Cards
-                  </div>
-                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#92400E' }}>
-                    {additionalResults.overall.with.n}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>
-                    Properties without Additional Cards
-                  </div>
-                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#92400E' }}>
-                    {additionalResults.overall.without.n}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>
-                    Total Properties Analyzed
-                  </div>
-                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#92400E' }}>
-                    {additionalResults.summary?.totalPropertiesAnalyzed || 0}
-                  </div>
-                </div>
+        {/* Summary Stats */}
+        {additionalResults ? (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '20px' }}>
+              <div style={{ padding: '15px', backgroundColor: '#F9FAFB', borderRadius: '6px', border: '1px solid #E5E7EB' }}>
+                <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>Properties with Additional Cards</div>
+                <div style={{ fontSize: '24px', fontWeight: '600', color: '#111827' }}>{additionalResults.summary?.propertiesWithCards || 0}</div>
               </div>
-
-              {/* Analysis Method Info */}
-              <div style={{
-                padding: '8px 12px',
-                backgroundColor: 'rgba(146, 64, 14, 0.1)',
-                borderRadius: '4px',
-                fontSize: '12px',
-                color: '#92400E'
-              }}>
-                <strong>Analysis Method:</strong> Properties grouped by base location, SFLA summed across all cards.
-                {vendorType === 'BRT'
-                  ? ' Additional = Cards 2, 3, 4+ (excluding Card 1 and Main)'
-                  : ' Additional = Cards A-Z (excluding Card M/Main)'
-                }
+              <div style={{ padding: '15px', backgroundColor: '#F9FAFB', borderRadius: '6px', border: '1px solid #E5E7EB' }}>
+                <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>Properties without Additional Cards</div>
+                <div style={{ fontSize: '24px', fontWeight: '600', color: '#111827' }}>{additionalResults.summary?.propertiesWithoutCards || 0}</div>
+              </div>
+              <div style={{ padding: '15px', backgroundColor: '#F9FAFB', borderRadius: '6px', border: '1px solid #E5E7EB' }}>
+                <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>Total Properties Analyzed</div>
+                <div style={{ fontSize: '24px', fontWeight: '600', color: '#111827' }}>{additionalResults.summary?.totalPropertiesAnalyzed || 0}</div>
               </div>
             </div>
 
-            {/* VCS Analysis Table */}
+            {/* Impact Summary */}
+            <div style={{
+              marginBottom: '20px',
+              padding: '15px',
+              backgroundColor: '#F8FAFC',
+              borderRadius: '6px',
+              border: '1px solid #E2E8F0'
+            }}>
+              <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0 0 10px 0', color: '#1E293B' }}>
+                Overall Impact Summary
+              </h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', fontSize: '13px' }}>
+                <div>
+                  <span style={{ color: '#64748B', fontWeight: '500' }}>Total Dollar Impact: </span>
+                  <span style={{ fontWeight: '600', color: '#059669' }}>
+                    {(() => {
+                      const totalImpact = Object.values(additionalResults.byVCS || {}).reduce((sum, data) => {
+                        return sum + (data.flat_adj || 0);
+                      }, 0);
+                      return totalImpact !== 0 ? formatCurrency(totalImpact) : 'No valid comparisons';
+                    })()}
+                  </span>
+                </div>
+                <div>
+                  <span style={{ color: '#64748B', fontWeight: '500' }}>Average % Impact: </span>
+                  <span style={{ fontWeight: '600', color: '#059669' }}>
+                    {(() => {
+                      const impacts = Object.values(additionalResults.byVCS || {}).filter(data => data.pct_adj !== null && data.pct_adj !== undefined);
+                      if (impacts.length === 0) return 'No valid comparisons';
+                      const avgPct = impacts.reduce((sum, data) => sum + data.pct_adj, 0) / impacts.length;
+                      return `${avgPct.toFixed(1)}%`;
+                    })()}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+
+            {/* Package Pair Analysis Table */}
+            <div style={{
+              border: '1px solid #E5E7EB',
+              borderRadius: '6px',
+              overflow: 'auto',
+              marginBottom: '30px'
+            }}>
+              <div style={{
+                padding: '12px 15px',
+                backgroundColor: '#F9FAFB',
+                borderBottom: '1px solid #E5E7EB'
+              }}>
+                <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0' }}>
+                  Additional Cards Package Analysis
+                </h4>
+                <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>
+                  Each row shows a package with additional cards vs baseline properties without cards in the same VCS
+                </div>
+              </div>
+
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#F3F4F6' }}>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: '600' }}>Package Location</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: '600' }}>VCS</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Sum SFLA (w)</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Year (w)</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Price (w)</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg SFLA (w/o)</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Year (w/o)</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Price (w/o)</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Adjusted</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Impact ($)</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Impact (%)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* Render individual package pairs */}
+                  {renderPackagePairs(additionalResults)}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Additional Cards Detail Table */}
             <div style={{
               border: '1px solid #E5E7EB',
               borderRadius: '6px',
@@ -2204,110 +2863,154 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               <div style={{
                 padding: '12px 15px',
                 backgroundColor: '#F9FAFB',
-                borderBottom: '1px solid #E5E7EB'
+                borderBottom: '1px solid #E5E7EB',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
               }}>
                 <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0' }}>
-                  Analysis by VCS
+                  All Additional Cards Detail
                 </h4>
+                <span style={{ fontSize: '12px', color: '#6B7280', fontWeight: '500' }}>
+                  ({(additionalResults.additionalCardsList || []).length} cards)
+                </span>
               </div>
 
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#F3F4F6' }}>
-                    <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '12px', fontWeight: '600' }}>
-                      VCS
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>
-                      With Cards (n)
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      Avg Total SFLA
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      Avg Price
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600' }}>
-                      Without Cards (n)
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      Avg SFLA
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      Avg Price
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      $ Impact
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600' }}>
-                      % Impact
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(additionalResults.byVCS || {}).map(([vcs, data], idx) => (
-                    <tr key={vcs} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                      <td style={{ padding: '8px 12px', fontSize: '13px', fontWeight: '500' }}>
-                        {vcs}
-                      </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
-                        {data.with.n}
-                      </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
-                        {data.with.avg_size ? `${data.with.avg_size.toLocaleString()} sf` : '-'}
-                      </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
-                        {data.with.avg_price ? formatCurrency(data.with.avg_price) : '-'}
-                      </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
-                        {data.without.n}
-                      </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
-                        {data.without.avg_size ? `${data.without.avg_size.toLocaleString()} sf` : '-'}
-                      </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
-                        {data.without.avg_price ? formatCurrency(data.without.avg_price) : '-'}
-                      </td>
-                      <td style={{
-                        padding: '8px 12px',
-                        textAlign: 'right',
-                        fontSize: '13px',
-                        color: data.flat_adj > 0 ? '#059669' :
-                               data.flat_adj < 0 ? '#DC2626' : '#6B7280'
-                      }}>
-                        {data.flat_adj ? formatCurrency(data.flat_adj) : '-'}
-                      </td>
-                      <td style={{
-                        padding: '8px 12px',
-                        textAlign: 'right',
-                        fontSize: '13px',
-                        color: data.pct_adj > 0 ? '#059669' :
-                               data.pct_adj < 0 ? '#DC2626' : '#6B7280'
-                      }}>
-                        {data.pct_adj ? formatPercent(data.pct_adj) : '-'}
-                      </td>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#F3F4F6' }}>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('property_block')}
+                      >
+                        Block{renderSortIcon('property_block')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('property_lot')}
+                      >
+                        Lot{renderSortIcon('property_lot')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('property_qualifier')}
+                      >
+                        Qualifier{renderSortIcon('property_qualifier')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('property_addl_card')}
+                      >
+                        Card{renderSortIcon('property_addl_card')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('property_location')}
+                      >
+                        Address{renderSortIcon('property_location')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('new_vcs')}
+                      >
+                        VCS{renderSortIcon('new_vcs')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('property_m4_class')}
+                      >
+                        Class{renderSortIcon('property_m4_class')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('asset_type_use')}
+                      >
+                        Type/Use{renderSortIcon('asset_type_use')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('asset_building_class')}
+                      >
+                        Building Class{renderSortIcon('asset_building_class')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('asset_sfla')}
+                      >
+                        SFLA{renderSortIcon('asset_sfla')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('asset_year_built')}
+                      >
+                        Year Built{renderSortIcon('asset_year_built')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('sales_price')}
+                      >
+                        Sales Price{renderSortIcon('sales_price')}
+                      </th>
+                      <th
+                        style={{ padding: '8px 12px', textAlign: 'right', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort('values_norm_time')}
+                      >
+                        Price Time{renderSortIcon('values_norm_time')}
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {getSortedAdditionalCards().length > 0 ? (
+                      getSortedAdditionalCards().map((prop, idx) => (
+                        <tr key={`${prop.property_composite_key}-${idx}`} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.property_block || '-'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.property_lot || '-'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.property_qualifier || '-'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px', fontWeight: '500' }}>
+                            {prop.property_addl_card || prop.additional_card}
+                          </td>
+                          <td style={{ padding: '8px 12px', fontSize: '13px' }}>{prop.property_location}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.new_vcs || prop.property_vcs || '-'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
+                            {prop.property_m4_class || prop.property_cama_class || '-'}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.asset_type_use || '-'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
+                            {prop.asset_building_class || '-'}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
+                            {prop.asset_sfla ? parseInt(prop.asset_sfla).toLocaleString() : '-'}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.asset_year_built || '-'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
+                            {prop.sales_price ? formatCurrency(prop.sales_price) : '-'}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
+                            {prop.values_norm_time ? formatCurrency(prop.values_norm_time) : '-'}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="13" style={{ padding: '20px', textAlign: 'center', color: '#6B7280', fontSize: '13px' }}>
+                          No additional cards found in this dataset
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
-
-        {/* No Results Yet */}
-        {!additionalResults && !additionalWorking && (
-          <div style={{
-            padding: '40px',
-            textAlign: 'center',
-            backgroundColor: '#F9FAFB',
-            borderRadius: '6px',
-            color: '#6B7280'
-          }}>
-            <div style={{ fontSize: '14px' }}>
-              Additional card analysis will run automatically when data is loaded.
+          </>
+        ) : (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#6B7280' }}>
+            <div style={{ marginBottom: '10px' }}>
+              <svg style={{ width: '48px', height: '48px', margin: '0 auto', opacity: 0.3 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
             </div>
-            <div style={{ fontSize: '12px', marginTop: '8px' }}>
-              Properties with multiple cards (A cards, Card 2+) will be compared to single-card properties.
-            </div>
+            <div>Loading additional cards analysis...</div>
           </div>
         )}
       </div>
