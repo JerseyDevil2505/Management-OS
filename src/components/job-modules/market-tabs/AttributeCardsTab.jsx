@@ -88,7 +88,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
   // ============ ADDITIONAL CARDS STATE ============
   const [additionalResults, setAdditionalResults] = useState(marketLandData.additional_cards_rollup || null);
-  const [sortField, setSortField] = useState('property_vcs'); // Default sort by VCS
+  const [sortField, setSortField] = useState('new_vcs'); // Default sort by VCS
   const [sortDirection, setSortDirection] = useState('asc');
 
   // ============ PROPERTY MARKET DATA STATE ============
@@ -1728,7 +1728,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       const validPropsForAnalysis = properties.filter(p =>
         p.values_norm_time &&
         p.values_norm_time > 0 &&
-        p.property_vcs
+        (p.new_vcs || p.property_vcs)
       );
 
       // Group properties by base location (to identify main vs additional cards)
@@ -1774,7 +1774,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       // Process groups with additional cards
       groupsWithCards.forEach(group => {
-        const vcs = group[0].property_vcs;
+        const vcs = group[0].new_vcs || group[0].property_vcs;
         if (!vcs) return;
 
         if (!byVCS[vcs]) {
@@ -1793,7 +1793,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       // Process groups without additional cards
       groupsWithoutCards.forEach(group => {
-        const vcs = group[0].property_vcs;
+        const vcs = group[0].new_vcs || group[0].property_vcs;
         if (!vcs) return;
 
         if (!byVCS[vcs]) {
@@ -1821,8 +1821,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         },
         additionalCardsList: additionalCardProperties.sort((a, b) => {
           // Sort by VCS, then by address
-          if (a.property_vcs !== b.property_vcs) {
-            return (a.property_vcs || '').localeCompare(b.property_vcs || '');
+          const aVcs = a.new_vcs || a.property_vcs || '';
+          const bVcs = b.new_vcs || b.property_vcs || '';
+          if (aVcs !== bVcs) {
+            return aVcs.localeCompare(bVcs);
           }
           return (a.property_location || '').localeCompare(b.property_location || '');
         }),
@@ -1922,7 +1924,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     additionalResults.additionalCardsList.forEach(prop => {
       csv += `"${prop.property_location || ''}",`;
       csv += `"${prop.property_addl_card || prop.additional_card || ''}",`;
-      csv += `"${prop.property_vcs || ''}",`;
+      csv += `"${prop.new_vcs || prop.property_vcs || ''}",`;
       csv += `"${prop.property_m4_class || prop.property_cama_class || ''}",`;
       csv += `"${prop.asset_type_use || ''}",`;
       csv += `"${prop.sales_price || ''}",`;
@@ -2176,9 +2178,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                       </th>
                       <th
                         style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
-                        onClick={() => handleSort('property_vcs')}
+                        onClick={() => handleSort('new_vcs')}
                       >
-                        VCS{renderSortIcon('property_vcs')}
+                        VCS{renderSortIcon('new_vcs')}
                       </th>
                       <th
                         style={{ padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
@@ -2235,7 +2237,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                             {prop.property_addl_card || prop.additional_card}
                           </td>
                           <td style={{ padding: '8px 12px', fontSize: '13px' }}>{prop.property_location}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.property_vcs || '-'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.new_vcs || prop.property_vcs || '-'}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
                             {prop.property_m4_class || prop.property_cama_class || '-'}
                           </td>
