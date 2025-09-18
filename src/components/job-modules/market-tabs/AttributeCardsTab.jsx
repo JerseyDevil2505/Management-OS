@@ -445,14 +445,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id, properties.length, typeUseFilter, useInteriorInspections, manualExteriorBaseline, manualInteriorBaseline]);
 
-  // Load additional card analysis on mount (like condition analysis)
+  // Add this useEffect to run the analysis on mount and when data changes
   useEffect(() => {
-    if (!jobData?.id || properties.length === 0 || propertyMarketData.length === 0) return;
-
-    console.log('Auto-running additional card analysis on mount...');
-    runAdditionalCardsAnalysis();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobData?.id, properties.length, propertyMarketData.length]);
+    if (active === 'additional' && properties && properties.length > 0) {
+      runAdditionalCardsAnalysis();
+    }
+  }, [active, properties, vendorType]);
   // ============ BUILD CONDITION CASCADE TABLE ============
   const renderConditionTable = (data, type, expandedVCS, setExpandedVCS) => {
     const vcsKeys = Object.keys(data).sort();
