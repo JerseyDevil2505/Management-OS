@@ -658,6 +658,17 @@ useEffect(() => {
   debug('�� Initial load complete');
 }, [marketLandData]);
 
+// ========== FORCE FRESH CALCULATION AFTER LOAD ==========
+useEffect(() => {
+  if (isInitialLoadComplete && properties && properties.length > 0) {
+    debug('🔄 Triggering fresh calculation after load complete to use values_norm_time');
+    // Short delay to ensure all state is loaded before recalculating
+    setTimeout(() => {
+      filterVacantSales();
+    }, 100);
+  }
+}, [isInitialLoadComplete, properties, filterVacantSales]);
+
   // ========== CHECK FRONT FOOT AVAILABILITY ==========
   useEffect(() => {
     if (jobData?.parsed_code_definitions && vendorType) {
