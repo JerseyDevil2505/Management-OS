@@ -87,7 +87,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [customResults, setCustomResults] = useState(marketLandData.custom_attribute_rollup || null);
 
   // ============ ADDITIONAL CARDS STATE ============
-  const [additionalWorking, setAdditionalWorking] = useState(false);
   const [additionalResults, setAdditionalResults] = useState(marketLandData.additional_cards_rollup || null);
 
   // ============ PROPERTY MARKET DATA STATE ============
