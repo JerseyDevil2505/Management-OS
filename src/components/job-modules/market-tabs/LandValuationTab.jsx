@@ -2062,7 +2062,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Log special region usage
       if (region !== 'Normal') {
-        debug(`🌟 Using special region "${region}" rates for sale ${sale.property_block}/${sale.property_lot}:`, {
+        debug(`�� Using special region "${region}" rates for sale ${sale.property_block}/${sale.property_lot}:`, {
           primeRate: cascadeRates.prime?.rate,
           secondaryRate: cascadeRates.secondary?.rate,
           excessRate: cascadeRates.excess?.rate
@@ -4848,19 +4848,28 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         type="checkbox"
                         checked={includedSales.has(sale.id)}
                         onChange={(e) => {
-                          debug(`����� Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
-                            checked: e.target.checked,
+                          const isChecked = e.target.checked;
+                          debug(`🧮 Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
+                            checked: isChecked,
                             saleId: sale.id
                           });
-                          if (e.target.checked) {
+                          if (isChecked) {
+                            // Include in analysis and ensure it's NOT in the Method 1 excluded set
                             setIncludedSales(prev => new Set([...prev, sale.id]));
-                          } else {
-                            setIncludedSales(prev => {
-                              const newSet = new Set(prev);
-                              newSet.delete(sale.id);
-                              debug('❌ Removed from included sales, new size:', newSet.size);
-                              return newSet;
+                            setMethod1ExcludedSales(prev => {
+                              const next = new Set(prev);
+                              next.delete(sale.id);
+                              return next;
                             });
+                          } else {
+                            // Exclude from analysis and track in Method 1 excluded set (for persistence and rebuilds)
+                            setIncludedSales(prev => {
+                              const next = new Set(prev);
+                              next.delete(sale.id);
+                              debug('❌ Removed from included sales, new size:', next.size);
+                              return next;
+                            });
+                            setMethod1ExcludedSales(prev => new Set([...prev, sale.id]));
                           }
                         }}
                       />
