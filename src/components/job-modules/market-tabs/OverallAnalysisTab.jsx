@@ -4,7 +4,7 @@ import {
   TrendingUp, RefreshCw, Download, Filter, ChevronDown, ChevronUp,
   AlertCircle, Home, Building, Calendar, MapPin, Layers, DollarSign
 } from 'lucide-react';
-import './sharedTabNav.css';
+import './sharedTabNav.css\';\nimport MicrosystemsDiagnostic from \'../../MicrosystemsDiagnostic';
 
 const OverallAnalysisTab = ({ 
   properties = [], 
@@ -2109,7 +2109,7 @@ const OverallAnalysisTab = ({
                                   <td className="px-3 py-2 text-sm font-medium">{bedroom.label}</td>
                                   <td className="px-3 py-2 text-sm text-center">{bedroom.salesCount}</td>
                                   <td className="px-3 py-2 text-sm text-center">
-                                    {bedroom.avgSize > 0 ? formatNumber(bedroom.avgSize) : '—'}
+                                    {bedroom.avgSize > 0 ? formatNumber(bedroom.avgSize) : '���'}
                                   </td>
                                   <td className="px-3 py-2 text-sm text-center">
                                     {bedroom.avgPrice > 0 ? formatCurrency(bedroom.avgPrice) : <span className="text-gray-500 text-xs">NO DATA</span>}
