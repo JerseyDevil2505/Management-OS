@@ -44,6 +44,18 @@ const LandValuationTab = ({
   // ========== MAIN TAB STATE ==========
   const [activeSubTab, setActiveSubTab] = useState('land-rates');
 
+  // Helper to update session state
+  const updateSession = useCallback((updates) => {
+    if (updateSessionState) {
+      updateSessionState(prev => ({
+        ...prev,
+        ...updates,
+        hasUnsavedChanges: true,
+        lastModified: Date.now()
+      }));
+    }
+  }, [updateSessionState]);
+
   // Listen for external navigation events to set LandValuation inner subtab
   useEffect(() => {
     const handler = (e) => {
