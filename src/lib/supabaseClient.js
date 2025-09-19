@@ -1890,16 +1890,7 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
       }
 
       // BRT: No more LANDUR summation - that was the old incorrect way
-      console.warn(`❌ BRT property lot size calculation failed - no valid source found:`, {
-        property_key: property.property_composite_key,
-        checked_sources: ['frontage_x_depth', 'market_manual_lot_acre', 'market_manual_lot_sf', 'asset_lot_acre', 'asset_lot_sf'],
-        available_fields: {
-          frontage: frontage || 'missing',
-          depth: depth || 'missing',
-          manual_acre: manualAcre || 'missing',
-          manual_sf: manualSf || 'missing'
-        }
-      });
+      // No valid lot size source found for BRT property
       return '0.00';
     }
 
