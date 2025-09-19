@@ -1359,14 +1359,9 @@ const getPricePerUnit = useCallback((price, size) => {
       return true;
     });
 
-    debug('🔄 Applying Method 1 exclusions:', {
-      totalSalesBeforeExclusion: finalSales.length,
-      excludedSalesCount: activeExcluded.size,
-      totalSalesAfterExclusion: salesBeforeClassFilter,
-      packagesWithRestrictedClasses: salesBeforeClassFilter - filteredSales.length,
-      finalSalesCount: filteredSales.length,
-      excludedIds: Array.from(activeExcluded),
-      filteredOutSales: finalSales.filter(sale => activeExcluded.has(sale.id)).map(s => ({id: s.id, block: s.property_block, lot: s.property_lot}))
+    debug('🔄 Vacant sales processing:', {
+      totalSalesFound: finalSales.length,
+      finalSalesCount: filteredSales.length
     });
 
     setVacantSales(filteredSales);
