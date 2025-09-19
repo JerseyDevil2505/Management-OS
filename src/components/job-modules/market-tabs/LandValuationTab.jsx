@@ -734,6 +734,41 @@ useEffect(() => {
   debug('�� Initial load complete');
 }, [marketLandData, sessionState]);
 
+// Update session state whenever relevant state changes
+useEffect(() => {
+  if (!isInitialLoadComplete || !updateSession) return;
+
+  updateSession({
+    method1ExcludedSales,
+    includedSales,
+    saleCategories,
+    specialRegions,
+    landNotes,
+    cascadeConfig,
+    vcsSheetData,
+    vcsManualSiteValues,
+    vcsDescriptions,
+    vcsTypes,
+    vcsRecommendedSites,
+    collapsedFields
+  });
+}, [
+  method1ExcludedSales,
+  includedSales,
+  saleCategories,
+  specialRegions,
+  landNotes,
+  cascadeConfig,
+  vcsSheetData,
+  vcsManualSiteValues,
+  vcsDescriptions,
+  vcsTypes,
+  vcsRecommendedSites,
+  collapsedFields,
+  isInitialLoadComplete,
+  updateSession
+]);
+
   // ========== CHECK FRONT FOOT AVAILABILITY ==========
   useEffect(() => {
     if (jobData?.parsed_code_definitions && vendorType) {
@@ -2250,7 +2285,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       remainingAcres = 0;
     }
 
-    debug(`🔢 Raw land calculation for ${acres} acres:`, breakdown.join(' + '), `= $${rawLandValue.toFixed(0)}`);
+    debug(`���� Raw land calculation for ${acres} acres:`, breakdown.join(' + '), `= $${rawLandValue.toFixed(0)}`);
 
     return rawLandValue;
   };
@@ -7322,7 +7357,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       value={targetAllocation || ''}
                       onChange={(e) => {
                         const value = e.target.value;
-                        debug('🎯 Target allocation input changed:', value);
+                        debug('��� Target allocation input changed:', value);
                         // Fix: Parse as number to prevent caching issues
                         setTargetAllocation(value === '' ? null : parseFloat(value));
                       }}
@@ -8593,7 +8628,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               >
                 <option value="all">All</option>
                 <option value="1">1 — Single Family</option>
-                <option value="2">2 �� Duplex / Semi-Detached</option>
+                <option value="2">2 — Duplex / Semi-Detached</option>
                 <option value="3">3* �� Row / Townhouse</option>
                 <option value="4">4* — MultiFamily</option>
                 <option value="5">5* — Conversions</option>
