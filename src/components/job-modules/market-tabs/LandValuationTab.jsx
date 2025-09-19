@@ -4860,8 +4860,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                               debug('❌ Removed from included sales, new size:', newSet.size);
                               return newSet;
                             });
-                            // Track this as explicitly excluded to prevent auto-re-inclusion
-                            setMethod1ExcludedSales(prev => new Set([...prev, sale.id]));
                           }
                         }}
                       />
