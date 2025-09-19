@@ -732,7 +732,7 @@ useEffect(() => {
   setIsInitialLoadComplete(true);
 
   debug('�� Initial load complete');
-}, [marketLandData]);
+}, [marketLandData, sessionState]);
 
   // ========== CHECK FRONT FOOT AVAILABILITY ==========
   useEffect(() => {
@@ -8593,7 +8593,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               >
                 <option value="all">All</option>
                 <option value="1">1 — Single Family</option>
-                <option value="2">2 — Duplex / Semi-Detached</option>
+                <option value="2">2 �� Duplex / Semi-Detached</option>
                 <option value="3">3* �� Row / Townhouse</option>
                 <option value="4">4* — MultiFamily</option>
                 <option value="5">5* — Conversions</option>
