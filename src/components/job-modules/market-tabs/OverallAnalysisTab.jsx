@@ -1410,11 +1410,6 @@ const OverallAnalysisTab = ({
         </div>
       )}
 
-      {/* Microsystems Code Mapping Diagnostic */}
-      {vendorType === 'Microsystems' && (
-        <MicrosystemsDiagnostic properties={filteredProperties} jobData={jobData} />
-      )}
-
       {/* Header */}
       <div className="bg-white rounded-lg shadow-sm p-6">
         {/* Normalization Warning Banner */}
