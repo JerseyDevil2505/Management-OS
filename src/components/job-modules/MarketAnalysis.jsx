@@ -119,6 +119,19 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
     return () => window.removeEventListener('navigate_market_analysis_tab', handler);
   }, [tabs]);
 
+  // Warn user if they try to leave with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (landValuationSession?.hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [landValuationSession?.hasUnsavedChanges]);
+
   // ==================== MAIN RENDER ====================
   return (
     <div className="min-h-screen bg-gray-50">
