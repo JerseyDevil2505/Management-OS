@@ -1885,10 +1885,7 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
       const sfField = marketAnalysis?.asset_lot_sf ?? property.asset_lot_sf;
       if (sfField && parseFloat(sfField) > 0) {
         const acres = (parseFloat(sfField) / 43560).toFixed(2);
-        console.log(`✅ BRT lot size from asset_lot_sf field: ${acres} acres`, {
-          property_key: property.property_composite_key,
-          sf: parseFloat(sfField)
-        });
+        // Calculated from asset_lot_sf field
         return acres;
       }
 
