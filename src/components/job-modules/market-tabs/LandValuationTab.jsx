@@ -738,6 +738,11 @@ useEffect(() => {
   debug('�� Initial load complete');
 }, [marketLandData]);
 
+// Reset initialization flag when job changes
+useEffect(() => {
+  hasInitialized.current = false;
+}, [jobData?.id]);
+
 // Update session state whenever relevant state changes (but only after initial load)
 const isUpdatingSessionRef = useRef(false);
 const hasCompletedInitialLoad = useRef(false);
