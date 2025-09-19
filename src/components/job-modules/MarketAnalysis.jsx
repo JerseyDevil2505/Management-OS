@@ -29,6 +29,24 @@ import AttributeCardsTab from './market-tabs/AttributeCardsTab';
 const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache, onDataChange }) => {
   // ==================== STATE MANAGEMENT ====================
   const [activeTab, setActiveTab] = useState('data-quality');
+
+  // Land Valuation Session State - persists user changes while navigating tabs
+  const [landValuationSession, setLandValuationSession] = useState({
+    method1ExcludedSales: new Set(),
+    includedSales: new Set(),
+    saleCategories: {},
+    specialRegions: {},
+    landNotes: {},
+    cascadeConfig: null,
+    vcsSheetData: {},
+    vcsManualSiteValues: {},
+    vcsDescriptions: {},
+    vcsTypes: {},
+    vcsRecommendedSites: {},
+    collapsedFields: {},
+    hasUnsavedChanges: false,
+    lastModified: null
+  });
   
   // ==================== DERIVE DATA FROM PROPS ====================
   // Extract vendor type and code definitions from jobData
