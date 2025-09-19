@@ -1008,7 +1008,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (newSales.length > 0) {
-        debug('������ Found new sales to add:', newSales.length);
+        debug('�������� Found new sales to add:', newSales.length);
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
           const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
@@ -4844,8 +4844,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           const checked = e.target.checked;
                           debug(`Checkbox change for ${sale.property_block}/${sale.property_lot}:`, { checked, saleId: sale.id });
                           if (checked) {
+                            // Remove from excluded set when checking
+                            setMethod1ExcludedSales(prev => {
+                              const newSet = new Set(prev);
+                              newSet.delete(sale.id);
+                              return newSet;
+                            });
                             setIncludedSales(prev => new Set([...prev, sale.id]));
                           } else {
+                            // Add to excluded set when unchecking
+                            setMethod1ExcludedSales(prev => new Set([...prev, sale.id]));
                             setIncludedSales(prev => {
                               const newSet = new Set(prev);
                               newSet.delete(sale.id);
