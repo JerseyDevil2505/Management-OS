@@ -1008,7 +1008,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (newSales.length > 0) {
-        debug('�������� Found new sales to add:', newSales.length);
+        debug('������ Found new sales to add:', newSales.length);
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
           const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
@@ -1376,13 +1376,18 @@ const getPricePerUnit = useCallback((price, size) => {
       const existingIds = new Set(prev);
       const currentSaleIds = new Set(filteredSales.map(s => s.id));
 
-      // Start with existing included sales that are still in the current results (after exclusion filter)
-      const preservedIncluded = new Set([...prev].filter(id => currentSaleIds.has(id)));
+      const preservedIncluded = new Set();
 
-      // Auto-include only sales that are truly new (not in previous state at all)
+      // Only include sales that:
+      // 1. Are in the current filtered results
+      // 2. Are NOT in the excluded set
       filteredSales.forEach(sale => {
-        if (!existingIds.has(sale.id)) {
-          preservedIncluded.add(sale.id);
+        if (!method1ExcludedSales.has(sale.id)) {
+          // If it was previously included, keep it included
+          // Or if it's a new sale, auto-include it
+          if (existingIds.has(sale.id) || !existingIds.has(sale.id)) {
+            preservedIncluded.add(sale.id);
+          }
         }
       });
 
@@ -2129,7 +2134,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
     });
 
-    debug('🏠 Processed allocation data:', {
+    debug('���� Processed allocation data:', {
       totalVacantSales: processedVacantSales.length,
       positiveSales: processedVacantSales.filter(s => s.isPositive).length,
       negativeSales: processedVacantSales.filter(s => !s.isPositive).length
