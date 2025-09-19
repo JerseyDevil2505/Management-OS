@@ -734,10 +734,23 @@ useEffect(() => {
   debug('�� Initial load complete');
 }, [marketLandData, sessionState?.hasUnsavedChanges, sessionState?.lastModified]);
 
-// Update session state whenever relevant state changes
+// Update session state whenever relevant state changes (but only after initial load)
 const isUpdatingSessionRef = useRef(false);
+const hasCompletedInitialLoad = useRef(false);
+
 useEffect(() => {
-  if (!isInitialLoadComplete || !updateSession || isUpdatingSessionRef.current) return;
+  if (!isInitialLoadComplete) {
+    hasCompletedInitialLoad.current = false;
+    return;
+  }
+
+  // Mark that we've completed initial load on first run
+  if (!hasCompletedInitialLoad.current) {
+    hasCompletedInitialLoad.current = true;
+    return; // Don't update session state on the very first completion of initial load
+  }
+
+  if (!updateSession || isUpdatingSessionRef.current) return;
 
   isUpdatingSessionRef.current = true;
   updateSession({
@@ -754,7 +767,11 @@ useEffect(() => {
     vcsRecommendedSites,
     collapsedFields
   });
-  isUpdatingSessionRef.current = false;
+
+  // Use setTimeout to reset the flag after the update is processed
+  setTimeout(() => {
+    isUpdatingSessionRef.current = false;
+  }, 0);
 }, [
   method1ExcludedSales,
   includedSales,
@@ -5503,7 +5520,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales • Avg $${Math.round(data.avgPrice).toLocaleString()} ��� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ��� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales • Avg $${Math.round(data.avgPrice).toLocaleString()} ��� ${data.avgAcres.toFixed(2)} �� $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ��� $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{ marginBottom: '8px', border: '1px solid #E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
@@ -7175,7 +7192,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '���������') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '�����������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
