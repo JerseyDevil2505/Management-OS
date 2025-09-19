@@ -890,19 +890,18 @@ const getPricePerUnit = useCallback((price, size) => {
     }
   }, [isInitialLoadComplete]);
 
-  // Immediate auto-save when critical state changes (like adding sales)
-  useEffect(() => {
-    if (!isInitialLoadComplete) return;
-
-    debug('🔄 State change detected, triggering immediate save');
-    const timeoutId = setTimeout(() => {
-      if (window.landValuationSave) {
-        window.landValuationSave({ source: 'autosave' });
-      }
-    }, 1000); // 1 second delay to batch multiple changes
-
-    return () => clearTimeout(timeoutId);
-  }, [vacantSales.length, Object.keys(saleCategories).length, isInitialLoadComplete]);
+  // DISABLED: Immediate auto-save was causing checkbox state to revert
+  // Auto-save only happens every 30 seconds via the interval above
+  // useEffect(() => {
+  //   if (!isInitialLoadComplete) return;
+  //   debug('🔄 State change detected, triggering immediate save');
+  //   const timeoutId = setTimeout(() => {
+  //     if (window.landValuationSave) {
+  //       window.landValuationSave({ source: 'autosave' });
+  //     }
+  //   }, 1000);
+  //   return () => clearTimeout(timeoutId);
+  // }, [vacantSales.length, Object.keys(saleCategories).length, isInitialLoadComplete]);
 
   // Clear Method 1 temporary variables after filtering is complete
   useEffect(() => {
