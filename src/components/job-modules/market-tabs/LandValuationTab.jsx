@@ -481,38 +481,38 @@ useEffect(() => {
   if (currentSession?.hasUnsavedChanges && currentSession?.lastModified) {
     debug('📋 Restoring from session state (unsaved changes detected)');
 
-    setMethod1ExcludedSales(sessionState.method1ExcludedSales || new Set());
-    setIncludedSales(sessionState.includedSales || new Set());
-    setSaleCategories(sessionState.saleCategories || {});
-    setSpecialRegions(sessionState.specialRegions || {});
-    setLandNotes(sessionState.landNotes || {});
+    setMethod1ExcludedSales(currentSession.method1ExcludedSales || new Set());
+    setIncludedSales(currentSession.includedSales || new Set());
+    setSaleCategories(currentSession.saleCategories || {});
+    setSpecialRegions(currentSession.specialRegions || {});
+    setLandNotes(currentSession.landNotes || {});
 
-    if (sessionState.cascadeConfig) {
-      setCascadeConfig(sessionState.cascadeConfig);
+    if (currentSession.cascadeConfig) {
+      setCascadeConfig(currentSession.cascadeConfig);
     }
 
-    if (sessionState.vcsSheetData) {
-      setVcsSheetData(sessionState.vcsSheetData);
+    if (currentSession.vcsSheetData) {
+      setVcsSheetData(currentSession.vcsSheetData);
     }
 
-    if (sessionState.vcsManualSiteValues) {
-      setVcsManualSiteValues(sessionState.vcsManualSiteValues);
+    if (currentSession.vcsManualSiteValues) {
+      setVcsManualSiteValues(currentSession.vcsManualSiteValues);
     }
 
-    if (sessionState.vcsDescriptions) {
-      setVcsDescriptions(sessionState.vcsDescriptions);
+    if (currentSession.vcsDescriptions) {
+      setVcsDescriptions(currentSession.vcsDescriptions);
     }
 
-    if (sessionState.vcsTypes) {
-      setVcsTypes(sessionState.vcsTypes);
+    if (currentSession.vcsTypes) {
+      setVcsTypes(currentSession.vcsTypes);
     }
 
-    if (sessionState.vcsRecommendedSites) {
-      setVcsRecommendedSites(sessionState.vcsRecommendedSites);
+    if (currentSession.vcsRecommendedSites) {
+      setVcsRecommendedSites(currentSession.vcsRecommendedSites);
     }
 
-    if (sessionState.collapsedFields) {
-      setCollapsedFields(sessionState.collapsedFields);
+    if (currentSession.collapsedFields) {
+      setCollapsedFields(currentSession.collapsedFields);
     }
 
     // Still load read-only data from marketLandData
@@ -7208,7 +7208,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '����������') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '���������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
