@@ -1863,10 +1863,7 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
       // 2. FALLBACK: Use Unit Rate Config results (market_manual_lot_acre)
       const manualAcre = marketAnalysis?.market_manual_lot_acre ?? property.market_manual_lot_acre;
       if (manualAcre && parseFloat(manualAcre) > 0) {
-        console.log(`✅ BRT lot size from Unit Rate Config: ${parseFloat(manualAcre).toFixed(2)} acres`, {
-          property_key: property.property_composite_key,
-          source: 'market_manual_lot_acre'
-        });
+        // Using Unit Rate Config manual acres
         return parseFloat(manualAcre).toFixed(2);
       }
 
