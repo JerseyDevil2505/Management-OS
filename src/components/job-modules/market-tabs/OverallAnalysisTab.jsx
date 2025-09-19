@@ -5,7 +5,6 @@ import {
   AlertCircle, Home, Building, Calendar, MapPin, Layers, DollarSign
 } from 'lucide-react';
 import './sharedTabNav.css';
-import MicrosystemsDiagnostic from '../../MicrosystemsDiagnostic';
 
 const OverallAnalysisTab = ({ 
   properties = [], 
