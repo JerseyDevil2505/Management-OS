@@ -732,7 +732,7 @@ useEffect(() => {
   setIsInitialLoadComplete(true);
 
   debug('�� Initial load complete');
-}, [marketLandData, sessionState]);
+}, [marketLandData, sessionState?.hasUnsavedChanges, sessionState?.lastModified]);
 
 // Update session state whenever relevant state changes
 const isUpdatingSessionRef = useRef(false);
