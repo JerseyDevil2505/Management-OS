@@ -1333,9 +1333,8 @@ const getPricePerUnit = useCallback((price, size) => {
       }
     });
 
-    // CRITICAL FIX: Filter out excluded sales from Method 1 before setting finalSales
-    const activeExcluded = window._method1ExcludedSales || method1ExcludedSales;
-    let filteredSales = finalSales.filter(sale => !activeExcluded.has(sale.id));
+    // Keep all sales in UI - method1ExcludedSales only affects calculations, not visibility
+    let filteredSales = finalSales;
 
     // Filter out packages containing properties with restricted property classes (2, 3A, 4A, 4B, 4C)
     const restrictedClasses = ['2', '3A', '4A', '4B', '4C'];
@@ -7178,7 +7177,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         <td style={{ padding: '8px' }}>{prop.property_location}</td>
                         <td style={{ padding: '8px' }}>
                           {prop.sales_date}
-                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>����️</span>}
+                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>���️</span>}
                         </td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>${prop.sales_price?.toLocaleString()}</td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>${Math.round(prop.normalizedTime)?.toLocaleString()}</td>
