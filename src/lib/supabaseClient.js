@@ -1856,12 +1856,7 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
       if (frontage && depth && parseFloat(frontage) > 0 && parseFloat(depth) > 0) {
         const sf = parseFloat(frontage) * parseFloat(depth);
         const acres = (sf / 43560).toFixed(2);
-        console.log(`✅ BRT lot size calculated from frontage × depth: ${acres} acres`, {
-          property_key: property.property_composite_key,
-          frontage: parseFloat(frontage),
-          depth: parseFloat(depth),
-          sf: sf
-        });
+        // Calculated from frontage × depth
         return acres;
       }
 
