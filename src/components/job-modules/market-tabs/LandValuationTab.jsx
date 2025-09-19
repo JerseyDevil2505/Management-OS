@@ -331,6 +331,7 @@ const LandValuationTab = ({
   const [actualAllocations, setActualAllocations] = useState({});
   const [vcsSiteValues, setVcsSiteValues] = useState({});
   const [targetAllocation, setTargetAllocation] = useState(null);
+  const [targetAllocationJustSaved, setTargetAllocationJustSaved] = useState(false);
   const [currentOverallAllocation, setCurrentOverallAllocation] = useState(0);
 
   // ========== VCS SHEET STATE - ENHANCED ==========
@@ -509,7 +510,7 @@ useEffect(() => {
   //   setCascadeConfig(marketLandData.cascade_rates);
   // }
 
-  // Restore Method 1 state persistence (like Method 2)
+  // Restore Method 1 state persistence but SKIP cached sales data to force fresh calculation
   if (marketLandData.vacant_sales_analysis?.sales) {
     const savedCategories = {};
     const savedNotes = {};
@@ -518,7 +519,7 @@ useEffect(() => {
     const savedIncluded = new Set();
     const manuallyAddedIds = new Set();
 
-    debug('🔄 Loading saved Method 1 sales data:', {
+    debug('���� Loading saved Method 1 metadata (SKIPPING cached sales for fresh calculation):', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
@@ -535,7 +536,7 @@ useEffect(() => {
       if (s.manually_added) manuallyAddedIds.add(s.id);
     });
 
-    debug('🔄 Restored Method 1 states:', {
+    debug('🔄 Restored Method 1 metadata (sales data will be recalculated):', {
       excludedCount: savedExcluded.size,
       includedCount: savedIncluded.size,
       manuallyAddedCount: manuallyAddedIds.size,
@@ -557,6 +558,10 @@ useEffect(() => {
 
     setMethod1ExcludedSales(savedExcluded);
     setIncludedSales(savedIncluded);
+
+    // FORCE FRESH CALCULATION: Clear any cached sales data and force recalculation with new values_norm_time logic
+    debug('🧹 Clearing cached sales data to force fresh calculation with values_norm_time');
+    setVacantSales([]); // Clear cached sales to force recalculation
   }
 
   // Also restore Method 1 excluded sales from new field (like Method 2)
@@ -591,13 +596,26 @@ useEffect(() => {
     debug('�� LOADING TARGET ALLOCATION FROM ALLOCATION STUDY:', loadedTargetAllocation);
   }
 
-  // Only set if we found a valid value
+  // Only set if we found a valid value AND current state is null/empty to prevent overwrites
   if (loadedTargetAllocation !== null) {
     // Ensure it's a number to prevent caching issues
     const numericValue = typeof loadedTargetAllocation === 'string' ?
       parseFloat(loadedTargetAllocation) : loadedTargetAllocation;
-    setTargetAllocation(numericValue);
-    debug('✅ Target allocation set to:', numericValue, typeof numericValue);
+
+    // DEFENSIVE FIX: Only update if current targetAllocation is null/empty to prevent overwrites
+    setTargetAllocation(prev => {
+      if (targetAllocationJustSaved) {
+        debug('🛡️ Target allocation just saved - skipping reload to prevent overwrite');
+        return prev;
+      }
+      if (prev === null || prev === undefined || prev === '') {
+        debug('✅ Target allocation set to:', numericValue, typeof numericValue);
+        return numericValue;
+      } else {
+        debug('🛡️ Preserving existing target allocation:', prev, 'instead of overwriting with:', numericValue);
+        return prev;
+      }
+    });
   } else {
     debug('ℹ️ No target allocation found in database');
   }
@@ -755,7 +773,7 @@ const getPricePerUnit = useCallback((price, size) => {
     const standard = [
       { code: '1', description: '1 — Single Family' },
       { code: '2', description: '2 — Duplex / Semi-Detached' },
-      { code: '3', description: '3* — Row / Townhouse (3E,3I,30,31)' },
+      { code: '3', description: '3* �� Row / Townhouse (3E,3I,30,31)' },
       { code: '4', description: '4* — MultiFamily (42,43,44)' },
       { code: '5', description: '5* �� Conversions (51,52,53)' },
       { code: '6', description: '6 — Condominium' },
@@ -923,7 +941,7 @@ const getPricePerUnit = useCallback((price, size) => {
       manuallyAddedProps.forEach(prop => {
         const acres = calculateAcreage(prop);
         const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
-        const pricePerUnit = getPricePerUnit(prop.sales_price, sizeForUnit);
+        const pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, sizeForUnit);
         finalSales.push({
           ...prop,
           totalAcres: acres,
@@ -991,11 +1009,11 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (newSales.length > 0) {
-        debug('���� Found new sales to add:', newSales.length);
+        debug('������ Found new sales to add:', newSales.length);
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
           const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
-          const pricePerUnit = getPricePerUnit(prop.sales_price, sizeForUnit);
+          const pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, sizeForUnit);
           return {
             ...prop,
             totalAcres: acres,
@@ -1094,9 +1112,9 @@ const getPricePerUnit = useCallback((price, size) => {
       let pricePerUnit;
       if (valuationMode === 'ff') {
         const frontage = parseFloat(prop.asset_lot_frontage) || 0;
-        pricePerUnit = getPricePerUnit(prop.sales_price, frontage);
+        pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, frontage);
       } else {
-        pricePerUnit = getPricePerUnit(prop.sales_price, acres);
+        pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, acres);
       }
       // Ensure whole numbers for unit rates
       const roundedUnitPrice = Math.round(pricePerUnit);
@@ -1179,7 +1197,7 @@ const getPricePerUnit = useCallback((price, size) => {
         if (packageData.is_package_sale || packageData.package_count > 1) {
             // Prefer any precomputed combined lot acres from the analyzer
           // Use original property sales_price (don't sum - each property already has full package price)
-          const totalPrice = group[0].sales_price;
+          const totalPrice = group[0].values_norm_time || group[0].sales_price;
 
           let totalAcres = null;
           if (packageData.combined_lot_acres && !isNaN(Number(packageData.combined_lot_acres)) && Number(packageData.combined_lot_acres) > 0) {
@@ -1264,7 +1282,7 @@ const getPricePerUnit = useCallback((price, size) => {
       // Default: fall back to previous behavior
       if (group.length > 1) {
         // Use original sale price (don't sum - properties already contain full package price)
-        const totalPrice = group[0].sales_price;
+        const totalPrice = group[0].values_norm_time || group[0].sales_price;
         const totalAcres = group.reduce((sum, p) => sum + calculateAcreage(p), 0);
         const pricePerUnit = getPricePerUnit(totalPrice, totalAcres);
 
@@ -1391,6 +1409,17 @@ const getPricePerUnit = useCallback((price, size) => {
     });
   }, [properties, dateRange, calculateAcreage, getPricePerUnit, saleCategories]);
 
+  // ========== FORCE FRESH CALCULATION AFTER LOAD ==========
+  useEffect(() => {
+    if (isInitialLoadComplete && properties && properties.length > 0) {
+      debug('🔄 Triggering fresh calculation after load complete to use values_norm_time');
+      // Short delay to ensure all state is loaded before recalculating
+      setTimeout(() => {
+        filterVacantSales();
+      }, 100);
+    }
+  }, [isInitialLoadComplete, properties, filterVacantSales]);
+
   const performBracketAnalysis = useCallback(async () => {
     if (!properties || !jobData?.id) return;
 
@@ -1464,7 +1493,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
         vcsSales[vcs].push({
           acres,
-          salesPrice: prop.sales_price,
+          salesPrice: timeNormData.values_norm_time,
           normalizedTime: timeNormData.values_norm_time,
           sfla,
           address: prop.property_location,
@@ -1891,7 +1920,7 @@ const getPricePerUnit = useCallback((price, size) => {
     const enriched = toAdd.map(prop => {
       const acres = calculateAcreage(prop);
       const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
-      const pricePerUnit = getPricePerUnit(prop.sales_price, sizeForUnit);
+      const pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, sizeForUnit);
       return {
         ...prop,
         totalAcres: acres,
@@ -2042,7 +2071,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Apply cascade calculation to get raw land value
       const rawLandValue = calculateRawLandValue(acres, cascadeRates);
-      const siteValue = sale.sales_price - rawLandValue;
+      const siteValue = (sale.values_norm_time || sale.sales_price) - rawLandValue;
 
       // Find improved sales for this sale's year
       const improvedSalesForYear = properties.filter(prop => {
@@ -2064,7 +2093,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       debug(`✅ Found ${improvedSalesForYear.length} improved sales for year ${year} with type_use starting with '1'`);
 
       // Calculate averages for this year's improved sales
-      const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + p.sales_price, 0) / improvedSalesForYear.length;
+      const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + (p.values_norm_time || p.sales_price), 0) / improvedSalesForYear.length;
       const avgImprovedAcres = improvedSalesForYear.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / improvedSalesForYear.length;
 
       // Calculate current allocation for this year
@@ -2086,7 +2115,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         region,
         block: sale.property_block,
         lot: sale.property_lot,
-        vacantPrice: sale.sales_price,
+        vacantPrice: sale.values_norm_time || sale.sales_price,
         acres,
         rawLandValue,
         siteValue,
@@ -2279,9 +2308,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             
             // Valid NU codes for actual price
             const nu = prop.sales_nu || '';
-            const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' || 
+            const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
                            nu === '7' || nu.charCodeAt(0) === 32;
-            if (validNu) avgActualPrice[prop.new_vcs].push(prop.sales_price);
+            if (validNu && prop.values_norm_time > 0) avgActualPrice[prop.new_vcs].push(prop.values_norm_time);
           }
         }
       } else if (prop.property_m4_class === '4A' || prop.property_m4_class === '4B' || prop.property_m4_class === '4C') {
@@ -2414,7 +2443,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return;
     }
 
-    debug('🎯 Calculating VCS recommended site values with target allocation:', targetAllocation + '%');
+    debug('���� Calculating VCS recommended site values with target allocation:', targetAllocation + '%');
 
     const recommendedSites = {};
     const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
@@ -2471,7 +2500,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
       // Calculate average sale price from relevant sales
-      const avgSalePrice = relevantSales.reduce((sum, p) => sum + p.sales_price, 0) / relevantSales.length;
+      const avgSalePrice = relevantSales.reduce((sum, p) => sum + (p.values_norm_time || p.sales_price), 0) / relevantSales.length;
 
       // Check if this VCS is a condo type
       const vcsType = vcsTypes[vcs] || 'Residential-Typical';
@@ -2587,10 +2616,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       totalProperties: properties.length,
       withNewVCS: properties.filter(p => p.new_vcs).length,
       withLocationAnalysis: properties.filter(p => p.location_analysis).length,
-      withSalesData: properties.filter(p => p.sales_price > 0).length,
+      withSalesData: properties.filter(p => p.values_norm_time && p.values_norm_time > 0).length,  // FIXED: Use values_norm_time
       withVCSOnly: properties.filter(p => p.new_vcs && !p.location_analysis).length,
       withVCSAndLocation: properties.filter(p => p.new_vcs && p.location_analysis).length,
-      withAllThree: properties.filter(p => p.new_vcs && p.location_analysis && p.sales_price > 0).length,
+      withAllThree: properties.filter(p => p.new_vcs && p.location_analysis && p.values_norm_time && p.values_norm_time > 0).length,  // FIXED: Use values_norm_time
       uniqueVCSCodes: [...new Set(properties.filter(p => p.new_vcs).map(p => p.new_vcs))],
       samplePropertiesWithVCS: properties.filter(p => p.new_vcs).slice(0, 5).map(p => ({
         new_vcs: p.new_vcs,
@@ -2631,14 +2660,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
       // Add all properties to build VCS structure, but only include sales data if available
-      const hasSalesData = prop.sales_price && prop.sales_price > 0;
+      // FIXED: Use values_norm_time instead of sales_price to include $1 sales
+      const hasSalesData = prop.values_norm_time && prop.values_norm_time > 0;
 
       if (hasSalesData) {
         factors[vcs][locationAnalysis].withFactor.push({
           id: prop.id,
-          price: prop.sales_price,
-          normalizedTime: prop.values_norm_time || prop.sales_price,
-          normalizedSize: prop.values_norm_size || prop.sales_price,
+          price: prop.values_norm_time,  // Use values_norm_time as primary price
+          normalizedTime: prop.values_norm_time,
+          normalizedSize: prop.values_norm_size || prop.values_norm_time,  // fallback to norm_time if norm_size missing,
           acres: parseFloat(calculateAcreage(prop)),
           address: prop.property_location,
           year: prop.asset_year_built,
@@ -2653,17 +2683,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Find comparable sales without location factors for each VCS
     Object.keys(factors).forEach(vcs => {
       // Get baseline sales (no location factors - properties with same VCS but no location_analysis)
+      // CRITICAL FIX: Use values_norm_time > 0 instead of sales_price > 0 to include $1 sales
       const baselineSales = properties.filter(prop =>
         prop.new_vcs === vcs &&
         (!prop.location_analysis || prop.location_analysis.trim() === '' ||
          prop.location_analysis.toLowerCase().includes('none') ||
          prop.location_analysis.toLowerCase().includes('no analysis')) &&
-        prop.sales_price > 0
+        prop.values_norm_time && prop.values_norm_time > 0  // FIXED: Check values_norm_time instead of sales_price
       ).map(prop => ({
         id: prop.id,
-        price: prop.sales_price,
-        normalizedTime: prop.values_norm_time || prop.sales_price,
-        normalizedSize: prop.values_norm_size || prop.sales_price,
+        price: prop.values_norm_time,  // USE values_norm_time as primary price
+        normalizedTime: prop.values_norm_time,
+        normalizedSize: prop.values_norm_size || prop.values_norm_time,  // fallback to norm_time
         acres: parseFloat(calculateAcreage(prop)),
         year: prop.asset_year_built,
         yearSold: new Date(prop.sales_date).getFullYear(),
@@ -2948,8 +2979,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Update last saved timestamp
       setLastSaved(new Date());
 
+      // Set flag to prevent overwrites during re-initialization
+      setTargetAllocationJustSaved(true);
+      setTimeout(() => setTargetAllocationJustSaved(false), 5000); // Clear flag after 5 seconds
+
       // Show success feedback
       alert(`Target allocation ${targetValue}% saved successfully!`);
+
+      // CRITICAL FIX: Trigger parent component data refresh to update marketLandData prop
+      if (typeof onDataRefresh === 'function') {
+        debug('🔄 Triggering parent component data refresh...');
+        onDataRefresh();
+      }
 
       // Trigger VCS recommended sites calculation
       debug('🔄 Triggering VCS recommended sites calculation...');
@@ -3050,7 +3091,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       };
 
       // Debug: Log the exact data being saved
-      debug('��� Data structure being saved:', {
+      debug('������ Data structure being saved:', {
         cascadeConfigLocation1: analysisData.raw_land_config.cascade_config.specialCategories,
         cascadeConfigLocation2: analysisData.cascade_rates.specialCategories,
         salesData: analysisData.vacant_sales_analysis.sales.slice(0, 3), // First 3 for brevity
@@ -4237,7 +4278,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // For constrained land types (wetlands, landlocked, conservation), use simple $/acre
       if (categoryType === 'constrained') {
         if (valuationMode === 'sf') {
-          const totalPrice = filtered.reduce((sum, s) => sum + s.sales_price, 0);
+          const totalPrice = filtered.reduce((sum, s) => sum + (s.values_norm_time || s.sales_price), 0);
           const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
           return {
             avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
@@ -4285,7 +4326,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             }
 
             const sizeDiff = largerSize - smallerSize;
-            const priceDiff = larger.sales_price - smaller.sales_price;
+            const priceDiff = (larger.values_norm_time || larger.sales_price) - (smaller.values_norm_time || smaller.sales_price);
 
             // Only include positive price differences and positive size differences
             if (priceDiff > 0 && sizeDiff > 0) {
@@ -4347,7 +4388,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Fallback to simple calculation if paired analysis fails
       if (valuationMode === 'sf') {
-        const totalPrice = filtered.reduce((sum, s) => sum + s.sales_price, 0);
+        const totalPrice = filtered.reduce((sum, s) => sum + (s.values_norm_time || s.sales_price), 0);
         const totalSF = filtered.reduce((sum, s) => sum + (s.totalAcres * 43560), 0);
         return {
           avg: totalSF > 0 ? (totalPrice / totalSF).toFixed(2) : 0,
@@ -4403,7 +4444,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           category: saleCategories[s.id],
           isIncluded: includedSales.has(s.id),
           isInBuildingLot: isInCategory,
-          price: s.sales_price,
+          price: s.values_norm_time || s.sales_price,
           acres: s.totalAcres,
           pricePerAcre: s.pricePerAcre
         });
@@ -4415,7 +4456,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           id: s.id,
           category: saleCategories[s.id],
           isInBuildingLot: isInCategory,
-          price: s.sales_price,
+          price: s.values_norm_time || s.sales_price,
           acres: s.totalAcres
         });
       }
@@ -4807,7 +4848,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         type="checkbox"
                         checked={includedSales.has(sale.id)}
                         onChange={(e) => {
-                          debug(`��� Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
+                          debug(`����� Checkbox change for ${sale.property_block}/${sale.property_lot}:`, {
                             checked: e.target.checked,
                             saleId: sale.id
                           });
@@ -6829,7 +6870,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         : prop.asset_design_style || '-';
                       const acres = calculateAcreage(prop);
                       const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
-                      const pricePerUnit = getPricePerUnit(prop.sales_price, sizeForUnit);
+                      const pricePerUnit = getPricePerUnit(prop.values_norm_time || prop.sales_price, sizeForUnit);
                       
                       return (
                         <tr key={prop.id}>
@@ -7035,7 +7076,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'normTime' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '���' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('acres')}

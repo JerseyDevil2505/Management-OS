@@ -735,6 +735,84 @@ const PRESERVED_FIELDS = [
 // ===== CODE INTERPRETATION UTILITIES =====
 // Utilities for interpreting vendor-specific codes in MarketLandAnalysis
 export const interpretCodes = {
+  // Utility function to diagnose and repair Microsystems code definitions
+  diagnoseMicrosystemsDefinitions: async function(jobId) {
+    try {
+      console.log('🔍 Diagnosing Microsystems code definitions for job:', jobId);
+
+      const { data: job, error } = await supabase
+        .from('jobs')
+        .select('parsed_code_definitions, code_file_content, vendor_type')
+        .eq('id', jobId)
+        .single();
+
+      if (error || !job) {
+        console.error('❌ Could not fetch job data:', error);
+        return { status: 'error', message: 'Could not fetch job data' };
+      }
+
+      if (job.vendor_type !== 'Microsystems') {
+        return { status: 'error', message: 'Job is not Microsystems vendor type' };
+      }
+
+      const definitions = job.parsed_code_definitions;
+      console.log('📊 Current parsed_code_definitions structure:', {
+        hasDefinitions: !!definitions,
+        vendorType: definitions?.vendor_type,
+        hasFieldCodes: !!definitions?.field_codes,
+        hasFlatLookup: !!definitions?.flat_lookup,
+        fieldCodesCount: definitions?.field_codes ? Object.keys(definitions.field_codes).length : 0,
+        flatLookupCount: definitions?.flat_lookup ? Object.keys(definitions.flat_lookup).length : 0,
+        rootKeysCount: definitions ? Object.keys(definitions).filter(k => k.match(/^\d/)).length : 0
+      });
+
+      // Check if we need to repair the structure
+      if (!definitions?.flat_lookup && definitions?.field_codes) {
+        console.log('🔧 Attempting to repair flat_lookup from field_codes...');
+
+        const flatLookup = {};
+        Object.entries(definitions.field_codes).forEach(([prefix, codes]) => {
+          Object.entries(codes).forEach(([code, codeData]) => {
+            // Store both the clean code and full code formats
+            flatLookup[code] = codeData.description;
+            if (codeData.full_code) {
+              flatLookup[codeData.full_code] = codeData.description;
+            }
+          });
+        });
+
+        const updatedDefinitions = {
+          ...definitions,
+          flat_lookup: flatLookup
+        };
+
+        // Update the database
+        const { error: updateError } = await supabase
+          .from('jobs')
+          .update({ parsed_code_definitions: updatedDefinitions })
+          .eq('id', jobId);
+
+        if (updateError) {
+          console.error('❌ Failed to repair definitions:', updateError);
+          return { status: 'error', message: 'Failed to repair definitions' };
+        }
+
+        console.log('✅ Successfully repaired flat_lookup structure');
+        return { status: 'repaired', message: 'Repaired flat_lookup structure', flatLookupCount: Object.keys(flatLookup).length };
+      }
+
+      return {
+        status: 'ok',
+        message: 'Code definitions appear to be properly structured',
+        flatLookupCount: definitions?.flat_lookup ? Object.keys(definitions.flat_lookup).length : 0
+      };
+
+    } catch (error) {
+      console.error('❌ Error diagnosing Microsystems definitions:', error);
+      return { status: 'error', message: error.message };
+    }
+  },
+
   // Microsystems field to prefix mapping
   microsystemsPrefixMap: {
     'inspection_info_by': '140',
@@ -816,25 +894,57 @@ brtParsedStructureMap: {
 
   // Get decoded value for Microsystems property field
   getMicrosystemsValue: function(property, codeDefinitions, fieldName) {
-    if (!property || !codeDefinitions) return null;
-    
+    if (!property || !codeDefinitions) {
+      return null;
+    }
+
     const prefix = this.microsystemsPrefixMap[fieldName];
-    if (!prefix) return null;
-    
+    if (!prefix) {
+      return null;
+    }
+
     // Get the code value from property (check both column and raw_data)
     let code = property[fieldName];
     if (!code && property.raw_data) {
       code = property.raw_data[fieldName];
     }
-    
+
     if (!code || code.trim() === '') return null;
-    
-    // Build lookup key - Microsystems format: "PREFIX+CODE+SPACES+9999"
-    const paddedCode = code.padEnd(4);
+
+    // FIXED: Only look up codes within the correct prefix category to prevent cross-contamination
+    const fieldCodes = codeDefinitions.field_codes;
+    if (!fieldCodes || !fieldCodes[prefix]) {
+      return code; // Return original code if no definitions found for this prefix
+    }
+
+    // Look up the code ONLY within the correct prefix category
+    const categoryData = fieldCodes[prefix];
+    const cleanCode = code.trim().toUpperCase();
+
+    // First try exact match
+    if (categoryData[cleanCode] && categoryData[cleanCode].description) {
+      return categoryData[cleanCode].description;
+    }
+
+    // If not found, try looking for codes that might have the prefix stripped
+    // e.g., looking for "CL" in the 520 category
+    for (const [storedCode, codeData] of Object.entries(categoryData)) {
+      if (storedCode === cleanCode && codeData.description) {
+        return codeData.description;
+      }
+    }
+
+    // Fallback to flat_lookup only as last resort, but verify it belongs to the right category
+    const flatLookup = codeDefinitions.flat_lookup || {};
+    const paddedCode = cleanCode.padEnd(4);
     const lookupKey = `${prefix}${paddedCode}9999`;
-    
-    // Return decoded value or original code if not found
-    return codeDefinitions[lookupKey] || code;
+
+    if (flatLookup[lookupKey]) {
+      return flatLookup[lookupKey];
+    }
+
+    // Return original code if no valid description found in the correct category
+    return code;
   },
 // Core BRT lookup function - FIXED to handle the actual structure
 getBRTValue: function(property, codeDefinitions, fieldName) {
