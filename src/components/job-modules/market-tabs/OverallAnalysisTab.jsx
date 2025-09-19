@@ -4,7 +4,8 @@ import {
   TrendingUp, RefreshCw, Download, Filter, ChevronDown, ChevronUp,
   AlertCircle, Home, Building, Calendar, MapPin, Layers, DollarSign
 } from 'lucide-react';
-import './sharedTabNav.css\';\nimport MicrosystemsDiagnostic from \'../../MicrosystemsDiagnostic';
+import './sharedTabNav.css';
+import MicrosystemsDiagnostic from '../../MicrosystemsDiagnostic';
 
 const OverallAnalysisTab = ({ 
   properties = [], 
