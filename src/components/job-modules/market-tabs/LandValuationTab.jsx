@@ -460,11 +460,15 @@ const LandValuationTab = ({
     }
   }, [ecoObsFactors, mappedLocationCodes, mapTokenToCode]);
 // ========== INITIALIZE FROM PROPS ==========
+const hasInitialized = useRef(false);
+
 useEffect(() => {
-  if (!marketLandData) {
-    setIsLoading(false);
+  if (!marketLandData || hasInitialized.current) {
+    if (!marketLandData) setIsLoading(false);
     return;
   }
+
+  hasInitialized.current = true;
 
   // If we have session state with unsaved changes, use it instead of database
   if (sessionState?.hasUnsavedChanges && sessionState?.lastModified) {
@@ -5520,7 +5524,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales • Avg $${Math.round(data.avgPrice).toLocaleString()} ��� ${data.avgAcres.toFixed(2)} �� $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ��� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales • Avg $${Math.round(data.avgPrice).toLocaleString()} ��� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ��� $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{ marginBottom: '8px', border: '1px solid #E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
@@ -7192,7 +7196,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '�����������') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '���������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
