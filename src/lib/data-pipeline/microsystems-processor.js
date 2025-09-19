@@ -381,7 +381,7 @@ export class MicrosystemsProcessor {
     return {
       // Job context
       job_id: jobId,
-      
+
       // Property identifiers
       property_block: rawRecord['Block'],
       property_lot: rawRecord['Lot'],
@@ -393,19 +393,19 @@ export class MicrosystemsProcessor {
       property_m4_class: rawRecord['Class'],
       property_facility: rawRecord['Facility Name'],
       property_vcs: rawRecord['VCS'],
-      
+
       // Owner fields
       owner_name: rawRecord['Owner Name'],
       owner_street: rawRecord['Owner Street'],
       owner_csz: rawRecord['Owner Csz'],
-      
+
       // Sales fields
       sales_date: this.parseDate(rawRecord['Sale Date']),
       sales_price: this.parseNumeric(rawRecord['Sale Price']),
       sales_book: rawRecord['Sale Book'],
       sales_page: rawRecord['Sale Page'],
       sales_nu: rawRecord['Sale Nu'],
-      
+
       // Values - Direct mapping to renamed headers
       values_mod_land: this.parseNumeric(rawRecord['Land Value']), // First instance
       values_cama_land: this.parseNumeric(rawRecord['Land Value2']), // Second instance
@@ -416,7 +416,7 @@ export class MicrosystemsProcessor {
       values_base_cost: this.parseNumeric(rawRecord['Base Cost']),
       values_det_items: this.parseNumeric(rawRecord['Det Items']),
       values_repl_cost: this.parseNumeric(rawRecord['Cost New']),
-      
+
       // Inspection fields
       inspection_info_by: rawRecord['Interior Finish3'], // Store letter codes directly (E, F, O, R, V)
       inspection_list_by: rawRecord['Insp By'],
@@ -425,7 +425,7 @@ export class MicrosystemsProcessor {
       inspection_measure_date: this.parseDate(rawRecord['Insp Date 1']),
       inspection_price_by: null, // Not available in Microsystems
       inspection_price_date: null, // Not available in Microsystems
-      
+
       // Asset fields - All analysis fields now in single table
       asset_building_class: rawRecord['Bldg Qual Class Code'],
       asset_design_style: rawRecord['Style Code'],

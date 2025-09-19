@@ -44,6 +44,36 @@ const OverallAnalysisTab = ({
   const vendorType = jobData?.vendor_type || 'BRT';
   const codeDefinitions = jobData?.parsed_code_definitions || {};
 
+  // Microsystems diagnostic state
+  const [diagnosticStatus, setDiagnosticStatus] = useState(null);
+  const [isRunningDiagnostic, setIsRunningDiagnostic] = useState(false);
+
+  // Check if Microsystems definitions need repair
+  const needsRepair = vendorType === 'Microsystems' && codeDefinitions && !codeDefinitions.flat_lookup;
+
+  // Function to run diagnostic and repair
+  const runMicrosystemsDiagnostic = async () => {
+    if (!jobData?.id) return;
+
+    setIsRunningDiagnostic(true);
+    try {
+      const result = await interpretCodes.diagnoseMicrosystemsDefinitions(jobData.id);
+      setDiagnosticStatus(result);
+
+      // If repair was successful, trigger a page refresh to reload the updated definitions
+      if (result.status === 'repaired') {
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      }
+    } catch (error) {
+      console.error('Failed to run diagnostic:', error);
+      setDiagnosticStatus({ status: 'error', message: error.message });
+    } finally {
+      setIsRunningDiagnostic(false);
+    }
+  };
+
   // ==================== CME BRACKET DEFINITIONS ====================
   const CME_BRACKETS = [
     { min: 0, max: 99999, label: 'up to $99,999', color: '#FF9999', textColor: 'black' },          // Light red/pink
@@ -1328,6 +1358,58 @@ const OverallAnalysisTab = ({
   
   return (
     <div className="max-w-full mx-auto space-y-6">
+      {/* Microsystems Code Definitions Diagnostic Banner */}
+      {(needsRepair || diagnosticStatus) && (
+        <div className={`rounded-lg p-4 border ${
+          diagnosticStatus?.status === 'repaired' ? 'bg-green-50 border-green-200' :
+          diagnosticStatus?.status === 'error' ? 'bg-red-50 border-red-200' :
+          'bg-orange-50 border-orange-200'
+        }`}>
+          <div className="flex items-start gap-3">
+            <AlertCircle className={`h-5 w-5 mt-0.5 ${
+              diagnosticStatus?.status === 'repaired' ? 'text-green-600' :
+              diagnosticStatus?.status === 'error' ? 'text-red-600' :
+              'text-orange-600'
+            }`} />
+            <div className="flex-1">
+              <div className={`font-medium ${
+                diagnosticStatus?.status === 'repaired' ? 'text-green-900' :
+                diagnosticStatus?.status === 'error' ? 'text-red-900' :
+                'text-orange-900'
+              }`}>
+                {diagnosticStatus?.status === 'repaired' ? 'Code Definitions Repaired!' :
+                 diagnosticStatus?.status === 'error' ? 'Code Definitions Error' :
+                 'Code Definitions Issue Detected'}
+              </div>
+              <div className={`text-sm mt-1 ${
+                diagnosticStatus?.status === 'repaired' ? 'text-green-800' :
+                diagnosticStatus?.status === 'error' ? 'text-red-800' :
+                'text-orange-800'
+              }`}>
+                {diagnosticStatus?.message ||
+                 'Microsystems code definitions are missing or corrupted. This will cause raw codes to display instead of descriptions.'}
+              </div>
+              {diagnosticStatus?.status === 'repaired' && (
+                <div className="text-sm text-green-700 mt-2">
+                  Page will refresh automatically to load the updated definitions...
+                </div>
+              )}
+              {!diagnosticStatus && (
+                <div className="mt-3">
+                  <button
+                    onClick={runMicrosystemsDiagnostic}
+                    disabled={isRunningDiagnostic}
+                    className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    {isRunningDiagnostic ? 'Diagnosing...' : 'Fix Code Definitions'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white rounded-lg shadow-sm p-6">
         {/* Normalization Warning Banner */}
@@ -2028,7 +2110,7 @@ const OverallAnalysisTab = ({
                                   <td className="px-3 py-2 text-sm font-medium">{bedroom.label}</td>
                                   <td className="px-3 py-2 text-sm text-center">{bedroom.salesCount}</td>
                                   <td className="px-3 py-2 text-sm text-center">
-                                    {bedroom.avgSize > 0 ? formatNumber(bedroom.avgSize) : '—'}
+                                    {bedroom.avgSize > 0 ? formatNumber(bedroom.avgSize) : '���'}
                                   </td>
                                   <td className="px-3 py-2 text-sm text-center">
                                     {bedroom.avgPrice > 0 ? formatCurrency(bedroom.avgPrice) : <span className="text-gray-500 text-xs">NO DATA</span>}
