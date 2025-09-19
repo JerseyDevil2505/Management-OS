@@ -4585,7 +4585,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
     const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
 
-    debug('🏗️ Building Lot Analysis Result:', {
+    debug('��️ Building Lot Analysis Result:', {
       avg: buildingLot.avg,
       count: buildingLot.count,
       method: buildingLot.method,
@@ -8961,6 +8961,41 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   return (
     <div style={{ padding: '20px' }}>
+      {/* Unsaved Changes Banner */}
+      {sessionState?.hasUnsavedChanges && (
+        <div style={{
+          padding: '12px 16px',
+          background: '#FEF3C7',
+          border: '1px solid #F59E0B',
+          borderRadius: '6px',
+          marginBottom: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <span style={{ color: '#92400E', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            ⚠️ You have unsaved changes. These will be preserved while you stay in this job.
+          </span>
+          <button
+            onClick={() => saveAnalysis({ source: 'unsaved-changes-banner' })}
+            disabled={isSaving}
+            style={{
+              background: '#10B981',
+              color: 'white',
+              padding: '6px 12px',
+              borderRadius: '4px',
+              border: 'none',
+              cursor: isSaving ? 'not-allowed' : 'pointer',
+              opacity: isSaving ? 0.6 : 1,
+              fontSize: '14px',
+              fontWeight: '500'
+            }}
+          >
+            {isSaving ? 'Saving...' : 'Save Now'}
+          </button>
+        </div>
+      )}
+
       {/* Tab Navigation - FIXED STYLE */}
   <div className="mls-subtab-nav">
         {[
