@@ -1878,9 +1878,7 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
       // 4. Final fallback: Check for pre-calculated fields (unlikely for BRT but just in case)
       const acreField = marketAnalysis?.asset_lot_acre ?? property.asset_lot_acre;
       if (acreField && parseFloat(acreField) > 0) {
-        console.log(`✅ BRT lot size from asset_lot_acre field: ${parseFloat(acreField).toFixed(2)} acres`, {
-          property_key: property.property_composite_key
-        });
+        // Using pre-calculated asset_lot_acre field
         return parseFloat(acreField).toFixed(2);
       }
 
