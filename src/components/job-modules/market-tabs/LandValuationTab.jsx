@@ -1386,10 +1386,8 @@ const getPricePerUnit = useCallback((price, size) => {
       const preservedIncluded = new Set([...prev].filter(id => currentSaleIds.has(id)));
 
       // Auto-include only sales that are truly new (not in previous state at all)
-      // BUT NEVER auto-include sales that are explicitly excluded in method1ExcludedSales
-      const activeExcluded = window._method1ExcludedSales || method1ExcludedSales;
       filteredSales.forEach(sale => {
-        if (!existingIds.has(sale.id) && !activeExcluded.has(sale.id)) {
+        if (!existingIds.has(sale.id)) {
           preservedIncluded.add(sale.id);
         }
       });
