@@ -1871,11 +1871,7 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
       const manualSf = marketAnalysis?.market_manual_lot_sf ?? property.market_manual_lot_sf;
       if (manualSf && parseFloat(manualSf) > 0) {
         const acres = (parseFloat(manualSf) / 43560).toFixed(2);
-        console.log(`✅ BRT lot size calculated from Unit Rate Config SF: ${acres} acres`, {
-          property_key: property.property_composite_key,
-          sf: parseFloat(manualSf),
-          source: 'market_manual_lot_sf'
-        });
+        // Calculated from Unit Rate Config SF
         return acres;
       }
 
