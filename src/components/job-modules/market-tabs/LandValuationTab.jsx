@@ -839,7 +839,7 @@ const getPricePerUnit = useCallback((price, size) => {
       debug('���� Triggering allocation study recalculation...');
       loadAllocationStudyData();
     }
-  }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, includedSales, specialRegions]);
+  }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, specialRegions]);
   // Note: intentionally exclude loadAllocationStudyData from deps to avoid TDZ issues, it is stable via useCallback.
 
   // Auto-calculate VCS recommended sites when target allocation changes
@@ -1369,7 +1369,7 @@ const getPricePerUnit = useCallback((price, size) => {
     setIncludedSales(prev => {
       // If initial load isn't complete yet, don't modify included sales
       if (!isInitialLoadComplete) {
-        debug('⏸��� Skipping checkbox update - waiting for initial load');
+        debug('����� Skipping checkbox update - waiting for initial load');
         return prev;
       }
 
