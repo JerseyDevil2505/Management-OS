@@ -461,6 +461,12 @@ const LandValuationTab = ({
   }, [ecoObsFactors, mappedLocationCodes, mapTokenToCode]);
 // ========== INITIALIZE FROM PROPS ==========
 const hasInitialized = useRef(false);
+const currentSessionState = useRef(sessionState);
+
+// Keep ref in sync with sessionState without causing re-renders
+useEffect(() => {
+  currentSessionState.current = sessionState;
+}, [sessionState]);
 
 useEffect(() => {
   if (!marketLandData || hasInitialized.current) {
@@ -469,9 +475,10 @@ useEffect(() => {
   }
 
   hasInitialized.current = true;
+  const currentSession = currentSessionState.current;
 
   // If we have session state with unsaved changes, use it instead of database
-  if (sessionState?.hasUnsavedChanges && sessionState?.lastModified) {
+  if (currentSession?.hasUnsavedChanges && currentSession?.lastModified) {
     debug('📋 Restoring from session state (unsaved changes detected)');
 
     setMethod1ExcludedSales(sessionState.method1ExcludedSales || new Set());
@@ -7201,7 +7208,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '���������') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '����������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
