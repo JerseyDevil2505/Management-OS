@@ -735,9 +735,11 @@ useEffect(() => {
 }, [marketLandData, sessionState]);
 
 // Update session state whenever relevant state changes
+const isUpdatingSessionRef = useRef(false);
 useEffect(() => {
-  if (!isInitialLoadComplete || !updateSession) return;
+  if (!isInitialLoadComplete || !updateSession || isUpdatingSessionRef.current) return;
 
+  isUpdatingSessionRef.current = true;
   updateSession({
     method1ExcludedSales,
     includedSales,
@@ -752,6 +754,7 @@ useEffect(() => {
     vcsRecommendedSites,
     collapsedFields
   });
+  isUpdatingSessionRef.current = false;
 }, [
   method1ExcludedSales,
   includedSales,
@@ -765,8 +768,8 @@ useEffect(() => {
   vcsTypes,
   vcsRecommendedSites,
   collapsedFields,
-  isInitialLoadComplete,
-  updateSession
+  isInitialLoadComplete
+  // Note: updateSession intentionally excluded to prevent infinite loops
 ]);
 
   // ========== CHECK FRONT FOOT AVAILABILITY ==========
