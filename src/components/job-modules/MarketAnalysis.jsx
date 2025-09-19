@@ -238,6 +238,9 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                   console.log('LandValuation reported analysis update; marking module dirty');
                   if (typeof onDataChange === 'function') onDataChange();
                 }}
+                // Session state management props
+                sessionState={landValuationSession}
+                updateSessionState={setLandValuationSession}
               />
             )}
             
