@@ -1387,8 +1387,10 @@ const getPricePerUnit = useCallback((price, size) => {
       const preservedIncluded = new Set([...prev].filter(id => currentSaleIds.has(id)));
 
       // Auto-include only sales that are truly new (not in previous state at all)
+      // BUT NEVER auto-include sales that are explicitly excluded in method1ExcludedSales
+      const activeExcluded = window._method1ExcludedSales || method1ExcludedSales;
       filteredSales.forEach(sale => {
-        if (!existingIds.has(sale.id)) {
+        if (!existingIds.has(sale.id) && !activeExcluded.has(sale.id)) {
           preservedIncluded.add(sale.id);
         }
       });
@@ -4859,6 +4861,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                               debug('❌ Removed from included sales, new size:', newSet.size);
                               return newSet;
                             });
+                            // Track this as explicitly excluded to prevent auto-re-inclusion
+                            setMethod1ExcludedSales(prev => new Set([...prev, sale.id]));
                           }
                         }}
                       />
@@ -7174,7 +7178,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         <td style={{ padding: '8px' }}>{prop.property_location}</td>
                         <td style={{ padding: '8px' }}>
                           {prop.sales_date}
-                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>���️</span>}
+                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>����️</span>}
                         </td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>${prop.sales_price?.toLocaleString()}</td>
                         <td style={{ padding: '8px', textAlign: 'right' }}>${Math.round(prop.normalizedTime)?.toLocaleString()}</td>
