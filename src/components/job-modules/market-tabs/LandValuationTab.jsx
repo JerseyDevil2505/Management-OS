@@ -466,7 +466,55 @@ useEffect(() => {
     return;
   }
 
-  debug('🔄 Loading market land data:', {
+  // If we have session state with unsaved changes, use it instead of database
+  if (sessionState?.hasUnsavedChanges && sessionState?.lastModified) {
+    debug('📋 Restoring from session state (unsaved changes detected)');
+
+    setMethod1ExcludedSales(sessionState.method1ExcludedSales || new Set());
+    setIncludedSales(sessionState.includedSales || new Set());
+    setSaleCategories(sessionState.saleCategories || {});
+    setSpecialRegions(sessionState.specialRegions || {});
+    setLandNotes(sessionState.landNotes || {});
+
+    if (sessionState.cascadeConfig) {
+      setCascadeConfig(sessionState.cascadeConfig);
+    }
+
+    if (sessionState.vcsSheetData) {
+      setVcsSheetData(sessionState.vcsSheetData);
+    }
+
+    if (sessionState.vcsManualSiteValues) {
+      setVcsManualSiteValues(sessionState.vcsManualSiteValues);
+    }
+
+    if (sessionState.vcsDescriptions) {
+      setVcsDescriptions(sessionState.vcsDescriptions);
+    }
+
+    if (sessionState.vcsTypes) {
+      setVcsTypes(sessionState.vcsTypes);
+    }
+
+    if (sessionState.vcsRecommendedSites) {
+      setVcsRecommendedSites(sessionState.vcsRecommendedSites);
+    }
+
+    if (sessionState.collapsedFields) {
+      setCollapsedFields(sessionState.collapsedFields);
+    }
+
+    // Still load read-only data from marketLandData
+    setLastSaved(marketLandData.updated_at ? new Date(marketLandData.updated_at) : null);
+    setIsLoading(false);
+    setIsInitialLoadComplete(true);
+
+    debug('✅ Session state restored successfully');
+    return;
+  }
+
+  // No unsaved changes, load from database as normal
+  debug('🔄 Loading from database (no unsaved session changes):', {
     hasRawLandConfig: !!marketLandData.raw_land_config,
     hasCascadeRates: !!marketLandData.cascade_rates,
     hasVacantSales: !!marketLandData.vacant_sales_analysis?.sales?.length
