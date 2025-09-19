@@ -1391,16 +1391,14 @@ const getPricePerUnit = useCallback((price, size) => {
         }
       });
 
-      debug('✅ Checkbox state management:', {
+      debug('✅ Checkbox state management (respecting exclusions):', {
         isInitialLoadComplete,
         previousCount: prev.size,
         currentSalesCount: filteredSales.length,
         preservedCount: preservedIncluded.size,
-        newlyAdded: preservedIncluded.size - [...prev].filter(id => currentSaleIds.has(id)).length,
-        excludedCount: filteredSales.length - preservedIncluded.size,
+        excludedCount: method1ExcludedSales.size,
         preservedIds: Array.from(preservedIncluded),
-        filteredSalesIds: filteredSales.map(s => s.id),
-        salesMismatch: filteredSales.filter(s => !preservedIncluded.has(s.id)).map(s => ({id: s.id, block: s.property_block, lot: s.property_lot}))
+        excludedIds: Array.from(method1ExcludedSales)
       });
 
       return preservedIncluded;
@@ -2134,7 +2132,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
     });
 
-    debug('���� Processed allocation data:', {
+    debug('🏠 Processed allocation data:', {
       totalVacantSales: processedVacantSales.length,
       positiveSales: processedVacantSales.filter(s => s.isPositive).length,
       negativeSales: processedVacantSales.filter(s => !s.isPositive).length
