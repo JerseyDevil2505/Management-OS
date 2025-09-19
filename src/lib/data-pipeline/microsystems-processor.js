@@ -375,13 +375,9 @@ export class MicrosystemsProcessor {
 
   /**
    * Map Microsystems record to property_records table (ALL 82 FIELDS)
-   * FIXED: Correctly maps codes to database fields based on prefix system
-   * Codes are now categorized by their prefixes rather than source column names
+   * UPDATED: Combines original property_records + analysis fields into single record
    */
   mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo = {}) {
-    // FIXED: Create prefix-aware field mapping for codes
-    const categorizedCodes = this.categorizeCodes(rawRecord);
-
     return {
       // Job context
       job_id: jobId,
@@ -430,11 +426,11 @@ export class MicrosystemsProcessor {
       inspection_price_by: null, // Not available in Microsystems
       inspection_price_date: null, // Not available in Microsystems
 
-      // FIXED: Asset fields mapped by prefix instead of source column
-      asset_building_class: categorizedCodes.asset_building_class || rawRecord['Bldg Qual Class Code'],
-      asset_design_style: categorizedCodes.asset_design_style || rawRecord['Style Code'],
-      asset_ext_cond: categorizedCodes.asset_ext_cond || rawRecord['Condition'],
-      asset_int_cond: categorizedCodes.asset_int_cond || rawRecord['Interior Cond Or End Unit'],
+      // Asset fields - All analysis fields now in single table
+      asset_building_class: rawRecord['Bldg Qual Class Code'],
+      asset_design_style: rawRecord['Style Code'],
+      asset_ext_cond: rawRecord['Condition'],
+      asset_int_cond: rawRecord['Interior Cond Or End Unit'],
       asset_lot_acre: this.parseNumeric(rawRecord['Lot Size In Acres'], 2),
       asset_lot_depth: this.calculateLotDepth(rawRecord),
       asset_lot_frontage: this.calculateLotFrontage(rawRecord),
@@ -442,7 +438,7 @@ export class MicrosystemsProcessor {
       asset_neighborhood: rawRecord['Neighborhood'],
       asset_sfla: this.parseNumeric(rawRecord['Livable Area']),
       asset_story_height: this.parseNumeric(rawRecord['Story Height']),
-      asset_type_use: categorizedCodes.asset_type_use || rawRecord['Type Use Code'],
+      asset_type_use: rawRecord['Type Use Code'],
       asset_view: null, // Not available in Microsystems
       asset_year_built: this.parseInteger(rawRecord['Year Built']),
 
@@ -451,16 +447,6 @@ export class MicrosystemsProcessor {
       //          asset_zoning, values_norm_size, values_norm_time
       //          (moved to property_market_analysis table)
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
-
-      // FIXED: Raw data fields categorized by prefix
-      roof_type: categorizedCodes.roof_type,
-      roof_material: categorizedCodes.roof_material,
-      foundation: categorizedCodes.foundation,
-      interior_wall: categorizedCodes.interior_wall,
-      electric: categorizedCodes.electric,
-      roof_pitch: categorizedCodes.roof_pitch,
-      heat_source: categorizedCodes.heat_source,
-      exterior: categorizedCodes.exterior,
       
       // Processing metadata
       processed_at: new Date().toISOString(),
