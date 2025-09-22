@@ -58,7 +58,7 @@ const LandValuationTab = ({
 
   // DEBUG: Watch for re-renders (this useEffect will run on every render)
   useEffect(() => {
-    console.log('🔄 LandValuationTab re-rendered');
+    console.log('🔄 LandValuationTab re-rendered, saleCategories:', saleCategories);
   });
 
   // Listen for external navigation events to set LandValuation inner subtab
@@ -1507,7 +1507,7 @@ const getPricePerUnit = useCallback((price, size) => {
     setIncludedSales(prev => {
       // If initial load isn't complete yet, don't modify included sales
       if (!isInitialLoadComplete) {
-        debug('����� Skipping checkbox update - waiting for initial load');
+        debug('������� Skipping checkbox update - waiting for initial load');
         return prev;
       }
 
