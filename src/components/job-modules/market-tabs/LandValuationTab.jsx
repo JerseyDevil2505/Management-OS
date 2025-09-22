@@ -5335,7 +5335,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
                       <select
                         value={saleCategories[sale.id] || sale.autoCategory || 'uncategorized'}
-                        onChange={(e) => setSaleCategories(prev => ({ ...prev, [sale.id]: e.target.value }))}
+                        onChange={(e) => {
+                          const newValue = e.target.value;
+                          setSaleCategories(prev => {
+                            if (prev[sale.id] === newValue) return prev; // Don't update if same value
+                            return { ...prev, [sale.id]: newValue };
+                          });
+                        }}
                         style={{
                           padding: '4px',
                           border: '1px solid #D1D5DB',
@@ -7490,7 +7496,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'normTime' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '�����' : '↓') : ''}
+                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '���' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('acres')}
