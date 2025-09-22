@@ -2092,7 +2092,7 @@ const getPricePerUnit = useCallback((price, size) => {
       console.error('Error in performBracketAnalysis:', error);
       setBracketAnalysis({});
     }
-  }, [properties, jobData, method2TypeFilter, method2ExcludedSales]);
+  }, [properties, jobData, method2TypeFilter, method2ExcludedSales, vacantSales, specialRegions, cascadeConfig]);
 
   const calculateRates = useCallback((regionFilter = null) => {
     const included = vacantSales.filter(s => {
@@ -2372,7 +2372,7 @@ Class: ${property.property_m4_class === '2' ? 'Residential (possible teardown)' 
 
 Find specific information about this property and sale. Include:
 
-���� Property ownership/seller details
+��� Property ownership/seller details
 • Tax assessment and classification details
 • Documented environmental constraints (wetlands, floodplains)
 • Municipality-specific land use characteristics
