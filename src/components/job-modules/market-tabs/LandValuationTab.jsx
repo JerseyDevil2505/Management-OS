@@ -56,6 +56,11 @@ const LandValuationTab = ({
     }
   }, [updateSessionState]);
 
+  // DEBUG: Watch for re-renders (this useEffect will run on every render)
+  useEffect(() => {
+    console.log('🔄 LandValuationTab re-rendered');
+  });
+
   // Listen for external navigation events to set LandValuation inner subtab
   useEffect(() => {
     const handler = (e) => {
