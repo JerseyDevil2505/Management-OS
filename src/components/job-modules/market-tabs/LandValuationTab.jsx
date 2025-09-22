@@ -1443,7 +1443,7 @@ const getPricePerUnit = useCallback((price, size) => {
         setIncludedSales(prev => new Set([...prev, packageSale.id]));
 
         // Set package category
-        if (packageSale.autoCategory) {
+        if (packageSale.autoCategory && !saleCategories[packageSale.id]) {
           setSaleCategories(prev => ({...prev, [packageSale.id]: packageSale.autoCategory}));
         }
       } else {
@@ -4658,7 +4658,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     debug('🔄 Recalculating category analysis');
     debug('���� Total vacant sales:', vacantSales.length);
-    debug('������ Checked sales count:', checkedSales.length);
+    debug('���� Checked sales count:', checkedSales.length);
     debug('📋 Included sales IDs:', Array.from(includedSales));
     debug('📋 Sale categories state:', saleCategories);
     debug('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
@@ -7482,7 +7482,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'salePrice' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '����' : '���') : ''}
+                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '��' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('normTime')}
