@@ -679,7 +679,7 @@ useEffect(() => {
     // DEFENSIVE FIX: Only update if current targetAllocation is null/empty to prevent overwrites
     setTargetAllocation(prev => {
       if (targetAllocationJustSaved) {
-        debug('🛡️ Target allocation just saved - skipping reload to prevent overwrite');
+        debug('🛡��� Target allocation just saved - skipping reload to prevent overwrite');
         return prev;
       }
       if (prev === null || prev === undefined || prev === '') {
@@ -8143,7 +8143,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     return CME_BRACKETS.find(bracket => price >= bracket.min && price <= bracket.max) || CME_BRACKETS[0];
   };
 
-  // Memoize VCS special categories calculation to prevent re-renders
+  // Memoize VCS special categories calculation based on config only (not individual sales)
   const vcsSpecialCategoriesMap = useMemo(() => {
     const map = {};
     Object.keys(vcsSheetData).forEach(vcs => {
@@ -8151,18 +8151,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const isGrayedOut = !type.startsWith('Residential');
 
       map[vcs] = !isGrayedOut ? {
-        wetlands: cascadeConfig.specialCategories.wetlands && (
-          vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'wetlands') ||
-          cascadeConfig.specialCategories.wetlands > 0
-        ),
-        landlocked: cascadeConfig.specialCategories.landlocked && (
-          vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'landlocked') ||
-          cascadeConfig.specialCategories.landlocked > 0
-        ),
-        conservation: cascadeConfig.specialCategories.conservation && (
-          vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'conservation') ||
-          cascadeConfig.specialCategories.conservation > 0
-        )
+        wetlands: cascadeConfig.specialCategories.wetlands && cascadeConfig.specialCategories.wetlands > 0,
+        landlocked: cascadeConfig.specialCategories.landlocked && cascadeConfig.specialCategories.landlocked > 0,
+        conservation: cascadeConfig.specialCategories.conservation && cascadeConfig.specialCategories.conservation > 0
       } : {
         wetlands: false,
         landlocked: false,
@@ -8170,7 +8161,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       };
     });
     return map;
-  }, [vcsSheetData, vcsTypes, cascadeConfig.specialCategories, vacantSales, saleCategories]);
+  }, [vcsSheetData, vcsTypes, cascadeConfig.specialCategories]);
 
   // ========== RENDER VCS SHEET TAB ==========
   const renderVCSSheetTab = () => {
