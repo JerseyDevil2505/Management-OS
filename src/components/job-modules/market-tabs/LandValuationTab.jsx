@@ -1450,7 +1450,7 @@ const getPricePerUnit = useCallback((price, size) => {
         // Single property with book/page
         const enriched = enrichProperty(group[0]);
         finalSales.push(enriched);
-        if (enriched.autoCategory) {
+        if (enriched.autoCategory && !saleCategories[enriched.id]) {
           setSaleCategories(prev => ({...prev, [enriched.id]: enriched.autoCategory}));
         }
       }
@@ -1492,7 +1492,7 @@ const getPricePerUnit = useCallback((price, size) => {
       return true;
     });
 
-    debug('��� Vacant sales processing:', {
+    debug('🔄 Vacant sales processing:', {
       totalSalesFound: finalSales.length,
       finalSalesCount: filteredSales.length
     });
@@ -4874,7 +4874,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
     const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
 
-    debug('��️ Building Lot Analysis Result:', {
+    debug('���️ Building Lot Analysis Result:', {
       avg: buildingLot.avg,
       count: buildingLot.count,
       method: buildingLot.method,
