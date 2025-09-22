@@ -8143,6 +8143,35 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     return CME_BRACKETS.find(bracket => price >= bracket.min && price <= bracket.max) || CME_BRACKETS[0];
   };
 
+  // Memoize VCS special categories calculation to prevent re-renders
+  const vcsSpecialCategoriesMap = useMemo(() => {
+    const map = {};
+    Object.keys(vcsSheetData).forEach(vcs => {
+      const type = vcsTypes[vcs] || 'Residential-Typical';
+      const isGrayedOut = !type.startsWith('Residential');
+
+      map[vcs] = !isGrayedOut ? {
+        wetlands: cascadeConfig.specialCategories.wetlands && (
+          vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'wetlands') ||
+          cascadeConfig.specialCategories.wetlands > 0
+        ),
+        landlocked: cascadeConfig.specialCategories.landlocked && (
+          vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'landlocked') ||
+          cascadeConfig.specialCategories.landlocked > 0
+        ),
+        conservation: cascadeConfig.specialCategories.conservation && (
+          vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'conservation') ||
+          cascadeConfig.specialCategories.conservation > 0
+        )
+      } : {
+        wetlands: false,
+        landlocked: false,
+        conservation: false
+      };
+    });
+    return map;
+  }, [vcsSheetData, vcsTypes, cascadeConfig.specialCategories, vacantSales, saleCategories]);
+
   // ========== RENDER VCS SHEET TAB ==========
   const renderVCSSheetTab = () => {
     const VCS_TYPES = [
