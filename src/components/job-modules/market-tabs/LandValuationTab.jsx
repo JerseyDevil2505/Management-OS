@@ -686,7 +686,7 @@ useEffect(() => {
         debug('✅ Target allocation set to:', numericValue, typeof numericValue);
         return numericValue;
       } else {
-        debug('🛡️ Preserving existing target allocation:', prev, 'instead of overwriting with:', numericValue);
+        debug('🛡�� Preserving existing target allocation:', prev, 'instead of overwriting with:', numericValue);
         return prev;
       }
     });
@@ -5335,32 +5335,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
                       <select
                         value={saleCategories[sale.id] || sale.autoCategory || 'uncategorized'}
-                        onChange={(e) => {
-                          e.preventDefault(); // Add this to prevent any bubbling
-                          e.stopPropagation(); // Add this too
-
-                          const newValue = e.target.value;
-                          console.log('Setting sale category:', sale.id, 'to', newValue);
-
-                          setSaleCategories(prev => {
-                            console.log('Previous categories:', prev);
-                            const updated = { ...prev, [sale.id]: newValue };
-                            console.log('Updated categories:', updated);
-                            return updated;
-                          });
-
-                          // Update session state for persistence WITHOUT triggering parent update
-                          if (updateSessionState) {
-                            updateSessionState(prevSession => ({
-                              ...prevSession,
-                              saleCategories: { ...prevSession?.saleCategories, [sale.id]: newValue },
-                              lastModified: new Date().toISOString(),
-                              hasUnsavedChanges: true
-                            }));
-                          }
-
-                          // Don't call onDataChange here - only call it when actually saving
-                        }}
+                        onChange={(e) => setSaleCategories(prev => ({ ...prev, [sale.id]: e.target.value }))}
                         style={{
                           padding: '4px',
                           border: '1px solid #D1D5DB',
