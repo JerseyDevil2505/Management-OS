@@ -315,6 +315,7 @@ const LandValuationTab = ({
   // VCS Analysis
   const [bracketAnalysis, setBracketAnalysis] = useState({});
   const [method2Summary, setMethod2Summary] = useState({});
+  const [method2ByRegion, setMethod2ByRegion] = useState({}); // VCS analysis grouped by special region
 
   // Enhanced Method 2 UI State - Use Single Family as default
   const [method2TypeFilter, setMethod2TypeFilter] = useState('1');
@@ -1578,6 +1579,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       const vcsSales = {};
+      const vcsSalesByRegion = {}; // New: Group by VCS + Special Region
 
       // Filter properties that have time normalization data
       properties.forEach(prop => {
@@ -1613,14 +1615,39 @@ const getPricePerUnit = useCallback((price, size) => {
         const vcs = timeNormData.new_vcs;
         if (!vcs) return;
 
+        // Determine special region for this property (check if it's an improved sale with a matching vacant sale)
+        let propRegion = 'Normal';
+
+        // For improved sales, find if there's a vacant sale at the same location with a special region
+        const matchingVacantSale = vacantSales.find(vs =>
+          vs.property_block === prop.property_block &&
+          vs.property_lot === prop.property_lot
+        );
+
+        if (matchingVacantSale && specialRegions[matchingVacantSale.id]) {
+          propRegion = specialRegions[matchingVacantSale.id];
+        }
+
+        // Group by VCS only (legacy)
         if (!vcsSales[vcs]) {
           vcsSales[vcs] = [];
+        }
+
+        // Group by VCS + Region (new)
+        const regionKey = `${vcs}_${propRegion}`;
+        if (!vcsSalesByRegion[regionKey]) {
+          vcsSalesByRegion[regionKey] = {
+            vcs,
+            region: propRegion,
+            sales: []
+          };
         }
 
         const acres = parseFloat(calculateAcreage(prop) || 0);
         const sfla = parseFloat(prop.asset_sfla || 0);
 
-        vcsSales[vcs].push({
+        const saleData = {
+          id: prop.id,
           acres,
           salesPrice: timeNormData.values_norm_time,
           normalizedTime: timeNormData.values_norm_time,
@@ -1628,13 +1655,136 @@ const getPricePerUnit = useCallback((price, size) => {
           address: prop.property_location,
           yearBuilt: prop.asset_year_built,
           saleDate: prop.sales_date,
-          typeUse: prop.asset_type_use
-        });
+          typeUse: prop.asset_type_use,
+          region: propRegion
+        };
+
+        vcsSales[vcs].push(saleData);
+        vcsSalesByRegion[regionKey].sales.push(saleData);
       });
 
       const analysis = {};
+      const analysisByRegion = {};
       let validRates = [];
+      let validRatesByRegion = {};
 
+      // Helper function to get cascade boundaries for a region
+      const getCascadeBoundaries = (region) => {
+        const config = region === 'Normal' ? cascadeConfig.normal : (cascadeConfig.special?.[region] || cascadeConfig.normal);
+        return {
+          pMax: config?.prime?.max ?? 1,
+          sMax: config?.secondary?.max ?? 5,
+          eMax: config?.excess?.max ?? 10,
+          rMax: config?.residual?.max ?? null
+        };
+      };
+
+      // Helper function to perform bracket analysis for a set of sales
+      const performRegionBracketAnalysis = (sales, region, vcs) => {
+        if (sales.length < 3) return null; // Need minimum sales for analysis
+
+        // Sort by acreage for bracketing
+        sales.sort((a, b) => a.acres - b.acres);
+
+        // Use region-specific cascade boundaries
+        const { pMax, sMax, eMax, rMax } = getCascadeBoundaries(region);
+
+        const brackets = {
+          small: sales.filter(s => s.acres < pMax),
+          medium: sales.filter(s => s.acres >= pMax && s.acres < sMax),
+          large: sales.filter(s => s.acres >= sMax && s.acres < eMax),
+          xlarge: rMax ? sales.filter(s => s.acres >= eMax && s.acres < rMax) : sales.filter(s => s.acres >= eMax),
+          residual: rMax ? sales.filter(s => s.acres >= rMax) : []
+        };
+
+        // Calculate overall VCS average SFLA for size adjustment (Method 2 uses SFLA)
+        const allValidSFLA = sales.filter(s => s.sfla > 0);
+        const overallAvgSFLA = allValidSFLA.length > 0 ?
+          allValidSFLA.reduce((sum, s) => sum + s.sfla, 0) / allValidSFLA.length : null;
+
+        // FIXED statistics calculation
+        const calcBracketStats = (arr) => {
+          if (arr.length === 0) return {
+            count: 0,
+            avgAcres: null,
+            avgSalePrice: null,
+            avgNormTime: null,
+            avgSFLA: null,
+            avgAdjusted: null
+          };
+
+          // Use time-normalized values for Method 2
+          const avgNormTime = arr.reduce((sum, s) => sum + s.normalizedTime, 0) / arr.length;
+          const avgAcres = arr.reduce((sum, s) => sum + s.acres, 0) / arr.length;
+          const validSFLA = arr.filter(s => s.sfla > 0);
+          const avgSFLA = validSFLA.length > 0 ?
+            validSFLA.reduce((sum, s) => sum + s.sfla, 0) / validSFLA.length : null;
+
+          // Jim's Magic Formula for size adjustment - METHOD 2 USES SFLA, NOT LOT SIZE
+          let avgAdjusted = avgNormTime;
+          if (overallAvgSFLA && avgSFLA && avgSFLA > 0) {
+            const sflaDiff = overallAvgSFLA - avgSFLA;
+            const pricePerSfla = avgNormTime / avgSFLA;
+            const sizeAdjustment = sflaDiff * (pricePerSfla * 0.50);
+            avgAdjusted = avgNormTime + sizeAdjustment;
+          }
+
+          return {
+            count: arr.length,
+            avgAcres: Math.round(avgAcres * 100) / 100, // Round to 2 decimals
+            avgSalePrice: Math.round(avgNormTime), // Time-normalized sale price
+            avgNormTime: Math.round(avgNormTime), // Keep for compatibility
+            avgSFLA: avgSFLA ? Math.round(avgSFLA) : null,
+            avgAdjusted: Math.round(avgAdjusted)
+          };
+        };
+
+        const bracketStats = {
+          small: calcBracketStats(brackets.small),
+          medium: calcBracketStats(brackets.medium),
+          large: calcBracketStats(brackets.large),
+          xlarge: calcBracketStats(brackets.xlarge)
+        };
+
+        // Calculate implied rate from bracket differences
+        let impliedRate = null;
+        if (bracketStats.small.count > 0 && bracketStats.medium.count > 0) {
+          const priceDiff = bracketStats.medium.avgAdjusted - bracketStats.small.avgAdjusted;
+          const acresDiff = bracketStats.medium.avgAcres - bracketStats.small.avgAcres;
+          if (acresDiff > 0 && priceDiff > 0) {
+            impliedRate = Math.round(priceDiff / acresDiff);
+          }
+        }
+
+        return {
+          totalSales: sales.length,
+          avgPrice: Math.round(sales.reduce((sum, s) => sum + s.normalizedTime, 0) / sales.length),
+          avgAcres: Math.round((sales.reduce((sum, s) => sum + s.acres, 0) / sales.length) * 100) / 100,
+          avgAdjusted: Math.round(sales.reduce((sum, s) => sum + s.normalizedTime, 0) / sales.length),
+          brackets: bracketStats,
+          impliedRate,
+          region,
+          cascadeBoundaries: { pMax, sMax, eMax, rMax }
+        };
+      };
+
+      // Process VCS sales by region
+      Object.values(vcsSalesByRegion).forEach(({ vcs, region, sales }) => {
+        const regionAnalysis = performRegionBracketAnalysis(sales, region, vcs);
+        if (regionAnalysis && regionAnalysis.impliedRate) {
+          if (!analysisByRegion[region]) {
+            analysisByRegion[region] = {};
+          }
+          analysisByRegion[region][vcs] = regionAnalysis;
+
+          if (!validRatesByRegion[region]) {
+            validRatesByRegion[region] = [];
+          }
+          validRatesByRegion[region].push(regionAnalysis.impliedRate);
+        }
+      });
+
+      // Legacy analysis (maintain backwards compatibility)
       Object.keys(vcsSales).forEach(vcs => {
         const sales = vcsSales[vcs];
         if (sales.length < 3) return; // Need minimum sales for analysis
@@ -1642,7 +1792,7 @@ const getPricePerUnit = useCallback((price, size) => {
         // Sort by acreage for bracketing
         sales.sort((a, b) => a.acres - b.acres);
 
-        // Use configured cascade boundaries (in acres) for bracketing
+        // Use normal cascade boundaries for legacy analysis
         const pMax = cascadeConfig.normal?.prime?.max ?? 1;
         const sMax = cascadeConfig.normal?.secondary?.max ?? 5;
         const eMax = cascadeConfig.normal?.excess?.max ?? 10;
