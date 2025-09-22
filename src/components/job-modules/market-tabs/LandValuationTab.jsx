@@ -315,7 +315,6 @@ const LandValuationTab = ({
   // VCS Analysis
   const [bracketAnalysis, setBracketAnalysis] = useState({});
   const [method2Summary, setMethod2Summary] = useState({});
-  const [method2ByRegion, setMethod2ByRegion] = useState({}); // VCS analysis grouped by special region
 
   // Enhanced Method 2 UI State - Use Single Family as default
   const [method2TypeFilter, setMethod2TypeFilter] = useState('1');
@@ -5793,7 +5792,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales • Avg $${Math.round(data.avgPrice).toLocaleString()} ��� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ��� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales �� Avg $${Math.round(data.avgPrice).toLocaleString()} ��� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ��� $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{ marginBottom: '8px', border: '1px solid #E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
