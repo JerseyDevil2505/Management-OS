@@ -29,6 +29,24 @@ import AttributeCardsTab from './market-tabs/AttributeCardsTab';
 const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache, onDataChange }) => {
   // ==================== STATE MANAGEMENT ====================
   const [activeTab, setActiveTab] = useState('data-quality');
+
+  // Land Valuation Session State - persists user changes while navigating tabs
+  const [landValuationSession, setLandValuationSession] = useState({
+    method1ExcludedSales: new Set(),
+    includedSales: new Set(),
+    saleCategories: {},
+    specialRegions: {},
+    landNotes: {},
+    cascadeConfig: null,
+    vcsSheetData: {},
+    vcsManualSiteValues: {},
+    vcsDescriptions: {},
+    vcsTypes: {},
+    vcsRecommendedSites: {},
+    collapsedFields: {},
+    hasUnsavedChanges: false,
+    lastModified: null
+  });
   
   // ==================== DERIVE DATA FROM PROPS ====================
   // Extract vendor type and code definitions from jobData
@@ -100,6 +118,19 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
     window.addEventListener('navigate_market_analysis_tab', handler);
     return () => window.removeEventListener('navigate_market_analysis_tab', handler);
   }, [tabs]);
+
+  // Warn user if they try to leave with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (landValuationSession?.hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [landValuationSession?.hasUnsavedChanges]);
 
   // ==================== MAIN RENDER ====================
   return (
@@ -220,6 +251,9 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                   console.log('LandValuation reported analysis update; marking module dirty');
                   if (typeof onDataChange === 'function') onDataChange();
                 }}
+                // Session state management props
+                sessionState={landValuationSession}
+                updateSessionState={setLandValuationSession}
               />
             )}
             
