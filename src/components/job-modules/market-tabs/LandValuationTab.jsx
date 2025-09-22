@@ -1407,7 +1407,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
           finalSales.push(packageSale);
           setIncludedSales(prev => new Set([...prev, packageSale.id]));
-          if (packageSale.autoCategory) setSaleCategories(prev => ({...prev, [packageSale.id]: packageSale.autoCategory}));
+          if (packageSale.autoCategory && !saleCategories[packageSale.id]) setSaleCategories(prev => ({...prev, [packageSale.id]: packageSale.autoCategory}));
           return;
         }
       }
@@ -1492,7 +1492,7 @@ const getPricePerUnit = useCallback((price, size) => {
       return true;
     });
 
-    debug('🔄 Vacant sales processing:', {
+    debug('��� Vacant sales processing:', {
       totalSalesFound: finalSales.length,
       finalSalesCount: filteredSales.length
     });
