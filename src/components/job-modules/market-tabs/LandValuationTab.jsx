@@ -1462,7 +1462,7 @@ const getPricePerUnit = useCallback((price, size) => {
       finalSales.push(enriched);
       if (enriched.autoCategory) {
         debug(`���️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
-        setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
+        if (!saleCategories[prop.id]) setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
       }
     });
 
