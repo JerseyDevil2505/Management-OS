@@ -1856,22 +1856,14 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
       if (frontage && depth && parseFloat(frontage) > 0 && parseFloat(depth) > 0) {
         const sf = parseFloat(frontage) * parseFloat(depth);
         const acres = (sf / 43560).toFixed(2);
-        console.log(`✅ BRT lot size calculated from frontage × depth: ${acres} acres`, {
-          property_key: property.property_composite_key,
-          frontage: parseFloat(frontage),
-          depth: parseFloat(depth),
-          sf: sf
-        });
+        // Calculated from frontage × depth
         return acres;
       }
 
       // 2. FALLBACK: Use Unit Rate Config results (market_manual_lot_acre)
       const manualAcre = marketAnalysis?.market_manual_lot_acre ?? property.market_manual_lot_acre;
       if (manualAcre && parseFloat(manualAcre) > 0) {
-        console.log(`✅ BRT lot size from Unit Rate Config: ${parseFloat(manualAcre).toFixed(2)} acres`, {
-          property_key: property.property_composite_key,
-          source: 'market_manual_lot_acre'
-        });
+        // Using Unit Rate Config manual acres
         return parseFloat(manualAcre).toFixed(2);
       }
 
@@ -1879,44 +1871,26 @@ getTotalLotSize: async function(property, vendorType, codeDefinitions) {
       const manualSf = marketAnalysis?.market_manual_lot_sf ?? property.market_manual_lot_sf;
       if (manualSf && parseFloat(manualSf) > 0) {
         const acres = (parseFloat(manualSf) / 43560).toFixed(2);
-        console.log(`✅ BRT lot size calculated from Unit Rate Config SF: ${acres} acres`, {
-          property_key: property.property_composite_key,
-          sf: parseFloat(manualSf),
-          source: 'market_manual_lot_sf'
-        });
+        // Calculated from Unit Rate Config SF
         return acres;
       }
 
       // 4. Final fallback: Check for pre-calculated fields (unlikely for BRT but just in case)
       const acreField = marketAnalysis?.asset_lot_acre ?? property.asset_lot_acre;
       if (acreField && parseFloat(acreField) > 0) {
-        console.log(`✅ BRT lot size from asset_lot_acre field: ${parseFloat(acreField).toFixed(2)} acres`, {
-          property_key: property.property_composite_key
-        });
+        // Using pre-calculated asset_lot_acre field
         return parseFloat(acreField).toFixed(2);
       }
 
       const sfField = marketAnalysis?.asset_lot_sf ?? property.asset_lot_sf;
       if (sfField && parseFloat(sfField) > 0) {
         const acres = (parseFloat(sfField) / 43560).toFixed(2);
-        console.log(`✅ BRT lot size from asset_lot_sf field: ${acres} acres`, {
-          property_key: property.property_composite_key,
-          sf: parseFloat(sfField)
-        });
+        // Calculated from asset_lot_sf field
         return acres;
       }
 
       // BRT: No more LANDUR summation - that was the old incorrect way
-      console.warn(`❌ BRT property lot size calculation failed - no valid source found:`, {
-        property_key: property.property_composite_key,
-        checked_sources: ['frontage_x_depth', 'market_manual_lot_acre', 'market_manual_lot_sf', 'asset_lot_acre', 'asset_lot_sf'],
-        available_fields: {
-          frontage: frontage || 'missing',
-          depth: depth || 'missing',
-          manual_acre: manualAcre || 'missing',
-          manual_sf: manualSf || 'missing'
-        }
-      });
+      // No valid lot size source found for BRT property
       return '0.00';
     }
 
