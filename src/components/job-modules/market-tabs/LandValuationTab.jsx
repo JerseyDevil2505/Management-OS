@@ -5340,8 +5340,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <select
                         value={saleCategories[sale.id] || sale.autoCategory || 'uncategorized'}
                         onChange={(e) => {
+                          e.preventDefault(); // Add this to prevent any bubbling
+                          e.stopPropagation(); // Add this too
+
                           const newValue = e.target.value;
-                          setSaleCategories(prev => ({ ...prev, [sale.id]: newValue }));
+                          console.log('Setting sale category:', sale.id, 'to', newValue);
+
+                          setSaleCategories(prev => {
+                            console.log('Previous categories:', prev);
+                            const updated = { ...prev, [sale.id]: newValue };
+                            console.log('Updated categories:', updated);
+                            return updated;
+                          });
 
                           // Update session state for persistence WITHOUT triggering parent update
                           if (updateSessionState) {
