@@ -1972,6 +1972,109 @@ const getPricePerUnit = useCallback((price, size) => {
         };
       };
 
+      // Calculate Method 2 Summary by special region
+      const method2SummaryByRegion = {};
+
+      Object.keys(analysisByRegion).forEach(region => {
+        const regionVcsSales = analysisByRegion[region];
+        const regionBracketRates = {
+          mediumRange: [],
+          largeRange: [],
+          xlargeRange: []
+        };
+
+        Object.keys(regionVcsSales).forEach(vcs => {
+          const vcsAnalysis = regionVcsSales[vcs];
+          if (!vcsAnalysis) return;
+
+          const { brackets, cascadeBoundaries } = vcsAnalysis;
+          const allBrackets = [brackets.small, brackets.medium, brackets.large, brackets.xlarge];
+
+          // For each bracket, find the best comparison bracket (highest valid one below it)
+          const findBestComparison = (targetBracket, targetIndex) => {
+            let bestBracket = null;
+            let highestValidAdjusted = 0;
+
+            for (let i = 0; i < targetIndex; i++) {
+              const candidate = allBrackets[i];
+              if (candidate &&
+                  candidate.count > 0 &&
+                  candidate.avgAdjusted &&
+                  candidate.avgAdjusted < targetBracket.avgAdjusted &&
+                  candidate.avgAdjusted > highestValidAdjusted) {
+                bestBracket = candidate;
+                highestValidAdjusted = candidate.avgAdjusted;
+              }
+            }
+            return bestBracket;
+          };
+
+          // Calculate bracket range rates using region-specific boundaries
+          const boundaries = cascadeBoundaries;
+
+          // Medium range (comparing medium bracket to best lower bracket)
+          if (brackets.medium.count > 0 && brackets.medium.avgAdjusted) {
+            const comparison = findBestComparison(brackets.medium, 1);
+            if (comparison) {
+              const priceDiff = brackets.medium.avgAdjusted - comparison.avgAdjusted;
+              const acresDiff = brackets.medium.avgAcres - comparison.avgAcres;
+              if (acresDiff > 0 && priceDiff > 0) {
+                const rate = Math.round(priceDiff / acresDiff);
+                regionBracketRates.mediumRange.push(rate);
+              }
+            }
+          }
+
+          // Large range (comparing large bracket to best lower bracket)
+          if (brackets.large.count > 0 && brackets.large.avgAdjusted) {
+            const comparison = findBestComparison(brackets.large, 2);
+            if (comparison) {
+              const priceDiff = brackets.large.avgAdjusted - comparison.avgAdjusted;
+              const acresDiff = brackets.large.avgAcres - comparison.avgAcres;
+              if (acresDiff > 0 && priceDiff > 0) {
+                const rate = Math.round(priceDiff / acresDiff);
+                regionBracketRates.largeRange.push(rate);
+              }
+            }
+          }
+
+          // XLarge range (comparing xlarge bracket to best lower bracket)
+          if (brackets.xlarge.count > 0 && brackets.xlarge.avgAdjusted) {
+            const comparison = findBestComparison(brackets.xlarge, 3);
+            if (comparison) {
+              const priceDiff = brackets.xlarge.avgAdjusted - comparison.avgAdjusted;
+              const acresDiff = brackets.xlarge.avgAcres - comparison.avgAcres;
+              if (acresDiff > 0 && priceDiff > 0) {
+                const rate = Math.round(priceDiff / acresDiff);
+                regionBracketRates.xlargeRange.push(rate);
+              }
+            }
+          }
+        });
+
+        // Calculate averages for each bracket range
+        const calculateBracketSummary = (rates) => {
+          if (rates.length === 0) return { perAcre: 'N/A', perSqFt: 'N/A', count: 0 };
+
+          const avgPerAcre = Math.round(rates.reduce((sum, r) => sum + r, 0) / rates.length);
+          const avgPerSqFt = (avgPerAcre / 43560).toFixed(2);
+
+          return {
+            perAcre: avgPerAcre,
+            perSqFt: avgPerSqFt,
+            count: rates.length
+          };
+        };
+
+        method2SummaryByRegion[region] = {
+          mediumRange: calculateBracketSummary(regionBracketRates.mediumRange),
+          largeRange: calculateBracketSummary(regionBracketRates.largeRange),
+          xlargeRange: calculateBracketSummary(regionBracketRates.xlargeRange),
+          totalVCS: Object.keys(regionVcsSales).length,
+          cascadeBoundaries: getCascadeBoundaries(region)
+        };
+      });
+
       setMethod2Summary({
         mediumRange: calculateBracketSummary(bracketRates.mediumRange), // 1.00-4.99
         largeRange: calculateBracketSummary(bracketRates.largeRange),   // 5.00-9.99
@@ -1980,6 +2083,10 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       setBracketAnalysis(analysis);
+      setMethod2ByRegion({
+        analysis: analysisByRegion,
+        summary: method2SummaryByRegion
+      });
 
     } catch (error) {
       console.error('Error in performBracketAnalysis:', error);
@@ -2265,7 +2372,7 @@ Class: ${property.property_m4_class === '2' ? 'Residential (possible teardown)' 
 
 Find specific information about this property and sale. Include:
 
-��� Property ownership/seller details
+���� Property ownership/seller details
 • Tax assessment and classification details
 • Documented environmental constraints (wetlands, floodplains)
 • Municipality-specific land use characteristics
