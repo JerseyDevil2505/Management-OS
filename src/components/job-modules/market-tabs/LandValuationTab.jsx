@@ -4821,7 +4821,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Debug teardown sales to see if they're incorrectly going to raw land
       if (saleCategories[s.id] === 'teardown' || (s.property_block === '5' && s.property_lot === '12.12')) {
-        debug('🌱 Raw Land check for teardown/5.12.12:', {
+        debug('�� Raw Land check for teardown/5.12.12:', {
           block: s.property_block,
           lot: s.property_lot,
           id: s.id,
@@ -5882,23 +5882,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             return brackets.map((bracket, index) => {
                               if (!bracket.data || bracket.data.count === 0) return null;
 
-                              console.log(`Row ${index} (${bracket.label}):`, {
-                                avgAdjusted: bracket.data.avgAdjusted,
-                                avgAcres: bracket.data.avgAcres
-                              });
-
                               // Find the bracket with the highest adjusted value that's still lower than current
                               let comparisonBracket = null;
                               let highestValidAdjusted = 0;
 
                               for (let i = 0; i < index; i++) {
                                 const candidate = brackets[i].data;
-                                console.log(`  Checking row ${i}:`, {
-                                  hasData: !!candidate,
-                                  avgAdjusted: candidate?.avgAdjusted,
-                                  wouldBePositiveDelta: candidate && bracket.data.avgAdjusted > candidate.avgAdjusted,
-                                  isHigherThanCurrent: candidate?.avgAdjusted > highestValidAdjusted
-                                });
 
                                 if (candidate &&
                                     candidate.count > 0 &&
@@ -5907,14 +5896,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                                     candidate.avgAdjusted > highestValidAdjusted) {
                                   comparisonBracket = candidate;
                                   highestValidAdjusted = candidate.avgAdjusted;
-                                  console.log(`  ✓ New best comparison: row ${i} (${candidate.avgAdjusted})`);
                                 }
-                              }
-
-                              if (!comparisonBracket) {
-                                console.log(`  ✗ No valid comparison found`);
-                              } else {
-                                console.log(`  ✅ Final comparison: ${highestValidAdjusted}`);
                               }
 
                               let adjustedDelta = null;
