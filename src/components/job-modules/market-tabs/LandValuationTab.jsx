@@ -679,7 +679,7 @@ useEffect(() => {
     // DEFENSIVE FIX: Only update if current targetAllocation is null/empty to prevent overwrites
     setTargetAllocation(prev => {
       if (targetAllocationJustSaved) {
-        debug('🛡��� Target allocation just saved - skipping reload to prevent overwrite');
+        debug('🛡️ Target allocation just saved - skipping reload to prevent overwrite');
         return prev;
       }
       if (prev === null || prev === undefined || prev === '') {
@@ -4882,7 +4882,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     return { rawLand, buildingLot, wetlands, landlocked, conservation };
-  }, [vacantSales, includedSales, saleCategories, valuationMode]);
+  }, [vacantSales, includedSales, valuationMode]);
 
   const saveRates = async () => {
     // Update cascade config mode to match current valuation mode
@@ -7490,7 +7490,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'normTime' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '���' : '↓') : ''}
+                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '�����' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('acres')}
