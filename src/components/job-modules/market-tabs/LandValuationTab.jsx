@@ -4882,7 +4882,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     return { rawLand, buildingLot, wetlands, landlocked, conservation };
-  }, [vacantSales, includedSales, valuationMode]);
+  }, [vacantSales, includedSales, saleCategories, valuationMode]);
 
   const saveRates = async () => {
     // Update cascade config mode to match current valuation mode
