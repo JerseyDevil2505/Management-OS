@@ -2082,10 +2082,6 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       setBracketAnalysis(analysis);
-      setMethod2ByRegion({
-        analysis: analysisByRegion,
-        summary: method2SummaryByRegion
-      });
 
     } catch (error) {
       console.error('Error in performBracketAnalysis:', error);
@@ -2441,7 +2437,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const cascadeRates = region === 'Normal' ? cascadeConfig.normal : cascadeConfig.special[region];
 
       if (!cascadeRates) {
-        console.warn(`⚠️ Missing cascade rates for region "${region}" on sale ${sale.property_block}/${sale.property_lot}`);
+        console.warn(`⚠��� Missing cascade rates for region "${region}" on sale ${sale.property_block}/${sale.property_lot}`);
         return;
       }
 
