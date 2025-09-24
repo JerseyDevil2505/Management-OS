@@ -3480,36 +3480,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         totalSales: analysisData.vacant_sales_analysis.sales.length
       });
 
-      // Check if record exists - don't use .single() to avoid errors
-      const { data: existing, error: checkError } = await supabase
-        .from('market_land_valuation')
-        .select('id')
-        .eq('job_id', jobData.id)
-        .maybeSingle();
+      // Use the same table that's used for loading: property_market_analysis
+      debug('💾 Saving to property_market_analysis table...');
+      const { error } = await supabase
+        .from('property_market_analysis')
+        .upsert(analysisData, {
+          onConflict: 'job_id',
+          ignoreDuplicates: false
+        });
 
-      // If there was an error checking, log it but try to proceed with upsert
-      if (checkError && checkError.code !== 'PGRST116') {
-        console.warn('⚠️ Error checking for existing record:', checkError);
-      }
-
-      if (existing) {
-        debug('📝 Updating existing record...');
-        const { error } = await supabase
-          .from('market_land_valuation')
-          .update(analysisData)
-          .eq('job_id', jobData.id);
-        if (error) throw error;
-      } else {
-        debug('➕ Creating new record...');
-        // Use upsert to handle race conditions
-        const { error } = await supabase
-          .from('market_land_valuation')
-          .upsert(analysisData, {
-            onConflict: 'job_id',
-            ignoreDuplicates: false
-          });
-        if (error) throw error;
-      }
+      if (error) throw error;
 
       debug('✅ Save completed successfully');
       setLastSaved(new Date());
