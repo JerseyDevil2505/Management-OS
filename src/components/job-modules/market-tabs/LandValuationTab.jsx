@@ -3394,7 +3394,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   // ========== SAVE & EXPORT FUNCTIONS ==========
-  const saveAnalysis = async (options = {}) => {
+  const saveAnalysis = useCallback(async (options = {}) => {
     if (!jobData?.id) {
       debug('❌ Save cancelled: No job ID');
       return;
@@ -3480,36 +3480,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         totalSales: analysisData.vacant_sales_analysis.sales.length
       });
 
-      // Check if record exists - don't use .single() to avoid errors
-      const { data: existing, error: checkError } = await supabase
-        .from('market_land_valuation')
-        .select('id')
-        .eq('job_id', jobData.id)
-        .maybeSingle();
+      // Use the same table that's used for loading: property_market_analysis
+      debug('💾 Saving to property_market_analysis table...');
+      const { error } = await supabase
+        .from('property_market_analysis')
+        .upsert(analysisData, {
+          onConflict: 'job_id',
+          ignoreDuplicates: false
+        });
 
-      // If there was an error checking, log it but try to proceed with upsert
-      if (checkError && checkError.code !== 'PGRST116') {
-        console.warn('⚠️ Error checking for existing record:', checkError);
-      }
-
-      if (existing) {
-        debug('📝 Updating existing record...');
-        const { error } = await supabase
-          .from('market_land_valuation')
-          .update(analysisData)
-          .eq('job_id', jobData.id);
-        if (error) throw error;
-      } else {
-        debug('➕ Creating new record...');
-        // Use upsert to handle race conditions
-        const { error } = await supabase
-          .from('market_land_valuation')
-          .upsert(analysisData, {
-            onConflict: 'job_id',
-            ignoreDuplicates: false
-          });
-        if (error) throw error;
-      }
+      if (error) throw error;
 
       debug('✅ Save completed successfully');
       setLastSaved(new Date());
@@ -3554,10 +3534,23 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [
+    jobData?.id, vacantSales, includedSales, method1ExcludedSales,
+    saleCategories, specialRegions, landNotes, dateRange, valuationMode,
+    cascadeConfig, bracketAnalysis, method2Summary, method2ExcludedSales,
+    targetAllocation, vcsSheetData, vcsManualSiteValues, vcsDescriptions,
+    vcsTypes, vcsRecommendedSites, ecoObsFactors, mappedLocationCodes,
+    trafficLevels, customLocationCodes, summaryInputs, actualAdjustments,
+    computedAdjustments, calculateRates, onAnalysisUpdate, updateSessionState
+  ]);
 
   // Expose saveAnalysis to window for auto-save access (avoids hoisting issues)
-  window.landValuationSave = saveAnalysis;
+  useEffect(() => {
+    window.landValuationSave = saveAnalysis;
+    return () => {
+      delete window.landValuationSave;
+    };
+  }, [saveAnalysis]);
 
   // Excel export functions need to be defined before being used
   const exportVCSSheetExcel = () => {
