@@ -3537,7 +3537,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   // Expose saveAnalysis to window for auto-save access (avoids hoisting issues)
-  window.landValuationSave = saveAnalysis;
+  useEffect(() => {
+    window.landValuationSave = saveAnalysis;
+    return () => {
+      delete window.landValuationSave;
+    };
+  }, [saveAnalysis]);
 
   // Excel export functions need to be defined before being used
   const exportVCSSheetExcel = () => {
