@@ -1006,7 +1006,7 @@ const getPricePerUnit = useCallback((price, size) => {
   // Auto-save every 30 seconds - but only after initial load is complete
   useEffect(() => {
     if (!isInitialLoadComplete) {
-      debug('�����️ Auto-save waiting for initial load to complete');
+      debug('�������� Auto-save waiting for initial load to complete');
       return;
     }
 
@@ -3480,10 +3480,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         totalSales: analysisData.vacant_sales_analysis.sales.length
       });
 
-      // Use the same table that's used for loading: property_market_analysis
-      debug('💾 Saving to property_market_analysis table...');
+      // Use the same table that's used for loading: market_land_valuation
+      debug('💾 Saving to market_land_valuation table...');
       const { error } = await supabase
-        .from('property_market_analysis')
+        .from('market_land_valuation')
         .upsert(analysisData, {
           onConflict: 'job_id',
           ignoreDuplicates: false
