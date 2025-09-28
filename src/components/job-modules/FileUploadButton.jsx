@@ -2185,12 +2185,22 @@ const handleCodeFileUpdate = async () => {
             {batchComplete && (
               <div className="flex space-x-3">
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     setShowBatchModal(false);
                     setShowResultsModal(false);
                     setSourceFile(null);
                     setSourceFileContent(null);
                     setSalesDecisions(new Map());
+
+                    // Trigger data refresh to update all sub-modules with new data
+                    if (onDataRefresh) {
+                      try {
+                        await onDataRefresh();
+                        console.log('🔄 Data refresh triggered after file upload completion');
+                      } catch (error) {
+                        console.error('❌ Error during post-upload data refresh:', error);
+                      }
+                    }
                   }}
                   className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-medium"
                 >
