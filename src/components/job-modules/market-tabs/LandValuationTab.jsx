@@ -1515,14 +1515,19 @@ const getPricePerUnit = useCallback((price, size) => {
       // Only include sales that:
       // 1. Are in the current filtered results
       // 2. Are NOT in the excluded set
-      // 3. Were previously included OR are new sales (auto-include new ones)
+      // 3. Were previously included OR are genuinely new sales (auto-include new ones)
       filteredSales.forEach(sale => {
         if (!method1ExcludedSales.has(sale.id)) {
           // If it was previously included, keep it included
-          // If it's a new sale (not in existingIds), auto-include it
           if (existingIds.has(sale.id)) {
             preservedIncluded.add(sale.id);
           }
+          // Auto-include new sales that weren't in the previous dataset at all
+          else if (!currentSaleIds.has(sale.id)) {
+            preservedIncluded.add(sale.id);
+          }
+          // Note: Sales that were in the previous dataset but not included
+          // (i.e., user unchecked them) will NOT be re-included
         }
       });
 
