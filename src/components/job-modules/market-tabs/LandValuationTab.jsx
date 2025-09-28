@@ -1006,7 +1006,7 @@ const getPricePerUnit = useCallback((price, size) => {
   // Auto-save every 30 seconds - but only after initial load is complete
   useEffect(() => {
     if (!isInitialLoadComplete) {
-      debug('�������� Auto-save waiting for initial load to complete');
+      debug('���������� Auto-save waiting for initial load to complete');
       return;
     }
 
@@ -1515,11 +1515,12 @@ const getPricePerUnit = useCallback((price, size) => {
       // Only include sales that:
       // 1. Are in the current filtered results
       // 2. Are NOT in the excluded set
+      // 3. Were previously included OR are new sales (auto-include new ones)
       filteredSales.forEach(sale => {
         if (!method1ExcludedSales.has(sale.id)) {
           // If it was previously included, keep it included
-          // Or if it's a new sale, auto-include it
-          if (existingIds.has(sale.id) || !existingIds.has(sale.id)) {
+          // If it's a new sale (not in existingIds), auto-include it
+          if (existingIds.has(sale.id)) {
             preservedIncluded.add(sale.id);
           }
         }
