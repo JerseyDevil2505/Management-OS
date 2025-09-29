@@ -2,6 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
+// Development logging wrapper
+const isDevelopment = process.env.NODE_ENV === 'development';
+const devLog = (...args) => {
+  if (isDevelopment) {
+    console.log(...args);
+  }
+};
+
 const BillingManagement = ({ 
   activeJobs = [], 
   legacyJobs = [], 
@@ -2483,7 +2491,7 @@ const loadJobs = async () => {
                           </span>
                           {totals?.isComplete && (
                             <span className="flex items-center px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
-                              ✅ 100% Billed
+                              ��� 100% Billed
                             </span>
                           )}
                         </div>
