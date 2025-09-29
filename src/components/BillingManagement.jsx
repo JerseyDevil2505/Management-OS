@@ -942,7 +942,7 @@ const calculateDistributionMetrics = async () => {
             devLog(`✅ Updated job ${selectedJob.id} percent_billed to ${(actualTotalPercent * 100).toFixed(4)}% (recalculated from ${allBillingEvents.length} events)`);
 
             // Sync cache without forcing full refresh
-            devLog('✅ Billing event added - syncing cache');
+            devLog('��� Billing event added - syncing cache');
 
             // Notify parent components that data has changed
             if (onDataUpdate) {
@@ -1185,9 +1185,8 @@ const calculateDistributionMetrics = async () => {
         debouncedDataUpdate('billing_event', editingEvent.id, updateData);
       }
 
-      // Always load fresh data after billing updates
-      devLog('🔄 Refreshing data after billing update');
-      debouncedRefresh();
+      // No immediate refresh needed - optimistic update is sufficient
+      devLog('✅ Billing event updated with optimistic UI, refresh deferred');
     } catch (error) {
       console.error('Error updating billing event:', error);
       alert('Error updating billing event: ' + error.message);
