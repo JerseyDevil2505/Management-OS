@@ -245,30 +245,23 @@ Thank you for your immediate attention to this matter.`;
 
   // Removed redundant data loading - using props-first pattern
 
-  // Update displayed lists when props change, but avoid overwriting during edit operations
+  // Cache-aware data updates - only update when props actually change, not on tab switches
   useEffect(() => {
     // Don't update local state if we're in the middle of editing or updating
     if (showEditBilling || isUpdatingBilling) return;
 
-    if (activeTab === 'active') {
-      setJobs(activeJobs);
-    } else if (activeTab === 'legacy') {
-      setLegacyJobs(legacyJobs);
-    } else if (activeTab === 'planned') {
-      setPlanningJobs(planningJobs);
-    }
-  }, [activeJobs, legacyJobs, planningJobs, activeTab, showEditBilling, isUpdatingBilling]);
+    // Only update if data actually changed (not just tab switch)
+    setJobs(activeJobs);
+    setLegacyJobs(legacyJobs);
+    setPlanningJobs(planningJobs);
+  }, [activeJobs, legacyJobs, planningJobs, showEditBilling, isUpdatingBilling]);
 
-  // Update tab-specific data when props change
+  // Update secondary data when props change (independent of active tab)
   useEffect(() => {
-    if (activeTab === 'expenses') {
-      setExpenses(expenses);
-    } else if (activeTab === 'receivables') {
-      setOfficeReceivables(receivables);
-    } else if (activeTab === 'distributions') {
-      setDistributions(distributions);
-    }
-  }, [expenses, receivables, distributions, activeTab]);
+    setExpenses(expenses);
+    setOfficeReceivables(receivables);
+    setDistributions(distributions);
+  }, [expenses, receivables, distributions]);
 
   // Removed redundant load calls - data updates via props
 
