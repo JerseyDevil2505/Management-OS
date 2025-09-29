@@ -807,7 +807,7 @@ const calculateDistributionMetrics = async () => {
         secondYearAppealsPercentage: 0.02,
         thirdYearAppealsPercentage: 0.00
       });
-      await loadFreshDataFromDB();
+      if (onRefresh) await onRefresh();
     } catch (error) {
       console.error('Error setting up contract:', error);
     }
