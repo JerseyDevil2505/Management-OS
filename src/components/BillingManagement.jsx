@@ -1992,13 +1992,8 @@ const calculateDistributionMetrics = async () => {
         </nav>
       </div>
 
-      {loading ? (
-        <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading billing data...</p>
-        </div>
-      ) : (
-        <>
+      {/* Using props-first pattern - no main loading screen needed */}
+      <>
           {/* Active Jobs Tab */}
           {activeTab === 'active' && (
             <div className="space-y-6">
