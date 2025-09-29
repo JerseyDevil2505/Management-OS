@@ -10,6 +10,20 @@ const devLog = (...args) => {
   }
 };
 
+// Debouncing utility to prevent cascade updates
+const useDebounce = (callback, delay) => {
+  const timeoutRef = React.useRef(null);
+
+  return React.useCallback((...args) => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => {
+      callback(...args);
+    }, delay);
+  }, [callback, delay]);
+};
+
 const BillingManagement = ({ 
   activeJobs = [], 
   legacyJobs = [], 
