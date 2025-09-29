@@ -1050,6 +1050,8 @@ const calculateDistributionMetrics = async () => {
       setTimeout(() => debouncedRefresh(), 500);
     } catch (error) {
       console.error('Error adding billing event:', error);
+    } finally {
+      setLoadingStates(prev => ({ ...prev, billingEvent: false }));
     }
   };
   const formatCurrency = (amount) => {
