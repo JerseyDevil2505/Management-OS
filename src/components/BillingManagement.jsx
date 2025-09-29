@@ -1493,10 +1493,12 @@ const calculateDistributionMetrics = async () => {
         onDataUpdate('billing_event_delete', editingEvent.id, { deleted: true });
       }
 
-      // Always load fresh data after delete operations
-      setTimeout(async () => {
-        await loadFreshDataFromDB();
-      }, 100);
+      // Always refresh data after delete operations
+      if (onRefresh) {
+        setTimeout(async () => {
+          await onRefresh();
+        }, 100);
+      }
     } catch (error) {
       console.error('Error deleting billing event:', error);
     }
