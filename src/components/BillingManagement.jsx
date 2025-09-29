@@ -243,11 +243,7 @@ Thank you for your immediate attention to this matter.`;
     }
   }, [activeJobs, legacyJobs, planningJobs, billingMetrics]);
 
-  // Load fresh data on component mount and tab changes
-  useEffect(() => {
-    devLog('🔄 BillingManagement mounted or tab changed, loading fresh data');
-    loadFreshDataFromDB();
-  }, [activeTab, loadFreshDataFromDB]);
+  // Removed redundant data loading - using props-first pattern
 
   // Update displayed lists when props change, but avoid overwriting during edit operations
   useEffect(() => {
