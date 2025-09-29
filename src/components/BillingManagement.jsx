@@ -265,11 +265,12 @@ Thank you for your immediate attention to this matter.`;
 
   // Removed redundant load calls - data updates via props
 
+  // Calculate distribution metrics when relevant data changes
   useEffect(() => {
     if (activeTab === 'distributions' && globalMetrics.totalPaid > 0) {
       calculateDistributionMetrics();
     }
-  }, [globalMetrics, activeTab, reserveSettings]);
+  }, [globalMetrics.totalPaid, reserveSettings]);
 
   const calculateGlobalMetrics = async () => {
     // Use the pre-calculated metrics from App.js
