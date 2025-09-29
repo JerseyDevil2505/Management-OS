@@ -1038,7 +1038,8 @@ const calculateDistributionMetrics = async () => {
         overrideAmount: '',
         billingType: ''
       });
-      if (onRefresh) onRefresh();
+      // Optimistic updates already applied, defer refresh for better UX
+      setTimeout(() => debouncedRefresh(), 500);
     } catch (error) {
       console.error('Error adding billing event:', error);
     }
