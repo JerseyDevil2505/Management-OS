@@ -3516,9 +3516,22 @@ const calculateDistributionMetrics = async () => {
               </button>
               <button
                 onClick={handleAddBillingEvent}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                disabled={loadingStates.billingEvent}
+                className={`px-4 py-2 text-white rounded-md flex items-center space-x-2 ${
+                  loadingStates.billingEvent
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
               >
-                {showBulkPaste ? 'Import Events' : 'Add Billing Event'}
+                {loadingStates.billingEvent && (
+                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                )}
+                <span>
+                  {loadingStates.billingEvent
+                    ? 'Processing...'
+                    : (showBulkPaste ? 'Import Events' : 'Add Billing Event')
+                  }
+                </span>
               </button>
             </div>
           </div>
