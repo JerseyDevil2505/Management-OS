@@ -301,6 +301,17 @@ Thank you for your immediate attention to this matter.`;
       await onRefresh();
     }
   }, [onRefresh]);
+
+  // Debounced refresh to prevent cascade updates
+  const debouncedRefresh = useDebounce(handleRefresh, 300);
+
+  // Debounced data update notifications
+  const debouncedDataUpdate = useDebounce((type, id, data) => {
+    if (onDataUpdate) {
+      devLog(`🔄 Debounced data update: ${type} ${id}`);
+      onDataUpdate(type, id, data);
+    }
+  }, 200);
   
 const calculateDistributionMetrics = async () => {
     try {
