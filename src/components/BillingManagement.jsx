@@ -693,7 +693,8 @@ const calculateDistributionMetrics = async () => {
 
   const handleContractSetup = async () => {
     if (!selectedJob) return;
-    
+
+    setLoadingStates(prev => ({ ...prev, contractSetup: true }));
     try {
       // Calculate all amounts based on percentages
       const contractData = {
