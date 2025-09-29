@@ -1201,7 +1201,7 @@ const loadJobs = async () => {
         onDataUpdate('billing_event_status', editingEvent.id, { status: editingEvent.status });
       }
 
-      console.log('📊 Fetching job data for job_id:', editingEvent.job_id);
+      devLog('📊 Fetching job data for job_id:', editingEvent.job_id);
 
       // Get all billing events for this job ordered by date
       const { data: jobData, error: jobFetchError } = await supabase
@@ -1250,7 +1250,7 @@ const loadJobs = async () => {
       }
 
       // Optimistically update local state first
-      console.log('✅ Billing event updated - applying optimistic update');
+      devLog('✅ Billing event updated - applying optimistic update');
 
       // Update the local state immediately for responsive UI
       if (activeTab === 'legacy') {
@@ -1292,12 +1292,12 @@ const loadJobs = async () => {
 
       // Call onDataUpdate for cache synchronization without forcing full refresh
       if (onDataUpdate) {
-        console.log('���� Updating cache without full refresh');
+        devLog('���� Updating cache without full refresh');
         onDataUpdate('billing_event', editingEvent.id, updateData);
       }
 
       // Always load fresh data after billing updates
-      console.log('🔄 Loading fresh data after billing update');
+      devLog('🔄 Loading fresh data after billing update');
       await loadFreshDataFromDB();
     } catch (error) {
       console.error('Error updating billing event:', error);
@@ -1573,7 +1573,7 @@ const loadJobs = async () => {
       setEditingEvent(null);
 
       // Sync cache without aggressive refresh
-      console.log('✅ Billing event deleted - syncing cache');
+      devLog('✅ Billing event deleted - syncing cache');
 
       // Optimistically remove from local state
       if (activeTab === 'legacy') {
