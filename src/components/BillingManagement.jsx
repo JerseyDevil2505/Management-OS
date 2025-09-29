@@ -233,57 +233,7 @@ Thank you for your immediate attention to this matter.`;
     projectedProfitLossPercent: 0  
   });
 
-  // Load fresh data directly from database - BYPASSES ALL CACHING
-  const loadFreshDataFromDB = useCallback(async () => {
-    devLog('🔄 Loading fresh data directly from database...');
-
-    try {
-      setLoadingStatus(prev => ({ ...prev, isRefreshing: true, message: 'Loading fresh data...' }));
-
-      // Load jobs with billing events directly from DB
-      const { data: jobsData, error: jobsError } = await supabase
-        .from('jobs')
-        .select(`
-          *,
-          job_contracts(*),
-          billing_events(*)
-        `)
-        .in('job_type', ['standard', 'legacy_billing']);
-
-      if (jobsError) throw jobsError;
-
-      if (jobsData) {
-        const activeJobs = jobsData.filter(j => j.job_type === 'standard');
-        const legacyJobs = jobsData.filter(j => j.job_type === 'legacy_billing');
-
-        // Update local state immediately with fresh data
-        if (activeTab === 'active') {
-          setJobs(activeJobs);
-        } else if (activeTab === 'legacy') {
-          setLegacyJobs(legacyJobs);
-        }
-
-        devLog('✅ Fresh data loaded:', { activeJobs: activeJobs.length, legacyJobs: legacyJobs.length });
-      }
-
-      setLoadingStatus(prev => ({ ...prev, isRefreshing: false, message: 'Fresh data loaded' }));
-
-    } catch (error) {
-      // Log detailed error for debugging
-      console.error('❌ Error loading fresh data:', error);
-      let errMsg = '';
-      try {
-        if (!error) errMsg = 'Unknown error';
-        else if (typeof error === 'string') errMsg = error;
-        else if (error.message) errMsg = error.message;
-        else if (error.error) errMsg = error.error;
-        else errMsg = JSON.stringify(error);
-      } catch (e) {
-        errMsg = String(error);
-      }
-      setLoadingStatus(prev => ({ ...prev, isRefreshing: false, lastError: errMsg }));
-    }
-  }, [activeTab]);
+  // Removed loadFreshDataFromDB - using props-first pattern instead
 
   useEffect(() => {
     // Set initial data from props
