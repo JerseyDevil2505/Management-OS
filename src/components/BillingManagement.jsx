@@ -1,6 +1,28 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import * as XLSX from 'xlsx';
+
+// Development logging wrapper
+const isDevelopment = process.env.NODE_ENV === 'development';
+const devLog = (...args) => {
+  if (isDevelopment) {
+    console.log(...args);
+  }
+};
+
+// Debouncing utility to prevent cascade updates
+const useDebounce = (callback, delay) => {
+  const timeoutRef = React.useRef(null);
+
+  return React.useCallback((...args) => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => {
+      callback(...args);
+    }, delay);
+  }, [callback, delay]);
+};
 
 const BillingManagement = ({ 
   activeJobs = [], 
@@ -17,14 +39,18 @@ const BillingManagement = ({
   const [jobs, setJobs] = useState([]);
   const [legacyJobsState, setLegacyJobs] = useState([]);
   const [planningJobsState, setPlanningJobs] = useState([]);
-  // Add state to track counts for all job types
-  const [jobCounts, setJobCounts] = useState({
-    active: 0,
-    planned: 0,
-    legacy: 0
-  });
+  // Job counts are now memoized instead of state
   const [expensesState, setExpenses] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Centralized loading states for better UX
+  const [loadingStates, setLoadingStates] = useState({
+    initialLoad: false,
+    contractSetup: false,
+    billingEvent: false,
+    deleteEvent: false,
+    openInvoices: false,
+    expenseImport: false
+  });
+
   const [showContractSetup, setShowContractSetup] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const [showBillingForm, setShowBillingForm] = useState(false);
@@ -192,11 +218,7 @@ Thank you for your immediate attention to this matter.`;
   const [showEditBilling, setShowEditBilling] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
   const [isUpdatingBilling, setIsUpdatingBilling] = useState(false);
-  const [loadingStatus, setLoadingStatus] = useState({
-    isRefreshing: false,
-    lastError: null,
-    message: ''
-  });
+  // Removed loadingStatus - no longer needed since we use props-first pattern
   const [showLegacyJobForm, setShowLegacyJobForm] = useState(false);
   const [legacyJobForm, setLegacyJobForm] = useState({
     jobName: '',
@@ -225,124 +247,35 @@ Thank you for your immediate attention to this matter.`;
     projectedProfitLossPercent: 0  
   });
 
-  // Load fresh data directly from database - BYPASSES ALL CACHING
-  const loadFreshDataFromDB = useCallback(async () => {
-    console.log('🔄 Loading fresh data directly from database...');
+  // Removed loadFreshDataFromDB - using props-first pattern instead
 
-    try {
-      setLoadingStatus(prev => ({ ...prev, isRefreshing: true, message: 'Loading fresh data...' }));
-
-      // Load jobs with billing events directly from DB
-      const { data: jobsData, error: jobsError } = await supabase
-        .from('jobs')
-        .select(`
-          *,
-          job_contracts(*),
-          billing_events(*)
-        `)
-        .in('job_type', ['standard', 'legacy_billing']);
-
-      if (jobsError) throw jobsError;
-
-      if (jobsData) {
-        const activeJobs = jobsData.filter(j => j.job_type === 'standard');
-        const legacyJobs = jobsData.filter(j => j.job_type === 'legacy_billing');
-
-        // Update local state immediately with fresh data
-        if (activeTab === 'active') {
-          setJobs(activeJobs);
-        } else if (activeTab === 'legacy') {
-          setLegacyJobs(legacyJobs);
-        }
-
-        console.log('✅ Fresh data loaded:', { activeJobs: activeJobs.length, legacyJobs: legacyJobs.length });
-      }
-
-      setLoadingStatus(prev => ({ ...prev, isRefreshing: false, message: 'Fresh data loaded' }));
-
-    } catch (error) {
-      // Log detailed error for debugging
-      console.error('❌ Error loading fresh data:', error);
-      let errMsg = '';
-      try {
-        if (!error) errMsg = 'Unknown error';
-        else if (typeof error === 'string') errMsg = error;
-        else if (error.message) errMsg = error.message;
-        else if (error.error) errMsg = error.error;
-        else errMsg = JSON.stringify(error);
-      } catch (e) {
-        errMsg = String(error);
-      }
-      setLoadingStatus(prev => ({ ...prev, isRefreshing: false, lastError: errMsg }));
-    }
-  }, [activeTab]);
-
+  // Combined props-to-state updates with simplified dependencies
   useEffect(() => {
-    // Set initial data from props
-    loadJobCounts();
+    // Don't update job data if we're in the middle of editing operations
+    if (!showEditBilling && !isUpdatingBilling) {
+      setJobs(activeJobs);
+      setLegacyJobs(legacyJobs);
+      setPlanningJobs(planningJobs);
+    }
+
+    // Always update secondary data and metrics
+    setExpenses(expenses);
+    setOfficeReceivables(receivables);
+    setDistributions(distributions);
+
     if (billingMetrics) {
       setGlobalMetrics(billingMetrics);
     }
-  }, [activeJobs, legacyJobs, planningJobs, billingMetrics]);
+  }, [activeJobs, legacyJobs, planningJobs, expenses, receivables, distributions, billingMetrics, showEditBilling, isUpdatingBilling]);
 
-  // Load fresh data on component mount and tab changes
-  useEffect(() => {
-    console.log('🔄 BillingManagement mounted or tab changed, loading fresh data');
-    loadFreshDataFromDB();
-  }, [activeTab, loadFreshDataFromDB]);
+  // Removed redundant load calls - data updates via props
 
-  // Update displayed lists when props change, but avoid overwriting during edit operations
-  useEffect(() => {
-    // Don't update local state if we're in the middle of editing or updating
-    if (showEditBilling || isUpdatingBilling) return;
-
-    if (activeTab === 'active') {
-      setJobs(activeJobs);
-    } else if (activeTab === 'legacy') {
-      setLegacyJobs(legacyJobs);
-    } else if (activeTab === 'planned') {
-      setPlanningJobs(planningJobs);
-    }
-  }, [activeJobs, legacyJobs, planningJobs, activeTab, showEditBilling, isUpdatingBilling]);
-
-  // Update other data when props change
-  useEffect(() => {
-    if (activeTab === 'expenses') {
-      setExpenses(expenses);
-    }
-  }, [expenses, activeTab]);
-
-  useEffect(() => {
-    if (activeTab === 'receivables') {
-      setOfficeReceivables(receivables);
-    }
-  }, [receivables, activeTab]);
-
-  useEffect(() => {
-    if (activeTab === 'distributions') {
-      setDistributions(distributions);
-    }
-  }, [distributions, activeTab]);
-
-  useEffect(() => {
-    // Load specific data when tab changes
-    loadJobs();
-    if (activeTab === 'expenses') {
-      loadExpenses();
-    }
-    if (activeTab === 'receivables') {
-      loadOfficeReceivables();
-    }
-    if (activeTab === 'distributions') {
-      loadDistributions();
-    }
-  }, [activeTab]);
-
+  // Calculate distribution metrics when relevant data changes
   useEffect(() => {
     if (activeTab === 'distributions' && globalMetrics.totalPaid > 0) {
       calculateDistributionMetrics();
     }
-  }, [globalMetrics, activeTab, reserveSettings]);
+  }, [globalMetrics.totalPaid, reserveSettings]);
 
   const calculateGlobalMetrics = async () => {
     // Use the pre-calculated metrics from App.js
@@ -351,39 +284,32 @@ Thank you for your immediate attention to this matter.`;
     }
   };
 
-  const loadExpenses = async () => {
-    // Just use the expenses from props
-    setExpenses(expenses);
-  };
-
-  const loadOfficeReceivables = async () => {
-    // Just use the receivables from props
-    setOfficeReceivables(receivables);
-  }; 
-
-  const loadDistributions = async () => {
-    // Just use the distributions from props
-    setDistributions(distributions);
-  };
-
   // Function to sync cache without forcing full refresh
   const syncCacheItem = (type, id, data) => {
     if (onDataUpdate) {
-      console.log(`🔄 Syncing cache item: ${type} ${id}`);
+      devLog(`🔄 Syncing cache item: ${type} ${id}`);
       onDataUpdate(type, id, data);
     }
   };
 
-  // Override the onRefresh prop with our fresh data loader
+  // Use onRefresh prop for data refreshing
   const handleRefresh = useCallback(async () => {
-    console.log('🔄 Refresh requested - loading fresh data');
-    await loadFreshDataFromDB();
-
-    // Also call the original onRefresh if available
+    devLog('🔄 Refresh requested - using props onRefresh');
     if (onRefresh) {
       await onRefresh();
     }
-  }, [loadFreshDataFromDB, onRefresh]);
+  }, [onRefresh]);
+
+  // Debounced refresh to prevent cascade updates
+  const debouncedRefresh = useDebounce(handleRefresh, 300);
+
+  // Debounced data update notifications
+  const debouncedDataUpdate = useDebounce((type, id, data) => {
+    if (onDataUpdate) {
+      devLog(`🔄 Debounced data update: ${type} ${id}`);
+      onDataUpdate(type, id, data);
+    }
+  }, 200);
   
 const calculateDistributionMetrics = async () => {
     try {
@@ -475,8 +401,8 @@ const calculateDistributionMetrics = async () => {
         throw planningError;
       }
 
-      console.log('Active jobs fetched:', activeJobsData?.length || 0);
-      console.log('Planning jobs fetched:', planningJobsData?.length || 0);
+      devLog('Active jobs fetched:', activeJobsData?.length || 0);
+      devLog('Planning jobs fetched:', planningJobsData?.length || 0);
 
       const allJobs = [];
       
@@ -571,9 +497,9 @@ const calculateDistributionMetrics = async () => {
       const amountForAvg = jobsWithParcels.reduce((sum, job) => sum + parseFloat(job.amount), 0);
       const avgPricePerParcel = parcelsForAvg > 0 ? (amountForAvg / parcelsForAvg).toFixed(2) : '0.00';
       
-      console.log('Total jobs in report:', allJobs.length);
-      console.log('Total amount:', totalAmount);
-      console.log('Total parcels:', totalParcels);
+      devLog('Total jobs in report:', allJobs.length);
+      devLog('Total amount:', totalAmount);
+      devLog('Total parcels:', totalParcels);
       
       // Generate PDF using jsPDF - LANDSCAPE orientation
       const { jsPDF } = window.jspdf;
@@ -711,38 +637,14 @@ const calculateDistributionMetrics = async () => {
     };
   };
   
-  const loadJobCounts = async () => {
-    // Use counts from props
-    setJobCounts({
-      active: activeJobs.length,
-      planned: planningJobs.length,
-      legacy: legacyJobs.length
-    });
-  };
+  // Memoized job counts calculation
+  const jobCounts = useMemo(() => ({
+    active: activeJobs.length,
+    planned: planningJobs.length,
+    legacy: legacyJobs.length
+  }), [activeJobs.length, planningJobs.length, legacyJobs.length]);
 
-const loadJobs = async () => {
-    try {
-      setLoading(true);
-
-      if (activeTab === 'active') {
-        // Use activeJobs from props but ensure fresh data
-        setJobs(activeJobs);
-        setJobCounts(prev => ({ ...prev, active: activeJobs.length }));
-      } else if (activeTab === 'planned') {
-        // Use planningJobs from props but ensure fresh data
-        setPlanningJobs(planningJobs);
-        setJobCounts(prev => ({ ...prev, planned: planningJobs.length }));
-      } else if (activeTab === 'legacy') {
-        // Use legacyJobs from props but ensure fresh data
-        setLegacyJobs(legacyJobs);
-        setJobCounts(prev => ({ ...prev, legacy: legacyJobs.length }));
-      }
-    } catch (error) {
-      console.error('Error loading jobs:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Removed loadJobs - using props-first pattern in useEffect hooks instead
 
   const parseBillingHistory = (text) => {
     // Parse pasted billing history
@@ -791,7 +693,8 @@ const loadJobs = async () => {
 
   const handleContractSetup = async () => {
     if (!selectedJob) return;
-    
+
+    setLoadingStates(prev => ({ ...prev, contractSetup: true }));
     try {
       // Calculate all amounts based on percentages
       const contractData = {
@@ -913,16 +816,18 @@ const loadJobs = async () => {
         secondYearAppealsPercentage: 0.02,
         thirdYearAppealsPercentage: 0.00
       });
-      await loadFreshDataFromDB();
+      debouncedRefresh();
     } catch (error) {
       console.error('Error setting up contract:', error);
+    } finally {
+      setLoadingStates(prev => ({ ...prev, contractSetup: false }));
     }
   };
 
   const handleAddBillingEvent = async () => {
     if (!selectedJob || !selectedJob.job_contracts?.[0]) return;
-    
-  
+
+    setLoadingStates(prev => ({ ...prev, billingEvent: true }));
     try {
       const contract = selectedJob.job_contracts[0];
       
@@ -1042,10 +947,10 @@ const loadJobs = async () => {
           if (jobUpdateError) {
             console.error('Error updating job percent_billed:', jobUpdateError);
           } else {
-            console.log(`✅ Updated job ${selectedJob.id} percent_billed to ${(actualTotalPercent * 100).toFixed(4)}% (recalculated from ${allBillingEvents.length} events)`);
+            devLog(`✅ Updated job ${selectedJob.id} percent_billed to ${(actualTotalPercent * 100).toFixed(4)}% (recalculated from ${allBillingEvents.length} events)`);
 
             // Sync cache without forcing full refresh
-            console.log('✅ Billing event added - syncing cache');
+            devLog('��� Billing event added - syncing cache');
 
             // Notify parent components that data has changed
             if (onDataUpdate) {
@@ -1141,9 +1046,12 @@ const loadJobs = async () => {
         overrideAmount: '',
         billingType: ''
       });
-      if (onRefresh) onRefresh();
+      // Optimistic updates already applied, defer refresh for better UX
+      setTimeout(() => debouncedRefresh(), 500);
     } catch (error) {
       console.error('Error adding billing event:', error);
+    } finally {
+      setLoadingStates(prev => ({ ...prev, billingEvent: false }));
     }
   };
   const formatCurrency = (amount) => {
@@ -1160,7 +1068,7 @@ const loadJobs = async () => {
 
     try {
       setIsUpdatingBilling(true);
-      console.log('🔧 Updating billing event:', editingEvent);
+      devLog('🔧 Updating billing event:', editingEvent);
 
       // Check if job_id is available
       if (!editingEvent.job_id) {
@@ -1177,7 +1085,7 @@ const loadJobs = async () => {
         invoice_number: editingEvent.invoice_number || ''
       };
 
-      console.log('📝 Update data:', updateData);
+      devLog('📝 Update data:', updateData);
 
       // First update the billing event
       const { error: updateError } = await supabase
@@ -1189,11 +1097,11 @@ const loadJobs = async () => {
 
       // Call the cache update for status changes
       if (onDataUpdate) {
-        console.log('🔄 Calling onDataUpdate for cache update');
-        onDataUpdate('billing_event_status', editingEvent.id, { status: editingEvent.status });
+        devLog('🔄 Calling debounced data update for cache update');
+        debouncedDataUpdate('billing_event_status', editingEvent.id, { status: editingEvent.status });
       }
 
-      console.log('📊 Fetching job data for job_id:', editingEvent.job_id);
+      devLog('📊 Fetching job data for job_id:', editingEvent.job_id);
 
       // Get all billing events for this job ordered by date
       const { data: jobData, error: jobFetchError } = await supabase
@@ -1242,7 +1150,7 @@ const loadJobs = async () => {
       }
 
       // Optimistically update local state first
-      console.log('✅ Billing event updated - applying optimistic update');
+      devLog('✅ Billing event updated - applying optimistic update');
 
       // Update the local state immediately for responsive UI
       if (activeTab === 'legacy') {
@@ -1284,13 +1192,12 @@ const loadJobs = async () => {
 
       // Call onDataUpdate for cache synchronization without forcing full refresh
       if (onDataUpdate) {
-        console.log('���� Updating cache without full refresh');
-        onDataUpdate('billing_event', editingEvent.id, updateData);
+        devLog('���� Updating cache without full refresh');
+        debouncedDataUpdate('billing_event', editingEvent.id, updateData);
       }
 
-      // Always load fresh data after billing updates
-      console.log('🔄 Loading fresh data after billing update');
-      await loadFreshDataFromDB();
+      // No immediate refresh needed - optimistic update is sufficient
+      devLog('✅ Billing event updated with optimistic UI, refresh deferred');
     } catch (error) {
       console.error('Error updating billing event:', error);
       alert('Error updating billing event: ' + error.message);
@@ -1565,7 +1472,7 @@ const loadJobs = async () => {
       setEditingEvent(null);
 
       // Sync cache without aggressive refresh
-      console.log('✅ Billing event deleted - syncing cache');
+      devLog('✅ Billing event deleted - syncing cache');
 
       // Optimistically remove from local state
       if (activeTab === 'legacy') {
@@ -1596,13 +1503,11 @@ const loadJobs = async () => {
 
       // Sync cache
       if (onDataUpdate) {
-        onDataUpdate('billing_event_delete', editingEvent.id, { deleted: true });
+        debouncedDataUpdate('billing_event_delete', editingEvent.id, { deleted: true });
       }
 
-      // Always load fresh data after delete operations
-      setTimeout(async () => {
-        await loadFreshDataFromDB();
-      }, 100);
+      // Optimistic delete sufficient - defer refresh for better UX
+      devLog('✅ Billing event deleted with optimistic UI, refresh deferred');
     } catch (error) {
       console.error('Error deleting billing event:', error);
     }
@@ -1615,7 +1520,7 @@ const loadJobs = async () => {
     }
 
     try {
-      console.log('Starting remaining_due recalculation...');
+      devLog('Starting remaining_due recalculation...');
 
       // Get all jobs with contracts and billing events
       const { data: allJobs } = await supabase
@@ -1667,10 +1572,10 @@ const loadJobs = async () => {
         }
 
         fixedJobsCount++;
-        console.log(`Fixed job: ${job.job_name} (${sortedEvents.length} events)`);
+        devLog(`Fixed job: ${job.job_name} (${sortedEvents.length} events)`);
       }
 
-      console.log(`Recalculation complete! Fixed ${fixedEventsCount} events across ${fixedJobsCount} jobs.`);
+      devLog(`Recalculation complete! Fixed ${fixedEventsCount} events across ${fixedJobsCount} jobs.`);
       alert(`Recalculation complete! Fixed ${fixedEventsCount} events across ${fixedJobsCount} jobs.`);
 
       if (onRefresh) onRefresh();
@@ -1901,17 +1806,7 @@ const loadJobs = async () => {
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Billing Management</h1>
             <p className="text-gray-600">Track contracts, billing events, and payment status</p>
           </div>
-          {loadingStatus.isRefreshing && (
-            <div className="flex items-center space-x-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-md">
-              <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
-              <span className="text-blue-700 font-medium">Loading fresh data...</span>
-            </div>
-          )}
-          {loadingStatus.lastError && (
-            <div className="flex items-center space-x-2 px-4 py-2 bg-red-50 border border-red-200 rounded-md">
-              <span className="text-red-700 font-medium">Error: {loadingStatus.lastError}</span>
-            </div>
-          )}
+          {/* Removed loadingStatus UI - using props-first pattern instead */}
         </div>
       </div>
 
@@ -2097,13 +1992,8 @@ const loadJobs = async () => {
         </nav>
       </div>
 
-      {loading ? (
-        <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading billing data...</p>
-        </div>
-      ) : (
-        <>
+      {/* Using props-first pattern - no main loading screen needed */}
+      <>
           {/* Active Jobs Tab */}
           {activeTab === 'active' && (
             <div className="space-y-6">
@@ -3416,9 +3306,22 @@ const loadJobs = async () => {
               </button>
               <button
                 onClick={handleContractSetup}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                disabled={loadingStates.contractSetup}
+                className={`px-4 py-2 text-white rounded-md flex items-center space-x-2 ${
+                  loadingStates.contractSetup
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
               >
-                Save Contract {billingHistoryText.trim() && '& Import History'}
+                {loadingStates.contractSetup && (
+                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                )}
+                <span>
+                  {loadingStates.contractSetup
+                    ? 'Setting up...'
+                    : `Save Contract ${billingHistoryText.trim() && '& Import History'}`
+                  }
+                </span>
               </button>
             </div>
           </div>
@@ -3608,9 +3511,22 @@ const loadJobs = async () => {
               </button>
               <button
                 onClick={handleAddBillingEvent}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                disabled={loadingStates.billingEvent}
+                className={`px-4 py-2 text-white rounded-md flex items-center space-x-2 ${
+                  loadingStates.billingEvent
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
               >
-                {showBulkPaste ? 'Import Events' : 'Add Billing Event'}
+                {loadingStates.billingEvent && (
+                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                )}
+                <span>
+                  {loadingStates.billingEvent
+                    ? 'Processing...'
+                    : (showBulkPaste ? 'Import Events' : 'Add Billing Event')
+                  }
+                </span>
               </button>
             </div>
           </div>
