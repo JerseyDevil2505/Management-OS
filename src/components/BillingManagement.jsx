@@ -317,16 +317,13 @@ Thank you for your immediate attention to this matter.`;
     }
   };
 
-  // Override the onRefresh prop with our fresh data loader
+  // Use onRefresh prop for data refreshing
   const handleRefresh = useCallback(async () => {
-    devLog('🔄 Refresh requested - loading fresh data');
-    await loadFreshDataFromDB();
-
-    // Also call the original onRefresh if available
+    devLog('🔄 Refresh requested - using props onRefresh');
     if (onRefresh) {
       await onRefresh();
     }
-  }, [loadFreshDataFromDB, onRefresh]);
+  }, [onRefresh]);
   
 const calculateDistributionMetrics = async () => {
     try {
