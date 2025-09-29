@@ -620,14 +620,12 @@ const calculateDistributionMetrics = async () => {
     };
   };
   
-  const loadJobCounts = async () => {
-    // Use counts from props
-    setJobCounts({
-      active: activeJobs.length,
-      planned: planningJobs.length,
-      legacy: legacyJobs.length
-    });
-  };
+  // Memoized job counts calculation
+  const jobCounts = useMemo(() => ({
+    active: activeJobs.length,
+    planned: planningJobs.length,
+    legacy: legacyJobs.length
+  }), [activeJobs.length, planningJobs.length, legacyJobs.length]);
 
   // Removed loadJobs - using props-first pattern in useEffect hooks instead
 
