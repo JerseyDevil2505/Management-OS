@@ -1093,8 +1093,8 @@ const calculateDistributionMetrics = async () => {
 
       // Call the cache update for status changes
       if (onDataUpdate) {
-        devLog('🔄 Calling onDataUpdate for cache update');
-        onDataUpdate('billing_event_status', editingEvent.id, { status: editingEvent.status });
+        devLog('🔄 Calling debounced data update for cache update');
+        debouncedDataUpdate('billing_event_status', editingEvent.id, { status: editingEvent.status });
       }
 
       devLog('📊 Fetching job data for job_id:', editingEvent.job_id);
@@ -1189,7 +1189,7 @@ const calculateDistributionMetrics = async () => {
       // Call onDataUpdate for cache synchronization without forcing full refresh
       if (onDataUpdate) {
         devLog('���� Updating cache without full refresh');
-        onDataUpdate('billing_event', editingEvent.id, updateData);
+        debouncedDataUpdate('billing_event', editingEvent.id, updateData);
       }
 
       // Always load fresh data after billing updates
@@ -1500,7 +1500,7 @@ const calculateDistributionMetrics = async () => {
 
       // Sync cache
       if (onDataUpdate) {
-        onDataUpdate('billing_event_delete', editingEvent.id, { deleted: true });
+        debouncedDataUpdate('billing_event_delete', editingEvent.id, { deleted: true });
       }
 
       // Always refresh data after delete operations
