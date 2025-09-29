@@ -244,32 +244,24 @@ Thank you for your immediate attention to this matter.`;
 
   // Removed loadFreshDataFromDB - using props-first pattern instead
 
+  // Combined props-to-state updates with simplified dependencies
   useEffect(() => {
-    // Set initial data from props
-    if (billingMetrics) {
-      setGlobalMetrics(billingMetrics);
+    // Don't update job data if we're in the middle of editing operations
+    if (!showEditBilling && !isUpdatingBilling) {
+      setJobs(activeJobs);
+      setLegacyJobs(legacyJobs);
+      setPlanningJobs(planningJobs);
     }
-  }, [billingMetrics]);
 
-  // Removed redundant data loading - using props-first pattern
-
-  // Cache-aware data updates - only update when props actually change, not on tab switches
-  useEffect(() => {
-    // Don't update local state if we're in the middle of editing or updating
-    if (showEditBilling || isUpdatingBilling) return;
-
-    // Only update if data actually changed (not just tab switch)
-    setJobs(activeJobs);
-    setLegacyJobs(legacyJobs);
-    setPlanningJobs(planningJobs);
-  }, [activeJobs, legacyJobs, planningJobs, showEditBilling, isUpdatingBilling]);
-
-  // Update secondary data when props change (independent of active tab)
-  useEffect(() => {
+    // Always update secondary data and metrics
     setExpenses(expenses);
     setOfficeReceivables(receivables);
     setDistributions(distributions);
-  }, [expenses, receivables, distributions]);
+
+    if (billingMetrics) {
+      setGlobalMetrics(billingMetrics);
+    }
+  }, [activeJobs, legacyJobs, planningJobs, expenses, receivables, distributions, billingMetrics, showEditBilling, isUpdatingBilling]);
 
   // Removed redundant load calls - data updates via props
 
