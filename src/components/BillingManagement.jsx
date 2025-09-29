@@ -1188,13 +1188,13 @@ const calculateDistributionMetrics = async () => {
 
       // Call onDataUpdate for cache synchronization without forcing full refresh
       if (onDataUpdate) {
-        devLog('������ Updating cache without full refresh');
+        devLog('���� Updating cache without full refresh');
         onDataUpdate('billing_event', editingEvent.id, updateData);
       }
 
       // Always load fresh data after billing updates
       devLog('🔄 Refreshing data after billing update');
-      if (onRefresh) await onRefresh();
+      debouncedRefresh();
     } catch (error) {
       console.error('Error updating billing event:', error);
       alert('Error updating billing event: ' + error.message);
