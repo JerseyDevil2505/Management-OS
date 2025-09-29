@@ -660,29 +660,7 @@ const calculateDistributionMetrics = async () => {
     });
   };
 
-const loadJobs = async () => {
-    try {
-      setLoading(true);
-
-      if (activeTab === 'active') {
-        // Use activeJobs from props but ensure fresh data
-        setJobs(activeJobs);
-        setJobCounts(prev => ({ ...prev, active: activeJobs.length }));
-      } else if (activeTab === 'planned') {
-        // Use planningJobs from props but ensure fresh data
-        setPlanningJobs(planningJobs);
-        setJobCounts(prev => ({ ...prev, planned: planningJobs.length }));
-      } else if (activeTab === 'legacy') {
-        // Use legacyJobs from props but ensure fresh data
-        setLegacyJobs(legacyJobs);
-        setJobCounts(prev => ({ ...prev, legacy: legacyJobs.length }));
-      }
-    } catch (error) {
-      console.error('Error loading jobs:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Removed loadJobs - using props-first pattern in useEffect hooks instead
 
   const parseBillingHistory = (text) => {
     // Parse pasted billing history
