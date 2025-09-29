@@ -1504,11 +1504,7 @@ const calculateDistributionMetrics = async () => {
       }
 
       // Always refresh data after delete operations
-      if (onRefresh) {
-        setTimeout(async () => {
-          await onRefresh();
-        }, 100);
-      }
+      setTimeout(() => debouncedRefresh(), 100);
     } catch (error) {
       console.error('Error deleting billing event:', error);
     }
