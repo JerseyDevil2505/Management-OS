@@ -25,12 +25,7 @@ const BillingManagement = ({
   const [jobs, setJobs] = useState([]);
   const [legacyJobsState, setLegacyJobs] = useState([]);
   const [planningJobsState, setPlanningJobs] = useState([]);
-  // Add state to track counts for all job types
-  const [jobCounts, setJobCounts] = useState({
-    active: 0,
-    planned: 0,
-    legacy: 0
-  });
+  // Job counts are now memoized instead of state
   const [expensesState, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showContractSetup, setShowContractSetup] = useState(false);
