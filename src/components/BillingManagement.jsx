@@ -270,7 +270,7 @@ Thank you for your immediate attention to this matter.`;
 
     } catch (error) {
       // Log detailed error for debugging
-      console.error('��� Error loading fresh data:', error);
+      console.error('❌ Error loading fresh data:', error);
       let errMsg = '';
       try {
         if (!error) errMsg = 'Unknown error';
@@ -483,8 +483,8 @@ const calculateDistributionMetrics = async () => {
         throw planningError;
       }
 
-      console.log('Active jobs fetched:', activeJobsData?.length || 0);
-      console.log('Planning jobs fetched:', planningJobsData?.length || 0);
+      devLog('Active jobs fetched:', activeJobsData?.length || 0);
+      devLog('Planning jobs fetched:', planningJobsData?.length || 0);
 
       const allJobs = [];
       
@@ -579,9 +579,9 @@ const calculateDistributionMetrics = async () => {
       const amountForAvg = jobsWithParcels.reduce((sum, job) => sum + parseFloat(job.amount), 0);
       const avgPricePerParcel = parcelsForAvg > 0 ? (amountForAvg / parcelsForAvg).toFixed(2) : '0.00';
       
-      console.log('Total jobs in report:', allJobs.length);
-      console.log('Total amount:', totalAmount);
-      console.log('Total parcels:', totalParcels);
+      devLog('Total jobs in report:', allJobs.length);
+      devLog('Total amount:', totalAmount);
+      devLog('Total parcels:', totalParcels);
       
       // Generate PDF using jsPDF - LANDSCAPE orientation
       const { jsPDF } = window.jspdf;
