@@ -1050,10 +1050,10 @@ const loadJobs = async () => {
           if (jobUpdateError) {
             console.error('Error updating job percent_billed:', jobUpdateError);
           } else {
-            console.log(`✅ Updated job ${selectedJob.id} percent_billed to ${(actualTotalPercent * 100).toFixed(4)}% (recalculated from ${allBillingEvents.length} events)`);
+            devLog(`✅ Updated job ${selectedJob.id} percent_billed to ${(actualTotalPercent * 100).toFixed(4)}% (recalculated from ${allBillingEvents.length} events)`);
 
             // Sync cache without forcing full refresh
-            console.log('✅ Billing event added - syncing cache');
+            devLog('✅ Billing event added - syncing cache');
 
             // Notify parent components that data has changed
             if (onDataUpdate) {
@@ -1168,7 +1168,7 @@ const loadJobs = async () => {
 
     try {
       setIsUpdatingBilling(true);
-      console.log('🔧 Updating billing event:', editingEvent);
+      devLog('🔧 Updating billing event:', editingEvent);
 
       // Check if job_id is available
       if (!editingEvent.job_id) {
@@ -1185,7 +1185,7 @@ const loadJobs = async () => {
         invoice_number: editingEvent.invoice_number || ''
       };
 
-      console.log('📝 Update data:', updateData);
+      devLog('📝 Update data:', updateData);
 
       // First update the billing event
       const { error: updateError } = await supabase
@@ -1197,7 +1197,7 @@ const loadJobs = async () => {
 
       // Call the cache update for status changes
       if (onDataUpdate) {
-        console.log('🔄 Calling onDataUpdate for cache update');
+        devLog('🔄 Calling onDataUpdate for cache update');
         onDataUpdate('billing_event_status', editingEvent.id, { status: editingEvent.status });
       }
 
