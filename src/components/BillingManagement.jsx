@@ -1495,8 +1495,8 @@ const calculateDistributionMetrics = async () => {
         debouncedDataUpdate('billing_event_delete', editingEvent.id, { deleted: true });
       }
 
-      // Always refresh data after delete operations
-      setTimeout(() => debouncedRefresh(), 100);
+      // Optimistic delete sufficient - defer refresh for better UX
+      devLog('✅ Billing event deleted with optimistic UI, refresh deferred');
     } catch (error) {
       console.error('Error deleting billing event:', error);
     }
