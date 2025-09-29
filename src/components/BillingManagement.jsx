@@ -826,8 +826,8 @@ const calculateDistributionMetrics = async () => {
 
   const handleAddBillingEvent = async () => {
     if (!selectedJob || !selectedJob.job_contracts?.[0]) return;
-    
-  
+
+    setLoadingStates(prev => ({ ...prev, billingEvent: true }));
     try {
       const contract = selectedJob.job_contracts[0];
       
