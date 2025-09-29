@@ -817,7 +817,7 @@ const calculateDistributionMetrics = async () => {
         secondYearAppealsPercentage: 0.02,
         thirdYearAppealsPercentage: 0.00
       });
-      if (onRefresh) await onRefresh();
+      debouncedRefresh();
     } catch (error) {
       console.error('Error setting up contract:', error);
     }
@@ -1188,7 +1188,7 @@ const calculateDistributionMetrics = async () => {
 
       // Call onDataUpdate for cache synchronization without forcing full refresh
       if (onDataUpdate) {
-        devLog('���� Updating cache without full refresh');
+        devLog('������ Updating cache without full refresh');
         onDataUpdate('billing_event', editingEvent.id, updateData);
       }
 
