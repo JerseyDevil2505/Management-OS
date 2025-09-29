@@ -1623,7 +1623,7 @@ const loadJobs = async () => {
     }
 
     try {
-      console.log('Starting remaining_due recalculation...');
+      devLog('Starting remaining_due recalculation...');
 
       // Get all jobs with contracts and billing events
       const { data: allJobs } = await supabase
@@ -1675,10 +1675,10 @@ const loadJobs = async () => {
         }
 
         fixedJobsCount++;
-        console.log(`Fixed job: ${job.job_name} (${sortedEvents.length} events)`);
+        devLog(`Fixed job: ${job.job_name} (${sortedEvents.length} events)`);
       }
 
-      console.log(`Recalculation complete! Fixed ${fixedEventsCount} events across ${fixedJobsCount} jobs.`);
+      devLog(`Recalculation complete! Fixed ${fixedEventsCount} events across ${fixedJobsCount} jobs.`);
       alert(`Recalculation complete! Fixed ${fixedEventsCount} events across ${fixedJobsCount} jobs.`);
 
       if (onRefresh) onRefresh();
