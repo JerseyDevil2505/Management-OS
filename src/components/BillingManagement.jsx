@@ -235,7 +235,7 @@ Thank you for your immediate attention to this matter.`;
 
   // Load fresh data directly from database - BYPASSES ALL CACHING
   const loadFreshDataFromDB = useCallback(async () => {
-    console.log('🔄 Loading fresh data directly from database...');
+    devLog('🔄 Loading fresh data directly from database...');
 
     try {
       setLoadingStatus(prev => ({ ...prev, isRefreshing: true, message: 'Loading fresh data...' }));
@@ -263,14 +263,14 @@ Thank you for your immediate attention to this matter.`;
           setLegacyJobs(legacyJobs);
         }
 
-        console.log('✅ Fresh data loaded:', { activeJobs: activeJobs.length, legacyJobs: legacyJobs.length });
+        devLog('✅ Fresh data loaded:', { activeJobs: activeJobs.length, legacyJobs: legacyJobs.length });
       }
 
       setLoadingStatus(prev => ({ ...prev, isRefreshing: false, message: 'Fresh data loaded' }));
 
     } catch (error) {
       // Log detailed error for debugging
-      console.error('❌ Error loading fresh data:', error);
+      console.error('��� Error loading fresh data:', error);
       let errMsg = '';
       try {
         if (!error) errMsg = 'Unknown error';
@@ -295,7 +295,7 @@ Thank you for your immediate attention to this matter.`;
 
   // Load fresh data on component mount and tab changes
   useEffect(() => {
-    console.log('🔄 BillingManagement mounted or tab changed, loading fresh data');
+    devLog('🔄 BillingManagement mounted or tab changed, loading fresh data');
     loadFreshDataFromDB();
   }, [activeTab, loadFreshDataFromDB]);
 
@@ -377,14 +377,14 @@ Thank you for your immediate attention to this matter.`;
   // Function to sync cache without forcing full refresh
   const syncCacheItem = (type, id, data) => {
     if (onDataUpdate) {
-      console.log(`🔄 Syncing cache item: ${type} ${id}`);
+      devLog(`🔄 Syncing cache item: ${type} ${id}`);
       onDataUpdate(type, id, data);
     }
   };
 
   // Override the onRefresh prop with our fresh data loader
   const handleRefresh = useCallback(async () => {
-    console.log('🔄 Refresh requested - loading fresh data');
+    devLog('🔄 Refresh requested - loading fresh data');
     await loadFreshDataFromDB();
 
     // Also call the original onRefresh if available
@@ -2491,7 +2491,7 @@ const loadJobs = async () => {
                           </span>
                           {totals?.isComplete && (
                             <span className="flex items-center px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
-                              ��� 100% Billed
+                              ✅ 100% Billed
                             </span>
                           )}
                         </div>
