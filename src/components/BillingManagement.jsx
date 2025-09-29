@@ -3311,9 +3311,22 @@ const calculateDistributionMetrics = async () => {
               </button>
               <button
                 onClick={handleContractSetup}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                disabled={loadingStates.contractSetup}
+                className={`px-4 py-2 text-white rounded-md flex items-center space-x-2 ${
+                  loadingStates.contractSetup
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
               >
-                Save Contract {billingHistoryText.trim() && '& Import History'}
+                {loadingStates.contractSetup && (
+                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                )}
+                <span>
+                  {loadingStates.contractSetup
+                    ? 'Setting up...'
+                    : `Save Contract ${billingHistoryText.trim() && '& Import History'}`
+                  }
+                </span>
               </button>
             </div>
           </div>
