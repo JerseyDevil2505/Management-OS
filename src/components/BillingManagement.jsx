@@ -1183,8 +1183,8 @@ const calculateDistributionMetrics = async () => {
       }
 
       // Always load fresh data after billing updates
-      devLog('🔄 Loading fresh data after billing update');
-      await loadFreshDataFromDB();
+      devLog('🔄 Refreshing data after billing update');
+      if (onRefresh) await onRefresh();
     } catch (error) {
       console.error('Error updating billing event:', error);
       alert('Error updating billing event: ' + error.message);
