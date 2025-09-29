@@ -209,11 +209,7 @@ Thank you for your immediate attention to this matter.`;
   const [showEditBilling, setShowEditBilling] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
   const [isUpdatingBilling, setIsUpdatingBilling] = useState(false);
-  const [loadingStatus, setLoadingStatus] = useState({
-    isRefreshing: false,
-    lastError: null,
-    message: ''
-  });
+  // Removed loadingStatus - no longer needed since we use props-first pattern
   const [showLegacyJobForm, setShowLegacyJobForm] = useState(false);
   const [legacyJobForm, setLegacyJobForm] = useState({
     jobName: '',
