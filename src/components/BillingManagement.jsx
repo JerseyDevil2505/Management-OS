@@ -259,24 +259,16 @@ Thank you for your immediate attention to this matter.`;
     }
   }, [activeJobs, legacyJobs, planningJobs, activeTab, showEditBilling, isUpdatingBilling]);
 
-  // Update other data when props change
+  // Update tab-specific data when props change
   useEffect(() => {
     if (activeTab === 'expenses') {
       setExpenses(expenses);
-    }
-  }, [expenses, activeTab]);
-
-  useEffect(() => {
-    if (activeTab === 'receivables') {
+    } else if (activeTab === 'receivables') {
       setOfficeReceivables(receivables);
-    }
-  }, [receivables, activeTab]);
-
-  useEffect(() => {
-    if (activeTab === 'distributions') {
+    } else if (activeTab === 'distributions') {
       setDistributions(distributions);
     }
-  }, [distributions, activeTab]);
+  }, [expenses, receivables, distributions, activeTab]);
 
   // Removed redundant load calls - data updates via props
 
