@@ -309,21 +309,6 @@ Thank you for your immediate attention to this matter.`;
     }
   };
 
-  const loadExpenses = async () => {
-    // Just use the expenses from props
-    setExpenses(expenses);
-  };
-
-  const loadOfficeReceivables = async () => {
-    // Just use the receivables from props
-    setOfficeReceivables(receivables);
-  }; 
-
-  const loadDistributions = async () => {
-    // Just use the distributions from props
-    setDistributions(distributions);
-  };
-
   // Function to sync cache without forcing full refresh
   const syncCacheItem = (type, id, data) => {
     if (onDataUpdate) {
