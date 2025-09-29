@@ -278,19 +278,7 @@ Thank you for your immediate attention to this matter.`;
     }
   }, [distributions, activeTab]);
 
-  useEffect(() => {
-    // Load specific data when tab changes
-    loadJobs();
-    if (activeTab === 'expenses') {
-      loadExpenses();
-    }
-    if (activeTab === 'receivables') {
-      loadOfficeReceivables();
-    }
-    if (activeTab === 'distributions') {
-      loadDistributions();
-    }
-  }, [activeTab]);
+  // Removed redundant load calls - data updates via props
 
   useEffect(() => {
     if (activeTab === 'distributions' && globalMetrics.totalPaid > 0) {
