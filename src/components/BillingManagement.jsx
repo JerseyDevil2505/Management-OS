@@ -232,11 +232,10 @@ Thank you for your immediate attention to this matter.`;
 
   useEffect(() => {
     // Set initial data from props
-    loadJobCounts();
     if (billingMetrics) {
       setGlobalMetrics(billingMetrics);
     }
-  }, [activeJobs, legacyJobs, planningJobs, billingMetrics]);
+  }, [billingMetrics]);
 
   // Removed redundant data loading - using props-first pattern
 
