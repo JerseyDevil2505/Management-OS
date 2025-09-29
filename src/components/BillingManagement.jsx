@@ -819,6 +819,8 @@ const calculateDistributionMetrics = async () => {
       debouncedRefresh();
     } catch (error) {
       console.error('Error setting up contract:', error);
+    } finally {
+      setLoadingStates(prev => ({ ...prev, contractSetup: false }));
     }
   };
 
