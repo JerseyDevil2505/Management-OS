@@ -41,7 +41,7 @@ const BillingManagement = ({
   const [planningJobsState, setPlanningJobs] = useState([]);
   // Job counts are now memoized instead of state
   const [expensesState, setExpenses] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [showContractSetup, setShowContractSetup] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const [showBillingForm, setShowBillingForm] = useState(false);
