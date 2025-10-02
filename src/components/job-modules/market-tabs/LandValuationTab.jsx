@@ -611,6 +611,8 @@ useEffect(() => {
     if (savedConfig.mode) {
       setValuationMode(savedConfig.mode);
     }
+
+    console.log('🟢 LOADED CASCADE RATES:', savedConfig);
   } else if (restoredFromSession) {
     debug('⏭️ Skipping cascade config DB load - already restored from session');
   }
@@ -672,6 +674,13 @@ useEffect(() => {
     // FORCE FRESH CALCULATION: Clear any cached sales data and force recalculation with new values_norm_time logic
     debug('🧹 Clearing cached sales data to force fresh calculation with values_norm_time');
     setVacantSales([]); // Clear cached sales to force recalculation
+
+    console.log('🟢 LOADED VACANT SALES:', {
+      count: marketLandData.vacant_sales_analysis.sales.length,
+      manuallyAdded: manuallyAddedIds.size,
+      includedCount: savedIncluded.size,
+      excludedCount: savedExcluded.size
+    });
   }
 
   // Also restore Method 1 excluded sales from new field (like Method 2)
@@ -708,6 +717,7 @@ useEffect(() => {
 
   // Only set if we found a valid value AND current state is null/empty to prevent overwrites
   if (loadedTargetAllocation !== null) {
+    console.log('🟢 LOADED TARGET ALLOCATION:', loadedTargetAllocation);
     // Ensure it's a number to prevent caching issues
     const numericValue = typeof loadedTargetAllocation === 'string' ?
       parseFloat(loadedTargetAllocation) : loadedTargetAllocation;
