@@ -1109,12 +1109,13 @@ const getPricePerUnit = useCallback((price, size) => {
   const filterVacantSales = useCallback(() => {
     if (!properties) return;
 
-    debug('🔄 FilterVacantSales called:', {
+    console.log('🔄 FilterVacantSales called:', {
       currentVacantSalesCount: vacantSales.length,
       hasMethod1Excluded: !!window._method1ExcludedSales,
       method1ExcludedSize: window._method1ExcludedSales?.size || 0,
       hasManuallyAdded: !!window._method1ManuallyAdded,
-      manuallyAddedSize: window._method1ManuallyAdded?.size || 0
+      manuallyAddedSize: window._method1ManuallyAdded?.size || 0,
+      isInitialLoadComplete: isInitialLoadComplete
     });
 
     // CRITICAL: First restore manually added properties that might not meet natural criteria
@@ -1201,7 +1202,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (newSales.length > 0) {
-        debug('������ Found new sales to add:', newSales.length);
+        debug('�������� Found new sales to add:', newSales.length);
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
           const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
@@ -3567,7 +3568,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       if (error) throw error;
 
-      debug('✅ Save completed successfully');
+      debug('�� Save completed successfully');
       setLastSaved(new Date());
 
       // Notify parent component
