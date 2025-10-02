@@ -1008,13 +1008,20 @@ const getPricePerUnit = useCallback((price, size) => {
   }, [vendorType]);
 
   useEffect(() => {
+    // CRITICAL FIX: Don't auto-detect/filter during initialization!
+    // This prevents overwriting manually added sales that were saved to the database
+    if (!isInitialLoadComplete) {
+      console.log('⏸️ Skipping auto-detection - waiting for initial load to complete');
+      return;
+    }
+
     if (properties && properties.length > 0) {
-      console.log('🔄 Triggering fresh calculations with FIXED DELTA LOGIC');
+      console.log('🔄 Triggering fresh calculations with FIXED DELTA LOGIC (post-initialization)');
       filterVacantSales();
       performBracketAnalysis();
       loadVCSPropertyCounts();
     }
-  }, [properties, dateRange, valuationMode, method2TypeFilter, method2ExcludedSales]);
+  }, [properties, dateRange, valuationMode, method2TypeFilter, method2ExcludedSales, isInitialLoadComplete]);
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
@@ -7651,7 +7658,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         <td style={{ padding: '8px', textAlign: 'right' }}>{prop.asset_sfla || '-'}</td>
                         <td style={{ padding: '8px' }}>
                           {prop.asset_year_built || '-'}
-                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>��️</span>}
+                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>���️</span>}
                         </td>
                         <td style={{ padding: '8px' }}>{prop.asset_type_use || '-'}</td>
                       </tr>
