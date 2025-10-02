@@ -1989,6 +1989,160 @@ standardLocations = [
 - Outlier Threshold: Default 15% from equalization ratio
 - Auto-Save Interval: 30 seconds for worksheet data
 
+### OverallAnalysisTab.jsx - Overall Market & Condo Analysis 📈
+
+**Scale**: ~1,000 lines of comprehensive property analysis and condo valuation
+
+**Core Philosophy**: Provide market insights through systematic analysis and visual mapping
+
+**Two Main Tabs:**
+1. **Market Analysis** - Type/use, design, year built, VCS analysis
+2. **Condo Analysis** - Floor premiums, design variations, bedroom configurations
+
+**Market Analysis Tab:**
+
+**Type & Use Analysis:**
+- Groups properties by type use codes (10=single family, 60=condo, etc.)
+- Calculates statistics for ALL properties vs properties WITH SALES
+- Shows average year built and SFLA for each group
+- **CME Bracket Calculation**: Maps average adjusted price to brackets
+- **Delta Analysis**: Percentage difference from baseline group
+- **Size-Adjusted Pricing**: Uses 50% method for normalization
+
+**Statistics Display:**
+```
+┌────────────────────────────────────────────────────────────┐
+│ Type Use │ Total │ Avg Year │ Avg Size │ Sales │ Adj Price │
+├────────────────────────────────────────────────────────────┤
+│ Single   │ 1,234 │   1985   │  1,850   │  156  │ $285,000  │
+│ Multi    │   432 │   1972   │  1,450   │   45  │ $225,000  │
+│ Condo    │   789 │   1998   │  1,100   │   89  │ $165,000  │
+└────────────────────────────────────────────────────────────┘
+```
+
+**Design Style Analysis:**
+- Groups by design codes (Colonial, Ranch, Cape Cod, etc.)
+- Vendor-aware code interpretation (BRT vs Microsystems)
+- Shows distribution percentages
+- Sales analysis per design type
+- Average pricing by style
+
+**Year Built Analysis:**
+- Decade grouping (1950-1959, 1960-1969, etc.)
+- Visual bar chart for distribution
+- Average price trends by decade
+- Construction boom identification
+
+**VCS by Type Analysis:**
+- Cross-tabulation of VCS codes with property types
+- Neighborhood-specific type distributions
+- Average values by VCS/type combination
+- Market segmentation insights
+
+**Condo Analysis Tab:**
+
+**Specialized Condo Features:**
+- **Type Use Detection**: Code 6 (Microsystems) or 60 (BRT)
+- **Floor Premium Analysis**: Calculates % difference from 1st floor baseline
+- **Bedroom Configuration**: Studio, 1BED, 2BED, 3BED detection
+- **Design Grouping**: Groups similar condo designs
+- **VCS Complex Analysis**: Groups condos by VCS and bedroom count
+
+**Floor Premium Calculation:**
+```javascript
+// Size-adjusted price for floor comparison
+adjustedPrice = salePrice + ((avgSize - unitSize) × (pricePerSF × 0.5))
+// Premium calculation
+floorPremium = ((floorPrice - firstFloorPrice) / firstFloorPrice) × 100
+```
+
+**Floor Analysis Table:**
+```
+┌──────────────────────────────────────────────┐
+│ Floor     │ Count │ Avg Price │ Premium      │
+├──────────────────────────────────────────────┤
+│ 1ST FLOOR │  234  │ $165,000  │ BASELINE     │
+│ 2ND FLOOR │  189  │ $162,000  │ -2%          │
+│ 3RD FLOOR │  145  │ $158,000  │ -4%          │
+│ PENTHOUSE │   12  │ $195,000  │ +18%         │
+└──────────────────────────────────────────────┘
+```
+
+**Bedroom Detection Logic:**
+- **Primary Method**: Checks design style for bedroom indicators
+- **BRT Specific**: Looks for BEDTOT field in raw data
+- **Microsystems**: Parses design codes (1BR, 2BR patterns)
+- **Fallback**: Async enrichment from raw_data if available
+- **Unknown Handling**: Groups separately for review
+
+**VCS/Bedroom Grouping:**
+```
+VCS: RIVERSIDE COMPLEX
+├── STUDIO: 45 units, Avg: $125,000
+├── 1BED: 123 units, Avg: $145,000
+├── 2BED: 89 units, Avg: $175,000
+└── 3BED: 12 units, Avg: $225,000
+```
+
+**Block Value Mapping:**
+
+**Color Scale Configuration:**
+- Starting Value: Base price for first color
+- Increment: Price step between colors
+- 32-Color Palette: Matches Bluebeam Revu for PDF maps
+- Consistency Metrics: Age, size, design uniformity
+
+**Consistency Calculations:**
+
+**Age Consistency:**
+- High: ≤10 year range
+- Medium: 11-25 year range
+- Low: 26-50 year range
+- Mixed: >50 year range
+
+**Size Consistency:** Coefficient of variation
+- High: CV ≤15%
+- Medium: CV 16-30%
+- Low: CV >30%
+
+**Design Consistency:** Unique design count
+- High: 1-2 designs
+- Medium: 3-4 designs
+- Low: 5+ designs
+
+**Export Options:**
+- CSV Export: All analysis types
+- PDF Reference: Color legend for mapping
+- Block Summary: Statistics per block
+
+**Performance Features:**
+
+**Data Processing:**
+- Memoized calculations with useMemo
+- Async bedroom enrichment (BRT only)
+- Single-pass analysis for all metrics
+- Cached results prevent redundant processing
+
+**Smart Behaviors:**
+- Auto-runs analysis on data load
+- Collapsible sections for space management
+- Visual indicators for data quality issues
+- Handles missing data gracefully
+
+**Integration Points:**
+- Uses interpretCodes for vendor-aware code lookup
+- Accesses normalized prices from PreValuationTab
+- Shares consistency metrics with other tabs
+- Updates parent via onDataChange callback
+
+**Business Rules:**
+- Baseline Group: Most common type/use becomes baseline
+- CME Brackets: Standard ranges for market segmentation
+- Floor Premium Limits: Typically -10% to +20% range
+- Condo Identification: Type use starts with '6'
+- Size Adjustment: Always uses 50% method
+- Minimum Sales: Groups need 3+ sales for statistics
+
 ### ManagementChecklist.jsx - 29-Item Workflow Management System ✅
 
 **Scale**: Complete workflow tracker with document management and client approvals
