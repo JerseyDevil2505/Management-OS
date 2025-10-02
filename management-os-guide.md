@@ -98,7 +98,7 @@ Vendor Files (BRT/Microsystems) → FileUploadButton (Comparison) → Processors
 ```
 
 **Critical Pattern: INSERT vs UPSERT**
-- **Initial Import**: AdminJobManagement → processors → INSERT new records (job creation)
+- **Initial Import**: AdminJobManagement ��� processors → INSERT new records (job creation)
 - **Ongoing Updates**: FileUploadButton → updaters → UPSERT operations (file maintenance)
 
 ### Module Data Loading Architecture (NEW)
@@ -1244,7 +1244,7 @@ sales_history: {
 }
 ```
 
-### ProductionTracker.jsx - The KABOB! Analytics & Data Processing Engine 🚀
+### ProductionTracker.jsx - Analytics & Data Processing Engine 🚀
 
 **Scale**: 4,400+ lines managing the entire data processing pipeline with real-time validation
 
@@ -1263,34 +1263,107 @@ sales_history: {
 - **Persistence Layer**: UPSERTs all valid records to inspection_data in one batch
 - **External Inspector Support**: Handles client codes merged with regular employee data
 
+**The Nine Validation Rules:**
+1. **Valid date + missing initials** → scrub (remove from inspection_data)
+2. **Valid initials + missing/invalid date** → scrub
+3. **Invalid InfoBy codes** → scrub
+4. **Refusal code but missing listing data** → flag for review
+5. **Entry code but missing listing data** → flag for review
+6. **Estimation code but has listing data** → flag for review
+7. **Residential inspector on commercial property** → flag for review
+8. **Zero improvement but missing listing data** → flag for review
+9. **Price field validation (BRT only)** → scrub if invalid
+
+**Processing Flow:**
+1. **Lock project start date** → Filters old inspector noise
+2. **Configure InfoBy categories** → Reads from parsed_code_definitions
+3. **Start session** → UUID tracking for batch integrity
+4. **Load ALL properties with pagination** → Handles 16K+ records
+5. **Validate with 9 rules** → Collects issues for modal review
+6. **Show validation modal** → One issue at a time with navigation
+7. **Apply override decisions** → Skip or override during processing
+8. **UPSERT to inspection_data** → Batch of 250 with retry logic
+9. **Calculate analytics** → Entry rates, refusal rates, completion percentages
+10. **Update App.js state** → Force navigation survival
+11. **Persist to database** → jobs.workflow_stats for permanent storage
+
+**Five-Tab Dashboard:**
+
+**1. Inspector Analytics Tab:**
+- Individual inspector performance tiles
+- Entry/Refusal/Estimation rates
+- Daily averages and totals
+- Role-specific metrics (Residential vs Commercial vs Management)
+- External inspector support with "(External)" suffix
+
+**2. Billing Summary Tab:**
+- Job-level completion metrics
+- Entry rate: Entries ÷ Total Residential × 100
+- Refusal rate: Refusals ÷ Total Residential × 100
+- Commercial complete %: Inspected ÷ Total Commercial × 100
+- Pricing complete %: Priced ÷ Total Commercial × 100
+
+**3. Validation Report Tab:**
+- All properties with validation issues
+- Grouped error messages per property
+- Override management interface
+- Export to CSV functionality
+- Shows WHY properties were excluded
+
+**4. Missing Properties Tab:**
+- Properties not in inspection_data
+- Reason codes for exclusion
+- Export capability
+- Helps identify data gaps
+
+**5. Override Management Tab:**
+- CRUD operations for overrides
+- Audit trail with timestamps
+- Custom reason tracking
+- Bulk operations support
+
 **Smart Processing Details:**
-- Project start date locking (filters old inspector noise)
-- Session-based processing with UUID tracking
-- Special codes category (V, N) that bypass validation
-- External contractor awareness (tracks unassigned properties)
-- Data staleness detection (knows when to reprocess)
-- Compound validation messages (groups issues per property)
-- Export everything (3 different CSV reports)
-- Force navigation survival via `jobs.workflow_stats`
+- **Project start date locking**: Filters old inspector noise
+- **Session-based processing**: UUID tracking for batch integrity
+- **Special codes category**: V, N bypass validation
+- **External contractor awareness**: Tracks unassigned properties
+- **Data staleness detection**: Knows when to reprocess
+- **Compound validation messages**: Groups issues per property
+- **Export everything**: 3 different CSV reports
+- **Force navigation survival**: via `jobs.workflow_stats`
 - **Validation override syncing**: Prevents duplicate key errors by updating file_version
 - **Promise-based modal wait**: Uses `window._resolveProcessingModal` pattern (temporary solution)
 - **Single validation review**: Shows one issue at a time with navigation controls
+- **Progress notifications**: Every 5000 records for large datasets
 
-**The Processing Flow:**
-1. Lock project start date → Configure InfoBy categories → Start session
-2. Load ALL properties with pagination → Validate with 9 rules
-3. Show validation modal for issues → Apply override decisions
-4. UPSERT to inspection_data → Calculate analytics
-5. Update App.js state → Persist to database
+**Performance Optimizations:**
+- Batch size: 250 records for UPSERT operations
+- Retry logic: 50 attempts with exponential backoff
+- Pagination: 1000 records per page from JobContainer
+- Validation decision batching: Single database write
+- Override lookup map: Fast O(1) checking
+- Complete property data in overrides: Avoids additional lookups
 
-**Production Genius:**
-- Handles massive datasets with progress notifications every 5000 records
-- Smart vendor detection (BRT vs Microsystems) for code parsing
-- Entry/Refusal rates calculated correctly (against total residential, not just inspected)
-- Commercial completion uses inspector totals for accuracy
-- Validation overrides count as valid inspections for progress tracking
-- Missing properties report shows WHY data didn't make it to inspection_data
-- Complete override records include all property fields to avoid additional lookups
+**External Inspector Pattern:**
+- Stored as comma-separated string in `jobs.external_inspectors`
+- Merged with regular employees for validation
+- Display with "(External)" suffix in analytics
+- Count toward analytics but flagged separately
+- Configured in ProductionTracker settings panel
+
+**Data Flow to App.js:**
+```javascript
+workflowStats = {
+  jobEntryRate: 85.2,
+  jobRefusalRate: 6.3,
+  commercialCompletePercent: 92.5,
+  pricingCompletePercent: 78.4,
+  validInspections: 4231,
+  totalRecords: 5142,
+  lastProcessed: timestamp,
+  needsRefresh: boolean
+}
+```
 
 ### MarketAnalysis.jsx - Comprehensive Valuation System (🚧 IN DEVELOPMENT)
 
