@@ -1390,13 +1390,97 @@ sales_history: {
 - Unit-based valuation adjustments
 - Common area allocations
 
-### ManagementChecklist.jsx - Workflow Engine ⭐
+### ManagementChecklist.jsx - 29-Item Workflow Management System ✅
 
-- **29 predefined workflow items** across 4 categories
-- **Rich feature set**: Client approvals, file uploads, special actions, auto-updates
-- **Project type switching** (Revaluation vs Reassessment)
-- **Progress dashboard** with completion percentages and metrics
-- **Archive workflow** - completing turnover date triggers job archival
+**Scale**: Complete workflow tracker with document management and client approvals
+
+**Core Philosophy**: Track every critical step from contract to turnover with visual progress indicators
+
+**29 Workflow Items (Hardcoded Template):**
+
+**Setup Phase (Items 1-8):**
+1. Contract Signed by Client (file upload)
+2. Contract Signed/Approved by State (file upload)
+3. Tax Maps Approved
+4. Tax Map Upload (file upload)
+5. Zoning Map Upload (file upload)
+6. Zoning Bulk and Use Regulations Upload (file upload)
+7. PPA Website Updated
+8. Data Collection Parameters (requires client approval)
+
+**Inspection Phase (Items 9-16):**
+9. Initial Mailing List (special action: generate_mailing_list)
+10. Initial Letter and Brochure (multiple file uploads supported)
+11. Initial Mailing Sent
+12. First Attempt Inspections (auto-updates from ProductionTracker stats)
+13. Second Attempt Inspections (special action: generate_second_attempt_mailer)
+14. Third Attempt Inspections (special action: generate_third_attempt_mailer)
+15. Lot Sizing Completed
+16. Lot Sizing Questions Complete
+
+**Analysis Phase (Items 17-26):**
+17. Data Quality Analysis
+18. Market Analysis (synced from component)
+19. Page by Page Analysis (synced from component)
+20. Land Value Tables Built (synced from component)
+21. Land Values Entered (requires client approval, synced)
+22. Economic Obsolescence Study (synced from component)
+23. VCS Reviewed/Reset (requires client approval)
+24. Cost Conversion Factor Set (requires client approval, synced)
+25. Building Class Review/Updated (synced from component)
+26. Effective Age Loaded/Set (synced from component)
+
+**Completion Phase (Items 27-29):**
+27. Final Values Ready (requires client approval, synced)
+28. Generate Turnover Document (file upload)
+29. Turnover Date (date input, special action: archive_trigger)
+
+**Key Features:**
+- **Status Tracking**: pending → in_progress → completed states
+- **Client Approval System**: Track approval status, date, and approver
+- **Document Management**: Upload/download files via Supabase Storage
+- **Multiple File Support**: Initial Letter can have multiple documents
+- **Auto-Sync Items**: 11 items marked as `is_analysis_item` sync from MarketAnalysis tabs
+- **Special Actions**: Generate mailing lists, trigger archive on turnover
+- **Reassessment Mode**: Certain items marked "Not Applicable" for reassessment jobs
+- **File Verification**: Checks actual file existence in storage
+
+**Visual Indicators:**
+- **Color-coded categories**: Setup (blue), Inspection (green), Analysis (purple), Completion (gray)
+- **Progress badges**: Synced from Analysis, Not Applicable badges
+- **Client approval badges**: Purple indicators for approved items with dates
+- **Completion status**: Green checkmarks with completion dates
+- **File indicators**: Blue file icons for uploaded documents
+
+**Database Integration:**
+- Status stored in `checklist_item_status` table per job
+- Documents tracked in `checklist_documents` table
+- File paths reference Supabase Storage locations
+- Per-job status tracking (not global template)
+
+**Component Integration:**
+- Receives inspection data from JobContainer props
+- Updates First Attempt item with ProductionTracker stats
+- Syncs with MarketAnalysis tab completion events
+- Saves assessor name/email changes to jobs table
+
+**Smart Behaviors:**
+- Auto-populates inspection counts from workflow stats
+- Enables special actions based on item completion
+- Validates file existence before showing download links
+- Handles both single and multiple file uploads per item
+- Preserves scroll position during status updates
+
+**Special Actions:**
+- **generate_mailing_list**: Creates inspection mailing list
+- **generate_second_attempt_mailer**: Second attempt letters
+- **generate_third_attempt_mailer**: Third attempt letters
+- **archive_trigger**: Archives job on turnover date entry
+
+**Reassessment Handling:**
+- Items 10-14 marked "Not Applicable" for reassessment projects
+- Based on `jobData.data_collection_status === 'reassessment'`
+- Visual gray styling for non-applicable items
 
 ### BillingManagement.jsx - Financial Control Tower 💰
 
