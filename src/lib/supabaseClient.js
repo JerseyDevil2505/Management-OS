@@ -129,20 +129,22 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 /**
  * Cache for parsed source file data to avoid repeated parsing
  */
-const sourceFileCache = new Map();
-
 /**
  * Get parsed raw data for a job (with caching)
  */
 async function getRawDataForJob(jobId) {
-  if (sourceFileCache.has(jobId)) {
-    return sourceFileCache.get(jobId);
+  // Check cache first
+  const cacheKey = `job_raw_data_${jobId}`;
+  const cached = dataCache.get(cacheKey);
+  if (cached) {
+    console.log(`📦 Returning cached raw data for job ${jobId}`);
+    return cached;
   }
 
   try {
     const { data: job, error } = await supabase
       .from('jobs')
-      .select('raw_file_content, ccdd_code, start_date')
+      .select('raw_file_content, parsed_code_definitions, vendor_type, ccdd_code, start_date')
       .eq('id', jobId)
       .single();
 
@@ -151,7 +153,7 @@ async function getRawDataForJob(jobId) {
     }
 
     // Determine vendor type and year
-    const vendorType = detectVendorTypeFromContent(job.raw_file_content);
+    const vendorType = job.vendor_type || detectVendorTypeFromContent(job.raw_file_content);
     const yearCreated = new Date(job.start_date).getFullYear();
     const ccddCode = job.ccdd_code;
 
@@ -175,12 +177,14 @@ async function getRawDataForJob(jobId) {
       vendorType: vendorType || 'Unknown',
       yearCreated: yearCreated || new Date().getFullYear(),
       ccddCode: ccddCode || '',
-      propertyMap: propertyMap || new Map()
+      propertyMap: propertyMap || new Map(),
+      codeDefinitions: job.parsed_code_definitions,
+      parsed_code_definitions: job.parsed_code_definitions
     };
 
-    // Cache for 5 minutes
-    sourceFileCache.set(jobId, result);
-    setTimeout(() => sourceFileCache.delete(jobId), 5 * 60 * 1000);
+    // Cache with longer TTL since code definitions rarely change
+    dataCache.set(cacheKey, result, CACHE_CONFIG.CODE_DEFINITIONS);
+    console.log(`💾 Cached raw data for job ${jobId}`);
 
     return result;
 
