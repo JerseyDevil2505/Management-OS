@@ -10,8 +10,43 @@ import FileUploadButton from './components/job-modules/FileUploadButton';
 import LandingPage from './components/LandingPage';
 import UserManagement from './components/UserManagement';
 
+/**
+ * MANAGEMENT OS - LIVE DATA ARCHITECTURE
+ * =====================================
+ *
+ * This application uses a LIVE DATA FIRST strategy with no persistent caching layer.
+ *
+ * KEY PRINCIPLES:
+ * - Every navigation/view change loads fresh data from Supabase
+ * - No stale data issues - always showing current database state
+ * - Props-based distribution from App.js to all child components
+ * - Selective updates only reload affected data sections
+ *
+ * DATA FLOW:
+ * 1. App.js maintains central state for all module data
+ * 2. loadLiveData() fetches directly from Supabase
+ * 3. Data distributed via props to components
+ * 4. Components call onDataUpdate() to trigger targeted refreshes
+ *
+ * PERFORMANCE OPTIMIZATIONS:
+ * - Batch loading (500-1000 records per query)
+ * - Single load pattern in JobContainer
+ * - Pagination for large datasets
+ * - Deferred state updates to prevent React errors
+ *
+ * LOCAL STORAGE USAGE:
+ * - UI preferences only (filters, view settings)
+ * - No application data caching
+ * - Session storage for unsaved form changes
+ *
+ * EXCEPTIONS:
+ * - ProductionTracker: 5-minute cache on analytics raw data (45K+ records)
+ * - This is the ONLY component with data caching for performance
+ */
+
 // ==========================================
-// LIVE DATA - NO CACHING
+// LIVE DATA ARCHITECTURE - NO PERSISTENT CACHING
+// See documentation at top of file for details
 // ==========================================
 
 const App = () => {
