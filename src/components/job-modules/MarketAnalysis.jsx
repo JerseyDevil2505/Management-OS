@@ -27,6 +27,17 @@ import CostValuationTab from './market-tabs/CostValuationTab';
 import AttributeCardsTab from './market-tabs/AttributeCardsTab';
 
 const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache, onDataChange }) => {
+  // 📊 DEBUG - MarketAnalysis passing data to tabs
+  console.log('📊 MarketAnalysis passing to LandValuationTab:', {
+    marketLandData_updated_at: marketLandData?.updated_at,
+    hasVacantSales: !!marketLandData?.vacant_sales_analysis?.sales,
+    salesCount: marketLandData?.vacant_sales_analysis?.sales?.length,
+    manuallyAddedCount: marketLandData?.vacant_sales_analysis?.sales?.filter(s => s.manually_added)?.length,
+    hasCascadeRates: !!marketLandData?.cascade_rates,
+    hasTargetAllocation: marketLandData?.target_allocation !== undefined,
+    targetAllocationValue: marketLandData?.target_allocation
+  });
+
   // ==================== STATE MANAGEMENT ====================
   const [activeTab, setActiveTab] = useState('data-quality');
 
