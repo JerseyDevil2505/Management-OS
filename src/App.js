@@ -864,10 +864,10 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Cache Status Bar - Errors Only */}
-      {cacheStatus.lastError && (
+      {/* Loading Status Bar - Errors Only */}
+      {loadingStatus.lastError && (
         <div className="fixed top-0 left-0 right-0 z-50 px-4 py-2 text-sm font-medium text-center bg-red-100 text-red-800">
-          {cacheStatus.message}
+          {loadingStatus.message}
         </div>
       )}
 
