@@ -3688,6 +3688,11 @@ export const propertyService = {
 
   // ENHANCED: Update method with field preservation that calls UPDATERS (UPSERT) for existing jobs
   async updateCSVData(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, vendorType, versionInfo = {}) {
+    // Clear any cached data for this job when updating
+    dataCache.clear(`job_${jobId}`);
+    dataCache.clear(`job_raw_data_${jobId}`);
+    console.log(`🗑️ Cleared cache for job ${jobId} due to CSV update`);
+
     try {
       console.log(`🔄 Updating ${vendorType} data for job ${jobId} with field preservation`);
       
