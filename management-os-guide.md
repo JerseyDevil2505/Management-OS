@@ -1137,6 +1137,7 @@ getPackageSaleData(properties)
 - **Composite Key Matching**: Generates keys EXACTLY like processors for accurate matching
 - **Smart Job Sorting**: By year → billing % → municipality
 - **Force Quit Option**: Escape hatch for problematic imports
+- **Tab Navigation Memory**: Maintains active tab during data refreshes
 
 **Production Details:**
 - Batch size: 500 records for large file processing (assignments and job creation)
