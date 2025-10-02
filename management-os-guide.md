@@ -850,7 +850,7 @@ export const interpretCodes = {
 | created_at | timestamp with time zone |
 | updated_at | timestamp with time zone |
 
-#### **property_market_analysis** �� NEW TABLE
+#### **property_market_analysis** ���� NEW TABLE
 **Component:** Market analysis modules, field preservation during updates
 
 | Column | Data Type | Notes |
@@ -1007,7 +1007,9 @@ These tables were removed during optimization. Ensure no references remain in co
 11. **production_data** - Replaced by inspection_data
 12. **revenue_summary** - Unused aggregation
 13. **sales_decisions** - Using property_records.sales_history JSONB
-14. **source_file_versions** - Using property_records.file_version
+14. **property_change_log** - Using comparison_reports for change tracking
+
+**Note:** `source_file_versions` was previously listed as deleted but remains ACTIVE. See table documentation below.
 
 ### Database Performance Optimizations
 
@@ -2240,7 +2242,7 @@ VCS: RIVERSIDE COMPLEX
 - Mixed: >50 year range
 
 **Size Consistency:** Coefficient of variation
-- High: CV ≤15%
+- High: CV ��15%
 - Medium: CV 16-30%
 - Low: CV >30%
 
@@ -2989,7 +2991,7 @@ The component displays a detailed analysis table with the following columns:
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ ☑ │ Block │ Lot │ Qual │ Card │ Sale Date │ Price    │ Year │ Class │ SFLA  │ Land   │ CCF   │
-├────────────────────────────────────────────────────────────────────────────────────────────────┤
+├─────────────────────────────────────────────────────────────────────────────────────────���──────┤
 │ ☑ │ 123   │ 45  │      │ 1    │ 03/15/24  │ $285,000 │ 2020 │ C+3   │ 1,850 │ $45,000│ 1.15  │
 │ ☑ │ 124   │ 12  │      │ 1    │ 06/22/24  │ $310,000 │ 2021 │ C+4   │ 2,100 │ $48,000│ 1.18  │
 │ ☐ │ 125   │ 78  │      │ 1    │ 01/10/24  │ $265,000 │ 2019 │ C+2   │ 1,650 │ $42,000│ 1.08  │
@@ -3557,7 +3559,7 @@ Purpose:
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Condition │ Count │ Avg SFLA │ Avg Year │ Avg Value  │ Flat Adj  │ % Adj    │
-├──────────────────────────────────────────────────────────────────────────────┤
+├─────────────────────────────��────────────────────────────────────────────────┤
 │ EXCELLENT │   89  │  1,920   │   1992   │ $325,000   │ +$34,075  │ +11.95%  │
 │ GOOD ⭐   │  234  │  1,850   │   1985   │ $285,000   │ BASELINE  │ BASELINE │
 │ AVERAGE   │  156  │  1,830   │   1978   │ $255,000   │ -$30,000  │ -10.53%  │
@@ -3731,7 +3733,7 @@ Deed Book 1234, Page 567 (Sale Date: 03/15/2024)
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ VCS: A1 - DOWNTOWN RESIDENTIAL                                              │
-├─────────────────────────────────────────────────────────────────────────────┤
+├─────────────────���───────────────────────────────────────────────────────────┤
 │ WITH Additional Cards (23 properties):                                      │
 │   ├── Average SFLA: 2,450 SF (combined from all cards)                      │
 │   ├── Average Year Built: 1988                                              │
@@ -3779,7 +3781,7 @@ Deed Book 1234, Page 567 (Sale Date: 03/15/2024)
 
 **Sortable Columns:**
 ```
-┌──────────────────────────────────────────────────────────────────────────────┐
+┌─────────────────────────────────────────────────────────────���────────────────┐
 │ VCS ▲│ Block │ Lot │ Cards │ Sale Price  │ Norm Price  │ SFLA  │ Year Built │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ A1   │  123  │  45 │  2    │  $385,000   │  $390,000   │ 2,450 │    1988    │
