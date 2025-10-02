@@ -1090,7 +1090,7 @@ const App = () => {
           <EmployeeManagement
             employees={appData.employees}
             globalAnalytics={appData.globalInspectionAnalytics}
-            onDataUpdate={updateCacheItem}
+            onDataUpdate={updateDataSection}
             onRefresh={() => loadLiveData(['employees'])}
           />
         )}
