@@ -7,6 +7,7 @@ const FileUploadButton = ({
   onFileProcessed,
   isJobLoading = false,
   onDataRefresh,
+  onUpdateJobCache,  // JobContainer's refresh callback
   isJobContainerLoading = false  // Accept loading state from JobContainer
 }) => {
   const [sourceFile, setSourceFile] = useState(null);
@@ -1344,7 +1345,7 @@ const handleCodeFileUpdate = async () => {
       addBatchLog(`📊 Calling ${job.vendor_type} updater (UPSERT mode)...`, 'info');
 
       // FIX: Calculate new file_version for property_records - fetch current from DB with timeout
-      addBatchLog('🔍 Fetching current file version from database...', 'info');
+      addBatchLog('�� Fetching current file version from database...', 'info');
 
       let currentFileVersion = 1;
       let newFileVersion = 2;
