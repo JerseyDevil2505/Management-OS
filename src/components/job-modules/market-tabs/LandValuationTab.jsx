@@ -558,6 +558,7 @@ useEffect(() => {
   }
 
   // ALWAYS load from database
+  console.log('🟡 ABOUT TO LOAD FROM DATABASE');
   debug('🔄 Loading from database:', {
     hasRawLandConfig: !!marketLandData.raw_land_config,
     hasCascadeRates: !!marketLandData.cascade_rates,
@@ -2849,7 +2850,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
     debug('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
-    debug('📊 Input validation:', {
+    debug('���� Input validation:', {
       hasTargetAllocation: !!targetAllocation,
       targetAllocationValue: targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
@@ -7476,7 +7477,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'lot' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Lot {modalSortField === 'lot' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Lot {modalSortField === 'lot' ? (modalSortDirection === 'asc' ? '��' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('address')}
