@@ -1051,16 +1051,127 @@ getPackageSaleData(properties)
 - Marks items as auto-completed based on module activity
 - Syncs with ManagementChecklist component
 
-### App.js - System Orchestrator & Module State Hub
+### App.js - System Orchestrator & Live Data Hub 🎯
 
-- **Central state management** for all job module data
-- **Job-centric navigation** - select job first, then access modules
-- **Module state persistence** - analytics survive navigation
-- **Real-time data flow**: ProductionTracker → App.js state → AdminJobManagement tiles
-- **Deferred State Updates**: Uses `setTimeout(() => setState(), 0)` throughout to prevent React Error #301
+**Core Philosophy**: Live data without caching - always fresh, always accurate
+
+**Key Features:**
+- **URL-Based Navigation**: Browser back/forward support, F5 refresh preservation
+- **Live Data Loading**: No caching layer - direct database queries for freshness
+- **Central State Management**: All job module data flows through App.js
+- **Module State Persistence**: Analytics survive navigation between modules
+- **Real-Time Data Flow**: ProductionTracker → App.js state → AdminJobManagement tiles
+- **Job-Centric Navigation**: Select job first, then access modules
+- **Role-Based Access**: Admin/Owner only for billing/payroll sections
+
+**State Management Structure:**
+```javascript
+appData = {
+  // Core Data
+  jobs: [],              // Active jobs
+  employees: [],         // All employees
+  managers: [],          // Management type employees
+  planningJobs: [],      // Future projects
+  archivedJobs: [],      // Completed/draft jobs
+
+  // Billing Data
+  activeJobs: [],        // Standard billing jobs
+  legacyJobs: [],        // Legacy billing jobs
+  expenses: [],          // Monthly expenses
+  receivables: [],       // Office receivables
+  distributions: [],     // Shareholder distributions
+  billingMetrics: {},    // Calculated financial metrics
+
+  // Computed Data
+  jobFreshness: {},      // File upload vs production run dates
+  assignedPropertyCounts: {},
+  workflowStats: {},     // ProductionTracker analytics
+  globalInspectionAnalytics: null,
+
+  // State Flags
+  isLoading: false,
+  isInitialized: false
+}
+```
+
+**URL Routing Pattern:**
+- Main views: /admin-jobs, /billing, /employees, /payroll, /users
+- Job-specific: /job/{jobId} - Automatically restores job selection after F5
+- Browser history: Full back/forward support with state restoration
+
+**Live Data Loading (loadLiveData):**
+- Component-specific loading: ['jobs'], ['billing'], ['employees']
+- Full refresh: ['all'] - Used on initial load
+- Job freshness calculation: Compares file uploads vs production runs
+- Workflow stats extraction: Reads from jobs.workflow_stats field
+- Error handling: Timeout detection, user-friendly messages
+
+**Data Flow Patterns:**
+
+**1. Job Selection Flow:**
+User clicks job → handleJobSelect() → Updates URL → Sets selectedJob → Shows JobContainer
+
+**2. Module Analytics Flow:**
+ProductionTracker processes → Calls onUpdateWorkflowStats → Updates App.js state →
+Persists to jobs.workflow_stats → Available in AdminJobManagement tiles
+
+**3. File Processing Flow:**
+FileUploadButton processes → Triggers onFileProcessed → Sets refresh flag →
+Refreshes data when user returns to jobs list
+
+**Smart Patterns:**
+- **Deferred State Updates**: Uses `setTimeout(() => setState(), 0)` to prevent React Error #301
 - **Job Creation Lock**: `isCreatingJob` flag prevents race conditions during heavy operations
 - **Analytics Completion Detection**: Tracks when ProductionTracker finishes initial processing
 - **Workflow Stats Persistence**: All analytics stored in `jobs.workflow_stats` for navigation survival
+- **Surgical Updates**: Billing changes reload only billing data, not entire app
+
+**Job Transformation Logic:**
+- Extracts workflow stats from either string or object format
+- Maps job_assignments to assignedManagers array
+- Calculates totalProperties from multiple fallback sources
+- Determines freshness status for each job
+- Transforms billing events for display
+
+**Performance Monitoring:**
+```javascript
+performanceRef = {
+  appStartTime: Date.now(),
+  dbQueries: 0,
+  avgLoadTime: 0
+}
+```
+
+**Authentication Integration:**
+- Supabase auth session management
+- Role-based view restrictions
+- Automatic redirect to landing page when logged out
+- User context available throughout app
+
+**Error Handling:**
+- Database timeout detection (57014 error code)
+- User-friendly error messages
+- Cache status bar for error display
+- Graceful fallbacks for missing data
+
+**Calculation Functions:**
+- `calculateBillingMetrics`: Financial rollups across jobs
+- `calculateInspectionAnalytics`: Global employee performance
+- `loadJobFreshness`: Determines which jobs need updates
+
+**Component Props Distribution:**
+Each component receives:
+- Relevant data slice from appData
+- onDataUpdate callback for changes
+- onRefresh callback for fresh data
+- Component-specific handlers
+
+**Critical Implementation Notes:**
+- NO caching - always fetch fresh data
+- URL updates without page reload via pushState
+- Job selection persists through F5 refresh
+- Billing updates trigger multi-component refresh
+- Workflow stats update both state and database
 
 ### JobContainer.jsx - Module Orchestrator & Central Data Loader (ENHANCED!)
 
