@@ -716,9 +716,11 @@ useEffect(() => {
     }
     if (marketLandData.worksheet_data.descriptions) {
       setVcsDescriptions(marketLandData.worksheet_data.descriptions);
+      debug('✅ Loaded VCS descriptions:', marketLandData.worksheet_data.descriptions);
     }
     if (marketLandData.worksheet_data.types) {
       setVcsTypes(marketLandData.worksheet_data.types);
+      debug('✅ Loaded VCS types:', marketLandData.worksheet_data.types);
     }
   }
 
