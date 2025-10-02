@@ -1107,7 +1107,7 @@ getPackageSaleData(properties)
 - **Property Assignment System**: Handles 1000+ property CSV uploads with batch processing
 - **Payroll Period Detection**: Knows when updates are needed for accurate payroll/billing
 - **Live Metrics Integration**: Prioritizes real-time data from App.js over database values
-- **Freshness Tracking**: Color-coded indicators (Green ≤3 days, Yellow ≤14 days, Red >14 days)
+- **Freshness Tracking**: Color-coded indicators (Green ���3 days, Yellow ≤14 days, Red >14 days)
 
 **Smart Patterns:**
 - **Assignment-Aware Display**: Shows "Residential Only" when no commercial properties assigned
@@ -1393,17 +1393,34 @@ sales_history: {
 **Scale**: 2,600+ lines combining HR operations with cross-job performance analytics
 
 **Core Features:**
-- **Global Inspector Performance Analytics**: Loads ALL inspection data across ALL jobs with pagination
+- **Global Inspector Performance Analytics**: Loads ALL inspection data across ALL jobs with pagination (45K+ records)
 - **Smart Employee Import**: Excel upload with automatic role detection and inactive status management
 - **FTE Calculation Engine**: Real workforce capacity based on hours worked (part-time = hours/40)
 - **Inspector Performance Tiles**: ProductionTracker-style metrics by role type
 - **Bulk Communication System**: Email by role, region, or selection with clipboard support
+- **Employee Enrichment Pipeline**: Matches inspection records with employees via initials lookup
 
 **Tabs = Mini Applications:**
-- **Overview**: Full analytics dashboard + FTE analysis
+- **Overview**: Full analytics dashboard + FTE analysis + Role distribution panels
 - **Directory**: Complete contact management with filtering
 - **HR Forms**: Document repository
 - **Data Management**: Import/export/quality control
+
+**Key Display Components:**
+- **FTE Analysis Panel**: Shows Total FTE, Full-Time FTE, Part-Time FTE, and FTE Efficiency (FTE vs headcount ratio)
+- **Role Distribution Visual**:
+  - Inspector Types: Residential, Commercial, Management, Clerical, Owners
+  - Employment Types: Full-Time, Part-Time, Contractors with counts
+- **Top Performers Tracking**: Identifies best residential and commercial inspectors by metrics
+- **Regional Statistics**: Aggregates total inspections and inspector counts by region
+
+**Analytics Processing Pipeline:**
+1. Load 45K+ inspection records with pagination (500/batch)
+2. Enrich with employee data via initials matching
+3. Add job-specific InfoBy configs and vendor types
+4. Handle special cases: "PO" (Per Office) and empty initials
+5. Cache both raw and processed data for 5 minutes
+6. Allow filter changes without database reload
 
 **Key Patterns:**
 - Inactive employee auto-detection from import files
@@ -1411,7 +1428,6 @@ sales_history: {
   - Residential: Entry/Refusal rates, daily averages
   - Commercial: Inspection counts, pricing metrics
   - Management: Combined view of both residential AND commercial
-- Paginated loading for handling millions of inspection records
 - The "three kings" hardcoded: Tom Davis (Owner), Brian Schneider (Owner), James Duda (Management) 👑
 
 **Production Details:**
@@ -1422,7 +1438,10 @@ sales_history: {
 - Export functionality for HR reporting
 - Quarter filtering for analytics (Q1-Q4 2024-2025)
 - 3-retry logic with exponential backoff for failed data loads
-- **Caching**: 5-minute cache on analytics raw data (45K+ records) to enable fast filter changes without database reload
+- **Enhanced Caching**:
+  - Stores both `rawData` (45K records) and `processedResults`
+  - 5-minute cache expiration with timestamp tracking
+  - Enables instant filter changes without database hits
 
 ## Component Complexity Rankings (Reality Check!)
 
