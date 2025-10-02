@@ -155,7 +155,7 @@ src/
 │   └── job-modules/
 │       ├── JobContainer.jsx           ← Job module dispatcher, navigation & DATA LOADER (NEW ROLE!)
 │       ├── ManagementChecklist.jsx    ← 29-item workflow management (✅ IMPLEMENTED)
-│       ├─�� ProductionTracker.jsx      ← Analytics & payroll engine (✅ IMPLEMENTED - 4,400+ lines!)
+���       ├─�� ProductionTracker.jsx      ← Analytics & payroll engine (✅ IMPLEMENTED - 4,400+ lines!)
 │       ├── MarketLandAnalysis.jsx     ← 6-tab valuation parent component (🚧 IN DEVELOPMENT)
 │       ├── market-tabs/               ← Individual tab components (NEW STRUCTURE)
 │       │   ├── DataQualityTab.jsx    ← Data validation and error checking
@@ -1201,7 +1201,7 @@ Each component receives:
 ```
 ┌─────────────────────────────────────────────────┐
 │ Loading property records                     75% │
-│ ████████████████████████░░░░░░░░  12,450/16,600 │
+│ ████████████████████████░░��░░░░░  12,450/16,600 │
 │ records loaded (assigned only)                   │
 └─────────────────────────────────────────────────┘
 ```
@@ -1561,103 +1561,113 @@ workflowStats = {
 }
 ```
 
-### MarketAnalysis.jsx - Comprehensive Valuation System (🚧 IN DEVELOPMENT)
+### MarketAnalysis.jsx - Comprehensive Valuation System Parent 🎯
 
-**Architecture**: Parent component managing 6 integrated tab components
+**Scale**: 173 lines - lightweight orchestrator for 6 heavyweight tab components
 
-**NEW Data Flow Pattern (No Double Loading!)**:
-- Receives `properties` from JobContainer props (single load!)
-- Extracts `vendor_type` from jobData.vendor_type
-- Uses `parsed_code_definitions` from jobData
-- Builds `availableFields` from received properties
-- Shows property count in header
-- Manages unsaved changes tracking
+**Core Philosophy**: Tab orchestrator receiving props from JobContainer, no double loading
+
+**Architecture Pattern:**
+```
+JobContainer loads data once → MarketAnalysis receives props → Distributes to tabs
+```
+
+**Props Received from JobContainer:**
+- `properties` - Complete property array (pre-loaded, filtered if assigned)
+- `jobData` - Job metadata including vendor_type, parsed_code_definitions
+- `marketLandData` - market_land_valuation record
+- `hpiData` - County HPI data for normalization
+- `checklistStatus` - For auto-completion tracking
+- `onUpdateJobCache` - Callback for refreshing parent data
 
 **Tab Structure:**
 1. **Data Quality/Error Checking** - Validate data integrity, identify issues
 2. **Pre-Valuation Setup** - Normalization (time/size) + Page by Page Worksheet
 3. **Overall Analysis** - General analysis including Condos
-4. **Land Valuation** - Complete 7-section land system with Economic Obsolescence
+4. **Land Valuation** - Complete 7-section land system with Economic Obsolescence (4,400+ lines!)
 5. **Cost Valuation** - New Construction + Cost Conversion Factor
 6. **Attribute & Card Analytics** - Condition/Misc Items + Additional Cards
 
-#### Pre-Valuation Setup Tab Details
+**Data Flow Management:**
+- **No Double Loading**: Uses properties from JobContainer props
+- **Vendor Detection**: Extracts from jobData.vendor_type
+- **Code Definitions**: Uses jobData.parsed_code_definitions
+- **Property Count**: Displays in header from props.length
+- **Unsaved Changes**: Tracks via landValuationSession state
 
-**Normalization Component:**
-- **Time Normalization**: Uses county_hpi_data table, applies HPI multipliers to target year (typically 2012)
-- **Size Normalization**: Jim's 50% formula: `(((current_size - sale_size) * ((sale_price / sale_size) * 0.50)) + sale_price`
-- **Sales Ratio Analysis**: Calculate ratios first, flag outliers outside 15% of equalization ratio
-- **Property Type Groupings**: Uses asset_typeuse codes (10=single family, 42/43/44=multifamily, etc.)
-- **Manual Review Interface**: Keep/Reject decisions for flagged sales
-- **Results Storage**: values_norm_time and values_norm_size fields
+**Tab Component Complexity:**
+- **LandValuationTab**: 4,400+ lines (THE BEAST!)
+- **PreValuationTab**: 3,726 lines
+- **DataQualityTab**: 2,651 lines
+- **CostValuationTab**: ~1,500 lines
+- **OverallAnalysisTab**: ~1,000 lines
+- **AttributeCardsTab**: ~800 lines
 
-**Page by Page Worksheet Component:**
-- **Excel-like data grid** for systematic property review
-- **Manual entry fields**: newVCS, location_analysis, asset_zoning, asset_map_page, asset_key_page
-- **Multi-page support**: Properties can span pages (format: "12,13,14" or "12-15")
-- **Location standardization**: Smart fuzzy matching to prevent typos ("railraod" → "Railroad")
-- **VCS management**: Manager-generated alphanumeric codes (A1, DOWNTOWN, SECTOR-5)
-- **Auto-save persistence**: Every 30 seconds, never lose work
-- **Progress tracking**: By map page and overall completion
+**Inter-Tab Communication:**
+- Custom events for navigation from ManagementChecklist
+- `navigate_market_analysis_tab` event listener
+- `navigate_prevaluation_subtab` for inner tab navigation
+- `navigate_landvaluation_subtab` for land section navigation
 
-#### Land Valuation Tab Details
+**Session Management:**
+```javascript
+landValuationSession = {
+  hasUnsavedChanges: boolean,
+  lastSaved: timestamp,
+  currentSection: string,
+  dataVersion: number
+}
+```
 
-**Complete 7-Section System:**
+**Header Display:**
+```
+Market & Land Analysis
+Properties: 5,234 | Vendor: BRT | [Unsaved Changes indicator]
+```
 
-1. **Data Preparation & Import**
-   - Auto-scan for vacant land sales (PROPCLASS = 1 or 3B)
-   - Auto-exclude package deals (same deed book/page)
-   - Pre-filter and group improved sales by VCS
+**Tab Navigation Pattern:**
+- Maintains active tab state
+- No data reload on tab switch
+- Preserves work between tabs
+- Shows unsaved changes warning
 
-2. **Raw Land Rate Determination**
-   - **Method 1**: Vacant Land Sales Analysis
-   - **Method 2**: Lot Size Analysis (for validation)
-   - Conservative approach: Use lower of two methods
-   - Cascade options: 3-6 steps (Prime, Second, Excess rates)
+**External Navigation Support:**
+From ManagementChecklist, items can directly navigate to specific tabs:
+- "Market Analysis" → pre-valuation → marketAnalysis subtab
+- "Page by Page Analysis" → pre-valuation → worksheet subtab
+- "VCS Reviewed/Reset" → land-valuation → vcs-sheet subtab
+- "Cost Conversion Factor Set" → cost-valuation tab
+- "Land Value Tables Built" → land-valuation tab
 
-3. **Land Allocation Validation**
-   - Test rates on vacant sales (target ratio 0.9-1.1)
-   - Apply to improved sales (target allocation 25-40%)
-   - Market validation analysis
+**Browser Integration:**
+- beforeunload handler warns about unsaved changes
+- Scroll to top on external navigation
+- Tab state persists during module switches
 
-4. **Special Condition Rate Development**
-   - Wetlands, open space, conservation easements
-   - Market-derived adjustment rates
-   - Self-improving system with manager notation
+**Available Fields Detection:**
+Builds list of available fields from properties for dropdown menus:
+```javascript
+const fieldList = properties.length > 0 ?
+  Object.keys(properties[0]).filter(key =>
+    typeof properties[0][key] !== 'object'
+  ) : [];
+```
 
-5. **VCS Site Value Framework**
-   - Neighborhood-specific base site values ($120K-$165K typical)
-   - Market profile data for validation
-   - Zoning and development context
+**Props Distribution to Tabs:**
+Each tab receives:
+- All parent props (properties, jobData, etc.)
+- activeTab for visibility control
+- vendorType extracted from jobData
+- codeDefinitions from parsed_code_definitions
+- onUpdateJobCache for parent refresh
 
-6. **Economic Obsolescence Analysis**
-   - **Negative adjustments**: Highway/traffic (-10% to -25%), Railroad (-15% to -25%), Power lines (-5% to -20%)
-   - **Positive adjustments**: River proximity (+5%), beneficial easements
-   - **Combination effects**: Multiple factors stack with maximum limits
-   - **Factor code system**: HT, RR, PL, PV, ES, RIV, I78, etc.
-
-7. **Site Value Calculator**
-   - Final formula: `VCS Base + Raw Land Component + Special Adjustments + Economic Obsolescence`
-   - Batch processing capability
-   - Quality control and allocation checks
-   - Complete audit trail for appeals
-
-#### Overall Analysis Tab Details
-
-**Block Value Mapping Component:**
-- **Configurable color scales**: Starting value and increment size
-- **Bluebeam Revu integration**: 32-color palette for PDF map editing
-- **Consistency metrics** (with popup details):
-  - Age Consistency: High (≤10 years), Medium (11-25), Low (26-50), Mixed (>50)
-  - Size Consistency: Based on coefficient of variation (≤15% = High)
-  - Design Consistency: Building class variety (1-2 types = High)
-- **Property type filtering**: Single family, multifamily, commercial, all residential
-- **Export options**: PDF reference sheet, CSV for mapping software
-
-**Condo Analysis Integration:**
-- Special handling for condo properties
-- Unit-based valuation adjustments
-- Common area allocations
+**Critical Implementation Notes:**
+- Lightweight parent, heavy lifting in tabs
+- No duplicate data loading
+- Tab components handle their own state
+- External navigation events respected
+- Unsaved changes protection
+- Property count always visible
 
 ### ManagementChecklist.jsx - 29-Item Workflow Management System ✅
 
