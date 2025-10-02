@@ -474,9 +474,9 @@ const App = () => {
   }, [appData, loadJobFreshness]);
 
   // ==========================================
-  // SURGICAL DATA UPDATES
+  // TARGETED DATA UPDATES
   // ==========================================
-  const updateCacheItem = useCallback(async (type, id, data) => {
+  const updateDataSection = useCallback(async (type, id, data) => {
     console.log('🔧 Updating app data:', type, id);
 
     // For any billing-related updates, just reload fresh data
