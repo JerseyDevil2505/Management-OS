@@ -169,7 +169,7 @@ src/
 ├── lib/
 │   ├── supabaseClient.js              ← Core services, business logic & interpretCodes (ENHANCED!)
 │   └── data-pipeline/
-│       ├── brt-processor.js           ← BRT initial job creation (INSERT)
+│       ├─��� brt-processor.js           ← BRT initial job creation (INSERT)
 │       ├── brt-updater.js             ← BRT ongoing updates (UPSERT)
 │       ├── microsystems-processor.js  ← Microsystems initial job creation (INSERT)
 │       └── microsystems-updater.js    ← Microsystems ongoing updates (UPSERT)
@@ -1096,12 +1096,12 @@ getPackageSaleData(properties)
 **Scale**: 3,200+ lines managing entire job lifecycle with real-time monitoring
 
 **Core Features:**
-- **Five-Tab Command Center**: Each tab is essentially a complete application
-  - Active Jobs: Live metrics, assignment management, freshness tracking
-  - Planning Jobs: Pipeline management with job conversion workflow
-  - Archived Jobs: Historical reference system
-  - County HPI: Housing Price Index data management for valuation
-  - Manager Assignments: Workload distribution analytics
+- **Five-Tab Command Center with Live Counts**: Each tab shows real-time record counts
+  - Active Jobs: Live metrics, assignment management, freshness tracking, database connection indicator
+  - Planning Jobs: Pipeline management with job conversion workflow, Add/Edit/Delete functionality
+  - Archived Jobs: Historical reference system (includes both 'archived' and 'draft' status)
+  - County HPI: Housing Price Index data management per county with import/update buttons
+  - Manager Assignments: Workload distribution analytics (excludes Tom Davis from display)
 
 - **Real-Time Batch Processing Monitor**: Console.log hijacking shows users live import progress
 - **Property Assignment System**: Handles 1000+ property CSV uploads with batch processing
