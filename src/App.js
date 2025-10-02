@@ -1104,7 +1104,7 @@ const App = () => {
             jobs={appData.jobs}
             archivedPeriods={appData.archivedPayrollPeriods}
             dataRecency={appData.dataRecency}
-            onDataUpdate={updateCacheItem}
+            onDataUpdate={updateDataSection}
             onRefresh={() => loadLiveData(['payroll'])}
           />
         ) : (
