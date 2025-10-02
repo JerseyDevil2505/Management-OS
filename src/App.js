@@ -1062,7 +1062,7 @@ const App = () => {
             jobFreshness={appData.jobFreshness}
             inspectionData={appData.inspectionData}
             workflowStats={appData.workflowStats}
-            onDataUpdate={updateCacheItem}
+            onDataUpdate={updateDataSection}
             onRefresh={() => loadLiveData(['jobs'])}
           />
         )}
