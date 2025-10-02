@@ -258,20 +258,20 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
                 onAnalysisUpdate={async (data, opts) => {
-                  // CRITICAL FIX: Reload marketLandData from database after saves
-                  console.log('LandValuation reported analysis update; refreshing parent data from database');
+                  // SURGICAL REFRESH: Only reload marketLandData without global refresh
+                  console.log('LandValuation reported analysis update; triggering surgical refresh');
 
-                  // Trigger full data reload from database
-                  if (typeof onUpdateJobCache === 'function' && jobData?.id) {
+                  // Use targeted refresh for marketLandData only
+                  if (typeof refreshMarketLandData === 'function') {
                     try {
-                      await onUpdateJobCache(jobData.id, { forceRefresh: true });
-                      console.log('✅ Parent data refreshed successfully - marketLandData is now fresh from DB');
+                      await refreshMarketLandData();
+                      console.log('✅ Market land data refreshed surgically - no global refresh');
                     } catch (e) {
-                      console.error('❌ Failed to refresh parent data:', e);
+                      console.error('❌ Failed to refresh market land data:', e);
                     }
                   }
 
-                  // Also mark module as changed
+                  // Mark module as changed
                   if (typeof onDataChange === 'function') onDataChange();
                 }}
                 // Session state management props
