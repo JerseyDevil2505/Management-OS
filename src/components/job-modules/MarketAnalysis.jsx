@@ -257,9 +257,21 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
-                onAnalysisUpdate={(data, opts) => {
-                  // Do NOT trigger a parent reload here. Mark module dirty instead so parent can refresh on switch.
-                  console.log('LandValuation reported analysis update; marking module dirty');
+                onAnalysisUpdate={async (data, opts) => {
+                  // CRITICAL FIX: Reload marketLandData from database after saves
+                  console.log('LandValuation reported analysis update; refreshing parent data from database');
+
+                  // Trigger full data reload from database
+                  if (typeof onUpdateJobCache === 'function' && jobData?.id) {
+                    try {
+                      await onUpdateJobCache(jobData.id, { forceRefresh: true });
+                      console.log('✅ Parent data refreshed successfully - marketLandData is now fresh from DB');
+                    } catch (e) {
+                      console.error('❌ Failed to refresh parent data:', e);
+                    }
+                  }
+
+                  // Also mark module as changed
                   if (typeof onDataChange === 'function') onDataChange();
                 }}
                 // Session state management props
