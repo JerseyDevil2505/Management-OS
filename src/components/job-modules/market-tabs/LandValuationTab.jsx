@@ -2973,6 +2973,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ...prev,
       [vcs]: description
     }));
+
+    // Trigger autosave to persist the description
+    debug('💾 Triggering autosave for VCS description change');
+    setTimeout(() => {
+      if (window.landValuationSave) {
+        window.landValuationSave({ source: 'autosave' });
+      }
+    }, 1000); // 1 second delay to batch rapid typing
   };
 
 
@@ -2981,6 +2989,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ...prev,
       [vcs]: type
     }));
+
+    // Trigger autosave to persist the type change
+    debug('💾 Triggering autosave for VCS type change');
+    setTimeout(() => {
+      if (window.landValuationSave) {
+        window.landValuationSave({ source: 'autosave' });
+      }
+    }, 500);
   };
 
   const toggleFieldCollapse = (fieldName) => {
