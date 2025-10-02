@@ -474,7 +474,7 @@ const App = () => {
   }, [appData, loadJobFreshness]);
 
   // ==========================================
-  // SURGICAL CACHE UPDATES (renamed but keeping same interface)
+  // SURGICAL DATA UPDATES
   // ==========================================
   const updateCacheItem = useCallback(async (type, id, data) => {
     console.log('🔧 Updating app data:', type, id);
