@@ -1173,11 +1173,13 @@ Each component receives:
 - Billing updates trigger multi-component refresh
 - Workflow stats update both state and database
 
-### JobContainer.jsx - Module Orchestrator & Central Data Loader (ENHANCED!)
+### JobContainer.jsx - Module Orchestrator & Central Data Loader 🎛️
 
-**Scale**: Central hub for all job modules with unified data loading
+**Scale**: ~500 lines, central hub for all job modules with unified data loading
 
-**Core Features:**
+**Core Philosophy**: Load data once, distribute everywhere - eliminate duplicate queries
+
+**Key Features:**
 - **Single Property Load Pattern**: Loads ALL property_records once with pagination
 - **Assignment-Aware Filtering**: Respects `has_property_assignments` flag
 - **Progress Bar in Banner**: Shows real-time loading progress (no modal!)
@@ -1185,22 +1187,105 @@ Each component receives:
 - **Module Tab Navigation**: Clean switching between 5 modules
 - **Version Tracking**: Shows current data/code versions
 - **Props Distribution**: Passes loaded data to all child modules
+- **Analytics State Bridge**: Connects ProductionTracker to App.js
 
-**Data Loading Process:**
-1. Check `jobs.has_property_assignments` flag
-2. If true, add `.eq('is_assigned_property', true)` to query
-3. Load properties in 1000-record batches
-4. Update progress bar in banner
-5. Distribute to all modules via props
+**Data Loading Stages:**
+1. **Initialize**: Load job metadata, file versions, code definitions
+2. **Check Assignments**: Query `has_property_assignments` flag
+3. **Load Properties**: Paginated query with optional assignment filter
+4. **Load Supporting Data**: Inspection data, market data, HPI data, checklist
+5. **Load Employees**: For inspector validation
+6. **Distribute Props**: Pass all data to active module
 
-**Smart Patterns:**
-- Loads `parsed_code_definitions` from jobs table
-- Detects `vendor_type` from job data
-- Shows "Assigned Properties Only" badge when filtering active
-- Refreshes data when files are processed via `fileRefreshTrigger`
-- Maintains module state during navigation
-- Handles `handleFileProcessed` for file updates
-- Handles `handleAnalyticsUpdate` for ProductionTracker integration
+**Loading Progress Display:**
+```
+┌─────────────────────────────────────────────────┐
+│ Loading property records                     75% │
+│ ████████████████████████░░░░░░░░  12,450/16,600 │
+│ records loaded (assigned only)                   │
+└─────────────────────────────────────────────────┘
+```
+
+**Assignment Filtering Logic:**
+```javascript
+if (jobData.has_property_assignments) {
+  query = query.eq('is_assigned_property', true);
+  // Shows "Assigned Properties Only" badge
+}
+```
+
+**Module Navigation:**
+- Checklist (ManagementChecklist)
+- ProductionTracker (shows ✓ when processed)
+- Market & Land Analysis
+- Final Valuation (placeholder)
+- Appeal Coverage (placeholder)
+
+**Props Distribution Pattern:**
+```javascript
+baseProps = {
+  jobData,              // Complete job metadata
+  properties,           // ALL loaded properties
+  inspectionData,       // Inspection records
+  marketLandData,       // Market land valuation
+  hpiData,              // County HPI data
+  checklistItems,       // Checklist status
+  employees,            // For validation
+  latestFileVersion,    // Current data version
+  onFileProcessed,      // Callback for updates
+  onUpdateJobCache,     // Job refresh callback
+}
+```
+
+**ProductionTracker Integration:**
+- Passes currentWorkflowStats from App.js
+- Handles onAnalyticsUpdate callback
+- Transforms analytics to App.js format
+- Persists to jobs.workflow_stats
+- Shows green checkmark when processed
+
+**Performance Metrics:**
+- 5,000 properties: ~5 seconds total load time
+- 13,000 properties: ~13 seconds total load time
+- 16,000+ properties: ~16-20 seconds total load time
+- Batch size: 1000 records per database query
+- Delay between batches: 100ms to prevent overload
+
+**Smart Behaviors:**
+- **No Double Loading**: Properties load once, shared across all modules
+- **Progress Calculation**: (loadedCount / totalCount) * 100
+- **Error Recovery**: Retry button for failed loads
+- **Module State Preservation**: Switching tabs doesn't reload data
+- **File Processing Hook**: Refreshes when FileUploadButton processes
+- **Analytics Completion Detection**: Shows indicator when ProductionTracker finishes
+
+**Version Banner States:**
+- **Loading**: Shows progress bar with percentage
+- **Success**: Blue banner with version info and property count
+- **Error**: Red banner with error message and retry option
+- **Assignment Mode**: Yellow badge "Assigned Properties Only"
+
+**Data Update Flow:**
+```
+FileUploadButton processes → setFileRefreshTrigger →
+JobContainer reloads → Updates all module props
+```
+
+**Module Props Interface:**
+Each module receives the complete data package, preventing need for individual queries:
+- Properties array (filtered if assignments active)
+- Supporting data (inspection, market, HPI)
+- Callbacks for updates and refresh
+- Version tracking information
+- Loading state indicators
+
+**Critical Implementation Notes:**
+- Always loads from property_records, never from cache
+- Pagination prevents Supabase timeout on large datasets
+- Assignment filtering happens at database level, not client
+- Progress bar updates smoothly with each batch
+- Module switching preserves all loaded data
+- FileUploadButton integration triggers automatic refresh
 
 ### AdminJobManagement.jsx - Enterprise Job Operations Platform 🚀
 
