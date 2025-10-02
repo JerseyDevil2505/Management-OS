@@ -1092,6 +1092,16 @@ const getPricePerUnit = useCallback((price, size) => {
   //   return () => clearTimeout(timeoutId);
   // }, [vacantSales.length, Object.keys(saleCategories).length, isInitialLoadComplete]);
 
+  // Trigger calculations ONCE after initial load completes
+  useEffect(() => {
+    if (isInitialLoadComplete && properties && properties.length > 0) {
+      console.log('✅ Initial load complete - triggering first calculations with saved data');
+      filterVacantSales();
+      performBracketAnalysis();
+      loadVCSPropertyCounts();
+    }
+  }, [isInitialLoadComplete]); // Only run once when initial load completes
+
   // Clear Method 1 temporary variables after filtering is complete
   useEffect(() => {
     if (isInitialLoadComplete && window._method1ExcludedSales) {
@@ -3387,7 +3397,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return;
     }
 
-    debug('💾 Saving target allocation:', `${targetValue}%`, 'for job:', jobData.id);
+    debug('�� Saving target allocation:', `${targetValue}%`, 'for job:', jobData.id);
 
     try {
       // Check if record exists first
@@ -7658,7 +7668,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         <td style={{ padding: '8px', textAlign: 'right' }}>{prop.asset_sfla || '-'}</td>
                         <td style={{ padding: '8px' }}>
                           {prop.asset_year_built || '-'}
-                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>���️</span>}
+                          {isPreConstruction && <span style={{ color: '#F59E0B', marginLeft: '4px' }}>��️</span>}
                         </td>
                         <td style={{ padding: '8px' }}>{prop.asset_type_use || '-'}</td>
                       </tr>
