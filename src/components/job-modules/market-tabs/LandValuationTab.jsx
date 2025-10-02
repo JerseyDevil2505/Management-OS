@@ -576,6 +576,7 @@ useEffect(() => {
     }
   } else if (restoredFromSession) {
     debug('⏭️ Skipping cascade config DB load - already restored from session');
+  }
 
   // Skip the duplicate cascade_rates assignment - it's redundant
   // if (marketLandData.cascade_rates) {
