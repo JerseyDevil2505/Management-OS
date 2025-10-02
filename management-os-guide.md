@@ -1199,7 +1199,7 @@ Each component receives:
 
 **Loading Progress Display:**
 ```
-┌─────────────────────────────────────────────────┐
+┌─��───────────────────────────────────────────────┐
 │ Loading property records                     75% │
 │ ████████████████████████░░��░░░░░  12,450/16,600 │
 │ records loaded (assigned only)                   │
@@ -2017,7 +2017,7 @@ standardLocations = [
 │ Single   │ 1,234 │   1985   │  1,850   │  156  │ $285,000  │
 │ Multi    │   432 │   1972   │  1,450   │   45  │ $225,000  │
 │ Condo    │   789 │   1998   │  1,100   │   89  │ $165,000  │
-└────────────────────────────────────────────────────────────┘
+└───────────────────���────────────────────────────────────────┘
 ```
 
 **Design Style Analysis:**
@@ -2142,6 +2142,548 @@ VCS: RIVERSIDE COMPLEX
 - Condo Identification: Type use starts with '6'
 - Size Adjustment: Always uses 50% method
 - Minimum Sales: Groups need 3+ sales for statistics
+
+### LandValuationTab.jsx - Complete 7-Section Land Valuation System 🏞️
+
+**Scale**: ~10,000 lines - **THE ABSOLUTE LARGEST COMPONENT IN THE ENTIRE SYSTEM**
+
+**Core Philosophy**: Comprehensive land valuation using multiple methodologies, economic obsolescence analysis, and VCS-based rate structures
+
+**Three Valuation Modes:**
+1. **Acre Mode** (Default) - Uses acreage for calculations
+2. **Square Foot Mode** - Alternative calculation method for smaller lots
+3. **Front Foot Mode** - When frontage data is available (SFFR/EFFR rates)
+
+**Seven Main Sections:**
+1. **VCS Sheet** - Neighborhood configuration and zoning parameters
+2. **Method 1: Vacant Land Sales Analysis** - Direct vacant land sales comparison
+3. **Method 2: Lot Size Analysis** - Modal distribution analysis
+4. **Rate Tables** - Cascade configuration with break points
+5. **Economic Obsolescence** - Location factor adjustments
+6. **Allocation Study** - Validation and distribution analysis
+7. **Special Regions** - Region-specific rate overrides
+
+**Valuation Mode Configuration:**
+
+**Acre Mode (Default):**
+- Primary calculation: Total Acreage × Rate per Acre
+- Auto-converts SF to acres (÷ 43,560)
+- Cascade breaks on acreage thresholds
+- Typical for suburban/rural properties
+
+**Square Foot Mode:**
+- Direct SF calculation without conversion
+- Rate per square foot
+- Cascade breaks on SF thresholds
+- Typical for urban/high-density areas
+
+**Front Foot Mode:**
+- Uses asset_lot_frontage field
+- Frontage × Depth × Rate per Front Foot
+- SFFR/EFFR rate structures
+- Common for commercial/waterfront properties
+
+**Section 1: VCS Sheet Configuration**
+
+**Key Features:**
+- **Act Site vs Rec Site**: Manual override vs calculated recommendation
+- **VCS Type Classification**: Residential/Commercial/Mixed designation
+- **Zoning Configuration**: Complete zoning parameters per VCS
+- **Property Count Display**: Shows affected property counts per VCS
+- **Collapsible Field Groups**: UI optimization for large datasets
+
+**VCS Sheet Fields:**
+```
+VCS Code: A1 (DOWNTOWN RESIDENTIAL)
+├── Type: Residential
+├── Properties: 1,234 affected
+├── Act Site Rate: $45,000/acre (manual override)
+├── Rec Site Rate: $42,500/acre (calculated)
+├── Zoning Config:
+│   ├── Minimum Lot Size: 0.25 acres
+│   ├── Max FAR: 0.35
+│   ├── Setback Requirements: Front 25', Side 10', Rear 30'
+│   └── Special Restrictions: Historic district overlay
+└── Special Region: None
+```
+
+**VCS Configuration Storage:**
+- Saves to market_land_valuation.worksheet_data
+- JSONB structure for flexible schema
+- Tracks manual overrides vs calculated recommendations
+- Version history for rate changes
+
+**Section 2: Method 1 - Vacant Land Sales Analysis**
+
+**Process:**
+- Filters properties with minimal/no improvements
+- Analyzes sale prices per acre/SF
+- Excludes outliers and non-arms-length transactions
+- Groups by VCS for rate recommendation
+
+**Exclusion Management:**
+- Track excluded sales per method
+- Reasons: Package sale, non-market, contaminated, etc.
+- Exclusion persistence across sessions
+- Export capability for audit trail
+
+**Method 1 Results:**
+```
+VCS A1 - Vacant Land Analysis
+├── Valid Sales: 45
+├── Excluded: 12 (reasons tracked)
+├── Average $/Acre: $42,500
+├── Median $/Acre: $41,200
+├── Range: $28,000 - $65,000
+├── Standard Deviation: $8,200
+└── Recommended Rate: $42,500 (median)
+```
+
+**Section 3: Method 2 - Lot Size Analysis**
+
+**Modal Analysis:**
+- Distribution analysis of lot sizes
+- Identifies predominant lot size(s)
+- Price per acre for modal lots
+- Detailed review modal for verification
+
+**Modal Review Features:**
+- Interactive histogram
+- Outlier identification
+- Size clustering visualization
+- Sale validation interface
+
+**Method 2 Results:**
+```
+VCS A1 - Lot Size Analysis
+├── Total Properties: 1,234
+├── Modal Size: 0.50 acres (789 properties)
+├── Secondary Modal: 0.25 acres (234 properties)
+├── Sales at Modal Size: 23
+├── Average Price: $21,250 per lot
+├── Calculated Rate: $42,500/acre ($21,250 ÷ 0.50)
+└── Confidence: High (large sample)
+```
+
+**Conservative Selection:**
+- System recommends lower of Method 1 and Method 2
+- Safety margin for defensible valuations
+- Override capability with justification required
+- Tracks selection rationale in database
+
+**Section 4: Cascade Configuration**
+
+**Break Points Configuration:**
+- Customizable acreage/SF thresholds
+- 3-6 step cascades (flexible)
+- Rate stepping: automatic or manual degradation
+- Visual rate table with color coding
+
+**Standard 6-Step Cascade Example:**
+```
+VCS A1 - Residential Cascade
+┌───────────────────────────────────��─────────┐
+│ Break Point │ Rate/Acre │ Degradation      │
+├─────────────────────────────────────────────┤
+│ 0.00 - 0.50 │ $45,000   │ BASELINE         │
+│ 0.51 - 1.00 │ $42,000   │ -6.7%            │
+│ 1.01 - 2.00 │ $38,000   │ -9.5%            │
+│ 2.01 - 5.00 │ $32,000   │ -15.8%           │
+│ 5.01 - 10.0 │ $25,000   │ -21.9%           │
+│ 10.01+      │ $18,000   │ -28.0%           │
+└─────────────────────────────────────────────┘
+```
+
+**Rate Stepping Options:**
+- **Automatic**: System calculates degradation based on market data
+- **Manual**: Manager sets each rate individually
+- **Percentage**: Define degradation % per step
+- **Copy from VCS**: Inherit cascade from similar neighborhood
+
+**Special Region Cascades:**
+- Separate cascade logic per region
+- Region-specific rate adjustments
+- Override standard VCS rates when applicable
+- Visual highlighting in rate tables
+
+**Section 5: Economic Obsolescence Analysis**
+
+**9 Default Location Codes:**
+1. **BS** - Busy Street (with traffic level integration)
+2. **RR** - Railroad
+3. **HW** - Highway
+4. **IN** - Industrial
+5. **CO** - Commercial
+6. **PL** - Power Lines
+7. **WF** - Waterfront (positive factor)
+8. **PK** - Park (positive factor)
+9. **GC** - Golf Course (positive factor)
+
+**Traffic Level Integration:**
+- For BS (Busy Street) code, tracks specific traffic volumes
+- ADT (Average Daily Traffic) ranges
+- Adjustment scales with traffic intensity
+- Example: BS-5000 (5,000 ADT) vs BS-25000 (25,000 ADT)
+
+**Compound Factors:**
+- System handles multiple factors: "BS/RR" (Busy Street + Railroad)
+- Compound calculation: Applies both adjustments
+- Standalone vs Compound Analysis: Separates single factors from combinations
+- Override capability for unusual combinations
+
+**Custom Location Codes:**
+- Users can add beyond the 9 default codes
+- Custom code configuration (positive/negative)
+- Adjustment percentage per code
+- Persistence across sessions
+
+**Economic Obsolescence Workflow:**
+```
+1. Identify Location Factors:
+   Property 123-45-67: BS/RR (Busy Street + Railroad)
+
+2. Apply Adjustments:
+   Base Land Value: $50,000
+   BS Adjustment: -8%
+   RR Adjustment: -5%
+   Compound Total: -13% (additive)
+   Adjusted Value: $43,500
+
+3. Summary Adjustments:
+   Cross-VCS averaging for consistent application
+   Review compound factors for reasonableness
+   Export worksheet for documentation
+```
+
+**Positive/Negative Split:**
+- Separate fields for beneficial vs detrimental factors
+- eco_obs_positive: Waterfront, Park, Golf Course
+- eco_obs_negative: Busy Street, Railroad, Highway, Industrial
+- Net adjustment calculation
+- Visual indicators (green/red) in UI
+
+**Summary Adjustments:**
+- Cross-VCS averaging for consistent application
+- Identifies inconsistencies across neighborhoods
+- Recommended standard adjustments
+- Manager review and approval workflow
+
+**Data Persistence:**
+Saves to market_land_valuation table:
+- `eco_obs_code_config` - Complete configuration (codes, percentages, custom codes)
+- `eco_obs_applied_adjustments` - Actual percentages applied per property
+- `eco_obs_compound_overrides` - Compound factor handling rules
+- `eco_obs_summary_adjustments` - Cross-VCS summary statistics
+
+**Section 6: Special Regions Feature**
+
+**9 Predefined Regions:**
+1. **Pinelands** - NJ Pinelands National Reserve
+2. **Highlands** - NJ Highlands Water Protection Area
+3. **Coastal** - CAFRA zones
+4. **Wetlands** - DEP wetlands restrictions
+5. **Historic** - Historic district overlays
+6. **Flood** - FEMA flood zones
+7. **Airport** - Airport noise zones
+8. **Brownfield** - Contaminated/remediation sites
+9. **Agricultural** - Farmland preservation areas
+
+**Custom Region Creation:**
+- Define new region with boundaries
+- Set region-specific rate overrides
+- Attach to properties via GIS or manual assignment
+- Track region impact on valuations
+
+**Region-Specific Rate Overrides:**
+```
+VCS A1 - Base Rate: $45,000/acre
+├── Standard Properties: $45,000/acre
+├── Pinelands Override: $15,000/acre (-67%)
+├── Wetlands Override: $8,000/acre (-82%)
+└── Historic District: $52,000/acre (+16%)
+```
+
+**Visual Highlighting:**
+- Color-coded rate tables by region
+- Map integration (if available)
+- Property count per region
+- Impact analysis dashboard
+
+**Section 7: Allocation Study & Validation**
+
+**Purpose:**
+- Validates land value as % of total property value
+- Identifies over/under-valued land assessments
+- Ensures defensible allocation ratios
+- Tracks target allocation percentage
+
+**Target Allocation Configuration:**
+- Saves to market_land_valuation.target_allocation
+- Typical residential: 25-35% land
+- Commercial varies widely: 15-60%
+- VCS-specific targets
+
+**Allocation Study Results:**
+```
+┌─────────────────────────────────────────────────┐
+│ VCS │ Avg Allocation │ Target │ Status          │
+├─────────────────────────────────────────────────┤
+│ A1  │ 28.5%          │ 30%    │ ✓ Within Range  │
+│ B2  │ 42.1%          │ 30%    │ ⚠ High - Review │
+│ C3  │ 18.2%          │ 30%    │ ⚠ Low - Review  │
+└─────────────────────────────────────────────────┘
+```
+
+**Validation Results:**
+- Properties outside target range flagged
+- Outlier analysis
+- Recommended adjustments
+- Export for detailed review
+
+**Export Capabilities:**
+
+**1. Land Rates Excel Export:**
+- Complete rate analysis by VCS
+- Cascade tables with all break points
+- Economic obsolescence configuration
+- Special region overrides
+- Formatted for presentation/documentation
+
+**2. Allocation Study Export:**
+- Validation results per VCS
+- Property-level allocation percentages
+- Outlier identification
+- Statistical summary
+
+**3. VCS Sheet CSV:**
+- For mapping software integration
+- Rate assignments per property
+- Geographic data included
+- Import-ready format
+
+**4. Economic Obsolescence Worksheet:**
+- Excel format with all calculations
+- Location factor assignments
+- Adjustment percentages
+- Compound factor analysis
+- Property-level detail
+
+**5. Complete Analysis Export:**
+- All sections combined
+- Executive summary
+- Methodology documentation
+- Statistical appendices
+- Audit-ready package
+
+**Data Persistence Details:**
+
+**Saves to market_land_valuation table:**
+```javascript
+{
+  // Configuration
+  eco_obs_code_config: {
+    defaultCodes: [...9 standard codes...],
+    customCodes: [...user-defined codes...],
+    adjustmentPercentages: {...},
+    trafficLevels: {...}
+  },
+
+  // Applied Adjustments
+  eco_obs_applied_adjustments: {
+    propertyId: {
+      factors: ['BS', 'RR'],
+      adjustments: [-8, -5],
+      totalAdjustment: -13,
+      compoundOverride: false
+    }
+  },
+
+  // Compound Factor Rules
+  eco_obs_compound_overrides: {
+    'BS/RR': { method: 'additive', cap: -15 },
+    'WF/PK': { method: 'multiplicative', boost: 1.25 }
+  },
+
+  // Cross-VCS Summaries
+  eco_obs_summary_adjustments: {
+    averageByVCS: {...},
+    standardDeviations: {...},
+    recommendedStandards: {...}
+  },
+
+  // VCS Configuration
+  worksheet_data: {
+    vcsCode: {
+      actSite: number,
+      recSite: number,
+      vcsType: 'Residential|Commercial|Mixed',
+      zoning: {...},
+      specialRegion: string|null
+    }
+  },
+
+  // Allocation Target
+  target_allocation: 30  // Percentage (e.g., 30%)
+}
+```
+
+**Integration with ManagementChecklist:**
+
+**Auto-Sync Completion Status:**
+- **"Land Value Tables Built"** - Checks if cascade rates are configured
+- **"Land Values Entered"** - Verifies VCS sheet completion
+- **"Economic Obsolescence Study"** - Confirms eco obs analysis complete
+
+**Workflow Integration:**
+```
+LandValuationTab saves data
+    ↓
+Updates market_land_valuation fields
+    ↓
+ManagementChecklist queries for completion
+    ↓
+Auto-checks checkboxes if criteria met
+    ↓
+Updates checklist_item_status table
+```
+
+**Completion Criteria:**
+- Land Value Tables: cascade_rates field not empty
+- Land Values Entered: worksheet_data populated for all active VCS codes
+- Economic Obsolescence: eco_obs_code_config configured AND eco_obs_applied_adjustments populated
+
+**Performance Optimizations (for 10K+ lines):**
+
+**Lazy Loading:**
+- Data loads on tab activation (not on parent mount)
+- Section-by-section loading (VCS sheet → Methods → Rates → Eco Obs)
+- Prevents initial render blocking
+- Reduces memory footprint
+
+**Debounced Saves:**
+- Auto-save with 500ms delay
+- Prevents excessive database writes
+- Batches rapid changes
+- User feedback via non-blocking notifications
+
+**Pagination:**
+- Vacant sales modal handles large datasets (1000+ sales)
+- VCS sheet paginated for 100+ neighborhoods
+- Property lists virtualized
+- Lazy rendering of rate tables
+
+**Memoization:**
+- Uses useCallback for expensive calculations
+- useMemo for cascade rate generation
+- Cached VCS code lookups
+- Prevents redundant processing
+
+**Notification System:**
+- Non-blocking save confirmations (toast messages)
+- Progress indicators for long operations
+- Error notifications with retry options
+- Success feedback without interrupting workflow
+
+**Debug Mode:**
+
+**Enable Debug Logging:**
+```javascript
+// In browser console
+window.DEBUG_LAND_VALUATION = true
+```
+
+**Debug Features:**
+- Tracks all calculations and state changes
+- Logs cascade rate generation logic
+- Monitors economic obsolescence application
+- Allocation calculation transparency
+- Essential for troubleshooting allocation issues
+
+**Debug Output Example:**
+```
+[LandVal] VCS A1: Calculating cascade rates
+[LandVal] Method 1 result: $42,500/acre (45 sales)
+[LandVal] Method 2 result: $42,500/acre (modal: 0.50ac)
+[LandVal] Conservative selection: $42,500 (equal, using Method 1)
+[LandVal] Cascade generated: 6 steps
+[LandVal] Eco Obs applied: 234 properties, avg adjustment: -6.5%
+[LandVal] Allocation check: VCS A1 = 28.5% (target: 30%, ✓)
+[LandVal] Save complete: 1,234 properties updated
+```
+
+**Debug Use Cases:**
+- Troubleshooting allocation percentage discrepancies
+- Verifying cascade rate degradation logic
+- Confirming economic obsolescence compound factors
+- Validating Method 1 vs Method 2 selection
+- Investigating performance bottlenecks
+
+**Method 1 vs Method 2 Analysis:**
+
+**Method 1: Vacant Land Sales Analysis**
+- **Approach**: Direct analysis of vacant land sales
+- **Data Source**: Properties with minimal/no improvements
+- **Filters**:
+  - Improvement value < 10% of total value
+  - Valid arms-length transactions
+  - Sale date within analysis period
+  - Excludes package sales
+- **Calculation**: Sale Price ÷ Lot Size (acres or SF)
+- **Strengths**: Direct market evidence
+- **Weaknesses**: Limited sales in some VCS areas
+
+**Method 2: Lot Size Analysis**
+- **Approach**: Modal distribution of lot sizes with sales at modal
+- **Data Source**: All properties in VCS
+- **Process**:
+  1. Identify predominant lot size(s)
+  2. Filter sales at or near modal size
+  3. Calculate average price per lot
+  4. Divide by modal lot size for rate
+- **Strengths**: Works with limited vacant sales
+- **Weaknesses**: Assumes consistent lot values
+
+**Detailed Review Modal:**
+- Interactive comparison of both methods
+- Side-by-side results display
+- Statistical confidence indicators
+- Sale-by-sale breakdown
+- Manager selection interface
+- Justification notes field
+
+**Conservative Selection Logic:**
+```javascript
+// System recommends lower value for defensibility
+const recommendedRate = Math.min(method1Result, method2Result);
+
+// Example:
+// Method 1: $45,000/acre (15 vacant sales)
+// Method 2: $42,500/acre (modal analysis)
+// Recommended: $42,500/acre (conservative)
+```
+
+**Override Capability:**
+- Manager can select higher value
+- Requires justification note
+- Tracks override in database
+- Audit trail for review
+- Warning displayed if override exceeds 10% difference
+
+**Business Rules:**
+- Minimum 3 sales required for Method 1 validity
+- Modal size must represent >20% of properties for Method 2
+- Conservative selection default unless overridden
+- All calculations documented for defensibility
+- State equalization ratio compliance checks
+
+**Critical Implementation Notes:**
+- Largest component requires careful state management
+- Heavy use of JSONB for flexible data structures
+- Cross-VCS consistency essential for legal defense
+- Integration with ManagementChecklist for workflow tracking
+- Export capabilities critical for documentation
+- Debug mode essential for complex troubleshooting
+- Performance optimizations mandatory for usability
 
 ### ManagementChecklist.jsx - 29-Item Workflow Management System ✅
 
