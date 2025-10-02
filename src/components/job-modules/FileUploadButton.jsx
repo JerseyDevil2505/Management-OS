@@ -1345,7 +1345,7 @@ const handleCodeFileUpdate = async () => {
       addBatchLog(`📊 Calling ${job.vendor_type} updater (UPSERT mode)...`, 'info');
 
       // FIX: Calculate new file_version for property_records - fetch current from DB with timeout
-      addBatchLog('�� Fetching current file version from database...', 'info');
+      addBatchLog('🔍 Fetching current file version from database...', 'info');
 
       let currentFileVersion = 1;
       let newFileVersion = 2;
@@ -2193,13 +2193,14 @@ const handleCodeFileUpdate = async () => {
                     setSourceFileContent(null);
                     setSalesDecisions(new Map());
 
-                    // Trigger data refresh to update all sub-modules with new data
-                    if (onDataRefresh) {
+                    // Trigger JobContainer refresh to update all modules with new data
+                    if (onUpdateJobCache) {
                       try {
-                        await onDataRefresh();
-                        console.log('🔄 Data refresh triggered after file upload completion');
+                        console.log('🔄 Triggering JobContainer refresh after file upload completion');
+                        await onUpdateJobCache(job.id, { forceRefresh: true });
+                        console.log('✅ JobContainer data refreshed successfully');
                       } catch (error) {
-                        console.error('❌ Error during post-upload data refresh:', error);
+                        console.error('❌ Error during JobContainer refresh:', error);
                       }
                     }
                   }}
