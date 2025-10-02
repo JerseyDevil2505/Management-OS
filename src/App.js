@@ -1076,7 +1076,7 @@ const App = () => {
             receivables={appData.receivables}
             distributions={appData.distributions}
             billingMetrics={appData.billingMetrics}
-            onDataUpdate={updateCacheItem}
+            onDataUpdate={updateDataSection}
             onRefresh={() => loadLiveData(['billing'])}
           />
         ) : (
