@@ -182,7 +182,7 @@ const App = () => {
     console.log('📡 Loading fresh data from database:', components);
 
     try {
-      setCacheStatus(prev => ({ ...prev, isRefreshing: true, message: 'Loading fresh data...' }));
+      setLoadingStatus(prev => ({ ...prev, isRefreshing: true, message: 'Loading fresh data...' }));
       setAppData(prev => ({ ...prev, isLoading: true }));
 
       const updates = {};
