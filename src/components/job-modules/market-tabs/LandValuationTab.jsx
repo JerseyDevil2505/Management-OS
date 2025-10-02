@@ -3518,6 +3518,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             lastModified: null
           });
           debug('🧹 Session state cleared after successful save');
+// Also clear sessionStorage to ensure complete cleanup
+          try {
+            sessionStorage.removeItem('landValuation_' + jobData.id + '_session');
+            debug('🧹 Cleared session storage after successful save');
+          } catch (err) {
+            console.warn('Failed to clear sessionStorage:', err);
+          }
         } catch (e) {
           console.warn('Failed to clear session state after save', e);
         }
