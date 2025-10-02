@@ -9300,7 +9300,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             <FileDown size={16} /> Export All
           </button>
           <button
-            onClick={() => saveAnalysis()}
+            onClick={() => saveAnalysis({ source: 'manual' })}
             disabled={isSaving}
             style={{
               backgroundColor: '#10B981',
