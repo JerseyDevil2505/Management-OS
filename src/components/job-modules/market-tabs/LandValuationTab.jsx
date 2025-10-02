@@ -478,9 +478,10 @@ useEffect(() => {
   hasInitialized.current = true;
   const currentSession = currentSessionState.current;
 
-  // If we have session state with unsaved changes, use it instead of database
+  // Check for unsaved session changes
+  let restoredFromSession = false;
   if (currentSession?.hasUnsavedChanges && currentSession?.lastModified) {
-    debug('📋 Restoring from session state (unsaved changes detected)');
+    debug('⚠️ Found unsaved session changes from', currentSession.lastModified);
 
     setMethod1ExcludedSales(currentSession.method1ExcludedSales || new Set());
     setIncludedSales(currentSession.includedSales || new Set());
@@ -516,20 +517,16 @@ useEffect(() => {
       setCollapsedFields(currentSession.collapsedFields);
     }
 
-    // Still load read-only data from marketLandData
-    setLastSaved(marketLandData.updated_at ? new Date(marketLandData.updated_at) : null);
-    setIsLoading(false);
-    setIsInitialLoadComplete(true);
-
-    debug('✅ Session state restored successfully');
-    return;
+    restoredFromSession = true;
+    debug('✅ Session state restored, will merge with database data');
   }
 
-  // No unsaved changes, load from database as normal
-  debug('🔄 Loading from database (no unsaved session changes):', {
+  // ALWAYS load from database
+  debug('🔄 Loading from database:', {
     hasRawLandConfig: !!marketLandData.raw_land_config,
     hasCascadeRates: !!marketLandData.cascade_rates,
-    hasVacantSales: !!marketLandData.vacant_sales_analysis?.sales?.length
+    hasVacantSales: !!marketLandData.vacant_sales_analysis?.sales?.length,
+    restoredFromSession
   });
 
   // Restore all saved states from marketLandData
