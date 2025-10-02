@@ -1107,7 +1107,29 @@ getPackageSaleData(properties)
 - **Property Assignment System**: Handles 1000+ property CSV uploads with batch processing
 - **Payroll Period Detection**: Knows when updates are needed for accurate payroll/billing
 - **Live Metrics Integration**: Prioritizes real-time data from App.js over database values
-- **Freshness Tracking**: Color-coded indicators (Green ���3 days, Yellow ≤14 days, Red >14 days)
+- **Freshness Tracking**: Color-coded indicators (Green ≤3 days, Yellow ≤14 days, Red >14 days)
+- **URL-Based Job Selection**: Restores selected job from URL path on page refresh (/job/{id})
+
+**Job Data Transformation Pipeline:**
+- Transforms raw database records to UI-ready format
+- Maps `workflow_stats` (string or object) to property counts
+- Converts `job_assignments` to `assignedManagers` array
+- Falls back to multiple fields for counts (workflow_stats → inspected_properties → 0)
+- Handles job type differentiation (standard vs legacy_billing)
+
+**Planning Jobs Features:**
+- Create new planning jobs with metadata
+- Edit existing planning job details
+- Convert planning job to active job
+- Delete planning jobs
+- Track potential contract values
+
+**Manager Assignments Display:**
+- Visual workload cards per manager
+- Color-coded workload levels (green/yellow/red)
+- Active job count per manager
+- Filters out owner-level users from management view
+- Shows unassigned jobs separately
 
 **Smart Patterns:**
 - **Assignment-Aware Display**: Shows "Residential Only" when no commercial properties assigned
