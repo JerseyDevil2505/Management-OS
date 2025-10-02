@@ -892,18 +892,18 @@ const App = () => {
               </span>
               <button
                 onClick={() => {
-                  setCacheStatus(prev => ({ ...prev, isRefreshing: true, message: 'Refreshing...' }));
+                  setLoadingStatus(prev => ({ ...prev, isRefreshing: true, message: 'Refreshing...' }));
                   loadLiveData(['all']).then(() => {
-                    setCacheStatus(prev => ({ ...prev, isRefreshing: false, message: 'Data refreshed' }));
+                    setLoadingStatus(prev => ({ ...prev, isRefreshing: false, message: 'Data refreshed' }));
                     setTimeout(() => {
-                      setCacheStatus(prev => ({ ...prev, message: '' }));
+                      setLoadingStatus(prev => ({ ...prev, message: '' }));
                     }, 2000);
                   });
                 }}
-                disabled={cacheStatus.isRefreshing}
+                disabled={loadingStatus.isRefreshing}
                 className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200 disabled:opacity-50"
               >
-                {cacheStatus.isRefreshing ? (
+                {loadingStatus.isRefreshing ? (
                   <span className="flex items-center gap-2">
                     <span className="animate-spin">⟳</span> Refreshing...
                   </span>
