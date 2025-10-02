@@ -1,6 +1,72 @@
 import { createClient } from '@supabase/supabase-js';
 
 /**
+ * SELECTIVE CACHING LAYER
+ * ======================
+ * Cache only truly static data that rarely changes.
+ * Everything else uses live data pattern.
+ */
+
+// Cache configuration
+const CACHE_CONFIG = {
+  CODE_DEFINITIONS: 30 * 60 * 1000,  // 30 minutes - code files rarely change
+  EMPLOYEE_LIST: 10 * 60 * 1000,     // 10 minutes - employee data is relatively static
+  COUNTY_HPI: 60 * 60 * 1000,        // 60 minutes - historical HPI data never changes
+  MANAGERS: 10 * 60 * 1000,          // 10 minutes - manager list is stable
+};
+
+// Simple cache implementation
+class DataCache {
+  constructor() {
+    this.cache = new Map();
+  }
+
+  set(key, data, ttl = 5 * 60 * 1000) {
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now(),
+      ttl
+    });
+  }
+
+  get(key) {
+    const cached = this.cache.get(key);
+    if (!cached) return null;
+
+    if (Date.now() - cached.timestamp > cached.ttl) {
+      // Cache expired, remove it
+      this.cache.delete(key);
+      return null;
+    }
+
+    return cached.data;
+  }
+
+  clear(key) {
+    if (key) {
+      this.cache.delete(key);
+    } else {
+      this.cache.clear();
+    }
+  }
+
+  has(key) {
+    const cached = this.cache.get(key);
+    if (!cached) return false;
+
+    if (Date.now() - cached.timestamp > cached.ttl) {
+      this.cache.delete(key);
+      return false;
+    }
+
+    return true;
+  }
+}
+
+// Export cache instance
+export const dataCache = new DataCache();
+
+/**
  * Helper function to safely extract error message from any error type
  */
 function getErrorMessage(error) {
