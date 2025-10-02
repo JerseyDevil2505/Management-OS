@@ -2425,7 +2425,7 @@ VCS A1 - Base Rate: $45,000/acre
 
 **Allocation Study Results:**
 ```
-┌─────────────────────────────────────────────────┐
+┌─────��───────────────────────────────────────────┐
 │ VCS │ Avg Allocation │ Target │ Status          │
 ├─────────────────────────────────────────────────┤
 │ A1  │ 28.5%          │ 30%    │ ✓ Within Range  │
@@ -2768,7 +2768,7 @@ Component allows switching between two price calculation methods:
 │              ○ Sale Price               │
 │                                         │
 │ Using time-normalized values from       │
-│ Pre-Valuation tab for accuracy         │
+│ Pre-Valuation tab for accuracy         ���
 └─────────────────────────────────────────┘
 ```
 
@@ -2854,7 +2854,7 @@ The component displays a detailed analysis table with the following columns:
 │ ☑ │ 123   │ 45  │      │ 1    │ 03/15/24  │ $285,000 │ 2020 │ C+3   │ 1,850 │ $45,000│ 1.15  │
 │ ☑ │ 124   │ 12  │      │ 1    │ 06/22/24  │ $310,000 │ 2021 │ C+4   │ 2,100 │ $48,000│ 1.18  │
 │ ☐ │ 125   │ 78  │      │ 1    │ 01/10/24  │ $265,000 │ 2019 │ C+2   │ 1,650 │ $42,000│ 1.08  │
-└────────────────────────────────────────────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────��─────────────────────────────────────────────┘
 ```
 
 **Inclusion/Exclusion Feature:**
@@ -2891,7 +2891,7 @@ The component displays a detailed analysis table with the following columns:
 │ Total Properties: 45                    │
 │ Included: 42                            │
 │ Excluded: 3                             │
-│                                         │
+��                                         │
 │ Recommended CCF (all): 1.15             │
 │ Recommended CCF (included): 1.12        │
 │ Difference: -2.6%                       │
@@ -3319,6 +3319,896 @@ const getLivingArea = (property) => {
 - Export capabilities essential for client presentations
 - Performance optimizations critical for large datasets
 - Living area detection handles vendor variations
+
+### AttributeCardsTab.jsx - Attribute & Additional Card Analysis 🏷️
+
+**Scale**: ~2,500 lines of comprehensive attribute and card impact analysis
+
+**Core Philosophy**: Quantify the market impact of property attributes and additional dwelling units through statistical comparison
+
+**Purpose**:
+- Analyze property attributes (condition, features) and their impact on valuation
+- Assess additional card impacts on property values
+- Calculate adjustment factors for unique property characteristics
+- Support defensible valuation adjustments
+
+**Three Sub-Tabs:**
+1. **Condition Analysis** - Interior/exterior condition impact on values
+2. **Custom Attribute Analysis** - Impact of any raw field attribute
+3. **Additional Card Analysis** - Multiple dwelling units/structures analysis
+
+**Sub-Tab 1: Condition Analysis**
+
+**Purpose:**
+- Analyzes interior and exterior condition impacts on property values
+- Uses normalized time values for accurate comparisons
+- Groups properties by condition codes
+- Calculates dollar and percentage adjustments
+
+**Condition Code Groups:**
+- **EX** - Excellent
+- **GD** - Good (often baseline)
+- **AV** - Average
+- **FR** - Fair
+- **PR** - Poor
+- Vendor-specific codes supported
+
+**Analysis Features:**
+
+**1. Property Grouping by Condition:**
+```
+Condition: GOOD (Baseline)
+��── Count: 234 properties
+├── Average SFLA: 1,850 SF
+├── Average Year Built: 1985
+├── Average Normalized Value: $285,000
+└── Price per SF: $154.05
+
+Condition: EXCELLENT
+├── Count: 89 properties
+├── Average SFLA: 1,920 SF
+├── Average Year Built: 1992
+└── Average Normalized Value: $325,000
+```
+
+**2. Jim's Formula Adjustment:**
+```javascript
+// Adjusts for SFLA differences between conditions
+jimAdjusted = withAvg + ((withoutSFLA - withSFLA) × (withAvg / withSFLA) × 0.5)
+flatAdj = jimAdjusted - withoutAvg
+pctAdj = (flatAdj / withoutAvg) × 100
+
+// Example: Excellent vs Good (baseline)
+// withAvg = $325,000 (excellent average)
+// withSFLA = 1,920 SF (excellent SFLA)
+// withoutAvg = $285,000 (good average)
+// withoutSFLA = 1,850 SF (good SFLA)
+//
+// jimAdjusted = $325,000 + ((1,850 - 1,920) × ($325,000 / 1,920) × 0.5)
+// jimAdjusted = $325,000 + (-70 × $169.27 × 0.5)
+// jimAdjusted = $325,000 - $5,925 = $319,075
+// flatAdj = $319,075 - $285,000 = $34,075
+// pctAdj = ($34,075 / $285,000) × 100 = 11.95%
+```
+
+**3. Baseline Selection:**
+- **Manual Baseline**: Manager selects reference condition (typically "Good")
+- **Auto-Detect**: System identifies most common condition as baseline
+- Baseline shown with highlighted background
+- All other conditions compared to baseline
+
+**4. Interior Inspections Toggle:**
+```
+☑ Only Include Properties with Interior Inspections
+
+Purpose:
+- Ensures condition ratings are based on actual inspections
+- Excludes drive-by/exterior-only inspections
+- More reliable condition assessments
+- Filters by inspection_info_by field
+```
+
+**5. Filtered by Property Type:**
+- Dropdown filter for type/use codes
+- Single Family, Duplex, Condo, etc.
+- Ensures comparable property comparisons
+- Prevents mixing commercial/residential
+
+**Condition Analysis Results Table:**
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Condition │ Count │ Avg SFLA │ Avg Year │ Avg Value  │ Flat Adj  │ % Adj    │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ EXCELLENT │   89  │  1,920   │   1992   │ $325,000   │ +$34,075  │ +11.95%  │
+│ GOOD ⭐   │  234  │  1,850   │   1985   │ $285,000   │ BASELINE  │ BASELINE │
+│ AVERAGE   │  156  │  1,830   │   1978   │ $255,000   │ -$30,000  │ -10.53%  │
+│ FAIR      │   45  │  1,780   │   1972   │ $215,000   │ -$70,000  │ -24.56%  │
+│ POOR      │   12  │  1,650   │   1965   │ $175,000   │-$110,000  │ -38.60%  │
+└─────────────────────────────────────────────────────���────────────────────────┘
+```
+
+**Visual Indicators:**
+- ⭐ Baseline condition marked
+- Green text for positive adjustments
+- Red text for negative adjustments
+- Gray text when no data available
+
+**Sub-Tab 2: Custom Attribute Analysis**
+
+**Purpose:**
+- Analyze impact of ANY raw field from property data
+- Compare properties WITH attribute vs WITHOUT attribute
+- Calculate market impact using Jim's formula
+- Support for pools, garages, basements, fireplaces, etc.
+
+**Workflow:**
+
+**1. Field Selection:**
+```
+Select Field: [Choose from property data ▼]
+  ├── POOL (from raw_data)
+  ├── GARAGE_TYPE (from raw_data)
+  ├── BASEMENT_TYPE (from raw_data)
+  ├── FIREPLACE (from raw_data)
+  ├── CENTRAL_AIR (from raw_data)
+  └── [Any other field in raw_data]
+```
+
+**Field Dropdown Population:**
+- Populated from actual property data
+- Scans raw_data JSONB field
+- Excludes empty/null fields
+- Alphabetically sorted
+
+**2. Match Value Entry:**
+```
+Field: POOL
+Match Value: [Y___]  (Enter value to search for)
+
+System searches for properties where raw_data.POOL = "Y"
+```
+
+**3. Analysis Execution:**
+```
+Run Analysis button triggers:
+1. Split properties into WITH and WITHOUT groups
+2. Calculate averages for each group
+3. Apply Jim's formula for size adjustment
+4. Display flat and percentage adjustments
+```
+
+**Custom Attribute Results:**
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Attribute: POOL = "Y"                                               │
+├─────────────────────────────────────────────────────────────────────┤
+│ WITH Pool (89 properties):                                          │
+│   ├── Average SFLA: 2,100 SF                                        │
+│   ├── Average Year Built: 1995                                      │
+│   └── Average Normalized Value: $345,000                            │
+│                                                                      │
+│ WITHOUT Pool (1,145 properties):                                    │
+│   ├── Average SFLA: 1,850 SF                                        │
+│   ├── Average Year Built: 1985                                      │
+│   └── Average Normalized Value: $285,000                            │
+│                                                                      │
+│ Jim's Adjusted Impact:                                              │
+│   ├── Flat Adjustment: +$35,250                                     │
+│   ├── Percentage: +12.37%                                           │
+│   └── (Size-adjusted using 50% method)                              │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Supported Field Types:**
+- Text fields (Y/N, codes)
+- Numeric fields (values, counts)
+- Nested JSONB fields
+- Vendor-specific fields
+
+**Use Cases:**
+- Pool impact analysis
+- Garage/carport value
+- Basement finish impact
+- Fireplace adjustments
+- Central air value
+- Any custom feature
+
+**Sub-Tab 3: Additional Card Analysis (Most Complex)**
+
+**Purpose:**
+- Analyze impact of additional dwelling units/structures
+- Identify package sales (multiple properties sold together)
+- Calculate premiums/discounts for multi-unit properties
+- Provide detailed property-level data
+
+**Vendor-Specific Card Logic:**
+
+**BRT Vendor:**
+- Card 1 = Main dwelling (baseline)
+- Cards 2, 3, 4+ = Additional structures
+- Additional cards indicate: Mother-in-law suite, garage apartment, separate cottage, etc.
+
+**Microsystems Vendor:**
+- Card M = Main dwelling (baseline)
+- Cards A-Z (except M) = Additional structures
+- Different card scheme but same concept
+
+**Three Analysis Components:**
+
+**1. Package Pair Analysis:**
+
+**Purpose:**
+- Identifies properties sold as packages (same deed book/page)
+- Compares package sales to single-property baseline
+- Calculates premium/discount for packages
+
+**Package Detection Logic:**
+```javascript
+// Group properties by deed book + page + sale date
+const packages = properties.reduce((acc, prop) => {
+  const key = `${prop.deed_book}-${prop.deed_page}-${prop.sale_date}`;
+  if (!acc[key]) acc[key] = [];
+  acc[key].push(prop);
+  return acc;
+}, {});
+
+// Filter to only packages (2+ properties)
+const packagePairs = Object.values(packages).filter(group => group.length > 1);
+```
+
+**Package Analysis Results:**
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Package Sales Analysis                                              │
+├────────────────���────────────────────────────────────────────────────┤
+│ Package Pairs Found: 12                                             │
+│                                                                      │
+│ Average Package Price: $425,000                                     │
+│ Average Single Property (same VCS): $285,000                        │
+│ Expected Value (2 × $285,000): $570,000                             │
+│                                                                      │
+│ Package Discount: -$145,000 (-25.4%)                                │
+│ (Typical: Buyers pay less for bulk purchases)                       │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Package Pair Details:**
+```
+Deed Book 1234, Page 567 (Sale Date: 03/15/2024)
+├── Property 1: Block 45, Lot 12 - $210,000
+├── Property 2: Block 45, Lot 13 - $215,000
+└── Total Package: $425,000 (vs $570,000 expected)
+```
+
+**2. VCS Rollup Analysis:**
+
+**Purpose:**
+- Groups by VCS (neighborhood) code
+- Compares properties WITH additional cards vs WITHOUT
+- Shows impact of additional units on value
+- Neighborhood-specific analysis
+
+**VCS Rollup Results:**
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ VCS: A1 - DOWNTOWN RESIDENTIAL                                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ WITH Additional Cards (23 properties):                                      │
+│   ├── Average SFLA: 2,450 SF (combined from all cards)                      │
+│   ├── Average Year Built: 1988                                              │
+│   ├── Average Normalized Value: $385,000                                    │
+│   └── Cards: Avg 2.3 cards per property                                     │
+│                                                                              │
+│ WITHOUT Additional Cards (211 properties):                                  │
+│   ���── Average SFLA: 1,850 SF                                                │
+│   ├── Average Year Built: 1985                                              │
+│   └── Average Normalized Value: $285,000                                    │
+│                                                                              │
+│ Jim's Adjusted Impact:                                                      │
+│   ├── Flat Adjustment: +$65,000 per additional card                         │
+│   ├── Percentage: +22.81%                                                   │
+│   └── (Accounts for increased living area)                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ [Expand/Collapse] Show Individual Properties ▼                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Expandable VCS Sections:**
+- Click to expand/collapse
+- Show all properties with additional cards in VCS
+- Performance optimization (don't render all at once)
+- Yellow highlighting in debug mode
+
+**3. Individual Property List:**
+
+**Purpose:**
+- Shows ALL properties with additional cards
+- Sortable columns for analysis
+- Export functionality
+- Detailed property-level data
+
+**Property List Columns:**
+- VCS Code
+- Block/Lot/Qualifier/Card
+- Sale Date
+- Sale Price
+- Time-Normalized Price
+- Year Built
+- Total SFLA (all cards combined)
+- Number of Cards
+- Card Details (expandable)
+
+**Sortable Columns:**
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ VCS ▲│ Block │ Lot │ Cards │ Sale Price  │ Norm Price  │ SFLA  │ Year Built │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ A1   │  123  │  45 │  2    │  $385,000   │  $390,000   │ 2,450 │    1988    │
+│ A1   │  124  │  12 │  3    │  $425,000   │  $435,000   │ 2,850 │    1992    │
+│ B2   │  234  │  67 │  2    │  $310,000   │  $315,000   │ 2,100 │    1985    │
+└──────────────────────────────────────────────────────────────────────────────┘
+Click column headers to sort ▲▼
+```
+
+**Export to CSV:**
+```
+[📥 Export Additional Cards to CSV]
+
+Exports all properties with:
+- Complete property identification
+- All card details
+- Sales data
+- Calculated adjustments
+- VCS groupings
+```
+
+**Jim's Formula Implementation (Used Across All Tabs)**
+
+**The Core Formula:**
+```javascript
+// Jim's 50% Size Adjustment Method
+jimAdjusted = withAvg + ((withoutSFLA - withSFLA) × (withAvg / withSFLA) × 0.5)
+flatAdj = jimAdjusted - withoutAvg
+pctAdj = (flatAdj / withoutAvg) × 100
+```
+
+**Variables:**
+- `withAvg` - Average normalized value WITH the attribute
+- `withSFLA` - Average SFLA WITH the attribute
+- `withoutAvg` - Average normalized value WITHOUT the attribute
+- `withoutSFLA` - Average SFLA WITHOUT the attribute
+
+**Why This Formula:**
+- Accounts for size differences between groups
+- 50% factor represents typical market adjustment for size
+- Prevents overstating impact when attribute correlates with larger homes
+- Widely accepted methodology in appraisal industry
+
+**Step-by-Step Example:**
+```
+Analyzing Pool Impact:
+
+Step 1: Calculate Averages
+├── WITH Pool: $345,000 avg, 2,100 SF avg
+└── WITHOUT Pool: $285,000 avg, 1,850 SF avg
+
+Step 2: Apply Jim's Formula
+jimAdjusted = $345,000 + ((1,850 - 2,100) × ($345,000 / 2,100) × 0.5)
+jimAdjusted = $345,000 + (-250 × $164.29 × 0.5)
+jimAdjusted = $345,000 - $20,536
+jimAdjusted = $324,464
+
+Step 3: Calculate Adjustments
+flatAdj = $324,464 - $285,000 = $39,464
+pctAdj = ($39,464 / $285,000) × 100 = 13.85%
+
+Result: Pool adds ~$39,500 or 13.85% to value (size-adjusted)
+```
+
+**Data Persistence:**
+
+**Saves to market_land_valuation Table:**
+```javascript
+{
+  // Condition Analysis Results
+  condition_rollup: {
+    baseline: 'GOOD',
+    results: {
+      'EXCELLENT': { count: 89, avgSFLA: 1920, avgValue: 325000, flatAdj: 34075, pctAdj: 11.95 },
+      'GOOD': { count: 234, avgSFLA: 1850, avgValue: 285000, flatAdj: 0, pctAdj: 0 },
+      'AVERAGE': { count: 156, avgSFLA: 1830, avgValue: 255000, flatAdj: -30000, pctAdj: -10.53 }
+      // ... more conditions
+    }
+  },
+
+  // Custom Attribute Results
+  custom_attribute_rollup: {
+    field: 'POOL',
+    matchValue: 'Y',
+    withCount: 89,
+    withoutCount: 1145,
+    flatAdj: 35250,
+    pctAdj: 12.37
+  },
+
+  // Additional Card Analysis
+  additional_cards_rollup: {
+    packagePairsFound: 12,
+    avgPackageDiscount: -25.4,
+    vcsSummary: {
+      'A1': { withCards: 23, withoutCards: 211, flatAdj: 65000, pctAdj: 22.81 },
+      'B2': { withCards: 15, withoutCards: 189, flatAdj: 52000, pctAdj: 18.92 }
+      // ... more VCS codes
+    }
+  }
+}
+```
+
+**Auto-Save Behavior:**
+- Results saved after each analysis run
+- JSONB format for flexible structure
+- Timestamp tracking for audit trail
+- No manual save required
+
+**Property Type Filter (Applies to All Tabs)**
+
+**Filter Dropdown:**
+```
+Type/Use Filter: [All Residential ▼]
+  ├── All Properties
+  ├── 1 — Single Family
+  ├── 2 — Duplex/Semi-Detached
+  ├── 3* — Row/Townhouse
+  ├── 4* — MultiFamily
+  ├── 5* — Conversions
+  ├── 6 — Condominium
+  └── All Residential (1-6)
+```
+
+**Filter Logic:**
+```javascript
+// Filters by first digit of asset_type_use
+const filterByType = (properties, selectedType) => {
+  if (selectedType === 'all') return properties;
+  if (selectedType === 'residential') {
+    return properties.filter(p => {
+      const type = p.asset_type_use?.toString()[0];
+      return ['1','2','3','4','5','6'].includes(type);
+    });
+  }
+  return properties.filter(p =>
+    p.asset_type_use?.toString().startsWith(selectedType)
+  );
+};
+```
+
+**Why Filter by Type:**
+- Ensures apples-to-apples comparisons
+- Different property types have different value drivers
+- Condition impacts vary by property class
+- Prevents skewed results from mixing types
+
+**Filter Persistence:**
+- Saves to local storage
+- Persists across tab switches
+- Resets on job change
+- Applied to all three sub-tabs consistently
+
+**Export Capabilities:**
+
+**1. Condition Analysis Export:**
+```
+[📥 Export Condition Rollup]
+
+CSV includes:
+- Condition code
+- Property count
+- Average SFLA
+- Average year built
+- Average normalized value
+- Flat adjustment
+- Percentage adjustment
+- Baseline indicator
+```
+
+**2. Custom Attribute Export:**
+```
+[📥 Export Attribute Analysis]
+
+CSV includes:
+- Field name and match value
+- WITH group statistics
+- WITHOUT group statistics
+- Jim's adjusted calculations
+- Sample properties from each group
+```
+
+**3. Additional Cards Export:**
+```
+[📥 Export Property List with Cards]
+
+CSV includes:
+- Complete property identification
+- All card numbers
+- Combined SFLA
+- Sales data
+- VCS grouping
+- Calculated adjustments
+```
+
+**Export Format:**
+- UTF-8 encoding
+- Excel-compatible
+- Timestamp in filename
+- Ready for presentation/documentation
+
+**Integration with PreValuationTab:**
+
+**SFLA Aggregation Logic:**
+
+The component is aware of additional cards when calculating normalization:
+
+```javascript
+// Aggregates SFLA from all cards for main property
+const getTotalSFLA = (property) => {
+  let totalSFLA = property.asset_living_area || 0;
+
+  // Check for additional cards
+  if (property.additional_cards && property.additional_cards.length > 0) {
+    property.additional_cards.forEach(card => {
+      totalSFLA += card.asset_living_area || 0;
+    });
+  }
+
+  return totalSFLA;
+};
+```
+
+**Impact on Size Normalization:**
+- Prevents understating living area when multiple cards exist
+- Ensures accurate price-per-SF calculations
+- Used in PreValuationTab's size normalization
+- Critical for multi-unit properties
+
+**Cross-Tab Data Flow:**
+```
+AttributeCardsTab identifies properties with additional cards
+    ↓
+Flags properties with has_additional_cards: true
+    ↓
+PreValuationTab aggregates SFLA from all cards
+    ↓
+Size normalization uses correct total SFLA
+    ↓
+Accurate market analysis results
+```
+
+**Performance Considerations:**
+
+**1. Sales Data Filtering:**
+```javascript
+// Filters properties with valid sales data only
+const validSales = properties.filter(p => {
+  return p.sale_price > 0 &&
+         p.sale_date &&
+         p.values_norm_time > 0 &&
+         isValidSalesNU(p.sale_nu);
+});
+```
+
+**Benefits:**
+- Reduces dataset size
+- Faster grouping operations
+- More accurate analysis
+- Excludes non-market transactions
+
+**2. Efficient Grouping Using Map Structures:**
+```javascript
+// Use Map for O(1) lookups instead of array filtering
+const groupByCondition = (properties) => {
+  const groups = new Map();
+  properties.forEach(p => {
+    const condition = p.asset_ext_cond || 'UNKNOWN';
+    if (!groups.has(condition)) groups.set(condition, []);
+    groups.get(condition).push(p);
+  });
+  return groups;
+};
+```
+
+**Performance Benefits:**
+- O(1) lookup vs O(n) filtering
+- Memory efficient
+- Scalable to large datasets
+- Faster re-grouping on filter changes
+
+**3. Memoized Calculations:**
+```javascript
+// Expensive calculations cached with useMemo
+const analysisResults = useMemo(() => {
+  return calculateConditionImpacts(
+    filteredProperties,
+    baselineCondition,
+    interiorInspectionsOnly
+  );
+}, [filteredProperties, baselineCondition, interiorInspectionsOnly]);
+```
+
+**4. Local Storage for Preferences:**
+```javascript
+// Persist user preferences
+localStorage.setItem('attributeCards_typeFilter', selectedType);
+localStorage.setItem('attributeCards_baselineCondition', baseline);
+localStorage.setItem('attributeCards_interiorOnly', interiorToggle);
+```
+
+**Benefits:**
+- User settings persist across sessions
+- No database calls for UI state
+- Faster component initialization
+- Better user experience
+
+**Visual Indicators:**
+
+**Color Coding:**
+- **Green text**: Positive adjustments (adds value)
+  - Example: "EXCELLENT: +$34,075 (+11.95%)"
+- **Red text**: Negative adjustments (reduces value)
+  - Example: "POOR: -$110,000 (-38.60%)"
+- **Gray text**: Neutral/no data
+  - Example: "UNKNOWN: No data available"
+- **Yellow highlighting**: Debug information (when debug mode enabled)
+  - Example: "Expected 45 sales, found 42 (3 excluded for valid sales NU)"
+
+**Expandable/Collapsible Sections:**
+```
+VCS: A1 - DOWNTOWN RESIDENTIAL [+]
+  ↓ (click to expand)
+VCS: A1 - DOWNTOWN RESIDENTIAL [-]
+├── WITH Additional Cards: 23 properties
+├── WITHOUT Additional Cards: 211 properties
+├── Adjustment: +$65,000 (+22.81%)
+└── [Show Individual Properties ▼]
+    ├── Block 123, Lot 45 - 2 cards - $385,000
+    ├── Block 124, Lot 12 - 3 cards - $425,000
+    └── ... (more properties)
+```
+
+**Icons and Badges:**
+- ⭐ Baseline indicator
+- 🏠 Single card (main dwelling only)
+- 🏘️ Multiple cards (additional units)
+- ⚠️ Warning for data quality issues
+- ✓ Checkmark for interior inspection completed
+- 📊 Chart icon for expandable statistics
+
+**Package Sale Detection Logic:**
+
+**Sophisticated Detection System:**
+
+**Step 1: Group by Deed Reference:**
+```javascript
+// Create composite key from deed book + page + date
+const packageKey = (property) => {
+  const deedBook = property.deed_book || 'UNKNOWN';
+  const deedPage = property.deed_page || 'UNKNOWN';
+  const saleDate = property.sale_date || 'UNKNOWN';
+  return `${deedBook}-${deedPage}-${saleDate}`;
+};
+
+// Group properties
+const grouped = properties.reduce((acc, prop) => {
+  const key = packageKey(prop);
+  if (!acc[key]) acc[key] = [];
+  acc[key].push(prop);
+  return acc;
+}, {});
+```
+
+**Step 2: Distinguish True Packages from Additional Cards:**
+```javascript
+// True package: Multiple separate properties (different blocks/lots)
+// Additional cards: Same property with multiple cards
+
+const isTruePackage = (group) => {
+  // Check if properties have different blocks OR lots
+  const uniqueBlockLots = new Set(
+    group.map(p => `${p.block}-${p.lot}`)
+  );
+  return uniqueBlockLots.size > 1;
+};
+
+const packagePairs = Object.values(grouped)
+  .filter(group => group.length > 1 && isTruePackage(group));
+```
+
+**Step 3: Calculate Package Premium/Discount:**
+```javascript
+// Compare to single-property baseline in same VCS
+const packageAnalysis = packagePairs.map(pkg => {
+  const totalPackagePrice = pkg.reduce((sum, p) => sum + p.sale_price, 0);
+  const avgSinglePrice = getAvgSinglePriceInVCS(pkg[0].vcs);
+  const expectedTotal = avgSinglePrice * pkg.length;
+  const discount = totalPackagePrice - expectedTotal;
+  const discountPct = (discount / expectedTotal) * 100;
+
+  return {
+    properties: pkg,
+    totalPrice: totalPackagePrice,
+    expectedPrice: expectedTotal,
+    discount: discount,
+    discountPct: discountPct
+  };
+});
+```
+
+**Package vs Additional Cards Comparison:**
+```
+TRUE PACKAGE:
+Deed Book 1234, Page 567
+├── Block 45, Lot 12 (separate property #1)
+└── Block 45, Lot 13 (separate property #2)
+Total: $425,000 (bulk discount applied)
+
+ADDITIONAL CARDS (NOT a package):
+Deed Book 1234, Page 789
+├── Block 56, Lot 78, Card 1 (main dwelling)
+└── Block 56, Lot 78, Card 2 (same property, mother-in-law suite)
+Total: One property with two structures
+```
+
+**Debug Features:**
+
+**Enable Debug Mode:**
+```javascript
+// In browser console
+window.DEBUG_ATTRIBUTE_CARDS = true
+```
+
+**Debug Information Displayed:**
+
+**1. Expected vs Actual Sales Counts:**
+```
+┌────────────────────────────────���────────────┐
+│ 🐛 DEBUG INFO                               │
+├─────────────────────────────────────────────┤
+│ Total Properties: 1,500                     │
+│ Expected Sales: 450 (30% sales ratio)       │
+│ Actual Valid Sales: 423                     │
+│ Excluded: 27 (invalid sales NU)             │
+│                                             │
+│ Breakdown:                                  │
+│ ├── Valid NU codes: 423                     │
+│ ├── Invalid NU codes: 18                    │
+│ ├── Missing sale price: 6                   │
+│ └── Missing sale date: 3                    │
+└─────────────────────────────────────────────┘
+```
+
+**2. Package Pairs Found Counter:**
+```
+Package Detection Debug:
+├── Total deed groups: 1,234
+├── Groups with 2+ properties: 45
+├── True package pairs (different blocks): 12
+├── Additional card groups (same block/lot): 33
+└── Average package size: 2.3 properties
+```
+
+**3. Sample Property Data Logging:**
+```javascript
+// Logs sample properties from each group
+console.log('Sample WITH attribute:', sampleWith);
+console.log('Sample WITHOUT attribute:', sampleWithout);
+console.log('Calculation breakdown:', {
+  withAvg, withSFLA, withoutAvg, withoutSFLA,
+  jimAdjusted, flatAdj, pctAdj
+});
+```
+
+**4. Helps Troubleshoot Data Issues:**
+- Identifies properties with missing fields
+- Shows which properties excluded and why
+- Validates grouping logic
+- Confirms calculation accuracy
+
+**Debug Output Example:**
+```
+[AttributeCards] Condition Analysis Started
+[AttributeCards] Filtered to 423 properties with valid sales
+[AttributeCards] Grouped by condition:
+  - EXCELLENT: 89 properties
+  - GOOD: 234 properties (BASELINE)
+  - AVERAGE: 156 properties
+  - FAIR: 45 properties
+  - POOR: 12 properties
+[AttributeCards] Jim's Formula applied:
+  - EXCELLENT: +$34,075 (+11.95%)
+  - AVERAGE: -$30,000 (-10.53%)
+  - FAIR: -$70,000 (-24.56%)
+  - POOR: -$110,000 (-38.60%)
+[AttributeCards] Analysis complete, results saved
+```
+
+**Empty State Handling:**
+
+**Each Tab Handles No-Data Scenarios:**
+
+**1. Before Analysis Run:**
+```
+┌─────────────────────────────────────────────┐
+│   📊 Condition Analysis                     │
+│                                             │
+│   No analysis has been run yet.             │
+│                                             │
+│   [▶ Run Condition Analysis]                │
+│                                             │
+│   This will analyze property condition      │
+│   impacts on value using Jim's formula.     │
+└─────────────────────────────────────────────┘
+```
+
+**2. No Matching Data Found:**
+```
+┌─────────────────────────────────────────────┐
+│   🔍 Custom Attribute Analysis              │
+│                                             │
+│   Field: POOL                               │
+│   Match Value: Y                            │
+│                                             │
+│   ⚠️ No properties found with POOL = "Y"   │
+│                                             │
+│   Suggestions:                              │
+│   • Check spelling of match value           │
+│   • Try different field                     │
+│   • Verify field exists in raw data         │
+│   • Check property type filter              │
+└─────────────────────────────────────────────┘
+```
+
+**3. Insufficient Data for Analysis:**
+```
+┌─────────────────────────────────────────────┐
+│   📈 Additional Card Analysis               │
+│                                             │
+│   Only 2 properties found with additional   │
+│   cards. Minimum 10 required for            │
+│   statistically valid analysis.             │
+│                                             │
+│   Current filters:                          │
+│   • Type: Single Family                     │
+│   • VCS: All                                │
+│                                             │
+│   Try:                                      │
+│   • Expand to "All Residential"             │
+│   • Remove VCS filter                       │
+│   • Check if data has additional cards      │
+└─────────────────────────────────────────────┘
+```
+
+**4. Clear Instructions:**
+- Step-by-step guidance for first-time users
+- Explanations of what each analysis does
+- Examples of typical use cases
+- Troubleshooting tips for common issues
+
+**Empty State Benefits:**
+- Prevents user confusion
+- Guides users to successful analysis
+- Provides helpful error messages
+- Reduces support requests
+
+**Critical Implementation Notes:**
+- Jim's formula essential for size-adjusted comparisons
+- Package detection prevents false multi-unit classifications
+- VCS rollup provides neighborhood-specific insights
+- Integration with PreValuationTab ensures accurate SFLA totals
+- Debug mode critical for troubleshooting complex analyses
+- Empty state handling improves user experience
+- Export capabilities essential for documentation and presentations
+- Performance optimizations necessary for large datasets
+- Visual indicators (color coding) aid quick interpretation
+- Filter persistence improves workflow efficiency
 
 ### ManagementChecklist.jsx - 29-Item Workflow Management System ✅
 
