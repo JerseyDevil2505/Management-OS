@@ -566,6 +566,20 @@ const App = () => {
     console.log('📊 Workflow stats updated - jobs list will refresh when user returns to jobs');
   }, []);
 
+  const handleJobDataRefresh = useCallback(async (jobId, opts = {}) => {
+    const { forceRefresh } = opts;
+    if (forceRefresh) {
+      console.log(`🔄 Force refreshing job data for job ${jobId}`);
+      try {
+        // Reload jobs data to get updated file versions and property counts
+        await loadLiveData(['jobs']);
+        console.log('✅ Job data refreshed successfully');
+      } catch (error) {
+        console.error('❌ Error refreshing job data:', error);
+      }
+    }
+  }, [loadLiveData]);
+
   // ==========================================
   // CALCULATION FUNCTIONS
   // ==========================================
