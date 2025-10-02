@@ -478,6 +478,42 @@ useEffect(() => {
   hasInitialized.current = true;
   const currentSession = currentSessionState.current;
 
+  // 🔴 CRITICAL DEBUG - LandValuationTab Initialization
+  console.log('🔴 CRITICAL DEBUG - LandValuationTab Initialization:', {
+    timestamp: new Date().toISOString(),
+    jobId: jobData?.id,
+
+    // What's coming from parent prop
+    marketLandDataFromProp: {
+      hasData: !!marketLandData,
+      updated_at: marketLandData?.updated_at,
+
+      // Check each critical field
+      vacant_sales: {
+        exists: !!marketLandData?.vacant_sales_analysis,
+        salesCount: marketLandData?.vacant_sales_analysis?.sales?.length,
+        manuallyAddedCount: marketLandData?.vacant_sales_analysis?.sales?.filter(s => s.manually_added)?.length,
+        firstSale: marketLandData?.vacant_sales_analysis?.sales?.[0]
+      },
+
+      cascade_rates: {
+        exists: !!marketLandData?.cascade_rates,
+        data: marketLandData?.cascade_rates
+      },
+
+      target_allocation: {
+        exists: marketLandData?.target_allocation !== undefined,
+        value: marketLandData?.target_allocation
+      },
+
+      worksheet_data: {
+        exists: !!marketLandData?.worksheet_data,
+        hasDescriptions: !!marketLandData?.worksheet_data?.descriptions,
+        descriptions: marketLandData?.worksheet_data?.descriptions
+      }
+    }
+  });
+
   // Check for unsaved session changes
   let restoredFromSession = false;
   if (currentSession?.hasUnsavedChanges && currentSession?.lastModified) {
