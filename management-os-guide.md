@@ -1669,6 +1669,167 @@ Each tab receives:
 - Unsaved changes protection
 - Property count always visible
 
+### DataQualityTab.jsx - Data Quality & Error Checking Engine 🔍
+
+**Scale**: 2,651 lines of comprehensive data validation and quality checks
+
+**Core Philosophy**: Catch data issues early, provide actionable insights, enable manager decisions
+
+**Key Features:**
+- **14 Standard Validation Checks**: Pre-built business logic validations
+- **Custom Check Builder**: Create job-specific validation rules
+- **Ignore System**: Mark false positives to reduce noise
+- **Quality Score**: 0-100% score based on issue severity
+- **Issue Categorization**: Critical, Warning, Info levels
+- **Excel Export**: Export all issues or ignored items
+- **QC Form Template**: Generate PDF for field verification
+- **Run History**: Track multiple analysis runs with timestamps
+
+**Three Sub-Tabs:**
+1. **Overview**: Dashboard with metrics, run button, history
+2. **Standard Checks**: Pre-built validations with results
+3. **Custom Checks**: User-defined rules builder
+4. **Ignored**: Manage false positives
+
+**Standard Validation Checks:**
+
+**Vacant Land Checks:**
+- Vacant land with improvements
+- Missing improvements on non-vacant
+- CAMA vacant land with improvements
+- CAMA properties missing improvements
+
+**Data Completeness:**
+- Missing facility information
+- Missing design style
+- Missing type use
+- Missing building dimensions
+- Zero improvement value issues
+
+**Classification Errors:**
+- Farm building without qualifier
+- Non-residential with wrong building class
+- Residential properties with building class 10
+- Type use/building class mismatches
+- Design without proper building class
+- Design without type use
+
+**Custom Check Builder:**
+```javascript
+// Example custom check configuration
+{
+  name: "Commercial without Tax ID",
+  severity: "warning",
+  conditions: [
+    { field: "property_m4_class", operator: "is one of", value: "4A,4B,4C" },
+    { field: "tax_id", operator: "is null", logic: "AND" }
+  ]
+}
+```
+
+**Condition Operators:**
+- equals, not equals
+- >, <, >=, <=
+- is null, is not null
+- contains
+- is one of, is not one of
+
+**Logic Support:**
+- AND conditions (all must match)
+- OR conditions (any must match)
+- Multiple condition groups
+
+**Issue Statistics Display:**
+```
+┌───────────────────────────��─────────────────┐
+│ Total Properties: 5,234                     │
+│ Properties with Issues: 342                 │
+│ Critical: 45 | Warnings: 187 | Info: 110   │
+│ Quality Score: 93.4%                        │
+└─────────────────────────────────────────────┘
+```
+
+**Quality Score Calculation:**
+```javascript
+// Weighted deductions per issue type
+issueWeights = {
+  critical: 10,  // Heavy penalty
+  warning: 5,    // Moderate penalty
+  info: 1        // Light penalty
+};
+score = 100 - (totalDeductions / propertyCount)
+```
+
+**Ignore System Workflow:**
+1. Run analysis → Find issues
+2. Review false positives
+3. Click "Ignore" on specific issues
+4. Issues move to Ignored tab
+5. Persist ignored list to database
+6. Future runs auto-filter ignored items
+
+**Database Persistence:**
+- Saves to market_land_valuation.quality_check_results
+- Stores custom checks configuration
+- Maintains ignored issues list
+- Tracks run history with timestamps
+
+**Export Features:**
+
+**Main Export (Excel):**
+- All categories and issues
+- Property details
+- Severity levels
+- Issue descriptions
+- Composite keys for reference
+
+**Ignored Export:**
+- Only ignored items
+- Reason for ignoring
+- Original issue details
+
+**QC Form Template (PDF):**
+- Printable field verification form
+- Checkboxes for common issues
+- Space for notes
+- Property identification fields
+
+**Performance Optimizations:**
+- Batch processing of checks
+- Category-based grouping
+- Lazy loading of property details
+- Cached check results
+- Efficient field access patterns
+
+**Integration Points:**
+- Receives properties from JobContainer
+- Uses vendor type for specific checks
+- Accesses code definitions for validation
+- Saves results to market_land_valuation
+- Updates parent via onUpdateJobCache
+
+**Smart Behaviors:**
+- Auto-expands categories with issues
+- Collapses empty categories
+- Shows issue counts per check
+- Highlights critical issues
+- Preserves ignored items between runs
+- Clear visual severity indicators
+
+**Modal System:**
+- Property details modal for deep inspection
+- Issue list with pagination
+- Direct property editing capability
+- Bulk ignore functionality
+
+**Critical Implementation Notes:**
+- Standard checks hardcoded for consistency
+- Custom checks saved per job
+- Ignored items persist across sessions
+- Quality score updates real-time
+- Export includes all metadata
+- Run history limited to last 10 runs
+
 ### ManagementChecklist.jsx - 29-Item Workflow Management System ✅
 
 **Scale**: Complete workflow tracker with document management and client approvals
