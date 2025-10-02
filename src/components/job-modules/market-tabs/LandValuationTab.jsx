@@ -584,7 +584,7 @@ useEffect(() => {
   // }
 
   // Restore Method 1 state persistence but SKIP cached sales data to force fresh calculation
-  if (marketLandData.vacant_sales_analysis?.sales) {
+  if (marketLandData.vacant_sales_analysis?.sales && (!restoredFromSession || includedSales.size === 0)) {
     const savedCategories = {};
     const savedNotes = {};
     const savedRegions = {};
