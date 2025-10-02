@@ -1600,16 +1600,8 @@ const getPricePerUnit = useCallback((price, size) => {
     });
   }, [properties, dateRange, calculateAcreage, getPricePerUnit]);
 
-  // ========== FORCE FRESH CALCULATION AFTER LOAD ==========
-  useEffect(() => {
-    if (isInitialLoadComplete && properties && properties.length > 0) {
-      debug('🔄 Triggering fresh calculation after load complete to use values_norm_time');
-      // Short delay to ensure all state is loaded before recalculating
-      setTimeout(() => {
-        filterVacantSales();
-      }, 100);
-    }
-  }, [isInitialLoadComplete, properties, filterVacantSales]);
+  // NOTE: filterVacantSales is already triggered by the main useEffect (lines 1010-1024)
+  // when isInitialLoadComplete becomes true. No need for a duplicate trigger here.
 
   const performBracketAnalysis = useCallback(async () => {
     if (!properties || !jobData?.id) return;
@@ -3599,7 +3591,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 // Also clear sessionStorage to ensure complete cleanup
           try {
             sessionStorage.removeItem('landValuation_' + jobData.id + '_session');
-            debug('🧹 Cleared session storage after successful save');
+            debug('��� Cleared session storage after successful save');
           } catch (err) {
             console.warn('Failed to clear sessionStorage:', err);
           }
