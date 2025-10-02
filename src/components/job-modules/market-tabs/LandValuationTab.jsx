@@ -574,7 +574,6 @@ useEffect(() => {
     if (savedConfig.mode) {
       setValuationMode(savedConfig.mode);
     }
-  }
   } else if (restoredFromSession) {
     debug('⏭️ Skipping cascade config DB load - already restored from session');
 
