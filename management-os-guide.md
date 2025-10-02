@@ -175,7 +175,7 @@ src/
 │       └── microsystems-updater.js    ← Microsystems ongoing updates (UPSERT)
 ├── App.js                             ← Central navigation + module state hub
 ├── App.css
-└── index.js
+���── index.js
 ```
 
 ### Data Interpretation Layer (interpretCodes) - ENHANCED
@@ -1446,28 +1446,64 @@ sales_history: {
 
 **Core Features:**
 - **Three-Step Workflow**: Upload worksheet → Calculate bonuses → Export to ADP
-- **Excel Worksheet Validation**: Detects formula issues, frozen panes, total mismatches
-- **Email Feedback Generator**: Creates friendly emails about worksheet issues
+- **Excel Worksheet Validation**: Detects formula issues, frozen panes, total mismatches, missing data
+- **Email Feedback Generator**: Creates friendly emails about worksheet issues with copy button
 - **Inspection Bonus Calculation**: $2.00 per residential inspection from inspection_data
 - **Smart Period Detection**: Knows payroll runs 15th and month-end
 - **Data Freshness Warnings**: Alerts if inspection data might be stale
 - **Archive System**: Saves to payroll_periods and payroll_entries tables
 
-**Production Intelligence:**
-- Detects hardcoded zeros vs formulas in Excel
-- Shows "Salary" badge for employees with "same" hours
+**Worksheet Intelligence:**
+- Detects hardcoded zeros vs formulas in Excel cells
+- Validates SUM formulas against individual row totals
+- Identifies frozen panes and merged cells
+- Finds employee header row automatically (looks for "EMPLOYEE")
+- Shows "Salary" badge for employees with "same" hours notation
 - Calculates expected hours based on actual working days
-- Initials matching with debug output
-- Auto-populates next period after processing
-- Color codes rows with issues (yellow highlighting)
+- Color codes validation issues (red=error, amber=warning, blue=suggestion)
+
+**Bonus Calculation Engine:**
+- Queries inspection_data for residential inspections (classes 2, 3A)
+- Filters by date range (payroll start to end)
+- Groups by inspector initials
+- Applies $2.00 per inspection rate
+- Tracks inspection IDs to prevent double-payment
+- Debug output shows all matched initials
+
+**Payroll Processing Features:**
 - Merges worksheet data with calculated bonuses
+- Updates Appt OT with Field Bonus amounts
+- Calculates new totals automatically
+- Shows inspection counts per employee
+- Visual row highlighting for employees with issues
+- Auto-populates next period dates after processing
+
+**Export & Archive:**
+- Generates ADP-compatible CSV format
+- Includes headers: Employee Name, Hours, Appt OT, Field Bonus, TOTAL OT
+- Adds totals row at bottom
+- Archives period data to payroll_periods table
+- Marks inspections as processed with period end date
+- Saves processing settings and issues found
 
 **Business Rules:**
-- Bimonthly payroll periods (1-15, 16-end)
+- Bimonthly payroll periods (1-15, 16-end of month)
 - Only residential inspectors get bonuses (classes 2, 3A)
 - Expected hours calculation excludes weekends
-- Exports specific format for ADP import
-- Marks inspections as processed to prevent double-payment
+- $2.00 bonus per residential inspection
+- Inspections marked processed to prevent double-payment
+- Salary employees show "same" for hours
+- Total validation tolerance: 0.01 for floating point
+
+**User Experience:**
+- Progress indicators for each step
+- Success messages with inspection counts
+- Email template generator for worksheet feedback
+- Copy-to-clipboard functionality
+- Next period auto-population
+- Color-coded validation feedback
+- Tip boxes for guidance
+- Archive view with historical periods
 
 ### EmployeeManagement.jsx - Human Capital Analytics Platform 💪
 
