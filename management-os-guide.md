@@ -1112,7 +1112,7 @@ appData = {
 User clicks job → handleJobSelect() → Updates URL → Sets selectedJob → Shows JobContainer
 
 **2. Module Analytics Flow:**
-ProductionTracker processes → Calls onUpdateWorkflowStats → Updates App.js state →
+ProductionTracker processes → Calls onUpdateWorkflowStats → Updates App.js state ���
 Persists to jobs.workflow_stats → Available in AdminJobManagement tiles
 
 **3. File Processing Flow:**
@@ -2011,7 +2011,7 @@ standardLocations = [
 
 **Statistics Display:**
 ```
-┌────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────���─────────────────┐
 │ Type Use │ Total │ Avg Year │ Avg Size │ Sales │ Adj Price │
 ├────────────────────────────────────────────────────────────┤
 │ Single   │ 1,234 │   1985   │  1,850   │  156  │ $285,000  │
@@ -2065,7 +2065,7 @@ floorPremium = ((floorPrice - firstFloorPrice) / firstFloorPrice) × 100
 │ 2ND FLOOR │  189  │ $162,000  │ -2%          │
 │ 3RD FLOOR │  145  │ $158,000  │ -4%          │
 │ PENTHOUSE │   12  │ $195,000  │ +18%         │
-└──────────────────────────────────────────────┘
+└──────���───────────────────────────────────────┘
 ```
 
 **Bedroom Detection Logic:**
@@ -2684,6 +2684,641 @@ const recommendedRate = Math.min(method1Result, method2Result);
 - Export capabilities critical for documentation
 - Debug mode essential for complex troubleshooting
 - Performance optimizations mandatory for usability
+
+### CostValuationTab.jsx - Cost Conversion Factor Analysis 💰
+
+**Scale**: ~800 lines of new construction analysis and cost conversion calculations
+
+**Core Philosophy**: Calculate and apply Cost Conversion Factor (CCF) for accurate property valuations based on replacement cost methodology
+
+**Purpose**:
+- Calculate Cost Conversion Factor (CCF) for property valuations
+- Analyze new construction sales to determine market-to-cost relationships
+- Apply consistent CCF across property types
+- Validate replacement cost calculations
+
+**Key Valuation Formula:**
+```javascript
+Adjusted Value = Current Land + ((Base Cost × Depreciation) × CCF) + Detached Items
+
+// Where:
+// Current Land = Land valuation from LandValuationTab
+// Base Cost = Replacement cost of improvements
+// Depreciation = 1 - ((Current Year - Year Built) / 100)
+// CCF = Cost Conversion Factor (market adjustment)
+// Detached Items = Garages, sheds, pools, etc.
+```
+
+**Dual CCF System:**
+
+The component supports two CCF values with smart selection logic:
+
+**1. Custom CCF (Job-Specific Override):**
+- Set by manager for entire job
+- Overrides all individual property calculations
+- Used when market conditions require uniform adjustment
+- Takes precedence over State County CCF
+- Common when market data is limited or inconsistent
+
+**2. State County CCF (Recommended Factor):**
+- State or county guidelines
+- Used as baseline/reference
+- Can be overridden by Custom CCF
+- Displayed for comparison purposes
+
+**Selection Logic:**
+```javascript
+// When Custom CCF is set
+if (customCCF) {
+  appliedCCF = customCCF;  // Use for ALL properties
+} else {
+  // Calculate individual property CCF
+  propertyCCF = improvementValue / replacementWithDepreciation;
+  // Recommended factor = median of all included property CCFs
+  recommendedCCF = median(allIncludedPropertyCCFs);
+}
+```
+
+**Custom CCF Use Cases:**
+- Market significantly above/below replacement cost
+- Consistent adjustment needed across all property types
+- Limited new construction sales data
+- Manager override based on experience/judgment
+
+**Price Basis Options:**
+
+Component allows switching between two price calculation methods:
+
+**1. Price Time (Default):**
+- Uses normalized time values from PreValuationTab
+- Accounts for market changes over time
+- Recommended for multi-year sales periods
+- Field: `values_norm_time` or time-adjusted sale price
+
+**2. Sale Price (Raw):**
+- Uses raw sale prices without time normalization
+- Appropriate for recent sales only
+- Simpler calculation
+- Field: `sale_price`
+
+**Price Basis Configuration:**
+```
+┌─────────────────────────────────────────┐
+│ Price Basis: ⦿ Price Time              │
+│              ○ Sale Price               │
+│                                         │
+│ Using time-normalized values from       │
+│ Pre-Valuation tab for accuracy         │
+└─────────────────────────────────────────┘
+```
+
+**Data Persistence:**
+- Saves to `market_land_valuation.cost_valuation_price_basis`
+- Persists selection across sessions
+- Applied consistently to all calculations
+
+**Property Type Grouping:**
+
+Instead of prefix filtering, uses dropdown for property type groups based on `asset_type_use` field:
+
+**Group Definitions:**
+- **Group '1'** - Single family residential (type use codes starting with '1')
+- **Group '2'** - Two family residential (type use codes starting with '2')
+- **Group '3'** - Three family residential (type use codes starting with '3')
+- **Group '4'** - Four+ family/commercial (type use codes starting with '4'+)
+
+**Filtering Logic:**
+```javascript
+// Filter by first digit of asset_type_use
+const filteredProperties = properties.filter(p => {
+  const typeUse = p.asset_type_use?.toString() || '';
+  return typeUse.startsWith(selectedGroup);
+});
+```
+
+**Group Selection UI:**
+```
+Property Type: [Group 1 ▼]
+  ├── Group 1 (Single Family) - 1,234 properties
+  ├── Group 2 (Two Family) - 89 properties
+  ├── Group 3 (Three Family) - 45 properties
+  └── Group 4 (Multi/Commercial) - 234 properties
+```
+
+**Purpose:**
+- Focus analysis on comparable property types
+- Different CCF factors may apply to different property classes
+- Residential vs commercial typically have different market-to-cost relationships
+
+**Comprehensive Analysis Grid:**
+
+The component displays a detailed analysis table with the following columns:
+
+**Property Identification:**
+- Block - Tax block number
+- Lot - Tax lot number
+- Qualifier - Lot qualifier (if applicable)
+- Card - Card number for condos/multiple units
+
+**Sales Data:**
+- Sale Date - Transaction date
+- Sale Price - Raw or time-normalized (based on price basis)
+- NU Code - Sales validity code
+- Price Time - Time-normalized price (if using Price Time basis)
+
+**Building Characteristics:**
+- Year Built - Construction year
+- Class - Building quality class
+- Living Area - Square footage of living space
+
+**Valuation Components:**
+- Current Land - Land value from LandValuationTab
+- Det Items - Detached items value (garages, pools, etc.)
+- Base Cost - Replacement cost of main structure
+
+**Calculations:**
+- Depreciation - Age-based depreciation percentage
+- Replacement w/Depreciation - (Base Cost + Det Items) × Depreciation
+- Improvement Value - Sale Price - Current Land - Det Items
+
+**CCF Analysis:**
+- CCF Calculation - Improvement Value ÷ Replacement w/Depreciation
+- Adjusted Value - Using CCF formula
+- Adjusted Ratio - (Adjusted Value ÷ Sale Price) × 100%
+
+**Grid Display:**
+```
+┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ ☑ │ Block │ Lot │ Qual │ Card │ Sale Date │ Price    │ Year │ Class │ SFLA  │ Land   │ CCF   │
+├────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ ☑ │ 123   │ 45  │      │ 1    │ 03/15/24  │ $285,000 │ 2020 │ C+3   │ 1,850 │ $45,000│ 1.15  │
+│ ☑ │ 124   │ 12  │      │ 1    │ 06/22/24  │ $310,000 │ 2021 │ C+4   │ 2,100 │ $48,000│ 1.18  │
+│ ☐ │ 125   │ 78  │      │ 1    │ 01/10/24  │ $265,000 │ 2019 │ C+2   │ 1,650 │ $42,000│ 1.08  │
+└────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Inclusion/Exclusion Feature:**
+
+**Checkbox Per Property:**
+- Allows manager to include/exclude individual properties from calculations
+- Affects recommended CCF factor calculation
+- Does not affect data persistence (session-only)
+
+**Use Cases:**
+- Exclude outliers (unusual sales, package sales)
+- Exclude properties with data quality issues
+- Focus on most comparable sales
+- Test impact of specific properties on recommended factor
+
+**Exclusion Workflow:**
+```
+1. Review grid and identify outliers
+2. Uncheck properties to exclude
+3. Recommended CCF recalculates automatically
+4. Compare median with/without outliers
+5. Make informed decision on final CCF
+```
+
+**Session-Only Behavior:**
+- Inclusion/exclusion state not saved to database
+- Resets when tab is closed/reopened
+- Prevents accidental permanent exclusions
+- Forces intentional review each session
+
+**Impact Display:**
+```
+┌─────────────────────────────────────────┐
+│ Total Properties: 45                    │
+│ Included: 42                            │
+│ Excluded: 3                             │
+│                                         │
+│ Recommended CCF (all): 1.15             │
+│ Recommended CCF (included): 1.12        │
+│ Difference: -2.6%                       │
+└─────────────────────────────────────────┘
+```
+
+**Land Value Editing:**
+
+**Inline Editing Capability:**
+- Click on Current Land value to edit
+- Override values from LandValuationTab
+- Useful for testing "what if" scenarios
+- Session-only changes (not saved to database)
+
+**Editing Workflow:**
+```
+1. Click on Current Land cell
+2. Enter new value
+3. Press Enter to apply
+4. All dependent calculations update automatically:
+   - Improvement Value recalculates
+   - CCF recalculates
+   - Adjusted Value recalculates
+   - Adjusted Ratio recalculates
+```
+
+**Visual Indicators:**
+- Edited cells highlighted in light yellow
+- Original value shown in tooltip on hover
+- Reset button to restore original values
+
+**Use Cases:**
+- Test impact of different land values on CCF
+- Override obviously incorrect land values
+- Scenario analysis for different land rate structures
+- Validation of land valuation methodology
+
+**Important Note:**
+- Changes are session-only
+- Does not update property_market_analysis table
+- Does not affect LandValuationTab calculations
+- Resets when tab closed/reopened
+
+**Year Range Filtering:**
+
+**Purpose:**
+- Focus on newer construction (≤20 years old)
+- Filter properties by sale year
+- Default: Last 3 years to current year
+
+**Configuration:**
+```
+┌─────────────────────────────────────────┐
+│ Sale Year Range:                        │
+│ From: [2021 ▼]  To: [2024 ▼]           │
+│                                         │
+│ Properties in range: 45                 │
+│ Newer construction (≤20 yrs): 42        │
+└─────────────────────────────────────────┘
+```
+
+**Auto-Save:**
+- Saves range to market_land_valuation table
+- Fields: `cost_valuation_from_year`, `cost_valuation_to_year`
+- Persists across sessions
+- Debounced save (500ms delay)
+
+**Filtering Logic:**
+```javascript
+// Filter by sale year
+const filtered = properties.filter(p => {
+  const saleYear = new Date(p.sale_date).getFullYear();
+  return saleYear >= fromYear && saleYear <= toYear;
+});
+
+// Additional filter: newer construction only
+const newerConstruction = filtered.filter(p => {
+  const age = currentYear - p.year_built;
+  return age <= 20;
+});
+```
+
+**Why Focus on Newer Construction:**
+- More consistent with modern building costs
+- Less depreciation complexity
+- Better representation of current market-to-cost relationships
+- Reduced impact of deferred maintenance
+
+**Calculation Methods:**
+
+**1. Depreciation Formula (Simple Straight-Line):**
+```javascript
+Depreciation = 1 - ((Current Year - Year Built) / 100)
+
+// Example:
+// Current Year: 2024
+// Year Built: 2020
+// Age: 4 years
+// Depreciation: 1 - (4 / 100) = 0.96 (96%)
+```
+
+**Depreciation Characteristics:**
+- 1% per year depreciation rate
+- Simple, defensible methodology
+- Caps at 0% (100 years old = fully depreciated)
+- No accelerated or curved depreciation
+
+**2. Cost Conversion Factor (CCF) Calculation:**
+
+**When NO Custom CCF is set:**
+```javascript
+// Per-property calculation
+Improvement Value = Sale Price - Current Land - Detached Items
+Replacement w/Depreciation = (Detached Items + Base Cost) × Depreciation
+CCF = Improvement Value / Replacement w/Depreciation
+
+// Example:
+// Sale Price: $285,000
+// Current Land: $45,000
+// Detached Items: $5,000
+// Base Cost: $200,000
+// Depreciation: 0.96 (4 years old)
+//
+// Improvement Value = $285,000 - $45,000 - $5,000 = $235,000
+// Replacement w/Depr = ($5,000 + $200,000) × 0.96 = $196,800
+// CCF = $235,000 / $196,800 = 1.194
+```
+
+**3. Recommended Factor Calculation:**
+
+**Uses Median (NOT Mean):**
+```javascript
+// Collect all CCFs from included properties
+const includedCCFs = properties
+  .filter(p => p.included)
+  .map(p => p.calculatedCCF)
+  .sort((a, b) => a - b);
+
+// Calculate median
+const median = includedCCFs[Math.floor(includedCCFs.length / 2)];
+
+// Why median?
+// - More resistant to outliers than average
+// - Better represents "typical" market conditions
+// - Reduces impact of unusual sales
+```
+
+**Median vs Mean Example:**
+```
+Property CCFs: [0.95, 1.05, 1.08, 1.12, 1.15, 1.18, 2.50]
+                                                      ↑ outlier
+Mean (Average): 1.29 (heavily skewed by outlier)
+Median: 1.12 (represents typical market)
+
+Recommended Factor: 1.12 (median)
+```
+
+**Export Functionality:**
+
+**CSV Export Features:**
+- Exports all filtered results
+- Includes all calculation columns
+- Filename format: `cost_valuation_analysis_YYYY-MM-DD.csv`
+
+**Export Button:**
+```
+┌─────────────────────────────────────────┐
+│ [📥 Export to CSV]                      │
+│                                         │
+│ Exports 42 included properties with:   │
+│ - All property identification           │
+│ - Sales data and characteristics        │
+│ - Complete calculations                 │
+│ - CCF analysis results                  │
+└─────────────────────────────────────────┘
+```
+
+**Exported Columns:**
+1. Block, Lot, Qualifier, Card
+2. Sale Date, Sale Price, NU Code
+3. Year Built, Building Class, Living Area
+4. Current Land, Detached Items, Base Cost
+5. Depreciation, Replacement w/Depreciation
+6. Improvement Value, CCF Calculation
+7. Adjusted Value, Adjusted Ratio
+8. Included (Yes/No)
+
+**Use Cases:**
+- Documentation for client presentations
+- State submission requirements
+- Audit trail for methodology
+- Further analysis in Excel
+- Archive of analysis results
+
+**Summary Statistics:**
+
+**Bottom-of-Component Display:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    SUMMARY STATISTICS                       │
+├─────────────────────────────────────────────────────────────┤
+│ Included Properties: 42                                     │
+│                                                             │
+│ Sum of Sale Prices:      $12,450,000                        │
+│ Sum of Adjusted Values:  $12,280,000                        │
+│ Overall Ratio:           98.6%                              │
+│                                                             │
+│ Recommended CCF (Median): 1.12                              │
+│ Custom CCF Applied:       1.15                              │
+│ State County CCF:         1.10                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Statistics Explained:**
+
+**Sum of Sale Prices:**
+- Total of all included property sale prices
+- Represents total market value
+
+**Sum of Adjusted Values:**
+- Total of all calculated adjusted values using CCF formula
+- Should closely match sale price sum for validation
+
+**Overall Ratio:**
+- (Sum of Adjusted Values ÷ Sum of Sale Prices) × 100%
+- Target: ~100% (indicates accurate CCF)
+- >100%: CCF may be too high
+- <100%: CCF may be too low
+
+**CCF Values:**
+- Recommended: Median of included properties
+- Custom: Manager override (if set)
+- State County: Reference value (if available)
+
+**Performance Optimizations:**
+
+**1. Row Display Limit (500 Properties):**
+```javascript
+// Display only first 500 rows for performance
+const displayedProperties = filteredProperties.slice(0, 500);
+
+// Warning message if more than 500
+if (filteredProperties.length > 500) {
+  showWarning(`Showing first 500 of ${filteredProperties.length} properties.
+               Use filters to narrow results.`);
+}
+```
+
+**Why 500 Limit:**
+- Prevents browser freezing with large datasets
+- Maintains responsive UI
+- Encourages use of filters for focused analysis
+- All properties still included in calculations (only display limited)
+
+**2. Debounced Auto-Save:**
+```javascript
+// Year range changes auto-save with 500ms delay
+const debouncedSave = useCallback(
+  debounce((fromYear, toYear) => {
+    saveYearRange(fromYear, toYear);
+  }, 500),
+  []
+);
+```
+
+**Benefits:**
+- Prevents excessive database writes
+- Allows user to adjust both years without multiple saves
+- Smooth user experience
+- Reduces server load
+
+**3. Memoized Calculations:**
+```javascript
+// Expensive calculations cached with useMemo
+const calculatedResults = useMemo(() => {
+  return properties.map(p => ({
+    ...p,
+    depreciation: calculateDepreciation(p),
+    replacementWithDepr: calculateReplacement(p),
+    ccf: calculateCCF(p),
+    adjustedValue: calculateAdjusted(p)
+  }));
+}, [properties, customCCF, priceBasis, currentLandOverrides]);
+```
+
+**Benefits:**
+- Recalculates only when dependencies change
+- Prevents redundant processing
+- Faster re-renders
+- Reduced CPU usage
+
+**Data Persistence:**
+
+**All Settings Saved to market_land_valuation Table:**
+
+**Fields:**
+```javascript
+{
+  // CCF Values
+  cost_conv_factor: number,           // Custom CCF (job-wide override)
+  cost_conv_recommendation: number,   // State County CCF (reference)
+
+  // Filtering
+  cost_valuation_from_year: number,   // Filter start year
+  cost_valuation_to_year: number,     // Filter end year
+  type_group: string,                 // Property type filter ('1', '2', '3', '4')
+
+  // Configuration
+  cost_valuation_price_basis: string  // 'price_time' or 'sale_price'
+}
+```
+
+**Save Triggers:**
+- Custom CCF: Manual save button
+- State County CCF: Manual save button
+- Year range: Auto-save with debouncing
+- Type group: Auto-save on change
+- Price basis: Auto-save on change
+
+**Session-Only Data (NOT Saved):**
+- Inclusion/exclusion checkboxes
+- Current land value overrides
+- Sort order and UI state
+
+**Integration with ManagementChecklist:**
+
+**Auto-Update Workflow:**
+```
+CostValuationTab saves Custom CCF
+    ↓
+Updates market_land_valuation.cost_conv_factor
+    ↓
+ManagementChecklist queries for completion
+    ↓
+Auto-checks "Cost Conversion Factor Set" if factor exists
+    ↓
+Updates checklist_item_status table
+```
+
+**Completion Criteria:**
+```javascript
+// Checklist item #24: "Cost Conversion Factor Set"
+const isComplete =
+  marketLandValuation.cost_conv_factor !== null &&
+  marketLandValuation.cost_conv_factor > 0;
+```
+
+**Workflow Integration:**
+- Syncs completion status with workflow engine
+- Requires client approval (configurable)
+- Tracks completion timestamp
+- Records completing user
+
+**Checklist Display:**
+```
+☑ 24. Cost Conversion Factor Set ✓
+     Completed: 2024-01-15 14:30
+     By: Jim Smith
+     Client Approved: Yes (2024-01-16)
+     CCF Value: 1.15
+```
+
+**Living Area Field Detection:**
+
+**Intelligent Field Search:**
+
+The component searches for living area in multiple field names to handle vendor differences:
+
+**Primary Fields (BRT):**
+- `asset_living_area`
+- `living_area`
+- `asset_sfla`
+
+**Alternate Fields (Microsystems):**
+- `asset_sfl_a`
+- `asset_sf_la`
+- `sf_la`
+
+**Additional Variants:**
+- `sf_living_area`
+- `asset_liv_area`
+- `asset_livingarea`
+
+**Nested Raw Data Search:**
+- Also checks `property.raw_data.SFLA`
+- Handles JSONB nested structures
+- Vendor-specific raw data formats
+
+**Field Detection Logic:**
+```javascript
+const getLivingArea = (property) => {
+  // Try standard fields first
+  const standardFields = [
+    'asset_living_area', 'living_area', 'asset_sfla',
+    'asset_sfl_a', 'asset_sf_la', 'sf_la',
+    'sf_living_area', 'asset_liv_area', 'asset_livingarea'
+  ];
+
+  for (const field of standardFields) {
+    if (property[field]) return property[field];
+  }
+
+  // Try nested raw_data
+  if (property.raw_data?.SFLA) {
+    return property.raw_data.SFLA;
+  }
+
+  // Return null if not found
+  return null;
+};
+```
+
+**Missing Data Handling:**
+- Properties without living area flagged in UI
+- Warning icon displayed
+- Excludes from CCF calculation (no valid living area = no base cost)
+- Summary shows count of properties with missing data
+
+**Critical Implementation Notes:**
+- Focuses on newer construction (≤20 years) for accuracy
+- Median recommended factor more defensible than mean
+- Session-only overrides prevent accidental data corruption
+- Custom CCF takes precedence over calculated values
+- Integration with ManagementChecklist for workflow tracking
+- Export capabilities essential for client presentations
+- Performance optimizations critical for large datasets
+- Living area detection handles vendor variations
 
 ### ManagementChecklist.jsx - 29-Item Workflow Management System ✅
 
