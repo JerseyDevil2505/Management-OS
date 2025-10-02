@@ -1158,26 +1158,79 @@ getPackageSaleData(properties)
 - **Vendor Auto-Detection**: .csv → BRT, pipe-delimited → Microsystems
 - **Comparison Analysis**: Missing records, deletions, sales changes, class changes
 - **Sales Decision System**: Keep Old/Keep New/Keep Both for price conflicts
-- **Report Generation**: Saves to comparison_reports + CSV export
+- **Report Generation**: Saves to comparison_reports table + CSV export
 - **Version Tracking**: Separate handling for source vs code files
 - **Batch Monitoring**: Real-time progress via console.log interception
+- **Zero-Change Processing**: Updates version even when no changes detected
 
 **Workflow Pattern:**
-1. User selects file → Auto-detect vendor
+1. User selects file → Auto-detect vendor type
 2. Compare against database → Show changes in modal
 3. User makes sales decisions → Reviews all changes
 4. Process approved changes → Call appropriate updater
 5. Save comparison report → Update job metadata
+6. Trigger data refresh → Notify parent components
+
+**Comparison Categories:**
+- **New Records**: Properties in file but not in database
+- **Deletions**: Properties in database but not in file
+- **Sales Changes**: Price/date differences requiring decisions
+- **Class Changes**: Property classification modifications
+- **Fuzzy Matches**: Near-matches for manual review (optional)
+
+**Sales Decision Handling:**
+- **Keep Old**: Reverts to database values
+- **Keep New**: Uses file values (default)
+- **Keep Both**: Stores new as current, old in sales_history
+- Decisions persist to `sales_history` JSONB field
+- Scroll position maintained during decision-making
 
 **File Version Management:**
-- Source file versions tracked in `property_records.file_version`
-- Code file versions tracked in `jobs.code_file_version`
-- Banner shows "Imported at Job Creation" (v1) or "Updated via FileUpload" (v2+)
+- Source file versions: `property_records.file_version`
+- Code file versions: `jobs.code_file_version`
+- Banner indicators: "Imported at Job Creation" (v1) vs "Updated via FileUpload" (v2+)
+- Version increments even with no changes (tracks review activity)
 
 **Composite Key Generation:**
 - Generates keys EXACTLY matching processor logic
 - BRT: `YEAR+CCDD-BLOCK-LOT_QUALIFIER-CARD-LOCATION`
 - Microsystems: `YEAR+CCDD-Block-Lot_Qual-Bldg-Location`
+- Handles edge cases: missing qualifiers, zero padding
+
+**Batch Processing Modal:**
+- Real-time console.log interception
+- Progress indicators with record counts
+- Color-coded log levels (info, warning, error, success)
+- Expandable log entries with metadata
+- Auto-scroll to latest entries
+- Force quit option for problematic operations
+
+**Report Export Features:**
+- CSV format matching legacy structure
+- Headers: Report_Date, Composite_Key, Change_Type, etc.
+- Includes sales decisions and review status
+- Compatible with Excel for manual review
+
+**Integration Points:**
+- Calls processors for initial imports (INSERT)
+- Calls updaters for file updates (UPSERT)
+- Triggers `onFileProcessed` callback to parent
+- Updates job validation status
+- Refreshes report count badge
+
+**Error Handling:**
+- Validates file content before processing
+- Handles vendor detection failures
+- Manages comparison timeouts
+- Provides detailed error logging
+- Rollback support for failed batches
+
+**Performance Optimizations:**
+- Targeted deletion using composite key lists
+- Batch processing with configurable sizes
+- Efficient comparison algorithms
+- Minimal database round-trips
+- Scroll position preservation during updates
 
 **Sales Decision Persistence:**
 ```javascript
