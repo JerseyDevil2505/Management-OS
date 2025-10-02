@@ -66,6 +66,41 @@ const JobContainer = ({
     }
   }, [fileRefreshTrigger, selectedJob]);
 
+  // SURGICAL REFRESH: Only reload marketLandData without global refresh
+  const refreshMarketLandData = async () => {
+    if (!selectedJob?.id) return;
+    console.log('🔄 Refreshing market land data only (surgical refresh)...');
+
+    try {
+      const { data: freshData, error } = await supabase
+        .from('market_land_valuation')
+        .select('*')
+        .eq('job_id', selectedJob.id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('❌ Error refreshing market land data:', error);
+        return;
+      }
+
+      // Normalize unit_rate_codes_applied if needed
+      if (freshData && freshData.unit_rate_codes_applied && typeof freshData.unit_rate_codes_applied === 'string') {
+        try {
+          freshData.unit_rate_codes_applied = JSON.parse(freshData.unit_rate_codes_applied);
+        } catch (e) {
+          console.warn('Failed to parse unit_rate_codes_applied:', e);
+        }
+      }
+
+      // Update ONLY the marketLandData state - no other data affected
+      setMarketLandData(freshData || {});
+      console.log('✅ Market land data refreshed without global refresh');
+
+    } catch (error) {
+      console.error('❌ Failed to refresh market land data:', error);
+    }
+  };
+
   const loadLatestFileVersions = async () => {
     if (!selectedJob?.id) return;
     console.log('📝 LOADING JOB DATA - No caching, fresh data every time');
@@ -80,7 +115,7 @@ const JobContainer = ({
     console.log('📊 Loading job data using direct database calls...');
 
     try {
-        console.log('🔍 Loading fresh data for job:', selectedJob.id);
+        console.log('�� Loading fresh data for job:', selectedJob.id);
       console.log('📡 Loading fresh data from database...');
 
       // Add timeout wrapper function
@@ -946,6 +981,8 @@ const JobContainer = ({
         // Mark that this module made changes
         setModuleHasChanges(true);
       },
+      // SURGICAL REFRESH: Only reload marketLandData without affecting other data
+      refreshMarketLandData: refreshMarketLandData,
       // REMOVED: No longer needed - FileUploadButton uses job.vendor_type directly
       // NEW: Pass loading state to disable FileUploadButton while loading
       isJobContainerLoading: isLoadingVersion || isLoadingProperties

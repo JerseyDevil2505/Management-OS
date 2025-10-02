@@ -1,6 +1,72 @@
 import { createClient } from '@supabase/supabase-js';
 
 /**
+ * SELECTIVE CACHING LAYER
+ * ======================
+ * Cache only truly static data that rarely changes.
+ * Everything else uses live data pattern.
+ */
+
+// Cache configuration
+const CACHE_CONFIG = {
+  CODE_DEFINITIONS: 30 * 60 * 1000,  // 30 minutes - code files rarely change
+  EMPLOYEE_LIST: 10 * 60 * 1000,     // 10 minutes - employee data is relatively static
+  COUNTY_HPI: 60 * 60 * 1000,        // 60 minutes - historical HPI data never changes
+  MANAGERS: 10 * 60 * 1000,          // 10 minutes - manager list is stable
+};
+
+// Simple cache implementation
+class DataCache {
+  constructor() {
+    this.cache = new Map();
+  }
+
+  set(key, data, ttl = 5 * 60 * 1000) {
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now(),
+      ttl
+    });
+  }
+
+  get(key) {
+    const cached = this.cache.get(key);
+    if (!cached) return null;
+
+    if (Date.now() - cached.timestamp > cached.ttl) {
+      // Cache expired, remove it
+      this.cache.delete(key);
+      return null;
+    }
+
+    return cached.data;
+  }
+
+  clear(key) {
+    if (key) {
+      this.cache.delete(key);
+    } else {
+      this.cache.clear();
+    }
+  }
+
+  has(key) {
+    const cached = this.cache.get(key);
+    if (!cached) return false;
+
+    if (Date.now() - cached.timestamp > cached.ttl) {
+      this.cache.delete(key);
+      return false;
+    }
+
+    return true;
+  }
+}
+
+// Export cache instance
+export const dataCache = new DataCache();
+
+/**
  * Helper function to safely extract error message from any error type
  */
 function getErrorMessage(error) {
@@ -63,20 +129,22 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 /**
  * Cache for parsed source file data to avoid repeated parsing
  */
-const sourceFileCache = new Map();
-
 /**
  * Get parsed raw data for a job (with caching)
  */
 async function getRawDataForJob(jobId) {
-  if (sourceFileCache.has(jobId)) {
-    return sourceFileCache.get(jobId);
+  // Check cache first
+  const cacheKey = `job_raw_data_${jobId}`;
+  const cached = dataCache.get(cacheKey);
+  if (cached) {
+    console.log(`📦 Returning cached raw data for job ${jobId}`);
+    return cached;
   }
 
   try {
     const { data: job, error } = await supabase
       .from('jobs')
-      .select('raw_file_content, ccdd_code, start_date')
+      .select('raw_file_content, parsed_code_definitions, vendor_type, ccdd_code, start_date')
       .eq('id', jobId)
       .single();
 
@@ -85,7 +153,7 @@ async function getRawDataForJob(jobId) {
     }
 
     // Determine vendor type and year
-    const vendorType = detectVendorTypeFromContent(job.raw_file_content);
+    const vendorType = job.vendor_type || detectVendorTypeFromContent(job.raw_file_content);
     const yearCreated = new Date(job.start_date).getFullYear();
     const ccddCode = job.ccdd_code;
 
@@ -109,12 +177,14 @@ async function getRawDataForJob(jobId) {
       vendorType: vendorType || 'Unknown',
       yearCreated: yearCreated || new Date().getFullYear(),
       ccddCode: ccddCode || '',
-      propertyMap: propertyMap || new Map()
+      propertyMap: propertyMap || new Map(),
+      codeDefinitions: job.parsed_code_definitions,
+      parsed_code_definitions: job.parsed_code_definitions
     };
 
-    // Cache for 5 minutes
-    sourceFileCache.set(jobId, result);
-    setTimeout(() => sourceFileCache.delete(jobId), 5 * 60 * 1000);
+    // Cache with longer TTL since code definitions rarely change
+    dataCache.set(cacheKey, result, CACHE_CONFIG.CODE_DEFINITIONS);
+    console.log(`💾 Cached raw data for job ${jobId}`);
 
     return result;
 
@@ -3618,6 +3688,11 @@ export const propertyService = {
 
   // ENHANCED: Update method with field preservation that calls UPDATERS (UPSERT) for existing jobs
   async updateCSVData(sourceFileContent, codeFileContent, jobId, yearCreated, ccddCode, vendorType, versionInfo = {}) {
+    // Clear any cached data for this job when updating
+    dataCache.clear(`job_${jobId}`);
+    dataCache.clear(`job_raw_data_${jobId}`);
+    console.log(`🗑️ Cleared cache for job ${jobId} due to CSV update`);
+
     try {
       console.log(`🔄 Updating ${vendorType} data for job ${jobId} with field preservation`);
       
@@ -4505,6 +4580,43 @@ export const worksheetService = {
       .eq('job_id', jobId);
     
     if (error) throw error;
+  }
+};
+
+/**
+ * County HPI Data Service (with caching)
+ */
+export const countyHpiService = {
+  async getAll() {
+    // Check cache first
+    const cacheKey = 'county_hpi_all';
+    const cached = dataCache.get(cacheKey);
+    if (cached) {
+      console.log('📦 Returning cached county HPI data');
+      return cached;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('county_hpi_data')
+        .select('*')
+        .order('county_name, observation_year');
+
+      if (error) throw error;
+
+      // Cache with long TTL since historical data doesn't change
+      dataCache.set(cacheKey, data, CACHE_CONFIG.COUNTY_HPI);
+      console.log('💾 Cached county HPI data');
+
+      return data;
+    } catch (error) {
+      console.error('County HPI service error:', error);
+      throw error;
+    }
+  },
+
+  clearCache() {
+    dataCache.clear('county_hpi_all');
   }
 };
 

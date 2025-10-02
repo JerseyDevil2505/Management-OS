@@ -478,9 +478,46 @@ useEffect(() => {
   hasInitialized.current = true;
   const currentSession = currentSessionState.current;
 
-  // If we have session state with unsaved changes, use it instead of database
+  // 🔴 CRITICAL DEBUG - LandValuationTab Initialization
+  console.log('🔴 CRITICAL DEBUG - LandValuationTab Initialization:', {
+    timestamp: new Date().toISOString(),
+    jobId: jobData?.id,
+
+    // What's coming from parent prop
+    marketLandDataFromProp: {
+      hasData: !!marketLandData,
+      updated_at: marketLandData?.updated_at,
+
+      // Check each critical field
+      vacant_sales: {
+        exists: !!marketLandData?.vacant_sales_analysis,
+        salesCount: marketLandData?.vacant_sales_analysis?.sales?.length,
+        manuallyAddedCount: marketLandData?.vacant_sales_analysis?.sales?.filter(s => s.manually_added)?.length,
+        firstSale: marketLandData?.vacant_sales_analysis?.sales?.[0]
+      },
+
+      cascade_rates: {
+        exists: !!marketLandData?.cascade_rates,
+        data: marketLandData?.cascade_rates
+      },
+
+      target_allocation: {
+        exists: marketLandData?.target_allocation !== undefined,
+        value: marketLandData?.target_allocation
+      },
+
+      worksheet_data: {
+        exists: !!marketLandData?.worksheet_data,
+        hasDescriptions: !!marketLandData?.worksheet_data?.descriptions,
+        descriptions: marketLandData?.worksheet_data?.descriptions
+      }
+    }
+  });
+
+  // Check for unsaved session changes
+  let restoredFromSession = false;
   if (currentSession?.hasUnsavedChanges && currentSession?.lastModified) {
-    debug('📋 Restoring from session state (unsaved changes detected)');
+    debug('⚠️ Found unsaved session changes from', currentSession.lastModified);
 
     setMethod1ExcludedSales(currentSession.method1ExcludedSales || new Set());
     setIncludedSales(currentSession.includedSales || new Set());
@@ -516,20 +553,17 @@ useEffect(() => {
       setCollapsedFields(currentSession.collapsedFields);
     }
 
-    // Still load read-only data from marketLandData
-    setLastSaved(marketLandData.updated_at ? new Date(marketLandData.updated_at) : null);
-    setIsLoading(false);
-    setIsInitialLoadComplete(true);
-
-    debug('✅ Session state restored successfully');
-    return;
+    restoredFromSession = true;
+    debug('✅ Session state restored, will merge with database data');
   }
 
-  // No unsaved changes, load from database as normal
-  debug('🔄 Loading from database (no unsaved session changes):', {
+  // ALWAYS load from database
+  console.log('🟡 ABOUT TO LOAD FROM DATABASE');
+  debug('🔄 Loading from database:', {
     hasRawLandConfig: !!marketLandData.raw_land_config,
     hasCascadeRates: !!marketLandData.cascade_rates,
-    hasVacantSales: !!marketLandData.vacant_sales_analysis?.sales?.length
+    hasVacantSales: !!marketLandData.vacant_sales_analysis?.sales?.length,
+    restoredFromSession
   });
 
   // Restore all saved states from marketLandData
@@ -548,7 +582,7 @@ useEffect(() => {
 
   // Load cascade config from either location (prefer cascade_rates, fallback to raw_land_config)
   const savedConfig = marketLandData.cascade_rates || marketLandData.raw_land_config?.cascade_config;
-  if (savedConfig) {
+  if (savedConfig && !restoredFromSession) {
     debug('��� Loading cascade config:', {
       source: marketLandData.cascade_rates ? 'cascade_rates' : 'raw_land_config',
       specialCategories: savedConfig.specialCategories,
@@ -577,6 +611,10 @@ useEffect(() => {
     if (savedConfig.mode) {
       setValuationMode(savedConfig.mode);
     }
+
+    console.log('🟢 LOADED CASCADE RATES:', savedConfig);
+  } else if (restoredFromSession) {
+    debug('⏭️ Skipping cascade config DB load - already restored from session');
   }
 
   // Skip the duplicate cascade_rates assignment - it's redundant
@@ -585,7 +623,7 @@ useEffect(() => {
   // }
 
   // Restore Method 1 state persistence but SKIP cached sales data to force fresh calculation
-  if (marketLandData.vacant_sales_analysis?.sales) {
+  if (marketLandData.vacant_sales_analysis?.sales && (!restoredFromSession || includedSales.size === 0)) {
     const savedCategories = {};
     const savedNotes = {};
     const savedRegions = {};
@@ -636,6 +674,13 @@ useEffect(() => {
     // FORCE FRESH CALCULATION: Clear any cached sales data and force recalculation with new values_norm_time logic
     debug('🧹 Clearing cached sales data to force fresh calculation with values_norm_time');
     setVacantSales([]); // Clear cached sales to force recalculation
+
+    console.log('🟢 LOADED VACANT SALES:', {
+      count: marketLandData.vacant_sales_analysis.sales.length,
+      manuallyAdded: manuallyAddedIds.size,
+      includedCount: savedIncluded.size,
+      excludedCount: savedExcluded.size
+    });
   }
 
   // Also restore Method 1 excluded sales from new field (like Method 2)
@@ -672,6 +717,7 @@ useEffect(() => {
 
   // Only set if we found a valid value AND current state is null/empty to prevent overwrites
   if (loadedTargetAllocation !== null) {
+    console.log('🟢 LOADED TARGET ALLOCATION:', loadedTargetAllocation);
     // Ensure it's a number to prevent caching issues
     const numericValue = typeof loadedTargetAllocation === 'string' ?
       parseFloat(loadedTargetAllocation) : loadedTargetAllocation;
@@ -717,9 +763,11 @@ useEffect(() => {
     }
     if (marketLandData.worksheet_data.descriptions) {
       setVcsDescriptions(marketLandData.worksheet_data.descriptions);
+      debug('✅ Loaded VCS descriptions:', marketLandData.worksheet_data.descriptions);
     }
     if (marketLandData.worksheet_data.types) {
       setVcsTypes(marketLandData.worksheet_data.types);
+      debug('✅ Loaded VCS types:', marketLandData.worksheet_data.types);
     }
   }
 
@@ -960,13 +1008,20 @@ const getPricePerUnit = useCallback((price, size) => {
   }, [vendorType]);
 
   useEffect(() => {
+    // CRITICAL FIX: Don't auto-detect/filter during initialization!
+    // This prevents overwriting manually added sales that were saved to the database
+    if (!isInitialLoadComplete) {
+      console.log('⏸️ Skipping auto-detection - waiting for initial load to complete');
+      return;
+    }
+
     if (properties && properties.length > 0) {
-      console.log('🔄 Triggering fresh calculations with FIXED DELTA LOGIC');
+      console.log('🔄 Triggering fresh calculations with FIXED DELTA LOGIC (post-initialization)');
       filterVacantSales();
       performBracketAnalysis();
       loadVCSPropertyCounts();
     }
-  }, [properties, dateRange, valuationMode, method2TypeFilter, method2ExcludedSales]);
+  }, [properties, dateRange, valuationMode, method2TypeFilter, method2ExcludedSales, isInitialLoadComplete]);
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
@@ -1038,24 +1093,29 @@ const getPricePerUnit = useCallback((price, size) => {
   // }, [vacantSales.length, Object.keys(saleCategories).length, isInitialLoadComplete]);
 
   // Clear Method 1 temporary variables after filtering is complete
+  // IMPORTANT: Don't clear too early - filterVacantSales needs these to preserve manual sales
   useEffect(() => {
-    if (isInitialLoadComplete && window._method1ExcludedSales) {
+    if (isInitialLoadComplete && vacantSales.length > 0 && window._method1ExcludedSales) {
+      // Only clear after we have populated vacantSales (which means filterVacantSales has run)
       debug('🧹 Clearing Method 1 temporary variables after successful application');
-      delete window._method1ExcludedSales;
-      delete window._method1IncludedSales;
-      delete window._method1ManuallyAdded;
+      setTimeout(() => {
+        delete window._method1ExcludedSales;
+        delete window._method1IncludedSales;
+        delete window._method1ManuallyAdded;
+      }, 1000); // Small delay to ensure filterVacantSales completes
     }
-  }, [isInitialLoadComplete]);
+  }, [isInitialLoadComplete, vacantSales.length]);
   // ========== LAND RATES FUNCTIONS WITH ENHANCED FILTERS ==========
   const filterVacantSales = useCallback(() => {
     if (!properties) return;
 
-    debug('🔄 FilterVacantSales called:', {
+    console.log('🔄 FilterVacantSales called:', {
       currentVacantSalesCount: vacantSales.length,
       hasMethod1Excluded: !!window._method1ExcludedSales,
       method1ExcludedSize: window._method1ExcludedSales?.size || 0,
       hasManuallyAdded: !!window._method1ManuallyAdded,
-      manuallyAddedSize: window._method1ManuallyAdded?.size || 0
+      manuallyAddedSize: window._method1ManuallyAdded?.size || 0,
+      isInitialLoadComplete: isInitialLoadComplete
     });
 
     // CRITICAL: First restore manually added properties that might not meet natural criteria
@@ -1142,7 +1202,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (newSales.length > 0) {
-        debug('������ Found new sales to add:', newSales.length);
+        debug('�������� Found new sales to add:', newSales.length);
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
           const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
@@ -1540,16 +1600,8 @@ const getPricePerUnit = useCallback((price, size) => {
     });
   }, [properties, dateRange, calculateAcreage, getPricePerUnit]);
 
-  // ========== FORCE FRESH CALCULATION AFTER LOAD ==========
-  useEffect(() => {
-    if (isInitialLoadComplete && properties && properties.length > 0) {
-      debug('🔄 Triggering fresh calculation after load complete to use values_norm_time');
-      // Short delay to ensure all state is loaded before recalculating
-      setTimeout(() => {
-        filterVacantSales();
-      }, 100);
-    }
-  }, [isInitialLoadComplete, properties, filterVacantSales]);
+  // NOTE: filterVacantSales is already triggered by the main useEffect (lines 1010-1024)
+  // when isInitialLoadComplete becomes true. No need for a duplicate trigger here.
 
   const performBracketAnalysis = useCallback(async () => {
     if (!properties || !jobData?.id) return;
@@ -2812,7 +2864,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
     debug('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
-    debug('📊 Input validation:', {
+    debug('���� Input validation:', {
       hasTargetAllocation: !!targetAllocation,
       targetAllocationValue: targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
@@ -2974,6 +3026,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ...prev,
       [vcs]: description
     }));
+
+    // Trigger autosave to persist the description
+    debug('💾 Triggering autosave for VCS description change');
+    setTimeout(() => {
+      if (window.landValuationSave) {
+        window.landValuationSave({ source: 'autosave' });
+      }
+    }, 1000); // 1 second delay to batch rapid typing
   };
 
 
@@ -2982,6 +3042,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ...prev,
       [vcs]: type
     }));
+
+    // Trigger autosave to persist the type change
+    debug('💾 Triggering autosave for VCS type change');
+    setTimeout(() => {
+      if (window.landValuationSave) {
+        window.landValuationSave({ source: 'autosave' });
+      }
+    }, 500);
   };
 
   const toggleFieldCollapse = (fieldName) => {
@@ -3492,7 +3560,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       if (error) throw error;
 
-      debug('✅ Save completed successfully');
+      debug('�� Save completed successfully');
       setLastSaved(new Date());
 
       // Notify parent component
@@ -3520,6 +3588,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             lastModified: null
           });
           debug('🧹 Session state cleared after successful save');
+// Also clear sessionStorage to ensure complete cleanup
+          try {
+            sessionStorage.removeItem('landValuation_' + jobData.id + '_session');
+            debug('��� Cleared session storage after successful save');
+          } catch (err) {
+            console.warn('Failed to clear sessionStorage:', err);
+          }
         } catch (e) {
           console.warn('Failed to clear session state after save', e);
         }
@@ -7416,7 +7491,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'lot' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Lot {modalSortField === 'lot' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Lot {modalSortField === 'lot' ? (modalSortDirection === 'asc' ? '��' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('address')}
@@ -9276,7 +9351,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             <FileDown size={16} /> Export All
           </button>
           <button
-            onClick={() => saveAnalysis()}
+            onClick={() => saveAnalysis({ source: 'manual' })}
             disabled={isSaving}
             style={{
               backgroundColor: '#10B981',

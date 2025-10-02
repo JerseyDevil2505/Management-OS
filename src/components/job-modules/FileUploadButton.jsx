@@ -7,6 +7,7 @@ const FileUploadButton = ({
   onFileProcessed,
   isJobLoading = false,
   onDataRefresh,
+  onUpdateJobCache,  // JobContainer's refresh callback
   isJobContainerLoading = false  // Accept loading state from JobContainer
 }) => {
   const [sourceFile, setSourceFile] = useState(null);
@@ -2192,13 +2193,14 @@ const handleCodeFileUpdate = async () => {
                     setSourceFileContent(null);
                     setSalesDecisions(new Map());
 
-                    // Trigger data refresh to update all sub-modules with new data
-                    if (onDataRefresh) {
+                    // Trigger JobContainer refresh to update all modules with new data
+                    if (onUpdateJobCache) {
                       try {
-                        await onDataRefresh();
-                        console.log('🔄 Data refresh triggered after file upload completion');
+                        console.log('🔄 Triggering JobContainer refresh after file upload completion');
+                        await onUpdateJobCache(job.id, { forceRefresh: true });
+                        console.log('✅ JobContainer data refreshed successfully');
                       } catch (error) {
-                        console.error('❌ Error during post-upload data refresh:', error);
+                        console.error('❌ Error during JobContainer refresh:', error);
                       }
                     }
                   }}
