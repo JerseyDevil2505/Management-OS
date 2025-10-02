@@ -1071,6 +1071,7 @@ const App = () => {
                     job={selectedJob}
                     onFileProcessed={handleFileProcessed}
                     onDataRefresh={handleFileProcessed}
+                    onUpdateJobCache={handleJobDataRefresh}
                   />
                 </div>
               </div>
