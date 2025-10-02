@@ -4583,4 +4583,41 @@ export const worksheetService = {
   }
 };
 
+/**
+ * County HPI Data Service (with caching)
+ */
+export const countyHpiService = {
+  async getAll() {
+    // Check cache first
+    const cacheKey = 'county_hpi_all';
+    const cached = dataCache.get(cacheKey);
+    if (cached) {
+      console.log('📦 Returning cached county HPI data');
+      return cached;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('county_hpi_data')
+        .select('*')
+        .order('county_name, observation_year');
+
+      if (error) throw error;
+
+      // Cache with long TTL since historical data doesn't change
+      dataCache.set(cacheKey, data, CACHE_CONFIG.COUNTY_HPI);
+      console.log('💾 Cached county HPI data');
+
+      return data;
+    } catch (error) {
+      console.error('County HPI service error:', error);
+      throw error;
+    }
+  },
+
+  clearCache() {
+    dataCache.clear('county_hpi_all');
+  }
+};
+
 export default supabase;
