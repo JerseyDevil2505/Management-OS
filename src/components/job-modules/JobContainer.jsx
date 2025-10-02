@@ -115,7 +115,7 @@ const JobContainer = ({
     console.log('📊 Loading job data using direct database calls...');
 
     try {
-        console.log('🔍 Loading fresh data for job:', selectedJob.id);
+        console.log('�� Loading fresh data for job:', selectedJob.id);
       console.log('📡 Loading fresh data from database...');
 
       // Add timeout wrapper function
@@ -981,6 +981,8 @@ const JobContainer = ({
         // Mark that this module made changes
         setModuleHasChanges(true);
       },
+      // SURGICAL REFRESH: Only reload marketLandData without affecting other data
+      refreshMarketLandData: refreshMarketLandData,
       // REMOVED: No longer needed - FileUploadButton uses job.vendor_type directly
       // NEW: Pass loading state to disable FileUploadButton while loading
       isJobContainerLoading: isLoadingVersion || isLoadingProperties
