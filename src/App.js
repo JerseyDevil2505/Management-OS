@@ -433,7 +433,7 @@ const App = () => {
 
       setAppData(newData);
 
-      setCacheStatus({
+      setLoadingStatus({
         isStale: false,
         isRefreshing: false,
         lastError: null,
