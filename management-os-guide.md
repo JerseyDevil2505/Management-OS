@@ -159,7 +159,7 @@ src/
 │       ├── MarketLandAnalysis.jsx     ← 6-tab valuation parent component (🚧 IN DEVELOPMENT)
 │       ├── market-tabs/               ← Individual tab components (NEW STRUCTURE)
 │       │   ├── DataQualityTab.jsx    ← Data validation and error checking
-│       │   ├── PreValuationTab.jsx   ← Normalization + Page by Page worksheet
+��       │   ├── PreValuationTab.jsx   ← Normalization + Page by Page worksheet
 │       │   ├── OverallAnalysisTab.jsx ← Block mapping + consistency metrics
 │       │   ├── LandValuationTab.jsx  ← 7-section land methodology
 │       │   ├── CostValuationTab.jsx  ← New construction + CCF
@@ -1345,42 +1345,100 @@ sales_history: {
 - **Progress dashboard** with completion percentages and metrics
 - **Archive workflow** - completing turnover date triggers job archival
 
-### BillingManagement.jsx - Enterprise Financial Operations Platform 💰
+### BillingManagement.jsx - Financial Control Tower 💰
 
-**Scale**: 3,300+ lines managing complete financial lifecycle
+**Scale**: 3,300 lines of integrated financial management
 
 **Core Features:**
-- **Six-Tab Financial Command Center**:
-  - Active Jobs: Contract setup, billing events, payment tracking
-  - Planned Jobs: Pipeline management with contract values
-  - Legacy Jobs: Historical billing management
-  - Expenses: Monthly tracking with Excel import
-  - Office Receivables: Non-job revenue tracking
-  - Shareholder Distributions: Profit distribution analysis
+- **Six-Tab Command Center with Live Counts**:
+  - Active Jobs: Contract setup, billing events, payment tracking with visual status indicators
+  - Planned Jobs: Pipeline management with contract values and 90% collection assumption
+  - Legacy Jobs: Historical billing management for special cases
+  - Expenses: Monthly tracking with Excel import, auto-calculation of daily fringe rate
+  - Office Receivables: Non-job revenue tracking with status management (Open/Paid)
+  - Shareholder Distributions: Profit distribution analysis with equity tracking
 
-- **Global Business Metrics Dashboard**: Real-time P&L, collection rates, cash flow analysis
-- **Distribution Calculator**: Conservative vs Projected analysis with reserve management
-- **Contract Templates**: Standard (10% retainer, 5% end, 3%+2% appeals) or custom
-- **Bulk Billing Import**: Paste from Excel with automatic parsing
+- **Global Business Metrics Dashboard**:
+  - Real-time P&L with profit margin percentages
+  - Collection rate tracking (YTD and projected)
+  - Cash flow analysis with working capital calculations
+  - Daily expense rate based on actual working days
+  - Projected year-end financials
+
+- **Contract Management System**:
+  - Standard Templates: 10% retainer, 5% end, 3%+2% appeals structure
+  - Custom contract configuration per job
+  - Visual indicators for missing contracts (⚠️ Contract Setup Required)
+  - Automatic billing percentage calculations
+
+- **Billing Event Features**:
+  - Bulk billing import from Excel with parsing
+  - Payment status tracking (Pending/Paid)
+  - Invoice number management
+  - Remaining due calculations excluding retainer amounts
+  - Visual completion indicators (✅ 100% Billed)
+
+**Distribution Calculator:**
+- Conservative Analysis: Based on actual collections only
+- Projected Analysis: Includes planned contracts at 90% collection
+- Operating Reserve Settings: 0-2 months configurable
+- Cash Reserve: $200k default (adjustable)
+- Equity-based distribution maintenance
+- YTD distribution tracking per shareholder
 
 **Financial Intelligence:**
-- **"Remaining (No Retainer)"**: Shows actual work left excluding holdbacks
-- **Payroll Period Detection**: Matches AdminJobManagement alerts
-- **Collection Rate Tracking**: Monitors payment efficiency
-- **Daily Expense Rate**: Dynamic calculation from actual working days
-- **Profit Margin Analysis**: Real-time and projected
+- **"Remaining (No Retainer)"**: Shows actual work left excluding 10% holdbacks
+- **Job Status Color Coding**: Visual indicators based on billing percentage
+- **Payroll Period Detection**: Alerts for 15th and month-end periods
+- **Collection Efficiency**: Monitors payment velocity and aging
+- **Working Days Calculation**: Dynamic based on actual calendar (252/year typical)
 
-**Ownership Structure** (discovered in distributions):
+**Ownership Structure:**
 - Thomas Davis: 10%
 - Brian Schneider: 45%
 - Kristine Duda: 45%
 
+**Excel Integration:**
+- Expense import with monthly allocation
+- Billing history paste from clipboard
+- Automatic parsing and validation
+- Error handling for malformed data
+
 **Key Business Rules:**
-- Planned contracts assumed at 90% collection rate
-- Operating reserves: 0-2 months configurable
-- Cash reserve: $200k default
-- Distribution equity maintained for tax purposes
-- Working days: Dynamically calculated based on actual calendar
+- Planned contracts: 90% collection rate assumption
+- Operating reserves: Configurable 0-2 months
+- Cash reserve: $200k default (adjustable)
+- Distribution equity: Maintained for tax purposes
+- Working days: 21 per month average, 252 per year
+- Daily fringe: Current expenses ÷ working days YTD
+- Profit margin: (Revenue - Expenses) ÷ Revenue × 100
+
+**Tab-Specific Features:**
+
+**Active Jobs Tab:**
+- Sort by billing percentage (lowest first)
+- Contract setup warnings
+- Billing completion badges
+- Quick actions: Setup Contract, Add Billing, View History
+
+**Expenses Tab:**
+- Monthly breakdown grid
+- Excel import functionality
+- YTD totals and projections
+- Daily expense rate calculations
+
+**Office Receivables Tab:**
+- Status management (Open/Paid/Cancelled)
+- Invoice number tracking
+- Non-job revenue categorization
+- Quick edit/delete actions
+
+**Shareholder Distributions Tab:**
+- Individual shareholder tracking
+- Distribution group management
+- Monthly/yearly aggregations
+- Equity percentage calculations
+- Notes and documentation
 
 ### PayrollManagement.jsx - Office Manager Chaos Killer 💸
 
