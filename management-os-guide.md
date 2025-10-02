@@ -1741,7 +1741,7 @@ Each tab receives:
 
 **Issue Statistics Display:**
 ```
-┌───────────────────────────��─────────────────┐
+┌────────────���──────────────��─────────────────┐
 │ Total Properties: 5,234                     │
 │ Properties with Issues: 342                 │
 │ Critical: 45 | Warnings: 187 | Info: 110   │
@@ -1829,6 +1829,165 @@ score = 100 - (totalDeductions / propertyCount)
 - Quality score updates real-time
 - Export includes all metadata
 - Run history limited to last 10 runs
+
+### PreValuationTab.jsx - Pre-Valuation Setup & Normalization Engine 📊
+
+**Scale**: 3,726 lines of sophisticated normalization and worksheet management
+
+**Core Philosophy**: Prepare properties for valuation through systematic normalization and review
+
+**Two Main Components:**
+1. **Normalization** - Time and size adjustments for market comparison
+2. **Page by Page Worksheet** - Systematic property review interface
+
+**Normalization Component:**
+
+**Time Normalization Features:**
+- **HPI-Based Adjustment**: Uses county_hpi_data table for multipliers
+- **Formula**: `Sale Price × (Target Year HPI ÷ Sale Year HPI)`
+- **Target Year Selection**: Typically normalize to 2012 or current year
+- **Sales Filtering**:
+  - Minimum sale price threshold (default $10,000)
+  - Year range selection (e.g., 2010-2024)
+  - Sales NU validation (empty, null, 00, 7, or 07 are valid)
+  - Card filtering (Card 1 for BRT, Card M for Microsystems)
+- **Package Sale Detection**: Identifies same deed book/page transactions
+- **Additional Cards Handling**: Aggregates SFLA from multiple cards
+
+**Size Normalization (Jim's 50% Method):**
+```javascript
+Formula: (((Group Avg Size - Sale Size) × ((Sale Price ÷ Sale Size) × 0.50)) + Sale Price)
+
+// Groups properties by type (single family, multi-family, etc.)
+// Applies 50% adjustment factor for size differences
+// Preserves time normalization results
+```
+
+**Sales Ratio Analysis:**
+- **Ratio Calculation**: Assessed Value ÷ Time Normalized Price
+- **Outlier Detection**: Flags sales outside equalization ratio threshold
+- **Default Settings**:
+  - Equalization Ratio: 70%
+  - Outlier Threshold: 15%
+  - Properties flagged if ratio differs >15% from 70%
+
+**Keep/Reject Decision Interface:**
+- Manual review of flagged outliers
+- Keep/Reject/Pending status for each sale
+- Batch operations (Keep All, Reject All)
+- Decisions persist to database
+- Visual indicators for outliers
+
+**Statistics Dashboard:**
+```
+┌─────────────────────────────────────────────┐
+│ Total Sales: 1,234                          │
+│ Time Normalized: 1,234                      │
+│ Average Ratio: 68.5%                        │
+│ Flagged Outliers: 142                       │
+│ Pending Review: 42                          │
+│ Kept: 89 | Rejected: 11                     │
+└─────────────────────────────────────────────┘
+```
+
+**Page by Page Worksheet Component:**
+
+**Excel-Like Data Grid Features:**
+- **Sortable Columns**: Block, Lot, Location, Class, etc.
+- **Manual Entry Fields**:
+  - new_vcs - Manager-assigned neighborhood codes
+  - location_analysis - Location factors (Railroad, Highway, etc.)
+  - asset_zoning - Zoning classification
+  - asset_map_page - Tax map page reference
+  - asset_key_page - Key map page reference
+  - worksheet_notes - General notes field
+
+**Smart Features:**
+- **Multi-Page Support**: Format "12,13,14" or "12-15" for spanning pages
+- **Location Standardization**: Fuzzy matching prevents typos
+  - "railraod" → "Railroad"
+  - "hwy" → "Highway"
+  - Common misspellings auto-corrected
+- **VCS Validation**: Alphanumeric codes (A1, DOWNTOWN, SECTOR-5)
+- **Bulk Operations**: Apply values to filtered selections
+- **Auto-Save**: Every 30 seconds to prevent data loss
+
+**Filtering & Search:**
+- Search by any field
+- Filter by map page
+- Filter by VCS code
+- Filter by class
+- Quick filters for empty fields
+
+**Progress Tracking:**
+```
+Overall Progress: 1,045/1,234 (84.7%)
+Page 12: 45/50 complete
+Page 13: 38/42 complete
+```
+
+**Standardized Location Values:**
+```javascript
+standardLocations = [
+  'Railroad', 'Highway', 'Power Lines', 'River',
+  'Commercial', 'Industrial', 'School',
+  'Park', 'Cemetery', 'Golf Course'
+]
+```
+
+**Data Persistence:**
+
+**Time Normalization Results:**
+- Saved to market_land_valuation.time_normalized_sales
+- Includes all sales with decisions
+- Format: JSONB array of normalized sales
+
+**Size Normalization Results:**
+- Updates property_market_analysis.values_norm_time
+- Updates property_market_analysis.values_norm_size
+
+**Worksheet Data:**
+- Saves to property_market_analysis table
+- Fields: new_vcs, location_analysis, asset_zoning, asset_map_page, asset_key_page
+- Auto-save every 30 seconds
+- Manual save button also available
+
+**Configuration Storage:**
+- Normalization settings saved to market_land_valuation.normalization_config
+- Includes year ranges, thresholds, target years
+- Statistics saved to normalization_stats
+
+**Performance Optimizations:**
+
+**Batch Processing:**
+- Processes 100 properties at a time for normalization
+- Progress bar with real-time updates
+- Prevents UI freezing on large datasets
+
+**Smart Data Loading:**
+- Only loads enhanced sales data when needed
+- Caches HPI data for quick lookups
+- Debounced search (300ms delay)
+
+**Memory Management:**
+- Pagination for large result sets
+- Virtual scrolling for worksheet
+- Lazy loading of additional cards
+
+**Integration Points:**
+- HPI Data: Uses county_hpi_data table
+- Additional Cards: Aggregates from property_records
+- Package Detection: interpretCodes.getPackageSaleData()
+- Composite Key Parsing: Handles both BRT and Microsystems formats
+- Vendor Detection: Adapts UI based on vendor type
+
+**Business Rules:**
+- Valid Sales NU: Empty, null, "00", "7", or "07"
+- Building Class Filter: Must be > 10
+- Required Fields: Type use and design style must exist
+- Card Selection: Card 1 (BRT) or Card M (Microsystems)
+- Outlier Threshold: Default 15% from equalization ratio
+- Auto-Save Interval: 30 seconds for worksheet data
 
 ### ManagementChecklist.jsx - 29-Item Workflow Management System ✅
 
