@@ -463,7 +463,7 @@ const App = () => {
         ? 'Database timeout - system may be busy. Please try again.'
         : 'Failed to load data';
 
-      setCacheStatus({
+      setLoadingStatus({
         isStale: false,
         isRefreshing: false,
         lastError: errMsg,
