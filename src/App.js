@@ -102,8 +102,8 @@ const App = () => {
     isInitialized: false
   });
 
-  // UI State - keeping original cache status structure but using it for loading status
-  const [cacheStatus, setCacheStatus] = useState({
+  // UI State - loading status tracking
+  const [loadingStatus, setLoadingStatus] = useState({
     isStale: false,
     isRefreshing: false,
     lastError: null,
