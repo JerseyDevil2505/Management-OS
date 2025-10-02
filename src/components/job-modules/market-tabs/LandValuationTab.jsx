@@ -1092,25 +1092,19 @@ const getPricePerUnit = useCallback((price, size) => {
   //   return () => clearTimeout(timeoutId);
   // }, [vacantSales.length, Object.keys(saleCategories).length, isInitialLoadComplete]);
 
-  // Trigger calculations ONCE after initial load completes
-  useEffect(() => {
-    if (isInitialLoadComplete && properties && properties.length > 0) {
-      console.log('✅ Initial load complete - triggering first calculations with saved data');
-      filterVacantSales();
-      performBracketAnalysis();
-      loadVCSPropertyCounts();
-    }
-  }, [isInitialLoadComplete]); // Only run once when initial load completes
-
   // Clear Method 1 temporary variables after filtering is complete
+  // IMPORTANT: Don't clear too early - filterVacantSales needs these to preserve manual sales
   useEffect(() => {
-    if (isInitialLoadComplete && window._method1ExcludedSales) {
+    if (isInitialLoadComplete && vacantSales.length > 0 && window._method1ExcludedSales) {
+      // Only clear after we have populated vacantSales (which means filterVacantSales has run)
       debug('🧹 Clearing Method 1 temporary variables after successful application');
-      delete window._method1ExcludedSales;
-      delete window._method1IncludedSales;
-      delete window._method1ManuallyAdded;
+      setTimeout(() => {
+        delete window._method1ExcludedSales;
+        delete window._method1IncludedSales;
+        delete window._method1ManuallyAdded;
+      }, 1000); // Small delay to ensure filterVacantSales completes
     }
-  }, [isInitialLoadComplete]);
+  }, [isInitialLoadComplete, vacantSales.length]);
   // ========== LAND RATES FUNCTIONS WITH ENHANCED FILTERS ==========
   const filterVacantSales = useCallback(() => {
     if (!properties) return;
@@ -3397,7 +3391,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return;
     }
 
-    debug('�� Saving target allocation:', `${targetValue}%`, 'for job:', jobData.id);
+    debug('💾 Saving target allocation:', `${targetValue}%`, 'for job:', jobData.id);
 
     try {
       // Check if record exists first
