@@ -4758,6 +4758,63 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     debug('🔄 Recalculating category analysis');
     debug('���� Total vacant sales:', vacantSales.length);
     debug('���� Checked sales count:', checkedSales.length);
+    // 🔍 COMPREHENSIVE FILTERING DEBUG - Shows exactly which sales go where
+    console.log('🔍 PAIRED SALES ANALYSIS - Category Breakdown:', {
+      totalCheckedSales: checkedSales.length,
+
+      normalRegion: {
+        count: checkedSales.filter(s => !specialRegions[s.id] || specialRegions[s.id] === 'Normal').length,
+        sales: checkedSales.filter(s => !specialRegions[s.id] || specialRegions[s.id] === 'Normal').map(s => ({
+          block_lot: `${s.property_block}/${s.property_lot}`,
+          category: saleCategories[s.id] || 'uncategorized',
+          class: s.property_m4_class,
+          region: specialRegions[s.id] || 'Normal'
+        }))
+      },
+
+      rawLandGroup: {
+        count: checkedSales.filter(s => {
+          const isRawLandCategory = saleCategories[s.id] === 'raw_land';
+          const isUncategorizedVacant = !saleCategories[s.id] && s.property_m4_class === '1';
+          const isNormalRegion = !specialRegions[s.id] || specialRegions[s.id] === 'Normal';
+          return (isRawLandCategory || isUncategorizedVacant) && isNormalRegion;
+        }).length,
+        sales: checkedSales.filter(s => {
+          const isRawLandCategory = saleCategories[s.id] === 'raw_land';
+          const isUncategorizedVacant = !saleCategories[s.id] && s.property_m4_class === '1';
+          const isNormalRegion = !specialRegions[s.id] || specialRegions[s.id] === 'Normal';
+          return (isRawLandCategory || isUncategorizedVacant) && isNormalRegion;
+        }).map(s => `${s.property_block}/${s.property_lot}`)
+      },
+
+      buildingLotGroup: {
+        count: checkedSales.filter(s => {
+          const isInCategory = saleCategories[s.id] === 'building_lot' || saleCategories[s.id] === 'teardown' || saleCategories[s.id] === 'pre-construction';
+          const isNormalRegion = !specialRegions[s.id] || specialRegions[s.id] === 'Normal';
+          return isInCategory && isNormalRegion;
+        }).length,
+        sales: checkedSales.filter(s => {
+          const isInCategory = saleCategories[s.id] === 'building_lot' || saleCategories[s.id] === 'teardown' || saleCategories[s.id] === 'pre-construction';
+          const isNormalRegion = !specialRegions[s.id] || specialRegions[s.id] === 'Normal';
+          return isInCategory && isNormalRegion;
+        }).map(s => ({
+          block_lot: `${s.property_block}/${s.property_lot}`,
+          category: saleCategories[s.id]
+        }))
+      },
+
+      specialRegionSales: Object.entries(
+        checkedSales.reduce((acc, s) => {
+          const region = specialRegions[s.id];
+          if (region && region !== 'Normal') {
+            if (!acc[region]) acc[region] = [];
+            acc[region].push(`${s.property_block}/${s.property_lot}`);
+          }
+          return acc;
+        }, {})
+      ).map(([region, sales]) => ({ region, count: sales.length, sales }))
+    });
+
     debug('📋 Included sales IDs:', Array.from(includedSales));
     debug('📋 Sale categories state:', saleCategories);
     debug('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
