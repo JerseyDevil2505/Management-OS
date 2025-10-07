@@ -5001,14 +5001,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const specialRegionsAnalysis = {};
     Object.entries(specialRegionsMap).forEach(([region, sales]) => {
       if (sales.length > 0) {
-        let avgRate = 0;
-        if (valuationMode === 'sf') {
-          avgRate = sales.reduce((sum, s) => sum + s.pricePerSF, 0) / sales.length;
-        } else if (valuationMode === 'ff') {
-          avgRate = sales.reduce((sum, s) => sum + s.pricePerFF, 0) / sales.length;
-        } else {
-          avgRate = sales.reduce((sum, s) => sum + s.pricePerAcre, 0) / sales.length;
-        }
+        // NOTE: pricePerAcre is a misleading name - it contains price per unit for current mode (acre, sf, or ff)
+        const avgRate = sales.reduce((sum, s) => sum + s.pricePerAcre, 0) / sales.length;
         specialRegionsAnalysis[region] = {
           avg: Math.round(avgRate),
           count: sales.length,
