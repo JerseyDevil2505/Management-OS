@@ -4728,7 +4728,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     debug('🔄 Recalculating category analysis');
     debug('���� Total vacant sales:', vacantSales.length);
     debug('���� Checked sales count:', checkedSales.length);
-    debug('📋 Included sales IDs:', Array.from(includedSales));
+    debug('��� Included sales IDs:', Array.from(includedSales));
     debug('📋 Sale categories state:', saleCategories);
     debug('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
     debug('📋 Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
@@ -5642,6 +5642,26 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 )}
               </div>
             </div>
+
+            {/* Special Regions Summary */}
+            {categoryAnalysis.specialRegions && Object.keys(categoryAnalysis.specialRegions).length > 0 && (
+              <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #E5E7EB' }}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold', color: '#374151' }}>
+                  Special Regions
+                </h4>
+                <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+                  {Object.entries(categoryAnalysis.specialRegions).map(([region, data]) => (
+                    <div key={region} style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px', border: '1px solid #E5E7EB', minWidth: '180px' }}>
+                      <div style={{ fontSize: '12px', color: '#6B7280' }}>{region}</div>
+                      <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#6366F1' }}>
+                        {valuationMode === 'sf' ? `$${data.avg}` : `$${data.avg.toLocaleString()}`} {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{data.count} sales</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Paired Analysis Details */}
             {(categoryAnalysis.rawLand.method === 'paired' || categoryAnalysis.buildingLot.method === 'paired') && (
