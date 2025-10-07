@@ -4865,6 +4865,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           const minPriceDiff = Math.min(...priceDiffs);
           const maxPriceDiff = Math.max(...priceDiffs);
 
+          console.log(`📊 Paired analysis results for ${categoryType}:`, {
+            totalPairs: pairedRates.length,
+            avgPriceDiff: Math.round(avgPriceDiff),
+            minPriceDiff: Math.round(minPriceDiff),
+            maxPriceDiff: Math.round(maxPriceDiff),
+            medianRate: Math.round(medianRate),
+            allPriceDiffs: priceDiffs.map(d => Math.round(d))
+          });
+
           // Return rounded whole-number unit rates for all modes (user requested whole numbers only)
           return {
             avg: Math.round(medianRate),
