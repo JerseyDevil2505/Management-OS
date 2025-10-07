@@ -2425,7 +2425,7 @@ Find specific information about this property and sale. Include:
 • Tax assessment and classification details
 • Documented environmental constraints (wetlands, floodplains)
 • Municipality-specific land use characteristics
-��� Any circumstances of the sale (estate, distressed, etc.)
+• Any circumstances of the sale (estate, distressed, etc.)
 
 Provide only verifiable facts with sources. Be specific and actionable for valuation purposes. 2-3 sentences.`;
 
@@ -5631,66 +5631,32 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   {categoryAnalysis.rawLand.method === 'paired' && categoryAnalysis.rawLand.pairedAnalysis && (
                     <div style={{ backgroundColor: '#F0FDF4', padding: '12px', borderRadius: '6px', border: '1px solid #BBF7D0' }}>
                       <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#059669', marginBottom: '8px' }}>
-                        Raw Land - Best Pair Analysis
+                        Raw Land - Average of All Valid Pairs
                       </div>
-                      {categoryAnalysis.rawLand.pairedAnalysis.bestPair && (
-                        <div style={{ fontSize: '11px', color: '#065F46' }}>
-                          <div style={{ marginBottom: '4px' }}>
-                            <strong>Properties:</strong> {categoryAnalysis.rawLand.pairedAnalysis.bestPair.properties}
-                          </div>
-                          <div style={{ marginBottom: '4px' }}>
-                            <strong>Size Difference:</strong> {(() => {
-                              const bp = categoryAnalysis.rawLand.pairedAnalysis.bestPair;
-                              if (!bp) return '';
-                              if (valuationMode === 'acre') return `${bp.sizeDiff.toFixed(2)} acres`;
-                              if (valuationMode === 'sf') return `${Math.round(bp.sizeDiff).toLocaleString()} sqft`;
-                              return `${Math.round(bp.sizeDiff).toLocaleString()} ft`;
-                            })()}
-                          </div>
-                          <div style={{ marginBottom: '4px' }}>
-                            <strong>Price Difference:</strong> ${categoryAnalysis.rawLand.pairedAnalysis.bestPair.priceDiff.toLocaleString()}
-                          </div>
-                          <div style={{ marginBottom: '4px' }}>
-                            <strong>Raw Land Rate:</strong> ${Math.round(categoryAnalysis.rawLand.pairedAnalysis.bestPair.rate).toLocaleString()} {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
-                          </div>
-                          <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '6px' }}>
-                            Median of {categoryAnalysis.rawLand.pairedAnalysis.pairs} paired comparisons from {categoryAnalysis.rawLand.count} properties
-                          </div>
+                      <div style={{ fontSize: '11px', color: '#065F46' }}>
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Properties:</strong> {categoryAnalysis.rawLand.pairedAnalysis.pairs} pairs analyzed (Range: ${categoryAnalysis.rawLand.pairedAnalysis.minPriceDiff?.toLocaleString() || 0} - ${categoryAnalysis.rawLand.pairedAnalysis.maxPriceDiff?.toLocaleString() || 0})
                         </div>
-                      )}
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Average Price Difference:</strong> ${categoryAnalysis.rawLand.pairedAnalysis.avgPriceDiff?.toLocaleString() || 0}
+                        </div>
+                      </div>
                     </div>
                   )}
 
                   {categoryAnalysis.buildingLot.method === 'paired' && categoryAnalysis.buildingLot.pairedAnalysis && (
                     <div style={{ backgroundColor: '#EFF6FF', padding: '12px', borderRadius: '6px', border: '1px solid #BFDBFE' }}>
                       <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#2563EB', marginBottom: '8px' }}>
-                        Building Lot - Best Pair Analysis
+                        Building Lot - Average of All Valid Pairs
                       </div>
-                      {categoryAnalysis.buildingLot.pairedAnalysis.bestPair && (
-                        <div style={{ fontSize: '11px', color: '#1E40AF' }}>
-                          <div style={{ marginBottom: '4px' }}>
-                            <strong>Properties:</strong> {categoryAnalysis.buildingLot.pairedAnalysis.bestPair.properties}
-                          </div>
-                          <div style={{ marginBottom: '4px' }}>
-                            <strong>Size Difference:</strong> {(() => {
-                              const bp = categoryAnalysis.buildingLot.pairedAnalysis.bestPair;
-                              if (!bp) return '';
-                              if (valuationMode === 'acre') return `${bp.sizeDiff.toFixed(2)} acres`;
-                              if (valuationMode === 'sf') return `${Math.round(bp.sizeDiff).toLocaleString()} sqft`;
-                              return `${Math.round(bp.sizeDiff).toLocaleString()} ft`;
-                            })()}
-                          </div>
-                          <div style={{ marginBottom: '4px' }}>
-                            <strong>Price Difference:</strong> ${categoryAnalysis.buildingLot.pairedAnalysis.bestPair.priceDiff.toLocaleString()}
-                          </div>
-                          <div style={{ marginBottom: '4px' }}>
-                            <strong>Raw Land Rate:</strong> ${Math.round(categoryAnalysis.buildingLot.pairedAnalysis.bestPair.rate).toLocaleString()} {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
-                          </div>
-                          <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '6px' }}>
-                            Median of {categoryAnalysis.buildingLot.pairedAnalysis.pairs} paired comparisons from {categoryAnalysis.buildingLot.count} properties
-                          </div>
+                      <div style={{ fontSize: '11px', color: '#1E40AF' }}>
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Properties:</strong> {categoryAnalysis.buildingLot.pairedAnalysis.pairs} pairs analyzed (Range: ${categoryAnalysis.buildingLot.pairedAnalysis.minPriceDiff?.toLocaleString() || 0} - ${categoryAnalysis.buildingLot.pairedAnalysis.maxPriceDiff?.toLocaleString() || 0})
                         </div>
-                      )}
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Average Price Difference:</strong> ${categoryAnalysis.buildingLot.pairedAnalysis.avgPriceDiff?.toLocaleString() || 0}
+                        </div>
+                      </div>
                     </div>
                   )}
 
