@@ -2395,7 +2395,7 @@ const getPricePerUnit = useCallback((price, size) => {
       }
 
       if (autoCategory) {
-        debug(`🏗�� Auto-categorizing manually added ${p.property_block}/${p.property_lot} as ${autoCategory}`);
+        debug(`������ Auto-categorizing manually added ${p.property_block}/${p.property_lot} as ${autoCategory}`);
         setSaleCategories(prev => ({...prev, [p.id]: autoCategory}));
       }
     });
@@ -3452,13 +3452,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
     } catch (error) {
-      console.error('❌ Error saving target allocation:', error);
-      console.error('Error details:', {
-        message: error.message,
-        code: error.code,
-        details: error.details
-      });
-      alert(`Failed to save target allocation: ${error.message}`);
+      // Extract readable error message
+      const errorMessage = error?.message || error?.error?.message || error?.details ||
+                          (typeof error === 'string' ? error : JSON.stringify(error));
+
+      console.error('❌ Error saving target allocation:', errorMessage);
+      console.error('Full error object:', error);
+
+      alert(`Failed to save target allocation: ${errorMessage}`);
     }
   };
 
@@ -7606,7 +7607,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'acres' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Acres {modalSortField === 'acres' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
+                      Acres {modalSortField === 'acres' ? (modalSortDirection === 'asc' ? '↑' : '��') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('sfla')}
