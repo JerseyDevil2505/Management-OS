@@ -479,7 +479,7 @@ useEffect(() => {
   const currentSession = currentSessionState.current;
 
   // 🔴 CRITICAL DEBUG - LandValuationTab Initialization
-  console.log('🔴 CRITICAL DEBUG - LandValuationTab Initialization:', {
+  console.log('�� CRITICAL DEBUG - LandValuationTab Initialization:', {
     timestamp: new Date().toISOString(),
     jobId: jobData?.id,
 
@@ -631,7 +631,7 @@ useEffect(() => {
     const savedIncluded = new Set();
     const manuallyAddedIds = new Set();
 
-    debug('����� Loading saved Method 1 metadata (SKIPPING cached sales for fresh calculation):', {
+    debug('���� Loading saved Method 1 metadata (SKIPPING cached sales for fresh calculation):', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
@@ -2863,7 +2863,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
-    debug('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
+    debug('�� calculateVCSRecommendedSitesWithTarget CALLED!');
     debug('���� Input validation:', {
       hasTargetAllocation: !!targetAllocation,
       targetAllocationValue: targetAllocation,
@@ -5642,6 +5642,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <div style={{ fontSize: '12px', color: '#6B7280' }}>Wetlands</div>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#06B6D4' }}>
                   {valuationMode === 'sf' ? `$${categoryAnalysis.wetlands.avg}` : `$${categoryAnalysis.wetlands.avg.toLocaleString()}`}
+                  <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#6B7280', marginLeft: '4px' }}>
+                    {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                  </span>
                 </div>
                 <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.wetlands.count} sales</div>
                 {categoryAnalysis.wetlands.count > 0 && (
@@ -5654,6 +5657,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <div style={{ fontSize: '12px', color: '#6B7280' }}>Landlocked</div>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#F59E0B' }}>
                   {valuationMode === 'sf' ? `$${categoryAnalysis.landlocked.avg}` : `$${categoryAnalysis.landlocked.avg.toLocaleString()}`}
+                  <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#6B7280', marginLeft: '4px' }}>
+                    {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                  </span>
                 </div>
                 <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.landlocked.count} sales</div>
                 {categoryAnalysis.landlocked.count > 0 && (
@@ -5666,6 +5672,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <div style={{ fontSize: '12px', color: '#6B7280' }}>Conservation</div>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#8B5CF6' }}>
                   {valuationMode === 'sf' ? `$${categoryAnalysis.conservation.avg}` : `$${categoryAnalysis.conservation.avg.toLocaleString()}`}
+                  <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#6B7280', marginLeft: '4px' }}>
+                    {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                  </span>
                 </div>
                 <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.conservation.count} sales</div>
                 {categoryAnalysis.conservation.count > 0 && (
