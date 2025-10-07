@@ -3600,13 +3600,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
       }
     } catch (error) {
-      console.error('���� Save failed:', error);
-      console.error('Error details:', {
-        message: error.message,
-        code: error.code,
-        details: error.details
-      });
-      alert('Failed to save analysis. Please try again.');
+      // Extract readable error message
+      const errorMessage = error?.message || error?.error?.message || error?.details ||
+                          (typeof error === 'string' ? error : JSON.stringify(error));
+
+      console.error('❌ Save failed:', errorMessage);
+      console.error('Full error object:', error);
+
+      alert(`Failed to save analysis: ${errorMessage}\n\nPlease try again.`);
     } finally {
       setIsSaving(false);
     }
@@ -7605,7 +7606,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'acres' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Acres {modalSortField === 'acres' ? (modalSortDirection === 'asc' ? '↑' : '��') : ''}
+                      Acres {modalSortField === 'acres' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('sfla')}
