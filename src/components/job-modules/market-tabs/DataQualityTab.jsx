@@ -1666,6 +1666,14 @@ const generateQCFormPDF = () => {
 
       console.log(`✅ Saved: ${totalIssues} issues found (displayed, ignoring ${ignoredIssues.size} ignored)`);
 
+      // After successful save
+      if (onUpdateJobCache) {
+        setTimeout(() => {
+          console.log('🔄 DataQualityTab requesting parent refresh...');
+          onUpdateJobCache();
+        }, 500);
+      }
+
     } catch (error) {
       console.error('Error saving:', error);
     }
