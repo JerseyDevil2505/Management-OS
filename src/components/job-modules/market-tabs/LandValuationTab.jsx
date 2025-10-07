@@ -1039,7 +1039,7 @@ const getPricePerUnit = useCallback((price, size) => {
     // CRITICAL FIX: Don't auto-detect/filter during initialization!
     // This prevents overwriting manually added sales that were saved to the database
     if (!isInitialLoadComplete) {
-      console.log('⏸️ Skipping auto-detection - waiting for initial load to complete');
+      console.log('��️ Skipping auto-detection - waiting for initial load to complete');
       return;
     }
 
@@ -5165,6 +5165,50 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
     });
 
+    // 📊 FINAL RESULTS LOG - Shows what will be displayed to user
+    console.log('📊 PAIRED SALES ANALYSIS - Final Results:', {
+      valuationMode,
+      unitLabel: valuationMode === 'acre' ? '$/acre' : valuationMode === 'sf' ? '$/SF' : '$/FF',
+
+      rawLand: {
+        avg: rawLand.avg,
+        count: rawLand.count,
+        method: rawLand.method,
+        avgLotSize: rawLand.avgLotSize,
+        ...(rawLand.pairedAnalysis && {
+          pairs: rawLand.pairedAnalysis.pairs,
+          medianRate: rawLand.pairedAnalysis.medianRate,
+          priceRange: `$${rawLand.pairedAnalysis.minPriceDiff?.toLocaleString()} - $${rawLand.pairedAnalysis.maxPriceDiff?.toLocaleString()}`
+        })
+      },
+
+      buildingLot: {
+        avg: buildingLot.avg,
+        count: buildingLot.count,
+        method: buildingLot.method,
+        avgLotSize: buildingLot.avgLotSize,
+        ...(buildingLot.pairedAnalysis && {
+          pairs: buildingLot.pairedAnalysis.pairs,
+          medianRate: buildingLot.pairedAnalysis.medianRate,
+          priceRange: `$${buildingLot.pairedAnalysis.minPriceDiff?.toLocaleString()} - $${buildingLot.pairedAnalysis.maxPriceDiff?.toLocaleString()}`
+        })
+      },
+
+      specialRegions: Object.entries(specialRegionsAnalysis).map(([region, data]) => ({
+        region,
+        avg: data.avg,
+        count: data.count,
+        method: data.method,
+        ...(data.pairs && { pairs: data.pairs })
+      })),
+
+      excludedFromMainTiles: {
+        wetlands: { avg: wetlands.avg, count: wetlands.count },
+        landlocked: { avg: landlocked.avg, count: landlocked.count },
+        conservation: { avg: conservation.avg, count: conservation.count }
+      }
+    });
+
     return { rawLand, buildingLot, wetlands, landlocked, conservation, specialRegions: specialRegionsAnalysis };
   }, [vacantSales, includedSales, saleCategories, valuationMode, specialRegions]);
 
@@ -6095,7 +6139,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales �� Avg $${Math.round(data.avgPrice).toLocaleString()} ����� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ��� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales �� Avg $${Math.round(data.avgPrice).toLocaleString()} ����� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{ marginBottom: '8px', border: '1px solid #E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
