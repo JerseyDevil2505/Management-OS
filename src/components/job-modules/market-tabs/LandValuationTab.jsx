@@ -168,6 +168,34 @@ const LandValuationTab = ({
   const [valuationMode, setValuationMode] = useState('acre'); // acre, sf, ff
   const [canUseFrontFoot, setCanUseFrontFoot] = useState(false);
 
+  // Recalculate price per unit when valuation mode changes
+  useEffect(() => {
+    if (vacantSales.length === 0 || !isInitialLoadComplete) return;
+
+    console.log(`🔄 Recalculating prices for mode: ${valuationMode}`);
+
+    setVacantSales(prev => prev.map(sale => {
+      const acres = sale.totalAcres || 0;
+      let sizeForUnit, pricePerUnit;
+
+      if (valuationMode === 'ff') {
+        sizeForUnit = parseFloat(sale.asset_lot_frontage) || 0;
+      } else if (valuationMode === 'sf') {
+        sizeForUnit = acres * 43560;
+      } else {
+        sizeForUnit = acres;
+      }
+
+      const price = sale.values_norm_time || sale.sales_price || 0;
+      pricePerUnit = sizeForUnit > 0 ? price / sizeForUnit : 0;
+
+      return {
+        ...sale,
+        pricePerAcre: Math.round(pricePerUnit) // NOTE: misleading name - contains price per current unit
+      };
+    }));
+  }, [valuationMode, isInitialLoadComplete]);
+
   // ========== SPECIAL REGIONS CONFIG ==========
   const SPECIAL_REGIONS = [
     'Normal',
@@ -953,7 +981,7 @@ const getPricePerUnit = useCallback((price, size) => {
   const getTypeUseOptions = useCallback(() => {
     // Standardized Type & Use dropdown options for consistency across tabs
     const standard = [
-      { code: '1', description: '1 — Single Family' },
+      { code: '1', description: '1 ��� Single Family' },
       { code: '2', description: '2 — Duplex / Semi-Detached' },
       { code: '3', description: '3* �� Row / Townhouse (3E,3I,30,31)' },
       { code: '4', description: '4* — MultiFamily (42,43,44)' },
