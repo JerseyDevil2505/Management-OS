@@ -631,7 +631,7 @@ useEffect(() => {
     const savedIncluded = new Set();
     const manuallyAddedIds = new Set();
 
-    debug('���� Loading saved Method 1 metadata (SKIPPING cached sales for fresh calculation):', {
+    debug('����� Loading saved Method 1 metadata (SKIPPING cached sales for fresh calculation):', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
@@ -5600,6 +5600,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </div>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#10B981' }}>
                   {valuationMode === 'sf' ? `$${categoryAnalysis.rawLand.avg}` : `$${categoryAnalysis.rawLand.avg.toLocaleString()}`}
+                  <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#6B7280', marginLeft: '4px' }}>
+                    {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                  </span>
                 </div>
                 <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.rawLand.count} sales</div>
                 {categoryAnalysis.rawLand.count > 0 && (
@@ -5619,6 +5622,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </div>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#3B82F6' }}>
                   {valuationMode === 'sf' ? `$${categoryAnalysis.buildingLot.avg}` : `$${categoryAnalysis.buildingLot.avg.toLocaleString()}`}
+                  <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#6B7280', marginLeft: '4px' }}>
+                    {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                  </span>
                 </div>
                 <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.buildingLot.count} sales</div>
                 {categoryAnalysis.buildingLot.count > 0 && (
@@ -5706,10 +5712,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       </div>
                       <div style={{ fontSize: '11px', color: '#065F46' }}>
                         <div style={{ marginBottom: '4px' }}>
-                          <strong>Properties:</strong> {categoryAnalysis.rawLand.pairedAnalysis.pairs} pairs analyzed (Range: ${categoryAnalysis.rawLand.pairedAnalysis.minPriceDiff?.toLocaleString() || 0} - ${categoryAnalysis.rawLand.pairedAnalysis.maxPriceDiff?.toLocaleString() || 0})
+                          <strong>Properties:</strong> {categoryAnalysis.rawLand.pairedAnalysis.pairs} pairs analyzed
                         </div>
                         <div style={{ marginBottom: '4px' }}>
-                          <strong>Average Price Difference:</strong> ${categoryAnalysis.rawLand.pairedAnalysis.avgPriceDiff?.toLocaleString() || 0}
+                          <strong>Average Rate:</strong> ${Math.round(categoryAnalysis.rawLand.avg).toLocaleString()}{valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                        </div>
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Price Range:</strong> ${categoryAnalysis.rawLand.pairedAnalysis.minPriceDiff?.toLocaleString() || 0} - ${categoryAnalysis.rawLand.pairedAnalysis.maxPriceDiff?.toLocaleString() || 0}
                         </div>
                       </div>
                     </div>
@@ -5722,10 +5731,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       </div>
                       <div style={{ fontSize: '11px', color: '#1E40AF' }}>
                         <div style={{ marginBottom: '4px' }}>
-                          <strong>Properties:</strong> {categoryAnalysis.buildingLot.pairedAnalysis.pairs} pairs analyzed (Range: ${categoryAnalysis.buildingLot.pairedAnalysis.minPriceDiff?.toLocaleString() || 0} - ${categoryAnalysis.buildingLot.pairedAnalysis.maxPriceDiff?.toLocaleString() || 0})
+                          <strong>Properties:</strong> {categoryAnalysis.buildingLot.pairedAnalysis.pairs} pairs analyzed
                         </div>
                         <div style={{ marginBottom: '4px' }}>
-                          <strong>Average Price Difference:</strong> ${categoryAnalysis.buildingLot.pairedAnalysis.avgPriceDiff?.toLocaleString() || 0}
+                          <strong>Average Rate:</strong> ${Math.round(categoryAnalysis.buildingLot.avg).toLocaleString()}{valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                        </div>
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Price Range:</strong> ${categoryAnalysis.buildingLot.pairedAnalysis.minPriceDiff?.toLocaleString() || 0} - ${categoryAnalysis.buildingLot.pairedAnalysis.maxPriceDiff?.toLocaleString() || 0}
                         </div>
                       </div>
                     </div>
