@@ -4959,8 +4959,32 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       hasPairedAnalysis: !!buildingLot.pairedAnalysis
     });
 
-    return { rawLand, buildingLot, wetlands, landlocked, conservation };
-  }, [vacantSales, includedSales, saleCategories, valuationMode]);
+    // Calculate special regions analysis
+    const specialRegionsMap = {};
+    checkedSales.forEach(sale => {
+      const region = specialRegions[sale.id];
+      if (region && region !== 'Normal') {
+        if (!specialRegionsMap[region]) {
+          specialRegionsMap[region] = [];
+        }
+        specialRegionsMap[region].push(sale);
+      }
+    });
+
+    const specialRegionsAnalysis = {};
+    Object.entries(specialRegionsMap).forEach(([region, sales]) => {
+      if (sales.length > 0) {
+        const avgRate = sales.reduce((sum, s) => sum + s.pricePerAcre, 0) / sales.length;
+        specialRegionsAnalysis[region] = {
+          avg: Math.round(avgRate),
+          count: sales.length,
+          region
+        };
+      }
+    });
+
+    return { rawLand, buildingLot, wetlands, landlocked, conservation, specialRegions: specialRegionsAnalysis };
+  }, [vacantSales, includedSales, saleCategories, valuationMode, specialRegions]);
 
   const saveRates = async () => {
     // Update cascade config mode to match current valuation mode
