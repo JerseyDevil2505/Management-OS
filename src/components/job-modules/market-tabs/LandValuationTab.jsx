@@ -479,7 +479,7 @@ useEffect(() => {
   const currentSession = currentSessionState.current;
 
   // 🔴 CRITICAL DEBUG - LandValuationTab Initialization
-  console.log('�� CRITICAL DEBUG - LandValuationTab Initialization:', {
+  console.log('🔴 CRITICAL DEBUG - LandValuationTab Initialization:', {
     timestamp: new Date().toISOString(),
     jobId: jobData?.id,
 
@@ -2863,7 +2863,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
-    debug('�� calculateVCSRecommendedSitesWithTarget CALLED!');
+    debug('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
     debug('���� Input validation:', {
       hasTargetAllocation: !!targetAllocation,
       targetAllocationValue: targetAllocation,
@@ -5755,7 +5755,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </div>
 
                 <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '8px', fontStyle: 'italic' }}>
-                  * Paired analysis extracts incremental raw land value between similar sales with different acreages.
+                  * Paired analysis extracts incremental raw land value between similar sales with different {valuationMode === 'ff' ? 'frontages' : valuationMode === 'sf' ? 'square footages' : 'acreages'}.
                   This isolates the pure land component from site value and improvements.
                   <br />
                   * All properties are included regardless of acreage similarity.
@@ -7642,7 +7642,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '��') : ''}
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '����') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('yearBuilt')}
