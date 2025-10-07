@@ -1481,10 +1481,12 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       // Save to database
       await saveSizeNormalizedValues(acceptedSales);
 
-      //Clear cache after size normalization
-      if (onUpdateJobCache && jobData?.id) {
-        if (false) console.log('🗑️ Clearing cache after size normalization');
-        callRefresh(null);
+      // After size normalization save
+      if (onUpdateJobCache) {
+        setTimeout(() => {
+          console.log('🔄 PreValuationTab requesting parent refresh...');
+          onUpdateJobCache();
+        }, 500);
       }
 
       // Track the run date
@@ -1857,7 +1859,7 @@ const handleSalesDecision = (saleId, decision) => {
 
       // FOURTH: Clear cache to prevent stale data issues
       if (onUpdateJobCache && jobData?.id) {
-        if (false) console.log('🗑️ Clearing cache after batch save to prevent stale data');
+        if (false) console.log('����️ Clearing cache after batch save to prevent stale data');
         callRefresh(null);
       }
 
