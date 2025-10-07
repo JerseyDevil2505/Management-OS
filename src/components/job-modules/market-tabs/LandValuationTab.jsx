@@ -4728,7 +4728,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     debug('🔄 Recalculating category analysis');
     debug('���� Total vacant sales:', vacantSales.length);
     debug('���� Checked sales count:', checkedSales.length);
-    debug('��� Included sales IDs:', Array.from(includedSales));
+    debug('📋 Included sales IDs:', Array.from(includedSales));
     debug('📋 Sale categories state:', saleCategories);
     debug('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
     debug('📋 Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
@@ -4775,6 +4775,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // For developable land (raw land, building lot), use paired sales analysis
       if (categoryType === 'developable' && filtered.length >= 2) {
+        // Log which sales are being used for this analysis
+        console.log(`🔍 Paired analysis for ${categoryType}:`, {
+          salesCount: filtered.length,
+          sales: filtered.map(s => ({
+            block_lot: `${s.property_block}/${s.property_lot}`,
+            category: saleCategories[s.id] || 'uncategorized',
+            class: s.property_m4_class,
+            price: s.values_norm_time || s.sales_price,
+            acres: s.totalAcres
+          }))
+        });
+
         // Sort by acreage for paired analysis
         const sortedSales = [...filtered].sort((a, b) => a.totalAcres - b.totalAcres);
 
