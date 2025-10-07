@@ -1025,7 +1025,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
-      debug('���� Triggering allocation study recalculation...');
+      debug('������ Triggering allocation study recalculation...');
       loadAllocationStudyData();
     }
   }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, specialRegions]);
@@ -5001,7 +5001,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const specialRegionsAnalysis = {};
     Object.entries(specialRegionsMap).forEach(([region, sales]) => {
       if (sales.length > 0) {
-        const avgRate = sales.reduce((sum, s) => sum + s.pricePerAcre, 0) / sales.length;
+        let avgRate = 0;
+        if (valuationMode === 'sf') {
+          avgRate = sales.reduce((sum, s) => sum + s.pricePerSF, 0) / sales.length;
+        } else if (valuationMode === 'ff') {
+          avgRate = sales.reduce((sum, s) => sum + s.pricePerFF, 0) / sales.length;
+        } else {
+          avgRate = sales.reduce((sum, s) => sum + s.pricePerAcre, 0) / sales.length;
+        }
         specialRegionsAnalysis[region] = {
           avg: Math.round(avgRate),
           count: sales.length,
