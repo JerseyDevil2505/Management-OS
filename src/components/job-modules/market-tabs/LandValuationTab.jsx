@@ -4943,12 +4943,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
     };
 
-    // RAW LAND ANALYSIS - ONLY vacant land sales (no/minimal improvements)
+    // RAW LAND ANALYSIS - ONLY vacant land sales (no/minimal improvements) in NORMAL region
     // This includes properties explicitly categorized as 'raw_land' OR uncategorized class 1 properties
+    // MUST be in Normal special region (not Beach Block, River Front, etc.)
     const rawLand = getCategoryAverage(s => {
       const isRawLandCategory = saleCategories[s.id] === 'raw_land';
       const isUncategorizedVacant = !saleCategories[s.id] && s.property_m4_class === '1';
-      const isInRawLand = isRawLandCategory || isUncategorizedVacant;
+      const isNormalRegion = !specialRegions[s.id] || specialRegions[s.id] === 'Normal';
+      const isInRawLand = (isRawLandCategory || isUncategorizedVacant) && isNormalRegion;
 
       // Debug teardown sales to see if they're incorrectly going to raw land
       if (saleCategories[s.id] === 'teardown' || (s.property_block === '5' && s.property_lot === '12.12')) {
@@ -4959,8 +4961,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           category: saleCategories[s.id],
           hasCategory: !!saleCategories[s.id],
           class: s.property_m4_class,
+          specialRegion: specialRegions[s.id] || 'Normal',
           isRawLandCategory,
           isUncategorizedVacant,
+          isNormalRegion,
           isInRawLand
         });
       }
@@ -4968,12 +4972,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return isInRawLand;
     }, 'developable');
 
-    // BUILDING LOT ANALYSIS - ONLY improved properties to extract land value
+    // BUILDING LOT ANALYSIS - ONLY buildable properties in NORMAL region
     // This includes properties explicitly categorized as 'building_lot', 'teardown', or 'pre-construction'
+    // MUST be in Normal special region (not Beach Block, River Front, etc.)
     const buildingLot = getCategoryAverage(s => {
       const isInCategory = saleCategories[s.id] === 'building_lot' ||
                           saleCategories[s.id] === 'teardown' ||
                           saleCategories[s.id] === 'pre-construction';
+      const isNormalRegion = !specialRegions[s.id] || specialRegions[s.id] === 'Normal';
+      const isInBuildingLot = isInCategory && isNormalRegion;
 
       // Debug all teardown sales
       if (saleCategories[s.id] === 'teardown') {
@@ -4982,8 +4989,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           lot: s.property_lot,
           id: s.id,
           category: saleCategories[s.id],
+          specialRegion: specialRegions[s.id] || 'Normal',
           isIncluded: includedSales.has(s.id),
-          isInBuildingLot: isInCategory,
+          isInCategory,
+          isNormalRegion,
+          isInBuildingLot,
           price: s.values_norm_time || s.sales_price,
           acres: s.totalAcres,
           pricePerAcre: s.pricePerAcre
@@ -4995,12 +5005,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         debug('🏠 Property 47/2 details:', {
           id: s.id,
           category: saleCategories[s.id],
-          isInBuildingLot: isInCategory,
+          specialRegion: specialRegions[s.id] || 'Normal',
+          isInBuildingLot,
           price: s.values_norm_time || s.sales_price,
           acres: s.totalAcres
         });
       }
-      return isInCategory;
+      return isInBuildingLot;
     }, 'developable');
 
     const wetlands = getCategoryAverage(s => saleCategories[s.id] === 'wetlands', 'constrained');
@@ -5014,7 +5025,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       hasPairedAnalysis: !!buildingLot.pairedAnalysis
     });
 
-    // Calculate special regions analysis
+    // Calculate special regions analysis - use PAIRED analysis when 2+ sales, simple average for 1 sale
     const specialRegionsMap = {};
     checkedSales.forEach(sale => {
       const region = specialRegions[sale.id];
@@ -5028,14 +5039,72 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     const specialRegionsAnalysis = {};
     Object.entries(specialRegionsMap).forEach(([region, sales]) => {
-      if (sales.length > 0) {
-        // NOTE: pricePerAcre is a misleading name - it contains price per unit for current mode (acre, sf, or ff)
-        const avgRate = sales.reduce((sum, s) => sum + s.pricePerAcre, 0) / sales.length;
+      if (sales.length === 0) return;
+
+      if (sales.length === 1) {
+        // Single sale: use individual rate
+        const sale = sales[0];
         specialRegionsAnalysis[region] = {
-          avg: Math.round(avgRate),
-          count: sales.length,
-          region
+          avg: Math.round(sale.pricePerAcre),
+          count: 1,
+          region,
+          method: 'single'
         };
+      } else {
+        // Multiple sales: use paired analysis
+        const sortedSales = [...sales].sort((a, b) => a.totalAcres - b.totalAcres);
+        const pairedRates = [];
+
+        for (let i = 0; i < sortedSales.length - 1; i++) {
+          for (let j = i + 1; j < sortedSales.length; j++) {
+            const smaller = sortedSales[i];
+            const larger = sortedSales[j];
+
+            let smallerSize = 0;
+            let largerSize = 0;
+            if (valuationMode === 'sf') {
+              smallerSize = (smaller.totalAcres || 0) * 43560;
+              largerSize = (larger.totalAcres || 0) * 43560;
+            } else if (valuationMode === 'ff') {
+              smallerSize = parseFloat(smaller.asset_lot_frontage) || 0;
+              largerSize = parseFloat(larger.asset_lot_frontage) || 0;
+            } else {
+              smallerSize = smaller.totalAcres || 0;
+              largerSize = larger.totalAcres || 0;
+            }
+
+            const sizeDiff = largerSize - smallerSize;
+            const priceDiff = (larger.values_norm_time || larger.sales_price) - (smaller.values_norm_time || smaller.sales_price);
+
+            if (priceDiff > 0 && sizeDiff > 0) {
+              pairedRates.push(priceDiff / sizeDiff);
+            }
+          }
+        }
+
+        if (pairedRates.length > 0) {
+          const rates = pairedRates.sort((a, b) => a - b);
+          const medianRate = rates.length % 2 === 0 ?
+            (rates[rates.length / 2 - 1] + rates[rates.length / 2]) / 2 :
+            rates[Math.floor(rates.length / 2)];
+
+          specialRegionsAnalysis[region] = {
+            avg: Math.round(medianRate),
+            count: sales.length,
+            region,
+            method: 'paired',
+            pairs: pairedRates.length
+          };
+        } else {
+          // Fallback to simple average if paired analysis fails
+          const avgRate = sales.reduce((sum, s) => sum + s.pricePerAcre, 0) / sales.length;
+          specialRegionsAnalysis[region] = {
+            avg: Math.round(avgRate),
+            count: sales.length,
+            region,
+            method: 'fallback'
+          };
+        }
       }
     });
 
@@ -5718,16 +5787,25 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             {categoryAnalysis.specialRegions && Object.keys(categoryAnalysis.specialRegions).length > 0 && (
               <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #E5E7EB' }}>
                 <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold', color: '#374151' }}>
-                  Special Regions
+                  Special Regions (Analyzed Separately)
                 </h4>
                 <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
                   {Object.entries(categoryAnalysis.specialRegions).map(([region, data]) => (
                     <div key={region} style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px', border: '1px solid #E5E7EB', minWidth: '180px' }}>
-                      <div style={{ fontSize: '12px', color: '#6B7280' }}>{region}</div>
-                      <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#6366F1' }}>
-                        {valuationMode === 'sf' ? `$${data.avg}` : `$${data.avg.toLocaleString()}`} {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                      <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                        {region} {data.method === 'paired' && <span style={{ color: '#10B981' }}>✓ Paired</span>}
+                        {data.method === 'single' && <span style={{ color: '#6B7280' }}>(Single Sale)</span>}
                       </div>
-                      <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{data.count} sales</div>
+                      <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#6366F1' }}>
+                        {valuationMode === 'sf' ? `$${data.avg}` : `$${data.avg.toLocaleString()}`}
+                        <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#6B7280', marginLeft: '4px' }}>
+                          {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                        {data.count} sale{data.count !== 1 ? 's' : ''}
+                        {data.method === 'paired' && data.pairs && ` • ${data.pairs} pairs`}
+                      </div>
                     </div>
                   ))}
                 </div>
