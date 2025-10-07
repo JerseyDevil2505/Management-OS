@@ -115,7 +115,12 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       }
 
       setPriceBasis(basis);
-      if (onUpdateJobCache && jobData?.id) onUpdateJobCache(jobData.id, { forceRefresh: true });
+      if (onUpdateJobCache) {
+        setTimeout(() => {
+          console.log('🔄 CostValuationTab requesting parent refresh...');
+          onUpdateJobCache();
+        }, 500);
+      }
     } catch (e) {
       const msg = extractErrorMessage(e);
       console.error('Error saving price basis:', e);
