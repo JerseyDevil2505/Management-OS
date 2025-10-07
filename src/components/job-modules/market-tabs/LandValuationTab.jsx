@@ -2425,7 +2425,7 @@ Find specific information about this property and sale. Include:
 • Tax assessment and classification details
 • Documented environmental constraints (wetlands, floodplains)
 • Municipality-specific land use characteristics
-• Any circumstances of the sale (estate, distressed, etc.)
+��� Any circumstances of the sale (estate, distressed, etc.)
 
 Provide only verifiable facts with sources. Be specific and actionable for valuation purposes. 2-3 sentences.`;
 
@@ -4847,6 +4847,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             return Math.abs(a.sizeDiff) - Math.abs(b.sizeDiff);
           })[0];
 
+          // Calculate aggregate statistics for all pairs
+          const priceDiffs = pairedRates.map(p => p.priceDiff);
+          const avgPriceDiff = priceDiffs.reduce((sum, diff) => sum + diff, 0) / priceDiffs.length;
+          const minPriceDiff = Math.min(...priceDiffs);
+          const maxPriceDiff = Math.max(...priceDiffs);
+
           // Return rounded whole-number unit rates for all modes (user requested whole numbers only)
           return {
             avg: Math.round(medianRate),
@@ -4856,7 +4862,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             pairedAnalysis: {
               pairs: pairedRates.length,
               medianRate: Math.round(medianRate),
-              bestPair
+              bestPair,
+              avgPriceDiff: Math.round(avgPriceDiff),
+              minPriceDiff: Math.round(minPriceDiff),
+              maxPriceDiff: Math.round(maxPriceDiff)
             }
           };
         }
