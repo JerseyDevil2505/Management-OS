@@ -1033,7 +1033,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
   // Auto-calculate VCS recommended sites when target allocation changes
   useEffect(() => {
-    debug('🔄 TARGET ALLOCATION USEEFFECT TRIGGERED:', {
+    debug('���� TARGET ALLOCATION USEEFFECT TRIGGERED:', {
       targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
       propertiesCount: properties?.length || 0
@@ -1067,7 +1067,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
     debug('🔄 Auto-save effect triggered, setting up interval');
     const interval = setInterval(() => {
-      debug('⏰ Auto-save interval triggered');
+      debug('�� Auto-save interval triggered');
       // Use window reference to avoid hoisting issues
       if (window.landValuationSave) {
         window.landValuationSave({ source: 'autosave' });
@@ -1097,7 +1097,7 @@ const getPricePerUnit = useCallback((price, size) => {
   useEffect(() => {
     if (isInitialLoadComplete && vacantSales.length > 0 && window._method1ExcludedSales) {
       // Only clear after we have populated vacantSales (which means filterVacantSales has run)
-      debug('🧹 Clearing Method 1 temporary variables after successful application');
+      debug('���� Clearing Method 1 temporary variables after successful application');
       setTimeout(() => {
         delete window._method1ExcludedSales;
         delete window._method1IncludedSales;
@@ -4913,6 +4913,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
     };
 
+    // RAW LAND ANALYSIS - ONLY vacant land sales (no/minimal improvements)
+    // This includes properties explicitly categorized as 'raw_land' OR uncategorized class 1 properties
     const rawLand = getCategoryAverage(s => {
       const isRawLandCategory = saleCategories[s.id] === 'raw_land';
       const isUncategorizedVacant = !saleCategories[s.id] && s.property_m4_class === '1';
