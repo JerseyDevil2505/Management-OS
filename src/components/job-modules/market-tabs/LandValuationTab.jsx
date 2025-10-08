@@ -3723,14 +3723,27 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
       }
     } catch (error) {
-      // Extract readable error message
+      // Extract readable error message with detailed debugging
       const errorMessage = error?.message || error?.error?.message || error?.details ||
                           (typeof error === 'string' ? error : JSON.stringify(error));
 
       console.error('❌ Save failed:', errorMessage);
       console.error('Full error object:', error);
+      console.error('Error details:', {
+        errorType: typeof error,
+        errorKeys: error ? Object.keys(error) : [],
+        errorCode: error?.code,
+        errorHint: error?.hint,
+        errorDetails: error?.details,
+        stackTrace: error?.stack
+      });
 
-      alert(`Failed to save analysis: ${errorMessage}\n\nPlease try again.`);
+      // Show user-friendly error with more context
+      const userMessage = `Failed to save analysis: ${errorMessage}\n\n` +
+        `Error type: ${error?.code || 'Unknown'}\n` +
+        `Please check the console for details and try again.`;
+
+      alert(userMessage);
     } finally {
       setIsSaving(false);
     }
@@ -4852,7 +4865,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
     debug('🔄 Recalculating category analysis');
-    debug('���� Total vacant sales:', vacantSales.length);
+    debug('������ Total vacant sales:', vacantSales.length);
     debug('���� Checked sales count:', checkedSales.length);
     // 🔍 COMPREHENSIVE FILTERING DEBUG - Shows exactly which sales go where
     console.log('🔍 PAIRED SALES ANALYSIS - Category Breakdown:', {
