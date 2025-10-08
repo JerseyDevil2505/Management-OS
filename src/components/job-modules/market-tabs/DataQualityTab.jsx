@@ -116,6 +116,14 @@ const DataQualityTab = ({
     }
   }, [marketLandData]);
 
+  // Re-apply filter when ignored issues change (e.g., loaded from database)
+  useEffect(() => {
+    if (rawResults && Object.keys(rawResults).length > 0) {
+      applyAndSetResults(rawResults, ignoredIssues);
+      console.log(`🔄 Re-filtered results with ${ignoredIssues.size} ignored issues`);
+    }
+  }, [ignoredIssues]);
+
   // Initialize overview stats from last run if available
   useEffect(() => {
     if (marketLandData && marketLandData.quality_check_results?.history?.length > 0) {
