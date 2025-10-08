@@ -2214,7 +2214,7 @@ const getPricePerUnit = useCallback((price, size) => {
     return { min, mode, modeCount, median, mean, max, count: sorted.length };
   }, [bracketAnalysis]);
 
-  // Suggest optimal brackets based on lot size distribution
+  // Suggest optimal brackets based on lot size distribution (quartiles only)
   const suggestOptimalBrackets = useCallback(() => {
     if (!lotSizeStats) return;
 
@@ -2239,40 +2239,25 @@ const getPricePerUnit = useCallback((price, size) => {
     const q2 = sorted[Math.floor(sorted.length * 0.50)];
     const q3 = sorted[Math.floor(sorted.length * 0.75)];
 
-    // Check for modal clustering (groups around mode)
-    const hasModalClustering = lotSizeStats.modeCount > sorted.length * 0.3;
+    // Always use quartiles - mathematically clear and defensible
+    const primeMax = q1;
+    const secondaryMax = q2;
+    const excessMax = q3;
+    const residualMax = null; // Open-ended
 
-    // Determine suggestion method
-    let method = 'quartiles';
-    let primeMax, secondaryMax, excessMax, residualMax;
+    // Round to 2 decimals and ensure ascending order
+    const values = [
+      Math.round(primeMax * 100) / 100,
+      Math.round(secondaryMax * 100) / 100,
+      Math.round(excessMax * 100) / 100
+    ].sort((a, b) => a - b); // Ensure ascending order
 
-    if (hasModalClustering) {
-      // Use modal clustering: brackets based on mode ± std deviation
-      method = 'modal';
-      const mean = lotSizeStats.mean;
-      const variance = sorted.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / sorted.length;
-      const stdDev = Math.sqrt(variance);
-
-      primeMax = Math.max(0.5, lotSizeStats.mode - stdDev * 0.5);
-      secondaryMax = lotSizeStats.mode + stdDev * 0.5;
-      excessMax = lotSizeStats.mode + stdDev * 1.5;
-      residualMax = null; // Open-ended
-    } else {
-      // Use quartiles for even distribution
-      method = 'quartiles';
-      primeMax = q1;
-      secondaryMax = q2;
-      excessMax = q3;
-      residualMax = null; // Open-ended
-    }
-
-    // Round to 2 decimals
     const suggested = {
-      primeMax: Math.round(primeMax * 100) / 100,
-      secondaryMax: Math.round(secondaryMax * 100) / 100,
-      excessMax: Math.round(excessMax * 100) / 100,
-      residualMax: residualMax ? Math.round(residualMax * 100) / 100 : null,
-      method,
+      primeMax: values[0],
+      secondaryMax: values[1],
+      excessMax: values[2],
+      residualMax: null,
+      method: 'quartiles',
       stats: lotSizeStats
     };
 
@@ -6120,13 +6105,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             <div style={{ marginTop: '12px', padding: '16px', borderRadius: '8px', backgroundColor: '#F0F9FF', border: '2px solid #3B82F6', width: '90%', maxWidth: '980px' }}>
               <div style={{ marginBottom: '12px' }}>
                 <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold', color: '#1E40AF' }}>
-                  Suggested Brackets ({suggestedBrackets.method === 'quartiles' ? 'Quartile-Based' : 'Modal Clustering'})
+                  Suggested Brackets (Quartile-Based)
                 </h4>
                 <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#6B7280' }}>
-                  {suggestedBrackets.method === 'quartiles'
-                    ? 'Based on quartile distribution for even spread across lot sizes'
-                    : `Based on modal clustering around ${suggestedBrackets.stats.mode.toFixed(2)} acres (${suggestedBrackets.stats.modeCount} sales)`
-                  }
+                  Based on quartile distribution (Q1, Q2, Q3) for even spread across {suggestedBrackets.stats.count} lot sizes. This method is mathematically defensible and ensures balanced distribution.
                 </p>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '12px' }}>
@@ -6164,13 +6146,30 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </button>
                 <button
                   onClick={() => {
+                    // Apply suggested values to bracket inputs
                     setBracketInputs({
                       primeMax: suggestedBrackets.primeMax,
                       secondaryMax: suggestedBrackets.secondaryMax,
                       excessMax: suggestedBrackets.excessMax,
                       residualMax: suggestedBrackets.residualMax || ''
                     });
-                    validateAndApplyBrackets({ recalc: true });
+
+                    // Update cascade config with new brackets
+                    setCascadeConfig(prev => ({
+                      ...prev,
+                      normal: {
+                        ...prev.normal,
+                        prime: { ...prev.normal?.prime, max: suggestedBrackets.primeMax },
+                        secondary: { ...prev.normal?.secondary, max: suggestedBrackets.secondaryMax },
+                        excess: { ...prev.normal?.excess, max: suggestedBrackets.excessMax },
+                        residual: { ...prev.normal?.residual, max: suggestedBrackets.residualMax || null }
+                      }
+                    }));
+
+                    // Trigger recalculation and close modal
+                    setTimeout(() => {
+                      validateAndApplyBrackets({ recalc: true });
+                    }, 100);
                     setShowSuggestedBrackets(false);
                   }}
                   style={{ padding: '8px 12px', backgroundColor: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
