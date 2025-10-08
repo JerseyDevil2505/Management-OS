@@ -271,6 +271,8 @@ const LandValuationTab = ({
 
   // Bracket editor UI state (allows per-job overrides of bracket boundaries)
   const [showBracketEditor, setShowBracketEditor] = useState(false);
+  const [showSuggestedBrackets, setShowSuggestedBrackets] = useState(false);
+  const [suggestedBrackets, setSuggestedBrackets] = useState(null);
   const [bracketInputs, setBracketInputs] = useState(() => ({
     primeMax: cascadeConfig.normal?.prime?.max ?? 1,
     secondaryMax: cascadeConfig.normal?.secondary?.max ?? 5,
@@ -2169,7 +2171,114 @@ const getPricePerUnit = useCallback((price, size) => {
       console.error('Error in performBracketAnalysis:', error);
       setBracketAnalysis({});
     }
-  }, [properties, jobData, method2TypeFilter, method2ExcludedSales, vacantSales, specialRegions, cascadeConfig]);
+  }, [properties, timeNormalizedData, cascadeConfig, calculateAcreage, method2TypeFilter, method2ExcludedSales, vacantSales, specialRegions]);
+
+  // Calculate lot size distribution statistics for Method 2
+  const lotSizeStats = useMemo(() => {
+    const allLotSizes = [];
+    Object.values(bracketAnalysis).forEach(vcs => {
+      // Collect lot sizes from all brackets
+      if (vcs.brackets) {
+        ['small', 'medium', 'large', 'xlarge'].forEach(bracket => {
+          const b = vcs.brackets[bracket];
+          if (b && b.count > 0 && b.avgAcres) {
+            // Add each sale's lot size (approximation based on average)
+            for (let i = 0; i < b.count; i++) {
+              allLotSizes.push(b.avgAcres);
+            }
+          }
+        });
+      }
+    });
+
+    if (allLotSizes.length === 0) return null;
+
+    const sorted = [...allLotSizes].sort((a, b) => a - b);
+    const min = sorted[0];
+    const max = sorted[sorted.length - 1];
+    const median = sorted.length % 2 === 0 ?
+      (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2 :
+      sorted[Math.floor(sorted.length / 2)];
+    const mean = sorted.reduce((sum, val) => sum + val, 0) / sorted.length;
+
+    // Calculate mode (most frequent value with tolerance)
+    const frequency = {};
+    sorted.forEach(val => {
+      const rounded = Math.round(val * 100) / 100; // Round to 2 decimals
+      frequency[rounded] = (frequency[rounded] || 0) + 1;
+    });
+    const modeEntry = Object.entries(frequency).reduce((a, b) => a[1] > b[1] ? a : b);
+    const mode = parseFloat(modeEntry[0]);
+    const modeCount = modeEntry[1];
+
+    return { min, mode, modeCount, median, mean, max, count: sorted.length };
+  }, [bracketAnalysis]);
+
+  // Suggest optimal brackets based on lot size distribution
+  const suggestOptimalBrackets = useCallback(() => {
+    if (!lotSizeStats) return;
+
+    const allLotSizes = [];
+    Object.values(bracketAnalysis).forEach(vcs => {
+      if (vcs.brackets) {
+        ['small', 'medium', 'large', 'xlarge'].forEach(bracket => {
+          const b = vcs.brackets[bracket];
+          if (b && b.count > 0 && b.avgAcres) {
+            for (let i = 0; i < b.count; i++) {
+              allLotSizes.push(b.avgAcres);
+            }
+          }
+        });
+      }
+    });
+
+    const sorted = [...allLotSizes].sort((a, b) => a - b);
+
+    // Calculate quartiles for even distribution
+    const q1 = sorted[Math.floor(sorted.length * 0.25)];
+    const q2 = sorted[Math.floor(sorted.length * 0.50)];
+    const q3 = sorted[Math.floor(sorted.length * 0.75)];
+
+    // Check for modal clustering (groups around mode)
+    const hasModalClustering = lotSizeStats.modeCount > sorted.length * 0.3;
+
+    // Determine suggestion method
+    let method = 'quartiles';
+    let primeMax, secondaryMax, excessMax, residualMax;
+
+    if (hasModalClustering) {
+      // Use modal clustering: brackets based on mode ± std deviation
+      method = 'modal';
+      const mean = lotSizeStats.mean;
+      const variance = sorted.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / sorted.length;
+      const stdDev = Math.sqrt(variance);
+
+      primeMax = Math.max(0.5, lotSizeStats.mode - stdDev * 0.5);
+      secondaryMax = lotSizeStats.mode + stdDev * 0.5;
+      excessMax = lotSizeStats.mode + stdDev * 1.5;
+      residualMax = null; // Open-ended
+    } else {
+      // Use quartiles for even distribution
+      method = 'quartiles';
+      primeMax = q1;
+      secondaryMax = q2;
+      excessMax = q3;
+      residualMax = null; // Open-ended
+    }
+
+    // Round to 2 decimals
+    const suggested = {
+      primeMax: Math.round(primeMax * 100) / 100,
+      secondaryMax: Math.round(secondaryMax * 100) / 100,
+      excessMax: Math.round(excessMax * 100) / 100,
+      residualMax: residualMax ? Math.round(residualMax * 100) / 100 : null,
+      method,
+      stats: lotSizeStats
+    };
+
+    setSuggestedBrackets(suggested);
+    setShowSuggestedBrackets(true);
+  }, [bracketAnalysis, lotSizeStats]);
 
   const calculateRates = useCallback((regionFilter = null) => {
     const included = vacantSales.filter(s => {
@@ -5978,6 +6087,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         <div style={{ display: 'flex', gap: '8px', flexDirection: 'column', alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
+              onClick={suggestOptimalBrackets}
+              style={{
+                padding: '8px 12px',
+                backgroundColor: 'white',
+                border: '1px solid #D1D5DB',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <span>🎯</span> Suggest Brackets
+            </button>
+            <button
               onClick={() => setShowBracketEditor(prev => !prev)}
               style={{
                 padding: '8px 12px',
@@ -5991,6 +6115,71 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             </button>
 
           </div>
+
+          {showSuggestedBrackets && suggestedBrackets && (
+            <div style={{ marginTop: '12px', padding: '16px', borderRadius: '8px', backgroundColor: '#F0F9FF', border: '2px solid #3B82F6', width: '90%', maxWidth: '980px' }}>
+              <div style={{ marginBottom: '12px' }}>
+                <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold', color: '#1E40AF' }}>
+                  Suggested Brackets ({suggestedBrackets.method === 'quartiles' ? 'Quartile-Based' : 'Modal Clustering'})
+                </h4>
+                <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#6B7280' }}>
+                  {suggestedBrackets.method === 'quartiles'
+                    ? 'Based on quartile distribution for even spread across lot sizes'
+                    : `Based on modal clustering around ${suggestedBrackets.stats.mode.toFixed(2)} acres (${suggestedBrackets.stats.modeCount} sales)`
+                  }
+                </p>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>Prime max</label>
+                  <div style={{ padding: '8px', backgroundColor: 'white', border: '1px solid #BFDBFE', borderRadius: '4px', fontWeight: 'bold', color: '#1E40AF' }}>
+                    {suggestedBrackets.primeMax} acres
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>Secondary max</label>
+                  <div style={{ padding: '8px', backgroundColor: 'white', border: '1px solid #BFDBFE', borderRadius: '4px', fontWeight: 'bold', color: '#1E40AF' }}>
+                    {suggestedBrackets.secondaryMax} acres
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>Excess max</label>
+                  <div style={{ padding: '8px', backgroundColor: 'white', border: '1px solid #BFDBFE', borderRadius: '4px', fontWeight: 'bold', color: '#1E40AF' }}>
+                    {suggestedBrackets.excessMax} acres
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>Residual max</label>
+                  <div style={{ padding: '8px', backgroundColor: 'white', border: '1px solid #BFDBFE', borderRadius: '4px', fontWeight: 'bold', color: '#1E40AF' }}>
+                    {suggestedBrackets.residualMax || 'Open-ended'}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <button
+                  onClick={() => setShowSuggestedBrackets(false)}
+                  style={{ padding: '8px 12px', backgroundColor: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: '6px', cursor: 'pointer' }}
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setBracketInputs({
+                      primeMax: suggestedBrackets.primeMax,
+                      secondaryMax: suggestedBrackets.secondaryMax,
+                      excessMax: suggestedBrackets.excessMax,
+                      residualMax: suggestedBrackets.residualMax || ''
+                    });
+                    validateAndApplyBrackets({ recalc: true });
+                    setShowSuggestedBrackets(false);
+                  }}
+                  style={{ padding: '8px 12px', backgroundColor: '#3B82F6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                >
+                  Apply Suggestions
+                </button>
+              </div>
+            </div>
+          )}
 
           {showBracketEditor && (
             <div style={{ marginTop: '12px', padding: '12px', borderRadius: '6px', backgroundColor: 'white', border: '1px solid #E5E7EB', width: '90%', maxWidth: '980px' }}>
@@ -6098,6 +6287,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         <div style={{ padding: '10px 15px 5px 15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: '12px', color: '#6B7280' }}>
             {Object.keys(bracketAnalysis).length} VCS areas • Filtered by: {method2TypeFilter} ({getTypeUseOptions().find(opt => opt.code === method2TypeFilter)?.description || 'Unknown'})
+            {lotSizeStats && (
+              <span style={{ marginLeft: '8px', color: '#9CA3AF' }}>
+                • Min {lotSizeStats.min.toFixed(2)} | Mode {lotSizeStats.mode.toFixed(2)} ({lotSizeStats.modeCount}) | Median {lotSizeStats.median.toFixed(2)} | Mean {lotSizeStats.mean.toFixed(2)} | Max {lotSizeStats.max.toFixed(2)} acres
+              </span>
+            )}
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
