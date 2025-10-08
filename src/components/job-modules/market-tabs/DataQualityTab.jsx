@@ -2943,6 +2943,14 @@ const editCustomCheck = (check) => {
                                 }
 
                                 console.log(`✅ ${isIgnored ? 'Restored' : 'Ignored'} issue and saved to database`);
+
+                                // Optional: Show brief success message
+                                const msg = isIgnored ? '✅ Issue restored' : '✅ Issue ignored';
+                                const toast = document.createElement('div');
+                                toast.textContent = msg;
+                                toast.style.cssText = 'position:fixed;top:20px;right:20px;background:#10B981;color:white;padding:12px 20px;border-radius:6px;z-index:9999;font-size:14px;';
+                                document.body.appendChild(toast);
+                                setTimeout(() => toast.remove(), 2000);
                               } catch (error) {
                                 console.error('Error saving ignored issues:', error);
                                 alert(`Failed to ${isIgnored ? 'restore' : 'ignore'} issue: ${error.message}`);
