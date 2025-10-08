@@ -2171,7 +2171,7 @@ const getPricePerUnit = useCallback((price, size) => {
       console.error('Error in performBracketAnalysis:', error);
       setBracketAnalysis({});
     }
-  }, [properties, timeNormalizedData, cascadeConfig, calculateAcreage, method2TypeFilter, method2ExcludedSales, vacantSales, specialRegions]);
+  }, [properties, cascadeConfig, calculateAcreage, method2TypeFilter, method2ExcludedSales, vacantSales, specialRegions]);
 
   // Calculate lot size distribution statistics for Method 2
   const lotSizeStats = useMemo(() => {
