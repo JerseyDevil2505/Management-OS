@@ -3738,10 +3738,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     jobData?.id, vacantSales, includedSales, method1ExcludedSales,
     saleCategories, specialRegions, landNotes, dateRange, valuationMode,
     cascadeConfig, bracketAnalysis, method2Summary, method2ExcludedSales,
-    targetAllocation, vcsSheetData, vcsManualSiteValues, vcsDescriptions,
-    vcsTypes, vcsRecommendedSites, ecoObsFactors, mappedLocationCodes,
-    trafficLevels, customLocationCodes, summaryInputs, actualAdjustments,
-    computedAdjustments, calculateRates, onAnalysisUpdate, updateSessionState
+    targetAllocation, vcsSiteValues, actualAllocations, currentOverallAllocation,
+    vcsPropertyCounts, vcsZoningData, vcsSheetData, vcsManualSiteValues,
+    vcsDescriptions, vcsTypes, vcsRecommendedSites, ecoObsFactors,
+    mappedLocationCodes, trafficLevels, customLocationCodes, summaryInputs,
+    actualAdjustments, computedAdjustments, calculateRates, calculateAllocationStats,
+    onAnalysisUpdate, updateSessionState
   ]);
 
   // Expose saveAnalysis to window for auto-save access (avoids hoisting issues)
