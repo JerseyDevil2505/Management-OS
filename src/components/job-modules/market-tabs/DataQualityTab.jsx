@@ -2379,6 +2379,13 @@ const editCustomCheck = (check) => {
                       }
 
                       console.log('✅ Cleared all ignored issues and saved to database');
+
+                      // Show success message
+                      const toast = document.createElement('div');
+                      toast.textContent = '✅ All ignored issues cleared';
+                      toast.style.cssText = 'position:fixed;top:20px;right:20px;background:#10B981;color:white;padding:12px 20px;border-radius:6px;z-index:9999;font-size:14px;';
+                      document.body.appendChild(toast);
+                      setTimeout(() => toast.remove(), 2000);
                     } catch (error) {
                       console.error('Error clearing ignored issues:', error);
                       alert(`Failed to clear ignored issues: ${error.message}`);
