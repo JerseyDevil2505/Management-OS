@@ -215,14 +215,20 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
           <>
             {/* Render active tab with all necessary props */}
             {activeTab === 'data-quality' && (
-              <DataQualityTab 
+              <DataQualityTab
                 properties={properties}
                 jobData={jobData}
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 availableFields={availableFields}
                 marketLandData={marketLandData}
-                onUpdateJobCache={onUpdateJobCache}
+                onUpdateJobCache={async () => {
+                  // Trigger surgical refresh after DataQualityTab saves
+                  if (typeof refreshMarketLandData === 'function') {
+                    await refreshMarketLandData();
+                  }
+                  if (typeof onDataChange === 'function') onDataChange();
+                }}
               />
             )}    
             
@@ -234,7 +240,13 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
                 hpiData={hpiData}
-                onUpdateJobCache={(...args) => { console.log('Child requested parent refresh — suppressed in MarketAnalysis'); if (typeof onDataChange === 'function') onDataChange(); }}
+                onUpdateJobCache={async () => {
+                  // Trigger surgical refresh after PreValuationTab saves
+                  if (typeof refreshMarketLandData === 'function') {
+                    await refreshMarketLandData();
+                  }
+                  if (typeof onDataChange === 'function') onDataChange();
+                }}
               />
             )}
             
@@ -287,7 +299,13 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
-                onUpdateJobCache={(...args) => { console.log('Child requested parent refresh — suppressed in MarketAnalysis'); if (typeof onDataChange === 'function') onDataChange(); }}
+                onUpdateJobCache={async () => {
+                  // Trigger surgical refresh after CostValuationTab saves
+                  if (typeof refreshMarketLandData === 'function') {
+                    await refreshMarketLandData();
+                  }
+                  if (typeof onDataChange === 'function') onDataChange();
+                }}
               />
             )}
             
@@ -298,7 +316,13 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
-                onUpdateJobCache={(...args) => { console.log('Child requested parent refresh — suppressed in MarketAnalysis'); if (typeof onDataChange === 'function') onDataChange(); }}
+                onUpdateJobCache={async () => {
+                  // Trigger surgical refresh after AttributeCardsTab saves
+                  if (typeof refreshMarketLandData === 'function') {
+                    await refreshMarketLandData();
+                  }
+                  if (typeof onDataChange === 'function') onDataChange();
+                }}
               />
             )}
           </>

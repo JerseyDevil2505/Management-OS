@@ -1396,6 +1396,14 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         });
 
       if (error) throw error;
+
+      // After saving custom results
+      if (onUpdateJobCache) {
+        setTimeout(() => {
+          console.log('🔄 AttributeCardsTab requesting parent refresh...');
+          onUpdateJobCache();
+        }, 500);
+      }
     } catch (error) {
       console.error('Error saving custom results:', error);
     }

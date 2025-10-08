@@ -116,6 +116,19 @@ const DataQualityTab = ({
     }
   }, [marketLandData]);
 
+  // Re-apply filter when ignored issues change (e.g., loaded from database)
+  useEffect(() => {
+    if (rawResults && Object.keys(rawResults).length > 0 && ignoredIssues.size > 0) {
+      const filtered = filterIgnoredResults(rawResults, ignoredIssues);
+      setCheckResults(filtered);
+      const score = calculateQualityScore(filtered);
+      setQualityScore(score);
+      const stats = computeStatsFromResults(filtered);
+      setIssueStats(stats);
+      console.log(`🔄 Re-filtered results with ${ignoredIssues.size} ignored issues`);
+    }
+  }, [ignoredIssues, rawResults]);
+
   // Initialize overview stats from last run if available
   useEffect(() => {
     if (marketLandData && marketLandData.quality_check_results?.history?.length > 0) {
@@ -1666,6 +1679,14 @@ const generateQCFormPDF = () => {
 
       console.log(`✅ Saved: ${totalIssues} issues found (displayed, ignoring ${ignoredIssues.size} ignored)`);
 
+      // After successful save
+      if (onUpdateJobCache) {
+        setTimeout(() => {
+          console.log('🔄 DataQualityTab requesting parent refresh...');
+          onUpdateJobCache();
+        }, 500);
+      }
+
     } catch (error) {
       console.error('Error saving:', error);
     }
@@ -2339,17 +2360,35 @@ const editCustomCheck = (check) => {
                     const emptySet = new Set();
                     setIgnoredIssues(emptySet);
                     try {
-                      await supabase
+                      const { error } = await supabase
                         .from('market_land_valuation')
                         .update({
                           ignored_issues: [],
                           updated_at: new Date().toISOString()
                         })
                         .eq('job_id', jobData.id);
+
+                      if (error) throw error;
+
                       // Recompute displayed results after clearing ignored
                       applyAndSetResults(rawResults || {} , emptySet);
+
+                      // Notify parent to refresh data
+                      if (onUpdateJobCache) {
+                        await onUpdateJobCache();
+                      }
+
+                      console.log('✅ Cleared all ignored issues and saved to database');
+
+                      // Show success message
+                      const toast = document.createElement('div');
+                      toast.textContent = '✅ All ignored issues cleared';
+                      toast.style.cssText = 'position:fixed;top:20px;right:20px;background:#10B981;color:white;padding:12px 20px;border-radius:6px;z-index:9999;font-size:14px;';
+                      document.body.appendChild(toast);
+                      setTimeout(() => toast.remove(), 2000);
                     } catch (error) {
                       console.error('Error clearing ignored issues:', error);
+                      alert(`Failed to clear ignored issues: ${error.message}`);
                     }
                   }}
                   className="px-4 py-2 bg-yellow-600 text-white rounded-lg font-medium hover:bg-yellow-700 transition-all flex items-center gap-2"
@@ -2892,7 +2931,7 @@ const editCustomCheck = (check) => {
 
                               // Save to database immediately
                               try {
-                                await supabase
+                                const { error } = await supabase
                                   .from('market_land_valuation')
                                   .update({
                                     ignored_issues: Array.from(newIgnored),
@@ -2900,10 +2939,28 @@ const editCustomCheck = (check) => {
                                   })
                                   .eq('job_id', jobData.id);
 
+                                if (error) throw error;
+
                                 // Update displayed results/stats after toggling ignored
                                 applyAndSetResults(checkResults, newIgnored);
+
+                                // Notify parent to refresh data
+                                if (onUpdateJobCache) {
+                                  await onUpdateJobCache();
+                                }
+
+                                console.log(`✅ ${isIgnored ? 'Restored' : 'Ignored'} issue and saved to database`);
+
+                                // Optional: Show brief success message
+                                const msg = isIgnored ? '✅ Issue restored' : '✅ Issue ignored';
+                                const toast = document.createElement('div');
+                                toast.textContent = msg;
+                                toast.style.cssText = 'position:fixed;top:20px;right:20px;background:#10B981;color:white;padding:12px 20px;border-radius:6px;z-index:9999;font-size:14px;';
+                                document.body.appendChild(toast);
+                                setTimeout(() => toast.remove(), 2000);
                               } catch (error) {
                                 console.error('Error saving ignored issues:', error);
+                                alert(`Failed to ${isIgnored ? 'restore' : 'ignore'} issue: ${error.message}`);
                               }
                             }}
                             className={`px-2 py-1 text-xs rounded transition-colors ${
