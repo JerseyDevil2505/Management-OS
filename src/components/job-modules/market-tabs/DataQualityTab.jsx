@@ -118,11 +118,16 @@ const DataQualityTab = ({
 
   // Re-apply filter when ignored issues change (e.g., loaded from database)
   useEffect(() => {
-    if (rawResults && Object.keys(rawResults).length > 0) {
-      applyAndSetResults(rawResults, ignoredIssues);
+    if (rawResults && Object.keys(rawResults).length > 0 && ignoredIssues.size > 0) {
+      const filtered = filterIgnoredResults(rawResults, ignoredIssues);
+      setCheckResults(filtered);
+      const score = calculateQualityScore(filtered);
+      setQualityScore(score);
+      const stats = computeStatsFromResults(filtered);
+      setIssueStats(stats);
       console.log(`🔄 Re-filtered results with ${ignoredIssues.size} ignored issues`);
     }
-  }, [ignoredIssues]);
+  }, [ignoredIssues, rawResults]);
 
   // Initialize overview stats from last run if available
   useEffect(() => {
