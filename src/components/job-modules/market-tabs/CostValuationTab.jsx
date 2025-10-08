@@ -51,7 +51,12 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         if (data.cost_valuation_from_year !== undefined && data.cost_valuation_from_year !== null) setFromYear(Number(data.cost_valuation_from_year));
         if (data.cost_valuation_to_year !== undefined && data.cost_valuation_to_year !== null) setToYear(Number(data.cost_valuation_to_year));
       }
-      if (onUpdateJobCache && jobData?.id) onUpdateJobCache(jobData.id, { forceRefresh: true });
+      if (onUpdateJobCache) {
+        setTimeout(() => {
+          console.log('🔄 CostValuationTab requesting parent refresh...');
+          onUpdateJobCache();
+        }, 500);
+      }
       setSavedYears(true);
       setTimeout(() => setSavedYears(false), 1500);
       console.log('Saved cost valuation year range', { from, to });
@@ -110,7 +115,12 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       }
 
       setPriceBasis(basis);
-      if (onUpdateJobCache && jobData?.id) onUpdateJobCache(jobData.id, { forceRefresh: true });
+      if (onUpdateJobCache) {
+        setTimeout(() => {
+          console.log('🔄 CostValuationTab requesting parent refresh...');
+          onUpdateJobCache();
+        }, 500);
+      }
     } catch (e) {
       const msg = extractErrorMessage(e);
       console.error('Error saving price basis:', e);
@@ -345,7 +355,12 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         .single();
       if (error) throw error;
       setStateRecommendedFactor(factor);
-      if (onUpdateJobCache && jobData?.id) onUpdateJobCache(jobData.id, { forceRefresh: true });
+      if (onUpdateJobCache) {
+        setTimeout(() => {
+          console.log('🔄 CostValuationTab requesting parent refresh...');
+          onUpdateJobCache();
+        }, 500);
+      }
       setSavedRecommendation(true);
       setTimeout(() => setSavedRecommendation(false), 1500);
     } catch (e) {
@@ -369,8 +384,13 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         .single();
       if (error) throw error;
       setCostConvFactor(factor);
-      // Invalidate cache if parent provided
-      if (onUpdateJobCache && jobData?.id) onUpdateJobCache(jobData.id, { forceRefresh: true });
+      // After saving factors
+      if (onUpdateJobCache) {
+        setTimeout(() => {
+          console.log('🔄 CostValuationTab requesting parent refresh...');
+          onUpdateJobCache();
+        }, 500);
+      }
       setSavedFactor(true);
       setTimeout(() => setSavedFactor(false), 1500);
     } catch (e) {

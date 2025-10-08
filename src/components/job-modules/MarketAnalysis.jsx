@@ -26,7 +26,18 @@ import LandValuationTab from './market-tabs/LandValuationTab';
 import CostValuationTab from './market-tabs/CostValuationTab';
 import AttributeCardsTab from './market-tabs/AttributeCardsTab';
 
-const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache, onDataChange }) => {
+const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache, onDataChange, refreshMarketLandData }) => {
+  // 📊 DEBUG - MarketAnalysis passing data to tabs
+  console.log('📊 MarketAnalysis passing to LandValuationTab:', {
+    marketLandData_updated_at: marketLandData?.updated_at,
+    hasVacantSales: !!marketLandData?.vacant_sales_analysis?.sales,
+    salesCount: marketLandData?.vacant_sales_analysis?.sales?.length,
+    manuallyAddedCount: marketLandData?.vacant_sales_analysis?.sales?.filter(s => s.manually_added)?.length,
+    hasCascadeRates: !!marketLandData?.cascade_rates,
+    hasTargetAllocation: marketLandData?.target_allocation !== undefined,
+    targetAllocationValue: marketLandData?.target_allocation
+  });
+
   // ==================== STATE MANAGEMENT ====================
   const [activeTab, setActiveTab] = useState('data-quality');
 
@@ -204,14 +215,20 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
           <>
             {/* Render active tab with all necessary props */}
             {activeTab === 'data-quality' && (
-              <DataQualityTab 
+              <DataQualityTab
                 properties={properties}
                 jobData={jobData}
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 availableFields={availableFields}
                 marketLandData={marketLandData}
-                onUpdateJobCache={onUpdateJobCache}
+                onUpdateJobCache={async () => {
+                  // Trigger surgical refresh after DataQualityTab saves
+                  if (typeof refreshMarketLandData === 'function') {
+                    await refreshMarketLandData();
+                  }
+                  if (typeof onDataChange === 'function') onDataChange();
+                }}
               />
             )}    
             
@@ -223,7 +240,13 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
                 hpiData={hpiData}
-                onUpdateJobCache={(...args) => { console.log('Child requested parent refresh — suppressed in MarketAnalysis'); if (typeof onDataChange === 'function') onDataChange(); }}
+                onUpdateJobCache={async () => {
+                  // Trigger surgical refresh after PreValuationTab saves
+                  if (typeof refreshMarketLandData === 'function') {
+                    await refreshMarketLandData();
+                  }
+                  if (typeof onDataChange === 'function') onDataChange();
+                }}
               />
             )}
             
@@ -246,9 +269,21 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
-                onAnalysisUpdate={(data, opts) => {
-                  // Do NOT trigger a parent reload here. Mark module dirty instead so parent can refresh on switch.
-                  console.log('LandValuation reported analysis update; marking module dirty');
+                onAnalysisUpdate={async (data, opts) => {
+                  // SURGICAL REFRESH: Only reload marketLandData without global refresh
+                  console.log('LandValuation reported analysis update; triggering surgical refresh');
+
+                  // Use targeted refresh for marketLandData only
+                  if (typeof refreshMarketLandData === 'function') {
+                    try {
+                      await refreshMarketLandData();
+                      console.log('✅ Market land data refreshed surgically - no global refresh');
+                    } catch (e) {
+                      console.error('❌ Failed to refresh market land data:', e);
+                    }
+                  }
+
+                  // Mark module as changed
                   if (typeof onDataChange === 'function') onDataChange();
                 }}
                 // Session state management props
@@ -264,7 +299,13 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
-                onUpdateJobCache={(...args) => { console.log('Child requested parent refresh — suppressed in MarketAnalysis'); if (typeof onDataChange === 'function') onDataChange(); }}
+                onUpdateJobCache={async () => {
+                  // Trigger surgical refresh after CostValuationTab saves
+                  if (typeof refreshMarketLandData === 'function') {
+                    await refreshMarketLandData();
+                  }
+                  if (typeof onDataChange === 'function') onDataChange();
+                }}
               />
             )}
             
@@ -275,7 +316,13 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
-                onUpdateJobCache={(...args) => { console.log('Child requested parent refresh — suppressed in MarketAnalysis'); if (typeof onDataChange === 'function') onDataChange(); }}
+                onUpdateJobCache={async () => {
+                  // Trigger surgical refresh after AttributeCardsTab saves
+                  if (typeof refreshMarketLandData === 'function') {
+                    await refreshMarketLandData();
+                  }
+                  if (typeof onDataChange === 'function') onDataChange();
+                }}
               />
             )}
           </>

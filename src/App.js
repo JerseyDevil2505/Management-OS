@@ -10,8 +10,43 @@ import FileUploadButton from './components/job-modules/FileUploadButton';
 import LandingPage from './components/LandingPage';
 import UserManagement from './components/UserManagement';
 
+/**
+ * MANAGEMENT OS - LIVE DATA ARCHITECTURE
+ * =====================================
+ *
+ * This application uses a LIVE DATA FIRST strategy with no persistent caching layer.
+ *
+ * KEY PRINCIPLES:
+ * - Every navigation/view change loads fresh data from Supabase
+ * - No stale data issues - always showing current database state
+ * - Props-based distribution from App.js to all child components
+ * - Selective updates only reload affected data sections
+ *
+ * DATA FLOW:
+ * 1. App.js maintains central state for all module data
+ * 2. loadLiveData() fetches directly from Supabase
+ * 3. Data distributed via props to components
+ * 4. Components call onDataUpdate() to trigger targeted refreshes
+ *
+ * PERFORMANCE OPTIMIZATIONS:
+ * - Batch loading (500-1000 records per query)
+ * - Single load pattern in JobContainer
+ * - Pagination for large datasets
+ * - Deferred state updates to prevent React errors
+ *
+ * LOCAL STORAGE USAGE:
+ * - UI preferences only (filters, view settings)
+ * - No application data caching
+ * - Session storage for unsaved form changes
+ *
+ * EXCEPTIONS:
+ * - ProductionTracker: 5-minute cache on analytics raw data (45K+ records)
+ * - This is the ONLY component with data caching for performance
+ */
+
 // ==========================================
-// LIVE DATA - NO CACHING
+// LIVE DATA ARCHITECTURE - NO PERSISTENT CACHING
+// See documentation at top of file for details
 // ==========================================
 
 const App = () => {
@@ -102,8 +137,8 @@ const App = () => {
     isInitialized: false
   });
 
-  // UI State - keeping original cache status structure but using it for loading status
-  const [cacheStatus, setCacheStatus] = useState({
+  // UI State - loading status tracking
+  const [loadingStatus, setLoadingStatus] = useState({
     isStale: false,
     isRefreshing: false,
     lastError: null,
@@ -182,7 +217,7 @@ const App = () => {
     console.log('📡 Loading fresh data from database:', components);
 
     try {
-      setCacheStatus(prev => ({ ...prev, isRefreshing: true, message: 'Loading fresh data...' }));
+      setLoadingStatus(prev => ({ ...prev, isRefreshing: true, message: 'Loading fresh data...' }));
       setAppData(prev => ({ ...prev, isLoading: true }));
 
       const updates = {};
@@ -433,7 +468,7 @@ const App = () => {
 
       setAppData(newData);
 
-      setCacheStatus({
+      setLoadingStatus({
         isStale: false,
         isRefreshing: false,
         lastError: null,
@@ -463,7 +498,7 @@ const App = () => {
         ? 'Database timeout - system may be busy. Please try again.'
         : 'Failed to load data';
 
-      setCacheStatus({
+      setLoadingStatus({
         isStale: false,
         isRefreshing: false,
         lastError: errMsg,
@@ -474,9 +509,9 @@ const App = () => {
   }, [appData, loadJobFreshness]);
 
   // ==========================================
-  // SURGICAL CACHE UPDATES (renamed but keeping same interface)
+  // TARGETED DATA UPDATES
   // ==========================================
-  const updateCacheItem = useCallback(async (type, id, data) => {
+  const updateDataSection = useCallback(async (type, id, data) => {
     console.log('🔧 Updating app data:', type, id);
 
     // For any billing-related updates, just reload fresh data
@@ -530,6 +565,20 @@ const App = () => {
   const handleWorkflowStatsUpdate = useCallback(() => {
     console.log('📊 Workflow stats updated - jobs list will refresh when user returns to jobs');
   }, []);
+
+  const handleJobDataRefresh = useCallback(async (jobId, opts = {}) => {
+    const { forceRefresh } = opts;
+    if (forceRefresh) {
+      console.log(`🔄 Force refreshing job data for job ${jobId}`);
+      try {
+        // Reload jobs data to get updated file versions and property counts
+        await loadLiveData(['jobs']);
+        console.log('✅ Job data refreshed successfully');
+      } catch (error) {
+        console.error('❌ Error refreshing job data:', error);
+      }
+    }
+  }, [loadLiveData]);
 
   // ==========================================
   // CALCULATION FUNCTIONS
@@ -864,10 +913,10 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Cache Status Bar - Errors Only */}
-      {cacheStatus.lastError && (
+      {/* Loading Status Bar - Errors Only */}
+      {loadingStatus.lastError && (
         <div className="fixed top-0 left-0 right-0 z-50 px-4 py-2 text-sm font-medium text-center bg-red-100 text-red-800">
-          {cacheStatus.message}
+          {loadingStatus.message}
         </div>
       )}
 
@@ -892,18 +941,18 @@ const App = () => {
               </span>
               <button
                 onClick={() => {
-                  setCacheStatus(prev => ({ ...prev, isRefreshing: true, message: 'Refreshing...' }));
+                  setLoadingStatus(prev => ({ ...prev, isRefreshing: true, message: 'Refreshing...' }));
                   loadLiveData(['all']).then(() => {
-                    setCacheStatus(prev => ({ ...prev, isRefreshing: false, message: 'Data refreshed' }));
+                    setLoadingStatus(prev => ({ ...prev, isRefreshing: false, message: 'Data refreshed' }));
                     setTimeout(() => {
-                      setCacheStatus(prev => ({ ...prev, message: '' }));
+                      setLoadingStatus(prev => ({ ...prev, message: '' }));
                     }, 2000);
                   });
                 }}
-                disabled={cacheStatus.isRefreshing}
+                disabled={loadingStatus.isRefreshing}
                 className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200 disabled:opacity-50"
               >
-                {cacheStatus.isRefreshing ? (
+                {loadingStatus.isRefreshing ? (
                   <span className="flex items-center gap-2">
                     <span className="animate-spin">⟳</span> Refreshing...
                   </span>
@@ -1022,6 +1071,7 @@ const App = () => {
                     job={selectedJob}
                     onFileProcessed={handleFileProcessed}
                     onDataRefresh={handleFileProcessed}
+                    onUpdateJobCache={handleJobDataRefresh}
                   />
                 </div>
               </div>
@@ -1062,7 +1112,7 @@ const App = () => {
             jobFreshness={appData.jobFreshness}
             inspectionData={appData.inspectionData}
             workflowStats={appData.workflowStats}
-            onDataUpdate={updateCacheItem}
+            onDataUpdate={updateDataSection}
             onRefresh={() => loadLiveData(['jobs'])}
           />
         )}
@@ -1076,7 +1126,7 @@ const App = () => {
             receivables={appData.receivables}
             distributions={appData.distributions}
             billingMetrics={appData.billingMetrics}
-            onDataUpdate={updateCacheItem}
+            onDataUpdate={updateDataSection}
             onRefresh={() => loadLiveData(['billing'])}
           />
         ) : (
@@ -1090,7 +1140,7 @@ const App = () => {
           <EmployeeManagement
             employees={appData.employees}
             globalAnalytics={appData.globalInspectionAnalytics}
-            onDataUpdate={updateCacheItem}
+            onDataUpdate={updateDataSection}
             onRefresh={() => loadLiveData(['employees'])}
           />
         )}
@@ -1104,7 +1154,7 @@ const App = () => {
             jobs={appData.jobs}
             archivedPeriods={appData.archivedPayrollPeriods}
             dataRecency={appData.dataRecency}
-            onDataUpdate={updateCacheItem}
+            onDataUpdate={updateDataSection}
             onRefresh={() => loadLiveData(['payroll'])}
           />
         ) : (

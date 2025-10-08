@@ -56,6 +56,7 @@ const LandValuationTab = ({
     }
   }, [updateSessionState]);
 
+
   // Listen for external navigation events to set LandValuation inner subtab
   useEffect(() => {
     const handler = (e) => {
@@ -166,6 +167,34 @@ const LandValuationTab = ({
   // ========== MODE SELECTION (NEW) ==========
   const [valuationMode, setValuationMode] = useState('acre'); // acre, sf, ff
   const [canUseFrontFoot, setCanUseFrontFoot] = useState(false);
+
+  // Recalculate price per unit when valuation mode changes
+  useEffect(() => {
+    if (vacantSales.length === 0 || !isInitialLoadComplete) return;
+
+    console.log(`🔄 Recalculating prices for mode: ${valuationMode}`);
+
+    setVacantSales(prev => prev.map(sale => {
+      const acres = sale.totalAcres || 0;
+      let sizeForUnit, pricePerUnit;
+
+      if (valuationMode === 'ff') {
+        sizeForUnit = parseFloat(sale.asset_lot_frontage) || 0;
+      } else if (valuationMode === 'sf') {
+        sizeForUnit = acres * 43560;
+      } else {
+        sizeForUnit = acres;
+      }
+
+      const price = sale.values_norm_time || sale.sales_price || 0;
+      pricePerUnit = sizeForUnit > 0 ? price / sizeForUnit : 0;
+
+      return {
+        ...sale,
+        pricePerAcre: Math.round(pricePerUnit) // NOTE: misleading name - contains price per current unit
+      };
+    }));
+  }, [valuationMode, isInitialLoadComplete]);
 
   // ========== SPECIAL REGIONS CONFIG ==========
   const SPECIAL_REGIONS = [
@@ -315,7 +344,6 @@ const LandValuationTab = ({
   // VCS Analysis
   const [bracketAnalysis, setBracketAnalysis] = useState({});
   const [method2Summary, setMethod2Summary] = useState({});
-  const [method2ByRegion, setMethod2ByRegion] = useState({}); // VCS analysis grouped by special region
 
   // Enhanced Method 2 UI State - Use Single Family as default
   const [method2TypeFilter, setMethod2TypeFilter] = useState('1');
@@ -478,9 +506,46 @@ useEffect(() => {
   hasInitialized.current = true;
   const currentSession = currentSessionState.current;
 
-  // If we have session state with unsaved changes, use it instead of database
+  // 🔴 CRITICAL DEBUG - LandValuationTab Initialization
+  console.log('🔴 CRITICAL DEBUG - LandValuationTab Initialization:', {
+    timestamp: new Date().toISOString(),
+    jobId: jobData?.id,
+
+    // What's coming from parent prop
+    marketLandDataFromProp: {
+      hasData: !!marketLandData,
+      updated_at: marketLandData?.updated_at,
+
+      // Check each critical field
+      vacant_sales: {
+        exists: !!marketLandData?.vacant_sales_analysis,
+        salesCount: marketLandData?.vacant_sales_analysis?.sales?.length,
+        manuallyAddedCount: marketLandData?.vacant_sales_analysis?.sales?.filter(s => s.manually_added)?.length,
+        firstSale: marketLandData?.vacant_sales_analysis?.sales?.[0]
+      },
+
+      cascade_rates: {
+        exists: !!marketLandData?.cascade_rates,
+        data: marketLandData?.cascade_rates
+      },
+
+      target_allocation: {
+        exists: marketLandData?.target_allocation !== undefined,
+        value: marketLandData?.target_allocation
+      },
+
+      worksheet_data: {
+        exists: !!marketLandData?.worksheet_data,
+        hasDescriptions: !!marketLandData?.worksheet_data?.descriptions,
+        descriptions: marketLandData?.worksheet_data?.descriptions
+      }
+    }
+  });
+
+  // Check for unsaved session changes
+  let restoredFromSession = false;
   if (currentSession?.hasUnsavedChanges && currentSession?.lastModified) {
-    debug('📋 Restoring from session state (unsaved changes detected)');
+    debug('⚠️ Found unsaved session changes from', currentSession.lastModified);
 
     setMethod1ExcludedSales(currentSession.method1ExcludedSales || new Set());
     setIncludedSales(currentSession.includedSales || new Set());
@@ -516,20 +581,17 @@ useEffect(() => {
       setCollapsedFields(currentSession.collapsedFields);
     }
 
-    // Still load read-only data from marketLandData
-    setLastSaved(marketLandData.updated_at ? new Date(marketLandData.updated_at) : null);
-    setIsLoading(false);
-    setIsInitialLoadComplete(true);
-
-    debug('✅ Session state restored successfully');
-    return;
+    restoredFromSession = true;
+    debug('✅ Session state restored, will merge with database data');
   }
 
-  // No unsaved changes, load from database as normal
-  debug('🔄 Loading from database (no unsaved session changes):', {
+  // ALWAYS load from database
+  console.log('🟡 ABOUT TO LOAD FROM DATABASE');
+  debug('🔄 Loading from database:', {
     hasRawLandConfig: !!marketLandData.raw_land_config,
     hasCascadeRates: !!marketLandData.cascade_rates,
-    hasVacantSales: !!marketLandData.vacant_sales_analysis?.sales?.length
+    hasVacantSales: !!marketLandData.vacant_sales_analysis?.sales?.length,
+    restoredFromSession
   });
 
   // Restore all saved states from marketLandData
@@ -548,7 +610,7 @@ useEffect(() => {
 
   // Load cascade config from either location (prefer cascade_rates, fallback to raw_land_config)
   const savedConfig = marketLandData.cascade_rates || marketLandData.raw_land_config?.cascade_config;
-  if (savedConfig) {
+  if (savedConfig && !restoredFromSession) {
     debug('��� Loading cascade config:', {
       source: marketLandData.cascade_rates ? 'cascade_rates' : 'raw_land_config',
       specialCategories: savedConfig.specialCategories,
@@ -577,6 +639,10 @@ useEffect(() => {
     if (savedConfig.mode) {
       setValuationMode(savedConfig.mode);
     }
+
+    console.log('🟢 LOADED CASCADE RATES:', savedConfig);
+  } else if (restoredFromSession) {
+    debug('⏭️ Skipping cascade config DB load - already restored from session');
   }
 
   // Skip the duplicate cascade_rates assignment - it's redundant
@@ -585,7 +651,7 @@ useEffect(() => {
   // }
 
   // Restore Method 1 state persistence but SKIP cached sales data to force fresh calculation
-  if (marketLandData.vacant_sales_analysis?.sales) {
+  if (marketLandData.vacant_sales_analysis?.sales && (!restoredFromSession || includedSales.size === 0)) {
     const savedCategories = {};
     const savedNotes = {};
     const savedRegions = {};
@@ -636,6 +702,13 @@ useEffect(() => {
     // FORCE FRESH CALCULATION: Clear any cached sales data and force recalculation with new values_norm_time logic
     debug('🧹 Clearing cached sales data to force fresh calculation with values_norm_time');
     setVacantSales([]); // Clear cached sales to force recalculation
+
+    console.log('🟢 LOADED VACANT SALES:', {
+      count: marketLandData.vacant_sales_analysis.sales.length,
+      manuallyAdded: manuallyAddedIds.size,
+      includedCount: savedIncluded.size,
+      excludedCount: savedExcluded.size
+    });
   }
 
   // Also restore Method 1 excluded sales from new field (like Method 2)
@@ -672,6 +745,7 @@ useEffect(() => {
 
   // Only set if we found a valid value AND current state is null/empty to prevent overwrites
   if (loadedTargetAllocation !== null) {
+    console.log('🟢 LOADED TARGET ALLOCATION:', loadedTargetAllocation);
     // Ensure it's a number to prevent caching issues
     const numericValue = typeof loadedTargetAllocation === 'string' ?
       parseFloat(loadedTargetAllocation) : loadedTargetAllocation;
@@ -686,7 +760,7 @@ useEffect(() => {
         debug('✅ Target allocation set to:', numericValue, typeof numericValue);
         return numericValue;
       } else {
-        debug('🛡️ Preserving existing target allocation:', prev, 'instead of overwriting with:', numericValue);
+        debug('🛡�� Preserving existing target allocation:', prev, 'instead of overwriting with:', numericValue);
         return prev;
       }
     });
@@ -717,9 +791,11 @@ useEffect(() => {
     }
     if (marketLandData.worksheet_data.descriptions) {
       setVcsDescriptions(marketLandData.worksheet_data.descriptions);
+      debug('✅ Loaded VCS descriptions:', marketLandData.worksheet_data.descriptions);
     }
     if (marketLandData.worksheet_data.types) {
       setVcsTypes(marketLandData.worksheet_data.types);
+      debug('✅ Loaded VCS types:', marketLandData.worksheet_data.types);
     }
   }
 
@@ -905,7 +981,7 @@ const getPricePerUnit = useCallback((price, size) => {
   const getTypeUseOptions = useCallback(() => {
     // Standardized Type & Use dropdown options for consistency across tabs
     const standard = [
-      { code: '1', description: '1 — Single Family' },
+      { code: '1', description: '1 ��� Single Family' },
       { code: '2', description: '2 — Duplex / Semi-Detached' },
       { code: '3', description: '3* �� Row / Townhouse (3E,3I,30,31)' },
       { code: '4', description: '4* — MultiFamily (42,43,44)' },
@@ -960,17 +1036,24 @@ const getPricePerUnit = useCallback((price, size) => {
   }, [vendorType]);
 
   useEffect(() => {
+    // CRITICAL FIX: Don't auto-detect/filter during initialization!
+    // This prevents overwriting manually added sales that were saved to the database
+    if (!isInitialLoadComplete) {
+      console.log('��️ Skipping auto-detection - waiting for initial load to complete');
+      return;
+    }
+
     if (properties && properties.length > 0) {
-      console.log('🔄 Triggering fresh calculations with FIXED DELTA LOGIC');
+      console.log('🔄 Triggering fresh calculations with FIXED DELTA LOGIC (post-initialization)');
       filterVacantSales();
       performBracketAnalysis();
       loadVCSPropertyCounts();
     }
-  }, [properties, dateRange, valuationMode, method2TypeFilter, method2ExcludedSales]);
+  }, [properties, dateRange, valuationMode, method2TypeFilter, method2ExcludedSales, isInitialLoadComplete]);
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
-      debug('���� Triggering allocation study recalculation...');
+      debug('������ Triggering allocation study recalculation...');
       loadAllocationStudyData();
     }
   }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, specialRegions]);
@@ -1006,7 +1089,7 @@ const getPricePerUnit = useCallback((price, size) => {
   // Auto-save every 30 seconds - but only after initial load is complete
   useEffect(() => {
     if (!isInitialLoadComplete) {
-      debug('�����️ Auto-save waiting for initial load to complete');
+      debug('���������� Auto-save waiting for initial load to complete');
       return;
     }
 
@@ -1038,24 +1121,29 @@ const getPricePerUnit = useCallback((price, size) => {
   // }, [vacantSales.length, Object.keys(saleCategories).length, isInitialLoadComplete]);
 
   // Clear Method 1 temporary variables after filtering is complete
+  // IMPORTANT: Don't clear too early - filterVacantSales needs these to preserve manual sales
   useEffect(() => {
-    if (isInitialLoadComplete && window._method1ExcludedSales) {
+    if (isInitialLoadComplete && vacantSales.length > 0 && window._method1ExcludedSales) {
+      // Only clear after we have populated vacantSales (which means filterVacantSales has run)
       debug('🧹 Clearing Method 1 temporary variables after successful application');
-      delete window._method1ExcludedSales;
-      delete window._method1IncludedSales;
-      delete window._method1ManuallyAdded;
+      setTimeout(() => {
+        delete window._method1ExcludedSales;
+        delete window._method1IncludedSales;
+        delete window._method1ManuallyAdded;
+      }, 1000); // Small delay to ensure filterVacantSales completes
     }
-  }, [isInitialLoadComplete]);
+  }, [isInitialLoadComplete, vacantSales.length]);
   // ========== LAND RATES FUNCTIONS WITH ENHANCED FILTERS ==========
   const filterVacantSales = useCallback(() => {
     if (!properties) return;
 
-    debug('🔄 FilterVacantSales called:', {
+    console.log('🔄 FilterVacantSales called:', {
       currentVacantSalesCount: vacantSales.length,
       hasMethod1Excluded: !!window._method1ExcludedSales,
       method1ExcludedSize: window._method1ExcludedSales?.size || 0,
       hasManuallyAdded: !!window._method1ManuallyAdded,
-      manuallyAddedSize: window._method1ManuallyAdded?.size || 0
+      manuallyAddedSize: window._method1ManuallyAdded?.size || 0,
+      isInitialLoadComplete: isInitialLoadComplete
     });
 
     // CRITICAL: First restore manually added properties that might not meet natural criteria
@@ -1142,7 +1230,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (newSales.length > 0) {
-        debug('������ Found new sales to add:', newSales.length);
+        debug('�������� Found new sales to add:', newSales.length);
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
           const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
@@ -1322,7 +1410,7 @@ const getPricePerUnit = useCallback((price, size) => {
             properties: packageData.package_properties ? packageData.package_properties.map(p => p.composite_key) : group.map(p => p.property_composite_key)
           };
           finalSales.push(enriched);
-          if (enriched.autoCategory) setSaleCategories(prev => ({...prev, [enriched.id]: enriched.autoCategory}));
+          if (enriched.autoCategory && !saleCategories[enriched.id]) setSaleCategories(prev => ({...prev, [enriched.id]: enriched.autoCategory}));
           return;
         }
 
@@ -1407,7 +1495,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
           finalSales.push(packageSale);
           setIncludedSales(prev => new Set([...prev, packageSale.id]));
-          if (packageSale.autoCategory) setSaleCategories(prev => ({...prev, [packageSale.id]: packageSale.autoCategory}));
+          if (packageSale.autoCategory && !saleCategories[packageSale.id]) setSaleCategories(prev => ({...prev, [packageSale.id]: packageSale.autoCategory}));
           return;
         }
       }
@@ -1443,14 +1531,14 @@ const getPricePerUnit = useCallback((price, size) => {
         setIncludedSales(prev => new Set([...prev, packageSale.id]));
 
         // Set package category
-        if (packageSale.autoCategory) {
+        if (packageSale.autoCategory && !saleCategories[packageSale.id]) {
           setSaleCategories(prev => ({...prev, [packageSale.id]: packageSale.autoCategory}));
         }
       } else {
         // Single property with book/page
         const enriched = enrichProperty(group[0]);
         finalSales.push(enriched);
-        if (enriched.autoCategory) {
+        if (enriched.autoCategory && !saleCategories[enriched.id]) {
           setSaleCategories(prev => ({...prev, [enriched.id]: enriched.autoCategory}));
         }
       }
@@ -1462,7 +1550,7 @@ const getPricePerUnit = useCallback((price, size) => {
       finalSales.push(enriched);
       if (enriched.autoCategory) {
         debug(`���️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
-        setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
+        if (!saleCategories[prop.id]) setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
       }
     });
 
@@ -1515,11 +1603,12 @@ const getPricePerUnit = useCallback((price, size) => {
       // Only include sales that:
       // 1. Are in the current filtered results
       // 2. Are NOT in the excluded set
+      // 3. Were previously included (preserve user selections)
       filteredSales.forEach(sale => {
         if (!method1ExcludedSales.has(sale.id)) {
-          // If it was previously included, keep it included
-          // Or if it's a new sale, auto-include it
-          if (existingIds.has(sale.id) || !existingIds.has(sale.id)) {
+          // Only preserve sales that were previously included
+          // This respects user checkbox selections (unchecked items stay unchecked)
+          if (existingIds.has(sale.id)) {
             preservedIncluded.add(sale.id);
           }
         }
@@ -1537,18 +1626,10 @@ const getPricePerUnit = useCallback((price, size) => {
 
       return preservedIncluded;
     });
-  }, [properties, dateRange, calculateAcreage, getPricePerUnit, saleCategories]);
+  }, [properties, dateRange, calculateAcreage, getPricePerUnit]);
 
-  // ========== FORCE FRESH CALCULATION AFTER LOAD ==========
-  useEffect(() => {
-    if (isInitialLoadComplete && properties && properties.length > 0) {
-      debug('🔄 Triggering fresh calculation after load complete to use values_norm_time');
-      // Short delay to ensure all state is loaded before recalculating
-      setTimeout(() => {
-        filterVacantSales();
-      }, 100);
-    }
-  }, [isInitialLoadComplete, properties, filterVacantSales]);
+  // NOTE: filterVacantSales is already triggered by the main useEffect (lines 1010-1024)
+  // when isInitialLoadComplete becomes true. No need for a duplicate trigger here.
 
   const performBracketAnalysis = useCallback(async () => {
     if (!properties || !jobData?.id) return;
@@ -2083,16 +2164,12 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       setBracketAnalysis(analysis);
-      setMethod2ByRegion({
-        analysis: analysisByRegion,
-        summary: method2SummaryByRegion
-      });
 
     } catch (error) {
       console.error('Error in performBracketAnalysis:', error);
       setBracketAnalysis({});
     }
-  }, [properties, jobData, method2TypeFilter, method2ExcludedSales, vacantSales, specialRegions, cascadeConfig]);
+  }, [properties, cascadeConfig, calculateAcreage, method2TypeFilter, method2ExcludedSales, vacantSales, specialRegions]);
 
   const calculateRates = useCallback((regionFilter = null) => {
     const included = vacantSales.filter(s => {
@@ -2346,7 +2423,7 @@ const getPricePerUnit = useCallback((price, size) => {
       }
 
       if (autoCategory) {
-        debug(`🏗�� Auto-categorizing manually added ${p.property_block}/${p.property_lot} as ${autoCategory}`);
+        debug(`������ Auto-categorizing manually added ${p.property_block}/${p.property_lot} as ${autoCategory}`);
         setSaleCategories(prev => ({...prev, [p.id]: autoCategory}));
       }
     });
@@ -2815,7 +2892,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
     debug('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
-    debug('📊 Input validation:', {
+    debug('���� Input validation:', {
       hasTargetAllocation: !!targetAllocation,
       targetAllocationValue: targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
@@ -2977,6 +3054,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ...prev,
       [vcs]: description
     }));
+
+    // Trigger autosave to persist the description
+    debug('💾 Triggering autosave for VCS description change');
+    setTimeout(() => {
+      if (window.landValuationSave) {
+        window.landValuationSave({ source: 'autosave' });
+      }
+    }, 1000); // 1 second delay to batch rapid typing
   };
 
 
@@ -2985,6 +3070,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ...prev,
       [vcs]: type
     }));
+
+    // Trigger autosave to persist the type change
+    debug('💾 Triggering autosave for VCS type change');
+    setTimeout(() => {
+      if (window.landValuationSave) {
+        window.landValuationSave({ source: 'autosave' });
+      }
+    }, 500);
   };
 
   const toggleFieldCollapse = (fieldName) => {
@@ -3387,18 +3480,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
     } catch (error) {
-      console.error('❌ Error saving target allocation:', error);
-      console.error('Error details:', {
-        message: error.message,
-        code: error.code,
-        details: error.details
-      });
-      alert(`Failed to save target allocation: ${error.message}`);
+      // Extract readable error message
+      const errorMessage = error?.message || error?.error?.message || error?.details ||
+                          (typeof error === 'string' ? error : JSON.stringify(error));
+
+      console.error('❌ Error saving target allocation:', errorMessage);
+      console.error('Full error object:', error);
+
+      alert(`Failed to save target allocation: ${errorMessage}`);
     }
   };
 
   // ========== SAVE & EXPORT FUNCTIONS ==========
-  const saveAnalysis = async (options = {}) => {
+  const saveAnalysis = useCallback(async (options = {}) => {
     if (!jobData?.id) {
       debug('❌ Save cancelled: No job ID');
       return;
@@ -3484,38 +3578,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         totalSales: analysisData.vacant_sales_analysis.sales.length
       });
 
-      // Check if record exists - don't use .single() to avoid errors
-      const { data: existing, error: checkError } = await supabase
+      // Use the same table that's used for loading: market_land_valuation
+      debug('💾 Saving to market_land_valuation table...');
+      const { error } = await supabase
         .from('market_land_valuation')
-        .select('id')
-        .eq('job_id', jobData.id)
-        .maybeSingle();
+        .upsert(analysisData, {
+          onConflict: 'job_id',
+          ignoreDuplicates: false
+        });
 
-      // If there was an error checking, log it but try to proceed with upsert
-      if (checkError && checkError.code !== 'PGRST116') {
-        console.warn('⚠️ Error checking for existing record:', checkError);
-      }
+      if (error) throw error;
 
-      if (existing) {
-        debug('📝 Updating existing record...');
-        const { error } = await supabase
-          .from('market_land_valuation')
-          .update(analysisData)
-          .eq('job_id', jobData.id);
-        if (error) throw error;
-      } else {
-        debug('➕ Creating new record...');
-        // Use upsert to handle race conditions
-        const { error } = await supabase
-          .from('market_land_valuation')
-          .upsert(analysisData, {
-            onConflict: 'job_id',
-            ignoreDuplicates: false
-          });
-        if (error) throw error;
-      }
-
-      debug('✅ Save completed successfully');
+      debug('�� Save completed successfully');
       setLastSaved(new Date());
 
       // Notify parent component
@@ -3543,25 +3617,61 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             lastModified: null
           });
           debug('🧹 Session state cleared after successful save');
+// Also clear sessionStorage to ensure complete cleanup
+          try {
+            sessionStorage.removeItem('landValuation_' + jobData.id + '_session');
+            debug('��� Cleared session storage after successful save');
+          } catch (err) {
+            console.warn('Failed to clear sessionStorage:', err);
+          }
         } catch (e) {
           console.warn('Failed to clear session state after save', e);
         }
       }
     } catch (error) {
-      console.error('���� Save failed:', error);
+      // Extract readable error message with detailed debugging
+      const errorMessage = error?.message || error?.error?.message || error?.details ||
+                          (typeof error === 'string' ? error : JSON.stringify(error));
+
+      console.error('❌ Save failed:', errorMessage);
+      console.error('Full error object:', error);
       console.error('Error details:', {
-        message: error.message,
-        code: error.code,
-        details: error.details
+        errorType: typeof error,
+        errorKeys: error ? Object.keys(error) : [],
+        errorCode: error?.code,
+        errorHint: error?.hint,
+        errorDetails: error?.details,
+        stackTrace: error?.stack
       });
-      alert('Failed to save analysis. Please try again.');
+
+      // Show user-friendly error with more context
+      const userMessage = `Failed to save analysis: ${errorMessage}\n\n` +
+        `Error type: ${error?.code || 'Unknown'}\n` +
+        `Please check the console for details and try again.`;
+
+      alert(userMessage);
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [
+    jobData?.id, vacantSales, includedSales, method1ExcludedSales,
+    saleCategories, specialRegions, landNotes, dateRange, valuationMode,
+    cascadeConfig, bracketAnalysis, method2Summary, method2ExcludedSales,
+    targetAllocation, vcsSiteValues, actualAllocations, currentOverallAllocation,
+    vcsPropertyCounts, vcsZoningData, vcsSheetData, vcsManualSiteValues,
+    vcsDescriptions, vcsTypes, vcsRecommendedSites, ecoObsFactors,
+    mappedLocationCodes, trafficLevels, customLocationCodes, summaryInputs,
+    actualAdjustments, computedAdjustments, calculateRates, calculateAllocationStats,
+    onAnalysisUpdate, updateSessionState
+  ]);
 
   // Expose saveAnalysis to window for auto-save access (avoids hoisting issues)
-  window.landValuationSave = saveAnalysis;
+  useEffect(() => {
+    window.landValuationSave = saveAnalysis;
+    return () => {
+      delete window.landValuationSave;
+    };
+  }, [saveAnalysis]);
 
   // Excel export functions need to be defined before being used
   const exportVCSSheetExcel = () => {
@@ -4663,6 +4773,63 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     debug('🔄 Recalculating category analysis');
     debug('���� Total vacant sales:', vacantSales.length);
     debug('���� Checked sales count:', checkedSales.length);
+    // 🔍 COMPREHENSIVE FILTERING DEBUG - Shows exactly which sales go where
+    console.log('🔍 PAIRED SALES ANALYSIS - Category Breakdown:', {
+      totalCheckedSales: checkedSales.length,
+
+      normalRegion: {
+        count: checkedSales.filter(s => !specialRegions[s.id] || specialRegions[s.id] === 'Normal').length,
+        sales: checkedSales.filter(s => !specialRegions[s.id] || specialRegions[s.id] === 'Normal').map(s => ({
+          block_lot: `${s.property_block}/${s.property_lot}`,
+          category: saleCategories[s.id] || 'uncategorized',
+          class: s.property_m4_class,
+          region: specialRegions[s.id] || 'Normal'
+        }))
+      },
+
+      rawLandGroup: {
+        count: checkedSales.filter(s => {
+          const isRawLandCategory = saleCategories[s.id] === 'raw_land';
+          const isUncategorizedVacant = !saleCategories[s.id] && s.property_m4_class === '1';
+          const isNormalRegion = !specialRegions[s.id] || specialRegions[s.id] === 'Normal';
+          return (isRawLandCategory || isUncategorizedVacant) && isNormalRegion;
+        }).length,
+        sales: checkedSales.filter(s => {
+          const isRawLandCategory = saleCategories[s.id] === 'raw_land';
+          const isUncategorizedVacant = !saleCategories[s.id] && s.property_m4_class === '1';
+          const isNormalRegion = !specialRegions[s.id] || specialRegions[s.id] === 'Normal';
+          return (isRawLandCategory || isUncategorizedVacant) && isNormalRegion;
+        }).map(s => `${s.property_block}/${s.property_lot}`)
+      },
+
+      buildingLotGroup: {
+        count: checkedSales.filter(s => {
+          const isInCategory = saleCategories[s.id] === 'building_lot' || saleCategories[s.id] === 'teardown' || saleCategories[s.id] === 'pre-construction';
+          const isNormalRegion = !specialRegions[s.id] || specialRegions[s.id] === 'Normal';
+          return isInCategory && isNormalRegion;
+        }).length,
+        sales: checkedSales.filter(s => {
+          const isInCategory = saleCategories[s.id] === 'building_lot' || saleCategories[s.id] === 'teardown' || saleCategories[s.id] === 'pre-construction';
+          const isNormalRegion = !specialRegions[s.id] || specialRegions[s.id] === 'Normal';
+          return isInCategory && isNormalRegion;
+        }).map(s => ({
+          block_lot: `${s.property_block}/${s.property_lot}`,
+          category: saleCategories[s.id]
+        }))
+      },
+
+      specialRegionSales: Object.entries(
+        checkedSales.reduce((acc, s) => {
+          const region = specialRegions[s.id];
+          if (region && region !== 'Normal') {
+            if (!acc[region]) acc[region] = [];
+            acc[region].push(`${s.property_block}/${s.property_lot}`);
+          }
+          return acc;
+        }, {})
+      ).map(([region, sales]) => ({ region, count: sales.length, sales }))
+    });
+
     debug('📋 Included sales IDs:', Array.from(includedSales));
     debug('📋 Sale categories state:', saleCategories);
     debug('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
@@ -4710,6 +4877,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // For developable land (raw land, building lot), use paired sales analysis
       if (categoryType === 'developable' && filtered.length >= 2) {
+        // Log which sales are being used for this analysis
+        console.log(`🔍 Paired analysis for ${categoryType}:`, {
+          salesCount: filtered.length,
+          sales: filtered.map(s => ({
+            block_lot: `${s.property_block}/${s.property_lot}`,
+            category: saleCategories[s.id] || 'uncategorized',
+            class: s.property_m4_class,
+            price: s.values_norm_time || s.sales_price,
+            acres: s.totalAcres
+          }))
+        });
+
         // Sort by acreage for paired analysis
         const sortedSales = [...filtered].sort((a, b) => a.totalAcres - b.totalAcres);
 
@@ -4782,6 +4961,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             return Math.abs(a.sizeDiff) - Math.abs(b.sizeDiff);
           })[0];
 
+          // Calculate aggregate statistics for all pairs
+          const priceDiffs = pairedRates.map(p => p.priceDiff);
+          const avgPriceDiff = priceDiffs.reduce((sum, diff) => sum + diff, 0) / priceDiffs.length;
+          const minPriceDiff = Math.min(...priceDiffs);
+          const maxPriceDiff = Math.max(...priceDiffs);
+
+          console.log(`📊 Paired analysis results for ${categoryType}:`, {
+            totalPairs: pairedRates.length,
+            avgPriceDiff: Math.round(avgPriceDiff),
+            minPriceDiff: Math.round(minPriceDiff),
+            maxPriceDiff: Math.round(maxPriceDiff),
+            medianRate: Math.round(medianRate),
+            allPriceDiffs: priceDiffs.map(d => Math.round(d))
+          });
+
           // Return rounded whole-number unit rates for all modes (user requested whole numbers only)
           return {
             avg: Math.round(medianRate),
@@ -4791,7 +4985,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             pairedAnalysis: {
               pairs: pairedRates.length,
               medianRate: Math.round(medianRate),
-              bestPair
+              bestPair,
+              avgPriceDiff: Math.round(avgPriceDiff),
+              minPriceDiff: Math.round(minPriceDiff),
+              maxPriceDiff: Math.round(maxPriceDiff)
             }
           };
         }
@@ -4818,22 +5015,28 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
     };
 
+    // RAW LAND ANALYSIS - ONLY vacant land sales (no/minimal improvements) in NORMAL region
+    // This includes properties explicitly categorized as 'raw_land' OR uncategorized class 1 properties
+    // MUST be in Normal special region (not Beach Block, River Front, etc.)
     const rawLand = getCategoryAverage(s => {
       const isRawLandCategory = saleCategories[s.id] === 'raw_land';
       const isUncategorizedVacant = !saleCategories[s.id] && s.property_m4_class === '1';
-      const isInRawLand = isRawLandCategory || isUncategorizedVacant;
+      const isNormalRegion = !specialRegions[s.id] || specialRegions[s.id] === 'Normal';
+      const isInRawLand = (isRawLandCategory || isUncategorizedVacant) && isNormalRegion;
 
       // Debug teardown sales to see if they're incorrectly going to raw land
       if (saleCategories[s.id] === 'teardown' || (s.property_block === '5' && s.property_lot === '12.12')) {
-        debug('🌱 Raw Land check for teardown/5.12.12:', {
+        debug('�� Raw Land check for teardown/5.12.12:', {
           block: s.property_block,
           lot: s.property_lot,
           id: s.id,
           category: saleCategories[s.id],
           hasCategory: !!saleCategories[s.id],
           class: s.property_m4_class,
+          specialRegion: specialRegions[s.id] || 'Normal',
           isRawLandCategory,
           isUncategorizedVacant,
+          isNormalRegion,
           isInRawLand
         });
       }
@@ -4841,10 +5044,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return isInRawLand;
     }, 'developable');
 
+    // BUILDING LOT ANALYSIS - ONLY buildable properties in NORMAL region
+    // This includes properties explicitly categorized as 'building_lot', 'teardown', or 'pre-construction'
+    // MUST be in Normal special region (not Beach Block, River Front, etc.)
     const buildingLot = getCategoryAverage(s => {
       const isInCategory = saleCategories[s.id] === 'building_lot' ||
                           saleCategories[s.id] === 'teardown' ||
                           saleCategories[s.id] === 'pre-construction';
+      const isNormalRegion = !specialRegions[s.id] || specialRegions[s.id] === 'Normal';
+      const isInBuildingLot = isInCategory && isNormalRegion;
 
       // Debug all teardown sales
       if (saleCategories[s.id] === 'teardown') {
@@ -4853,8 +5061,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           lot: s.property_lot,
           id: s.id,
           category: saleCategories[s.id],
+          specialRegion: specialRegions[s.id] || 'Normal',
           isIncluded: includedSales.has(s.id),
-          isInBuildingLot: isInCategory,
+          isInCategory,
+          isNormalRegion,
+          isInBuildingLot,
           price: s.values_norm_time || s.sales_price,
           acres: s.totalAcres,
           pricePerAcre: s.pricePerAcre
@@ -4866,27 +5077,155 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         debug('🏠 Property 47/2 details:', {
           id: s.id,
           category: saleCategories[s.id],
-          isInBuildingLot: isInCategory,
+          specialRegion: specialRegions[s.id] || 'Normal',
+          isInBuildingLot,
           price: s.values_norm_time || s.sales_price,
           acres: s.totalAcres
         });
       }
-      return isInCategory;
+      return isInBuildingLot;
     }, 'developable');
 
     const wetlands = getCategoryAverage(s => saleCategories[s.id] === 'wetlands', 'constrained');
     const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
     const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
 
-    debug('��️ Building Lot Analysis Result:', {
+    debug('���️ Building Lot Analysis Result:', {
       avg: buildingLot.avg,
       count: buildingLot.count,
       method: buildingLot.method,
       hasPairedAnalysis: !!buildingLot.pairedAnalysis
     });
 
-    return { rawLand, buildingLot, wetlands, landlocked, conservation };
-  }, [vacantSales, includedSales, saleCategories, valuationMode]);
+    // Calculate special regions analysis - use PAIRED analysis when 2+ sales, simple average for 1 sale
+    const specialRegionsMap = {};
+    checkedSales.forEach(sale => {
+      const region = specialRegions[sale.id];
+      if (region && region !== 'Normal') {
+        if (!specialRegionsMap[region]) {
+          specialRegionsMap[region] = [];
+        }
+        specialRegionsMap[region].push(sale);
+      }
+    });
+
+    const specialRegionsAnalysis = {};
+    Object.entries(specialRegionsMap).forEach(([region, sales]) => {
+      if (sales.length === 0) return;
+
+      if (sales.length === 1) {
+        // Single sale: use individual rate
+        const sale = sales[0];
+        specialRegionsAnalysis[region] = {
+          avg: Math.round(sale.pricePerAcre),
+          count: 1,
+          region,
+          method: 'single'
+        };
+      } else {
+        // Multiple sales: use paired analysis
+        const sortedSales = [...sales].sort((a, b) => a.totalAcres - b.totalAcres);
+        const pairedRates = [];
+
+        for (let i = 0; i < sortedSales.length - 1; i++) {
+          for (let j = i + 1; j < sortedSales.length; j++) {
+            const smaller = sortedSales[i];
+            const larger = sortedSales[j];
+
+            let smallerSize = 0;
+            let largerSize = 0;
+            if (valuationMode === 'sf') {
+              smallerSize = (smaller.totalAcres || 0) * 43560;
+              largerSize = (larger.totalAcres || 0) * 43560;
+            } else if (valuationMode === 'ff') {
+              smallerSize = parseFloat(smaller.asset_lot_frontage) || 0;
+              largerSize = parseFloat(larger.asset_lot_frontage) || 0;
+            } else {
+              smallerSize = smaller.totalAcres || 0;
+              largerSize = larger.totalAcres || 0;
+            }
+
+            const sizeDiff = largerSize - smallerSize;
+            const priceDiff = (larger.values_norm_time || larger.sales_price) - (smaller.values_norm_time || smaller.sales_price);
+
+            if (priceDiff > 0 && sizeDiff > 0) {
+              pairedRates.push(priceDiff / sizeDiff);
+            }
+          }
+        }
+
+        if (pairedRates.length > 0) {
+          const rates = pairedRates.sort((a, b) => a - b);
+          const medianRate = rates.length % 2 === 0 ?
+            (rates[rates.length / 2 - 1] + rates[rates.length / 2]) / 2 :
+            rates[Math.floor(rates.length / 2)];
+
+          specialRegionsAnalysis[region] = {
+            avg: Math.round(medianRate),
+            count: sales.length,
+            region,
+            method: 'paired',
+            pairs: pairedRates.length
+          };
+        } else {
+          // Fallback to simple average if paired analysis fails
+          const avgRate = sales.reduce((sum, s) => sum + s.pricePerAcre, 0) / sales.length;
+          specialRegionsAnalysis[region] = {
+            avg: Math.round(avgRate),
+            count: sales.length,
+            region,
+            method: 'fallback'
+          };
+        }
+      }
+    });
+
+    // 📊 FINAL RESULTS LOG - Shows what will be displayed to user
+    console.log('📊 PAIRED SALES ANALYSIS - Final Results:', {
+      valuationMode,
+      unitLabel: valuationMode === 'acre' ? '$/acre' : valuationMode === 'sf' ? '$/SF' : '$/FF',
+
+      rawLand: {
+        avg: rawLand.avg,
+        count: rawLand.count,
+        method: rawLand.method,
+        avgLotSize: rawLand.avgLotSize,
+        ...(rawLand.pairedAnalysis && {
+          pairs: rawLand.pairedAnalysis.pairs,
+          medianRate: rawLand.pairedAnalysis.medianRate,
+          priceRange: `$${rawLand.pairedAnalysis.minPriceDiff?.toLocaleString()} - $${rawLand.pairedAnalysis.maxPriceDiff?.toLocaleString()}`
+        })
+      },
+
+      buildingLot: {
+        avg: buildingLot.avg,
+        count: buildingLot.count,
+        method: buildingLot.method,
+        avgLotSize: buildingLot.avgLotSize,
+        ...(buildingLot.pairedAnalysis && {
+          pairs: buildingLot.pairedAnalysis.pairs,
+          medianRate: buildingLot.pairedAnalysis.medianRate,
+          priceRange: `$${buildingLot.pairedAnalysis.minPriceDiff?.toLocaleString()} - $${buildingLot.pairedAnalysis.maxPriceDiff?.toLocaleString()}`
+        })
+      },
+
+      specialRegions: Object.entries(specialRegionsAnalysis).map(([region, data]) => ({
+        region,
+        avg: data.avg,
+        count: data.count,
+        method: data.method,
+        ...(data.pairs && { pairs: data.pairs })
+      })),
+
+      excludedFromMainTiles: {
+        wetlands: { avg: wetlands.avg, count: wetlands.count },
+        landlocked: { avg: landlocked.avg, count: landlocked.count },
+        conservation: { avg: conservation.avg, count: conservation.count }
+      }
+    });
+
+    return { rawLand, buildingLot, wetlands, landlocked, conservation, specialRegions: specialRegionsAnalysis };
+  }, [vacantSales, includedSales, saleCategories, valuationMode, specialRegions]);
 
   const saveRates = async () => {
     // Update cascade config mode to match current valuation mode
@@ -5339,7 +5678,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <td style={{ padding: '8px', borderBottom: '1px solid #E5E7EB' }}>
                       <select
                         value={saleCategories[sale.id] || sale.autoCategory || 'uncategorized'}
-                        onChange={(e) => setSaleCategories(prev => ({ ...prev, [sale.id]: e.target.value }))}
+                        onChange={(e) => {
+                          const newValue = e.target.value;
+                          setSaleCategories(prev => {
+                            if (prev[sale.id] === newValue) return prev; // Don't update if same value
+                            return { ...prev, [sale.id]: newValue };
+                          });
+                        }}
                         style={{
                           padding: '4px',
                           border: '1px solid #D1D5DB',
@@ -5469,6 +5814,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </div>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#10B981' }}>
                   {valuationMode === 'sf' ? `$${categoryAnalysis.rawLand.avg}` : `$${categoryAnalysis.rawLand.avg.toLocaleString()}`}
+                  <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#6B7280', marginLeft: '4px' }}>
+                    {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                  </span>
                 </div>
                 <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.rawLand.count} sales</div>
                 {categoryAnalysis.rawLand.count > 0 && (
@@ -5488,6 +5836,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </div>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#3B82F6' }}>
                   {valuationMode === 'sf' ? `$${categoryAnalysis.buildingLot.avg}` : `$${categoryAnalysis.buildingLot.avg.toLocaleString()}`}
+                  <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#6B7280', marginLeft: '4px' }}>
+                    {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                  </span>
                 </div>
                 <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.buildingLot.count} sales</div>
                 {categoryAnalysis.buildingLot.count > 0 && (
@@ -5505,6 +5856,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <div style={{ fontSize: '12px', color: '#6B7280' }}>Wetlands</div>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#06B6D4' }}>
                   {valuationMode === 'sf' ? `$${categoryAnalysis.wetlands.avg}` : `$${categoryAnalysis.wetlands.avg.toLocaleString()}`}
+                  <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#6B7280', marginLeft: '4px' }}>
+                    {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                  </span>
                 </div>
                 <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.wetlands.count} sales</div>
                 {categoryAnalysis.wetlands.count > 0 && (
@@ -5517,6 +5871,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <div style={{ fontSize: '12px', color: '#6B7280' }}>Landlocked</div>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#F59E0B' }}>
                   {valuationMode === 'sf' ? `$${categoryAnalysis.landlocked.avg}` : `$${categoryAnalysis.landlocked.avg.toLocaleString()}`}
+                  <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#6B7280', marginLeft: '4px' }}>
+                    {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                  </span>
                 </div>
                 <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.landlocked.count} sales</div>
                 {categoryAnalysis.landlocked.count > 0 && (
@@ -5529,6 +5886,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <div style={{ fontSize: '12px', color: '#6B7280' }}>Conservation</div>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#8B5CF6' }}>
                   {valuationMode === 'sf' ? `$${categoryAnalysis.conservation.avg}` : `$${categoryAnalysis.conservation.avg.toLocaleString()}`}
+                  <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#6B7280', marginLeft: '4px' }}>
+                    {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                  </span>
                 </div>
                 <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{categoryAnalysis.conservation.count} sales</div>
                 {categoryAnalysis.conservation.count > 0 && (
@@ -5538,6 +5898,35 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 )}
               </div>
             </div>
+
+            {/* Special Regions Summary */}
+            {categoryAnalysis.specialRegions && Object.keys(categoryAnalysis.specialRegions).length > 0 && (
+              <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #E5E7EB' }}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold', color: '#374151' }}>
+                  Special Regions (Analyzed Separately)
+                </h4>
+                <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+                  {Object.entries(categoryAnalysis.specialRegions).map(([region, data]) => (
+                    <div key={region} style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px', border: '1px solid #E5E7EB', minWidth: '180px' }}>
+                      <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                        {region} {data.method === 'paired' && <span style={{ color: '#10B981' }}>✓ Paired</span>}
+                        {data.method === 'single' && <span style={{ color: '#6B7280' }}>(Single Sale)</span>}
+                      </div>
+                      <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#6366F1' }}>
+                        {valuationMode === 'sf' ? `$${data.avg}` : `$${data.avg.toLocaleString()}`}
+                        <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#6B7280', marginLeft: '4px' }}>
+                          {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                        {data.count} sale{data.count !== 1 ? 's' : ''}
+                        {data.method === 'paired' && data.pairs && ` • ${data.pairs} pairs`}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Paired Analysis Details */}
             {(categoryAnalysis.rawLand.method === 'paired' || categoryAnalysis.buildingLot.method === 'paired') && (
@@ -5551,73 +5940,45 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   {categoryAnalysis.rawLand.method === 'paired' && categoryAnalysis.rawLand.pairedAnalysis && (
                     <div style={{ backgroundColor: '#F0FDF4', padding: '12px', borderRadius: '6px', border: '1px solid #BBF7D0' }}>
                       <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#059669', marginBottom: '8px' }}>
-                        Raw Land - Best Pair Analysis
+                        Raw Land - Average of All Valid Pairs
                       </div>
-                      {categoryAnalysis.rawLand.pairedAnalysis.bestPair && (
-                        <div style={{ fontSize: '11px', color: '#065F46' }}>
-                          <div style={{ marginBottom: '4px' }}>
-                            <strong>Properties:</strong> {categoryAnalysis.rawLand.pairedAnalysis.bestPair.properties}
-                          </div>
-                          <div style={{ marginBottom: '4px' }}>
-                            <strong>Size Difference:</strong> {(() => {
-                              const bp = categoryAnalysis.rawLand.pairedAnalysis.bestPair;
-                              if (!bp) return '';
-                              if (valuationMode === 'acre') return `${bp.sizeDiff.toFixed(2)} acres`;
-                              if (valuationMode === 'sf') return `${Math.round(bp.sizeDiff).toLocaleString()} sqft`;
-                              return `${Math.round(bp.sizeDiff).toLocaleString()} ft`;
-                            })()}
-                          </div>
-                          <div style={{ marginBottom: '4px' }}>
-                            <strong>Price Difference:</strong> ${categoryAnalysis.rawLand.pairedAnalysis.bestPair.priceDiff.toLocaleString()}
-                          </div>
-                          <div style={{ marginBottom: '4px' }}>
-                            <strong>Raw Land Rate:</strong> ${Math.round(categoryAnalysis.rawLand.pairedAnalysis.bestPair.rate).toLocaleString()} {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
-                          </div>
-                          <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '6px' }}>
-                            Median of {categoryAnalysis.rawLand.pairedAnalysis.pairs} paired comparisons from {categoryAnalysis.rawLand.count} properties
-                          </div>
+                      <div style={{ fontSize: '11px', color: '#065F46' }}>
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Properties:</strong> {categoryAnalysis.rawLand.pairedAnalysis.pairs} pairs analyzed
                         </div>
-                      )}
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Average Rate:</strong> ${Math.round(categoryAnalysis.rawLand.avg).toLocaleString()}{valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                        </div>
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Price Range:</strong> ${categoryAnalysis.rawLand.pairedAnalysis.minPriceDiff?.toLocaleString() || 0} - ${categoryAnalysis.rawLand.pairedAnalysis.maxPriceDiff?.toLocaleString() || 0}
+                        </div>
+                      </div>
                     </div>
                   )}
 
                   {categoryAnalysis.buildingLot.method === 'paired' && categoryAnalysis.buildingLot.pairedAnalysis && (
                     <div style={{ backgroundColor: '#EFF6FF', padding: '12px', borderRadius: '6px', border: '1px solid #BFDBFE' }}>
                       <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#2563EB', marginBottom: '8px' }}>
-                        Building Lot - Best Pair Analysis
+                        Building Lot - Average of All Valid Pairs
                       </div>
-                      {categoryAnalysis.buildingLot.pairedAnalysis.bestPair && (
-                        <div style={{ fontSize: '11px', color: '#1E40AF' }}>
-                          <div style={{ marginBottom: '4px' }}>
-                            <strong>Properties:</strong> {categoryAnalysis.buildingLot.pairedAnalysis.bestPair.properties}
-                          </div>
-                          <div style={{ marginBottom: '4px' }}>
-                            <strong>Size Difference:</strong> {(() => {
-                              const bp = categoryAnalysis.buildingLot.pairedAnalysis.bestPair;
-                              if (!bp) return '';
-                              if (valuationMode === 'acre') return `${bp.sizeDiff.toFixed(2)} acres`;
-                              if (valuationMode === 'sf') return `${Math.round(bp.sizeDiff).toLocaleString()} sqft`;
-                              return `${Math.round(bp.sizeDiff).toLocaleString()} ft`;
-                            })()}
-                          </div>
-                          <div style={{ marginBottom: '4px' }}>
-                            <strong>Price Difference:</strong> ${categoryAnalysis.buildingLot.pairedAnalysis.bestPair.priceDiff.toLocaleString()}
-                          </div>
-                          <div style={{ marginBottom: '4px' }}>
-                            <strong>Raw Land Rate:</strong> ${Math.round(categoryAnalysis.buildingLot.pairedAnalysis.bestPair.rate).toLocaleString()} {valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
-                          </div>
-                          <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '6px' }}>
-                            Median of {categoryAnalysis.buildingLot.pairedAnalysis.pairs} paired comparisons from {categoryAnalysis.buildingLot.count} properties
-                          </div>
+                      <div style={{ fontSize: '11px', color: '#1E40AF' }}>
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Properties:</strong> {categoryAnalysis.buildingLot.pairedAnalysis.pairs} pairs analyzed
                         </div>
-                      )}
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Average Rate:</strong> ${Math.round(categoryAnalysis.buildingLot.avg).toLocaleString()}{valuationMode === 'sf' ? '/SF' : valuationMode === 'ff' ? '/FF' : '/acre'}
+                        </div>
+                        <div style={{ marginBottom: '4px' }}>
+                          <strong>Price Range:</strong> ${categoryAnalysis.buildingLot.pairedAnalysis.minPriceDiff?.toLocaleString() || 0} - ${categoryAnalysis.buildingLot.pairedAnalysis.maxPriceDiff?.toLocaleString() || 0}
+                        </div>
+                      </div>
                     </div>
                   )}
 
                 </div>
 
                 <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '8px', fontStyle: 'italic' }}>
-                  * Paired analysis extracts incremental raw land value between similar sales with different acreages.
+                  * Paired analysis extracts incremental raw land value between similar sales with different {valuationMode === 'ff' ? 'frontages' : valuationMode === 'sf' ? 'square footages' : 'acreages'}.
                   This isolates the pure land component from site value and improvements.
                   <br />
                   * All properties are included regardless of acreage similarity.
@@ -5643,7 +6004,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             >
               {showBracketEditor ? 'Hide Bracket Settings' : 'Edit Brackets'}
             </button>
-
           </div>
 
           {showBracketEditor && (
@@ -5793,7 +6153,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales • Avg $${Math.round(data.avgPrice).toLocaleString()} ��� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ��� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales �� Avg $${Math.round(data.avgPrice).toLocaleString()} ����� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{ marginBottom: '8px', border: '1px solid #E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
@@ -5880,23 +6240,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             return brackets.map((bracket, index) => {
                               if (!bracket.data || bracket.data.count === 0) return null;
 
-                              console.log(`Row ${index} (${bracket.label}):`, {
-                                avgAdjusted: bracket.data.avgAdjusted,
-                                avgAcres: bracket.data.avgAcres
-                              });
-
                               // Find the bracket with the highest adjusted value that's still lower than current
                               let comparisonBracket = null;
                               let highestValidAdjusted = 0;
 
                               for (let i = 0; i < index; i++) {
                                 const candidate = brackets[i].data;
-                                console.log(`  Checking row ${i}:`, {
-                                  hasData: !!candidate,
-                                  avgAdjusted: candidate?.avgAdjusted,
-                                  wouldBePositiveDelta: candidate && bracket.data.avgAdjusted > candidate.avgAdjusted,
-                                  isHigherThanCurrent: candidate?.avgAdjusted > highestValidAdjusted
-                                });
 
                                 if (candidate &&
                                     candidate.count > 0 &&
@@ -5905,14 +6254,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                                     candidate.avgAdjusted > highestValidAdjusted) {
                                   comparisonBracket = candidate;
                                   highestValidAdjusted = candidate.avgAdjusted;
-                                  console.log(`  ✓ New best comparison: row ${i} (${candidate.avgAdjusted})`);
                                 }
-                              }
-
-                              if (!comparisonBracket) {
-                                console.log(`  ✗ No valid comparison found`);
-                              } else {
-                                console.log(`  ✅ Final comparison: ${highestValidAdjusted}`);
                               }
 
                               let adjustedDelta = null;
@@ -6318,178 +6660,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           </div>
         )}
 
-        {/* Method 2 by Special Region - NEW SECTION */}
-        {method2ByRegion?.summary && Object.keys(method2ByRegion.summary).length > 0 && (
-          <div style={{ marginTop: '20px', borderTop: '2px solid #E5E7EB', backgroundColor: '#F8FAFC' }}>
-            <div style={{ padding: '20px' }}>
-              <h4 style={{ margin: '0 0 20px 0', fontSize: '16px', fontWeight: 'bold', color: '#1F2937' }}>
-                Method 2 Analysis by Special Region
-              </h4>
-
-              {Object.entries(method2ByRegion.summary).map(([region, regionSummary]) => {
-                const regionAnalysis = method2ByRegion.analysis[region] || {};
-                const hasData = regionSummary.mediumRange?.count > 0 || regionSummary.largeRange?.count > 0 || regionSummary.xlargeRange?.count > 0;
-
-                if (!hasData) return null;
-
-                return (
-                  <div key={region} style={{
-                    marginBottom: '25px',
-                    backgroundColor: 'white',
-                    borderRadius: '8px',
-                    overflow: 'hidden',
-                    border: '1px solid #E5E7EB'
-                  }}>
-                    <div style={{
-                      padding: '15px 20px',
-                      backgroundColor: region === 'Normal' ? '#F3F4F6' : '#FEF3C7',
-                      borderBottom: '1px solid #E5E7EB'
-                    }}>
-                      <h5 style={{
-                        margin: 0,
-                        fontSize: '14px',
-                        fontWeight: 'bold',
-                        color: '#1F2937'
-                      }}>
-                        {region === 'Normal' ? 'Normal Properties' : `${region} Special Region`}
-                      </h5>
-                      <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>
-                        Cascade Boundaries: {regionSummary.cascadeBoundaries.pMax}AC / {regionSummary.cascadeBoundaries.sMax}AC / {regionSummary.cascadeBoundaries.eMax}AC
-                        {regionSummary.cascadeBoundaries.rMax ? ` / ${regionSummary.cascadeBoundaries.rMax}AC` : ''}
-                      </div>
-                    </div>
-
-                    {/* Region Summary */}
-                    <div style={{ padding: '20px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', marginBottom: '20px' }}>
-                        {/* Medium Range */}
-                        <div style={{
-                          flex: 1,
-                          textAlign: 'center',
-                          padding: '15px',
-                          backgroundColor: '#F9FAFB',
-                          borderRadius: '6px',
-                          border: '1px solid #E5E7EB'
-                        }}>
-                          <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>
-                            {regionSummary.cascadeBoundaries.pMax.toFixed(2)}-{regionSummary.cascadeBoundaries.sMax.toFixed(2)} Acres
-                          </div>
-                          <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#1F2937' }}>
-                            {valuationMode === 'sf' ?
-                              (regionSummary.mediumRange?.perSqFt !== 'N/A' ? `$${regionSummary.mediumRange?.perSqFt}/SF` : 'N/A') :
-                              (regionSummary.mediumRange?.perAcre !== 'N/A' ? `$${regionSummary.mediumRange?.perAcre?.toLocaleString()}` : 'N/A')
-                            }
-                          </div>
-                          <div style={{ fontSize: '10px', color: '#9CA3AF' }}>
-                            ({regionSummary.mediumRange?.count || 0} VCS)
-                          </div>
-                        </div>
-
-                        {/* Large Range */}
-                        <div style={{
-                          flex: 1,
-                          textAlign: 'center',
-                          padding: '15px',
-                          backgroundColor: '#F9FAFB',
-                          borderRadius: '6px',
-                          border: '1px solid #E5E7EB'
-                        }}>
-                          <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>
-                            {regionSummary.cascadeBoundaries.sMax.toFixed(2)}-{regionSummary.cascadeBoundaries.eMax.toFixed(2)} Acres
-                          </div>
-                          <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#1F2937' }}>
-                            {valuationMode === 'sf' ?
-                              (regionSummary.largeRange?.perSqFt !== 'N/A' ? `$${regionSummary.largeRange?.perSqFt}/SF` : 'N/A') :
-                              (regionSummary.largeRange?.perAcre !== 'N/A' ? `$${regionSummary.largeRange?.perAcre?.toLocaleString()}` : 'N/A')
-                            }
-                          </div>
-                          <div style={{ fontSize: '10px', color: '#9CA3AF' }}>
-                            ({regionSummary.largeRange?.count || 0} VCS)
-                          </div>
-                        </div>
-
-                        {/* XLarge Range */}
-                        <div style={{
-                          flex: 1,
-                          textAlign: 'center',
-                          padding: '15px',
-                          backgroundColor: '#F9FAFB',
-                          borderRadius: '6px',
-                          border: '1px solid #E5E7EB'
-                        }}>
-                          <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>
-                            {regionSummary.cascadeBoundaries.rMax ?
-                              `${regionSummary.cascadeBoundaries.eMax.toFixed(2)}-${regionSummary.cascadeBoundaries.rMax.toFixed(2)} Acres` :
-                              `>${regionSummary.cascadeBoundaries.eMax.toFixed(2)} Acres`
-                            }
-                          </div>
-                          <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#1F2937' }}>
-                            {valuationMode === 'sf' ?
-                              (regionSummary.xlargeRange?.perSqFt !== 'N/A' ? `$${regionSummary.xlargeRange?.perSqFt}/SF` : 'N/A') :
-                              (regionSummary.xlargeRange?.perAcre !== 'N/A' ? `$${regionSummary.xlargeRange?.perAcre?.toLocaleString()}` : 'N/A')
-                            }
-                          </div>
-                          <div style={{ fontSize: '10px', color: '#9CA3AF' }}>
-                            ({regionSummary.xlargeRange?.count || 0} VCS)
-                          </div>
-                        </div>
-
-                        {/* Regional Average */}
-                        <div style={{
-                          flex: 1,
-                          textAlign: 'center',
-                          padding: '15px',
-                          backgroundColor: '#EFF6FF',
-                          borderRadius: '6px',
-                          border: '1px solid #DBEAFE'
-                        }}>
-                          <div style={{ fontSize: '12px', color: '#1E40AF', marginBottom: '4px' }}>
-                            Regional Average
-                          </div>
-                          <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#1E40AF' }}>
-                            {(() => {
-                              const allRates = [];
-                              if (regionSummary.mediumRange?.perAcre !== 'N/A') allRates.push(regionSummary.mediumRange.perAcre);
-                              if (regionSummary.largeRange?.perAcre !== 'N/A') allRates.push(regionSummary.largeRange.perAcre);
-                              if (regionSummary.xlargeRange?.perAcre !== 'N/A') allRates.push(regionSummary.xlargeRange.perAcre);
-
-                              if (allRates.length === 0) return 'N/A';
-
-                              const avgAcre = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
-                              if (valuationMode === 'sf') {
-                                const avgSf = (avgAcre / 43560).toFixed(2);
-                                return `$${avgSf}/SF`;
-                              }
-                              return `$${avgAcre.toLocaleString()}`;
-                            })()}
-                          </div>
-                          <div style={{ fontSize: '10px', color: '#6B7280' }}>
-                            ({regionSummary.totalVCS || 0} VCS Total)
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Regional VCS Details */}
-                      {Object.keys(regionAnalysis).length > 0 && (
-                        <div style={{ marginTop: '15px' }}>
-                          <div style={{ fontSize: '12px', fontWeight: '600', color: '#6B7280', marginBottom: '8px' }}>
-                            VCS Areas in {region}:
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#6B7280' }}>
-                            {Object.keys(regionAnalysis).map(vcs => {
-                              const vcsData = regionAnalysis[vcs];
-                              return `${vcs} (${vcsData.totalSales} sales, ${vcsData.impliedRate ? `$${vcsData.impliedRate.toLocaleString()}/AC` : 'N/A'})`;
-                            }).join(' • ')}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Cascade Rate Configuration - MOVED TO BOTTOM */}
@@ -7610,7 +7780,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'lot' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Lot {modalSortField === 'lot' ? (modalSortDirection === 'asc' ? '↑' : '↓') : ''}
+                      Lot {modalSortField === 'lot' ? (modalSortDirection === 'asc' ? '��' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('address')}
@@ -7694,7 +7864,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '��') : ''}
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '����') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('yearBuilt')}
@@ -8319,6 +8489,26 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     return CME_BRACKETS.find(bracket => price >= bracket.min && price <= bracket.max) || CME_BRACKETS[0];
   };
 
+  // Memoize VCS special categories calculation based on config only (not individual sales)
+  const vcsSpecialCategoriesMap = useMemo(() => {
+    const map = {};
+    Object.keys(vcsSheetData).forEach(vcs => {
+      const type = vcsTypes[vcs] || 'Residential-Typical';
+      const isGrayedOut = !type.startsWith('Residential');
+
+      map[vcs] = !isGrayedOut ? {
+        wetlands: cascadeConfig.specialCategories.wetlands && cascadeConfig.specialCategories.wetlands > 0,
+        landlocked: cascadeConfig.specialCategories.landlocked && cascadeConfig.specialCategories.landlocked > 0,
+        conservation: cascadeConfig.specialCategories.conservation && cascadeConfig.specialCategories.conservation > 0
+      } : {
+        wetlands: false,
+        landlocked: false,
+        conservation: false
+      };
+    });
+    return map;
+  }, [vcsSheetData, vcsTypes, cascadeConfig.specialCategories]);
+
   // ========== RENDER VCS SHEET TAB ==========
   const renderVCSSheetTab = () => {
     const VCS_TYPES = [
@@ -8478,21 +8668,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   const typicalLot = vcsProps.length > 0 ?
                     (vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length).toFixed(2) : '';
 
-                  // Check for special category properties in this VCS (only for residential)
-                  const vcsSpecialCategories = !isGrayedOut ? {
-                    wetlands: cascadeConfig.specialCategories.wetlands && (
-                      vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'wetlands') ||
-                      cascadeConfig.specialCategories.wetlands > 0
-                    ),
-                    landlocked: cascadeConfig.specialCategories.landlocked && (
-                      vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'landlocked') ||
-                      cascadeConfig.specialCategories.landlocked > 0
-                    ),
-                    conservation: cascadeConfig.specialCategories.conservation && (
-                      vacantSales.some(s => s.new_vcs === vcs && saleCategories[s.id] === 'conservation') ||
-                      cascadeConfig.specialCategories.conservation > 0
-                    )
-                  } : {
+                  // Use pre-calculated special categories to avoid re-renders
+                  const vcsSpecialCategories = vcsSpecialCategoriesMap[vcs] || {
                     wetlands: false,
                     landlocked: false,
                     conservation: false
@@ -9463,7 +9640,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             <FileDown size={16} /> Export All
           </button>
           <button
-            onClick={() => saveAnalysis()}
+            onClick={() => saveAnalysis({ source: 'manual' })}
             disabled={isSaving}
             style={{
               backgroundColor: '#10B981',

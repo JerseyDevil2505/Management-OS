@@ -7,6 +7,7 @@ const FileUploadButton = ({
   onFileProcessed,
   isJobLoading = false,
   onDataRefresh,
+  onUpdateJobCache,  // JobContainer's refresh callback
   isJobContainerLoading = false  // Accept loading state from JobContainer
 }) => {
   const [sourceFile, setSourceFile] = useState(null);
@@ -2185,12 +2186,23 @@ const handleCodeFileUpdate = async () => {
             {batchComplete && (
               <div className="flex space-x-3">
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     setShowBatchModal(false);
                     setShowResultsModal(false);
                     setSourceFile(null);
                     setSourceFileContent(null);
                     setSalesDecisions(new Map());
+
+                    // Trigger JobContainer refresh to update all modules with new data
+                    if (onUpdateJobCache) {
+                      try {
+                        console.log('🔄 Triggering JobContainer refresh after file upload completion');
+                        await onUpdateJobCache(job.id, { forceRefresh: true });
+                        console.log('✅ JobContainer data refreshed successfully');
+                      } catch (error) {
+                        console.error('❌ Error during JobContainer refresh:', error);
+                      }
+                    }
                   }}
                   className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-medium"
                 >
