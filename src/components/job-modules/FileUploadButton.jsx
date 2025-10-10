@@ -2253,7 +2253,7 @@ const handleCodeFileUpdate = async () => {
           {/* Content - FIXED: Scrollable area */}
           <div className="flex-1 overflow-y-auto p-6" style={{ maxHeight: 'calc(90vh - 140px)' }}>
             {/* Summary Tiles */}
-            <div className="grid grid-cols-5 gap-4 mb-6">
+            <div className="grid grid-cols-4 gap-4 mb-6">
               {/* New Records */}
               <div className={`p-4 rounded-lg border-2 text-center ${hasNewRecords ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
                 <div className={`text-2xl font-bold ${hasNewRecords ? 'text-green-600' : 'text-gray-500'}`}>
