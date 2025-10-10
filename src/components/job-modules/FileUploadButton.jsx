@@ -2287,6 +2287,50 @@ const handleCodeFileUpdate = async () => {
               </div>
             </div>
 
+            {/* Tab Navigation */}
+            <div className="flex border-b border-gray-200 mb-6">
+              <button
+                onClick={() => setActiveComparisonTab('added')}
+                className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+                  activeComparisonTab === 'added'
+                    ? 'border-green-600 text-green-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Added ({summary.missing || 0})
+              </button>
+              <button
+                onClick={() => setActiveComparisonTab('deleted')}
+                className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+                  activeComparisonTab === 'deleted'
+                    ? 'border-red-600 text-red-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Deleted ({summary.deletions || 0})
+              </button>
+              <button
+                onClick={() => setActiveComparisonTab('sales')}
+                className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+                  activeComparisonTab === 'sales'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Sales Changes ({summary.salesChanges || 0})
+              </button>
+              <button
+                onClick={() => setActiveComparisonTab('class')}
+                className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+                  activeComparisonTab === 'class'
+                    ? 'border-purple-600 text-purple-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Class Changes ({summary.classChanges || 0})
+              </button>
+            </div>
+
             {/* No Changes State */}
             {!hasAnyChanges && (
               <div className="text-center py-8">
@@ -3005,7 +3049,7 @@ const handleCodeFileUpdate = async () => {
       <div className="flex items-center gap-3 text-gray-300">
         <Settings className="w-4 h-4 text-green-400" />
         <span className="text-sm min-w-0 flex-1">
-          ⚙️ Code: {getFileStatusWithRealVersion(job.code_file_uploaded_at || job.created_at, 'code')}
+          ⚙�� Code: {getFileStatusWithRealVersion(job.code_file_uploaded_at || job.created_at, 'code')}
         </span>
         
         <input
