@@ -2254,28 +2254,20 @@ const handleCodeFileUpdate = async () => {
           <div className="flex-1 overflow-y-auto p-6" style={{ maxHeight: 'calc(90vh - 140px)' }}>
             {/* Summary Tiles */}
             <div className="grid grid-cols-4 gap-4 mb-6">
-              {/* New Records */}
+              {/* Added Properties */}
               <div className={`p-4 rounded-lg border-2 text-center ${hasNewRecords ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
                 <div className={`text-2xl font-bold ${hasNewRecords ? 'text-green-600' : 'text-gray-500'}`}>
                   {summary.missing || 0}
                 </div>
-                <div className="text-sm text-gray-600">New Records</div>
+                <div className="text-sm text-gray-600">Added</div>
               </div>
 
-              {/* Deletions */}
+              {/* Deleted Properties */}
               <div className={`p-4 rounded-lg border-2 text-center ${hasDeletions ? 'border-red-400 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
                 <div className={`text-2xl font-bold ${hasDeletions ? 'text-red-600' : 'text-gray-500'}`}>
                   {summary.deletions || 0}
                 </div>
-                <div className="text-sm text-gray-600">Deletions</div>
-              </div>
-
-              {/* Changes */}
-              <div className={`p-4 rounded-lg border-2 text-center ${hasChanges ? 'border-yellow-400 bg-yellow-50' : 'border-gray-200 bg-gray-50'}`}>
-                <div className={`text-2xl font-bold ${hasChanges ? 'text-yellow-600' : 'text-gray-500'}`}>
-                  {summary.changes || 0}
-                </div>
-                <div className="text-sm text-gray-600">Changes</div>
+                <div className="text-sm text-gray-600">Deleted</div>
               </div>
 
               {/* Sales Changes */}
