@@ -38,6 +38,9 @@ const FileUploadButton = ({
   const [currentReportPage, setCurrentReportPage] = useState(1);
   const [reportsPerPage, setReportsPerPage] = useState(5);
 
+  // Active tab for comparison modal
+  const [activeComparisonTab, setActiveComparisonTab] = useState('added');
+
   // Modal resize functionality
   const [modalSize, setModalSize] = useState({
     width: 800,
