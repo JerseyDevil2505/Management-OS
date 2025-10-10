@@ -165,7 +165,7 @@ const FileUploadButton = ({
       const qualifierValue = String(record.QUALIFIER || '').trim() || 'NONE';
       const cardValue = String(record.CARD || '').trim() || 'NONE';
       const locationRaw = String(record.PROPERTY_LOCATION || '').trim() || 'NONE';
-      const locationValue = locationRaw === 'NONE' ? 'NONE' : normalizeLocationForKey(locationRaw);
+      const locationValue = locationRaw || 'NONE';
 
       return `${year}${ccdd}-${blockValue}-${lotValue}_${qualifierValue}-${cardValue}-${locationValue}`;
     } else if (vendor === 'Microsystems') {
@@ -174,7 +174,7 @@ const FileUploadButton = ({
       const qualValue = String(record['Qual'] || '').trim() || 'NONE';
       const bldgValue = String(record['Bldg'] || '').trim() || 'NONE';
       const locationRaw = String(record['Location'] || '').trim() || 'NONE';
-      const locationValue = locationRaw === 'NONE' ? 'NONE' : normalizeLocationForKey(locationRaw);
+      const locationValue = locationRaw || 'NONE';
 
       return `${year}${ccdd}-${blockValue}-${lotValue}_${qualValue}-${bldgValue}-${locationValue}`;
     }
