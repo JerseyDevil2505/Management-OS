@@ -2340,228 +2340,263 @@ const handleCodeFileUpdate = async () => {
               </div>
             )}
 
-            {/* Sales Changes Section (if any) */}
-            {hasSalesChanges && (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                  Sales Changes Requiring Decisions: 
-                  <span className="ml-2 text-blue-600">
-                    ({details.salesChanges.filter(change => !salesDecisions.has(change.property_composite_key)).length} remaining)
-                  </span>
-                </h3>
-                <div id="sales-changes-container" className="space-y-4" style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
-                  {details.salesChanges.map((change, idx) => {
-                    const currentDecision = salesDecisions.get(change.property_composite_key);
-                    
-                    return (
-                      <div key={idx} className="border border-blue-200 rounded-lg p-4 bg-blue-50">
-                          <div className="mb-3">
-                          {/* Property Info */}
-                          <div className="mb-2">
-                            <h4 className="font-bold text-gray-900">
-                              Property {change.property_block}-{change.property_lot}
-                              {change.property_qualifier && change.property_qualifier !== 'NONE' && 
-                                <span className="text-gray-600"> (Qual: {change.property_qualifier})</span>}
-                            </h4>
-                            <p className="text-gray-600 text-sm">{change.property_location}</p>
-                          </div>
-                          
-                          {/* Sales Comparison */}
-                          <div className="grid grid-cols-2 gap-4 p-3 bg-white rounded-lg border border-gray-200">
-                            {/* Old Sale */}
-                            <div className="text-center">
-                              <div className="text-xs font-semibold text-gray-500 mb-1">OLD SALE</div>
-                              <div className="text-lg font-bold text-red-600">
-                                ${change.differences.sales_price.old?.toLocaleString() || 0}
-                              </div>
-                              <div className="text-xs text-gray-500 mt-1">
-                                {change.differences.sales_date.old || 'No Date'}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                Book: {change.differences.sales_book?.old || '--'} Page: {change.differences.sales_page?.old || '--'}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                NU: {(() => {
-                                  const nu = change.differences.sales_nu?.old;
-                                  if (!nu || nu === '' || nu === ' ' || nu === '0' || nu === '00') return '--';
-                                  return nu;
-                                })()}
-                              </div>
-                            </div>
-                            
-                            {/* New Sale */}
-                            <div className="text-center">
-                              <div className="text-xs font-semibold text-gray-500 mb-1">NEW SALE</div>
-                              <div className="text-lg font-bold text-green-600">
-                                ${change.differences.sales_price.new?.toLocaleString() || 0}
-                              </div>
-                              <div className="text-xs text-gray-500 mt-1">
-                                {change.differences.sales_date.new || 'No Date'}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                Book: {change.differences.sales_book?.new || '--'} Page: {change.differences.sales_page?.new || '--'}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                NU: {(() => {
-                                  const nu = change.differences.sales_nu?.new;
-                                  if (!nu || nu === '' || nu === ' ' || nu === '0' || nu === '00') return '--';
-                                  return nu;
-                                })()}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleSalesDecision(change.property_composite_key, 'Keep Old')}
-                            className={`px-3 py-1 rounded text-sm font-medium ${
-                              currentDecision === 'Keep Old' 
-                                ? 'bg-red-600 text-white' 
-                                : 'bg-red-100 text-red-800 hover:bg-red-200'
-                            }`}
-                          >
-                            Keep Old
-                          </button>
-                          
-                          <button
-                            onClick={() => handleSalesDecision(change.property_composite_key, 'Keep New')}
-                            className={`px-3 py-1 rounded text-sm font-medium ${
-                              currentDecision === 'Keep New' 
-                                ? 'bg-green-600 text-white' 
-                                : 'bg-green-100 text-green-800 hover:bg-green-200'
-                            }`}
-                          >
-                            Keep New
-                          </button>
-                          
-                          <button
-                            onClick={() => handleSalesDecision(change.property_composite_key, 'Keep Both')}
-                            className={`px-3 py-1 rounded text-sm font-medium ${
-                              currentDecision === 'Keep Both' 
-                                ? 'bg-blue-600 text-white' 
-                                : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
-                            }`}
-                          >
-                            Keep Both
-                          </button>
-                        </div>
-                        
-                        {currentDecision && (
-                          <div className="mt-2 p-2 bg-green-100 rounded">
-                            <div className="text-sm font-medium text-green-800">
-                              ✓ Decision: {currentDecision}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+            {/* Added Properties Tab */}
+            {activeComparisonTab === 'added' && (
+              <div>
+                {hasNewRecords ? (
+                  <>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Added Properties ({summary.missing})</h3>
+                    <div className="overflow-auto" style={{ maxHeight: '450px' }}>
+                      <table className="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead className="bg-gray-50 sticky top-0">
+                          <tr>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Block</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Lot</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Qualifier</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Location</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Composite Key</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {details.missing.map((record, idx) => {
+                            const blockField = job.vendor_type === 'BRT' ? 'BLOCK' : 'Block';
+                            const lotField = job.vendor_type === 'BRT' ? 'LOT' : 'Lot';
+                            const qualifierField = job.vendor_type === 'BRT' ? 'QUALIFIER' : 'Qual';
+                            const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
+                            const yearCreated = job.year_created || new Date().getFullYear();
+                            const ccddCode = job.ccdd_code || job.ccddCode;
+                            const compositeKey = generateCompositeKey(record, job.vendor_type, yearCreated, ccddCode);
 
-            {/* Class Changes Section (if any) */}
-            {hasClassChanges && (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Property Class Changes:</h3>
-                <div className="space-y-3" style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
-                  {details.classChanges.map((change, idx) => (
-                    <div key={idx} className="border border-purple-200 rounded-lg p-3 bg-purple-50">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h4 className="font-bold text-gray-900">
-                            Property {change.property_block}-{change.property_lot}
-                            {change.property_qualifier && change.property_qualifier !== 'NONE' && 
-                              <span className="text-gray-600"> (Qual: {change.property_qualifier})</span>}
-                          </h4>
-                          <p className="text-gray-600 text-sm">{change.property_location}</p>
-                        </div>
-                        <div className="text-right">
-                          {change.changes.map((classChange, cidx) => (
-                            <div key={cidx} className="mb-1">
-                              <div className="text-xs text-gray-600">{classChange.field}</div>
-                              <div className="text-sm">
-                                <span className="font-medium text-red-600">{classChange.old || 'None'}</span>
-                                <span className="mx-1">→</span>
-                                <span className="font-medium text-green-600">{classChange.new || 'None'}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                            return (
+                              <tr key={idx} className="hover:bg-green-50">
+                                <td className="px-4 py-3 whitespace-nowrap">{record[blockField]}</td>
+                                <td className="px-4 py-3 whitespace-nowrap">{record[lotField]}</td>
+                                <td className="px-4 py-3 whitespace-nowrap">{record[qualifierField] || 'NONE'}</td>
+                                <td className="px-4 py-3">{record[locationField] || 'NONE'}</td>
+                                <td className="px-4 py-3 text-xs font-mono text-gray-600">{compositeKey}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
-                  ))}
-                </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No properties to add</p>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* New Records Section (if any) */}
-            {hasNewRecords && (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">New Properties to Add:</h3>
-                <div className="text-sm text-gray-600 mb-2">
-                  Showing first 10 of {summary.missing} new properties
-                </div>
-                <div className="space-y-2" style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
-                  {details.missing.slice(0, 10).map((record, idx) => {
-                    const blockField = job.vendor_type === 'BRT' ? 'BLOCK' : 'Block';
-                    const lotField = job.vendor_type === 'BRT' ? 'LOT' : 'Lot';
-                    const qualifierField = job.vendor_type === 'BRT' ? 'QUALIFIER' : 'Qual';
-                    const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
-                    const classField = job.vendor_type === 'BRT' ? 'PROPERTY_CLASS' : 'Class';
-                    const priceField = job.vendor_type === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price';
-                    const dateField = job.vendor_type === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date';
-                    
-                    const salePrice = parseFloat(String(record[priceField] || 0).replace(/[,$]/g, '')) || 0;
-                    
-                    return (
-                      <div key={idx} className="border border-green-200 rounded p-2 bg-green-50 text-sm">
-                        <div className="flex justify-between">
-                          <div>
-                            <span className="font-medium">{record[blockField]}-{record[lotField]}</span>
-                            {record[qualifierField] && record[qualifierField] !== 'NONE' && 
-                              <span className="text-gray-600"> (Qual: {record[qualifierField]})</span>}
-                            <span className="text-gray-600 ml-2">{record[locationField]}</span>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-gray-600">Class: {record[classField]}</span>
-                            {salePrice > 0 && (
-                              <span className="ml-3 font-medium">${salePrice.toLocaleString()}</span>
+            {/* Deleted Properties Tab */}
+            {activeComparisonTab === 'deleted' && (
+              <div>
+                {hasDeletions ? (
+                  <>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Deleted Properties ({summary.deletions})</h3>
+                    <div className="overflow-auto" style={{ maxHeight: '450px' }}>
+                      <table className="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead className="bg-gray-50 sticky top-0">
+                          <tr>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Block</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Lot</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Qualifier</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Location</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Composite Key</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {details.deletions.map((record, idx) => (
+                            <tr key={idx} className="hover:bg-red-50">
+                              <td className="px-4 py-3 whitespace-nowrap">{record.property_block}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">{record.property_lot}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">{record.property_qualifier || 'NONE'}</td>
+                              <td className="px-4 py-3">{record.property_location || 'NONE'}</td>
+                              <td className="px-4 py-3 text-xs font-mono text-gray-600">{record.property_composite_key}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No properties to delete</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Sales Changes Tab */}
+            {activeComparisonTab === 'sales' && (
+              <div>
+                {hasSalesChanges ? (
+                  <>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                      Sales Changes Requiring Decisions:
+                      <span className="ml-2 text-blue-600">
+                        ({details.salesChanges.filter(change => !salesDecisions.has(change.property_composite_key)).length} remaining)
+                      </span>
+                    </h3>
+                    <div id="sales-changes-container" className="space-y-4" style={{ maxHeight: '450px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
+                      {details.salesChanges.map((change, idx) => {
+                        const currentDecision = salesDecisions.get(change.property_composite_key);
+
+                        return (
+                          <div key={idx} className="border border-blue-200 rounded-lg p-4 bg-blue-50">
+                              <div className="mb-3">
+                              {/* Property Info */}
+                              <div className="mb-2">
+                                <h4 className="font-bold text-gray-900">
+                                  Property {change.property_block}-{change.property_lot}
+                                  {change.property_qualifier && change.property_qualifier !== 'NONE' &&
+                                    <span className="text-gray-600"> (Qual: {change.property_qualifier})</span>}
+                                </h4>
+                                <p className="text-gray-600 text-sm">{change.property_location}</p>
+                              </div>
+
+                              {/* Sales Comparison */}
+                              <div className="grid grid-cols-2 gap-4 p-3 bg-white rounded-lg border border-gray-200">
+                                {/* Old Sale */}
+                                <div className="text-center">
+                                  <div className="text-xs font-semibold text-gray-500 mb-1">OLD SALE</div>
+                                  <div className="text-lg font-bold text-red-600">
+                                    ${change.differences.sales_price.old?.toLocaleString() || 0}
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    {change.differences.sales_date.old || 'No Date'}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    Book: {change.differences.sales_book?.old || '--'} Page: {change.differences.sales_page?.old || '--'}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    NU: {(() => {
+                                      const nu = change.differences.sales_nu?.old;
+                                      if (!nu || nu === '' || nu === ' ' || nu === '0' || nu === '00') return '--';
+                                      return nu;
+                                    })()}
+                                  </div>
+                                </div>
+
+                                {/* New Sale */}
+                                <div className="text-center">
+                                  <div className="text-xs font-semibold text-gray-500 mb-1">NEW SALE</div>
+                                  <div className="text-lg font-bold text-green-600">
+                                    ${change.differences.sales_price.new?.toLocaleString() || 0}
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    {change.differences.sales_date.new || 'No Date'}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    Book: {change.differences.sales_book?.new || '--'} Page: {change.differences.sales_page?.new || '--'}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    NU: {(() => {
+                                      const nu = change.differences.sales_nu?.new;
+                                      if (!nu || nu === '' || nu === ' ' || nu === '0' || nu === '00') return '--';
+                                      return nu;
+                                    })()}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleSalesDecision(change.property_composite_key, 'Keep Old')}
+                                className={`px-3 py-1 rounded text-sm font-medium ${
+                                  currentDecision === 'Keep Old'
+                                    ? 'bg-red-600 text-white'
+                                    : 'bg-red-100 text-red-800 hover:bg-red-200'
+                                }`}
+                              >
+                                Keep Old
+                              </button>
+
+                              <button
+                                onClick={() => handleSalesDecision(change.property_composite_key, 'Keep New')}
+                                className={`px-3 py-1 rounded text-sm font-medium ${
+                                  currentDecision === 'Keep New'
+                                    ? 'bg-green-600 text-white'
+                                    : 'bg-green-100 text-green-800 hover:bg-green-200'
+                                }`}
+                              >
+                                Keep New
+                              </button>
+
+                              <button
+                                onClick={() => handleSalesDecision(change.property_composite_key, 'Keep Both')}
+                                className={`px-3 py-1 rounded text-sm font-medium ${
+                                  currentDecision === 'Keep Both'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                                }`}
+                              >
+                                Keep Both
+                              </button>
+                            </div>
+
+                            {currentDecision && (
+                              <div className="mt-2 p-2 bg-green-100 rounded">
+                                <div className="text-sm font-medium text-green-800">
+                                  ✓ Decision: {currentDecision}
+                                </div>
+                              </div>
                             )}
                           </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No sales changes detected</p>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Deletions Section (if any) */}
-            {hasDeletions && (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Properties to Remove:</h3>
-                <div className="text-sm text-gray-600 mb-2">
-                  Showing first 10 of {summary.deletions} properties not in source file
-                </div>
-                <div className="space-y-2" style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
-                  {details.deletions.slice(0, 10).map((record, idx) => (
-                    <div key={idx} className="border border-red-200 rounded p-2 bg-red-50 text-sm">
-                      <div className="flex justify-between">
-                        <div>
-                          <span className="font-medium">{record.property_block}-{record.property_lot}</span>
-                          {record.property_qualifier && record.property_qualifier !== 'NONE' && 
-                            <span className="text-gray-600"> (Qual: {record.property_qualifier})</span>}
-                          <span className="text-gray-600 ml-2">{record.property_location}</span>
+            {/* Class Changes Tab */}
+            {activeComparisonTab === 'class' && (
+              <div>
+                {hasClassChanges ? (
+                  <>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Property Class Changes ({summary.classChanges})</h3>
+                    <div className="space-y-3" style={{ maxHeight: '450px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
+                      {details.classChanges.map((change, idx) => (
+                        <div key={idx} className="border border-purple-200 rounded-lg p-3 bg-purple-50">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="font-bold text-gray-900">
+                                Property {change.property_block}-{change.property_lot}
+                                {change.property_qualifier && change.property_qualifier !== 'NONE' &&
+                                  <span className="text-gray-600"> (Qual: {change.property_qualifier})</span>}
+                              </h4>
+                              <p className="text-gray-600 text-sm">{change.property_location}</p>
+                            </div>
+                            <div className="text-right">
+                              {change.changes.map((classChange, cidx) => (
+                                <div key={cidx} className="mb-1">
+                                  <div className="text-xs text-gray-600">{classChange.field}</div>
+                                  <div className="text-sm">
+                                    <span className="font-medium text-red-600">{classChange.old || 'None'}</span>
+                                    <span className="mx-1">→</span>
+                                    <span className="font-medium text-green-600">{classChange.new || 'None'}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-right text-gray-600">
-                          Will be removed
-                        </div>
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No class changes detected</p>
+                  </div>
+                )}
               </div>
             )}
 
