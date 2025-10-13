@@ -303,7 +303,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   const exportCsv = () => {
     if (!filtered || filtered.length === 0) return alert('No data to export');
     const headers = [
-      'Incl','Block','Lot','Qualifier','Card','Location','Sales Date','Sale Price','Sale NU','Price Time','Year Built','Depr','Building Class','Living Area','Current Land','Det Item','Base Cost','Repl w/Depr','Improv','CCF','Adjusted Ratio','Adjusted Value'
+      'Incl','Block','Lot','Qualifier','Card','Location','VCS','Sales Date','Sale Price','Sale NU','Price Time','Year Built','Depr','Building Class','Living Area','Current Land','Det Item','Base Cost','Repl w/Depr','Improv','CCF','Adjusted Ratio','Adjusted Value'
     ];
     const rows = filtered.map(p => {
       const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
@@ -322,8 +322,9 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       // adjusted value = Current Land + ((Base Cost * Depr) * CCF) + Det Item
       const adjustedValue = (cama !== '' ? (Number(cama) + ((Number(baseCost) * (depr !== '' ? Number(depr) : 0)) * (ccf !== '' ? Number(ccf) : 0)) + Number(detItems)) : '');
       const adjustedRatio = (salePrice && adjustedValue !== '' && salePrice !== 0) ? (Number(adjustedValue) / Number(salePrice)) : '';
+      const vcs = p.new_vcs || p.property_vcs || '';
 
-      return [included ? '1' : '0', p.property_block || '', p.property_lot || '', p.asset_qualifier || p.qualifier || '', p.property_card || '', p.property_location || '', saleDate, salePrice, p.sales_nu || '', timeNorm, yearBuilt, depr !== '' ? Number(depr).toFixed(3) : '', p.asset_building_class || '', (getLivingAreaValue(p) !== null ? getLivingAreaValue(p) : ''), cama, p.values_det_items || '', baseCost || '', replWithDepr !== '' ? Number(replWithDepr).toFixed(0) : '', improv !== '' ? Number(improv).toFixed(0) : '', ccf ? Number(ccf).toFixed(2) : '', adjustedRatio ? Number(adjustedRatio).toFixed(2) : '', adjustedValue !== '' ? Number(adjustedValue).toFixed(0) : ''];
+      return [included ? '1' : '0', p.property_block || '', p.property_lot || '', p.asset_qualifier || p.qualifier || '', p.property_card || '', p.property_location || '', vcs, saleDate, salePrice, p.sales_nu || '', timeNorm, yearBuilt, depr !== '' ? Number(depr).toFixed(3) : '', p.asset_building_class || '', (getLivingAreaValue(p) !== null ? getLivingAreaValue(p) : ''), cama, p.values_det_items || '', baseCost || '', replWithDepr !== '' ? Number(replWithDepr).toFixed(0) : '', improv !== '' ? Number(improv).toFixed(0) : '', ccf ? Number(ccf).toFixed(2) : '', adjustedRatio ? Number(adjustedRatio).toFixed(2) : '', adjustedValue !== '' ? Number(adjustedValue).toFixed(0) : ''];
     });
 
     const csvContent = [headers, ...rows].map(r => r.map(cell => {
@@ -595,6 +596,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
               <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Qualifier</th>
               <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Card</th>
               <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Location</th>
+              <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">VCS</th>
 
               <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Sales Date</th>
               <th className="px-3 py-2 text-xs text-gray-600 border-b border-r border-gray-200">Sale Price</th>
@@ -639,6 +641,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.property_card || ''}</td>
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.property_location || ''}</td>
+                  <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.new_vcs || p.property_vcs || '—'}</td>
 
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{p.sales_date ? new Date(p.sales_date).toLocaleDateString() : '���'}</td>
                   <td className="px-3 py-2 text-sm border-b border-r border-gray-100">{formatCurrencyNoCents(salePriceDisplay)}</td>
