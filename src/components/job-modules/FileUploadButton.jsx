@@ -681,54 +681,186 @@ const handleCodeFileUpdate = async () => {
     }
   };
 
-  // NEW: Export comparison results in old CSV format
+  // NEW: Export comparison results in tabular format matching modal tabs
   const exportComparisonReport = () => {
     if (!comparisonResults) return;
 
-    // Create CSV content matching old format
-    let csvContent = "Report_Date,Composite_Key,Change_Type,Block,Lot,Qualifier,Property_Location,Old_Value,New_Value,Status,Reviewed_By,Reviewed_Date\n";
-
     const reportDate = new Date().toLocaleDateString();
-    
-    // Add new records
+    const reportTime = new Date().toLocaleTimeString();
+    const summary = comparisonResults.summary;
+
+    // Build tabular text content
+    let textContent = '';
+
+    // Header
+    textContent += '='.repeat(100) + '\n';
+    textContent += `PROPERTY COMPARISON REPORT\n`;
+    textContent += `Job: ${job.name}\n`;
+    textContent += `Generated: ${reportDate} ${reportTime}\n`;
+    textContent += `Vendor: ${job.vendor_type}\n`;
+    textContent += '='.repeat(100) + '\n\n';
+
+    // Summary Section
+    textContent += 'SUMMARY\n';
+    textContent += '-'.repeat(100) + '\n';
+    textContent += `Added Properties:    ${summary.missing || 0}\n`;
+    textContent += `Deleted Properties:  ${summary.deletions || 0}\n`;
+    textContent += `Sales Changes:       ${summary.salesChanges || 0}\n`;
+    textContent += `Class Changes:       ${summary.classChanges || 0}\n`;
+    textContent += `Total Changes:       ${(summary.missing || 0) + (summary.deletions || 0) + (summary.salesChanges || 0) + (summary.classChanges || 0)}\n`;
+    textContent += '\n\n';
+
+    // Helper function to pad strings for tabular format
+    const pad = (str, length) => String(str || '').padEnd(length, ' ').substring(0, length);
+
+    // TAB 1: ADDED PROPERTIES
+    textContent += '='.repeat(100) + '\n';
+    textContent += 'ADDED PROPERTIES\n';
+    textContent += '='.repeat(100) + '\n\n';
+
     if (comparisonResults.details.missing?.length > 0) {
+      textContent += pad('Block', 10) + pad('Lot', 8) + pad('Qual', 8) + pad('Location', 30) + pad('Composite Key', 44) + '\n';
+      textContent += '-'.repeat(100) + '\n';
+
       comparisonResults.details.missing.forEach(record => {
         const blockField = job.vendor_type === 'BRT' ? 'BLOCK' : 'Block';
         const lotField = job.vendor_type === 'BRT' ? 'LOT' : 'Lot';
         const qualifierField = job.vendor_type === 'BRT' ? 'QUALIFIER' : 'Qual';
         const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
 
-        // Build composite key using same generator to ensure normalization matches processors
         const year = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
         const ccddCode = job.ccdd_code || '';
         const compositeKey = generateCompositeKey(record, job.vendor_type, year, ccddCode) || '';
-        const locationVal = String(record[locationField] || '') || '';
 
-        csvContent += `"${reportDate}","${compositeKey}","Property_Added","${record[blockField]}","${record[lotField]}","${record[qualifierField] || ''}","${locationVal}","Property_Not_Existed","Property_Added","pending_review","",""\n`;
+        textContent += pad(record[blockField], 10) +
+                      pad(record[lotField], 8) +
+                      pad(record[qualifierField] || '', 8) +
+                      pad(record[locationField] || '', 30) +
+                      pad(compositeKey, 44) + '\n';
       });
+    } else {
+      textContent += 'No added properties detected.\n';
     }
+    textContent += '\n\n';
 
-    // Add sales changes with decisions
+    // TAB 2: DELETED PROPERTIES
+    textContent += '='.repeat(100) + '\n';
+    textContent += 'DELETED PROPERTIES\n';
+    textContent += '='.repeat(100) + '\n\n';
+
+    if (comparisonResults.details.deletions?.length > 0) {
+      textContent += pad('Block', 10) + pad('Lot', 8) + pad('Qual', 8) + pad('Location', 30) + pad('Composite Key', 44) + '\n';
+      textContent += '-'.repeat(100) + '\n';
+
+      comparisonResults.details.deletions.forEach(record => {
+        textContent += pad(record.property_block, 10) +
+                      pad(record.property_lot, 8) +
+                      pad(record.property_qualifier || '', 8) +
+                      pad(record.property_location || '', 30) +
+                      pad(record.property_composite_key, 44) + '\n';
+      });
+    } else {
+      textContent += 'No deleted properties detected.\n';
+    }
+    textContent += '\n\n';
+
+    // TAB 3: SALES CHANGES
+    textContent += '='.repeat(100) + '\n';
+    textContent += 'SALES CHANGES\n';
+    textContent += '='.repeat(100) + '\n\n';
+
     if (comparisonResults.details.salesChanges?.length > 0) {
+      textContent += pad('Block', 8) + pad('Lot', 6) + pad('Qual', 6) + pad('Location', 20) +
+                    pad('Old Price', 15) + pad('New Price', 15) + pad('Old Date', 12) + pad('New Date', 12) + pad('Decision', 20) + '\n';
+      textContent += '-'.repeat(114) + '\n';
+
       comparisonResults.details.salesChanges.forEach(change => {
         const decision = salesDecisions.get(change.property_composite_key) || 'Keep New (default)';
-        const oldSaleValue = change.differences.sales_price.old ? 
-          `$${change.differences.sales_price.old.toLocaleString()} (${change.differences.sales_date.old || 'No Date'})` : 
-          'No_Sale';
-        const newSaleValue = change.differences.sales_price.new ? 
-          `$${change.differences.sales_price.new.toLocaleString()} (${change.differences.sales_date.new || 'No Date'})` : 
-          'No_Sale';
-          
-        csvContent += `"${reportDate}","${change.property_composite_key}","Sales_Change","${change.property_block}","${change.property_lot}","${change.property_qualifier || ''}","${change.property_location || ''}","${oldSaleValue}","${newSaleValue}","reviewed","user","${reportDate}"\n`;
+        const oldPrice = change.differences.sales_price.old ?
+          `$${change.differences.sales_price.old.toLocaleString()}` : 'No Sale';
+        const newPrice = change.differences.sales_price.new ?
+          `$${change.differences.sales_price.new.toLocaleString()}` : 'No Sale';
+        const oldDate = change.differences.sales_date.old || 'No Date';
+        const newDate = change.differences.sales_date.new || 'No Date';
+
+        textContent += pad(change.property_block, 8) +
+                      pad(change.property_lot, 6) +
+                      pad(change.property_qualifier || '', 6) +
+                      pad(change.property_location || '', 20) +
+                      pad(oldPrice, 15) +
+                      pad(newPrice, 15) +
+                      pad(oldDate, 12) +
+                      pad(newDate, 12) +
+                      pad(decision, 20) + '\n';
+
+        // Add additional sales details if available
+        if (change.differences.sales_nu || change.differences.sales_book || change.differences.sales_page) {
+          const oldNu = change.differences.sales_nu?.old || '';
+          const newNu = change.differences.sales_nu?.new || '';
+          const oldBook = change.differences.sales_book?.old || '';
+          const newBook = change.differences.sales_book?.new || '';
+          const oldPage = change.differences.sales_page?.old || '';
+          const newPage = change.differences.sales_page?.new || '';
+
+          if (oldNu !== newNu || oldBook !== newBook || oldPage !== newPage) {
+            textContent += pad('', 8) + '  Details: ' +
+                          `Nu: ${oldNu || 'N/A'} → ${newNu || 'N/A'}, ` +
+                          `Book: ${oldBook || 'N/A'} → ${newBook || 'N/A'}, ` +
+                          `Page: ${oldPage || 'N/A'} → ${newPage || 'N/A'}\n`;
+          }
+        }
       });
+    } else {
+      textContent += 'No sales changes detected.\n';
     }
+    textContent += '\n\n';
+
+    // TAB 4: CLASS CHANGES
+    textContent += '='.repeat(100) + '\n';
+    textContent += 'CLASS CHANGES\n';
+    textContent += '='.repeat(100) + '\n\n';
+
+    if (comparisonResults.details.classChanges?.length > 0) {
+      textContent += pad('Block', 10) + pad('Lot', 8) + pad('Qual', 8) + pad('Location', 25) +
+                    pad('Field', 20) + pad('Old Value', 15) + pad('New Value', 15) + '\n';
+      textContent += '-'.repeat(101) + '\n';
+
+      comparisonResults.details.classChanges.forEach(change => {
+        change.changes.forEach((classChange, idx) => {
+          // Only show property info on first line
+          if (idx === 0) {
+            textContent += pad(change.property_block, 10) +
+                          pad(change.property_lot, 8) +
+                          pad(change.property_qualifier || '', 8) +
+                          pad(change.property_location || '', 25) +
+                          pad(classChange.field, 20) +
+                          pad(classChange.old || '', 15) +
+                          pad(classChange.new || '', 15) + '\n';
+          } else {
+            // Indent additional changes for same property
+            textContent += pad('', 51) +
+                          pad(classChange.field, 20) +
+                          pad(classChange.old || '', 15) +
+                          pad(classChange.new || '', 15) + '\n';
+          }
+        });
+      });
+    } else {
+      textContent += 'No class changes detected.\n';
+    }
+    textContent += '\n\n';
+
+    // Footer
+    textContent += '='.repeat(100) + '\n';
+    textContent += 'END OF REPORT\n';
+    textContent += '='.repeat(100) + '\n';
 
     // Download the file
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const blob = new Blob([textContent], { type: 'text/plain' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${job.name}_Comparison_Report_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `${job.name}_Comparison_Report_${new Date().toISOString().split('T')[0]}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
