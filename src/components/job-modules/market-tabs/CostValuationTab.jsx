@@ -303,7 +303,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
   const exportCsv = () => {
     if (!filtered || filtered.length === 0) return alert('No data to export');
     const headers = [
-      'Incl','Block','Lot','Qualifier','Card','Location','Sales Date','Sale Price','Sale NU','Price Time','Year Built','Depr','Building Class','Living Area','Current Land','Det Item','Base Cost','Repl w/Depr','Improv','CCF','Adjusted Ratio','Adjusted Value'
+      'Incl','Block','Lot','Qualifier','Card','Location','VCS','Sales Date','Sale Price','Sale NU','Price Time','Year Built','Depr','Building Class','Living Area','Current Land','Det Item','Base Cost','Repl w/Depr','Improv','CCF','Adjusted Ratio','Adjusted Value'
     ];
     const rows = filtered.map(p => {
       const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
