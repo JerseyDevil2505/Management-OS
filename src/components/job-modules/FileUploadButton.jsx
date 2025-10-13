@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
 import { jobService, propertyService, supabase, preservedFieldsHandler } from '../../lib/supabaseClient';
+import * as XLSX from 'xlsx';
 
 const FileUploadButton = ({
   job,
@@ -37,6 +38,9 @@ const FileUploadButton = ({
   // Pagination for reports modal
   const [currentReportPage, setCurrentReportPage] = useState(1);
   const [reportsPerPage, setReportsPerPage] = useState(5);
+
+  // Active tab for comparison modal
+  const [activeComparisonTab, setActiveComparisonTab] = useState('added');
 
   // Modal resize functionality
   const [modalSize, setModalSize] = useState({
@@ -165,7 +169,7 @@ const FileUploadButton = ({
       const qualifierValue = String(record.QUALIFIER || '').trim() || 'NONE';
       const cardValue = String(record.CARD || '').trim() || 'NONE';
       const locationRaw = String(record.PROPERTY_LOCATION || '').trim() || 'NONE';
-      const locationValue = locationRaw === 'NONE' ? 'NONE' : normalizeLocationForKey(locationRaw);
+      const locationValue = locationRaw || 'NONE';
 
       return `${year}${ccdd}-${blockValue}-${lotValue}_${qualifierValue}-${cardValue}-${locationValue}`;
     } else if (vendor === 'Microsystems') {
@@ -174,7 +178,7 @@ const FileUploadButton = ({
       const qualValue = String(record['Qual'] || '').trim() || 'NONE';
       const bldgValue = String(record['Bldg'] || '').trim() || 'NONE';
       const locationRaw = String(record['Location'] || '').trim() || 'NONE';
-      const locationValue = locationRaw === 'NONE' ? 'NONE' : normalizeLocationForKey(locationRaw);
+      const locationValue = locationRaw || 'NONE';
 
       return `${year}${ccdd}-${blockValue}-${lotValue}_${qualValue}-${bldgValue}-${locationValue}`;
     }
@@ -678,60 +682,164 @@ const handleCodeFileUpdate = async () => {
     }
   };
 
-  // NEW: Export comparison results in old CSV format
+  // NEW: Export comparison results as Excel file with multiple sheets
   const exportComparisonReport = () => {
     if (!comparisonResults) return;
 
-    // Create CSV content matching old format
-    let csvContent = "Report_Date,Composite_Key,Change_Type,Block,Lot,Qualifier,Property_Location,Old_Value,New_Value,Status,Reviewed_By,Reviewed_Date\n";
-
     const reportDate = new Date().toLocaleDateString();
-    
-    // Add new records
+    const reportTime = new Date().toLocaleTimeString();
+    const summary = comparisonResults.summary;
+
+    // Create a new workbook
+    const workbook = XLSX.utils.book_new();
+
+    // SUMMARY SHEET
+    const summaryData = [
+      ['PROPERTY COMPARISON REPORT'],
+      ['Job:', job.name],
+      ['Generated:', `${reportDate} ${reportTime}`],
+      ['Vendor:', job.vendor_type],
+      [],
+      ['SUMMARY'],
+      ['Added Properties:', summary.missing || 0],
+      ['Deleted Properties:', summary.deletions || 0],
+      ['Sales Changes:', summary.salesChanges || 0],
+      ['Class Changes:', summary.classChanges || 0],
+      ['Total Changes:', (summary.missing || 0) + (summary.deletions || 0) + (summary.salesChanges || 0) + (summary.classChanges || 0)]
+    ];
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+    summarySheet['!cols'] = [{ wch: 25 }, { wch: 50 }];
+    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+
+    // ADDED PROPERTIES SHEET
     if (comparisonResults.details.missing?.length > 0) {
+      const addedData = [['Block', 'Lot', 'Qualifier', 'Location', 'Composite Key']];
+
       comparisonResults.details.missing.forEach(record => {
         const blockField = job.vendor_type === 'BRT' ? 'BLOCK' : 'Block';
         const lotField = job.vendor_type === 'BRT' ? 'LOT' : 'Lot';
         const qualifierField = job.vendor_type === 'BRT' ? 'QUALIFIER' : 'Qual';
         const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
 
-        // Build composite key using same generator to ensure normalization matches processors
         const year = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
         const ccddCode = job.ccdd_code || '';
         const compositeKey = generateCompositeKey(record, job.vendor_type, year, ccddCode) || '';
-        const locationVal = String(record[locationField] || '') || '';
 
-        csvContent += `"${reportDate}","${compositeKey}","Property_Added","${record[blockField]}","${record[lotField]}","${record[qualifierField] || ''}","${locationVal}","Property_Not_Existed","Property_Added","pending_review","",""\n`;
+        addedData.push([
+          record[blockField] || '',
+          record[lotField] || '',
+          record[qualifierField] || '',
+          record[locationField] || '',
+          compositeKey
+        ]);
       });
+
+      const addedSheet = XLSX.utils.aoa_to_sheet(addedData);
+      addedSheet['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 35 }, { wch: 50 }];
+      XLSX.utils.book_append_sheet(workbook, addedSheet, 'Added Properties');
     }
 
-    // Add sales changes with decisions
+    // DELETED PROPERTIES SHEET
+    if (comparisonResults.details.deletions?.length > 0) {
+      const deletedData = [['Block', 'Lot', 'Qualifier', 'Location', 'Composite Key']];
+
+      comparisonResults.details.deletions.forEach(record => {
+        deletedData.push([
+          record.property_block || '',
+          record.property_lot || '',
+          record.property_qualifier || '',
+          record.property_location || '',
+          record.property_composite_key || ''
+        ]);
+      });
+
+      const deletedSheet = XLSX.utils.aoa_to_sheet(deletedData);
+      deletedSheet['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 35 }, { wch: 50 }];
+      XLSX.utils.book_append_sheet(workbook, deletedSheet, 'Deleted Properties');
+    }
+
+    // SALES CHANGES SHEET
     if (comparisonResults.details.salesChanges?.length > 0) {
+      const salesData = [['Block', 'Lot', 'Qualifier', 'Location', 'Old Price', 'New Price', 'Old Date', 'New Date', 'Old Nu', 'New Nu', 'Old Book', 'New Book', 'Old Page', 'New Page', 'Decision']];
+
       comparisonResults.details.salesChanges.forEach(change => {
         const decision = salesDecisions.get(change.property_composite_key) || 'Keep New (default)';
-        const oldSaleValue = change.differences.sales_price.old ? 
-          `$${change.differences.sales_price.old.toLocaleString()} (${change.differences.sales_date.old || 'No Date'})` : 
-          'No_Sale';
-        const newSaleValue = change.differences.sales_price.new ? 
-          `$${change.differences.sales_price.new.toLocaleString()} (${change.differences.sales_date.new || 'No Date'})` : 
-          'No_Sale';
-          
-        csvContent += `"${reportDate}","${change.property_composite_key}","Sales_Change","${change.property_block}","${change.property_lot}","${change.property_qualifier || ''}","${change.property_location || ''}","${oldSaleValue}","${newSaleValue}","reviewed","user","${reportDate}"\n`;
+        const oldPrice = change.differences.sales_price.old || 0;
+        const newPrice = change.differences.sales_price.new || 0;
+        const oldDate = change.differences.sales_date.old || '';
+        const newDate = change.differences.sales_date.new || '';
+        const oldNu = change.differences.sales_nu?.old || '';
+        const newNu = change.differences.sales_nu?.new || '';
+        const oldBook = change.differences.sales_book?.old || '';
+        const newBook = change.differences.sales_book?.new || '';
+        const oldPage = change.differences.sales_page?.old || '';
+        const newPage = change.differences.sales_page?.new || '';
+
+        salesData.push([
+          change.property_block || '',
+          change.property_lot || '',
+          change.property_qualifier || '',
+          change.property_location || '',
+          oldPrice,
+          newPrice,
+          oldDate,
+          newDate,
+          oldNu,
+          newNu,
+          oldBook,
+          newBook,
+          oldPage,
+          newPage,
+          decision
+        ]);
       });
+
+      const salesSheet = XLSX.utils.aoa_to_sheet(salesData);
+      salesSheet['!cols'] = [
+        { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 25 },
+        { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+        { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 },
+        { wch: 10 }, { wch: 10 }, { wch: 20 }
+      ];
+      XLSX.utils.book_append_sheet(workbook, salesSheet, 'Sales Changes');
     }
 
-    // Download the file
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+    // CLASS CHANGES SHEET
+    if (comparisonResults.details.classChanges?.length > 0) {
+      const classData = [['Block', 'Lot', 'Qualifier', 'Location', 'Field', 'Old Value', 'New Value']];
+
+      comparisonResults.details.classChanges.forEach(change => {
+        change.changes.forEach(classChange => {
+          classData.push([
+            change.property_block || '',
+            change.property_lot || '',
+            change.property_qualifier || '',
+            change.property_location || '',
+            classChange.field || '',
+            classChange.old || '',
+            classChange.new || ''
+          ]);
+        });
+      });
+
+      const classSheet = XLSX.utils.aoa_to_sheet(classData);
+      classSheet['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 30 }, { wch: 25 }, { wch: 15 }, { wch: 15 }];
+      XLSX.utils.book_append_sheet(workbook, classSheet, 'Class Changes');
+    }
+
+    // Generate Excel file and download
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${job.name}_Comparison_Report_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `${job.name}_Comparison_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
 
-    addNotification('📊 Comparison report exported', 'success');
+    addNotification('📊 Comparison report exported as Excel', 'success');
   };
 
   // FIXED: Comparison logic using property_records directly instead of current_properties view
@@ -2250,29 +2358,21 @@ const handleCodeFileUpdate = async () => {
           {/* Content - FIXED: Scrollable area */}
           <div className="flex-1 overflow-y-auto p-6" style={{ maxHeight: 'calc(90vh - 140px)' }}>
             {/* Summary Tiles */}
-            <div className="grid grid-cols-5 gap-4 mb-6">
-              {/* New Records */}
+            <div className="grid grid-cols-4 gap-4 mb-6">
+              {/* Added Properties */}
               <div className={`p-4 rounded-lg border-2 text-center ${hasNewRecords ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
                 <div className={`text-2xl font-bold ${hasNewRecords ? 'text-green-600' : 'text-gray-500'}`}>
                   {summary.missing || 0}
                 </div>
-                <div className="text-sm text-gray-600">New Records</div>
+                <div className="text-sm text-gray-600">Added</div>
               </div>
 
-              {/* Deletions */}
+              {/* Deleted Properties */}
               <div className={`p-4 rounded-lg border-2 text-center ${hasDeletions ? 'border-red-400 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
                 <div className={`text-2xl font-bold ${hasDeletions ? 'text-red-600' : 'text-gray-500'}`}>
                   {summary.deletions || 0}
                 </div>
-                <div className="text-sm text-gray-600">Deletions</div>
-              </div>
-
-              {/* Changes */}
-              <div className={`p-4 rounded-lg border-2 text-center ${hasChanges ? 'border-yellow-400 bg-yellow-50' : 'border-gray-200 bg-gray-50'}`}>
-                <div className={`text-2xl font-bold ${hasChanges ? 'text-yellow-600' : 'text-gray-500'}`}>
-                  {summary.changes || 0}
-                </div>
-                <div className="text-sm text-gray-600">Changes</div>
+                <div className="text-sm text-gray-600">Deleted</div>
               </div>
 
               {/* Sales Changes */}
@@ -2292,6 +2392,50 @@ const handleCodeFileUpdate = async () => {
               </div>
             </div>
 
+            {/* Tab Navigation */}
+            <div className="flex border-b border-gray-200 mb-6">
+              <button
+                onClick={() => setActiveComparisonTab('added')}
+                className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+                  activeComparisonTab === 'added'
+                    ? 'border-green-600 text-green-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Added ({summary.missing || 0})
+              </button>
+              <button
+                onClick={() => setActiveComparisonTab('deleted')}
+                className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+                  activeComparisonTab === 'deleted'
+                    ? 'border-red-600 text-red-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Deleted ({summary.deletions || 0})
+              </button>
+              <button
+                onClick={() => setActiveComparisonTab('sales')}
+                className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+                  activeComparisonTab === 'sales'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Sales Changes ({summary.salesChanges || 0})
+              </button>
+              <button
+                onClick={() => setActiveComparisonTab('class')}
+                className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+                  activeComparisonTab === 'class'
+                    ? 'border-purple-600 text-purple-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Class Changes ({summary.classChanges || 0})
+              </button>
+            </div>
+
             {/* No Changes State */}
             {!hasAnyChanges && (
               <div className="text-center py-8">
@@ -2301,228 +2445,263 @@ const handleCodeFileUpdate = async () => {
               </div>
             )}
 
-            {/* Sales Changes Section (if any) */}
-            {hasSalesChanges && (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                  Sales Changes Requiring Decisions: 
-                  <span className="ml-2 text-blue-600">
-                    ({details.salesChanges.filter(change => !salesDecisions.has(change.property_composite_key)).length} remaining)
-                  </span>
-                </h3>
-                <div id="sales-changes-container" className="space-y-4" style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
-                  {details.salesChanges.map((change, idx) => {
-                    const currentDecision = salesDecisions.get(change.property_composite_key);
-                    
-                    return (
-                      <div key={idx} className="border border-blue-200 rounded-lg p-4 bg-blue-50">
-                          <div className="mb-3">
-                          {/* Property Info */}
-                          <div className="mb-2">
-                            <h4 className="font-bold text-gray-900">
-                              Property {change.property_block}-{change.property_lot}
-                              {change.property_qualifier && change.property_qualifier !== 'NONE' && 
-                                <span className="text-gray-600"> (Qual: {change.property_qualifier})</span>}
-                            </h4>
-                            <p className="text-gray-600 text-sm">{change.property_location}</p>
-                          </div>
-                          
-                          {/* Sales Comparison */}
-                          <div className="grid grid-cols-2 gap-4 p-3 bg-white rounded-lg border border-gray-200">
-                            {/* Old Sale */}
-                            <div className="text-center">
-                              <div className="text-xs font-semibold text-gray-500 mb-1">OLD SALE</div>
-                              <div className="text-lg font-bold text-red-600">
-                                ${change.differences.sales_price.old?.toLocaleString() || 0}
-                              </div>
-                              <div className="text-xs text-gray-500 mt-1">
-                                {change.differences.sales_date.old || 'No Date'}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                Book: {change.differences.sales_book?.old || '--'} Page: {change.differences.sales_page?.old || '--'}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                NU: {(() => {
-                                  const nu = change.differences.sales_nu?.old;
-                                  if (!nu || nu === '' || nu === ' ' || nu === '0' || nu === '00') return '--';
-                                  return nu;
-                                })()}
-                              </div>
-                            </div>
-                            
-                            {/* New Sale */}
-                            <div className="text-center">
-                              <div className="text-xs font-semibold text-gray-500 mb-1">NEW SALE</div>
-                              <div className="text-lg font-bold text-green-600">
-                                ${change.differences.sales_price.new?.toLocaleString() || 0}
-                              </div>
-                              <div className="text-xs text-gray-500 mt-1">
-                                {change.differences.sales_date.new || 'No Date'}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                Book: {change.differences.sales_book?.new || '--'} Page: {change.differences.sales_page?.new || '--'}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                NU: {(() => {
-                                  const nu = change.differences.sales_nu?.new;
-                                  if (!nu || nu === '' || nu === ' ' || nu === '0' || nu === '00') return '--';
-                                  return nu;
-                                })()}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleSalesDecision(change.property_composite_key, 'Keep Old')}
-                            className={`px-3 py-1 rounded text-sm font-medium ${
-                              currentDecision === 'Keep Old' 
-                                ? 'bg-red-600 text-white' 
-                                : 'bg-red-100 text-red-800 hover:bg-red-200'
-                            }`}
-                          >
-                            Keep Old
-                          </button>
-                          
-                          <button
-                            onClick={() => handleSalesDecision(change.property_composite_key, 'Keep New')}
-                            className={`px-3 py-1 rounded text-sm font-medium ${
-                              currentDecision === 'Keep New' 
-                                ? 'bg-green-600 text-white' 
-                                : 'bg-green-100 text-green-800 hover:bg-green-200'
-                            }`}
-                          >
-                            Keep New
-                          </button>
-                          
-                          <button
-                            onClick={() => handleSalesDecision(change.property_composite_key, 'Keep Both')}
-                            className={`px-3 py-1 rounded text-sm font-medium ${
-                              currentDecision === 'Keep Both' 
-                                ? 'bg-blue-600 text-white' 
-                                : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
-                            }`}
-                          >
-                            Keep Both
-                          </button>
-                        </div>
-                        
-                        {currentDecision && (
-                          <div className="mt-2 p-2 bg-green-100 rounded">
-                            <div className="text-sm font-medium text-green-800">
-                              ✓ Decision: {currentDecision}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+            {/* Added Properties Tab */}
+            {activeComparisonTab === 'added' && (
+              <div>
+                {hasNewRecords ? (
+                  <>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Added Properties ({summary.missing})</h3>
+                    <div className="overflow-auto" style={{ maxHeight: '450px' }}>
+                      <table className="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead className="bg-gray-50 sticky top-0">
+                          <tr>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Block</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Lot</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Qualifier</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Location</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Composite Key</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {details.missing.map((record, idx) => {
+                            const blockField = job.vendor_type === 'BRT' ? 'BLOCK' : 'Block';
+                            const lotField = job.vendor_type === 'BRT' ? 'LOT' : 'Lot';
+                            const qualifierField = job.vendor_type === 'BRT' ? 'QUALIFIER' : 'Qual';
+                            const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
+                            const yearCreated = job.year_created || new Date().getFullYear();
+                            const ccddCode = job.ccdd_code || job.ccddCode;
+                            const compositeKey = generateCompositeKey(record, job.vendor_type, yearCreated, ccddCode);
 
-            {/* Class Changes Section (if any) */}
-            {hasClassChanges && (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Property Class Changes:</h3>
-                <div className="space-y-3" style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
-                  {details.classChanges.map((change, idx) => (
-                    <div key={idx} className="border border-purple-200 rounded-lg p-3 bg-purple-50">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h4 className="font-bold text-gray-900">
-                            Property {change.property_block}-{change.property_lot}
-                            {change.property_qualifier && change.property_qualifier !== 'NONE' && 
-                              <span className="text-gray-600"> (Qual: {change.property_qualifier})</span>}
-                          </h4>
-                          <p className="text-gray-600 text-sm">{change.property_location}</p>
-                        </div>
-                        <div className="text-right">
-                          {change.changes.map((classChange, cidx) => (
-                            <div key={cidx} className="mb-1">
-                              <div className="text-xs text-gray-600">{classChange.field}</div>
-                              <div className="text-sm">
-                                <span className="font-medium text-red-600">{classChange.old || 'None'}</span>
-                                <span className="mx-1">→</span>
-                                <span className="font-medium text-green-600">{classChange.new || 'None'}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                            return (
+                              <tr key={idx} className="hover:bg-green-50">
+                                <td className="px-4 py-3 whitespace-nowrap">{record[blockField]}</td>
+                                <td className="px-4 py-3 whitespace-nowrap">{record[lotField]}</td>
+                                <td className="px-4 py-3 whitespace-nowrap">{record[qualifierField] || 'NONE'}</td>
+                                <td className="px-4 py-3">{record[locationField] || 'NONE'}</td>
+                                <td className="px-4 py-3 text-xs font-mono text-gray-600">{compositeKey}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
-                  ))}
-                </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No properties to add</p>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* New Records Section (if any) */}
-            {hasNewRecords && (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">New Properties to Add:</h3>
-                <div className="text-sm text-gray-600 mb-2">
-                  Showing first 10 of {summary.missing} new properties
-                </div>
-                <div className="space-y-2" style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
-                  {details.missing.slice(0, 10).map((record, idx) => {
-                    const blockField = job.vendor_type === 'BRT' ? 'BLOCK' : 'Block';
-                    const lotField = job.vendor_type === 'BRT' ? 'LOT' : 'Lot';
-                    const qualifierField = job.vendor_type === 'BRT' ? 'QUALIFIER' : 'Qual';
-                    const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
-                    const classField = job.vendor_type === 'BRT' ? 'PROPERTY_CLASS' : 'Class';
-                    const priceField = job.vendor_type === 'BRT' ? 'CURRENTSALE_PRICE' : 'Sale Price';
-                    const dateField = job.vendor_type === 'BRT' ? 'CURRENTSALE_DATE' : 'Sale Date';
-                    
-                    const salePrice = parseFloat(String(record[priceField] || 0).replace(/[,$]/g, '')) || 0;
-                    
-                    return (
-                      <div key={idx} className="border border-green-200 rounded p-2 bg-green-50 text-sm">
-                        <div className="flex justify-between">
-                          <div>
-                            <span className="font-medium">{record[blockField]}-{record[lotField]}</span>
-                            {record[qualifierField] && record[qualifierField] !== 'NONE' && 
-                              <span className="text-gray-600"> (Qual: {record[qualifierField]})</span>}
-                            <span className="text-gray-600 ml-2">{record[locationField]}</span>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-gray-600">Class: {record[classField]}</span>
-                            {salePrice > 0 && (
-                              <span className="ml-3 font-medium">${salePrice.toLocaleString()}</span>
+            {/* Deleted Properties Tab */}
+            {activeComparisonTab === 'deleted' && (
+              <div>
+                {hasDeletions ? (
+                  <>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Deleted Properties ({summary.deletions})</h3>
+                    <div className="overflow-auto" style={{ maxHeight: '450px' }}>
+                      <table className="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead className="bg-gray-50 sticky top-0">
+                          <tr>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Block</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Lot</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Qualifier</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Location</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Composite Key</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {details.deletions.map((record, idx) => (
+                            <tr key={idx} className="hover:bg-red-50">
+                              <td className="px-4 py-3 whitespace-nowrap">{record.property_block}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">{record.property_lot}</td>
+                              <td className="px-4 py-3 whitespace-nowrap">{record.property_qualifier || 'NONE'}</td>
+                              <td className="px-4 py-3">{record.property_location || 'NONE'}</td>
+                              <td className="px-4 py-3 text-xs font-mono text-gray-600">{record.property_composite_key}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No properties to delete</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Sales Changes Tab */}
+            {activeComparisonTab === 'sales' && (
+              <div>
+                {hasSalesChanges ? (
+                  <>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                      Sales Changes Requiring Decisions:
+                      <span className="ml-2 text-blue-600">
+                        ({details.salesChanges.filter(change => !salesDecisions.has(change.property_composite_key)).length} remaining)
+                      </span>
+                    </h3>
+                    <div id="sales-changes-container" className="space-y-4" style={{ maxHeight: '450px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
+                      {details.salesChanges.map((change, idx) => {
+                        const currentDecision = salesDecisions.get(change.property_composite_key);
+
+                        return (
+                          <div key={idx} className="border border-blue-200 rounded-lg p-4 bg-blue-50">
+                              <div className="mb-3">
+                              {/* Property Info */}
+                              <div className="mb-2">
+                                <h4 className="font-bold text-gray-900">
+                                  Property {change.property_block}-{change.property_lot}
+                                  {change.property_qualifier && change.property_qualifier !== 'NONE' &&
+                                    <span className="text-gray-600"> (Qual: {change.property_qualifier})</span>}
+                                </h4>
+                                <p className="text-gray-600 text-sm">{change.property_location}</p>
+                              </div>
+
+                              {/* Sales Comparison */}
+                              <div className="grid grid-cols-2 gap-4 p-3 bg-white rounded-lg border border-gray-200">
+                                {/* Old Sale */}
+                                <div className="text-center">
+                                  <div className="text-xs font-semibold text-gray-500 mb-1">OLD SALE</div>
+                                  <div className="text-lg font-bold text-red-600">
+                                    ${change.differences.sales_price.old?.toLocaleString() || 0}
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    {change.differences.sales_date.old || 'No Date'}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    Book: {change.differences.sales_book?.old || '--'} Page: {change.differences.sales_page?.old || '--'}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    NU: {(() => {
+                                      const nu = change.differences.sales_nu?.old;
+                                      if (!nu || nu === '' || nu === ' ' || nu === '0' || nu === '00') return '--';
+                                      return nu;
+                                    })()}
+                                  </div>
+                                </div>
+
+                                {/* New Sale */}
+                                <div className="text-center">
+                                  <div className="text-xs font-semibold text-gray-500 mb-1">NEW SALE</div>
+                                  <div className="text-lg font-bold text-green-600">
+                                    ${change.differences.sales_price.new?.toLocaleString() || 0}
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    {change.differences.sales_date.new || 'No Date'}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    Book: {change.differences.sales_book?.new || '--'} Page: {change.differences.sales_page?.new || '--'}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    NU: {(() => {
+                                      const nu = change.differences.sales_nu?.new;
+                                      if (!nu || nu === '' || nu === ' ' || nu === '0' || nu === '00') return '--';
+                                      return nu;
+                                    })()}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleSalesDecision(change.property_composite_key, 'Keep Old')}
+                                className={`px-3 py-1 rounded text-sm font-medium ${
+                                  currentDecision === 'Keep Old'
+                                    ? 'bg-red-600 text-white'
+                                    : 'bg-red-100 text-red-800 hover:bg-red-200'
+                                }`}
+                              >
+                                Keep Old
+                              </button>
+
+                              <button
+                                onClick={() => handleSalesDecision(change.property_composite_key, 'Keep New')}
+                                className={`px-3 py-1 rounded text-sm font-medium ${
+                                  currentDecision === 'Keep New'
+                                    ? 'bg-green-600 text-white'
+                                    : 'bg-green-100 text-green-800 hover:bg-green-200'
+                                }`}
+                              >
+                                Keep New
+                              </button>
+
+                              <button
+                                onClick={() => handleSalesDecision(change.property_composite_key, 'Keep Both')}
+                                className={`px-3 py-1 rounded text-sm font-medium ${
+                                  currentDecision === 'Keep Both'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                                }`}
+                              >
+                                Keep Both
+                              </button>
+                            </div>
+
+                            {currentDecision && (
+                              <div className="mt-2 p-2 bg-green-100 rounded">
+                                <div className="text-sm font-medium text-green-800">
+                                  ✓ Decision: {currentDecision}
+                                </div>
+                              </div>
                             )}
                           </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No sales changes detected</p>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Deletions Section (if any) */}
-            {hasDeletions && (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Properties to Remove:</h3>
-                <div className="text-sm text-gray-600 mb-2">
-                  Showing first 10 of {summary.deletions} properties not in source file
-                </div>
-                <div className="space-y-2" style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
-                  {details.deletions.slice(0, 10).map((record, idx) => (
-                    <div key={idx} className="border border-red-200 rounded p-2 bg-red-50 text-sm">
-                      <div className="flex justify-between">
-                        <div>
-                          <span className="font-medium">{record.property_block}-{record.property_lot}</span>
-                          {record.property_qualifier && record.property_qualifier !== 'NONE' && 
-                            <span className="text-gray-600"> (Qual: {record.property_qualifier})</span>}
-                          <span className="text-gray-600 ml-2">{record.property_location}</span>
+            {/* Class Changes Tab */}
+            {activeComparisonTab === 'class' && (
+              <div>
+                {hasClassChanges ? (
+                  <>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Property Class Changes ({summary.classChanges})</h3>
+                    <div className="space-y-3" style={{ maxHeight: '450px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
+                      {details.classChanges.map((change, idx) => (
+                        <div key={idx} className="border border-purple-200 rounded-lg p-3 bg-purple-50">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="font-bold text-gray-900">
+                                Property {change.property_block}-{change.property_lot}
+                                {change.property_qualifier && change.property_qualifier !== 'NONE' &&
+                                  <span className="text-gray-600"> (Qual: {change.property_qualifier})</span>}
+                              </h4>
+                              <p className="text-gray-600 text-sm">{change.property_location}</p>
+                            </div>
+                            <div className="text-right">
+                              {change.changes.map((classChange, cidx) => (
+                                <div key={cidx} className="mb-1">
+                                  <div className="text-xs text-gray-600">{classChange.field}</div>
+                                  <div className="text-sm">
+                                    <span className="font-medium text-red-600">{classChange.old || 'None'}</span>
+                                    <span className="mx-1">→</span>
+                                    <span className="font-medium text-green-600">{classChange.new || 'None'}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-right text-gray-600">
-                          Will be removed
-                        </div>
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No class changes detected</p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -3010,7 +3189,7 @@ const handleCodeFileUpdate = async () => {
       <div className="flex items-center gap-3 text-gray-300">
         <Settings className="w-4 h-4 text-green-400" />
         <span className="text-sm min-w-0 flex-1">
-          ⚙️ Code: {getFileStatusWithRealVersion(job.code_file_uploaded_at || job.created_at, 'code')}
+          ⚙�� Code: {getFileStatusWithRealVersion(job.code_file_uploaded_at || job.created_at, 'code')}
         </span>
         
         <input
