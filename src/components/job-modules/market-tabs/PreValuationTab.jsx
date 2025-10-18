@@ -720,7 +720,7 @@ useEffect(() => {
     const eqRatio = config.equalizationRatio || '';
     const outThreshold = config.outlierThreshold || '';
 
-    if (false) console.log(`���� Setting equalizationRatio: "${eqRatio}" (was: "${equalizationRatio}")`);
+    if (false) console.log(`�� Setting equalizationRatio: "${eqRatio}" (was: "${equalizationRatio}")`);
     if (false) console.log(`🔧 Setting outlierThreshold: "${outThreshold}" (was: "${outlierThreshold}")`);
 
     setEqualizationRatio(eqRatio);
@@ -2017,7 +2017,7 @@ const handleSalesDecision = (saleId, decision) => {
     //   if (prevTimer) clearTimeout(prevTimer);
     //   return setTimeout(() => { autoSaveWorksheet(); }, 30000);
     // });
-  }, [updateWorksheetStats, checkLocationStandardization]);
+  }, [updateWorksheetStats]);
 
   const autoSaveWorksheet = useCallback(async () => {
     try {
