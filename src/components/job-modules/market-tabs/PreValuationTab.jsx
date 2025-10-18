@@ -2494,7 +2494,11 @@ const analyzeImportFile = async (file) => {
     return matrix[str2.length][str1.length];
   };
   // ==================== SEARCH AND FILTER ====================
-  
+
+  // Track previous search/filter to only reset page when they change
+  const prevSearchRef = useRef(worksheetSearchTerm);
+  const prevFilterRef = useRef(worksheetFilter);
+
   useEffect(() => {
     let filtered = [...worksheetProperties];
 
@@ -2530,8 +2534,13 @@ const analyzeImportFile = async (file) => {
     }
 
     setFilteredWorksheetProps(filtered);
-    // Reset to page 1 when search/filter changes
-    setCurrentPage(1);
+
+    // Only reset to page 1 when search or filter actually changes (not when data updates)
+    if (prevSearchRef.current !== worksheetSearchTerm || prevFilterRef.current !== worksheetFilter) {
+      setCurrentPage(1);
+      prevSearchRef.current = worksheetSearchTerm;
+      prevFilterRef.current = worksheetFilter;
+    }
   }, [worksheetSearchTerm, worksheetFilter, worksheetProperties, readyProperties, editingRows]);
 
   // ==================== PAGINATION ====================
@@ -4076,6 +4085,33 @@ const analyzeImportFile = async (file) => {
                 </select>
               </div>
             </div>
+
+            {/* Top Pagination */}
+            {totalPages > 1 && (
+              <div className="flex justify-between items-center mb-4 pb-4 border-b">
+                <div className="text-sm text-gray-600">
+                  Page {currentPage} of {totalPages} ({filteredWorksheetProps.length} properties)
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 hover:bg-gray-50"
+                    title="Previous page"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 hover:bg-gray-50"
+                    title="Next page"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="overflow-x-auto max-h-[600px]">
               <table className="min-w-full table-fixed">
