@@ -4225,7 +4225,7 @@ const analyzeImportFile = async (file) => {
                       <td className="px-2 py-1 bg-gray-50">
                         <input
                           type="text"
-                          value={prop.new_vcs}
+                          value={prop.new_vcs || ''}
                           onChange={(e) => handleWorksheetChange(prop.property_composite_key, 'new_vcs', e.target.value)}
                           maxLength="4"
                           className="w-16 px-1 py-1 border border-gray-300 rounded text-sm uppercase"
@@ -4235,7 +4235,7 @@ const analyzeImportFile = async (file) => {
                       <td className="px-2 py-1 bg-gray-50">
                         <input
                           type="text"
-                          value={prop.location_analysis}
+                          value={prop.location_analysis || ''}
                           onChange={(e) => handleWorksheetChange(prop.property_composite_key, 'location_analysis', e.target.value)}
                           className="w-32 px-1 py-1 border border-gray-300 rounded text-sm"
                         />
@@ -4243,7 +4243,7 @@ const analyzeImportFile = async (file) => {
                       <td className="px-2 py-1 bg-gray-50">
                         <input
                           type="text"
-                          value={prop.asset_zoning}
+                          value={prop.asset_zoning || ''}
                           onChange={(e) => handleWorksheetChange(prop.property_composite_key, 'asset_zoning', e.target.value)}
                           className="w-16 px-1 py-1 border border-gray-300 rounded text-sm uppercase"
                           style={{ textTransform: 'uppercase' }}
@@ -4252,7 +4252,7 @@ const analyzeImportFile = async (file) => {
                       <td className="px-2 py-1 bg-gray-50">
                         <input
                           type="text"
-                          value={prop.asset_map_page}
+                          value={prop.asset_map_page || ''}
                           onChange={(e) => handleWorksheetChange(prop.property_composite_key, 'asset_map_page', e.target.value)}
                           className="w-16 px-1 py-1 border border-gray-300 rounded text-sm"
                         />
@@ -4260,7 +4260,7 @@ const analyzeImportFile = async (file) => {
                       <td className="px-2 py-1 bg-gray-50">
                         <input
                           type="text"
-                          value={prop.asset_key_page}
+                          value={prop.asset_key_page || ''}
                           onChange={(e) => handleWorksheetChange(prop.property_composite_key, 'asset_key_page', e.target.value)}
                           className="w-16 px-1 py-1 border border-gray-300 rounded text-sm"
                         />
@@ -4268,7 +4268,7 @@ const analyzeImportFile = async (file) => {
                       <td className="px-2 py-1 bg-gray-50">
                         <input
                           type="text"
-                          value={prop.worksheet_notes}
+                          value={prop.worksheet_notes || ''}
                           onChange={(e) => handleWorksheetChange(prop.property_composite_key, 'worksheet_notes', e.target.value)}
                           className="w-24 px-1 py-1 border border-gray-300 rounded text-sm"
                         />
