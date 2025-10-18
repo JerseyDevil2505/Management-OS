@@ -2206,12 +2206,13 @@ const processSelectedProperties = async () => {
 const analyzeImportFile = async (file) => {
     setIsAnalyzingImport(true);
     setImportFile(file);
-    
+
     try {
       const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
+      const workbook = XLSX.read(data, { raw: true, cellText: false, cellDates: false });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      // Use raw: true to preserve original string formatting (trailing zeros)
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: true, defval: '' });
 
       // Clean up column names (trim whitespace on header names)
       const cleanedData = jsonData.map(row => {
