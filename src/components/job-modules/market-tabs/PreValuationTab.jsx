@@ -1804,7 +1804,7 @@ const handleSalesDecision = (saleId, decision) => {
         for (let i = 0; i < keeps.length; i += 500) {
           const batch = keeps.slice(i, i + 500);
 
-          if (false) console.log(`💾 Keep batch ${Math.floor(i/500) + 1}: Saving ${batch.length} properties...`);
+          if (false) console.log(`���� Keep batch ${Math.floor(i/500) + 1}: Saving ${batch.length} properties...`);
 
           // Use safeUpsert for batch of keeps (includes job_id)
           const keepRecords = batch.map(sale => ({
@@ -2209,10 +2209,10 @@ const analyzeImportFile = async (file) => {
 
     try {
       const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data, { raw: true, cellText: false, cellDates: false });
+      const workbook = XLSX.read(data, { cellText: true, cellDates: false });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      // Use raw: true to preserve original string formatting (trailing zeros)
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: true, defval: '' });
+      // Convert to JSON preserving cell text (prevents Excel from converting .10 to .1)
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: false });
 
       // Clean up column names (trim whitespace on header names)
       const cleanedData = jsonData.map(row => {
