@@ -1197,7 +1197,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       setTimeNormalizedSales(normalized);
 
       // DEBUG: Final data check
-      if (false) console.log(`✅ Time normalization complete: ${normalized.length} sales processed`);
+      if (false) console.log(`�� Time normalization complete: ${normalized.length} sales processed`);
       if (false) console.log('🔍 Sample normalized sales data:', normalized.slice(0, 2).map(s => ({
         id: s.id,
         property_m4_class: s.property_m4_class,
@@ -1804,7 +1804,7 @@ const handleSalesDecision = (saleId, decision) => {
         for (let i = 0; i < keeps.length; i += 500) {
           const batch = keeps.slice(i, i + 500);
 
-          if (false) console.log(`💾 Keep batch ${Math.floor(i/500) + 1}: Saving ${batch.length} properties...`);
+          if (false) console.log(`���� Keep batch ${Math.floor(i/500) + 1}: Saving ${batch.length} properties...`);
 
           // Use safeUpsert for batch of keeps (includes job_id)
           const keepRecords = batch.map(sale => ({
@@ -1957,10 +1957,10 @@ const handleSalesDecision = (saleId, decision) => {
   }, [currentLocationChoice]);
 
   const handleWorksheetChange = useCallback((propertyKey, field, value) => {
-    // Check for location standardization
-    if (field === 'location_analysis' && value) {
-      checkLocationStandardization(value, propertyKey);
-    }
+    // Location standardization disabled - was interrupting typing
+    // if (field === 'location_analysis' && value) {
+    //   checkLocationStandardization(value, propertyKey);
+    // }
 
     // Mark this row as being edited so it won't disappear while user types
     // Update the ref immediately for synchronous checks and then mirror into state
@@ -2003,19 +2003,21 @@ const handleSalesDecision = (saleId, decision) => {
             }
           : prop
       );
-      setFilteredWorksheetProps(updated);
+      // Don't directly update filteredWorksheetProps - let the useEffect handle filtering
+      // This was causing the page to reset on every keystroke
       updateWorksheetStats(updated);
       return updated;
     });
 
     setUnsavedChanges(true);
 
-    // Reset auto-save timer
-    setAutoSaveTimer(prevTimer => {
-      if (prevTimer) clearTimeout(prevTimer);
-      return setTimeout(() => { autoSaveWorksheet(); }, 30000);
-    });
-  }, [updateWorksheetStats, checkLocationStandardization]);
+    // Auto-save disabled - field values only save when clicking Process
+    // Auto-save timer was only saving stats, not field values
+    // setAutoSaveTimer(prevTimer => {
+    //   if (prevTimer) clearTimeout(prevTimer);
+    //   return setTimeout(() => { autoSaveWorksheet(); }, 30000);
+    // });
+  }, [updateWorksheetStats]);
 
   const autoSaveWorksheet = useCallback(async () => {
     try {
@@ -2070,11 +2072,11 @@ const processSelectedProperties = async () => {
         const updates = batch.map(prop => ({
           job_id: jobData.id,
           property_composite_key: prop.property_composite_key,
-          new_vcs: prop.new_vcs,
-          location_analysis: prop.location_analysis,
-          asset_zoning: prop.asset_zoning,
-          asset_map_page: prop.asset_map_page,
-          asset_key_page: prop.asset_key_page
+          new_vcs: prop.new_vcs === '' ? null : prop.new_vcs,
+          location_analysis: prop.location_analysis === '' ? null : prop.location_analysis,
+          asset_zoning: prop.asset_zoning === '' ? null : prop.asset_zoning,
+          asset_map_page: prop.asset_map_page === '' ? null : prop.asset_map_page,
+          asset_key_page: prop.asset_key_page === '' ? null : prop.asset_key_page
         }));
 
         // Use safe upsert for batch processing
@@ -2117,15 +2119,32 @@ const processSelectedProperties = async () => {
   const handleSort = (field) => {
     const direction = sortConfig.field === field && sortConfig.direction === 'asc' ? 'desc' : 'asc';
     setSortConfig({ field, direction });
-    
+
     const sorted = [...filteredWorksheetProps].sort((a, b) => {
-      if (direction === 'asc') {
-        return a[field] > b[field] ? 1 : -1;
+      let aVal, bVal;
+
+      // Handle numeric fields
+      if (field === 'block') {
+        aVal = parseFloat(a.block) || 0;
+        bVal = parseFloat(b.block) || 0;
+      } else if (field === 'lot') {
+        aVal = parseFloat(a.lot) || 0;
+        bVal = parseFloat(b.lot) || 0;
+      } else if (field === 'qual') {
+        aVal = parseInt(a.qual) || 0;
+        bVal = parseInt(b.qual) || 0;
       } else {
-        return a[field] < b[field] ? 1 : -1;
+        aVal = a[field];
+        bVal = b[field];
+      }
+
+      if (direction === 'asc') {
+        return aVal > bVal ? 1 : -1;
+      } else {
+        return aVal < bVal ? 1 : -1;
       }
     });
-    
+
     setFilteredWorksheetProps(sorted);
   };
   const handleNormalizationSort = (field) => {
@@ -2188,12 +2207,13 @@ const processSelectedProperties = async () => {
 const analyzeImportFile = async (file) => {
     setIsAnalyzingImport(true);
     setImportFile(file);
-    
+
     try {
       const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
+      const workbook = XLSX.read(data, { cellText: true, cellDates: false });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      // Convert to JSON preserving cell text (prevents Excel from converting .10 to .1)
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: false });
 
       // Clean up column names (trim whitespace on header names)
       const cleanedData = jsonData.map(row => {
@@ -2475,7 +2495,11 @@ const analyzeImportFile = async (file) => {
     return matrix[str2.length][str1.length];
   };
   // ==================== SEARCH AND FILTER ====================
-  
+
+  // Track previous search/filter to only reset page when they change
+  const prevSearchRef = useRef(worksheetSearchTerm);
+  const prevFilterRef = useRef(worksheetFilter);
+
   useEffect(() => {
     let filtered = [...worksheetProperties];
 
@@ -2511,6 +2535,13 @@ const analyzeImportFile = async (file) => {
     }
 
     setFilteredWorksheetProps(filtered);
+
+    // Only reset to page 1 when search or filter actually changes (not when data updates)
+    if (prevSearchRef.current !== worksheetSearchTerm || prevFilterRef.current !== worksheetFilter) {
+      setCurrentPage(1);
+      prevSearchRef.current = worksheetSearchTerm;
+      prevFilterRef.current = worksheetFilter;
+    }
   }, [worksheetSearchTerm, worksheetFilter, worksheetProperties, readyProperties, editingRows]);
 
   // ==================== PAGINATION ====================
@@ -2956,7 +2987,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('block')}
                             >
-                              Block {normSortConfig.field === 'block' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                              Block {normSortConfig.field === 'block' && (normSortConfig.direction === 'asc' ? '↑' : '��')}
                             </th>
                             <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
@@ -3939,7 +3970,7 @@ const analyzeImportFile = async (file) => {
                         new_vcs: prop.property_vcs || ''
                       }));
                       setWorksheetProperties(updated);
-                      setFilteredWorksheetProps(updated);
+                      // Let useEffect handle filtering to respect current search/filter
                       updateWorksheetStats(updated);
                       setUnsavedChanges(true);
                       alert(`�� Copied current VCS values for ${worksheetProperties.length} properties`);
@@ -4056,6 +4087,33 @@ const analyzeImportFile = async (file) => {
               </div>
             </div>
 
+            {/* Top Pagination */}
+            {totalPages > 1 && (
+              <div className="flex justify-between items-center mb-4 pb-4 border-b">
+                <div className="text-sm text-gray-600">
+                  Page {currentPage} of {totalPages} ({filteredWorksheetProps.length} properties)
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 hover:bg-gray-50"
+                    title="Previous page"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 hover:bg-gray-50"
+                    title="Next page"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="overflow-x-auto max-h-[600px]">
               <table className="min-w-full table-fixed">
                     <thead className="bg-gray-50 border-b sticky top-0">
@@ -4100,7 +4158,7 @@ const analyzeImportFile = async (file) => {
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('building_class_display')}
                         >
-                          Building Class {sortConfig.field === 'building_class_display' && (sortConfig.direction === 'asc' ? '↑' : '��')}
+                          Building Class {sortConfig.field === 'building_class_display' && (sortConfig.direction === 'asc' ? '���' : '��')}
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
@@ -4225,7 +4283,7 @@ const analyzeImportFile = async (file) => {
                       <td className="px-2 py-1 bg-gray-50">
                         <input
                           type="text"
-                          value={prop.new_vcs}
+                          value={prop.new_vcs || ''}
                           onChange={(e) => handleWorksheetChange(prop.property_composite_key, 'new_vcs', e.target.value)}
                           maxLength="4"
                           className="w-16 px-1 py-1 border border-gray-300 rounded text-sm uppercase"
@@ -4235,7 +4293,7 @@ const analyzeImportFile = async (file) => {
                       <td className="px-2 py-1 bg-gray-50">
                         <input
                           type="text"
-                          value={prop.location_analysis}
+                          value={prop.location_analysis || ''}
                           onChange={(e) => handleWorksheetChange(prop.property_composite_key, 'location_analysis', e.target.value)}
                           className="w-32 px-1 py-1 border border-gray-300 rounded text-sm"
                         />
@@ -4243,7 +4301,7 @@ const analyzeImportFile = async (file) => {
                       <td className="px-2 py-1 bg-gray-50">
                         <input
                           type="text"
-                          value={prop.asset_zoning}
+                          value={prop.asset_zoning || ''}
                           onChange={(e) => handleWorksheetChange(prop.property_composite_key, 'asset_zoning', e.target.value)}
                           className="w-16 px-1 py-1 border border-gray-300 rounded text-sm uppercase"
                           style={{ textTransform: 'uppercase' }}
@@ -4252,7 +4310,7 @@ const analyzeImportFile = async (file) => {
                       <td className="px-2 py-1 bg-gray-50">
                         <input
                           type="text"
-                          value={prop.asset_map_page}
+                          value={prop.asset_map_page || ''}
                           onChange={(e) => handleWorksheetChange(prop.property_composite_key, 'asset_map_page', e.target.value)}
                           className="w-16 px-1 py-1 border border-gray-300 rounded text-sm"
                         />
@@ -4260,7 +4318,7 @@ const analyzeImportFile = async (file) => {
                       <td className="px-2 py-1 bg-gray-50">
                         <input
                           type="text"
-                          value={prop.asset_key_page}
+                          value={prop.asset_key_page || ''}
                           onChange={(e) => handleWorksheetChange(prop.property_composite_key, 'asset_key_page', e.target.value)}
                           className="w-16 px-1 py-1 border border-gray-300 rounded text-sm"
                         />
@@ -4268,7 +4326,7 @@ const analyzeImportFile = async (file) => {
                       <td className="px-2 py-1 bg-gray-50">
                         <input
                           type="text"
-                          value={prop.worksheet_notes}
+                          value={prop.worksheet_notes || ''}
                           onChange={(e) => handleWorksheetChange(prop.property_composite_key, 'worksheet_notes', e.target.value)}
                           className="w-24 px-1 py-1 border border-gray-300 rounded text-sm"
                         />
@@ -4307,7 +4365,7 @@ const analyzeImportFile = async (file) => {
               </table>
             </div>
 
-            {/* Pagination */}
+            {/* Bottom Pagination */}
             {totalPages > 1 && (
                 <div className="flex justify-between items-center mt-4">
                  <div className="text-sm text-gray-600">
@@ -4317,14 +4375,16 @@ const analyzeImportFile = async (file) => {
                    <button
                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                      disabled={currentPage === 1}
-                     className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50"
+                     className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 hover:bg-gray-50"
+                     title="Previous page"
                    >
                      <ChevronLeft size={16} />
                    </button>
                    <button
                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                      disabled={currentPage === totalPages}
-                     className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50"
+                     className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 hover:bg-gray-50"
+                     title="Next page"
                    >
                      <ChevronRight size={16} />
                    </button>
@@ -4609,19 +4669,20 @@ const analyzeImportFile = async (file) => {
                          });
                        }
                        return {
-                         ...prop,
-                         new_vcs: match.updates.new_vcs || prop.new_vcs,
-                         location_analysis: match.updates.location_analysis || prop.location_analysis,
-                         asset_zoning: match.updates.asset_zoning || prop.asset_zoning,
-                         asset_map_page: match.updates.asset_map_page || prop.asset_map_page,
-                         asset_key_page: match.updates.asset_key_page || prop.asset_key_page
-                       };
+                        ...prop,
+                        // Use imported value directly, convert empty strings to null for database
+                        new_vcs: match.updates.new_vcs === '' ? null : match.updates.new_vcs,
+                        location_analysis: match.updates.location_analysis === '' ? null : match.updates.location_analysis,
+                        asset_zoning: match.updates.asset_zoning === '' ? null : match.updates.asset_zoning,
+                        asset_map_page: match.updates.asset_map_page === '' ? null : match.updates.asset_map_page,
+                        asset_key_page: match.updates.asset_key_page === '' ? null : match.updates.asset_key_page
+                      };
                      }
                      return prop;
                    });
                    
                    setWorksheetProperties(updatedProps);
-                   setFilteredWorksheetProps(updatedProps);
+                   // Let useEffect handle filtering to respect current search/filter
                    updateWorksheetStats(updatedProps);
                    
                    // Mark as ready if option selected
