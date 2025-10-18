@@ -2186,9 +2186,7 @@ const processSelectedProperties = async () => {
     } catch (e) {}
 
     filteredWorksheetProps.forEach(prop => {
-      // Preserve trailing zeros in lot by prefixing with tab character (Excel text format marker)
-      const lotValue = prop.lot ? `\t${prop.lot}` : '';
-      csv += `"${prop.block}","${lotValue}","${prop.qualifier || ''}","${prop.card || ''}","${prop.property_location || ''}",`;
+      csv += `"${prop.block}","${prop.lot}","${prop.qualifier || ''}","${prop.card || ''}","${prop.property_location || ''}",`;
       csv += `"${prop.property_class}","${prop.property_vcs}",`;
       csv += `"${prop.building_class_display}","${prop.type_use_display}","${prop.design_display}",`;
       csv += `"${prop.new_vcs}","${prop.location_analysis}","${prop.asset_zoning}",`;
