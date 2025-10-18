@@ -1957,10 +1957,10 @@ const handleSalesDecision = (saleId, decision) => {
   }, [currentLocationChoice]);
 
   const handleWorksheetChange = useCallback((propertyKey, field, value) => {
-    // Check for location standardization
-    if (field === 'location_analysis' && value) {
-      checkLocationStandardization(value, propertyKey);
-    }
+    // Location standardization disabled - was interrupting typing
+    // if (field === 'location_analysis' && value) {
+    //   checkLocationStandardization(value, propertyKey);
+    // }
 
     // Mark this row as being edited so it won't disappear while user types
     // Update the ref immediately for synchronous checks and then mirror into state
@@ -2010,11 +2010,12 @@ const handleSalesDecision = (saleId, decision) => {
 
     setUnsavedChanges(true);
 
-    // Reset auto-save timer
-    setAutoSaveTimer(prevTimer => {
-      if (prevTimer) clearTimeout(prevTimer);
-      return setTimeout(() => { autoSaveWorksheet(); }, 30000);
-    });
+    // Auto-save disabled - field values only save when clicking Process
+    // Auto-save timer was only saving stats, not field values
+    // setAutoSaveTimer(prevTimer => {
+    //   if (prevTimer) clearTimeout(prevTimer);
+    //   return setTimeout(() => { autoSaveWorksheet(); }, 30000);
+    // });
   }, [updateWorksheetStats, checkLocationStandardization]);
 
   const autoSaveWorksheet = useCallback(async () => {
