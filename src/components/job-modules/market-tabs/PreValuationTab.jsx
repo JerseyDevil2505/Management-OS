@@ -2070,11 +2070,11 @@ const processSelectedProperties = async () => {
         const updates = batch.map(prop => ({
           job_id: jobData.id,
           property_composite_key: prop.property_composite_key,
-          new_vcs: prop.new_vcs,
-          location_analysis: prop.location_analysis,
-          asset_zoning: prop.asset_zoning,
-          asset_map_page: prop.asset_map_page,
-          asset_key_page: prop.asset_key_page
+          new_vcs: prop.new_vcs === '' ? null : prop.new_vcs,
+          location_analysis: prop.location_analysis === '' ? null : prop.location_analysis,
+          asset_zoning: prop.asset_zoning === '' ? null : prop.asset_zoning,
+          asset_map_page: prop.asset_map_page === '' ? null : prop.asset_map_page,
+          asset_key_page: prop.asset_key_page === '' ? null : prop.asset_key_page
         }));
 
         // Use safe upsert for batch processing
