@@ -4609,13 +4609,14 @@ const analyzeImportFile = async (file) => {
                          });
                        }
                        return {
-                         ...prop,
-                         new_vcs: match.updates.new_vcs || prop.new_vcs,
-                         location_analysis: match.updates.location_analysis || prop.location_analysis,
-                         asset_zoning: match.updates.asset_zoning || prop.asset_zoning,
-                         asset_map_page: match.updates.asset_map_page || prop.asset_map_page,
-                         asset_key_page: match.updates.asset_key_page || prop.asset_key_page
-                       };
+                        ...prop,
+                        // Use imported value directly, convert empty strings to null for database
+                        new_vcs: match.updates.new_vcs === '' ? null : match.updates.new_vcs,
+                        location_analysis: match.updates.location_analysis === '' ? null : match.updates.location_analysis,
+                        asset_zoning: match.updates.asset_zoning === '' ? null : match.updates.asset_zoning,
+                        asset_map_page: match.updates.asset_map_page === '' ? null : match.updates.asset_map_page,
+                        asset_key_page: match.updates.asset_key_page === '' ? null : match.updates.asset_key_page
+                      };
                      }
                      return prop;
                    });
