@@ -1197,7 +1197,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       setTimeNormalizedSales(normalized);
 
       // DEBUG: Final data check
-      if (false) console.log(`✅ Time normalization complete: ${normalized.length} sales processed`);
+      if (false) console.log(`�� Time normalization complete: ${normalized.length} sales processed`);
       if (false) console.log('🔍 Sample normalized sales data:', normalized.slice(0, 2).map(s => ({
         id: s.id,
         property_m4_class: s.property_m4_class,
@@ -2117,15 +2117,32 @@ const processSelectedProperties = async () => {
   const handleSort = (field) => {
     const direction = sortConfig.field === field && sortConfig.direction === 'asc' ? 'desc' : 'asc';
     setSortConfig({ field, direction });
-    
+
     const sorted = [...filteredWorksheetProps].sort((a, b) => {
-      if (direction === 'asc') {
-        return a[field] > b[field] ? 1 : -1;
+      let aVal, bVal;
+
+      // Handle numeric fields
+      if (field === 'block') {
+        aVal = parseFloat(a.block) || 0;
+        bVal = parseFloat(b.block) || 0;
+      } else if (field === 'lot') {
+        aVal = parseFloat(a.lot) || 0;
+        bVal = parseFloat(b.lot) || 0;
+      } else if (field === 'qual') {
+        aVal = parseInt(a.qual) || 0;
+        bVal = parseInt(b.qual) || 0;
       } else {
-        return a[field] < b[field] ? 1 : -1;
+        aVal = a[field];
+        bVal = b[field];
+      }
+
+      if (direction === 'asc') {
+        return aVal > bVal ? 1 : -1;
+      } else {
+        return aVal < bVal ? 1 : -1;
       }
     });
-    
+
     setFilteredWorksheetProps(sorted);
   };
   const handleNormalizationSort = (field) => {
@@ -2511,6 +2528,8 @@ const analyzeImportFile = async (file) => {
     }
 
     setFilteredWorksheetProps(filtered);
+    // Reset to page 1 when search/filter changes
+    setCurrentPage(1);
   }, [worksheetSearchTerm, worksheetFilter, worksheetProperties, readyProperties, editingRows]);
 
   // ==================== PAGINATION ====================
@@ -2956,7 +2975,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('block')}
                             >
-                              Block {normSortConfig.field === 'block' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                              Block {normSortConfig.field === 'block' && (normSortConfig.direction === 'asc' ? '↑' : '��')}
                             </th>
                             <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
