@@ -720,7 +720,7 @@ useEffect(() => {
     const eqRatio = config.equalizationRatio || '';
     const outThreshold = config.outlierThreshold || '';
 
-    if (false) console.log(`�� Setting equalizationRatio: "${eqRatio}" (was: "${equalizationRatio}")`);
+    if (false) console.log(`���� Setting equalizationRatio: "${eqRatio}" (was: "${equalizationRatio}")`);
     if (false) console.log(`🔧 Setting outlierThreshold: "${outThreshold}" (was: "${outlierThreshold}")`);
 
     setEqualizationRatio(eqRatio);
@@ -3970,7 +3970,7 @@ const analyzeImportFile = async (file) => {
                         new_vcs: prop.property_vcs || ''
                       }));
                       setWorksheetProperties(updated);
-                      setFilteredWorksheetProps(updated);
+                      // Let useEffect handle filtering to respect current search/filter
                       updateWorksheetStats(updated);
                       setUnsavedChanges(true);
                       alert(`�� Copied current VCS values for ${worksheetProperties.length} properties`);
@@ -4682,7 +4682,7 @@ const analyzeImportFile = async (file) => {
                    });
                    
                    setWorksheetProperties(updatedProps);
-                   setFilteredWorksheetProps(updatedProps);
+                   // Let useEffect handle filtering to respect current search/filter
                    updateWorksheetStats(updatedProps);
                    
                    // Mark as ready if option selected
