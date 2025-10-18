@@ -4157,7 +4157,7 @@ const analyzeImportFile = async (file) => {
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('building_class_display')}
                         >
-                          Building Class {sortConfig.field === 'building_class_display' && (sortConfig.direction === 'asc' ? '↑' : '��')}
+                          Building Class {sortConfig.field === 'building_class_display' && (sortConfig.direction === 'asc' ? '���' : '��')}
                         </th>
                         <th 
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
@@ -4364,7 +4364,7 @@ const analyzeImportFile = async (file) => {
               </table>
             </div>
 
-            {/* Pagination */}
+            {/* Bottom Pagination */}
             {totalPages > 1 && (
                 <div className="flex justify-between items-center mt-4">
                  <div className="text-sm text-gray-600">
@@ -4374,14 +4374,16 @@ const analyzeImportFile = async (file) => {
                    <button
                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                      disabled={currentPage === 1}
-                     className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50"
+                     className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 hover:bg-gray-50"
+                     title="Previous page"
                    >
                      <ChevronLeft size={16} />
                    </button>
                    <button
                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                      disabled={currentPage === totalPages}
-                     className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50"
+                     className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 hover:bg-gray-50"
+                     title="Next page"
                    >
                      <ChevronRight size={16} />
                    </button>
