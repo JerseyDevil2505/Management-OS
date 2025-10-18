@@ -2003,7 +2003,8 @@ const handleSalesDecision = (saleId, decision) => {
             }
           : prop
       );
-      setFilteredWorksheetProps(updated);
+      // Don't directly update filteredWorksheetProps - let the useEffect handle filtering
+      // This was causing the page to reset on every keystroke
       updateWorksheetStats(updated);
       return updated;
     });
