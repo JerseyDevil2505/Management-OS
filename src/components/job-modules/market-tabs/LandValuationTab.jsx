@@ -4982,7 +4982,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
           // Prepare human-readable size unit for debugging
           const sizeUnitLabel = valuationMode === 'acre' ? 'acres' : valuationMode === 'sf' ? 'sqft' : 'front ft';
-          debug(`��� ${categoryType} paired analysis:`, {
+          debug(`����� ${categoryType} paired analysis:`, {
             totalProperties: filtered.length,
             possiblePairs: (filtered.length * (filtered.length - 1)) / 2,
             validPairs: pairedRates.length,
@@ -7037,8 +7037,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     ? cascadeConfig.special[region].vcsList.split(',').map(v => v.trim()).filter(v => v)
                     : [];
 
-                  // Sort numerically
-                  assignedList.sort((a, b) => parseInt(a) - parseInt(b));
+                  // Sort: numeric first (numerically), then alphabetic
+                  assignedList.sort((a, b) => {
+                    const aIsNumeric = /^\d+$/.test(a);
+                    const bIsNumeric = /^\d+$/.test(b);
+
+                    if (aIsNumeric && bIsNumeric) return parseInt(a) - parseInt(b);
+                    if (aIsNumeric) return -1;
+                    if (bIsNumeric) return 1;
+                    return a.localeCompare(b);
+                  });
 
                   if (assignedList.length === 0) {
                     return <span style={{ color: '#9CA3AF', fontSize: '12px', fontStyle: 'italic' }}>No VCS assigned</span>;
@@ -7951,7 +7959,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'address' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '�����') : ''}
+                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('saleDate')}
