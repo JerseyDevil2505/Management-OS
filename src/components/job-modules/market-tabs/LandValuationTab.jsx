@@ -554,6 +554,7 @@ useEffect(() => {
 
     setMethod1ExcludedSales(currentSession.method1ExcludedSales || new Set());
     setIncludedSales(currentSession.includedSales || new Set());
+    setExcludedMethod2VCS(currentSession.excludedMethod2VCS || new Set());
     setSaleCategories(currentSession.saleCategories || {});
     setSpecialRegions(currentSession.specialRegions || {});
     setLandNotes(currentSession.landNotes || {});
