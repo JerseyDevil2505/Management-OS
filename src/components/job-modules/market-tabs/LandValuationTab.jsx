@@ -4792,35 +4792,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }));
   };
 
-  const toggleVCSExclusion = (region, vcs) => {
-    setExcludedRegionVCSs(prev => {
-      const regionExclusions = new Set(prev[region] || []);
-      if (regionExclusions.has(vcs)) {
-        regionExclusions.delete(vcs);
-      } else {
-        regionExclusions.add(vcs);
-      }
-      return {
-        ...prev,
-        [region]: regionExclusions
-      };
-    });
-  };
-
-  const selectAllVCSs = (region, vcsList) => {
-    setExcludedRegionVCSs(prev => ({
-      ...prev,
-      [region]: new Set()
-    }));
-  };
-
-  const deselectAllVCSs = (region, vcsList) => {
-    setExcludedRegionVCSs(prev => ({
-      ...prev,
-      [region]: new Set(vcsList)
-    }));
-  };
-
   const updateSpecialCategory = (category, rate) => {
     debug(`���� Updating special category: ${category} = ${rate}`);
     setCascadeConfig(prev => {
