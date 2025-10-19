@@ -1427,7 +1427,11 @@ const getPricePerUnit = useCallback((price, size) => {
         totalAcres: acres,
         pricePerAcre: roundedUnitPrice,
         autoCategory: category,
-        isPackage
+        isPackage,
+        // Preserve FF/Depth/Zone data for allocation study
+        land_front_feet: prop.land_front_feet || prop.asset_lot_frontage || 0,
+        land_depth: prop.land_depth || 0,
+        land_zoning: prop.land_zoning || prop.zoning || 'N/A'
       };
     };
 
