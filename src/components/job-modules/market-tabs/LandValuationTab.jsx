@@ -8506,22 +8506,49 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{sale.year}</td>
                   <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{sale.block}/{sale.lot}</td>
                   <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${sale.vacantPrice?.toLocaleString()}</td>
-                  <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.acres?.toFixed(2)}</td>
-                  <td style={{
-                    padding: '8px',
-                    textAlign: 'right',
-                    fontWeight: 'bold',
-                    color: sale.siteValue > 0 ? '#10B981' : '#EF4444',
-                    borderRight: '2px solid #E5E7EB',
-                    border: '1px solid #E5E7EB'
-                  }}>
-                    ${Math.round(sale.siteValue).toLocaleString()}
-                  </td>
+                  {valuationMode === 'ff' ? (
+                    <>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.frontFeet?.toFixed(1) || '-'}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.depth?.toFixed(1) || '-'}</td>
+                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{sale.zone || '-'}</td>
+                      <td style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: 'bold',
+                        color: sale.siteValue > 0 ? '#10B981' : '#EF4444',
+                        borderRight: '2px solid #E5E7EB',
+                        border: '1px solid #E5E7EB'
+                      }}>
+                        ${Math.round(sale.siteValue).toLocaleString()}
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.acres?.toFixed(2)}</td>
+                      <td style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: 'bold',
+                        color: sale.siteValue > 0 ? '#10B981' : '#EF4444',
+                        borderRight: '2px solid #E5E7EB',
+                        border: '1px solid #E5E7EB'
+                      }}>
+                        ${Math.round(sale.siteValue).toLocaleString()}
+                      </td>
+                    </>
+                  )}
 
                   {/* Improved Sales Data */}
                   <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{sale.improvedSalesCount}</td>
                   <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(sale.avgImprovedPrice)?.toLocaleString()}</td>
-                  <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedAcres}</td>
+                  {valuationMode === 'ff' ? (
+                    <>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedFF || '-'}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedDepth || '-'}</td>
+                    </>
+                  ) : (
+                    <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedAcres}</td>
+                  )}
                   <td style={{
                     padding: '8px',
                     textAlign: 'right',
