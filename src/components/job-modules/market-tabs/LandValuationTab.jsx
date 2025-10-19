@@ -5972,7 +5972,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   {Object.entries(categoryAnalysis.specialRegions).map(([region, data]) => (
                     <div key={region} style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px', border: '1px solid #E5E7EB', minWidth: '180px' }}>
                       <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                        {region} {data.method === 'paired' && <span style={{ color: '#10B981' }}>✓ Paired</span>}
+                        {region} {data.method === 'paired' && <span style={{ color: '#10B981' }}>�� Paired</span>}
                         {data.method === 'single' && <span style={{ color: '#6B7280' }}>(Single Sale)</span>}
                       </div>
                       <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#6366F1' }}>
@@ -8822,7 +8822,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const siteValue = targetValue - rawLandComponent;
 
     return siteValue;
-  }, [valuationMode, marketLandData, properties, depthTables, cascadeConfig, vacantSales, specialRegions, vcsDepthTableOverrides, vcsRecommendedSites, vcsSheetData, targetAllocation]);
+  }, [valuationMode, marketLandData, properties, depthTables, cascadeConfig, vacantSales, specialRegions, vcsDepthTableOverrides, vcsRecommendedSites, vcsSheetData, targetAllocation, vcsTypes]);
 
   // ========== RENDER VCS SHEET TAB ==========
   const renderVCSSheetTab = () => {
