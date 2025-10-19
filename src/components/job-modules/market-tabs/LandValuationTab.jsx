@@ -641,8 +641,18 @@ useEffect(() => {
         landlocked: null,
         conservation: null
       },
-      customCategories: savedConfig.customCategories || []
+      customCategories: savedConfig.customCategories || [],
+      excludedVCSs: savedConfig.excludedVCSs || {}
     });
+
+    // Load excluded VCS state
+    if (savedConfig.excludedVCSs) {
+      const excluded = {};
+      Object.entries(savedConfig.excludedVCSs).forEach(([region, vcsArray]) => {
+        excluded[region] = new Set(vcsArray || []);
+      });
+      setExcludedRegionVCSs(excluded);
+    }
 
     if (savedConfig.mode) {
       setValuationMode(savedConfig.mode);
@@ -861,6 +871,7 @@ useEffect(() => {
   updateSession({
     method1ExcludedSales,
     includedSales,
+    excludedRegionVCSs,
     saleCategories,
     specialRegions,
     landNotes,
@@ -880,6 +891,7 @@ useEffect(() => {
 }, [
   method1ExcludedSales,
   includedSales,
+  excludedRegionVCSs,
   saleCategories,
   specialRegions,
   landNotes,
@@ -3572,7 +3584,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           excluded_sales: Array.from(method2ExcludedSales),
           summary: method2Summary
         },
-        cascade_rates: cascadeConfig,
+        cascade_rates: {
+          ...cascadeConfig,
+          excludedVCSs: Object.entries(excludedRegionVCSs).reduce((acc, [region, vcsSet]) => {
+            acc[region] = Array.from(vcsSet);
+            return acc;
+          }, {})
+        },
         target_allocation: targetAllocation,
         allocation_study: {
           vcs_site_values: vcsSiteValues,
@@ -5255,7 +5273,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     // 📊 FINAL RESULTS LOG - Shows what will be displayed to user
-    console.log('���� PAIRED SALES ANALYSIS - Final Results:', {
+    console.log('📊 PAIRED SALES ANALYSIS - Final Results:', {
       valuationMode,
       unitLabel: valuationMode === 'acre' ? '$/acre' : valuationMode === 'sf' ? '$/SF' : '$/FF',
 
