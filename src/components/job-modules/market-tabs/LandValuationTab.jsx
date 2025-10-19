@@ -3795,21 +3795,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       if (vcsSpecificConfig) {
         cascadeRates = vcsSpecificConfig.rates || cascadeConfig.normal;
       } else {
-        // Check for special region configuration by VCS assignment
-        const assignedSpecialRegion = Object.entries(cascadeConfig.special || {}).find(([region, config]) => {
-          if (!config.vcsList) return false;
-          const vcsList = config.vcsList.split(',').map(v => v.trim().toUpperCase());
-          const vcsMatch = vcsList.includes(vcs.toString().toUpperCase());
-
-          // Check if this VCS is excluded for this region
-          const regionExclusions = excludedRegionVCSs[region] || new Set();
-          const isExcluded = regionExclusions.has(vcs.toString());
-
-          return vcsMatch && !isExcluded;
-        });
-
-        if (assignedSpecialRegion) {
-          cascadeRates = assignedSpecialRegion[1];
+        const vcsInSpecialRegion = vacantSales.find(sale =>
+          sale.new_vcs === vcs && specialRegions[sale.id] && specialRegions[sale.id] !== 'Normal'
+        );
+        if (vcsInSpecialRegion && cascadeConfig.special?.[specialRegions[vcsInSpecialRegion.id]]) {
+          cascadeRates = cascadeConfig.special[specialRegions[vcsInSpecialRegion.id]];
         }
       }
 
