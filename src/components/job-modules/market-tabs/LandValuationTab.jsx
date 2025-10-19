@@ -1573,7 +1573,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (hasRestrictedClass) {
-        debug(`🚫 Excluding package ${sale.property_block}/${sale.property_lot} - contains restricted property class`);
+        debug(`���� Excluding package ${sale.property_block}/${sale.property_lot} - contains restricted property class`);
         return false;
       }
 
@@ -6153,7 +6153,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales �� Avg $${Math.round(data.avgPrice).toLocaleString()} ����� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales �� Avg $${Math.round(data.avgPrice).toLocaleString()} ������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{ marginBottom: '8px', border: '1px solid #E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
@@ -8797,7 +8797,22 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         />
                       </td>
                       <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{getMethodDisplay(type, description)}</td>
-                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{typicalLot}</td>
+                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
+                        {valuationMode === 'ff' ?
+                          (typicalFrontage !== '' ? `${typicalFrontage} ft` : 'N/A') :
+                          typicalLot
+                        }
+                      </td>
+                      {valuationMode === 'ff' && (
+                        <>
+                          <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
+                            {typicalDepth !== '' ? `${typicalDepth} ft` : 'N/A'}
+                          </td>
+                          <td style={{ padding: '8px', textAlign: 'left', border: '1px solid #E5E7EB' }}>
+                            {depthTableName || 'Not Set'}
+                          </td>
+                        </>
+                      )}
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(recSite).toLocaleString()}</td>
                       <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
                         <input
