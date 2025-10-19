@@ -827,7 +827,7 @@ useEffect(() => {
   setIsLoading(false);
   setIsInitialLoadComplete(true);
 
-  debug('��� Initial load complete');
+  debug('�� Initial load complete');
 }, [marketLandData]);
 
 // Reset initialization flag when job changes
@@ -989,7 +989,7 @@ const getPricePerUnit = useCallback((price, size) => {
   const getTypeUseOptions = useCallback(() => {
     // Standardized Type & Use dropdown options for consistency across tabs
     const standard = [
-      { code: '1', description: '1 ����� Single Family' },
+      { code: '1', description: '1 ��� Single Family' },
       { code: '2', description: '2 — Duplex / Semi-Detached' },
       { code: '3', description: '3* �� Row / Townhouse (3E,3I,30,31)' },
       { code: '4', description: '4* — MultiFamily (42,43,44)' },
@@ -6998,7 +6998,23 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 }}
               >
                 <option value="">+ Add VCS...</option>
-                {Object.keys(vcsSheetData).sort((a, b) => parseInt(a) - parseInt(b)).map(vcs => {
+                {Object.keys(vcsSheetData).sort((a, b) => {
+                  // Check if values are purely numeric
+                  const aIsNumeric = /^\d+$/.test(a);
+                  const bIsNumeric = /^\d+$/.test(b);
+
+                  // Both numeric: sort numerically
+                  if (aIsNumeric && bIsNumeric) {
+                    return parseInt(a) - parseInt(b);
+                  }
+
+                  // One numeric, one not: numeric comes first
+                  if (aIsNumeric) return -1;
+                  if (bIsNumeric) return 1;
+
+                  // Both non-numeric: sort alphabetically
+                  return a.localeCompare(b);
+                }).map(vcs => {
                   const assignedList = cascadeConfig.special[region]?.vcsList
                     ? cascadeConfig.special[region].vcsList.split(',').map(v => v.trim()).filter(v => v)
                     : [];
@@ -7935,7 +7951,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'address' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
+                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '�����') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('saleDate')}
