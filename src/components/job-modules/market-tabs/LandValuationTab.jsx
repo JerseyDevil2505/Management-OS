@@ -857,7 +857,6 @@ useEffect(() => {
   updateSession({
     method1ExcludedSales,
     includedSales,
-    excludedRegionVCSs,
     saleCategories,
     specialRegions,
     landNotes,
@@ -877,7 +876,6 @@ useEffect(() => {
 }, [
   method1ExcludedSales,
   includedSales,
-  excludedRegionVCSs,
   saleCategories,
   specialRegions,
   landNotes,
@@ -3069,7 +3067,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }));
 
     // Immediate save to prevent data loss when navigating away
-    debug('💾 Triggering immediate save for Act Site change');
+    debug('���� Triggering immediate save for Act Site change');
     setTimeout(() => {
       if (window.landValuationSave) {
         window.landValuationSave({ source: 'autosave' });
