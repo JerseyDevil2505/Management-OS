@@ -8543,6 +8543,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return vcsRecommendedSites[vcs] || 0;
     }
 
+    // Get VCS data for avg price
+    const data = vcsSheetData[vcs];
+    if (!data) return vcsRecommendedSites[vcs] || 0;
+
+    // Use Avg Price, fallback to Avg Price (t)
+    const avgPrice = data.avgPrice || data.avgNormTime;
+    if (!avgPrice || !targetAllocation) return vcsRecommendedSites[vcs] || 0;
+
     // Front Foot mode calculation
     const zcfg = marketLandData?.zoning_config || {};
 
@@ -8625,14 +8633,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const standardFF = cascadeRates.standard?.rate || 0;
     const excessFF = cascadeRates.excess?.rate || Math.round(standardFF / 2);
 
-    // Front Foot Formula: (Standard Frontage × Std Rate × Depth Factor) + (Excess × Excess Rate)
-    const siteValue = Math.round(
+    // Calculate Raw Land Component: (Standard Frontage × Std Rate × Depth Factor) + (Excess × Excess Rate)
+    const rawLandComponent = Math.round(
       (standardFrontage * standardFF * depthFactor) +
       (excessFrontage * excessFF)
     );
 
+    // Calculate Target Allocation Value: avgPrice × (target% / 100)
+    const targetValue = Math.round(avgPrice * (targetAllocation / 100));
+
+    // Rec Site = Target Value - Raw Land Component
+    const siteValue = targetValue - rawLandComponent;
+
     return siteValue;
-  }, [valuationMode, marketLandData, properties, depthTables, cascadeConfig, vacantSales, specialRegions, vcsDepthTableOverrides, vcsRecommendedSites]);
+  }, [valuationMode, marketLandData, properties, depthTables, cascadeConfig, vacantSales, specialRegions, vcsDepthTableOverrides, vcsRecommendedSites, vcsSheetData, targetAllocation]);
 
   // ========== RENDER VCS SHEET TAB ==========
   const renderVCSSheetTab = () => {
