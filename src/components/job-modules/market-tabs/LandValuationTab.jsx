@@ -2667,7 +2667,57 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   }, [cascadeConfig, vacantSales, includedSales, specialRegions, calculateAcreage, properties]);
 
   // Helper function to calculate raw land value using cascade rates
-  const calculateRawLandValue = (acres, cascadeRates) => {
+  const calculateRawLandValue = (acresOrProperty, cascadeRates, propertyForFF = null) => {
+    // If valuationMode is Front Foot and we have a property with FF data, use FF calculation
+    if (valuationMode === 'ff' && propertyForFF) {
+      const frontFeet = parseFloat(propertyForFF.land_front_feet) || 0;
+      const depth = parseFloat(propertyForFF.land_depth) || 0;
+
+      if (frontFeet > 0 && depth > 0) {
+        // Get depth table and zone for this property
+        const zone = propertyForFF.land_zoning || propertyForFF.zoning || 'DEFAULT';
+        const depthTable = depthTables[zone] || depthTables['DEFAULT'];
+
+        if (depthTable && cascadeRates.standard?.rate) {
+          // Find depth factor from depth table
+          let depthFactor = 1.0;
+          for (const row of depthTable) {
+            if (depth >= row.min && depth <= row.max) {
+              depthFactor = row.factor;
+              break;
+            }
+          }
+
+          // Determine standard frontage limit (e.g., 100 feet)
+          const standardLimit = cascadeRates.standard?.max || 100;
+          const standardFF = Math.min(frontFeet, standardLimit);
+          const excessFF = Math.max(0, frontFeet - standardLimit);
+
+          // Calculate standard frontage value
+          const standardRate = cascadeRates.standard.rate || 0;
+          const standardValue = standardFF * standardRate * depthFactor;
+
+          // Calculate excess frontage value (if any)
+          let excessValue = 0;
+          if (excessFF > 0 && cascadeRates.excess?.rate) {
+            const excessRate = cascadeRates.excess.rate || 0;
+            excessValue = excessFF * excessRate * depthFactor;
+          }
+
+          const totalValue = standardValue + excessValue;
+
+          debug(`FF calc for ${frontFeet}' x ${depth}': Zone ${zone}, Depth ${depthFactor.toFixed(2)}, Std: ${standardFF}' x $${standardRate} x ${depthFactor.toFixed(2)} = $${standardValue.toFixed(0)}` +
+            (excessFF > 0 ? `, Excess: ${excessFF}' x $${cascadeRates.excess.rate} x ${depthFactor.toFixed(2)} = $${excessValue.toFixed(0)}` : '') +
+            ` = $${totalValue.toFixed(0)}`
+          );
+
+          return totalValue;
+        }
+      }
+    }
+
+    // Fall back to acreage-based calculation
+    const acres = typeof acresOrProperty === 'number' ? acresOrProperty : parseFloat(calculateAcreage(acresOrProperty));
     let remainingAcres = acres;
     let rawLandValue = 0;
     const breakdown = [];
