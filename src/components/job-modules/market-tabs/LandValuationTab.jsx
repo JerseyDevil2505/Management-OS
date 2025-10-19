@@ -8162,7 +8162,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '����') : ''}
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '���' : '����') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('yearBuilt')}
@@ -8908,7 +8908,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         if (!config.vcsList) return false;
         // Parse comma-separated VCS list and check if current VCS is in it
         const vcsList = config.vcsList.split(',').map(v => v.trim().toUpperCase());
-        return vcsList.includes(vcs.toString().toUpperCase());
+        const vcsMatch = vcsList.includes(vcs.toString().toUpperCase());
+
+        // Check if this VCS is excluded for this region
+        const regionExclusions = excludedRegionVCSs[region] || new Set();
+        const isExcluded = regionExclusions.has(vcs.toString());
+
+        // Only use this region's rates if VCS is assigned AND not excluded
+        return vcsMatch && !isExcluded;
       });
 
       if (assignedSpecialRegion) {
