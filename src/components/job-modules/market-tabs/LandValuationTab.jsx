@@ -1111,7 +1111,7 @@ const getPricePerUnit = useCallback((price, size) => {
       debug('✅ CONDITIONS MET - CALLING calculateVCSRecommendedSitesWithTarget');
       calculateVCSRecommendedSitesWithTarget();
     } else {
-      debug('❌ CONDITIONS NOT MET FOR VCS CALCULATION:', {
+      debug('�� CONDITIONS NOT MET FOR VCS CALCULATION:', {
         hasTargetAllocation: !!targetAllocation,
         hasCascadeRates: !!cascadeConfig.normal.prime,
         hasProperties: properties?.length > 0
@@ -1512,6 +1512,10 @@ const getPricePerUnit = useCallback((price, size) => {
               asset_lot_frontage: totalFrontage || null,
               asset_lot_depth: avgDepth,
               pricePerAcre: roundedPkgUnitPrice,
+              // Preserve FF/Depth/Zone for allocation study
+              land_front_feet: totalFrontage || null,
+              land_depth: avgDepth,
+              land_zoning: group[0].asset_zoning || group[0].land_zoning || group[0].zoning || 'N/A',
               packageData: {
                 is_package: true,
                 package_count: packageData.package_count || group.length,
@@ -1531,6 +1535,10 @@ const getPricePerUnit = useCallback((price, size) => {
               sales_price: totalPrice,
               totalAcres: totalAcres,
               pricePerAcre: pricePerUnit,
+              // Preserve FF/Depth/Zone for allocation study
+              land_front_feet: group[0].land_front_feet || group[0].asset_lot_frontage || 0,
+              land_depth: group[0].land_depth || group[0].asset_lot_depth || 0,
+              land_zoning: group[0].asset_zoning || group[0].land_zoning || group[0].zoning || 'N/A',
               packageData: {
                 is_package: true,
                 package_count: packageData.package_count || group.length,
