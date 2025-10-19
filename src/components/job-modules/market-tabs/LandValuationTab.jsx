@@ -6165,7 +6165,43 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           <div style={{ fontSize: '12px', color: '#6B7280' }}>
             {Object.keys(bracketAnalysis).length} VCS areas • Filtered by: {method2TypeFilter} ({getTypeUseOptions().find(opt => opt.code === method2TypeFilter)?.description || 'Unknown'})
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={() => setExcludedMethod2VCS(new Set())}
+              style={{
+                padding: '4px 10px',
+                fontSize: '11px',
+                backgroundColor: '#10B981',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: '600'
+              }}
+              title="Include all VCSs in summary calculation"
+            >
+              ✓ Select All
+            </button>
+            <button
+              onClick={() => setExcludedMethod2VCS(new Set(Object.keys(bracketAnalysis)))}
+              style={{
+                padding: '4px 10px',
+                fontSize: '11px',
+                backgroundColor: '#EF4444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: '600'
+              }}
+              title="Exclude all VCSs from summary calculation"
+            >
+              ✗ Deselect All
+            </button>
+            <span style={{ fontSize: '11px', color: '#6B7280', marginLeft: '4px' }}>
+              {Object.keys(bracketAnalysis).length - excludedMethod2VCS.size} of {Object.keys(bracketAnalysis).length} included
+            </span>
+            <div style={{ width: '1px', height: '20px', backgroundColor: '#D1D5DB', margin: '0 8px' }}></div>
             <button
               onClick={() => setExpandedVCS(new Set(Object.keys(bracketAnalysis)))}
               style={{
