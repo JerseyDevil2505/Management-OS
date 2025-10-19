@@ -2635,8 +2635,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const recommendedAllocation = avgImprovedPrice > 0 ? totalLandValue / avgImprovedPrice : 0;
 
       // Calculate improved sales FF/Depth averages for FF mode
-      const avgImprovedFF = improvedSalesForYear.reduce((sum, p) => sum + (parseFloat(p.land_front_feet) || 0), 0) / improvedSalesForYear.length;
-      const avgImprovedDepth = improvedSalesForYear.reduce((sum, p) => sum + (parseFloat(p.land_depth) || 0), 0) / improvedSalesForYear.length;
+      const avgImprovedFF = improvedSalesForYear.length > 0
+        ? improvedSalesForYear.reduce((sum, p) => sum + (parseFloat(p.land_front_feet) || 0), 0) / improvedSalesForYear.length
+        : 0;
+      const avgImprovedDepth = improvedSalesForYear.length > 0
+        ? improvedSalesForYear.reduce((sum, p) => sum + (parseFloat(p.land_depth) || 0), 0) / improvedSalesForYear.length
+        : 0;
 
       processedVacantSales.push({
         // Vacant sale info
