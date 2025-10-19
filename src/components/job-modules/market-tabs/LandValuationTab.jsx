@@ -637,18 +637,8 @@ useEffect(() => {
         landlocked: null,
         conservation: null
       },
-      customCategories: savedConfig.customCategories || [],
-      excludedVCSs: savedConfig.excludedVCSs || {}
+      customCategories: savedConfig.customCategories || []
     });
-
-    // Load excluded VCS state
-    if (savedConfig.excludedVCSs) {
-      const excluded = {};
-      Object.entries(savedConfig.excludedVCSs).forEach(([region, vcsArray]) => {
-        excluded[region] = new Set(vcsArray || []);
-      });
-      setExcludedRegionVCSs(excluded);
-    }
 
     if (savedConfig.mode) {
       setValuationMode(savedConfig.mode);
