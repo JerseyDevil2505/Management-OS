@@ -8520,6 +8520,103 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     return map;
   }, [vcsSheetData, vcsTypes, cascadeConfig.specialCategories]);
 
+  // ========== CALCULATE ACT SITE WITH FRONT FOOT FORMULA ==========
+  const calculateActSite = useCallback((vcs, recSite) => {
+    // If not in FF mode, return the recommended site value
+    if (valuationMode !== 'ff') {
+      return recSite || 0;
+    }
+
+    // Front Foot mode calculation
+    const zcfg = marketLandData?.zoning_config || {};
+
+    // Find the most common zoning for this VCS
+    const vcsProperties = properties.filter(p => p.new_vcs === vcs);
+    if (vcsProperties.length === 0) return recSite || 0;
+
+    const vcsZonings = vcsProperties
+      .map(p => p.asset_zoning)
+      .filter(z => z && z.trim() !== '');
+
+    if (vcsZonings.length === 0) return recSite || 0;
+
+    // Get most common zoning
+    const zoningCounts = {};
+    vcsZonings.forEach(z => {
+      const zKey = z.toString().trim();
+      zoningCounts[zKey] = (zoningCounts[zKey] || 0) + 1;
+    });
+    const mostCommonZoning = Object.keys(zoningCounts).reduce((a, b) =>
+      zoningCounts[a] > zoningCounts[b] ? a : b
+    );
+
+    const zoneEntry = zcfg[mostCommonZoning] ||
+                     zcfg[mostCommonZoning?.toUpperCase?.()] ||
+                     zcfg[mostCommonZoning?.toLowerCase?.()] || null;
+
+    if (!zoneEntry) return recSite || 0;
+
+    const depthTableName = zoneEntry.depth_table || zoneEntry.depthTable;
+    const minFrontage = parseFloat(zoneEntry.min_frontage || zoneEntry.minFrontage || 0);
+
+    if (!depthTableName || !minFrontage) return recSite || 0;
+
+    // Calculate average frontage and depth for properties in this VCS
+    const propsWithFrontage = vcsProperties.filter(p =>
+      p.asset_lot_frontage && parseFloat(p.asset_lot_frontage) > 0
+    );
+
+    if (propsWithFrontage.length === 0) return recSite || 0;
+
+    const avgFrontage = propsWithFrontage.reduce((sum, p) =>
+      sum + parseFloat(p.asset_lot_frontage), 0
+    ) / propsWithFrontage.length;
+
+    const propsWithDepth = vcsProperties.filter(p =>
+      p.asset_lot_depth && parseFloat(p.asset_lot_depth) > 0
+    );
+
+    const avgDepth = propsWithDepth.length > 0
+      ? propsWithDepth.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth), 0) / propsWithDepth.length
+      : 100; // Default depth if not available
+
+    // Get depth factor using the existing function from supabaseClient
+    const depthFactor = getDepthFactor(avgDepth, depthTableName, depthTables);
+
+    // Calculate standard and excess frontage
+    const standardFrontage = Math.min(avgFrontage, minFrontage);
+    const excessFrontage = Math.max(0, avgFrontage - minFrontage);
+
+    // Get standard and excess FF rates from cascade config or calculated values
+    // Check for VCS-specific configuration
+    let cascadeRates = cascadeConfig.normal;
+    const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
+      config.vcsList?.includes(vcs)
+    );
+    if (vcsSpecificConfig) {
+      cascadeRates = vcsSpecificConfig.rates || cascadeConfig.normal;
+    } else {
+      // Check for special region configuration
+      const vcsInSpecialRegion = vacantSales.find(sale =>
+        sale.new_vcs === vcs && specialRegions[sale.id] && specialRegions[sale.id] !== 'Normal'
+      );
+      if (vcsInSpecialRegion && cascadeConfig.special?.[specialRegions[vcsInSpecialRegion.id]]) {
+        cascadeRates = cascadeConfig.special[specialRegions[vcsInSpecialRegion.id]];
+      }
+    }
+
+    const standardFF = cascadeRates.standard?.rate || 0;
+    const excessFF = cascadeRates.excess?.rate || Math.round(standardFF / 2);
+
+    // Front Foot Formula: (Standard Frontage × Std Rate × Depth Factor) + (Excess × Excess Rate)
+    const siteValue = Math.round(
+      (standardFrontage * standardFF * depthFactor) +
+      (excessFrontage * excessFF)
+    );
+
+    return siteValue;
+  }, [valuationMode, marketLandData, properties, depthTables, cascadeConfig, vacantSales, specialRegions]);
+
   // ========== RENDER VCS SHEET TAB ==========
   const renderVCSSheetTab = () => {
     const VCS_TYPES = [
