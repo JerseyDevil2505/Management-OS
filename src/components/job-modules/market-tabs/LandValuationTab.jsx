@@ -348,6 +348,7 @@ const LandValuationTab = ({
   // Enhanced Method 2 UI State - Use Single Family as default
   const [method2TypeFilter, setMethod2TypeFilter] = useState('1');
   const [expandedVCS, setExpandedVCS] = useState(new Set());
+  const [excludedMethod2VCS, setExcludedMethod2VCS] = useState(new Set()); // VCSs excluded from Method 2 summary
 
   // VCS Sheet UI State - Collapsible fields
   const [collapsedFields, setCollapsedFields] = useState({
@@ -6242,7 +6243,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       </span>
                     </div>
                     <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
-                      ▼
+                      ���
                     </span>
                   </div>
 
@@ -9721,7 +9722,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <option value="all">All</option>
                 <option value="1">1 — Single Family</option>
                 <option value="2">2 — Duplex / Semi-Detached</option>
-                <option value="3">3* �� Row / Townhouse</option>
+                <option value="3">3* ��� Row / Townhouse</option>
                 <option value="4">4* — MultiFamily</option>
                 <option value="5">5* — Conversions</option>
                 <option value="6">6 — Condominium</option>
