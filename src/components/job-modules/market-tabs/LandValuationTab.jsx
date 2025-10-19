@@ -2700,6 +2700,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }
   }, [cascadeConfig, vacantSales, includedSales, specialRegions, calculateAcreage, properties]);
 
+  // Helper function to get unique regions from vacant test sales
+  const getUniqueRegions = () => {
+    const regions = new Set(vacantTestSales.map(sale => sale.region));
+    return Array.from(regions).sort((a, b) => {
+      if (a === 'Normal') return -1;
+      if (b === 'Normal') return 1;
+      return a.localeCompare(b);
+    });
+  };
+
   // Helper function to calculate raw land value using cascade rates
   const calculateRawLandValue = (acresOrProperty, cascadeRates, propertyForFF = null) => {
     // If valuationMode is Front Foot and we have a property with FF data, use FF calculation
@@ -3602,7 +3612,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
       // Trigger VCS recommended sites calculation
-      debug('🔄 Triggering VCS recommended sites calculation...');
+      debug('�� Triggering VCS recommended sites calculation...');
       if (cascadeConfig.normal.prime && properties?.length > 0) {
         calculateVCSRecommendedSitesWithTarget();
       } else {
@@ -10401,7 +10411,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             }}
             title={isVcsSheetComplete ? 'Click to reopen' : 'Mark VCS Reviewed/Reset complete'}
           >
-            {isVcsSheetComplete ? '✓ Mark Complete' : 'Mark Complete'}
+            {isVcsSheetComplete ? '�� Mark Complete' : 'Mark Complete'}
           </button>
         )}
 
