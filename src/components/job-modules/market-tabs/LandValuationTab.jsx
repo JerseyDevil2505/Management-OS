@@ -6968,6 +6968,27 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 Remove
               </button>
             </div>
+
+            {/* VCS Assignment Field */}
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+                Assigned VCS (comma-separated, e.g., 2, 205, 302)
+              </label>
+              <input
+                type="text"
+                value={cascadeConfig.special[region]?.vcsList || ''}
+                onChange={(e) => updateSpecialRegionVCSList(region, e.target.value)}
+                placeholder="Enter VCS codes (e.g., 2, 205, 302)"
+                style={{
+                  width: '100%',
+                  padding: '6px 8px',
+                  border: '1px solid #BFDBFE',
+                  borderRadius: '4px',
+                  fontSize: '13px'
+                }}
+              />
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns:
               valuationMode === 'ff' ? 'repeat(2, 1fr)' :
               valuationMode === 'sf' ? 'repeat(2, 1fr)' :
