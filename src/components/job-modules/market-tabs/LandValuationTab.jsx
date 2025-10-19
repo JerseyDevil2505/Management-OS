@@ -3641,7 +3641,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             vcsTypes: {},
             vcsRecommendedSites: {},
             collapsedFields: {},
-            excludedRegionVCSs: {},
             hasUnsavedChanges: false,
             lastModified: null
           });
