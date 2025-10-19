@@ -6178,7 +6178,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales �� Avg $${Math.round(data.avgPrice).toLocaleString()} ������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales �� Avg $${Math.round(data.avgPrice).toLocaleString()} ��������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{ marginBottom: '8px', border: '1px solid #E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
@@ -8534,11 +8534,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     return map;
   }, [vcsSheetData, vcsTypes, cascadeConfig.specialCategories]);
 
-  // ========== CALCULATE ACT SITE WITH FRONT FOOT FORMULA ==========
-  const calculateActSite = useCallback((vcs, recSite) => {
-    // If not in FF mode, return the recommended site value
+  // ========== CALCULATE REC SITE WITH FRONT FOOT FORMULA ==========
+  const calculateRecSite = useCallback((vcs) => {
+    // If not in FF mode, return the base recommended value
     if (valuationMode !== 'ff') {
-      return recSite || 0;
+      return vcsRecommendedSites[vcs] || 0;
     }
 
     // Front Foot mode calculation
@@ -8546,13 +8546,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Find the most common zoning for this VCS
     const vcsProperties = properties.filter(p => p.new_vcs === vcs);
-    if (vcsProperties.length === 0) return recSite || 0;
+    if (vcsProperties.length === 0) return vcsRecommendedSites[vcs] || 0;
 
     const vcsZonings = vcsProperties
       .map(p => p.asset_zoning)
       .filter(z => z && z.trim() !== '');
 
-    if (vcsZonings.length === 0) return recSite || 0;
+    if (vcsZonings.length === 0) return vcsRecommendedSites[vcs] || 0;
 
     // Get most common zoning
     const zoningCounts = {};
@@ -8568,20 +8568,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                      zcfg[mostCommonZoning?.toUpperCase?.()] ||
                      zcfg[mostCommonZoning?.toLowerCase?.()] || null;
 
-    if (!zoneEntry) return recSite || 0;
+    if (!zoneEntry) return vcsRecommendedSites[vcs] || 0;
 
     // Use VCS-specific depth table override if available, otherwise use zoning default
     const depthTableName = vcsDepthTableOverrides[vcs] || zoneEntry.depth_table || zoneEntry.depthTable;
     const minFrontage = parseFloat(zoneEntry.min_frontage || zoneEntry.minFrontage || 0);
 
-    if (!depthTableName || !minFrontage) return recSite || 0;
+    if (!depthTableName || !minFrontage) return vcsRecommendedSites[vcs] || 0;
 
     // Calculate average frontage and depth for properties in this VCS
     const propsWithFrontage = vcsProperties.filter(p =>
       p.asset_lot_frontage && parseFloat(p.asset_lot_frontage) > 0
     );
 
-    if (propsWithFrontage.length === 0) return recSite || 0;
+    if (propsWithFrontage.length === 0) return vcsRecommendedSites[vcs] || 0;
 
     const avgFrontage = propsWithFrontage.reduce((sum, p) =>
       sum + parseFloat(p.asset_lot_frontage), 0
@@ -8630,7 +8630,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     );
 
     return siteValue;
-  }, [valuationMode, marketLandData, properties, depthTables, cascadeConfig, vacantSales, specialRegions, vcsDepthTableOverrides]);
+  }, [valuationMode, marketLandData, properties, depthTables, cascadeConfig, vacantSales, specialRegions, vcsDepthTableOverrides, vcsRecommendedSites]);
 
   // ========== RENDER VCS SHEET TAB ==========
   const renderVCSSheetTab = () => {
@@ -8765,9 +8765,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   const type = vcsTypes[vcs] || 'Residential-Typical';
                   const isGrayedOut = !type.startsWith('Residential');
                   const description = vcsDescriptions[vcs] || getVCSDescription(vcs);
-                  const recSite = vcsRecommendedSites[vcs] || 0;
-                  // Calculate Act Site using FF formula if in FF mode, otherwise use manual or rec site
-                  const actSite = vcsManualSiteValues[vcs] ?? calculateActSite(vcs, recSite);
+                  // Calculate Rec Site using FF formula with depth table overrides
+                  const recSite = calculateRecSite(vcs);
+                  // Act Site is user-editable override, defaults to recSite if not set
+                  const actSite = vcsManualSiteValues[vcs] ?? recSite;
 
                   // Determine which cascade rates to use (priority: VCS-specific > Special Region > Normal)
                   let cascadeRates = cascadeConfig.normal;
