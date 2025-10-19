@@ -2619,7 +2619,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const rawLandValue = calculateRawLandValue(acres, cascadeRates, sale);
       const siteValue = (sale.values_norm_time || sale.sales_price) - rawLandValue;
 
-      // Find improved sales for this sale's year
+      // Find improved sales for this sale's year AND VCS
       const improvedSalesForYear = properties.filter(prop => {
         const isResidential = prop.property_m4_class === '2' || prop.property_m4_class === '3A';
         const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
@@ -2627,16 +2627,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         const hasValues = prop.values_mod_land > 0 && prop.values_mod_total > 0;
         const sameYear = new Date(prop.sales_date).getFullYear() === year;
         const hasValidTypeUse = prop.asset_type_use && prop.asset_type_use.toString().startsWith('1');
+        const sameVCS = prop.new_vcs === vcs;
 
-        return isResidential && hasValidSale && hasBuilding && hasValues && sameYear && hasValidTypeUse;
+        return isResidential && hasValidSale && hasBuilding && hasValues && sameYear && hasValidTypeUse && sameVCS;
       });
 
       if (improvedSalesForYear.length === 0) {
-        debug(`⚠️ No improved sales found for year ${year} (with type_use starting with '1')`);
+        debug(`⚠️ No improved sales found for VCS ${vcs}, year ${year} (with type_use starting with '1')`);
         return;
       }
 
-      debug(`✅ Found ${improvedSalesForYear.length} improved sales for year ${year} with type_use starting with '1'`);
+      debug(`✅ Found ${improvedSalesForYear.length} improved sales for VCS ${vcs}, year ${year} with type_use starting with '1'`);
 
       // Calculate averages for this year's improved sales
       const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + (p.values_norm_time || p.sales_price), 0) / improvedSalesForYear.length;
@@ -2649,14 +2650,23 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Calculate new land value using this sale's site value + improved sales average raw land
       let improvedRawLandValue;
       if (valuationMode === 'ff' && improvedSalesForYear.length > 0) {
-        // For FF mode, calculate each improved sale's raw land value and average them
-        const improvedRawValues = improvedSalesForYear.map(prop =>
-          calculateRawLandValue(null, cascadeConfig.normal, prop)
-        );
+        // For FF mode, calculate each improved sale's raw land value using the SALE'S zone (not the improved prop's zone)
+        // This ensures we use the same depth table as the vacant sale
+        const saleZone = sale.asset_zoning || sale.land_zoning || sale.zoning;
+        const improvedRawValues = improvedSalesForYear.map(prop => {
+          // Create a modified property object that uses the SALE's zone for depth table lookup
+          const propWithSaleZone = {
+            ...prop,
+            land_front_feet: prop.land_front_feet || prop.asset_lot_frontage || 0,
+            land_depth: prop.land_depth || prop.asset_lot_depth || 0,
+            land_zoning: saleZone // Use the vacant sale's zone
+          };
+          return calculateRawLandValue(null, cascadeRates, propWithSaleZone);
+        });
         improvedRawLandValue = improvedRawValues.reduce((sum, val) => sum + val, 0) / improvedRawValues.length;
       } else {
         // For acreage mode, use average acres
-        improvedRawLandValue = calculateRawLandValue(avgImprovedAcres, cascadeConfig.normal);
+        improvedRawLandValue = calculateRawLandValue(avgImprovedAcres, cascadeRates);
       }
       const totalLandValue = improvedRawLandValue + siteValue;
 
@@ -2751,7 +2761,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         const zone = propertyForFF.land_zoning || propertyForFF.zoning || 'DEFAULT';
         const depthTable = depthTables[zone] || depthTables['DEFAULT'];
 
-        if (depthTable && cascadeRates.standard?.rate) {
+        if (depthTable && (cascadeRates.prime?.rate || cascadeRates.standard?.rate)) {
           // Find depth factor from depth table
           let depthFactor = 1.0;
           for (const row of depthTable) {
@@ -2761,27 +2771,26 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             }
           }
 
-          // Determine standard frontage limit (e.g., 100 feet)
-          const standardLimit = cascadeRates.standard?.max || 100;
-          const standardFF = Math.min(frontFeet, standardLimit);
-          const excessFF = Math.max(0, frontFeet - standardLimit);
+          // Use prime/excess structure if available, otherwise fall back to standard/excess
+          const primeRate = cascadeRates.prime?.rate || cascadeRates.standard?.rate || 0;
+          const primeMax = cascadeRates.prime?.max || cascadeRates.standard?.max || 100;
+          const excessRate = cascadeRates.excess?.rate || 0;
 
-          // Calculate standard frontage value
-          const standardRate = cascadeRates.standard.rate || 0;
-          const standardValue = standardFF * standardRate * depthFactor;
+          // Calculate prime frontage (first X feet)
+          const primeFF = Math.min(frontFeet, primeMax);
+          const excessFF = Math.max(0, frontFeet - primeMax);
 
-          // Calculate excess frontage value (if any)
-          let excessValue = 0;
-          if (excessFF > 0 && cascadeRates.excess?.rate) {
-            const excessRate = cascadeRates.excess.rate || 0;
-            excessValue = excessFF * excessRate * depthFactor;
-          }
+          // Calculate raw frontage value (BEFORE depth multiplier)
+          const primeValue = primeFF * primeRate;
+          const excessValue = excessFF * excessRate;
+          const rawValue = primeValue + excessValue;
 
-          const totalValue = standardValue + excessValue;
+          // Apply depth multiplier to total
+          const totalValue = rawValue * depthFactor;
 
-          debug(`FF calc for ${frontFeet}' x ${depth}': Zone ${zone}, Depth ${depthFactor.toFixed(2)}, Std: ${standardFF}' x $${standardRate} x ${depthFactor.toFixed(2)} = $${standardValue.toFixed(0)}` +
-            (excessFF > 0 ? `, Excess: ${excessFF}' x $${cascadeRates.excess.rate} x ${depthFactor.toFixed(2)} = $${excessValue.toFixed(0)}` : '') +
-            ` = $${totalValue.toFixed(0)}`
+          debug(`FF calc for ${frontFeet}' x ${depth}': Zone ${zone}, Depth factor ${depthFactor.toFixed(2)}, Prime: ${primeFF}' x $${primeRate} = $${primeValue.toFixed(0)}` +
+            (excessFF > 0 ? `, Excess: ${excessFF}' x $${excessRate} = $${excessValue.toFixed(0)}` : '') +
+            `, Raw: $${rawValue.toFixed(0)} x ${depthFactor.toFixed(2)} = $${totalValue.toFixed(0)}`
           );
 
           return totalValue;
@@ -8272,7 +8281,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'typeUse' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '�������') : ''}
+                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '��������') : ''}
                     </th>
                   </tr>
                 </thead>
