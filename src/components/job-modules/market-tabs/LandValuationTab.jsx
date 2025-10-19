@@ -8595,8 +8595,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ? propsWithDepth.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth), 0) / propsWithDepth.length
       : 100; // Default depth if not available
 
-    // Get depth factor using the existing function from supabaseClient
-    const depthFactor = getDepthFactor(avgDepth, depthTableName, depthTables);
+    // Get depth factor using interpretCodes function that works with parsed code definitions
+    const depthFactor = interpretCodes.getDepthFactor(avgDepth, depthTableName, depthTables);
 
     // Calculate standard and excess frontage
     const standardFrontage = Math.min(avgFrontage, minFrontage);
