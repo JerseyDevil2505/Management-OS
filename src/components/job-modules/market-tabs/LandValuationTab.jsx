@@ -2595,15 +2595,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         return;
       }
 
-      // Debug FF/Depth/Zone data
-      console.log(`🏢 Sale ${sale.property_block}/${sale.property_lot} FF/Depth data:`, {
-        land_front_feet: sale.land_front_feet,
-        asset_lot_frontage: sale.asset_lot_frontage,
-        land_depth: sale.land_depth,
-        asset_lot_depth: sale.asset_lot_depth,
-        land_zoning: sale.land_zoning,
-        asset_zoning: sale.asset_zoning,
-        zoning: sale.zoning
+      // Debug FF/Depth/Zone data for vacant sale
+      const vacantFF = parseFloat(sale.land_front_feet ?? sale.asset_lot_frontage) || 0;
+      const vacantDepth = parseFloat(sale.land_depth ?? sale.asset_lot_depth) || 0;
+      const vacantZone = sale.asset_zoning || sale.land_zoning || sale.zoning || 'N/A';
+
+      console.log(`🏢 Vacant Sale ${sale.property_block}/${sale.property_lot}:`, {
+        frontFeet: vacantFF,
+        depth: vacantDepth,
+        zone: vacantZone,
+        valuationMode,
+        hasCascadeRates: !!cascadeRates
       });
 
       // Log special region usage
@@ -2616,8 +2618,28 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
       // Apply cascade calculation to get raw land value
-      const rawLandValue = calculateRawLandValue(acres, cascadeRates, sale);
+      // For FF mode, we need to ensure the sale object has the right fields
+      let rawLandValue;
+      if (valuationMode === 'ff' && vacantFF > 0 && vacantDepth > 0) {
+        // Create a properly formatted property object for FF calculation
+        const saleForFF = {
+          land_front_feet: vacantFF,
+          land_depth: vacantDepth,
+          land_zoning: vacantZone
+        };
+        rawLandValue = calculateRawLandValue(null, cascadeRates, saleForFF);
+      } else {
+        // Acre mode
+        rawLandValue = calculateRawLandValue(acres, cascadeRates);
+      }
+
       const siteValue = (sale.values_norm_time || sale.sales_price) - rawLandValue;
+
+      console.log(`💰 Sale ${sale.property_block}/${sale.property_lot} values:`, {
+        salePrice: sale.values_norm_time || sale.sales_price,
+        rawLandValue,
+        siteValue
+      });
 
       // Find improved sales for this sale's year AND VCS
       // IMPORTANT: Only use sales with values_norm_time (bad sales are filtered out during normalization)
@@ -2642,8 +2664,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       debug(`✅ Found ${improvedSalesForYear.length} improved sales for VCS ${vcs}, year ${year} with type_use starting with '1'`);
 
       // Calculate averages for this year's improved sales
-      // Use ONLY values_norm_time (no fallback to sales_price) since we filtered for it
-      const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + p.values_norm_time, 0) / improvedSalesForYear.length;
+      // Use sales_price (actual price from that year), but we filtered for values_norm_time to exclude bad sales
+      const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + p.sales_price, 0) / improvedSalesForYear.length;
       const avgImprovedAcres = improvedSalesForYear.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / improvedSalesForYear.length;
 
       // Calculate current allocation for this year
