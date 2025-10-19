@@ -6437,9 +6437,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         {method2Summary && (method2Summary.mediumRange || method2Summary.largeRange || method2Summary.xlargeRange) && (
           <div style={{ borderTop: '2px solid #E5E7EB', backgroundColor: '#F8FAFC' }}>
             <div style={{ padding: '20px' }}>
-              <h4 style={{ margin: '0 0 15px 0', fontSize: '16px', fontWeight: 'bold', color: '#1F2937' }}>
-                Method 2 Summary - Implied {valuationMode === 'sf' ? '$/Square Foot Rates' : '$/Acre Rates'}
-              </h4>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold', color: '#1F2937' }}>
+                  Method 2 Summary - Implied {valuationMode === 'sf' ? '$/Square Foot Rates' : '$/Acre Rates'}
+                </h4>
+                {method2Summary.excludedVCSCount > 0 && (
+                  <span style={{ fontSize: '12px', color: '#EF4444', fontWeight: '600', backgroundColor: '#FEE2E2', padding: '4px 12px', borderRadius: '4px' }}>
+                    {method2Summary.excludedVCSCount} VCS excluded from summary
+                  </span>
+                )}
+              </div>
 
               <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
                 {/* dynamic bracket labels based on cascadeConfig */}
