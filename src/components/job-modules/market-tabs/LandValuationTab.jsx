@@ -827,7 +827,7 @@ useEffect(() => {
   setIsLoading(false);
   setIsInitialLoadComplete(true);
 
-  debug('�� Initial load complete');
+  debug('��� Initial load complete');
 }, [marketLandData]);
 
 // Reset initialization flag when job changes
@@ -989,7 +989,7 @@ const getPricePerUnit = useCallback((price, size) => {
   const getTypeUseOptions = useCallback(() => {
     // Standardized Type & Use dropdown options for consistency across tabs
     const standard = [
-      { code: '1', description: '1 ��� Single Family' },
+      { code: '1', description: '1 ����� Single Family' },
       { code: '2', description: '2 — Duplex / Semi-Detached' },
       { code: '3', description: '3* �� Row / Townhouse (3E,3I,30,31)' },
       { code: '4', description: '4* — MultiFamily (42,43,44)' },
@@ -6972,67 +6972,32 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             {/* VCS Assignment Field */}
             <div style={{ marginBottom: '12px' }}>
               <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '6px', fontWeight: '500' }}>
-                Assigned VCS (click to add/remove)
+                Assigned VCS
               </label>
 
-              {/* Assigned VCS badges */}
-              <div style={{ marginBottom: '10px', minHeight: '36px', padding: '8px', backgroundColor: 'white', border: '1px solid #BFDBFE', borderRadius: '4px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(50px, 1fr))', gap: '6px', alignItems: 'start' }}>
-                {(() => {
-                  const assignedList = cascadeConfig.special[region]?.vcsList
-                    ? cascadeConfig.special[region].vcsList.split(',').map(v => v.trim()).filter(v => v)
-                    : [];
-
-                  // Sort numerically
-                  assignedList.sort((a, b) => parseInt(a) - parseInt(b));
-
-                  if (assignedList.length === 0) {
-                    return <span style={{ color: '#9CA3AF', fontSize: '12px', fontStyle: 'italic', gridColumn: '1 / -1' }}>No VCS assigned</span>;
+              {/* Dropdown to add VCS */}
+              <select
+                onChange={(e) => {
+                  if (e.target.value) {
+                    const assignedList = cascadeConfig.special[region]?.vcsList
+                      ? cascadeConfig.special[region].vcsList.split(',').map(v => v.trim()).filter(v => v)
+                      : [];
+                    const newList = [...assignedList, e.target.value].join(', ');
+                    updateSpecialRegionVCSList(region, newList);
+                    e.target.value = ''; // Reset dropdown
                   }
-
-                  return assignedList.map(vcs => (
-                    <span
-                      key={vcs}
-                      onClick={() => {
-                        const newList = assignedList.filter(v => v !== vcs).join(', ');
-                        updateSpecialRegionVCSList(region, newList);
-                      }}
-                      style={{
-                        padding: '4px 10px',
-                        backgroundColor: '#1E40AF',
-                        color: 'white',
-                        borderRadius: '4px',
-                        fontSize: '12px',
-                        cursor: 'pointer',
-                        fontWeight: '600',
-                        textAlign: 'center',
-                        transition: 'all 0.2s',
-                        userSelect: 'none'
-                      }}
-                      onMouseEnter={(e) => e.target.style.backgroundColor = '#1E3A8A'}
-                      onMouseLeave={(e) => e.target.style.backgroundColor = '#1E40AF'}
-                      title="Click to remove"
-                    >
-                      {vcs} ×
-                    </span>
-                  ));
-                })()}
-              </div>
-
-              {/* Available VCS badges */}
-              <div style={{ fontSize: '11px', color: '#6B7280', marginBottom: '4px' }}>
-                Available VCS:
-              </div>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(50px, 1fr))',
-                gap: '6px',
-                maxHeight: '200px',
-                overflowY: 'auto',
-                padding: '8px',
-                backgroundColor: '#F9FAFB',
-                border: '1px solid #E5E7EB',
-                borderRadius: '4px'
-              }}>
+                }}
+                style={{
+                  width: '100%',
+                  padding: '6px 8px',
+                  border: '1px solid #BFDBFE',
+                  borderRadius: '4px',
+                  fontSize: '13px',
+                  backgroundColor: 'white',
+                  marginBottom: '8px'
+                }}
+              >
+                <option value="">+ Add VCS...</option>
                 {Object.keys(vcsSheetData).sort((a, b) => parseInt(a) - parseInt(b)).map(vcs => {
                   const assignedList = cascadeConfig.special[region]?.vcsList
                     ? cascadeConfig.special[region].vcsList.split(',').map(v => v.trim()).filter(v => v)
@@ -7042,39 +7007,65 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   if (isAssigned) return null; // Don't show if already assigned
 
                   return (
-                    <span
-                      key={vcs}
-                      onClick={() => {
-                        const newList = [...assignedList, vcs].join(', ');
-                        updateSpecialRegionVCSList(region, newList);
-                      }}
-                      style={{
-                        padding: '4px 10px',
-                        backgroundColor: 'white',
-                        color: '#1E40AF',
-                        borderRadius: '4px',
-                        fontSize: '12px',
-                        cursor: 'pointer',
-                        fontWeight: '600',
-                        border: '1px solid #BFDBFE',
-                        textAlign: 'center',
-                        transition: 'all 0.2s',
-                        userSelect: 'none'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.target.style.backgroundColor = '#EFF6FF';
-                        e.target.style.borderColor = '#93C5FD';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.target.style.backgroundColor = 'white';
-                        e.target.style.borderColor = '#BFDBFE';
-                      }}
-                      title="Click to assign"
-                    >
-                      {vcs}
-                    </span>
+                    <option key={vcs} value={vcs}>
+                      VCS {vcs}
+                    </option>
                   );
                 })}
+              </select>
+
+              {/* Assigned VCS badges */}
+              <div style={{ minHeight: '36px', padding: '8px', backgroundColor: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: '4px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'start' }}>
+                {(() => {
+                  const assignedList = cascadeConfig.special[region]?.vcsList
+                    ? cascadeConfig.special[region].vcsList.split(',').map(v => v.trim()).filter(v => v)
+                    : [];
+
+                  // Sort numerically
+                  assignedList.sort((a, b) => parseInt(a) - parseInt(b));
+
+                  if (assignedList.length === 0) {
+                    return <span style={{ color: '#9CA3AF', fontSize: '12px', fontStyle: 'italic' }}>No VCS assigned</span>;
+                  }
+
+                  return assignedList.map(vcs => (
+                    <span
+                      key={vcs}
+                      style={{
+                        padding: '4px 10px',
+                        backgroundColor: '#1E40AF',
+                        color: 'white',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      {vcs}
+                      <button
+                        onClick={() => {
+                          const newList = assignedList.filter(v => v !== vcs).join(', ');
+                          updateSpecialRegionVCSList(region, newList);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'white',
+                          cursor: 'pointer',
+                          fontSize: '16px',
+                          lineHeight: '1',
+                          padding: '0',
+                          fontWeight: 'bold'
+                        }}
+                        title="Click to remove"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ));
+                })()}
               </div>
             </div>
 
