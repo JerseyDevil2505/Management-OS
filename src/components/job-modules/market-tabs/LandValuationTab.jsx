@@ -6,7 +6,7 @@ import {
   Save, FileDown, MapPin,
   Home
 } from 'lucide-react';
-import { supabase, interpretCodes, checklistService } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, checklistService, getDepthFactor, getDepthFactors } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 import './LandValuationTab.css';
 import './sharedTabNav.css';
@@ -4731,7 +4731,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           [category]: rate ? parseFloat(rate) : null
         }
       };
-      debug('🔧 New cascade config special categories:', newConfig.specialCategories);
+      debug('�� New cascade config special categories:', newConfig.specialCategories);
       return newConfig;
     });
   };
