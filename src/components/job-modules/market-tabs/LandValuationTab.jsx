@@ -2204,7 +2204,7 @@ const getPricePerUnit = useCallback((price, size) => {
       console.error('Error in performBracketAnalysis:', error);
       setBracketAnalysis({});
     }
-  }, [properties, cascadeConfig, calculateAcreage, method2TypeFilter, method2ExcludedSales, vacantSales, specialRegions]);
+  }, [properties, cascadeConfig, calculateAcreage, method2TypeFilter, method2ExcludedSales, vacantSales, specialRegions, excludedMethod2VCS]);
 
   const calculateRates = useCallback((regionFilter = null) => {
     const included = vacantSales.filter(s => {
