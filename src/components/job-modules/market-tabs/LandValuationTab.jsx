@@ -6477,9 +6477,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <thead>
                   <tr style={{ backgroundColor: '#F9FAFB' }}>
                     <th style={{ padding: '6px', textAlign: 'left', border: '1px solid #E5E7EB' }}>Zoning</th>
-                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Typ Lot FF</th>
-                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Typ Lot Depth</th>
-                    <th style={{ padding: '6px', textAlign: 'left', border: '1px solid #E5E7EB' }}>Depth Table</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Zoning Lot</th>
                     <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Land Value</th>
                     <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Min Frontage</th>
                     <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>Standard FF</th>
@@ -6494,7 +6492,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       if (zoneKeys.length === 0) {
                         return (
                           <tr>
-                            <td colSpan="8" style={{ padding: '8px', color: '#6B7280', border: '1px solid #E5E7EB' }}>
+                            <td colSpan="6" style={{ padding: '8px', color: '#6B7280', border: '1px solid #E5E7EB' }}>
                               No zoning with depth tables available.
                             </td>
                           </tr>
@@ -6531,9 +6529,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       rows.push(
                         <tr key="__summary__" style={{ fontWeight: '600', backgroundColor: '#F3F4F6' }}>
                           <td style={{ padding: '6px', border: '1px solid #E5E7EB' }}>Overall Average ({chosenBracketKey || 'N/A'})</td>
-                          <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
-                          <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
-                          <td style={{ padding: '6px', textAlign: 'left', border: '1px solid #E5E7EB' }}></td>
+                          <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{overallAvgAcres != null ? `${(Math.round(overallAvgAcres*100)/100).toFixed(2)} / ${summaryTypicalSF.toLocaleString()} SF` : 'N/A'}</td>
                           <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{summaryLandValue != null ? `$${Number(summaryLandValue).toLocaleString()}` : 'N/A'}</td>
                           <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
                           <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
@@ -6554,39 +6550,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         // Only include zones with an assigned depth table AND a min frontage
                         if (!depthTable || !minFrontage) return;
 
-                        // Calculate typical frontage and depth for this zoning
-                        let typicalFrontage = '';
-                        let typicalDepth = '';
-
-                        // Get all properties in this zoning with valid frontage data
-                        const propsForZone = (properties || []).filter(p =>
-                          p.asset_zoning?.toString().trim().toLowerCase() === zoneKey.toString().trim().toLowerCase() &&
-                          p.asset_lot_frontage && parseFloat(p.asset_lot_frontage) > 0
-                        );
-
-                        if (propsForZone.length > 0) {
-                          // Calculate average frontage
-                          const avgFrontage = propsForZone.reduce((sum, p) =>
-                            sum + parseFloat(p.asset_lot_frontage), 0
-                          ) / propsForZone.length;
-                          typicalFrontage = Math.round(avgFrontage);
-
-                          // Calculate average depth if available
-                          const propsWithDepth = propsForZone.filter(p =>
-                            p.asset_lot_depth && parseFloat(p.asset_lot_depth) > 0
-                          );
-
-                          if (propsWithDepth.length > 0) {
-                            const avgDepth = propsWithDepth.reduce((sum, p) =>
-                              sum + parseFloat(p.asset_lot_depth), 0
-                            ) / propsWithDepth.length;
-                            typicalDepth = Math.round(avgDepth);
-                          } else {
-                            // If no depth data, use standard depth of 100 ft
-                            typicalDepth = 100;
-                          }
-                        }
-
                         // Determine zoning lot from config if present, otherwise fallback to property average
                         let typicalLotAcres = '';
                         let typicalLotSF = '';
@@ -6603,10 +6566,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           }
                         } else {
                           // fallback: average from properties
-                          const propsForZoneAcres = (properties || []).filter(p => p.asset_zoning && p.asset_zoning.toString().trim().toLowerCase() === zoneKey.toString().trim().toLowerCase());
+                          const propsForZone = (properties || []).filter(p => p.asset_zoning && p.asset_zoning.toString().trim().toLowerCase() === zoneKey.toString().trim().toLowerCase());
                           let avgAcres = null;
-                          if (propsForZoneAcres.length > 0) {
-                            avgAcres = propsForZoneAcres.reduce((s, p) => s + (calculateAcreage(p) || 0), 0) / propsForZoneAcres.length;
+                          if (propsForZone.length > 0) {
+                            avgAcres = propsForZone.reduce((s, p) => s + (calculateAcreage(p) || 0), 0) / propsForZone.length;
                           }
                           typicalLotAcres = avgAcres !== null ? Number(avgAcres.toFixed(2)) : '';
                           typicalLotSF = avgAcres !== null ? Math.round(avgAcres * 43560) : '';
@@ -6649,15 +6612,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         rows.push(
                           <tr key={zoneKey}>
                             <td style={{ padding: '6px', border: '1px solid #E5E7EB' }}>{zoneKey}</td>
-                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>
-                              {typicalFrontage !== '' ? `${typicalFrontage} ft` : 'N/A'}
-                            </td>
-                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>
-                              {typicalDepth !== '' ? `${typicalDepth} ft` : 'N/A'}
-                            </td>
-                            <td style={{ padding: '6px', textAlign: 'left', border: '1px solid #E5E7EB' }}>
-                              {depthTable || 'Not Set'}
-                            </td>
+                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{typicalLotAcres !== '' ? `${typicalLotAcres} / ${typicalLotSF.toLocaleString()} SF` : 'N/A'}</td>
                             <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{landValue !== '' ? `$${Number(landValue).toLocaleString()}` : 'N/A'}</td>
                             <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{minFrontage}</td>
                             <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{standardFF !== '' ? `$${standardFF.toLocaleString()}` : 'N/A'}</td>
@@ -6681,8 +6636,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             <td style={{ padding: '6px', border: '1px solid #E5E7EB' }}>Recommended Front Foot</td>
                             <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
                             <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
-                            <td style={{ padding: '6px', textAlign: 'left', border: '1px solid #E5E7EB' }}></td>
-                            <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
                             <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
                             <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${recStandard.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                             <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${recExcess.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
@@ -6696,7 +6649,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       debug('Failed to render implied front foot rates:', e);
                       return (
                         <tr>
-                          <td colSpan="8" style={{ padding: '8px', color: '#EF4444' }}>Error rendering table</td>
+                          <td colSpan="6" style={{ padding: '8px', color: '#EF4444' }}>Error rendering table</td>
                         </tr>
                       );
                     }
