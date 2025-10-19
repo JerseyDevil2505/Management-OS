@@ -2495,7 +2495,7 @@ Find specific information about this property and sale. Include:
 ��� Property ownership/seller details
 • Tax assessment and classification details
 • Documented environmental constraints (wetlands, floodplains)
-• Municipality-specific land use characteristics
+�� Municipality-specific land use characteristics
 ��� Any circumstances of the sale (estate, distressed, etc.)
 
 Provide only verifiable facts with sources. Be specific and actionable for valuation purposes. 2-3 sentences.`;
@@ -2607,7 +2607,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const avgCurrentAllocation = currentAllocs.reduce((sum, a) => sum + a, 0) / currentAllocs.length;
 
       // Calculate new land value using this sale's site value + improved sales average raw land
-      const improvedRawLandValue = calculateRawLandValue(avgImprovedAcres, cascadeConfig.normal);
+      let improvedRawLandValue;
+      if (valuationMode === 'ff' && improvedSalesForYear.length > 0) {
+        // For FF mode, calculate each improved sale's raw land value and average them
+        const improvedRawValues = improvedSalesForYear.map(prop =>
+          calculateRawLandValue(null, cascadeConfig.normal, prop)
+        );
+        improvedRawLandValue = improvedRawValues.reduce((sum, val) => sum + val, 0) / improvedRawValues.length;
+      } else {
+        // For acreage mode, use average acres
+        improvedRawLandValue = calculateRawLandValue(avgImprovedAcres, cascadeConfig.normal);
+      }
       const totalLandValue = improvedRawLandValue + siteValue;
 
       // Calculate recommended allocation
