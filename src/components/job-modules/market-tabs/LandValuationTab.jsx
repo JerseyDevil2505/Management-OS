@@ -1572,6 +1572,10 @@ const getPricePerUnit = useCallback((price, size) => {
           sales_price: totalPrice,
           totalAcres: totalAcres,
           pricePerAcre: pricePerUnit,
+          // Preserve FF/Depth/Zone for allocation study
+          land_front_feet: group[0].land_front_feet || group[0].asset_lot_frontage || 0,
+          land_depth: group[0].land_depth || group[0].asset_lot_depth || 0,
+          land_zoning: group[0].asset_zoning || group[0].land_zoning || group[0].zoning || 'N/A',
           packageData: {
             is_package: true,
             package_count: group.length,
@@ -4907,7 +4911,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           [category]: rate ? parseFloat(rate) : null
         }
       };
-      debug('���� New cascade config special categories:', newConfig.specialCategories);
+      debug('����� New cascade config special categories:', newConfig.specialCategories);
       return newConfig;
     });
   };
@@ -8120,7 +8124,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <strong>Exclude problematic sales:</strong> Uncheck sales that should not be used in Method 2 calculations
                 (teardowns, poor condition, pre-construction, etc.).
                 <span style={{ display: 'block', marginTop: '4px' }}>
-                  ⚠️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
+                  ���️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
                 </span>
               </p>
             </div>
@@ -10021,7 +10025,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <option value="all">All</option>
                 <option value="1">1 — Single Family</option>
                 <option value="2">2 — Duplex / Semi-Detached</option>
-                <option value="3">3* ��� Row / Townhouse</option>
+                <option value="3">3* ���� Row / Townhouse</option>
                 <option value="4">4* — MultiFamily</option>
                 <option value="5">5* — Conversions</option>
                 <option value="6">6 — Condominium</option>
