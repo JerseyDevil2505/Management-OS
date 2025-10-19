@@ -386,6 +386,9 @@ const LandValuationTab = ({
   const [vcsDescriptions, setVcsDescriptions] = useState({});
   const [vcsRecommendedSites, setVcsRecommendedSites] = useState({});
 
+  // ========== DEPTH TABLES STATE ==========
+  const [depthTables, setDepthTables] = useState({});
+
   // ========== ECONOMIC OBSOLESCENCE STATE - ENHANCED ==========
   const [ecoObsFactors, setEcoObsFactors] = useState({});
   const [locationCodes, setLocationCodes] = useState({});
