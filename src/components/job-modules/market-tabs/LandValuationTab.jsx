@@ -733,6 +733,11 @@ useEffect(() => {
     setMethod2ExcludedSales(new Set(marketLandData.bracket_analysis.excluded_sales));
   }
 
+  // Restore Method 2 excluded VCSs
+  if (marketLandData.bracket_analysis?.excluded_vcs) {
+    setExcludedMethod2VCS(new Set(marketLandData.bracket_analysis.excluded_vcs));
+  }
+
   // Load target allocation with proper precedence to avoid stale data conflicts
   let loadedTargetAllocation = null;
 
