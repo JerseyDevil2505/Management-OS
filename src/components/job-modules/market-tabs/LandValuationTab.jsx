@@ -2576,7 +2576,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
       // Apply cascade calculation to get raw land value
-      const rawLandValue = calculateRawLandValue(acres, cascadeRates);
+      const rawLandValue = calculateRawLandValue(acres, cascadeRates, sale);
       const siteValue = (sale.values_norm_time || sale.sales_price) - rawLandValue;
 
       // Find improved sales for this sale's year
