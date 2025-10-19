@@ -771,7 +771,7 @@ useEffect(() => {
         debug('✅ Target allocation set to:', numericValue, typeof numericValue);
         return numericValue;
       } else {
-        debug('🛡�� Preserving existing target allocation:', prev, 'instead of overwriting with:', numericValue);
+        debug('🛡��� Preserving existing target allocation:', prev, 'instead of overwriting with:', numericValue);
         return prev;
       }
     });
@@ -1278,7 +1278,10 @@ const getPricePerUnit = useCallback((price, size) => {
           return {
             ...prop,
             totalAcres: acres,
-            pricePerAcre: pricePerUnit
+            pricePerAcre: pricePerUnit,
+            land_front_feet: prop.land_front_feet || prop.asset_lot_frontage || 0,
+            land_depth: prop.land_depth || prop.asset_lot_depth || 0,
+            land_zoning: prop.land_zoning || prop.asset_zoning || prop.zoning || 'N/A'
           };
         });
 
@@ -2556,7 +2559,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const loadAllocationStudyData = useCallback(() => {
     if (!cascadeConfig.normal.prime) return;
 
-    debug('���� Loading allocation study data - individual sale approach');
+    debug('����� Loading allocation study data - individual sale approach');
 
     // Process each individual vacant sale (no grouping)
     const processedVacantSales = [];
