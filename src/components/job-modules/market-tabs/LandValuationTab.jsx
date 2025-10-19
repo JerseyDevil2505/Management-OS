@@ -8637,17 +8637,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         </div>
       </div>
 
-      {/* Special Region Individual Allocation Analysis Table */}
-      {(() => {
-        const specialRegionSales = vacantTestSales.filter(sale => sale.region !== 'Normal');
-        if (specialRegionSales.length === 0) return null;
+      {/* Special Region Individual Allocation Analysis - Separate Section per Region */}
+      {getUniqueRegions().filter(regionName => regionName !== 'Normal').map(regionName => {
+        const regionSales = vacantTestSales.filter(sale => sale.region === regionName);
+        if (regionSales.length === 0) return null;
 
         return (
-          <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB', marginTop: '20px' }}>
+          <div key={regionName} style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB', marginTop: '20px' }}>
             <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F3E8FF' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold', color: '#8B5CF6' }}>Special Region Individual Allocation Analysis</h3>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold', color: '#8B5CF6' }}>{regionName} Individual Allocation Analysis</h3>
               <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6B7280' }}>
-                Vacant sales using special region cascade rates
+                Vacant sales using {regionName} cascade rates
               </p>
             </div>
 
@@ -8720,7 +8720,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   </tr>
                 </thead>
                 <tbody>
-                  {specialRegionSales.map((sale, index) => (
+                  {regionSales.map((sale, index) => (
                     <tr
                       key={`special_${sale.id}_${index}`}
                       style={{
@@ -8830,10 +8830,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </table>
             </div>
 
-            {/* Special Region Summary Footer */}
+            {/* Region-Specific Summary Footer */}
             <div style={{ padding: '15px', borderTop: '1px solid #E5E7EB', backgroundColor: '#F3E8FF' }}>
               {(() => {
-                const positiveSales = specialRegionSales.filter(s => s.isPositive);
+                const positiveSales = regionSales.filter(s => s.isPositive);
                 const totalLandValue = positiveSales.reduce((sum, s) => sum + s.totalLandValue, 0);
                 const totalSalePrice = positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0);
                 const overallRecommended = totalSalePrice > 0 ? (totalLandValue / totalSalePrice) * 100 : 0;
@@ -8841,8 +8841,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 return (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', fontSize: '14px' }}>
                     <div>
-                      <div style={{ color: '#6B7280', fontSize: '12px' }}>Special Region Sales Included</div>
-                      <div style={{ fontWeight: 'bold', color: '#8B5CF6' }}>{positiveSales.length} of {specialRegionSales.length}</div>
+                      <div style={{ color: '#6B7280', fontSize: '12px' }}>{regionName} Sales Included</div>
+                      <div style={{ fontWeight: 'bold', color: '#8B5CF6' }}>{positiveSales.length} of {regionSales.length}</div>
                     </div>
                     <div>
                       <div style={{ color: '#6B7280', fontSize: '12px' }}>Total Land Value</div>
@@ -8853,7 +8853,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <div style={{ fontWeight: 'bold' }}>${Math.round(totalSalePrice).toLocaleString()}</div>
                     </div>
                     <div>
-                      <div style={{ color: '#6B7280', fontSize: '12px' }}>Special Region Recommended</div>
+                      <div style={{ color: '#6B7280', fontSize: '12px' }}>{regionName} Recommended</div>
                       <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#8B5CF6' }}>{overallRecommended.toFixed(1)}%</div>
                     </div>
                   </div>
@@ -8862,7 +8862,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             </div>
           </div>
         );
-      })()}
+      })}
     </div>
   );
 
