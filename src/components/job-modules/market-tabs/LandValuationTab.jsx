@@ -1071,9 +1071,17 @@ const getPricePerUnit = useCallback((price, size) => {
   // ========== LOAD DEPTH TABLES ===========
   useEffect(() => {
     const codeDefinitions = jobData?.parsed_code_definitions;
-    const tables = getDepthFactors(codeDefinitions, vendorType);
-    setDepthTables(tables);
-    debug('📊 Depth tables loaded:', Object.keys(tables));
+    // Use interpretCodes.getDepthFactors to parse all tables from code file
+    const tables = interpretCodes.getDepthFactors(codeDefinitions, vendorType);
+    if (tables) {
+      setDepthTables(tables);
+      debug('📊 Depth tables loaded:', Object.keys(tables));
+    } else {
+      // Fallback to defaults if no code definitions
+      const defaultTables = getDepthFactors(codeDefinitions, vendorType);
+      setDepthTables(defaultTables);
+      debug('📊 Using default depth tables:', Object.keys(defaultTables));
+    }
   }, [jobData?.parsed_code_definitions, vendorType]);
 
   useEffect(() => {
