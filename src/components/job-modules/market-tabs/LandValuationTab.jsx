@@ -2477,7 +2477,7 @@ Find specific information about this property and sale. Include:
 • Tax assessment and classification details
 • Documented environmental constraints (wetlands, floodplains)
 • Municipality-specific land use characteristics
-• Any circumstances of the sale (estate, distressed, etc.)
+��� Any circumstances of the sale (estate, distressed, etc.)
 
 Provide only verifiable facts with sources. Be specific and actionable for valuation purposes. 2-3 sentences.`;
 
@@ -2796,19 +2796,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         counts[prop.new_vcs].special++;
       }
 
-      // Determine VCS type to filter avg price calculations
-      const vcsType = vcsTypes[prop.new_vcs] || 'Residential-Typical';
-      const vcsIsCondo = vcsType.toLowerCase().includes('condo');
-
-      // Determine property type from asset_type_use code
-      const typeCode = prop.asset_type_use || '';
-      const firstChar = typeCode.toString().charAt(0);
-      const propertyIsCondo = firstChar === '6';
-
-      // Collect averages only when VCS type matches property type
-      const shouldInclude = vcsIsCondo ? propertyIsCondo : !propertyIsCondo;
-
-      if (shouldInclude && prop.sales_price > 0 && prop.sales_date) {
+      // Collect sales averages for all properties with sales in this VCS
+      // Note: VCS type filtering happens later in calculateRecSite
+      if (prop.sales_price > 0 && prop.sales_date) {
         // Avg Price (t): ALL normalized time values in VCS (no date filter)
         if (prop.values_norm_time > 0) avgNormTime[prop.new_vcs].push(prop.values_norm_time);
 
