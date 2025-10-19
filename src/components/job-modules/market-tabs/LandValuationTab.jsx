@@ -2919,7 +2919,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
     debug('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
-    debug('���� Input validation:', {
+    debug('����� Input validation:', {
       hasTargetAllocation: !!targetAllocation,
       targetAllocationValue: targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
@@ -8855,14 +8855,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         if (!config.vcsList) return false;
         // Parse comma-separated VCS list and check if current VCS is in it
         const vcsList = config.vcsList.split(',').map(v => v.trim().toUpperCase());
-        const vcsMatch = vcsList.includes(vcs.toString().toUpperCase());
-
-        // Check if this VCS is excluded for this region
-        const regionExclusions = excludedRegionVCSs[region] || new Set();
-        const isExcluded = regionExclusions.has(vcs.toString());
-
-        // Only use this region's rates if VCS is assigned AND not excluded
-        return vcsMatch && !isExcluded;
+        return vcsList.includes(vcs.toString().toUpperCase());
       });
 
       if (assignedSpecialRegion) {
