@@ -2595,18 +2595,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         return;
       }
 
-      // Debug FF/Depth/Zone data for vacant sale
-      const vacantFF = parseFloat(sale.land_front_feet ?? sale.asset_lot_frontage) || 0;
-      const vacantDepth = parseFloat(sale.land_depth ?? sale.asset_lot_depth) || 0;
-      const vacantZone = sale.asset_zoning || sale.land_zoning || sale.zoning || 'N/A';
-
-      console.log(`🏢 Vacant Sale ${sale.property_block}/${sale.property_lot}:`, {
-        frontFeet: vacantFF,
-        depth: vacantDepth,
-        zone: vacantZone,
-        valuationMode,
-        hasCascadeRates: !!cascadeRates
-      });
 
       // Log special region usage
       if (region !== 'Normal') {
@@ -2618,28 +2606,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
       // Apply cascade calculation to get raw land value
-      // For FF mode, we need to ensure the sale object has the right fields
-      let rawLandValue;
-      if (valuationMode === 'ff' && vacantFF > 0 && vacantDepth > 0) {
-        // Create a properly formatted property object for FF calculation
-        const saleForFF = {
-          land_front_feet: vacantFF,
-          land_depth: vacantDepth,
-          land_zoning: vacantZone
-        };
-        rawLandValue = calculateRawLandValue(null, cascadeRates, saleForFF);
-      } else {
-        // Acre mode
-        rawLandValue = calculateRawLandValue(acres, cascadeRates);
-      }
-
+      const rawLandValue = calculateRawLandValue(acres, cascadeRates, sale);
       const siteValue = (sale.values_norm_time || sale.sales_price) - rawLandValue;
-
-      console.log(`💰 Sale ${sale.property_block}/${sale.property_lot} values:`, {
-        salePrice: sale.values_norm_time || sale.sales_price,
-        rawLandValue,
-        siteValue
-      });
 
       // Find improved sales for this sale's year AND VCS
       // IMPORTANT: Only use sales with values_norm_time (bad sales are filtered out during normalization)
@@ -8209,7 +8177,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'address' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
+                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '�����') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('saleDate')}
