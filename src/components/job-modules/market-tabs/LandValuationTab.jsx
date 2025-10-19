@@ -1063,6 +1063,14 @@ const getPricePerUnit = useCallback((price, size) => {
   // Note: intentionally exclude loadAllocationStudyData from deps to avoid TDZ issues, it is stable via useCallback.
 
   // Auto-calculate VCS recommended sites when target allocation changes
+  // ========== LOAD DEPTH TABLES ===========
+  useEffect(() => {
+    const codeDefinitions = jobData?.parsed_code_definitions;
+    const tables = getDepthFactors(codeDefinitions, vendorType);
+    setDepthTables(tables);
+    debug('📊 Depth tables loaded:', Object.keys(tables));
+  }, [jobData?.parsed_code_definitions, vendorType]);
+
   useEffect(() => {
     debug('🔄 TARGET ALLOCATION USEEFFECT TRIGGERED:', {
       targetAllocation,
