@@ -388,6 +388,7 @@ const LandValuationTab = ({
 
   // ========== DEPTH TABLES STATE ==========
   const [depthTables, setDepthTables] = useState({});
+  const [vcsDepthTableOverrides, setVcsDepthTableOverrides] = useState({}); // VCS-specific depth table overrides
 
   // ========== ECONOMIC OBSOLESCENCE STATE - ENHANCED ==========
   const [ecoObsFactors, setEcoObsFactors] = useState({});
@@ -791,6 +792,10 @@ useEffect(() => {
     }
     if (marketLandData.worksheet_data.recommended_sites) {
       setVcsRecommendedSites(marketLandData.worksheet_data.recommended_sites);
+    }
+
+    if (marketLandData.worksheet_data.depth_table_overrides) {
+      setVcsDepthTableOverrides(marketLandData.worksheet_data.depth_table_overrides);
     }
     if (marketLandData.worksheet_data.descriptions) {
       setVcsDescriptions(marketLandData.worksheet_data.descriptions);
@@ -3567,7 +3572,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           recommended_sites: vcsRecommendedSites,
           descriptions: vcsDescriptions,
           types: vcsTypes,
-          sheet_data: vcsSheetData
+          sheet_data: vcsSheetData,
+          depth_table_overrides: vcsDepthTableOverrides
         },
         eco_obs_applied_adjustments: actualAdjustments,
         eco_obs_code_config: {
@@ -8556,7 +8562,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     if (!zoneEntry) return recSite || 0;
 
-    const depthTableName = zoneEntry.depth_table || zoneEntry.depthTable;
+    // Use VCS-specific depth table override if available, otherwise use zoning default
+    const depthTableName = vcsDepthTableOverrides[vcs] || zoneEntry.depth_table || zoneEntry.depthTable;
     const minFrontage = parseFloat(zoneEntry.min_frontage || zoneEntry.minFrontage || 0);
 
     if (!depthTableName || !minFrontage) return recSite || 0;
@@ -8615,7 +8622,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     );
 
     return siteValue;
-  }, [valuationMode, marketLandData, properties, depthTables, cascadeConfig, vacantSales, specialRegions]);
+  }, [valuationMode, marketLandData, properties, depthTables, cascadeConfig, vacantSales, specialRegions, vcsDepthTableOverrides]);
 
   // ========== RENDER VCS SHEET TAB ==========
   const renderVCSSheetTab = () => {
@@ -8818,36 +8825,41 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         typicalDepth = 100;
                       }
 
-                      // Get depth table from zoning config
-                      // Find the most common zoning for this VCS
-                      const vcsZonings = vcsPropsWithFrontage
-                        .map(p => p.asset_zoning)
-                        .filter(z => z && z.trim() !== '');
+                      // Use VCS-specific override if available, otherwise get from zoning config
+                      if (vcsDepthTableOverrides[vcs]) {
+                        depthTableName = vcsDepthTableOverrides[vcs];
+                      } else {
+                        // Get depth table from zoning config
+                        // Find the most common zoning for this VCS
+                        const vcsZonings = vcsPropsWithFrontage
+                          .map(p => p.asset_zoning)
+                          .filter(z => z && z.trim() !== '');
 
-                      if (vcsZonings.length > 0) {
-                        // Get most common zoning
-                        const zoningCounts = {};
-                        vcsZonings.forEach(z => {
-                          const zKey = z.toString().trim();
-                          zoningCounts[zKey] = (zoningCounts[zKey] || 0) + 1;
-                        });
-                        const mostCommonZoning = Object.keys(zoningCounts).reduce((a, b) =>
-                          zoningCounts[a] > zoningCounts[b] ? a : b
-                        );
+                        if (vcsZonings.length > 0) {
+                          // Get most common zoning
+                          const zoningCounts = {};
+                          vcsZonings.forEach(z => {
+                            const zKey = z.toString().trim();
+                            zoningCounts[zKey] = (zoningCounts[zKey] || 0) + 1;
+                          });
+                          const mostCommonZoning = Object.keys(zoningCounts).reduce((a, b) =>
+                            zoningCounts[a] > zoningCounts[b] ? a : b
+                          );
 
-                        // Look up depth table from zoning config
-                        const zcfg = marketLandData?.zoning_config || {};
-                        const zoneEntry = zcfg[mostCommonZoning] ||
-                                         zcfg[mostCommonZoning?.toUpperCase?.()] ||
-                                         zcfg[mostCommonZoning?.toLowerCase?.()] || null;
+                          // Look up depth table from zoning config
+                          const zcfg = marketLandData?.zoning_config || {};
+                          const zoneEntry = zcfg[mostCommonZoning] ||
+                                           zcfg[mostCommonZoning?.toUpperCase?.()] ||
+                                           zcfg[mostCommonZoning?.toLowerCase?.()] || null;
 
-                        if (zoneEntry) {
-                          depthTableName = zoneEntry.depth_table ||
-                                          zoneEntry.depthTable ||
-                                          zoneEntry.depth_table_name ||
-                                          'Not Set';
-                        } else {
-                          depthTableName = 'Not Set';
+                          if (zoneEntry) {
+                            depthTableName = zoneEntry.depth_table ||
+                                            zoneEntry.depthTable ||
+                                            zoneEntry.depth_table_name ||
+                                            'Not Set';
+                          } else {
+                            depthTableName = 'Not Set';
+                          }
                         }
                       }
                     }
@@ -8916,8 +8928,37 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
                             {typicalDepth !== '' ? `${typicalDepth} ft` : 'N/A'}
                           </td>
-                          <td style={{ padding: '8px', textAlign: 'left', border: '1px solid #E5E7EB' }}>
-                            {depthTableName || 'Not Set'}
+                          <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
+                            <select
+                              value={vcsDepthTableOverrides[vcs] || depthTableName || ''}
+                              onChange={(e) => {
+                                const newDepthTable = e.target.value;
+                                setVcsDepthTableOverrides(prev => ({
+                                  ...prev,
+                                  [vcs]: newDepthTable
+                                }));
+                                // Trigger immediate save
+                                setTimeout(() => {
+                                  saveAllLandValuationData();
+                                }, 100);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '2px 4px',
+                                border: '1px solid #D1D5DB',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                backgroundColor: vcsDepthTableOverrides[vcs] ? '#FEF3C7' : 'white'
+                              }}
+                              title={vcsDepthTableOverrides[vcs] ? 'VCS Override Active' : 'Using zoning default'}
+                            >
+                              <option value="">Auto (from zoning)</option>
+                              {Object.keys(depthTables).map(table => (
+                                <option key={table} value={table}>
+                                  {table}
+                                </option>
+                              ))}
+                            </select>
                           </td>
                         </>
                       )}
