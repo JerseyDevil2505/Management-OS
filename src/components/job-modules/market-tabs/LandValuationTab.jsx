@@ -359,10 +359,6 @@ const LandValuationTab = ({
   // Method 1 Exclusion State (like Method 2)
   const [method1ExcludedSales, setMethod1ExcludedSales] = useState(new Set());
 
-  // VCS Exclusion State (for special regions)
-  // Structure: { regionName: Set(['vcs1', 'vcs2']) }
-  const [excludedRegionVCSs, setExcludedRegionVCSs] = useState({});
-
   // Method 2 Exclusion Modal State
   const [showMethod2Modal, setShowMethod2Modal] = useState(false);
   const [method2ModalVCS, setMethod2ModalVCS] = useState('');
@@ -753,7 +749,7 @@ useEffect(() => {
   // Priority 1: Dedicated column (most recent saves go here)
   if (marketLandData.target_allocation !== null && marketLandData.target_allocation !== undefined) {
     loadedTargetAllocation = marketLandData.target_allocation;
-    debug('🎯 LOADING TARGET ALLOCATION FROM DEDICATED COLUMN:', loadedTargetAllocation);
+    debug('�� LOADING TARGET ALLOCATION FROM DEDICATED COLUMN:', loadedTargetAllocation);
   }
   // Priority 2: Legacy allocation_study structure (fallback)
   else if (marketLandData.allocation_study?.target_allocation !== null &&
@@ -2696,7 +2692,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       remainingAcres = 0;
     }
 
-    debug(`���� Raw land calculation for ${acres} acres:`, breakdown.join(' + '), `= $${rawLandValue.toFixed(0)}`);
+    debug(`������ Raw land calculation for ${acres} acres:`, breakdown.join(' + '), `= $${rawLandValue.toFixed(0)}`);
 
     return rawLandValue;
   };
@@ -5130,7 +5126,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Debug teardown sales to see if they're incorrectly going to raw land
       if (saleCategories[s.id] === 'teardown' || (s.property_block === '5' && s.property_lot === '12.12')) {
-        debug('�� Raw Land check for teardown/5.12.12:', {
+        debug('���� Raw Land check for teardown/5.12.12:', {
           block: s.property_block,
           lot: s.property_lot,
           id: s.id,
