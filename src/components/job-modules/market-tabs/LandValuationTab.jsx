@@ -863,6 +863,7 @@ useEffect(() => {
   updateSession({
     method1ExcludedSales,
     includedSales,
+    excludedMethod2VCS,
     saleCategories,
     specialRegions,
     landNotes,
@@ -882,6 +883,7 @@ useEffect(() => {
 }, [
   method1ExcludedSales,
   includedSales,
+  excludedMethod2VCS,
   saleCategories,
   specialRegions,
   landNotes,
@@ -2473,7 +2475,7 @@ const getPricePerUnit = useCallback((price, size) => {
     setSearchResults([]);
 
     // Note: Auto-save will trigger within 30 seconds to persist these changes
-    debug('💾 Sales added - auto-save will persist these changes:', toAdd.map(p => `${p.property_block}/${p.property_lot}`));
+    debug('�� Sales added - auto-save will persist these changes:', toAdd.map(p => `${p.property_block}/${p.property_lot}`));
   };
 
   const handlePropertyResearch = async (property) => {
@@ -4780,7 +4782,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const updateSpecialCategory = (category, rate) => {
-    debug(`���� Updating special category: ${category} = ${rate}`);
+    debug(`������ Updating special category: ${category} = ${rate}`);
     setCascadeConfig(prev => {
       const newConfig = {
         ...prev,
@@ -8989,7 +8991,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     onClick={() => toggleFieldCollapse('zoning')}
                     title="Click to expand/collapse"
                   >
-                    Zoning {collapsedFields.zoning ? '���' : '▼'}
+                    Zoning {collapsedFields.zoning ? '����' : '▼'}
                   </th>
                   {shouldShowKeyColumn && (
                     <th
