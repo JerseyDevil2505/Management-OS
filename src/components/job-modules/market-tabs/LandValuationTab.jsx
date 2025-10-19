@@ -3568,13 +3568,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           excluded_sales: Array.from(method2ExcludedSales),
           summary: method2Summary
         },
-        cascade_rates: {
-          ...cascadeConfig,
-          excludedVCSs: Object.entries(excludedRegionVCSs).reduce((acc, [region, vcsSet]) => {
-            acc[region] = Array.from(vcsSet);
-            return acc;
-          }, {})
-        },
+        cascade_rates: cascadeConfig,
         target_allocation: targetAllocation,
         allocation_study: {
           vcs_site_values: vcsSiteValues,
