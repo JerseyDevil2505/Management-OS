@@ -8562,7 +8562,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Type</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Description</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Method</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Typ Lot</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
+                    {valuationMode === 'ff' ? 'Typ Lot FF' : 'Typ Lot'}
+                  </th>
+                  {valuationMode === 'ff' && (
+                    <>
+                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Typ Lot Depth</th>
+                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Depth Table</th>
+                    </>
+                  )}
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Rec Site</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Act Site</th>
                   {valuationMode === 'ff' ? (
