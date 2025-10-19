@@ -556,7 +556,6 @@ useEffect(() => {
     setSaleCategories(currentSession.saleCategories || {});
     setSpecialRegions(currentSession.specialRegions || {});
     setLandNotes(currentSession.landNotes || {});
-    setExcludedRegionVCSs(currentSession.excludedRegionVCSs || {});
 
     if (currentSession.cascadeConfig) {
       setCascadeConfig(currentSession.cascadeConfig);
