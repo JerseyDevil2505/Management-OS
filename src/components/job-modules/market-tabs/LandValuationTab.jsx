@@ -359,6 +359,10 @@ const LandValuationTab = ({
   // Method 1 Exclusion State (like Method 2)
   const [method1ExcludedSales, setMethod1ExcludedSales] = useState(new Set());
 
+  // VCS Exclusion State (for special regions)
+  // Structure: { regionName: Set(['vcs1', 'vcs2']) }
+  const [excludedRegionVCSs, setExcludedRegionVCSs] = useState({});
+
   // Method 2 Exclusion Modal State
   const [showMethod2Modal, setShowMethod2Modal] = useState(false);
   const [method2ModalVCS, setMethod2ModalVCS] = useState('');
@@ -4762,6 +4766,35 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }));
   };
 
+  const toggleVCSExclusion = (region, vcs) => {
+    setExcludedRegionVCSs(prev => {
+      const regionExclusions = new Set(prev[region] || []);
+      if (regionExclusions.has(vcs)) {
+        regionExclusions.delete(vcs);
+      } else {
+        regionExclusions.add(vcs);
+      }
+      return {
+        ...prev,
+        [region]: regionExclusions
+      };
+    });
+  };
+
+  const selectAllVCSs = (region, vcsList) => {
+    setExcludedRegionVCSs(prev => ({
+      ...prev,
+      [region]: new Set()
+    }));
+  };
+
+  const deselectAllVCSs = (region, vcsList) => {
+    setExcludedRegionVCSs(prev => ({
+      ...prev,
+      [region]: new Set(vcsList)
+    }));
+  };
+
   const updateSpecialCategory = (category, rate) => {
     debug(`���� Updating special category: ${category} = ${rate}`);
     setCascadeConfig(prev => {
@@ -5222,7 +5255,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     // 📊 FINAL RESULTS LOG - Shows what will be displayed to user
-    console.log('📊 PAIRED SALES ANALYSIS - Final Results:', {
+    console.log('���� PAIRED SALES ANALYSIS - Final Results:', {
       valuationMode,
       unitLabel: valuationMode === 'acre' ? '$/acre' : valuationMode === 'sf' ? '$/SF' : '$/FF',
 
