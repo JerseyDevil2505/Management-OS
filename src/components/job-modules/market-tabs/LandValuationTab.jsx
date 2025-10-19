@@ -3577,6 +3577,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         bracket_analysis: {
           ...bracketAnalysis,
           excluded_sales: Array.from(method2ExcludedSales),
+          excluded_vcs: Array.from(excludedMethod2VCS),
           summary: method2Summary
         },
         cascade_rates: cascadeConfig,
