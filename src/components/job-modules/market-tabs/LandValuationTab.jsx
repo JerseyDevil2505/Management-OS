@@ -2918,7 +2918,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
     debug('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
-    debug('���� Input validation:', {
+    debug('����� Input validation:', {
       hasTargetAllocation: !!targetAllocation,
       targetAllocationValue: targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
@@ -4199,7 +4199,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     Object.entries(bracketAnalysis || {}).sort(([a],[b]) => a.localeCompare(b)).forEach(([vcs, data]) => {
       // VCS header row
-      const vcsSummary = `${data.totalSales || 0} sales • Avg $${Math.round(data.avgPrice || 0).toLocaleString()} • ${data.avgAcres != null ? Number(data.avgAcres.toFixed(2)) : ''} acres �� $${Math.round(data.avgAdjusted || 0).toLocaleString()}`;
+      const vcsSummary = `${data.totalSales || 0} sales • Avg $${Math.round(data.avgPrice || 0).toLocaleString()} • ${data.avgAcres != null ? Number(data.avgAcres.toFixed(2)) : ''} acres ���� $${Math.round(data.avgAdjusted || 0).toLocaleString()}`;
       method2Rows.push([`${vcs} - ${vcsSummary}`]);
       method2Rows.push([]);
 
@@ -8838,13 +8838,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     cascadeRates = vcsSpecificConfig.rates || cascadeConfig.normal;
                     rateSource = `VCS-Specific (${vcsSpecificConfig.method?.toUpperCase()})`;
                   } else {
-                    // Check for special region configuration
-                    const vcsInSpecialRegion = vacantSales.find(sale =>
-                      sale.new_vcs === vcs && specialRegions[sale.id] && specialRegions[sale.id] !== 'Normal'
-                    );
-                    if (vcsInSpecialRegion && cascadeConfig.special?.[specialRegions[vcsInSpecialRegion.id]]) {
-                      cascadeRates = cascadeConfig.special[specialRegions[vcsInSpecialRegion.id]];
-                      rateSource = specialRegions[vcsInSpecialRegion.id];
+                    // Check for special region configuration by VCS assignment
+                    const assignedSpecialRegion = Object.entries(cascadeConfig.special || {}).find(([region, config]) => {
+                      if (!config.vcsList) return false;
+                      // Parse comma-separated VCS list and check if current VCS is in it
+                      const vcsList = config.vcsList.split(',').map(v => v.trim().toUpperCase());
+                      return vcsList.includes(vcs.toString().toUpperCase());
+                    });
+
+                    if (assignedSpecialRegion) {
+                      cascadeRates = assignedSpecialRegion[1];
+                      rateSource = assignedSpecialRegion[0]; // Region name
                     }
                   }
                   
