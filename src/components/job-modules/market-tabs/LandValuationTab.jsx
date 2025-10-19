@@ -1094,7 +1094,7 @@ const getPricePerUnit = useCallback((price, size) => {
   }, [jobData?.parsed_code_definitions, vendorType]);
 
   useEffect(() => {
-    debug('🔄 TARGET ALLOCATION USEEFFECT TRIGGERED:', {
+    debug('��� TARGET ALLOCATION USEEFFECT TRIGGERED:', {
       targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
       propertiesCount: properties?.length || 0
@@ -3651,6 +3651,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           updateSessionState({
             method1ExcludedSales: new Set(),
             includedSales: new Set(),
+            excludedMethod2VCS: new Set(),
             saleCategories: {},
             specialRegions: {},
             landNotes: {},
@@ -4792,7 +4793,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           [category]: rate ? parseFloat(rate) : null
         }
       };
-      debug('�� New cascade config special categories:', newConfig.specialCategories);
+      debug('���� New cascade config special categories:', newConfig.specialCategories);
       return newConfig;
     });
   };
