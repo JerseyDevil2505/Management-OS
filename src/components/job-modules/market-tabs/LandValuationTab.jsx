@@ -1198,7 +1198,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
     // If we already have restored sales, preserve them and only add new ones
     if (false) { // Disable complex caching logic
-      debug('���� Preserving existing restored sales, checking for new ones only');
+      debug('������ Preserving existing restored sales, checking for new ones only');
 
       // Find any new sales that match criteria but aren't already in vacantSales
       const existingIds = new Set(vacantSales.map(s => s.id));
@@ -8647,20 +8647,26 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const excessFrontage = Math.max(0, avgFrontage - minFrontage);
 
     // Get standard and excess FF rates from cascade config or calculated values
-    // Check for VCS-specific configuration
+    // Priority: VCS-Specific > Special Region (by VCS assignment) > Normal
     let cascadeRates = cascadeConfig.normal;
+
+    // Check for VCS-specific configuration
     const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
       config.vcsList?.includes(vcs)
     );
     if (vcsSpecificConfig) {
       cascadeRates = vcsSpecificConfig.rates || cascadeConfig.normal;
     } else {
-      // Check for special region configuration
-      const vcsInSpecialRegion = vacantSales.find(sale =>
-        sale.new_vcs === vcs && specialRegions[sale.id] && specialRegions[sale.id] !== 'Normal'
-      );
-      if (vcsInSpecialRegion && cascadeConfig.special?.[specialRegions[vcsInSpecialRegion.id]]) {
-        cascadeRates = cascadeConfig.special[specialRegions[vcsInSpecialRegion.id]];
+      // Check for special region configuration by VCS assignment
+      const assignedSpecialRegion = Object.entries(cascadeConfig.special || {}).find(([region, config]) => {
+        if (!config.vcsList) return false;
+        // Parse comma-separated VCS list and check if current VCS is in it
+        const vcsList = config.vcsList.split(',').map(v => v.trim().toUpperCase());
+        return vcsList.includes(vcs.toString().toUpperCase());
+      });
+
+      if (assignedSpecialRegion) {
+        cascadeRates = assignedSpecialRegion[1]; // Use the config object from the [region, config] tuple
       }
     }
 
