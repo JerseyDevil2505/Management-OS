@@ -8712,7 +8712,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const avgPrice = data.avgPrice || data.avgNormTime;
     if (!avgPrice || !targetAllocation) return vcsRecommendedSites[vcs] || 0;
 
-    // Front Foot mode calculation
+    // Check if this VCS is a condo - condos use simple allocation formula
+    const vcsType = vcsTypes[vcs] || 'Residential-Typical';
+    const isCondo = vcsType.toLowerCase().includes('condo');
+
+    if (isCondo) {
+      // For condos: Rec Site = Target % × Avg Price (no land dimensions)
+      return Math.round(avgPrice * (targetAllocation / 100));
+    }
+
+    // Front Foot mode calculation for non-condo residential
     const zcfg = marketLandData?.zoning_config || {};
 
     // Find the most common zoning for this VCS
