@@ -3616,7 +3616,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       if (error) throw error;
 
-      debug('���� Save completed successfully');
+      debug('�� Save completed successfully');
       setLastSaved(new Date());
 
       // Notify parent component
@@ -4771,7 +4771,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           [category]: rate ? parseFloat(rate) : null
         }
       };
-      debug('���� New cascade config special categories:', newConfig.specialCategories);
+      debug('�� New cascade config special categories:', newConfig.specialCategories);
       return newConfig;
     });
   };
@@ -6976,14 +6976,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </label>
 
               {/* Assigned VCS badges */}
-              <div style={{ marginBottom: '8px', minHeight: '32px', padding: '6px', backgroundColor: 'white', border: '1px solid #BFDBFE', borderRadius: '4px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+              <div style={{ marginBottom: '10px', minHeight: '36px', padding: '8px', backgroundColor: 'white', border: '1px solid #BFDBFE', borderRadius: '4px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(50px, 1fr))', gap: '6px', alignItems: 'start' }}>
                 {(() => {
                   const assignedList = cascadeConfig.special[region]?.vcsList
                     ? cascadeConfig.special[region].vcsList.split(',').map(v => v.trim()).filter(v => v)
                     : [];
 
+                  // Sort numerically
+                  assignedList.sort((a, b) => parseInt(a) - parseInt(b));
+
                   if (assignedList.length === 0) {
-                    return <span style={{ color: '#9CA3AF', fontSize: '12px', fontStyle: 'italic' }}>No VCS assigned</span>;
+                    return <span style={{ color: '#9CA3AF', fontSize: '12px', fontStyle: 'italic', gridColumn: '1 / -1' }}>No VCS assigned</span>;
                   }
 
                   return assignedList.map(vcs => (
@@ -6994,14 +6997,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         updateSpecialRegionVCSList(region, newList);
                       }}
                       style={{
-                        padding: '3px 8px',
+                        padding: '4px 10px',
                         backgroundColor: '#1E40AF',
                         color: 'white',
-                        borderRadius: '12px',
-                        fontSize: '11px',
+                        borderRadius: '4px',
+                        fontSize: '12px',
                         cursor: 'pointer',
-                        fontWeight: '500',
-                        transition: 'all 0.2s'
+                        fontWeight: '600',
+                        textAlign: 'center',
+                        transition: 'all 0.2s',
+                        userSelect: 'none'
                       }}
                       onMouseEnter={(e) => e.target.style.backgroundColor = '#1E3A8A'}
                       onMouseLeave={(e) => e.target.style.backgroundColor = '#1E40AF'}
@@ -7014,7 +7019,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </div>
 
               {/* Available VCS badges */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+              <div style={{ fontSize: '11px', color: '#6B7280', marginBottom: '4px' }}>
+                Available VCS:
+              </div>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(50px, 1fr))',
+                gap: '6px',
+                maxHeight: '200px',
+                overflowY: 'auto',
+                padding: '8px',
+                backgroundColor: '#F9FAFB',
+                border: '1px solid #E5E7EB',
+                borderRadius: '4px'
+              }}>
                 {Object.keys(vcsSheetData).sort((a, b) => parseInt(a) - parseInt(b)).map(vcs => {
                   const assignedList = cascadeConfig.special[region]?.vcsList
                     ? cascadeConfig.special[region].vcsList.split(',').map(v => v.trim()).filter(v => v)
@@ -7031,22 +7049,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         updateSpecialRegionVCSList(region, newList);
                       }}
                       style={{
-                        padding: '3px 8px',
-                        backgroundColor: '#E0E7FF',
+                        padding: '4px 10px',
+                        backgroundColor: 'white',
                         color: '#1E40AF',
-                        borderRadius: '12px',
-                        fontSize: '11px',
+                        borderRadius: '4px',
+                        fontSize: '12px',
                         cursor: 'pointer',
-                        fontWeight: '500',
+                        fontWeight: '600',
                         border: '1px solid #BFDBFE',
-                        transition: 'all 0.2s'
+                        textAlign: 'center',
+                        transition: 'all 0.2s',
+                        userSelect: 'none'
                       }}
                       onMouseEnter={(e) => {
-                        e.target.style.backgroundColor = '#C7D2FE';
+                        e.target.style.backgroundColor = '#EFF6FF';
                         e.target.style.borderColor = '#93C5FD';
                       }}
                       onMouseLeave={(e) => {
-                        e.target.style.backgroundColor = '#E0E7FF';
+                        e.target.style.backgroundColor = 'white';
                         e.target.style.borderColor = '#BFDBFE';
                       }}
                       title="Click to assign"
