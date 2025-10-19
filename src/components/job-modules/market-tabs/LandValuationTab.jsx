@@ -2445,7 +2445,10 @@ const getPricePerUnit = useCallback((price, size) => {
         ...prop,
         totalAcres: acres,
         pricePerAcre: pricePerUnit,
-        manuallyAdded: true
+        manuallyAdded: true,
+        land_front_feet: prop.land_front_feet || prop.asset_lot_frontage || 0,
+        land_depth: prop.land_depth || prop.asset_lot_depth || 0,
+        land_zoning: prop.land_zoning || prop.asset_zoning || prop.zoning || 'N/A'
       };
     });
 
@@ -8162,7 +8165,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '���������') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '����������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
