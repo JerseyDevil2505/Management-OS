@@ -2583,6 +2583,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         return;
       }
 
+      // Debug FF/Depth/Zone data
+      console.log(`🏢 Sale ${sale.property_block}/${sale.property_lot} FF/Depth data:`, {
+        land_front_feet: sale.land_front_feet,
+        asset_lot_frontage: sale.asset_lot_frontage,
+        land_depth: sale.land_depth,
+        asset_lot_depth: sale.asset_lot_depth,
+        land_zoning: sale.land_zoning,
+        asset_zoning: sale.asset_zoning,
+        zoning: sale.zoning
+      });
+
       // Log special region usage
       if (region !== 'Normal') {
         debug(`�� Using special region "${region}" rates for sale ${sale.property_block}/${sale.property_lot}:`, {
