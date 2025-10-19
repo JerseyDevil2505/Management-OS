@@ -4748,6 +4748,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }));
   };
 
+  const updateSpecialRegionVCSList = (region, vcsListString) => {
+    setCascadeConfig(prev => ({
+      ...prev,
+      special: {
+        ...prev.special,
+        [region]: {
+          ...prev.special[region],
+          vcsList: vcsListString
+        }
+      }
+    }));
+  };
+
   const updateSpecialCategory = (category, rate) => {
     debug(`���� Updating special category: ${category} = ${rate}`);
     setCascadeConfig(prev => {
