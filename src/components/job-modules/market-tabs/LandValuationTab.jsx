@@ -6238,13 +6238,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([vcs, data], index) => {
               const isExpanded = expandedVCS.has(vcs);
+              const isExcluded = excludedMethod2VCS.has(vcs);
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
               const summaryLine = `${data.totalSales} sales �� Avg $${Math.round(data.avgPrice).toLocaleString()} ��������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
 
               return (
-                <div key={vcs} style={{ marginBottom: '8px', border: '1px solid #E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
+                <div key={vcs} style={{
+                  marginBottom: '8px',
+                  border: '1px solid #E5E7EB',
+                  borderRadius: '6px',
+                  overflow: 'hidden',
+                  opacity: isExcluded ? 0.5 : 1,
+                  filter: isExcluded ? 'grayscale(60%)' : 'none'
+                }}>
                   {/* VCS Header */}
                   <div
                     onClick={() => {
@@ -6269,8 +6277,31 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       border: 'none'
                     }}
                   >
-                    <div>
-                      <span style={{ fontSize: '16px', fontWeight: 'bold' }}>{vcs}:</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <input
+                        type="checkbox"
+                        checked={!isExcluded}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          const newExcluded = new Set(excludedMethod2VCS);
+                          if (isExcluded) {
+                            newExcluded.delete(vcs);
+                          } else {
+                            newExcluded.add(vcs);
+                          }
+                          setExcludedMethod2VCS(newExcluded);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          width: '16px',
+                          height: '16px',
+                          cursor: 'pointer',
+                          margin: 0
+                        }}
+                        title={isExcluded ? 'Click to include in summary' : 'Click to exclude from summary'}
+                      />
+                      <div>
+                        <span style={{ fontSize: '16px', fontWeight: 'bold' }}>{vcs}:</span>
                       <span style={{ fontSize: '12px', marginLeft: '8px', fontWeight: 'normal' }}>
                         <span
                           onClick={(e) => {
@@ -6287,6 +6318,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         </span>
                         {` ��� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
                       </span>
+                      </div>
                     </div>
                     <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
                       ���
