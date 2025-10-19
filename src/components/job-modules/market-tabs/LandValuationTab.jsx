@@ -919,8 +919,15 @@ useEffect(() => {
       }
       
       setCanUseFrontFoot(hasFrontFootData);
+
+      // Auto-set to FF mode if depth tables exist and mode isn't already set
+      if (hasFrontFootData && valuationMode === 'acre' && !cascadeConfig.mode) {
+        debug('🏢 Auto-detecting Front Foot mode - depth tables found');
+        setValuationMode('ff');
+        setCascadeConfig(prev => ({ ...prev, mode: 'ff' }));
+      }
     }
-  }, [jobData, vendorType]);
+  }, [jobData, vendorType, valuationMode, cascadeConfig.mode]);
 
   // ========== CALCULATE CURRENT OVERALL ALLOCATION ==========
   useEffect(() => {
@@ -9152,7 +9159,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     onClick={() => toggleFieldCollapse('zoning')}
                     title="Click to expand/collapse"
                   >
-                    Zoning {collapsedFields.zoning ? '����' : '▼'}
+                    Zoning {collapsedFields.zoning ? '�����' : '▼'}
                   </th>
                   {shouldShowKeyColumn && (
                     <th
