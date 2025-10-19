@@ -8751,8 +8751,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   const isGrayedOut = !type.startsWith('Residential');
                   const description = vcsDescriptions[vcs] || getVCSDescription(vcs);
                   const recSite = vcsRecommendedSites[vcs] || 0;
-                  // Fix: Use nullish coalescing to allow 0 values in Act Site
-                  const actSite = vcsManualSiteValues[vcs] ?? recSite;
+                  // Calculate Act Site using FF formula if in FF mode, otherwise use manual or rec site
+                  const actSite = vcsManualSiteValues[vcs] ?? calculateActSite(vcs, recSite);
 
                   // Determine which cascade rates to use (priority: VCS-specific > Special Region > Normal)
                   let cascadeRates = cascadeConfig.normal;
