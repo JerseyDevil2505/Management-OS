@@ -1052,7 +1052,7 @@ const getPricePerUnit = useCallback((price, size) => {
     }
 
     if (properties && properties.length > 0) {
-      console.log('🔄 Triggering fresh calculations with FIXED DELTA LOGIC (post-initialization)');
+      console.log('���� Triggering fresh calculations with FIXED DELTA LOGIC (post-initialization)');
       filterVacantSales();
       performBracketAnalysis();
       loadVCSPropertyCounts();
@@ -1113,7 +1113,7 @@ const getPricePerUnit = useCallback((price, size) => {
   // Auto-save every 30 seconds - but only after initial load is complete
   useEffect(() => {
     if (!isInitialLoadComplete) {
-      debug('���������� Auto-save waiting for initial load to complete');
+      debug('����������� Auto-save waiting for initial load to complete');
       return;
     }
 
@@ -6222,7 +6222,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           {data.totalSales} sales
                         </span>
-                        {` • Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
+                        {` ��� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
                       </span>
                     </div>
                     <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
@@ -8727,7 +8727,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     onClick={() => toggleFieldCollapse('zoning')}
                     title="Click to expand/collapse"
                   >
-                    Zoning {collapsedFields.zoning ? '▶' : '▼'}
+                    Zoning {collapsedFields.zoning ? '���' : '▼'}
                   </th>
                   {shouldShowKeyColumn && (
                     <th
@@ -8947,7 +8947,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                                 }));
                                 // Trigger immediate save
                                 setTimeout(() => {
-                                  saveAllLandValuationData();
+                                  saveAnalysis();
                                 }, 100);
                               }}
                               style={{
