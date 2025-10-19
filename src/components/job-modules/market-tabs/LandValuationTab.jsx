@@ -2785,15 +2785,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         
         // Collect averages for residential with valid sales
         if (prop.sales_price > 0 && prop.sales_date) {
+          // Avg Price (t): ALL normalized time values in VCS (no date filter)
+          if (prop.values_norm_time > 0) avgNormTime[prop.new_vcs].push(prop.values_norm_time);
+
           const saleDate = new Date(prop.sales_date);
           const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
 
           // Sales from October 1st three years prior to present
           if (saleDate >= octoberFirstThreeYearsPrior) {
-            if (prop.values_norm_time > 0) avgNormTime[prop.new_vcs].push(prop.values_norm_time);
             if (prop.values_norm_size > 0) avgNormSize[prop.new_vcs].push(prop.values_norm_size);
-            
-            // Valid NU codes for actual price
+
+            // Avg Price: Valid NU codes + time constraint
             const nu = prop.sales_nu || '';
             const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
                            nu === '7' || nu.charCodeAt(0) === 32;
