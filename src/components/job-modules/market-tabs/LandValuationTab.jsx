@@ -2623,6 +2623,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Calculate recommended allocation
       const recommendedAllocation = avgImprovedPrice > 0 ? totalLandValue / avgImprovedPrice : 0;
 
+      // Calculate improved sales FF/Depth averages for FF mode
+      const avgImprovedFF = improvedSalesForYear.reduce((sum, p) => sum + (parseFloat(p.land_front_feet) || 0), 0) / improvedSalesForYear.length;
+      const avgImprovedDepth = improvedSalesForYear.reduce((sum, p) => sum + (parseFloat(p.land_depth) || 0), 0) / improvedSalesForYear.length;
+
       processedVacantSales.push({
         // Vacant sale info
         id: sale.id,
@@ -2633,6 +2637,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         lot: sale.property_lot,
         vacantPrice: sale.values_norm_time || sale.sales_price,
         acres,
+        frontFeet: parseFloat(sale.land_front_feet) || 0,
+        depth: parseFloat(sale.land_depth) || 0,
+        zone: sale.land_zoning || sale.zoning || 'N/A',
         rawLandValue,
         siteValue,
 
@@ -2640,6 +2647,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         improvedSalesCount: improvedSalesForYear.length,
         avgImprovedPrice: avgImprovedPrice,
         avgImprovedAcres: avgImprovedAcres.toFixed(2),
+        avgImprovedFF: avgImprovedFF.toFixed(1),
+        avgImprovedDepth: avgImprovedDepth.toFixed(1),
         improvedRawLandValue: improvedRawLandValue,
         totalLandValue: totalLandValue,
 
@@ -3544,7 +3553,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           })
           .eq('job_id', jobData.id);
       } else {
-        debug('➕ Creating new record with target allocation...');
+        debug('�� Creating new record with target allocation...');
         result = await supabase
           .from('market_land_valuation')
           .insert({
@@ -5416,7 +5425,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           zIndex: 9999,
           animation: 'slideIn 0.3s ease'
         }}>
-          ✓ Prompt copied! Paste into Claude AI
+          �� Prompt copied! Paste into Claude AI
         </div>
       )}
 
