@@ -3434,7 +3434,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     const targetValue = parseFloat(targetAllocation);
     if (isNaN(targetValue) || targetValue <= 0 || targetValue > 100) {
-      debug('❌ Save target allocation cancelled: Invalid value:', targetAllocation);
+      debug('��� Save target allocation cancelled: Invalid value:', targetAllocation);
       alert('Please enter a valid target allocation percentage between 1 and 100.');
       return;
     }
@@ -9036,13 +9036,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       if (!config.vcsList) return false;
                       // Parse comma-separated VCS list and check if current VCS is in it
                       const vcsList = config.vcsList.split(',').map(v => v.trim().toUpperCase());
-                      const vcsMatch = vcsList.includes(vcs.toString().toUpperCase());
-
-                      // Check if this VCS is excluded for this region
-                      const regionExclusions = excludedRegionVCSs[region] || new Set();
-                      const isExcluded = regionExclusions.has(vcs.toString());
-
-                      return vcsMatch && !isExcluded;
+                      return vcsList.includes(vcs.toString().toUpperCase());
                     });
 
                     if (assignedSpecialRegion) {
