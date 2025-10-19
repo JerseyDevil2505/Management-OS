@@ -2918,7 +2918,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
     debug('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
-    debug('����� Input validation:', {
+    debug('���� Input validation:', {
       hasTargetAllocation: !!targetAllocation,
       targetAllocationValue: targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
@@ -3616,7 +3616,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       if (error) throw error;
 
-      debug('�� Save completed successfully');
+      debug('���� Save completed successfully');
       setLastSaved(new Date());
 
       // Notify parent component
@@ -4199,7 +4199,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     Object.entries(bracketAnalysis || {}).sort(([a],[b]) => a.localeCompare(b)).forEach(([vcs, data]) => {
       // VCS header row
-      const vcsSummary = `${data.totalSales || 0} sales • Avg $${Math.round(data.avgPrice || 0).toLocaleString()} • ${data.avgAcres != null ? Number(data.avgAcres.toFixed(2)) : ''} acres ���� $${Math.round(data.avgAdjusted || 0).toLocaleString()}`;
+      const vcsSummary = `${data.totalSales || 0} sales • Avg $${Math.round(data.avgPrice || 0).toLocaleString()} • ${data.avgAcres != null ? Number(data.avgAcres.toFixed(2)) : ''} acres �� $${Math.round(data.avgAdjusted || 0).toLocaleString()}`;
       method2Rows.push([`${vcs} - ${vcsSummary}`]);
       method2Rows.push([]);
 
@@ -4771,7 +4771,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           [category]: rate ? parseFloat(rate) : null
         }
       };
-      debug('�� New cascade config special categories:', newConfig.specialCategories);
+      debug('���� New cascade config special categories:', newConfig.specialCategories);
       return newConfig;
     });
   };
@@ -6971,22 +6971,91 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
             {/* VCS Assignment Field */}
             <div style={{ marginBottom: '12px' }}>
-              <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                Assigned VCS (comma-separated, e.g., 2, 205, 302)
+              <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '6px', fontWeight: '500' }}>
+                Assigned VCS (click to add/remove)
               </label>
-              <input
-                type="text"
-                value={cascadeConfig.special[region]?.vcsList || ''}
-                onChange={(e) => updateSpecialRegionVCSList(region, e.target.value)}
-                placeholder="Enter VCS codes (e.g., 2, 205, 302)"
-                style={{
-                  width: '100%',
-                  padding: '6px 8px',
-                  border: '1px solid #BFDBFE',
-                  borderRadius: '4px',
-                  fontSize: '13px'
-                }}
-              />
+
+              {/* Assigned VCS badges */}
+              <div style={{ marginBottom: '8px', minHeight: '32px', padding: '6px', backgroundColor: 'white', border: '1px solid #BFDBFE', borderRadius: '4px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                {(() => {
+                  const assignedList = cascadeConfig.special[region]?.vcsList
+                    ? cascadeConfig.special[region].vcsList.split(',').map(v => v.trim()).filter(v => v)
+                    : [];
+
+                  if (assignedList.length === 0) {
+                    return <span style={{ color: '#9CA3AF', fontSize: '12px', fontStyle: 'italic' }}>No VCS assigned</span>;
+                  }
+
+                  return assignedList.map(vcs => (
+                    <span
+                      key={vcs}
+                      onClick={() => {
+                        const newList = assignedList.filter(v => v !== vcs).join(', ');
+                        updateSpecialRegionVCSList(region, newList);
+                      }}
+                      style={{
+                        padding: '3px 8px',
+                        backgroundColor: '#1E40AF',
+                        color: 'white',
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        cursor: 'pointer',
+                        fontWeight: '500',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = '#1E3A8A'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = '#1E40AF'}
+                      title="Click to remove"
+                    >
+                      {vcs} ×
+                    </span>
+                  ));
+                })()}
+              </div>
+
+              {/* Available VCS badges */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                {Object.keys(vcsSheetData).sort((a, b) => parseInt(a) - parseInt(b)).map(vcs => {
+                  const assignedList = cascadeConfig.special[region]?.vcsList
+                    ? cascadeConfig.special[region].vcsList.split(',').map(v => v.trim()).filter(v => v)
+                    : [];
+                  const isAssigned = assignedList.includes(vcs);
+
+                  if (isAssigned) return null; // Don't show if already assigned
+
+                  return (
+                    <span
+                      key={vcs}
+                      onClick={() => {
+                        const newList = [...assignedList, vcs].join(', ');
+                        updateSpecialRegionVCSList(region, newList);
+                      }}
+                      style={{
+                        padding: '3px 8px',
+                        backgroundColor: '#E0E7FF',
+                        color: '#1E40AF',
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        cursor: 'pointer',
+                        fontWeight: '500',
+                        border: '1px solid #BFDBFE',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.backgroundColor = '#C7D2FE';
+                        e.target.style.borderColor = '#93C5FD';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.backgroundColor = '#E0E7FF';
+                        e.target.style.borderColor = '#BFDBFE';
+                      }}
+                      title="Click to assign"
+                    >
+                      {vcs}
+                    </span>
+                  );
+                })}
+              </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns:
