@@ -490,7 +490,7 @@ const LandValuationTab = ({
 
     // debug log once
     if (Object.keys(newMap).length > 0) {
-      debug('�� Applied default eco-obs mapping for empty codes:', Object.entries(newMap).slice(0,20));
+      debug('���� Applied default eco-obs mapping for empty codes:', Object.entries(newMap).slice(0,20));
     }
   }, [ecoObsFactors, mappedLocationCodes, mapTokenToCode]);
 // ========== INITIALIZE FROM PROPS ==========
@@ -1574,7 +1574,7 @@ const getPricePerUnit = useCallback((price, size) => {
       const enriched = enrichProperty(prop);
       finalSales.push(enriched);
       if (enriched.autoCategory) {
-        debug(`���️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
+        debug(`����️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
         if (!saleCategories[prop.id]) setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
       }
     });
@@ -1999,6 +1999,9 @@ const getPricePerUnit = useCallback((price, size) => {
       };
 
       Object.keys(vcsSales).forEach(vcs => {
+        // Skip excluded VCSs from summary calculation
+        if (excludedMethod2VCS.has(vcs)) return;
+
         const vcsAnalysis = analysis[vcs];
         if (!vcsAnalysis) return;
 
@@ -2090,6 +2093,9 @@ const getPricePerUnit = useCallback((price, size) => {
         };
 
         Object.keys(regionVcsSales).forEach(vcs => {
+          // Skip excluded VCSs from regional summary calculation
+          if (excludedMethod2VCS.has(vcs)) return;
+
           const vcsAnalysis = regionVcsSales[vcs];
           if (!vcsAnalysis) return;
 
@@ -2181,11 +2187,15 @@ const getPricePerUnit = useCallback((price, size) => {
         };
       });
 
+      // Count only non-excluded VCSs
+      const includedVCSCount = Object.keys(vcsSales).filter(vcs => !excludedMethod2VCS.has(vcs)).length;
+
       setMethod2Summary({
         mediumRange: calculateBracketSummary(bracketRates.mediumRange), // 1.00-4.99
         largeRange: calculateBracketSummary(bracketRates.largeRange),   // 5.00-9.99
         xlargeRange: calculateBracketSummary(bracketRates.xlargeRange), // 10.00+
-        totalVCS: Object.keys(vcsSales).length
+        totalVCS: includedVCSCount,
+        excludedVCSCount: excludedMethod2VCS.size
       });
 
       setBracketAnalysis(analysis);
@@ -4873,7 +4883,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     debug('📋 Included sales IDs:', Array.from(includedSales));
-    debug('📋 Sale categories state:', saleCategories);
+    debug('�� Sale categories state:', saleCategories);
     debug('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
     debug('📋 Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
 
