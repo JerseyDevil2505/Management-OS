@@ -8676,6 +8676,75 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   const typicalLot = vcsProps.length > 0 ?
                     (vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length).toFixed(2) : '';
 
+                  // Calculate typical frontage and depth for Front Foot mode
+                  let typicalFrontage = '';
+                  let typicalDepth = '';
+                  let depthTableName = '';
+
+                  if (valuationMode === 'ff') {
+                    // Get all properties in this VCS with valid frontage data
+                    const vcsPropsWithFrontage = properties?.filter(p =>
+                      p.new_vcs === vcs &&
+                      p.asset_lot_frontage && parseFloat(p.asset_lot_frontage) > 0
+                    ) || [];
+
+                    if (vcsPropsWithFrontage.length > 0) {
+                      // Calculate average frontage
+                      const avgFrontage = vcsPropsWithFrontage.reduce((sum, p) =>
+                        sum + parseFloat(p.asset_lot_frontage), 0
+                      ) / vcsPropsWithFrontage.length;
+                      typicalFrontage = Math.round(avgFrontage);
+
+                      // Calculate average depth if available
+                      const vcsPropsWithDepth = vcsPropsWithFrontage.filter(p =>
+                        p.asset_lot_depth && parseFloat(p.asset_lot_depth) > 0
+                      );
+
+                      if (vcsPropsWithDepth.length > 0) {
+                        const avgDepth = vcsPropsWithDepth.reduce((sum, p) =>
+                          sum + parseFloat(p.asset_lot_depth), 0
+                        ) / vcsPropsWithDepth.length;
+                        typicalDepth = Math.round(avgDepth);
+                      } else {
+                        // If no depth data, use standard depth of 100 ft
+                        typicalDepth = 100;
+                      }
+
+                      // Get depth table from zoning config
+                      // Find the most common zoning for this VCS
+                      const vcsZonings = vcsPropsWithFrontage
+                        .map(p => p.asset_zoning)
+                        .filter(z => z && z.trim() !== '');
+
+                      if (vcsZonings.length > 0) {
+                        // Get most common zoning
+                        const zoningCounts = {};
+                        vcsZonings.forEach(z => {
+                          const zKey = z.toString().trim();
+                          zoningCounts[zKey] = (zoningCounts[zKey] || 0) + 1;
+                        });
+                        const mostCommonZoning = Object.keys(zoningCounts).reduce((a, b) =>
+                          zoningCounts[a] > zoningCounts[b] ? a : b
+                        );
+
+                        // Look up depth table from zoning config
+                        const zcfg = marketLandData?.zoning_config || {};
+                        const zoneEntry = zcfg[mostCommonZoning] ||
+                                         zcfg[mostCommonZoning?.toUpperCase?.()] ||
+                                         zcfg[mostCommonZoning?.toLowerCase?.()] || null;
+
+                        if (zoneEntry) {
+                          depthTableName = zoneEntry.depth_table ||
+                                          zoneEntry.depthTable ||
+                                          zoneEntry.depth_table_name ||
+                                          'Not Set';
+                        } else {
+                          depthTableName = 'Not Set';
+                        }
+                      }
+                    }
+                  }
+
                   // Use pre-calculated special categories to avoid re-renders
                   const vcsSpecialCategories = vcsSpecialCategoriesMap[vcs] || {
                     wetlands: false,
