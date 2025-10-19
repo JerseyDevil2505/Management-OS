@@ -1130,7 +1130,7 @@ const getPricePerUnit = useCallback((price, size) => {
   // Auto-save every 30 seconds - but only after initial load is complete
   useEffect(() => {
     if (!isInitialLoadComplete) {
-      debug('����������� Auto-save waiting for initial load to complete');
+      debug('������������� Auto-save waiting for initial load to complete');
       return;
     }
 
@@ -3664,6 +3664,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             vcsTypes: {},
             vcsRecommendedSites: {},
             collapsedFields: {},
+            excludedRegionVCSs: {},
             hasUnsavedChanges: false,
             lastModified: null
           });
