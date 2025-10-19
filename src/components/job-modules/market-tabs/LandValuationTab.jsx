@@ -3621,7 +3621,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       };
 
       // Debug: Log the exact data being saved
-      debug('������ Data structure being saved:', {
+      debug('�������� Data structure being saved:', {
         cascadeConfigLocation1: analysisData.raw_land_config.cascade_config.specialCategories,
         cascadeConfigLocation2: analysisData.cascade_rates.specialCategories,
         salesData: analysisData.vacant_sales_analysis.sales.slice(0, 3), // First 3 for brevity
@@ -7082,7 +7082,62 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 })}
               </select>
 
-              {/* Assigned VCS badges */}
+              {/* Select All / Deselect All buttons */}
+              {(() => {
+                const assignedList = cascadeConfig.special[region]?.vcsList
+                  ? cascadeConfig.special[region].vcsList.split(',').map(v => v.trim()).filter(v => v)
+                  : [];
+
+                if (assignedList.length === 0) return null;
+
+                const regionExclusions = excludedRegionVCSs[region] || new Set();
+                const allSelected = regionExclusions.size === 0;
+                const noneSelected = regionExclusions.size === assignedList.length;
+
+                return (
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
+                    <button
+                      onClick={() => selectAllVCSs(region, assignedList)}
+                      disabled={allSelected}
+                      style={{
+                        padding: '4px 12px',
+                        backgroundColor: allSelected ? '#E5E7EB' : '#10B981',
+                        color: allSelected ? '#9CA3AF' : 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: allSelected ? 'not-allowed' : 'pointer',
+                        fontSize: '11px',
+                        fontWeight: '600'
+                      }}
+                      title="Include all VCSs in the study"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      onClick={() => deselectAllVCSs(region, assignedList)}
+                      disabled={noneSelected}
+                      style={{
+                        padding: '4px 12px',
+                        backgroundColor: noneSelected ? '#E5E7EB' : '#EF4444',
+                        color: noneSelected ? '#9CA3AF' : 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: noneSelected ? 'not-allowed' : 'pointer',
+                        fontSize: '11px',
+                        fontWeight: '600'
+                      }}
+                      title="Exclude all VCSs from the study"
+                    >
+                      Deselect All
+                    </button>
+                    <span style={{ fontSize: '11px', color: '#6B7280', alignSelf: 'center', marginLeft: '8px' }}>
+                      {assignedList.length - regionExclusions.size} of {assignedList.length} included
+                    </span>
+                  </div>
+                );
+              })()}
+
+              {/* Assigned VCS badges with checkboxes */}
               <div style={{ minHeight: '36px', padding: '8px', backgroundColor: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: '4px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'start' }}>
                 {(() => {
                   const assignedList = cascadeConfig.special[region]?.vcsList
@@ -7104,43 +7159,67 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     return <span style={{ color: '#9CA3AF', fontSize: '12px', fontStyle: 'italic' }}>No VCS assigned</span>;
                   }
 
-                  return assignedList.map(vcs => (
-                    <span
-                      key={vcs}
-                      style={{
-                        padding: '4px 10px',
-                        backgroundColor: '#1E40AF',
-                        color: 'white',
-                        borderRadius: '4px',
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}
-                    >
-                      {vcs}
-                      <button
-                        onClick={() => {
-                          const newList = assignedList.filter(v => v !== vcs).join(', ');
-                          updateSpecialRegionVCSList(region, newList);
-                        }}
+                  const regionExclusions = excludedRegionVCSs[region] || new Set();
+
+                  return assignedList.map(vcs => {
+                    const isExcluded = regionExclusions.has(vcs);
+
+                    return (
+                      <span
+                        key={vcs}
                         style={{
-                          background: 'none',
-                          border: 'none',
+                          padding: '4px 10px',
+                          backgroundColor: isExcluded ? '#9CA3AF' : '#1E40AF',
                           color: 'white',
-                          cursor: 'pointer',
-                          fontSize: '16px',
-                          lineHeight: '1',
-                          padding: '0',
-                          fontWeight: 'bold'
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          opacity: isExcluded ? 0.6 : 1,
+                          textDecoration: isExcluded ? 'line-through' : 'none'
                         }}
-                        title="Click to remove"
                       >
-                        ×
-                      </button>
-                    </span>
-                  ));
+                        <input
+                          type="checkbox"
+                          checked={!isExcluded}
+                          onChange={() => toggleVCSExclusion(region, vcs)}
+                          style={{
+                            cursor: 'pointer',
+                            margin: 0
+                          }}
+                          title={isExcluded ? 'Click to include in study' : 'Click to exclude from study'}
+                        />
+                        {vcs}
+                        <button
+                          onClick={() => {
+                            const newList = assignedList.filter(v => v !== vcs).join(', ');
+                            updateSpecialRegionVCSList(region, newList);
+                            // Also remove from exclusions
+                            setExcludedRegionVCSs(prev => {
+                              const regionExclusions = new Set(prev[region] || []);
+                              regionExclusions.delete(vcs);
+                              return { ...prev, [region]: regionExclusions };
+                            });
+                          }}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontSize: '16px',
+                            lineHeight: '1',
+                            padding: '0',
+                            fontWeight: 'bold'
+                          }}
+                          title="Click to remove from region"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    );
+                  });
                 })()}
               </div>
             </div>
