@@ -2636,10 +2636,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Calculate improved sales FF/Depth averages for FF mode
       const avgImprovedFF = improvedSalesForYear.length > 0
-        ? improvedSalesForYear.reduce((sum, p) => sum + (parseFloat(p.land_front_feet) || 0), 0) / improvedSalesForYear.length
+        ? improvedSalesForYear.reduce((sum, p) => sum + (parseFloat(p.land_front_feet ?? p.asset_lot_frontage ?? p.frontage) || 0), 0) / improvedSalesForYear.length
         : 0;
       const avgImprovedDepth = improvedSalesForYear.length > 0
-        ? improvedSalesForYear.reduce((sum, p) => sum + (parseFloat(p.land_depth) || 0), 0) / improvedSalesForYear.length
+        ? improvedSalesForYear.reduce((sum, p) => sum + (parseFloat(p.land_depth ?? p.asset_lot_depth ?? p.depth) || 0), 0) / improvedSalesForYear.length
         : 0;
 
       processedVacantSales.push({
@@ -2652,9 +2652,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         lot: sale.property_lot,
         vacantPrice: sale.values_norm_time || sale.sales_price,
         acres,
-        frontFeet: parseFloat(sale.land_front_feet) || 0,
-        depth: parseFloat(sale.land_depth) || 0,
-        zone: sale.land_zoning || sale.zoning || 'N/A',
+        frontFeet: parseFloat(sale.land_front_feet ?? sale.asset_lot_frontage ?? sale.frontage) || 0,
+        depth: parseFloat(sale.land_depth ?? sale.asset_lot_depth ?? sale.depth) || 0,
+        zone: sale.asset_zoning || sale.land_zoning || sale.zoning || 'N/A',
         rawLandValue,
         siteValue,
 
@@ -2798,11 +2798,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
 
-  const getUniqueRegions = useCallback(() => {
-    const regions = new Set(['Normal']);
-    Object.values(specialRegions).forEach(r => regions.add(r));
-    return Array.from(regions);
-  }, [specialRegions]);
 
   // Available region options for dropdowns: built-in + custom special regions defined in cascadeConfig
   const regionOptions = useMemo(() => {
