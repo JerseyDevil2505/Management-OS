@@ -2620,16 +2620,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const siteValue = (sale.values_norm_time || sale.sales_price) - rawLandValue;
 
       // Find improved sales for this sale's year AND VCS
+      // IMPORTANT: Only use sales with values_norm_time (bad sales are filtered out during normalization)
       const improvedSalesForYear = properties.filter(prop => {
         const isResidential = prop.property_m4_class === '2' || prop.property_m4_class === '3A';
         const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
         const hasBuilding = prop.asset_year_built && prop.asset_year_built > 0;
         const hasValues = prop.values_mod_land > 0 && prop.values_mod_total > 0;
+        const hasNormalizedPrice = prop.values_norm_time && prop.values_norm_time > 0; // Only normalized sales
         const sameYear = new Date(prop.sales_date).getFullYear() === year;
         const hasValidTypeUse = prop.asset_type_use && prop.asset_type_use.toString().startsWith('1');
         const sameVCS = prop.new_vcs === vcs;
 
-        return isResidential && hasValidSale && hasBuilding && hasValues && sameYear && hasValidTypeUse && sameVCS;
+        return isResidential && hasValidSale && hasBuilding && hasValues && hasNormalizedPrice && sameYear && hasValidTypeUse && sameVCS;
       });
 
       if (improvedSalesForYear.length === 0) {
@@ -2640,7 +2642,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       debug(`✅ Found ${improvedSalesForYear.length} improved sales for VCS ${vcs}, year ${year} with type_use starting with '1'`);
 
       // Calculate averages for this year's improved sales
-      const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + (p.values_norm_time || p.sales_price), 0) / improvedSalesForYear.length;
+      // Use ONLY values_norm_time (no fallback to sales_price) since we filtered for it
+      const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + p.values_norm_time, 0) / improvedSalesForYear.length;
       const avgImprovedAcres = improvedSalesForYear.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / improvedSalesForYear.length;
 
       // Calculate current allocation for this year
@@ -2657,8 +2660,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           // Create a modified property object that uses the SALE's zone for depth table lookup
           const propWithSaleZone = {
             ...prop,
-            land_front_feet: prop.land_front_feet || prop.asset_lot_frontage || 0,
-            land_depth: prop.land_depth || prop.asset_lot_depth || 0,
+            land_front_feet: parseFloat(prop.asset_lot_frontage) || 0,
+            land_depth: parseFloat(prop.asset_lot_depth) || 0,
             land_zoning: saleZone // Use the vacant sale's zone
           };
           return calculateRawLandValue(null, cascadeRates, propWithSaleZone);
@@ -2674,11 +2677,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const recommendedAllocation = avgImprovedPrice > 0 ? totalLandValue / avgImprovedPrice : 0;
 
       // Calculate improved sales FF/Depth averages for FF mode
+      // Use lot frontage/depth from the lot data, not overall property size
       const avgImprovedFF = improvedSalesForYear.length > 0
-        ? improvedSalesForYear.reduce((sum, p) => sum + (parseFloat(p.land_front_feet ?? p.asset_lot_frontage ?? p.frontage) || 0), 0) / improvedSalesForYear.length
+        ? improvedSalesForYear.reduce((sum, p) => sum + (parseFloat(p.asset_lot_frontage) || 0), 0) / improvedSalesForYear.length
         : 0;
       const avgImprovedDepth = improvedSalesForYear.length > 0
-        ? improvedSalesForYear.reduce((sum, p) => sum + (parseFloat(p.land_depth ?? p.asset_lot_depth ?? p.depth) || 0), 0) / improvedSalesForYear.length
+        ? improvedSalesForYear.reduce((sum, p) => sum + (parseFloat(p.asset_lot_depth) || 0), 0) / improvedSalesForYear.length
         : 0;
 
       processedVacantSales.push({
