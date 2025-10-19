@@ -493,7 +493,7 @@ const LandValuationTab = ({
 
     // debug log once
     if (Object.keys(newMap).length > 0) {
-      debug('🧭 Applied default eco-obs mapping for empty codes:', Object.entries(newMap).slice(0,20));
+      debug('�� Applied default eco-obs mapping for empty codes:', Object.entries(newMap).slice(0,20));
     }
   }, [ecoObsFactors, mappedLocationCodes, mapTokenToCode]);
 // ========== INITIALIZE FROM PROPS ==========
@@ -560,6 +560,7 @@ useEffect(() => {
     setSaleCategories(currentSession.saleCategories || {});
     setSpecialRegions(currentSession.specialRegions || {});
     setLandNotes(currentSession.landNotes || {});
+    setExcludedRegionVCSs(currentSession.excludedRegionVCSs || {});
 
     if (currentSession.cascadeConfig) {
       setCascadeConfig(currentSession.cascadeConfig);
