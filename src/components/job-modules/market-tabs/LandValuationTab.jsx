@@ -1063,7 +1063,7 @@ const getPricePerUnit = useCallback((price, size) => {
     // CRITICAL FIX: Don't auto-detect/filter during initialization!
     // This prevents overwriting manually added sales that were saved to the database
     if (!isInitialLoadComplete) {
-      console.log('��️ Skipping auto-detection - waiting for initial load to complete');
+      console.log('����️ Skipping auto-detection - waiting for initial load to complete');
       return;
     }
 
@@ -1418,10 +1418,13 @@ const getPricePerUnit = useCallback((price, size) => {
       if (!category) {
         if (prop.property_m4_class === '2' && prop.values_mod_improvement < 10000) {
           category = 'teardown';
-        } else if (prop.property_m4_class === '2' && 
-                   prop.asset_year_built && 
+        } else if (prop.property_m4_class === '2' &&
+                   prop.asset_year_built &&
                    new Date(prop.sales_date).getFullYear() < prop.asset_year_built) {
           category = 'pre-construction';
+        } else if (prop.property_m4_class === '1' || prop.property_m4_class === '3B') {
+          // Default vacant land sales to Building Lots
+          category = 'building-lot';
         }
       }
       
@@ -3231,7 +3234,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
     debug('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
-    debug('����� Input validation:', {
+    debug('������ Input validation:', {
       hasTargetAllocation: !!targetAllocation,
       targetAllocationValue: targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
