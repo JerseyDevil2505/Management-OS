@@ -2781,22 +2781,28 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         let depthTableName = 'DEFAULT';
         let depthTableSource = 'Default';
 
-        // Try VCS override first
-        if (vcsDepthTableOverrides[vcs] && depthTables[vcsDepthTableOverrides[vcs]]) {
+        // Helper to check if depth table is valid (non-empty array)
+        const isValidDepthTable = (tableName) => {
+          const table = depthTables[tableName];
+          return table && Array.isArray(table) && table.length > 0;
+        };
+
+        // Try VCS override first - but only if it's a valid table
+        if (vcsDepthTableOverrides[vcs] && isValidDepthTable(vcsDepthTableOverrides[vcs])) {
           depthTableName = vcsDepthTableOverrides[vcs];
           depthTableSource = 'VCS Override';
         }
         // Then zoning requirement
-        else if (zoneEntry?.depth_table && depthTables[zoneEntry.depth_table]) {
+        else if (zoneEntry?.depth_table && isValidDepthTable(zoneEntry.depth_table)) {
           depthTableName = zoneEntry.depth_table;
           depthTableSource = 'Zoning Requirement';
         }
-        else if (zoneEntry?.depthTable && depthTables[zoneEntry.depthTable]) {
+        else if (zoneEntry?.depthTable && isValidDepthTable(zoneEntry.depthTable)) {
           depthTableName = zoneEntry.depthTable;
           depthTableSource = 'Zoning Requirement';
         }
         // Then property data
-        else if (sale.depth_table && depthTables[sale.depth_table]) {
+        else if (sale.depth_table && isValidDepthTable(sale.depth_table)) {
           depthTableName = sale.depth_table;
           depthTableSource = 'Property Data';
         }
