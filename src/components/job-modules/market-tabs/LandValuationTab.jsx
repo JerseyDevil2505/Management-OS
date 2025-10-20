@@ -2738,17 +2738,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           if (prop.asset_lot_frontage > 0) {
             const frontFeet = parseFloat(prop.asset_lot_frontage) || 0;
             const depth = parseFloat(prop.asset_lot_depth) || 100;
-            const zone = prop.asset_zoning || 'DEFAULT';
 
-            // Get VCS-specific depth table override
-            const vcsCode = prop.new_vcs;
-            let depthTableName = vcsDepthTableOverrides[vcsCode];
-            if (!depthTableName) {
-              depthTableName = 'DEFAULT';
-            }
-            const depthTable = depthTables[depthTableName] || depthTables['DEFAULT'];
+            // Use same cascade rates as the vacant sale (already looked up for this VCS)
+            const standardRate = cascadeRates.standard?.rate || cascadeRates.prime?.rate || 0;
+            const standardMax = cascadeRates.standard?.max || cascadeRates.prime?.max || 50;
+            const excessRate = cascadeRates.excess?.rate || 0;
 
+            // Get depth table (same VCS as vacant sale)
+            const depthTableName = vcsDepthTableOverrides[vcs] || prop.depth_table || 'DEFAULT';
+            const depthTable = depthTables[depthTableName];
             let depthFactor = 1.0;
+
             if (depthTable && Array.isArray(depthTable)) {
               for (const row of depthTable) {
                 if (depth >= row.min && depth <= row.max) {
@@ -2757,15 +2757,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 }
               }
             }
-
-            // Get VCS-specific FF rates if available
-            let vcsRates = cascadeConfig.vcsSpecific && cascadeConfig.vcsSpecific[vcsCode] && cascadeConfig.vcsSpecific[vcsCode].method === 'ff'
-              ? cascadeConfig.vcsSpecific[vcsCode].rates
-              : cascadeRates;
-
-            const standardRate = vcsRates?.standard?.rate || vcsRates?.prime?.rate || 0;
-            const standardMax = vcsRates?.standard?.max || vcsRates?.prime?.max || 50;
-            const excessRate = vcsRates?.excess?.rate || 0;
 
             const standardFF = Math.min(frontFeet, standardMax);
             const excessFF = Math.max(0, frontFeet - standardMax);
