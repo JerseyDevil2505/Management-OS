@@ -1077,7 +1077,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
-      debug('�������� Triggering allocation study recalculation...');
+      debug('��������� Triggering allocation study recalculation...');
       loadAllocationStudyData();
     }
   }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, specialRegions]);
@@ -2797,7 +2797,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         id: sale.id,
         vcs: vcs,
         year: year,
-        region: region,
+        region: actualRegion,
         block: sale.property_block,
         lot: sale.property_lot,
         vacantPrice: sale.sales_amount || sale.sales_price || 0,
