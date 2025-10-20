@@ -2619,7 +2619,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           return true;
         }
 
-        console.log(`⚠��� Excluding uncategorized sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
+        console.log(`⚠����� Excluding uncategorized sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
         return false;
       }
 
@@ -2811,18 +2811,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
 
       // Find improved sales for this sale's year AND VCS
-      // IMPORTANT: Only use sales with values_norm_time (bad sales are filtered out during normalization)
+      // Filter by: values_norm_time (yes=filter by year, no=include all years), type_use starts with 1, same VCS
       const improvedSalesForYear = properties.filter(prop => {
-        const isResidential = prop.property_m4_class === '2' || prop.property_m4_class === '3A';
         const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
-        const hasBuilding = prop.asset_year_built && prop.asset_year_built > 0;
-        const hasValues = prop.values_mod_land > 0 && prop.values_mod_total > 0;
-        const hasNormalizedPrice = prop.values_norm_time && prop.values_norm_time > 0; // Only normalized sales
-        const sameYear = new Date(prop.sales_date).getFullYear() === year;
+        const hasNormalizedPrice = prop.values_norm_time && prop.values_norm_time > 0;
         const hasValidTypeUse = prop.asset_type_use && prop.asset_type_use.toString().startsWith('1');
         const sameVCS = prop.new_vcs === vcs;
 
-        return isResidential && hasValidSale && hasBuilding && hasValues && hasNormalizedPrice && sameYear && hasValidTypeUse && sameVCS;
+        // If values_norm_time exists (yes), filter by year. If not (no), include all years
+        const yearMatch = hasNormalizedPrice
+          ? new Date(prop.sales_date).getFullYear() === year
+          : true;
+
+        return hasValidSale && hasValidTypeUse && sameVCS && yearMatch;
       });
 
       if (improvedSalesForYear.length === 0) {
@@ -8434,7 +8435,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '����������') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '��' : '����������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
