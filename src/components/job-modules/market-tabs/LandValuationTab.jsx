@@ -2793,15 +2793,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Calculate site value (what's left after raw land)
       siteValue = (sale.sales_price || 0) - rawLandValue;
 
-      console.log(`💰 SITE VALUE CALCULATION for ${sale.property_block}/${sale.property_lot} (VCS ${vcs}, ${region !== 'Normal' ? region : 'Normal Region'}):
-    Sale Price:        $${(sale.sales_price || 0).toLocaleString()}
-    - Raw Land Value:  $${rawLandValue.toLocaleString()}
-    = SITE VALUE:      $${siteValue.toLocaleString()}
-
-    ${valuationMode === 'ff' ? `(Front Feet: ${sale.asset_lot_frontage || 0}', Depth: ${sale.asset_lot_depth || 0}', Zone: ${sale.asset_zoning || 'N/A'})` : `(Acres: ${acres.toFixed(4)})`}
-    Cascade Rates Used: ${JSON.stringify(cascadeRates, null, 2)}
-  `);
-
       // Find improved sales for this sale's year AND VCS
       // Filter by: values_norm_time (yes=filter by year, no=include all years), type_use starts with 1, same VCS
       const improvedSalesForYear = properties.filter(prop => {
@@ -2955,7 +2946,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const totalSalePrice = positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0);
       const overallRecommended = totalSalePrice > 0 ? (totalLandValue / totalSalePrice) * 100 : 0;
 
-      debug('���� Overall recommended allocation:', {
+      debug('🎯 Overall recommended allocation:', {
         positiveSalesCount: positiveSales.length,
         totalLandValue,
         totalSalePrice,
