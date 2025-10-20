@@ -2645,28 +2645,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return true;
     });
 
-    console.log(`🔍 Allocation Study Sales Filter:`, {
-      totalVacantSales: vacantSales.length,
-      includedSales: vacantSales.filter(s => includedSales.has(s.id)).length,
-      afterCategoryFilter: filteredSales.length,
-      categories: filteredSales.map(s => ({
-        block: s.property_block,
-        lot: s.property_lot,
-        category: saleCategories[s.id]
-      }))
-    });
-
-    // DEBUG: Log special region assignments
-    console.log(`🎯 Special Region Assignments:`, {
-      specialRegionsState: specialRegions,
-      salesWithRegions: filteredSales.filter(s => specialRegions[s.id] && specialRegions[s.id] !== 'Normal').map(s => ({
-        id: s.id,
-        block: s.property_block,
-        lot: s.property_lot,
-        region: specialRegions[s.id],
-        category: saleCategories[s.id]
-      }))
-    });
 
     filteredSales.forEach(sale => {
       const year = new Date(sale.sales_date).getFullYear();
@@ -5703,7 +5681,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           zIndex: 9999,
           animation: 'slideIn 0.3s ease'
         }}>
-          �� Prompt copied! Paste into Claude AI
+          ��� Prompt copied! Paste into Claude AI
         </div>
       )}
 
