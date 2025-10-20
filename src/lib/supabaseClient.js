@@ -803,6 +803,62 @@ const PRESERVED_FIELDS = [
 // - asset_zoning, values_norm_size, values_norm_time, sales_history
 
 // ===== CODE INTERPRETATION UTILITIES =====
+/**
+ * Get depth factor from depth tables
+ * @param {number} depth - Lot depth in feet
+ * @param {string} depthTableName - Name of the depth table to use
+ * @param {object} depthTables - Object containing all depth table definitions
+ * @returns {number} - Depth factor (typically 0.5 to 1.5)
+ */
+export function getDepthFactor(depth, depthTableName, depthTables) {
+  if (!depth || !depthTableName || !depthTables) return 1.0;
+
+  const table = depthTables[depthTableName];
+  if (!table || !Array.isArray(table)) return 1.0;
+
+  // Find the appropriate depth range
+  for (const entry of table) {
+    if (depth >= entry.min_depth && depth <= entry.max_depth) {
+      return entry.factor || 1.0;
+    }
+  }
+
+  // If depth exceeds all ranges, use the last entry's factor
+  if (table.length > 0) {
+    const lastEntry = table[table.length - 1];
+    if (depth > lastEntry.max_depth) {
+      return lastEntry.factor || 1.0;
+    }
+  }
+
+  return 1.0; // Default if no match found
+}
+
+/**
+ * Get all depth tables from code definitions
+ * @param {object} codeDefinitions - Parsed code definitions
+ * @param {string} vendorType - Vendor type (BRT, Microsystems, etc)
+ * @returns {object} - Object containing depth table definitions
+ */
+export function getDepthFactors(codeDefinitions, vendorType = 'BRT') {
+  if (!codeDefinitions || !codeDefinitions.depth_tables) {
+    // Return default depth tables if none defined
+    return {
+      'STANDARD': [
+        { min_depth: 0, max_depth: 100, factor: 1.0 },
+        { min_depth: 101, max_depth: 150, factor: 1.05 },
+        { min_depth: 151, max_depth: 200, factor: 1.10 },
+        { min_depth: 201, max_depth: 999, factor: 1.15 }
+      ],
+      '100FT': [
+        { min_depth: 0, max_depth: 100, factor: 1.0 }
+      ]
+    };
+  }
+
+  return codeDefinitions.depth_tables;
+}
+
 // Utilities for interpreting vendor-specific codes in MarketLandAnalysis
 export const interpretCodes = {
   // Utility function to diagnose and repair Microsystems code definitions
@@ -4606,7 +4662,7 @@ export const countyHpiService = {
 
       // Cache with long TTL since historical data doesn't change
       dataCache.set(cacheKey, data, CACHE_CONFIG.COUNTY_HPI);
-      console.log('💾 Cached county HPI data');
+      console.log('��� Cached county HPI data');
 
       return data;
     } catch (error) {
