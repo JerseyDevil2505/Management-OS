@@ -2574,7 +2574,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const loadAllocationStudyData = useCallback(() => {
     if (!cascadeConfig.normal.prime) return;
 
-    debug('����� Loading allocation study data - individual sale approach');
+    debug('������ Loading allocation study data - individual sale approach');
 
     // Process each individual vacant sale (no grouping)
     const processedVacantSales = [];
@@ -2702,27 +2702,54 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const currentAllocs = improvedSalesForYear.map(p => p.values_mod_land / p.values_mod_total);
       const avgCurrentAllocation = currentAllocs.reduce((sum, a) => sum + a, 0) / currentAllocs.length;
 
-      // Calculate new land value using this sale's site value + improved sales average raw land
-      let improvedRawLandValue;
-      if (valuationMode === 'ff' && improvedSalesForYear.length > 0) {
-        // For FF mode, calculate each improved sale's raw land value using the SALE'S zone (not the improved prop's zone)
-        // This ensures we use the same depth table as the vacant sale
-        const saleZone = sale.asset_zoning || sale.land_zoning || sale.zoning;
-        const improvedRawValues = improvedSalesForYear.map(prop => {
-          // Create a modified property object that uses the SALE's zone for depth table lookup
-          const propWithSaleZone = {
-            ...prop,
-            land_front_feet: parseFloat(prop.asset_lot_frontage) || 0,
-            land_depth: parseFloat(prop.asset_lot_depth) || 0,
-            land_zoning: saleZone // Use the vacant sale's zone
-          };
-          return calculateRawLandValue(null, cascadeRates, propWithSaleZone);
+      // Calculate average improved raw land value for Front Foot mode
+      let avgImprovedRawLand = 0;
+
+      if (valuationMode === 'ff') {
+        let totalImprovedRawLand = 0;
+        let validImprovedCount = 0;
+
+        improvedSalesForYear.forEach(prop => {
+          if (prop.asset_lot_frontage > 0) {
+            const frontFeet = parseFloat(prop.asset_lot_frontage) || 0;
+            const depth = parseFloat(prop.asset_lot_depth) || 100;
+            const zone = prop.asset_zoning || 'DEFAULT';
+            const depthTable = depthTables[zone] || depthTables['DEFAULT'];
+
+            let depthFactor = 1.0;
+            if (depthTable && Array.isArray(depthTable)) {
+              for (const row of depthTable) {
+                if (depth >= row.min && depth <= row.max) {
+                  depthFactor = row.factor;
+                  break;
+                }
+              }
+            }
+
+            const vcsRates = cascadeRates || {};
+            const standardRate = vcsRates.standard?.rate || vcsRates.prime?.rate || 0;
+            const standardMax = vcsRates.standard?.max || vcsRates.prime?.max || 100;
+            const excessRate = vcsRates.excess?.rate || 0;
+
+            const standardFF = Math.min(frontFeet, standardMax);
+            const excessFF = Math.max(0, frontFeet - standardMax);
+
+            const improvedRawLand = ((standardFF * standardRate) + (excessFF * excessRate)) * depthFactor;
+            totalImprovedRawLand += improvedRawLand;
+            validImprovedCount++;
+          }
         });
-        improvedRawLandValue = improvedRawValues.reduce((sum, val) => sum + val, 0) / improvedRawValues.length;
+
+        avgImprovedRawLand = validImprovedCount > 0 ?
+          totalImprovedRawLand / validImprovedCount : 0;
       } else {
-        // For acreage mode, use average acres
-        improvedRawLandValue = calculateRawLandValue(avgImprovedAcres, cascadeRates);
+        // Acre/SF mode - calculate average raw land for improved properties
+        const improvedAcreages = improvedSalesForYear.map(p => parseFloat(calculateAcreage(p)));
+        avgImprovedRawLand = improvedAcreages.reduce((sum, acres) =>
+          sum + calculateRawLandValue(acres, cascadeRates), 0) / improvedSalesForYear.length;
       }
+
+      const improvedRawLandValue = avgImprovedRawLand;
       const totalLandValue = improvedRawLandValue + siteValue;
 
       // Calculate recommended allocation
@@ -9283,7 +9310,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       onClick={() => toggleFieldCollapse('key')}
                       title="Click to expand/collapse"
                     >
-                      Key {collapsedFields.key ? '▶' : '▼'}
+                      Key {collapsedFields.key ? '���' : '▼'}
                     </th>
                   )}
                   {shouldShowMapColumn && (
