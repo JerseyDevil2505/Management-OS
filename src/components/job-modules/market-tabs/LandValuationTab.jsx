@@ -4265,11 +4265,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       { wch: 8 },   // Total
       { wch: 20 },  // Type
       { wch: 25 },  // Description
-      { wch: 12 },  // Method
-      { wch: 15 },  // Typical Lot
-      { wch: 15 },  // Rec Site
-      { wch: 15 },  // Act Site
+      { wch: 12 }   // Method
     ];
+
+    // Typical lot columns (different for FF vs Acre mode)
+    if (valuationMode === 'ff') {
+      colWidths.push({ wch: 12 }, { wch: 12 }, { wch: 15 }); // Typical FF, Typical Depth, Depth Table
+    } else {
+      colWidths.push({ wch: 15 }); // Typical Lot Size
+    }
+
+    colWidths.push({ wch: 15 }, { wch: 15 }); // Rec Site, Act Site
 
     // Add cascade rate column widths
     if (valuationMode === 'ff') {
@@ -8507,7 +8513,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'normTime' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '���' : '↓') : ''}
+                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '����' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('acres')}
