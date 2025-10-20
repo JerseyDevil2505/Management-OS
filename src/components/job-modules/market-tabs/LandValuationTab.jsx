@@ -1077,7 +1077,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
-      debug('��������� Triggering allocation study recalculation...');
+      debug('�������� Triggering allocation study recalculation...');
       loadAllocationStudyData();
     }
   }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, specialRegions]);
@@ -8792,14 +8792,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           })()}
         </div>
 
-        {/* Special Region Summaries - Dynamic based on what's in the data */}
+        {/* Special Region Summaries - Show all configured special regions */}
         {(() => {
-          // Get unique regions from the data
-          const uniqueRegions = [...new Set(vacantTestSales.map(s => s.region))].filter(r => r && r !== 'Normal');
+          // Get all configured special regions from cascade config
+          const configuredRegions = Object.keys(cascadeConfig.special || {});
+          // Also include regions that have sales assigned
+          const regionsWithSales = [...new Set(vacantTestSales.map(s => s.region))].filter(r => r && r !== 'Normal');
+          // Combine both
+          const allRegions = [...new Set([...configuredRegions, ...regionsWithSales])];
 
-          return uniqueRegions.map(regionName => {
+          return allRegions.map(regionName => {
             const regionSales = vacantTestSales.filter(s => s.region === regionName && s.isPositive);
-            if (regionSales.length === 0) return null;
+            const totalRegionSales = vacantTestSales.filter(s => s.region === regionName).length;
 
             const totalLandValue = regionSales.reduce((sum, s) => sum + (s.totalLandValue || 0), 0);
             const totalSalePrice = regionSales.reduce((sum, s) => sum + (s.avgImprovedPrice || 0), 0);
