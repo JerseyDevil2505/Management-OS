@@ -2910,22 +2910,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                                  zcfg[propZone?.toUpperCase?.()] ||
                                  zcfg[propZone?.toLowerCase?.()] || null;
 
-            const depthTableName = vcsDepthTableOverrides[vcs] ||
-                                  propZoneEntry?.depth_table ||
-                                  propZoneEntry?.depthTable ||
-                                  prop.depth_table ||
-                                  'DEFAULT';
-            const depthTable = depthTables[depthTableName];
-            let depthFactor = 1.0;
-
-            if (depthTable && Array.isArray(depthTable)) {
-              for (const row of depthTable) {
-                if (depth >= row.min && depth <= row.max) {
-                  depthFactor = row.factor;
-                  break;
-                }
-              }
+            // Prioritize zoning over VCS override if VCS override doesn't exist
+            let depthTableName = 'DEFAULT';
+            if (vcsDepthTableOverrides[vcs] && depthTables[vcsDepthTableOverrides[vcs]]) {
+              depthTableName = vcsDepthTableOverrides[vcs];
+            } else if (propZoneEntry?.depth_table && depthTables[propZoneEntry.depth_table]) {
+              depthTableName = propZoneEntry.depth_table;
+            } else if (propZoneEntry?.depthTable && depthTables[propZoneEntry.depthTable]) {
+              depthTableName = propZoneEntry.depthTable;
+            } else if (prop.depth_table && depthTables[prop.depth_table]) {
+              depthTableName = prop.depth_table;
             }
+
+            // Use the imported getDepthFactor function
+            const depthFactor = getDepthFactor(depth, depthTableName, depthTables);
 
             const standardFF = Math.min(frontFeet, standardMax);
             const excessFF = Math.max(0, frontFeet - standardMax);
