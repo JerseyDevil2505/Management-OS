@@ -2882,30 +2882,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             const standardMax = cascadeRates.standard?.max || cascadeRates.prime?.max || 50;
             const excessRate = cascadeRates.excess?.rate || 0;
 
-            // Get depth table from zoning requirements (same VCS as vacant sale)
+            // Get depth table from zoning requirements
             const propZone = prop.asset_zoning || prop.zoning || 'DEFAULT';
             const zcfg = marketLandData?.zoning_config || {};
             const propZoneEntry = zcfg[propZone] ||
                                  zcfg[propZone?.toUpperCase?.()] ||
                                  zcfg[propZone?.toLowerCase?.()] || null;
 
-            // Helper to check if depth table is valid (non-empty array)
-            const isValidDepthTable = (tableName) => {
-              const table = depthTables[tableName];
-              return table && Array.isArray(table) && table.length > 0;
-            };
-
-            // Prioritize zoning over VCS override if VCS override doesn't exist or is invalid
-            let depthTableName = 'DEFAULT';
-            if (vcsDepthTableOverrides[vcs] && isValidDepthTable(vcsDepthTableOverrides[vcs])) {
-              depthTableName = vcsDepthTableOverrides[vcs];
-            } else if (propZoneEntry?.depth_table && isValidDepthTable(propZoneEntry.depth_table)) {
-              depthTableName = propZoneEntry.depth_table;
-            } else if (propZoneEntry?.depthTable && isValidDepthTable(propZoneEntry.depthTable)) {
-              depthTableName = propZoneEntry.depthTable;
-            } else if (prop.depth_table && isValidDepthTable(prop.depth_table)) {
-              depthTableName = prop.depth_table;
-            }
+            const depthTableName = propZoneEntry?.depth_table || propZoneEntry?.depthTable || '100FT Table';
 
             // Use the imported getDepthFactor function
             const depthFactor = getDepthFactor(depth, depthTableName, depthTables);
