@@ -593,7 +593,7 @@ useEffect(() => {
 
   // ALWAYS load from database
   console.log('🟡 ABOUT TO LOAD FROM DATABASE');
-  debug('🔄 Loading from database:', {
+  debug('�� Loading from database:', {
     hasRawLandConfig: !!marketLandData.raw_land_config,
     hasCascadeRates: !!marketLandData.cascade_rates,
     hasVacantSales: !!marketLandData.vacant_sales_analysis?.sales?.length,
@@ -1077,7 +1077,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
-      debug('��������� Triggering allocation study recalculation...');
+      debug('�������� Triggering allocation study recalculation...');
       loadAllocationStudyData();
     }
   }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, specialRegions]);
@@ -2808,7 +2808,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
         console.log(`🔍 VCS ${vcs} ${sale.property_block}/${sale.property_lot}:
     Zone: ${zone}
-    Depth Table Source: ${vcsDepthTableOverrides[vcs] ? 'VCS Override' : zoneEntry ? 'Zoning Requirement' : 'Property Data/Default'}
+    Depth Table Source: ${depthTableSource}
     Depth Table: ${depthTableName}
     Frontage: ${frontFeet}' × Depth: ${depth}'
     Standard: ${standardFF}' @ $${standardRate} = $${standardValue.toLocaleString()}
@@ -2820,9 +2820,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     Site Value: $${((sale.sales_price || 0) - rawLandValue).toLocaleString()}`);
 
         // Log depth table details for debugging
+        const depthTable = depthTables[depthTableName];
         if (depthTable && Array.isArray(depthTable)) {
           console.log(`📏 Depth Table "${depthTableName}" ranges:`,
-            depthTable.map(r => `${r.min}-${r.max}': ${r.factor}`).join(', '));
+            depthTable.map(r => `${r.min_depth || r.min}-${r.max_depth || r.max}': ${r.factor}`).join(', '));
         } else {
           console.warn(`⚠️ Depth table "${depthTableName}" not found or invalid!`);
         }
@@ -3885,7 +3886,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       let result;
       if (existing) {
-        debug('��� Updating existing record with target allocation...');
+        debug('📝 Updating existing record with target allocation...');
         result = await supabase
           .from('market_land_valuation')
           .update({
