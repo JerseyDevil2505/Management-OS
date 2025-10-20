@@ -2537,7 +2537,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       
       setLandNotes(prev => ({
         ...prev, 
-        [property.id]: '�� Prompt copied! Opening Claude... (paste response here when ready)'
+        [property.id]: '��� Prompt copied! Opening Claude... (paste response here when ready)'
       }));
       
       window.open('https://claude.ai/new', '_blank');
@@ -2882,8 +2882,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             const standardMax = cascadeRates.standard?.max || cascadeRates.prime?.max || 50;
             const excessRate = cascadeRates.excess?.rate || 0;
 
-            // Get depth table (same VCS as vacant sale)
-            const depthTableName = vcsDepthTableOverrides[vcs] || prop.depth_table || 'DEFAULT';
+            // Get depth table from zoning requirements (same VCS as vacant sale)
+            const propZone = prop.asset_zoning || prop.zoning || 'DEFAULT';
+            const zcfg = marketLandData?.zoning_config || {};
+            const propZoneEntry = zcfg[propZone] ||
+                                 zcfg[propZone?.toUpperCase?.()] ||
+                                 zcfg[propZone?.toLowerCase?.()] || null;
+
+            const depthTableName = vcsDepthTableOverrides[vcs] ||
+                                  propZoneEntry?.depth_table ||
+                                  propZoneEntry?.depthTable ||
+                                  prop.depth_table ||
+                                  'DEFAULT';
             const depthTable = depthTables[depthTableName];
             let depthFactor = 1.0;
 
@@ -3332,7 +3342,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return;
     }
 
-    debug('������ Calculating VCS recommended site values with target allocation:', targetAllocation + '%');
+    debug('���� Calculating VCS recommended site values with target allocation:', targetAllocation + '%');
 
     const recommendedSites = {};
     const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
@@ -6706,7 +6716,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           {data.totalSales} sales
                         </span>
-                        {` ��� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
+                        {` ���� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
                       </span>
                       </div>
                     </div>
