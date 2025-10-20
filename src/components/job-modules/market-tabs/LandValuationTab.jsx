@@ -8789,6 +8789,61 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             );
           })()}
         </div>
+
+        {/* Special Region Summaries - Dynamic based on what's in the data */}
+        {(() => {
+          // Get unique regions from the data
+          const uniqueRegions = [...new Set(vacantTestSales.map(s => s.region))].filter(r => r && r !== 'Normal');
+
+          return uniqueRegions.map(regionName => {
+            const regionSales = vacantTestSales.filter(s => s.region === regionName && s.isPositive);
+            if (regionSales.length === 0) return null;
+
+            const totalLandValue = regionSales.reduce((sum, s) => sum + (s.totalLandValue || 0), 0);
+            const totalSalePrice = regionSales.reduce((sum, s) => sum + (s.avgImprovedPrice || 0), 0);
+            const regionAllocation = totalSalePrice > 0 ? ((totalLandValue / totalSalePrice) * 100).toFixed(1) : 0;
+
+            return (
+              <div key={regionName} style={{
+                marginTop: '15px',
+                padding: '15px',
+                backgroundColor: regionName === 'Beach Block' ? '#E0F2FE' : '#FEF3C7',
+                borderRadius: '8px',
+                border: `1px solid ${regionName === 'Beach Block' ? '#0EA5E9' : '#FCD34D'}`
+              }}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold', color: '#1F2937' }}>
+                  {regionName} Region Analysis
+                </h4>
+                <div style={{ display: 'flex', gap: '30px', alignItems: 'center' }}>
+                  <div>
+                    <span style={{ fontSize: '12px', color: '#6B7280' }}>Sales Included:</span>
+                    <span style={{ fontSize: '14px', fontWeight: '600', marginLeft: '8px' }}>
+                      {regionSales.length} of {vacantTestSales.filter(s => s.region === regionName).length}
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '12px', color: '#6B7280' }}>Total Land Value:</span>
+                    <span style={{ fontSize: '14px', fontWeight: '600', marginLeft: '8px' }}>
+                      ${totalLandValue.toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '12px', color: '#6B7280' }}>Total Sale Price:</span>
+                    <span style={{ fontSize: '14px', fontWeight: '600', marginLeft: '8px' }}>
+                      ${totalSalePrice.toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '12px', color: '#6B7280' }}>Recommended:</span>
+                    <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#0EA5E9', marginLeft: '8px' }}>
+                      {regionAllocation}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          });
+        })()}
       </div>
 
       {/* Special Region Individual Allocation Analysis - Separate Section per Region */}
