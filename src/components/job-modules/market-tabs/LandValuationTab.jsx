@@ -1063,7 +1063,7 @@ const getPricePerUnit = useCallback((price, size) => {
     // CRITICAL FIX: Don't auto-detect/filter during initialization!
     // This prevents overwriting manually added sales that were saved to the database
     if (!isInitialLoadComplete) {
-      console.log('����️ Skipping auto-detection - waiting for initial load to complete');
+      console.log('�����️ Skipping auto-detection - waiting for initial load to complete');
       return;
     }
 
@@ -2784,14 +2784,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         return hasValidSale && hasNormalizedPrice && hasValidTypeUse && sameVCS && yearMatch;
       });
 
-      if (improvedSalesForYear.length === 0) {
-        return;
-      }
-
-      // Calculate averages using values_norm_time (time-normalized price) when available, fallback to sales_price
+      // Calculate averages only if we have improved sales
       // CRITICAL FIX: User's Excel uses time-normalized prices, not actual sale prices
-      const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + (p.values_norm_time || p.sales_price), 0) / improvedSalesForYear.length;
-      const avgImprovedAcres = improvedSalesForYear.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / improvedSalesForYear.length;
+      const avgImprovedPrice = improvedSalesForYear.length > 0
+        ? improvedSalesForYear.reduce((sum, p) => sum + (p.values_norm_time || p.sales_price), 0) / improvedSalesForYear.length
+        : 0;
+      const avgImprovedAcres = improvedSalesForYear.length > 0
+        ? improvedSalesForYear.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / improvedSalesForYear.length
+        : 0;
 
       // Log improved sales calculation for debugging
       if (sale.property_block === '118' || sale.property_block === '43') {
