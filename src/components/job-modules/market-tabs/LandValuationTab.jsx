@@ -2773,6 +2773,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Find improved sales for this sale's year AND VCS
       // CRITICAL: Must HAVE values_norm_time (time-normalized price), filter by year, type_use starts with 1, same VCS
+
+      // Debug: log all properties for this VCS (for special regions)
+      if (actualRegion !== 'Normal') {
+        const vcsProps = properties.filter(p => p.new_vcs === vcs);
+        const vcsPropsWithNorm = vcsProps.filter(p => p.values_norm_time && p.values_norm_time > 0);
+        console.log(`🔍 Special Region ${actualRegion} VCS ${vcs} - Year ${year}:`, {
+          totalPropsInVCS: vcsProps.length,
+          propsWithNormTime: vcsPropsWithNorm.length,
+          propsWithNormTimeAndType1: vcsPropsWithNorm.filter(p => p.asset_type_use?.toString().startsWith('1')).length,
+          propsMatchingYear: vcsPropsWithNorm.filter(p => new Date(p.sales_date).getFullYear() === year).length,
+          yearsAvailable: [...new Set(vcsPropsWithNorm.map(p => new Date(p.sales_date).getFullYear()))].sort()
+        });
+      }
+
       const improvedSalesForYear = properties.filter(prop => {
         const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
         const hasNormalizedPrice = prop.values_norm_time && prop.values_norm_time > 0;
