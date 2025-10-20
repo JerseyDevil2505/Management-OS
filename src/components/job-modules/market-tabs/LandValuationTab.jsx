@@ -2605,7 +2605,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         // Check for teardown (class 2 with minimal improvement)
         const isTeardown = String(s.property_m4_class) === '2' && s.values_mod_improvement < 10000;
         if (isTeardown) {
-          console.log(`✅ Including uncategorized teardown sale ${s.property_block}/${s.property_lot}`);
+          console.log(`�� Including uncategorized teardown sale ${s.property_block}/${s.property_lot}`);
           return true;
         }
 
@@ -2619,7 +2619,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           return true;
         }
 
-        console.log(`⚠����� Excluding uncategorized sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
+        console.log(`⚠��� Excluding uncategorized sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
         return false;
       }
 
@@ -2834,15 +2834,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           year: year,
           region: region,
           actualRegion: actualRegion,
-          reason: 'No improved sales in same year & VCS with type_use starting with 1'
+          reason: 'No sales in VCS with type_use starting with 1 (year filter applied only if values_norm_time exists)'
         });
         return;
       }
 
-      debug(`✅ Found ${improvedSalesForYear.length} improved sales for VCS ${vcs}, year ${year} with type_use starting with '1'`);
+      console.log(`✅ Found ${improvedSalesForYear.length} improved sales for VCS ${vcs}${improvedSalesForYear.some(p => p.values_norm_time) ? `, year ${year}` : ' (all years)'} with type_use starting with '1'`);
 
-      // Calculate averages for this year's improved sales
-      // Use sales_price (actual price from that year), but we filtered for values_norm_time to exclude bad sales
+      // Calculate averages using sales_price (actual sale price, not time normalized)
       const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + p.sales_price, 0) / improvedSalesForYear.length;
       const avgImprovedAcres = improvedSalesForYear.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / improvedSalesForYear.length;
 
@@ -8435,7 +8434,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '��' : '����������') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '����������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
