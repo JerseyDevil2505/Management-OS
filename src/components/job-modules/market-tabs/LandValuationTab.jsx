@@ -2656,10 +2656,35 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }))
     });
 
+    // DEBUG: Log special region assignments
+    console.log(`🎯 Special Region Assignments:`, {
+      specialRegionsState: specialRegions,
+      salesWithRegions: filteredSales.filter(s => specialRegions[s.id] && specialRegions[s.id] !== 'Normal').map(s => ({
+        id: s.id,
+        block: s.property_block,
+        lot: s.property_lot,
+        region: specialRegions[s.id],
+        category: saleCategories[s.id]
+      }))
+    });
+
     filteredSales.forEach(sale => {
       const year = new Date(sale.sales_date).getFullYear();
       const vcs = sale.new_vcs;
       const region = specialRegions[sale.id] || 'Normal';
+
+      // DEBUG: Log each sale's region assignment
+      if (region !== 'Normal') {
+        console.log(`🏖️ Processing special region sale:`, {
+          id: sale.id,
+          block: sale.property_block,
+          lot: sale.property_lot,
+          region: region,
+          vcs: vcs,
+          year: year,
+          category: saleCategories[sale.id]
+        });
+      }
 
       if (!vcs) return;
 
@@ -10339,7 +10364,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               <thead>
                 <tr style={{ backgroundColor: '#F8F9FA', borderBottom: '2px solid #E5E7EB' }}>
                   <th onClick={() => toggleSort('vcs')} style={{ padding: '8px 4px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px', cursor: 'pointer' }}>VCS{sortField === 'vcs' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                  <th onClick={() => toggleSort('location')} style={{ padding: '8px 4px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px', cursor: 'pointer' }}>Locational Analysis{sortField === 'location' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                  <th onClick={() => toggleSort('location')} style={{ padding: '8px 4px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px', cursor: 'pointer' }}>Locational Analysis{sortField === 'location' ? (sortDir === 'asc' ? ' ���' : ' ▼') : ''}</th>
                   <th onClick={() => toggleSort('code')} style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px', cursor: 'pointer' }}>Code{sortField === 'code' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                   <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>With Year Built</th>
                   <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>With Living Area</th>
