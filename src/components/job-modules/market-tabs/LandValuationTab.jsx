@@ -2845,9 +2845,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + p.sales_price, 0) / improvedSalesForYear.length;
       const avgImprovedAcres = improvedSalesForYear.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / improvedSalesForYear.length;
 
-      // Calculate current allocation for this year
-      const currentAllocs = improvedSalesForYear.map(p => p.values_mod_land / p.values_mod_total);
-      const avgCurrentAllocation = currentAllocs.reduce((sum, a) => sum + a, 0) / currentAllocs.length;
+      // Calculate current allocation for this year (only for sales that have mod values)
+      const salesWithModValues = improvedSalesForYear.filter(p => p.values_mod_land > 0 && p.values_mod_total > 0);
+      const avgCurrentAllocation = salesWithModValues.length > 0
+        ? salesWithModValues.reduce((sum, p) => sum + (p.values_mod_land / p.values_mod_total), 0) / salesWithModValues.length
+        : 0;
 
       // Calculate average improved raw land value for Front Foot mode
       let avgImprovedRawLand = 0;
@@ -5258,7 +5260,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     debug('📋 Included sales IDs:', Array.from(includedSales));
     debug('�� Sale categories state:', saleCategories);
-    debug('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
+    debug('���� Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
     debug('��� Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
 
     // Helper function to calculate average for a category
