@@ -4064,7 +4064,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const workbook = XLSX.utils.book_new();
 
     // Build headers array (start first row with headers only)
-    const headers = ['VCS', 'Total', 'Type', 'Description', 'Method', 'Typical Lot Size', 'Rec Site Value', 'Act Site Value'];
+    const headers = ['VCS', 'Total', 'Type', 'Description', 'Method'];
+
+    // Typical lot size headers - different for FF mode vs Acre mode
+    if (valuationMode === 'ff') {
+      headers.push('Typical FF', 'Typical Depth', 'Depth Table');
+    } else {
+      headers.push('Typical Lot Size');
+    }
+
+    headers.push('Rec Site Value', 'Act Site Value');
 
     // Dynamic cascade headers
     if (valuationMode === 'ff') {
@@ -5153,7 +5162,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const updateSpecialCategory = (category, rate) => {
-    debug(`�������� Updating special category: ${category} = ${rate}`);
+    debug(`������ Updating special category: ${category} = ${rate}`);
     setCascadeConfig(prev => {
       const newConfig = {
         ...prev,
@@ -9480,7 +9489,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       onClick={() => toggleFieldCollapse('map')}
                       title="Click to expand/collapse"
                     >
-                      Map {collapsedFields.map ? '��' : '▼'}
+                      Map {collapsedFields.map ? '▶' : '▼'}
                     </th>
                   )}
                 </tr>
