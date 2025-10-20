@@ -2589,16 +2589,25 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Calculate site value for this individual sale
       const acres = sale.totalAcres || parseFloat(calculateAcreage(sale));
 
-      // Get cascade rates for this region
-      const cascadeRates = region === 'Normal' ? cascadeConfig.normal : cascadeConfig.special[region];
+      // Check for VCS-specific configuration first
+      const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
+        config.vcsList && config.vcsList.includes(vcs)
+      );
 
-      if (!cascadeRates) {
-        console.warn(`⚠️ Missing cascade rates for region "${region}" on sale ${sale.property_block}/${sale.property_lot}`);
-        return;
+      // Get cascade rates - prioritize VCS-specific, then region-specific
+      let cascadeRates;
+      if (vcsSpecificConfig && vcsSpecificConfig.rates) {
+        cascadeRates = vcsSpecificConfig.rates;
+        console.log(`🎯 Using VCS-specific rates for VCS ${vcs}:`, cascadeRates);
+      } else {
+        cascadeRates = region === 'Normal' ? cascadeConfig.normal : cascadeConfig.special[region];
+        console.log(`📊 Using ${region} region rates for VCS ${vcs}:`, cascadeRates);
       }
 
-      // Debug what rates we're using
-      console.log(`📊 VCS ${vcs} Region ${region} Rates:`, cascadeRates);
+      if (!cascadeRates) {
+        console.warn(`⚠️ Missing cascade rates for VCS ${vcs}, region "${region}" on sale ${sale.property_block}/${sale.property_lot}`);
+        return;
+      }
 
 
       // Log special region usage
