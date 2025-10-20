@@ -2579,7 +2579,64 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Process each individual vacant sale (no grouping)
     const processedVacantSales = [];
 
-    vacantSales.filter(s => includedSales.has(s.id)).forEach(sale => {
+    // Filter sales according to user criteria:
+    // INCLUDE: Building Lots, Tear Downs, Preconstruction
+    // EXCLUDE: Raw Land, Landlocked, Wetlands, Uncategorized/unchecked
+    const filteredSales = vacantSales.filter(s => {
+      // Must be included in the study
+      if (!includedSales.has(s.id)) return false;
+
+      // Get the category for this sale
+      const category = saleCategories[s.id];
+
+      // If no category is set, exclude (uncategorized)
+      if (!category) {
+        console.log(`⚠️ Excluding uncategorized sale ${s.property_block}/${s.property_lot}`);
+        return false;
+      }
+
+      // Normalize category to lowercase for comparison
+      const cat = category.toLowerCase();
+
+      // EXCLUDE: Raw Land, Landlocked, Wetlands
+      if (cat.includes('raw') || cat.includes('land') && !cat.includes('building')) {
+        console.log(`⚠️ Excluding Raw Land sale ${s.property_block}/${s.property_lot}`);
+        return false;
+      }
+      if (cat.includes('landlocked')) {
+        console.log(`⚠️ Excluding Landlocked sale ${s.property_block}/${s.property_lot}`);
+        return false;
+      }
+      if (cat.includes('wetland')) {
+        console.log(`⚠️ Excluding Wetlands sale ${s.property_block}/${s.property_lot}`);
+        return false;
+      }
+
+      // INCLUDE: Building Lots, Tear Downs, Preconstruction
+      if (cat.includes('building') || cat.includes('lot') ||
+          cat.includes('tear') || cat.includes('down') || cat.includes('teardown') ||
+          cat.includes('pre') || cat.includes('construction') || cat.includes('preconstruction')) {
+        console.log(`✅ Including ${category} sale ${s.property_block}/${s.property_lot}`);
+        return true;
+      }
+
+      // Default: exclude if category doesn't match any inclusion criteria
+      console.log(`⚠️ Excluding sale with unrecognized category '${category}': ${s.property_block}/${s.property_lot}`);
+      return false;
+    });
+
+    console.log(`🔍 Allocation Study Sales Filter:`, {
+      totalVacantSales: vacantSales.length,
+      includedSales: vacantSales.filter(s => includedSales.has(s.id)).length,
+      afterCategoryFilter: filteredSales.length,
+      categories: filteredSales.map(s => ({
+        block: s.property_block,
+        lot: s.property_lot,
+        category: saleCategories[s.id]
+      }))
+    });
+
+    filteredSales.forEach(sale => {
       const year = new Date(sale.sales_date).getFullYear();
       const vcs = sale.new_vcs;
       const region = specialRegions[sale.id] || 'Normal';
@@ -3735,7 +3792,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         throw result.error;
       }
 
-      debug('✅ Target allocation saved successfully to database');
+      debug('�� Target allocation saved successfully to database');
 
       // Update last saved timestamp
       setLastSaved(new Date());
