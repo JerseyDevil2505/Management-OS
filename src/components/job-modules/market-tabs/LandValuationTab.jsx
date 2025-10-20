@@ -1270,7 +1270,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (newSales.length > 0) {
-        debug('�������� Found new sales to add:', newSales.length);
+        debug('��������� Found new sales to add:', newSales.length);
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
           const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
@@ -2619,7 +2619,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           return true;
         }
 
-        console.log(`⚠️ Excluding uncategorized sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
+        console.log(`⚠��� Excluding uncategorized sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
         return false;
       }
 
@@ -2826,7 +2826,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
 
       if (improvedSalesForYear.length === 0) {
-        debug(`⚠️ No improved sales found for VCS ${vcs}, year ${year} (with type_use starting with '1')`);
+        console.warn(`⚠️ SKIPPING SALE - No improved sales found:`, {
+          block: sale.property_block,
+          lot: sale.property_lot,
+          vcs: vcs,
+          year: year,
+          region: region,
+          actualRegion: actualRegion,
+          reason: 'No improved sales in same year & VCS with type_use starting with 1'
+        });
         return;
       }
 
