@@ -2867,20 +2867,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
     });
 
-    debug('🏠 Processed allocation data:', {
-      totalVacantSales: processedVacantSales.length,
-      positiveSales: processedVacantSales.filter(s => s.isPositive).length,
-      negativeSales: processedVacantSales.filter(s => !s.isPositive).length
-    });
-
-    // DEBUG: Log sales by region
-    const salesByRegion = {};
-    processedVacantSales.forEach(s => {
-      if (!salesByRegion[s.region]) salesByRegion[s.region] = [];
-      salesByRegion[s.region].push({ block: s.block, lot: s.lot, vcs: s.vcs });
-    });
-    console.log(`📊 Final Allocation Study Sales by Region:`, salesByRegion);
-
     setVacantTestSales(processedVacantSales);
 
     // Calculate overall recommended allocation (positive sales only)
