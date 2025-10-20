@@ -4387,6 +4387,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   // Allocation export -> Excel workbook (matches UI table structure)
   const exportAllocationExcel = () => {
+    console.log('📊 Allocation Export - vacantTestSales count:', (vacantTestSales || []).length);
+    console.log('📊 Allocation Export - valuationMode:', valuationMode);
+
     const rows = [];
 
     // Headers match UI table structure - different for FF vs Acre mode
