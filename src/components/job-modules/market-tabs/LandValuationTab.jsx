@@ -6,7 +6,7 @@ import {
   Save, FileDown, MapPin,
   Home
 } from 'lucide-react';
-import { supabase, interpretCodes, checklistService } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, checklistService, getDepthFactor, getDepthFactors } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 import './LandValuationTab.css';
 import './sharedTabNav.css';
@@ -172,7 +172,7 @@ const LandValuationTab = ({
   useEffect(() => {
     if (vacantSales.length === 0 || !isInitialLoadComplete) return;
 
-    console.log(`🔄 Recalculating prices for mode: ${valuationMode}`);
+    console.log(`�� Recalculating prices for mode: ${valuationMode}`);
 
     setVacantSales(prev => prev.map(sale => {
       const acres = sale.totalAcres || 0;
@@ -348,6 +348,7 @@ const LandValuationTab = ({
   // Enhanced Method 2 UI State - Use Single Family as default
   const [method2TypeFilter, setMethod2TypeFilter] = useState('1');
   const [expandedVCS, setExpandedVCS] = useState(new Set());
+  const [excludedMethod2VCS, setExcludedMethod2VCS] = useState(new Set()); // VCSs excluded from Method 2 summary
 
   // VCS Sheet UI State - Collapsible fields
   const [collapsedFields, setCollapsedFields] = useState({
@@ -385,6 +386,10 @@ const LandValuationTab = ({
   const [vcsZoningData, setVcsZoningData] = useState({});
   const [vcsDescriptions, setVcsDescriptions] = useState({});
   const [vcsRecommendedSites, setVcsRecommendedSites] = useState({});
+
+  // ========== DEPTH TABLES STATE ==========
+  const [depthTables, setDepthTables] = useState({});
+  const [vcsDepthTableOverrides, setVcsDepthTableOverrides] = useState({}); // VCS-specific depth table overrides
 
   // ========== ECONOMIC OBSOLESCENCE STATE - ENHANCED ==========
   const [ecoObsFactors, setEcoObsFactors] = useState({});
@@ -485,7 +490,7 @@ const LandValuationTab = ({
 
     // debug log once
     if (Object.keys(newMap).length > 0) {
-      debug('🧭 Applied default eco-obs mapping for empty codes:', Object.entries(newMap).slice(0,20));
+      debug('���� Applied default eco-obs mapping for empty codes:', Object.entries(newMap).slice(0,20));
     }
   }, [ecoObsFactors, mappedLocationCodes, mapTokenToCode]);
 // ========== INITIALIZE FROM PROPS ==========
@@ -549,6 +554,7 @@ useEffect(() => {
 
     setMethod1ExcludedSales(currentSession.method1ExcludedSales || new Set());
     setIncludedSales(currentSession.includedSales || new Set());
+    setExcludedMethod2VCS(currentSession.excludedMethod2VCS || new Set());
     setSaleCategories(currentSession.saleCategories || {});
     setSpecialRegions(currentSession.specialRegions || {});
     setLandNotes(currentSession.landNotes || {});
@@ -728,13 +734,18 @@ useEffect(() => {
     setMethod2ExcludedSales(new Set(marketLandData.bracket_analysis.excluded_sales));
   }
 
+  // Restore Method 2 excluded VCSs
+  if (marketLandData.bracket_analysis?.excluded_vcs) {
+    setExcludedMethod2VCS(new Set(marketLandData.bracket_analysis.excluded_vcs));
+  }
+
   // Load target allocation with proper precedence to avoid stale data conflicts
   let loadedTargetAllocation = null;
 
   // Priority 1: Dedicated column (most recent saves go here)
   if (marketLandData.target_allocation !== null && marketLandData.target_allocation !== undefined) {
     loadedTargetAllocation = marketLandData.target_allocation;
-    debug('🎯 LOADING TARGET ALLOCATION FROM DEDICATED COLUMN:', loadedTargetAllocation);
+    debug('�� LOADING TARGET ALLOCATION FROM DEDICATED COLUMN:', loadedTargetAllocation);
   }
   // Priority 2: Legacy allocation_study structure (fallback)
   else if (marketLandData.allocation_study?.target_allocation !== null &&
@@ -760,7 +771,7 @@ useEffect(() => {
         debug('✅ Target allocation set to:', numericValue, typeof numericValue);
         return numericValue;
       } else {
-        debug('🛡�� Preserving existing target allocation:', prev, 'instead of overwriting with:', numericValue);
+        debug('🛡��� Preserving existing target allocation:', prev, 'instead of overwriting with:', numericValue);
         return prev;
       }
     });
@@ -788,6 +799,10 @@ useEffect(() => {
     }
     if (marketLandData.worksheet_data.recommended_sites) {
       setVcsRecommendedSites(marketLandData.worksheet_data.recommended_sites);
+    }
+
+    if (marketLandData.worksheet_data.depth_table_overrides) {
+      setVcsDepthTableOverrides(marketLandData.worksheet_data.depth_table_overrides);
     }
     if (marketLandData.worksheet_data.descriptions) {
       setVcsDescriptions(marketLandData.worksheet_data.descriptions);
@@ -849,6 +864,7 @@ useEffect(() => {
   updateSession({
     method1ExcludedSales,
     includedSales,
+    excludedMethod2VCS,
     saleCategories,
     specialRegions,
     landNotes,
@@ -868,6 +884,7 @@ useEffect(() => {
 }, [
   method1ExcludedSales,
   includedSales,
+  excludedMethod2VCS,
   saleCategories,
   specialRegions,
   landNotes,
@@ -902,8 +919,15 @@ useEffect(() => {
       }
       
       setCanUseFrontFoot(hasFrontFootData);
+
+      // Auto-set to FF mode if depth tables exist and mode isn't already set
+      if (hasFrontFootData && valuationMode === 'acre' && !cascadeConfig.mode) {
+        debug('🏢 Auto-detecting Front Foot mode - depth tables found');
+        setValuationMode('ff');
+        setCascadeConfig(prev => ({ ...prev, mode: 'ff' }));
+      }
     }
-  }, [jobData, vendorType]);
+  }, [jobData, vendorType, valuationMode, cascadeConfig.mode]);
 
   // ========== CALCULATE CURRENT OVERALL ALLOCATION ==========
   useEffect(() => {
@@ -1044,7 +1068,7 @@ const getPricePerUnit = useCallback((price, size) => {
     }
 
     if (properties && properties.length > 0) {
-      console.log('🔄 Triggering fresh calculations with FIXED DELTA LOGIC (post-initialization)');
+      console.log('���� Triggering fresh calculations with FIXED DELTA LOGIC (post-initialization)');
       filterVacantSales();
       performBracketAnalysis();
       loadVCSPropertyCounts();
@@ -1053,15 +1077,31 @@ const getPricePerUnit = useCallback((price, size) => {
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
-      debug('������ Triggering allocation study recalculation...');
+      debug('�������� Triggering allocation study recalculation...');
       loadAllocationStudyData();
     }
   }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, specialRegions]);
   // Note: intentionally exclude loadAllocationStudyData from deps to avoid TDZ issues, it is stable via useCallback.
 
   // Auto-calculate VCS recommended sites when target allocation changes
+  // ========== LOAD DEPTH TABLES ===========
   useEffect(() => {
-    debug('🔄 TARGET ALLOCATION USEEFFECT TRIGGERED:', {
+    const codeDefinitions = jobData?.parsed_code_definitions;
+    // Use interpretCodes.getDepthFactors to parse all tables from code file
+    const tables = interpretCodes.getDepthFactors(codeDefinitions, vendorType);
+    if (tables) {
+      setDepthTables(tables);
+      debug('📊 Depth tables loaded:', Object.keys(tables));
+    } else {
+      // Fallback to defaults if no code definitions
+      const defaultTables = getDepthFactors(codeDefinitions, vendorType);
+      setDepthTables(defaultTables);
+      debug('📊 Using default depth tables:', Object.keys(defaultTables));
+    }
+  }, [jobData?.parsed_code_definitions, vendorType]);
+
+  useEffect(() => {
+    debug('��� TARGET ALLOCATION USEEFFECT TRIGGERED:', {
       targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
       propertiesCount: properties?.length || 0
@@ -1071,7 +1111,7 @@ const getPricePerUnit = useCallback((price, size) => {
       debug('✅ CONDITIONS MET - CALLING calculateVCSRecommendedSitesWithTarget');
       calculateVCSRecommendedSitesWithTarget();
     } else {
-      debug('❌ CONDITIONS NOT MET FOR VCS CALCULATION:', {
+      debug('�� CONDITIONS NOT MET FOR VCS CALCULATION:', {
         hasTargetAllocation: !!targetAllocation,
         hasCascadeRates: !!cascadeConfig.normal.prime,
         hasProperties: properties?.length > 0
@@ -1089,7 +1129,7 @@ const getPricePerUnit = useCallback((price, size) => {
   // Auto-save every 30 seconds - but only after initial load is complete
   useEffect(() => {
     if (!isInitialLoadComplete) {
-      debug('���������� Auto-save waiting for initial load to complete');
+      debug('������������� Auto-save waiting for initial load to complete');
       return;
     }
 
@@ -1174,7 +1214,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
     // If we already have restored sales, preserve them and only add new ones
     if (false) { // Disable complex caching logic
-      debug('���� Preserving existing restored sales, checking for new ones only');
+      debug('������ Preserving existing restored sales, checking for new ones only');
 
       // Find any new sales that match criteria but aren't already in vacantSales
       const existingIds = new Set(vacantSales.map(s => s.id));
@@ -1238,7 +1278,10 @@ const getPricePerUnit = useCallback((price, size) => {
           return {
             ...prop,
             totalAcres: acres,
-            pricePerAcre: pricePerUnit
+            pricePerAcre: pricePerUnit,
+            land_front_feet: prop.land_front_feet || prop.asset_lot_frontage || 0,
+            land_depth: prop.land_depth || prop.asset_lot_depth || 0,
+            land_zoning: prop.land_zoning || prop.asset_zoning || prop.zoning || 'N/A'
           };
         });
 
@@ -1387,7 +1430,11 @@ const getPricePerUnit = useCallback((price, size) => {
         totalAcres: acres,
         pricePerAcre: roundedUnitPrice,
         autoCategory: category,
-        isPackage
+        isPackage,
+        // Preserve FF/Depth/Zone data for allocation study
+        land_front_feet: prop.land_front_feet || prop.asset_lot_frontage || 0,
+        land_depth: prop.land_depth || prop.asset_lot_depth || 0,
+        land_zoning: prop.land_zoning || prop.asset_zoning || prop.zoning || 'N/A'
       };
     };
 
@@ -1465,6 +1512,10 @@ const getPricePerUnit = useCallback((price, size) => {
               asset_lot_frontage: totalFrontage || null,
               asset_lot_depth: avgDepth,
               pricePerAcre: roundedPkgUnitPrice,
+              // Preserve FF/Depth/Zone for allocation study
+              land_front_feet: totalFrontage || null,
+              land_depth: avgDepth,
+              land_zoning: group[0].asset_zoning || group[0].land_zoning || group[0].zoning || 'N/A',
               packageData: {
                 is_package: true,
                 package_count: packageData.package_count || group.length,
@@ -1484,6 +1535,10 @@ const getPricePerUnit = useCallback((price, size) => {
               sales_price: totalPrice,
               totalAcres: totalAcres,
               pricePerAcre: pricePerUnit,
+              // Preserve FF/Depth/Zone for allocation study
+              land_front_feet: group[0].land_front_feet || group[0].asset_lot_frontage || 0,
+              land_depth: group[0].land_depth || group[0].asset_lot_depth || 0,
+              land_zoning: group[0].asset_zoning || group[0].land_zoning || group[0].zoning || 'N/A',
               packageData: {
                 is_package: true,
                 package_count: packageData.package_count || group.length,
@@ -1517,6 +1572,10 @@ const getPricePerUnit = useCallback((price, size) => {
           sales_price: totalPrice,
           totalAcres: totalAcres,
           pricePerAcre: pricePerUnit,
+          // Preserve FF/Depth/Zone for allocation study
+          land_front_feet: group[0].land_front_feet || group[0].asset_lot_frontage || 0,
+          land_depth: group[0].land_depth || group[0].asset_lot_depth || 0,
+          land_zoning: group[0].asset_zoning || group[0].land_zoning || group[0].zoning || 'N/A',
           packageData: {
             is_package: true,
             package_count: group.length,
@@ -1549,7 +1608,7 @@ const getPricePerUnit = useCallback((price, size) => {
       const enriched = enrichProperty(prop);
       finalSales.push(enriched);
       if (enriched.autoCategory) {
-        debug(`���️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
+        debug(`����️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
         if (!saleCategories[prop.id]) setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
       }
     });
@@ -1573,7 +1632,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (hasRestrictedClass) {
-        debug(`🚫 Excluding package ${sale.property_block}/${sale.property_lot} - contains restricted property class`);
+        debug(`���� Excluding package ${sale.property_block}/${sale.property_lot} - contains restricted property class`);
         return false;
       }
 
@@ -1974,6 +2033,9 @@ const getPricePerUnit = useCallback((price, size) => {
       };
 
       Object.keys(vcsSales).forEach(vcs => {
+        // Skip excluded VCSs from summary calculation
+        if (excludedMethod2VCS.has(vcs)) return;
+
         const vcsAnalysis = analysis[vcs];
         if (!vcsAnalysis) return;
 
@@ -2065,6 +2127,9 @@ const getPricePerUnit = useCallback((price, size) => {
         };
 
         Object.keys(regionVcsSales).forEach(vcs => {
+          // Skip excluded VCSs from regional summary calculation
+          if (excludedMethod2VCS.has(vcs)) return;
+
           const vcsAnalysis = regionVcsSales[vcs];
           if (!vcsAnalysis) return;
 
@@ -2156,11 +2221,15 @@ const getPricePerUnit = useCallback((price, size) => {
         };
       });
 
+      // Count only non-excluded VCSs
+      const includedVCSCount = Object.keys(vcsSales).filter(vcs => !excludedMethod2VCS.has(vcs)).length;
+
       setMethod2Summary({
         mediumRange: calculateBracketSummary(bracketRates.mediumRange), // 1.00-4.99
         largeRange: calculateBracketSummary(bracketRates.largeRange),   // 5.00-9.99
         xlargeRange: calculateBracketSummary(bracketRates.xlargeRange), // 10.00+
-        totalVCS: Object.keys(vcsSales).length
+        totalVCS: includedVCSCount,
+        excludedVCSCount: excludedMethod2VCS.size
       });
 
       setBracketAnalysis(analysis);
@@ -2169,7 +2238,7 @@ const getPricePerUnit = useCallback((price, size) => {
       console.error('Error in performBracketAnalysis:', error);
       setBracketAnalysis({});
     }
-  }, [properties, cascadeConfig, calculateAcreage, method2TypeFilter, method2ExcludedSales, vacantSales, specialRegions]);
+  }, [properties, cascadeConfig, calculateAcreage, method2TypeFilter, method2ExcludedSales, vacantSales, specialRegions, excludedMethod2VCS]);
 
   const calculateRates = useCallback((regionFilter = null) => {
     const included = vacantSales.filter(s => {
@@ -2388,7 +2457,10 @@ const getPricePerUnit = useCallback((price, size) => {
         ...prop,
         totalAcres: acres,
         pricePerAcre: pricePerUnit,
-        manuallyAdded: true
+        manuallyAdded: true,
+        land_front_feet: prop.land_front_feet || prop.asset_lot_frontage || 0,
+        land_depth: prop.land_depth || prop.asset_lot_depth || 0,
+        land_zoning: prop.land_zoning || prop.asset_zoning || prop.zoning || 'N/A'
       };
     });
 
@@ -2433,7 +2505,7 @@ const getPricePerUnit = useCallback((price, size) => {
     setSearchResults([]);
 
     // Note: Auto-save will trigger within 30 seconds to persist these changes
-    debug('💾 Sales added - auto-save will persist these changes:', toAdd.map(p => `${p.property_block}/${p.property_lot}`));
+    debug('�� Sales added - auto-save will persist these changes:', toAdd.map(p => `${p.property_block}/${p.property_lot}`));
   };
 
   const handlePropertyResearch = async (property) => {
@@ -2452,8 +2524,8 @@ Find specific information about this property and sale. Include:
 ��� Property ownership/seller details
 • Tax assessment and classification details
 • Documented environmental constraints (wetlands, floodplains)
-• Municipality-specific land use characteristics
-• Any circumstances of the sale (estate, distressed, etc.)
+�� Municipality-specific land use characteristics
+��� Any circumstances of the sale (estate, distressed, etc.)
 
 Provide only verifiable facts with sources. Be specific and actionable for valuation purposes. 2-3 sentences.`;
 
@@ -2502,7 +2574,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const loadAllocationStudyData = useCallback(() => {
     if (!cascadeConfig.normal.prime) return;
 
-    debug('���� Loading allocation study data - individual sale approach');
+    debug('����� Loading allocation study data - individual sale approach');
 
     // Process each individual vacant sale (no grouping)
     const processedVacantSales = [];
@@ -2523,6 +2595,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         return;
       }
 
+
       // Log special region usage
       if (region !== 'Normal') {
         debug(`�� Using special region "${region}" rates for sale ${sale.property_block}/${sale.property_lot}:`, {
@@ -2533,30 +2606,52 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
       // Apply cascade calculation to get raw land value
-      const rawLandValue = calculateRawLandValue(acres, cascadeRates);
-      const siteValue = (sale.values_norm_time || sale.sales_price) - rawLandValue;
+      console.log(`🔍 Calculating raw land for ${sale.property_block}/${sale.property_lot}:`, {
+        valuationMode,
+        acres,
+        land_front_feet: sale.land_front_feet,
+        asset_lot_frontage: sale.asset_lot_frontage,
+        land_depth: sale.land_depth,
+        asset_lot_depth: sale.asset_lot_depth,
+        land_zoning: sale.land_zoning,
+        hasCascadeRates: !!cascadeRates
+      });
 
-      // Find improved sales for this sale's year
+      const rawLandValue = calculateRawLandValue(acres, cascadeRates, sale);
+      const salePrice = sale.values_norm_time || sale.sales_price;
+      const siteValue = salePrice - rawLandValue;
+
+      console.log(`💰 Sale ${sale.property_block}/${sale.property_lot} calculation:`, {
+        salePrice,
+        rawLandValue,
+        siteValue
+      });
+
+      // Find improved sales for this sale's year AND VCS
+      // IMPORTANT: Only use sales with values_norm_time (bad sales are filtered out during normalization)
       const improvedSalesForYear = properties.filter(prop => {
         const isResidential = prop.property_m4_class === '2' || prop.property_m4_class === '3A';
         const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
         const hasBuilding = prop.asset_year_built && prop.asset_year_built > 0;
         const hasValues = prop.values_mod_land > 0 && prop.values_mod_total > 0;
+        const hasNormalizedPrice = prop.values_norm_time && prop.values_norm_time > 0; // Only normalized sales
         const sameYear = new Date(prop.sales_date).getFullYear() === year;
         const hasValidTypeUse = prop.asset_type_use && prop.asset_type_use.toString().startsWith('1');
+        const sameVCS = prop.new_vcs === vcs;
 
-        return isResidential && hasValidSale && hasBuilding && hasValues && sameYear && hasValidTypeUse;
+        return isResidential && hasValidSale && hasBuilding && hasValues && hasNormalizedPrice && sameYear && hasValidTypeUse && sameVCS;
       });
 
       if (improvedSalesForYear.length === 0) {
-        debug(`⚠️ No improved sales found for year ${year} (with type_use starting with '1')`);
+        debug(`⚠️ No improved sales found for VCS ${vcs}, year ${year} (with type_use starting with '1')`);
         return;
       }
 
-      debug(`✅ Found ${improvedSalesForYear.length} improved sales for year ${year} with type_use starting with '1'`);
+      debug(`✅ Found ${improvedSalesForYear.length} improved sales for VCS ${vcs}, year ${year} with type_use starting with '1'`);
 
       // Calculate averages for this year's improved sales
-      const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + (p.values_norm_time || p.sales_price), 0) / improvedSalesForYear.length;
+      // Use sales_price (actual price from that year), but we filtered for values_norm_time to exclude bad sales
+      const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + p.sales_price, 0) / improvedSalesForYear.length;
       const avgImprovedAcres = improvedSalesForYear.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / improvedSalesForYear.length;
 
       // Calculate current allocation for this year
@@ -2564,11 +2659,39 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const avgCurrentAllocation = currentAllocs.reduce((sum, a) => sum + a, 0) / currentAllocs.length;
 
       // Calculate new land value using this sale's site value + improved sales average raw land
-      const improvedRawLandValue = calculateRawLandValue(avgImprovedAcres, cascadeConfig.normal);
+      let improvedRawLandValue;
+      if (valuationMode === 'ff' && improvedSalesForYear.length > 0) {
+        // For FF mode, calculate each improved sale's raw land value using the SALE'S zone (not the improved prop's zone)
+        // This ensures we use the same depth table as the vacant sale
+        const saleZone = sale.asset_zoning || sale.land_zoning || sale.zoning;
+        const improvedRawValues = improvedSalesForYear.map(prop => {
+          // Create a modified property object that uses the SALE's zone for depth table lookup
+          const propWithSaleZone = {
+            ...prop,
+            land_front_feet: parseFloat(prop.asset_lot_frontage) || 0,
+            land_depth: parseFloat(prop.asset_lot_depth) || 0,
+            land_zoning: saleZone // Use the vacant sale's zone
+          };
+          return calculateRawLandValue(null, cascadeRates, propWithSaleZone);
+        });
+        improvedRawLandValue = improvedRawValues.reduce((sum, val) => sum + val, 0) / improvedRawValues.length;
+      } else {
+        // For acreage mode, use average acres
+        improvedRawLandValue = calculateRawLandValue(avgImprovedAcres, cascadeRates);
+      }
       const totalLandValue = improvedRawLandValue + siteValue;
 
       // Calculate recommended allocation
       const recommendedAllocation = avgImprovedPrice > 0 ? totalLandValue / avgImprovedPrice : 0;
+
+      // Calculate improved sales FF/Depth averages for FF mode
+      // Use lot frontage/depth from the lot data, not overall property size
+      const avgImprovedFF = improvedSalesForYear.length > 0
+        ? improvedSalesForYear.reduce((sum, p) => sum + (parseFloat(p.asset_lot_frontage) || 0), 0) / improvedSalesForYear.length
+        : 0;
+      const avgImprovedDepth = improvedSalesForYear.length > 0
+        ? improvedSalesForYear.reduce((sum, p) => sum + (parseFloat(p.asset_lot_depth) || 0), 0) / improvedSalesForYear.length
+        : 0;
 
       processedVacantSales.push({
         // Vacant sale info
@@ -2580,6 +2703,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         lot: sale.property_lot,
         vacantPrice: sale.values_norm_time || sale.sales_price,
         acres,
+        frontFeet: parseFloat(sale.land_front_feet ?? sale.asset_lot_frontage ?? sale.frontage) || 0,
+        depth: parseFloat(sale.land_depth ?? sale.asset_lot_depth ?? sale.depth) || 0,
+        zone: sale.asset_zoning || sale.land_zoning || sale.zoning || 'N/A',
         rawLandValue,
         siteValue,
 
@@ -2587,6 +2713,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         improvedSalesCount: improvedSalesForYear.length,
         avgImprovedPrice: avgImprovedPrice,
         avgImprovedAcres: avgImprovedAcres.toFixed(2),
+        avgImprovedFF: avgImprovedFF.toFixed(1),
+        avgImprovedDepth: avgImprovedDepth.toFixed(1),
         improvedRawLandValue: improvedRawLandValue,
         totalLandValue: totalLandValue,
 
@@ -2623,8 +2751,71 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }
   }, [cascadeConfig, vacantSales, includedSales, specialRegions, calculateAcreage, properties]);
 
+  // Helper function to get unique regions from vacant test sales
+  const getUniqueRegions = () => {
+    const regions = new Set(vacantTestSales.map(sale => sale.region));
+    return Array.from(regions).sort((a, b) => {
+      if (a === 'Normal') return -1;
+      if (b === 'Normal') return 1;
+      return a.localeCompare(b);
+    });
+  };
+
   // Helper function to calculate raw land value using cascade rates
-  const calculateRawLandValue = (acres, cascadeRates) => {
+  const calculateRawLandValue = (acresOrProperty, cascadeRates, propertyForFF = null) => {
+    // If valuationMode is Front Foot and we have a property with FF data, use FF calculation
+    console.log('\u27a1\ufe0f calculateRawLandValue called:', { valuationMode, hasPropertyForFF: !!propertyForFF });
+
+    if (valuationMode === 'ff' && propertyForFF) {
+      const frontFeet = parseFloat(propertyForFF.land_front_feet) || 0;
+      const depth = parseFloat(propertyForFF.land_depth) || 0;
+
+      console.log('\ud83d\udcca FF mode values:', { frontFeet, depth, land_front_feet: propertyForFF.land_front_feet, land_depth: propertyForFF.land_depth });
+
+      if (frontFeet > 0 && depth > 0) {
+        // Get depth table and zone for this property
+        const zone = propertyForFF.land_zoning || propertyForFF.zoning || 'DEFAULT';
+        const depthTable = depthTables[zone] || depthTables['DEFAULT'];
+
+        if (depthTable && (cascadeRates.prime?.rate || cascadeRates.standard?.rate)) {
+          // Find depth factor from depth table
+          let depthFactor = 1.0;
+          for (const row of depthTable) {
+            if (depth >= row.min && depth <= row.max) {
+              depthFactor = row.factor;
+              break;
+            }
+          }
+
+          // Use prime/excess structure if available, otherwise fall back to standard/excess
+          const primeRate = cascadeRates.prime?.rate || cascadeRates.standard?.rate || 0;
+          const primeMax = cascadeRates.prime?.max || cascadeRates.standard?.max || 100;
+          const excessRate = cascadeRates.excess?.rate || 0;
+
+          // Calculate prime frontage (first X feet)
+          const primeFF = Math.min(frontFeet, primeMax);
+          const excessFF = Math.max(0, frontFeet - primeMax);
+
+          // Calculate raw frontage value (BEFORE depth multiplier)
+          const primeValue = primeFF * primeRate;
+          const excessValue = excessFF * excessRate;
+          const rawValue = primeValue + excessValue;
+
+          // Apply depth multiplier to total
+          const totalValue = rawValue * depthFactor;
+
+          debug(`FF calc for ${frontFeet}' x ${depth}': Zone ${zone}, Depth factor ${depthFactor.toFixed(2)}, Prime: ${primeFF}' x $${primeRate} = $${primeValue.toFixed(0)}` +
+            (excessFF > 0 ? `, Excess: ${excessFF}' x $${excessRate} = $${excessValue.toFixed(0)}` : '') +
+            `, Raw: $${rawValue.toFixed(0)} x ${depthFactor.toFixed(2)} = $${totalValue.toFixed(0)}`
+          );
+
+          return totalValue;
+        }
+      }
+    }
+
+    // Fall back to acreage-based calculation
+    const acres = typeof acresOrProperty === 'number' ? acresOrProperty : parseFloat(calculateAcreage(acresOrProperty));
     let remainingAcres = acres;
     let rawLandValue = 0;
     const breakdown = [];
@@ -2655,17 +2846,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       remainingAcres = 0;
     }
 
-    debug(`���� Raw land calculation for ${acres} acres:`, breakdown.join(' + '), `= $${rawLandValue.toFixed(0)}`);
+    debug(`������ Raw land calculation for ${acres} acres:`, breakdown.join(' + '), `= $${rawLandValue.toFixed(0)}`);
 
     return rawLandValue;
   };
 
 
-  const getUniqueRegions = useCallback(() => {
-    const regions = new Set(['Normal']);
-    Object.values(specialRegions).forEach(r => regions.add(r));
-    return Array.from(regions);
-  }, [specialRegions]);
 
   // Available region options for dropdowns: built-in + custom special regions defined in cascadeConfig
   const regionOptions = useMemo(() => {
@@ -2754,28 +2940,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
       
       counts[prop.new_vcs].total++;
-      
+
       // Count by property class
       if (prop.property_m4_class === '2' || prop.property_m4_class === '3A') {
         counts[prop.new_vcs].residential++;
-        
-        // Collect averages for residential with valid sales
-        if (prop.sales_price > 0 && prop.sales_date) {
-          const saleDate = new Date(prop.sales_date);
-          const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
-
-          // Sales from October 1st three years prior to present
-          if (saleDate >= octoberFirstThreeYearsPrior) {
-            if (prop.values_norm_time > 0) avgNormTime[prop.new_vcs].push(prop.values_norm_time);
-            if (prop.values_norm_size > 0) avgNormSize[prop.new_vcs].push(prop.values_norm_size);
-            
-            // Valid NU codes for actual price
-            const nu = prop.sales_nu || '';
-            const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
-                           nu === '7' || nu.charCodeAt(0) === 32;
-            if (validNu && prop.values_norm_time > 0) avgActualPrice[prop.new_vcs].push(prop.values_norm_time);
-          }
-        }
       } else if (prop.property_m4_class === '4A' || prop.property_m4_class === '4B' || prop.property_m4_class === '4C') {
         counts[prop.new_vcs].commercial++;
       } else if (prop.property_m4_class === '1' || prop.property_m4_class === '3B') {
@@ -2788,6 +2956,27 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         counts[prop.new_vcs].industrial++;
       } else {
         counts[prop.new_vcs].special++;
+      }
+
+      // Collect sales averages for all properties with sales in this VCS
+      // Note: VCS type filtering happens later in calculateRecSite
+      if (prop.sales_price > 0 && prop.sales_date) {
+        // Avg Price (t): ALL normalized time values in VCS (no date filter)
+        if (prop.values_norm_time > 0) avgNormTime[prop.new_vcs].push(prop.values_norm_time);
+
+        const saleDate = new Date(prop.sales_date);
+        const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
+
+        // Sales from October 1st three years prior to present
+        if (saleDate >= octoberFirstThreeYearsPrior) {
+          if (prop.values_norm_size > 0) avgNormSize[prop.new_vcs].push(prop.values_norm_size);
+
+          // Avg Price: Valid NU codes + time constraint
+          const nu = prop.sales_nu || '';
+          const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
+                         nu === '7' || nu.charCodeAt(0) === 32;
+          if (validNu && prop.values_norm_time > 0) avgActualPrice[prop.new_vcs].push(prop.values_norm_time);
+        }
       }
       
       // Collect unique zoning codes
@@ -2892,7 +3081,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
     debug('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
-    debug('���� Input validation:', {
+    debug('����� Input validation:', {
       hasTargetAllocation: !!targetAllocation,
       targetAllocationValue: targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
@@ -3040,7 +3229,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }));
 
     // Immediate save to prevent data loss when navigating away
-    debug('💾 Triggering immediate save for Act Site change');
+    debug('���� Triggering immediate save for Act Site change');
     setTimeout(() => {
       if (window.landValuationSave) {
         window.landValuationSave({ source: 'autosave' });
@@ -3407,7 +3596,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     const targetValue = parseFloat(targetAllocation);
     if (isNaN(targetValue) || targetValue <= 0 || targetValue > 100) {
-      debug('❌ Save target allocation cancelled: Invalid value:', targetAllocation);
+      debug('��� Save target allocation cancelled: Invalid value:', targetAllocation);
       alert('Please enter a valid target allocation percentage between 1 and 100.');
       return;
     }
@@ -3438,7 +3627,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           })
           .eq('job_id', jobData.id);
       } else {
-        debug('➕ Creating new record with target allocation...');
+        debug('�� Creating new record with target allocation...');
         result = await supabase
           .from('market_land_valuation')
           .insert({
@@ -3472,7 +3661,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
       // Trigger VCS recommended sites calculation
-      debug('🔄 Triggering VCS recommended sites calculation...');
+      debug('�� Triggering VCS recommended sites calculation...');
       if (cascadeConfig.normal.prime && properties?.length > 0) {
         calculateVCSRecommendedSitesWithTarget();
       } else {
@@ -3539,6 +3728,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         bracket_analysis: {
           ...bracketAnalysis,
           excluded_sales: Array.from(method2ExcludedSales),
+          excluded_vcs: Array.from(excludedMethod2VCS),
           summary: method2Summary
         },
         cascade_rates: cascadeConfig,
@@ -3556,7 +3746,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           recommended_sites: vcsRecommendedSites,
           descriptions: vcsDescriptions,
           types: vcsTypes,
-          sheet_data: vcsSheetData
+          sheet_data: vcsSheetData,
+          depth_table_overrides: vcsDepthTableOverrides
         },
         eco_obs_applied_adjustments: actualAdjustments,
         eco_obs_code_config: {
@@ -3571,7 +3762,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       };
 
       // Debug: Log the exact data being saved
-      debug('������ Data structure being saved:', {
+      debug('�������� Data structure being saved:', {
         cascadeConfigLocation1: analysisData.raw_land_config.cascade_config.specialCategories,
         cascadeConfigLocation2: analysisData.cascade_rates.specialCategories,
         salesData: analysisData.vacant_sales_analysis.sales.slice(0, 3), // First 3 for brevity
@@ -3603,6 +3794,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           updateSessionState({
             method1ExcludedSales: new Set(),
             includedSales: new Set(),
+            excludedMethod2VCS: new Set(),
             saleCategories: {},
             specialRegions: {},
             landNotes: {},
@@ -4721,8 +4913,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }));
   };
 
+  const updateSpecialRegionVCSList = (region, vcsListString) => {
+    setCascadeConfig(prev => ({
+      ...prev,
+      special: {
+        ...prev.special,
+        [region]: {
+          ...prev.special[region],
+          vcsList: vcsListString
+        }
+      }
+    }));
+  };
+
   const updateSpecialCategory = (category, rate) => {
-    debug(`���� Updating special category: ${category} = ${rate}`);
+    debug(`������ Updating special category: ${category} = ${rate}`);
     setCascadeConfig(prev => {
       const newConfig = {
         ...prev,
@@ -4731,7 +4936,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           [category]: rate ? parseFloat(rate) : null
         }
       };
-      debug('🔧 New cascade config special categories:', newConfig.specialCategories);
+      debug('����� New cascade config special categories:', newConfig.specialCategories);
       return newConfig;
     });
   };
@@ -4831,7 +5036,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     debug('📋 Included sales IDs:', Array.from(includedSales));
-    debug('📋 Sale categories state:', saleCategories);
+    debug('�� Sale categories state:', saleCategories);
     debug('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
     debug('📋 Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
 
@@ -4942,7 +5147,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
           // Prepare human-readable size unit for debugging
           const sizeUnitLabel = valuationMode === 'acre' ? 'acres' : valuationMode === 'sf' ? 'sqft' : 'front ft';
-          debug(`��� ${categoryType} paired analysis:`, {
+          debug(`����� ${categoryType} paired analysis:`, {
             totalProperties: filtered.length,
             possiblePairs: (filtered.length * (filtered.length - 1)) / 2,
             validPairs: pairedRates.length,
@@ -5026,7 +5231,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Debug teardown sales to see if they're incorrectly going to raw land
       if (saleCategories[s.id] === 'teardown' || (s.property_block === '5' && s.property_lot === '12.12')) {
-        debug('�� Raw Land check for teardown/5.12.12:', {
+        debug('���� Raw Land check for teardown/5.12.12:', {
           block: s.property_block,
           lot: s.property_lot,
           id: s.id,
@@ -5294,7 +5499,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           zIndex: 9999,
           animation: 'slideIn 0.3s ease'
         }}>
-          ✓ Prompt copied! Paste into Claude AI
+          �� Prompt copied! Paste into Claude AI
         </div>
       )}
 
@@ -6113,7 +6318,43 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           <div style={{ fontSize: '12px', color: '#6B7280' }}>
             {Object.keys(bracketAnalysis).length} VCS areas • Filtered by: {method2TypeFilter} ({getTypeUseOptions().find(opt => opt.code === method2TypeFilter)?.description || 'Unknown'})
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={() => setExcludedMethod2VCS(new Set())}
+              style={{
+                padding: '4px 10px',
+                fontSize: '11px',
+                backgroundColor: '#10B981',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: '600'
+              }}
+              title="Include all VCSs in summary calculation"
+            >
+              ✓ Select All
+            </button>
+            <button
+              onClick={() => setExcludedMethod2VCS(new Set(Object.keys(bracketAnalysis)))}
+              style={{
+                padding: '4px 10px',
+                fontSize: '11px',
+                backgroundColor: '#EF4444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: '600'
+              }}
+              title="Exclude all VCSs from summary calculation"
+            >
+              ✗ Deselect All
+            </button>
+            <span style={{ fontSize: '11px', color: '#6B7280', marginLeft: '4px' }}>
+              {Object.keys(bracketAnalysis).length - excludedMethod2VCS.size} of {Object.keys(bracketAnalysis).length} included
+            </span>
+            <div style={{ width: '1px', height: '20px', backgroundColor: '#D1D5DB', margin: '0 8px' }}></div>
             <button
               onClick={() => setExpandedVCS(new Set(Object.keys(bracketAnalysis)))}
               style={{
@@ -6150,13 +6391,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([vcs, data], index) => {
               const isExpanded = expandedVCS.has(vcs);
+              const isExcluded = excludedMethod2VCS.has(vcs);
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales �� Avg $${Math.round(data.avgPrice).toLocaleString()} ����� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales �� Avg $${Math.round(data.avgPrice).toLocaleString()} ��������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
 
               return (
-                <div key={vcs} style={{ marginBottom: '8px', border: '1px solid #E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
+                <div key={vcs} style={{
+                  marginBottom: '8px',
+                  border: '1px solid #E5E7EB',
+                  borderRadius: '6px',
+                  overflow: 'hidden',
+                  opacity: isExcluded ? 0.5 : 1,
+                  filter: isExcluded ? 'grayscale(60%)' : 'none'
+                }}>
                   {/* VCS Header */}
                   <div
                     onClick={() => {
@@ -6181,8 +6430,31 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       border: 'none'
                     }}
                   >
-                    <div>
-                      <span style={{ fontSize: '16px', fontWeight: 'bold' }}>{vcs}:</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <input
+                        type="checkbox"
+                        checked={!isExcluded}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          const newExcluded = new Set(excludedMethod2VCS);
+                          if (isExcluded) {
+                            newExcluded.delete(vcs);
+                          } else {
+                            newExcluded.add(vcs);
+                          }
+                          setExcludedMethod2VCS(newExcluded);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          width: '16px',
+                          height: '16px',
+                          cursor: 'pointer',
+                          margin: 0
+                        }}
+                        title={isExcluded ? 'Click to include in summary' : 'Click to exclude from summary'}
+                      />
+                      <div>
+                        <span style={{ fontSize: '16px', fontWeight: 'bold' }}>{vcs}:</span>
                       <span style={{ fontSize: '12px', marginLeft: '8px', fontWeight: 'normal' }}>
                         <span
                           onClick={(e) => {
@@ -6197,11 +6469,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           {data.totalSales} sales
                         </span>
-                        {` • Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
+                        {` ��� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
                       </span>
+                      </div>
                     </div>
                     <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
-                      ▼
+                      ���
                     </span>
                   </div>
 
@@ -6317,9 +6590,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         {method2Summary && (method2Summary.mediumRange || method2Summary.largeRange || method2Summary.xlargeRange) && (
           <div style={{ borderTop: '2px solid #E5E7EB', backgroundColor: '#F8FAFC' }}>
             <div style={{ padding: '20px' }}>
-              <h4 style={{ margin: '0 0 15px 0', fontSize: '16px', fontWeight: 'bold', color: '#1F2937' }}>
-                Method 2 Summary - Implied {valuationMode === 'sf' ? '$/Square Foot Rates' : '$/Acre Rates'}
-              </h4>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold', color: '#1F2937' }}>
+                  Method 2 Summary - Implied {valuationMode === 'sf' ? '$/Square Foot Rates' : '$/Acre Rates'}
+                </h4>
+                {method2Summary.excludedVCSCount > 0 && (
+                  <span style={{ fontSize: '12px', color: '#EF4444', fontWeight: '600', backgroundColor: '#FEE2E2', padding: '4px 12px', borderRadius: '4px' }}>
+                    {method2Summary.excludedVCSCount} VCS excluded from summary
+                  </span>
+                )}
+              </div>
 
               <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
                 {/* dynamic bracket labels based on cascadeConfig */}
@@ -6928,6 +7208,131 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 Remove
               </button>
             </div>
+
+            {/* VCS Assignment Field */}
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '6px', fontWeight: '500' }}>
+                Assigned VCS
+              </label>
+
+              {/* Dropdown to add VCS */}
+              <select
+                onChange={(e) => {
+                  if (e.target.value) {
+                    const assignedList = cascadeConfig.special[region]?.vcsList
+                      ? cascadeConfig.special[region].vcsList.split(',').map(v => v.trim()).filter(v => v)
+                      : [];
+                    const newList = [...assignedList, e.target.value].join(', ');
+                    updateSpecialRegionVCSList(region, newList);
+                    e.target.value = ''; // Reset dropdown
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '6px 8px',
+                  border: '1px solid #BFDBFE',
+                  borderRadius: '4px',
+                  fontSize: '13px',
+                  backgroundColor: 'white',
+                  marginBottom: '8px'
+                }}
+              >
+                <option value="">+ Add VCS...</option>
+                {Object.keys(vcsSheetData).sort((a, b) => {
+                  // Check if values are purely numeric
+                  const aIsNumeric = /^\d+$/.test(a);
+                  const bIsNumeric = /^\d+$/.test(b);
+
+                  // Both numeric: sort numerically
+                  if (aIsNumeric && bIsNumeric) {
+                    return parseInt(a) - parseInt(b);
+                  }
+
+                  // One numeric, one not: numeric comes first
+                  if (aIsNumeric) return -1;
+                  if (bIsNumeric) return 1;
+
+                  // Both non-numeric: sort alphabetically
+                  return a.localeCompare(b);
+                }).map(vcs => {
+                  const assignedList = cascadeConfig.special[region]?.vcsList
+                    ? cascadeConfig.special[region].vcsList.split(',').map(v => v.trim()).filter(v => v)
+                    : [];
+                  const isAssigned = assignedList.includes(vcs);
+
+                  if (isAssigned) return null; // Don't show if already assigned
+
+                  return (
+                    <option key={vcs} value={vcs}>
+                      VCS {vcs}
+                    </option>
+                  );
+                })}
+              </select>
+
+              {/* Assigned VCS badges */}
+              <div style={{ minHeight: '36px', padding: '8px', backgroundColor: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: '4px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'start' }}>
+                {(() => {
+                  const assignedList = cascadeConfig.special[region]?.vcsList
+                    ? cascadeConfig.special[region].vcsList.split(',').map(v => v.trim()).filter(v => v)
+                    : [];
+
+                  // Sort: numeric first (numerically), then alphabetic
+                  assignedList.sort((a, b) => {
+                    const aIsNumeric = /^\d+$/.test(a);
+                    const bIsNumeric = /^\d+$/.test(b);
+
+                    if (aIsNumeric && bIsNumeric) return parseInt(a) - parseInt(b);
+                    if (aIsNumeric) return -1;
+                    if (bIsNumeric) return 1;
+                    return a.localeCompare(b);
+                  });
+
+                  if (assignedList.length === 0) {
+                    return <span style={{ color: '#9CA3AF', fontSize: '12px', fontStyle: 'italic' }}>No VCS assigned</span>;
+                  }
+
+                  return assignedList.map(vcs => (
+                    <span
+                      key={vcs}
+                      style={{
+                        padding: '4px 10px',
+                        backgroundColor: '#1E40AF',
+                        color: 'white',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      {vcs}
+                      <button
+                        onClick={() => {
+                          const newList = assignedList.filter(v => v !== vcs).join(', ');
+                          updateSpecialRegionVCSList(region, newList);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'white',
+                          cursor: 'pointer',
+                          fontSize: '16px',
+                          lineHeight: '1',
+                          padding: '0',
+                          fontWeight: 'bold'
+                        }}
+                        title="Click to remove"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ));
+                })()}
+              </div>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns:
               valuationMode === 'ff' ? 'repeat(2, 1fr)' :
               valuationMode === 'sf' ? 'repeat(2, 1fr)' :
@@ -7744,7 +8149,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <strong>Exclude problematic sales:</strong> Uncheck sales that should not be used in Method 2 calculations
                 (teardowns, poor condition, pre-construction, etc.).
                 <span style={{ display: 'block', marginTop: '4px' }}>
-                  ⚠️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
+                  ���️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
                 </span>
               </p>
             </div>
@@ -7794,7 +8199,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'address' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
+                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '�����') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('saleDate')}
@@ -7808,7 +8213,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '���������') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '����������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
@@ -7892,7 +8297,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'typeUse' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '�����') : ''}
+                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '��������') : ''}
                     </th>
                   </tr>
                 </thead>
@@ -8108,14 +8513,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   borderRight: '2px solid #E5E7EB',
                   border: '1px solid #D1D5DB',
                   fontWeight: 'bold'
-                }} colSpan="6">Vacant Sale</th>
+                }} colSpan={valuationMode === 'ff' ? "8" : "6"}>Vacant Sale</th>
                 {/* Improved Sales Info */}
                 <th style={{
                   padding: '8px',
                   borderRight: '2px solid #E5E7EB',
                   border: '1px solid #D1D5DB',
                   fontWeight: 'bold'
-                }} colSpan="4">Improved Sales (Same Year)</th>
+                }} colSpan={valuationMode === 'ff' ? "6" : "4"}>Improved Sales (Same Year)</th>
                 {/* Allocation Results */}
                 <th style={{
                   padding: '8px',
@@ -8129,12 +8534,30 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Year</th>
                 <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Block/Lot</th>
                 <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Price</th>
-                <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Acres</th>
-                <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Site Value</th>
+                {valuationMode === 'ff' ? (
+                  <>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Front Feet</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Depth</th>
+                    <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Zone</th>
+                    <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Site Value</th>
+                  </>
+                ) : (
+                  <>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Acres</th>
+                    <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Site Value</th>
+                  </>
+                )}
                 {/* Improved Sales Columns */}
                 <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Count</th>
                 <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Price</th>
-                <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Acres</th>
+                {valuationMode === 'ff' ? (
+                  <>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg FF</th>
+                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Depth</th>
+                  </>
+                ) : (
+                  <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Acres</th>
+                )}
                 <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Total Land Value</th>
                 {/* Allocation Columns */}
                 <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Current %</th>
@@ -8157,22 +8580,49 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{sale.year}</td>
                   <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{sale.block}/{sale.lot}</td>
                   <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${sale.vacantPrice?.toLocaleString()}</td>
-                  <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.acres?.toFixed(2)}</td>
-                  <td style={{
-                    padding: '8px',
-                    textAlign: 'right',
-                    fontWeight: 'bold',
-                    color: sale.siteValue > 0 ? '#10B981' : '#EF4444',
-                    borderRight: '2px solid #E5E7EB',
-                    border: '1px solid #E5E7EB'
-                  }}>
-                    ${Math.round(sale.siteValue).toLocaleString()}
-                  </td>
+                  {valuationMode === 'ff' ? (
+                    <>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.frontFeet?.toFixed(1) || '-'}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.depth?.toFixed(1) || '-'}</td>
+                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{sale.zone || '-'}</td>
+                      <td style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: 'bold',
+                        color: sale.siteValue > 0 ? '#10B981' : '#EF4444',
+                        borderRight: '2px solid #E5E7EB',
+                        border: '1px solid #E5E7EB'
+                      }}>
+                        ${Math.round(sale.siteValue).toLocaleString()}
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.acres?.toFixed(2)}</td>
+                      <td style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: 'bold',
+                        color: sale.siteValue > 0 ? '#10B981' : '#EF4444',
+                        borderRight: '2px solid #E5E7EB',
+                        border: '1px solid #E5E7EB'
+                      }}>
+                        ${Math.round(sale.siteValue).toLocaleString()}
+                      </td>
+                    </>
+                  )}
 
                   {/* Improved Sales Data */}
                   <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{sale.improvedSalesCount}</td>
                   <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(sale.avgImprovedPrice)?.toLocaleString()}</td>
-                  <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedAcres}</td>
+                  {valuationMode === 'ff' ? (
+                    <>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedFF || '-'}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedDepth || '-'}</td>
+                    </>
+                  ) : (
+                    <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedAcres}</td>
+                  )}
                   <td style={{
                     padding: '8px',
                     textAlign: 'right',
@@ -8250,17 +8700,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         </div>
       </div>
 
-      {/* Special Region Individual Allocation Analysis Table */}
-      {(() => {
-        const specialRegionSales = vacantTestSales.filter(sale => sale.region !== 'Normal');
-        if (specialRegionSales.length === 0) return null;
+      {/* Special Region Individual Allocation Analysis - Separate Section per Region */}
+      {getUniqueRegions().filter(regionName => regionName !== 'Normal').map(regionName => {
+        const regionSales = vacantTestSales.filter(sale => sale.region === regionName);
+        if (regionSales.length === 0) return null;
 
         return (
-          <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB', marginTop: '20px' }}>
+          <div key={regionName} style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E5E7EB', marginTop: '20px' }}>
             <div style={{ padding: '15px', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F3E8FF' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold', color: '#8B5CF6' }}>Special Region Individual Allocation Analysis</h3>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold', color: '#8B5CF6' }}>{regionName} Individual Allocation Analysis</h3>
               <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6B7280' }}>
-                Vacant sales using special region cascade rates
+                Vacant sales using {regionName} cascade rates
               </p>
             </div>
 
@@ -8279,14 +8729,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       borderRight: '2px solid #E5E7EB',
                       border: '1px solid #D1D5DB',
                       fontWeight: 'bold'
-                    }} colSpan="7">Vacant Sale</th>
-                    {/* Improved Sales Info */}
-                    <th style={{
-                      padding: '8px',
-                      borderRight: '2px solid #E5E7EB',
-                      border: '1px solid #D1D5DB',
-                      fontWeight: 'bold'
-                    }} colSpan="4">Improved Sales (Same Year)</th>
+                    }} colSpan={valuationMode === 'ff' ? "9" : "7"}>Vacant Sale</th>
+                {/* Improved Sales Info */}
+                <th style={{
+                  padding: '8px',
+                  borderRight: '2px solid #E5E7EB',
+                  border: '1px solid #D1D5DB',
+                  fontWeight: 'bold'
+                }} colSpan={valuationMode === 'ff' ? "6" : "4"}>Improved Sales (Same Year)</th>
                     {/* Allocation Results */}
                     <th style={{
                       padding: '8px',
@@ -8297,17 +8747,35 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <tr style={{ backgroundColor: '#F3F4F6', fontSize: '11px', borderBottom: '1px solid #D1D5DB' }}>
                     {/* Vacant Sale Columns */}
                     <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>VCS</th>
-                    <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Year</th>
-                    <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Block/Lot</th>
-                    <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Region</th>
-                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Price</th>
-                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Acres</th>
-                    <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Site Value</th>
-                    {/* Improved Sales Columns */}
-                    <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Count</th>
-                    <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Price</th>
+                  <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Year</th>
+                  <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Block/Lot</th>
+                  <th style={{ padding: '6px', border: '1px solid #D1D5DB', fontWeight: '600' }}>Region</th>
+                  <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Price</th>
+                  {valuationMode === 'ff' ? (
+                    <>
+                      <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Front Feet</th>
+                      <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Depth</th>
+                      <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Zone</th>
+                      <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Site Value</th>
+                    </>
+                  ) : (
+                    <>
+                      <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Acres</th>
+                      <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Site Value</th>
+                    </>
+                  )}
+                  {/* Improved Sales Columns */}
+                  <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Count</th>
+                  <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Price</th>
+                  {valuationMode === 'ff' ? (
+                    <>
+                      <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg FF</th>
+                      <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Depth</th>
+                    </>
+                  ) : (
                     <th style={{ padding: '6px', textAlign: 'right', border: '1px solid #D1D5DB', fontWeight: '600' }}>Avg Acres</th>
-                    <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Total Land Value</th>
+                  )}
+                  <th style={{ padding: '6px', textAlign: 'right', borderRight: '2px solid #E5E7EB', border: '1px solid #D1D5DB', fontWeight: '600' }}>Total Land Value</th>
                     {/* Allocation Columns */}
                     <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Current %</th>
                     <th style={{ padding: '6px', textAlign: 'center', border: '1px solid #D1D5DB', fontWeight: '600' }}>Recommended %</th>
@@ -8315,7 +8783,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   </tr>
                 </thead>
                 <tbody>
-                  {specialRegionSales.map((sale, index) => (
+                  {regionSales.map((sale, index) => (
                     <tr
                       key={`special_${sale.id}_${index}`}
                       style={{
@@ -8338,22 +8806,49 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         {sale.region}
                       </td>
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${sale.vacantPrice?.toLocaleString()}</td>
-                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.acres?.toFixed(2)}</td>
-                      <td style={{
-                        padding: '8px',
-                        textAlign: 'right',
-                        fontWeight: 'bold',
-                        color: sale.siteValue > 0 ? '#10B981' : '#EF4444',
-                        borderRight: '2px solid #E5E7EB',
-                        border: '1px solid #E5E7EB'
-                      }}>
-                        ${Math.round(sale.siteValue).toLocaleString()}
-                      </td>
+                      {valuationMode === 'ff' ? (
+                        <>
+                          <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.frontFeet?.toFixed(1) || '-'}</td>
+                          <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.depth?.toFixed(1) || '-'}</td>
+                          <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{sale.zone || '-'}</td>
+                          <td style={{
+                            padding: '8px',
+                            textAlign: 'right',
+                            fontWeight: 'bold',
+                            color: sale.siteValue > 0 ? '#10B981' : '#EF4444',
+                            borderRight: '2px solid #E5E7EB',
+                            border: '1px solid #E5E7EB'
+                          }}>
+                            ${Math.round(sale.siteValue).toLocaleString()}
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.acres?.toFixed(2)}</td>
+                          <td style={{
+                            padding: '8px',
+                            textAlign: 'right',
+                            fontWeight: 'bold',
+                            color: sale.siteValue > 0 ? '#10B981' : '#EF4444',
+                            borderRight: '2px solid #E5E7EB',
+                            border: '1px solid #E5E7EB'
+                          }}>
+                            ${Math.round(sale.siteValue).toLocaleString()}
+                          </td>
+                        </>
+                      )}
 
                       {/* Improved Sales Data */}
                       <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{sale.improvedSalesCount}</td>
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(sale.avgImprovedPrice)?.toLocaleString()}</td>
-                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedAcres}</td>
+                      {valuationMode === 'ff' ? (
+                        <>
+                          <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedFF || '-'}</td>
+                          <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedDepth || '-'}</td>
+                        </>
+                      ) : (
+                        <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.avgImprovedAcres}</td>
+                      )}
                       <td style={{
                         padding: '8px',
                         textAlign: 'right',
@@ -8398,10 +8893,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               </table>
             </div>
 
-            {/* Special Region Summary Footer */}
+            {/* Region-Specific Summary Footer */}
             <div style={{ padding: '15px', borderTop: '1px solid #E5E7EB', backgroundColor: '#F3E8FF' }}>
               {(() => {
-                const positiveSales = specialRegionSales.filter(s => s.isPositive);
+                const positiveSales = regionSales.filter(s => s.isPositive);
                 const totalLandValue = positiveSales.reduce((sum, s) => sum + s.totalLandValue, 0);
                 const totalSalePrice = positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0);
                 const overallRecommended = totalSalePrice > 0 ? (totalLandValue / totalSalePrice) * 100 : 0;
@@ -8409,8 +8904,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 return (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', fontSize: '14px' }}>
                     <div>
-                      <div style={{ color: '#6B7280', fontSize: '12px' }}>Special Region Sales Included</div>
-                      <div style={{ fontWeight: 'bold', color: '#8B5CF6' }}>{positiveSales.length} of {specialRegionSales.length}</div>
+                      <div style={{ color: '#6B7280', fontSize: '12px' }}>{regionName} Sales Included</div>
+                      <div style={{ fontWeight: 'bold', color: '#8B5CF6' }}>{positiveSales.length} of {regionSales.length}</div>
                     </div>
                     <div>
                       <div style={{ color: '#6B7280', fontSize: '12px' }}>Total Land Value</div>
@@ -8421,7 +8916,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <div style={{ fontWeight: 'bold' }}>${Math.round(totalSalePrice).toLocaleString()}</div>
                     </div>
                     <div>
-                      <div style={{ color: '#6B7280', fontSize: '12px' }}>Special Region Recommended</div>
+                      <div style={{ color: '#6B7280', fontSize: '12px' }}>{regionName} Recommended</div>
                       <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#8B5CF6' }}>{overallRecommended.toFixed(1)}%</div>
                     </div>
                   </div>
@@ -8430,7 +8925,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             </div>
           </div>
         );
-      })()}
+      })}
     </div>
   );
 
@@ -8509,6 +9004,133 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     return map;
   }, [vcsSheetData, vcsTypes, cascadeConfig.specialCategories]);
 
+  // ========== CALCULATE REC SITE WITH FRONT FOOT FORMULA ==========
+  const calculateRecSite = useCallback((vcs) => {
+    // If not in FF mode, return the base recommended value
+    if (valuationMode !== 'ff') {
+      return vcsRecommendedSites[vcs] || 0;
+    }
+
+    // Get VCS data for avg price
+    const data = vcsSheetData[vcs];
+    if (!data) return vcsRecommendedSites[vcs] || 0;
+
+    // Use Avg Price, fallback to Avg Price (t)
+    const avgPrice = data.avgPrice || data.avgNormTime;
+    if (!avgPrice || !targetAllocation) return vcsRecommendedSites[vcs] || 0;
+
+    // Check if this VCS is a condo - condos use simple allocation formula
+    const vcsType = vcsTypes[vcs] || 'Residential-Typical';
+    const isCondo = vcsType.toLowerCase().includes('condo');
+
+    if (isCondo) {
+      // For condos: Rec Site = Target % × Avg Price (no land dimensions)
+      return Math.round(avgPrice * (targetAllocation / 100));
+    }
+
+    // Front Foot mode calculation for non-condo residential
+    const zcfg = marketLandData?.zoning_config || {};
+
+    // Find the most common zoning for this VCS
+    const vcsProperties = properties.filter(p => p.new_vcs === vcs);
+    if (vcsProperties.length === 0) return vcsRecommendedSites[vcs] || 0;
+
+    const vcsZonings = vcsProperties
+      .map(p => p.asset_zoning)
+      .filter(z => z && z.trim() !== '');
+
+    if (vcsZonings.length === 0) return vcsRecommendedSites[vcs] || 0;
+
+    // Get most common zoning
+    const zoningCounts = {};
+    vcsZonings.forEach(z => {
+      const zKey = z.toString().trim();
+      zoningCounts[zKey] = (zoningCounts[zKey] || 0) + 1;
+    });
+    const mostCommonZoning = Object.keys(zoningCounts).reduce((a, b) =>
+      zoningCounts[a] > zoningCounts[b] ? a : b
+    );
+
+    const zoneEntry = zcfg[mostCommonZoning] ||
+                     zcfg[mostCommonZoning?.toUpperCase?.()] ||
+                     zcfg[mostCommonZoning?.toLowerCase?.()] || null;
+
+    if (!zoneEntry) return vcsRecommendedSites[vcs] || 0;
+
+    // Use VCS-specific depth table override if available, otherwise use zoning default
+    const depthTableName = vcsDepthTableOverrides[vcs] || zoneEntry.depth_table || zoneEntry.depthTable;
+    const minFrontage = parseFloat(zoneEntry.min_frontage || zoneEntry.minFrontage || 0);
+
+    if (!depthTableName || !minFrontage) return vcsRecommendedSites[vcs] || 0;
+
+    // Calculate average frontage and depth for properties in this VCS
+    const propsWithFrontage = vcsProperties.filter(p =>
+      p.asset_lot_frontage && parseFloat(p.asset_lot_frontage) > 0
+    );
+
+    if (propsWithFrontage.length === 0) return vcsRecommendedSites[vcs] || 0;
+
+    const avgFrontage = propsWithFrontage.reduce((sum, p) =>
+      sum + parseFloat(p.asset_lot_frontage), 0
+    ) / propsWithFrontage.length;
+
+    const propsWithDepth = vcsProperties.filter(p =>
+      p.asset_lot_depth && parseFloat(p.asset_lot_depth) > 0
+    );
+
+    const avgDepth = propsWithDepth.length > 0
+      ? propsWithDepth.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth), 0) / propsWithDepth.length
+      : 100; // Default depth if not available
+
+    // Get depth factor using interpretCodes function that works with parsed code definitions
+    const depthFactor = interpretCodes.getDepthFactor(avgDepth, depthTableName, depthTables);
+
+    // Calculate standard and excess frontage
+    const standardFrontage = Math.min(avgFrontage, minFrontage);
+    const excessFrontage = Math.max(0, avgFrontage - minFrontage);
+
+    // Get standard and excess FF rates from cascade config or calculated values
+    // Priority: VCS-Specific > Special Region (by VCS assignment) > Normal
+    let cascadeRates = cascadeConfig.normal;
+
+    // Check for VCS-specific configuration
+    const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
+      config.vcsList?.includes(vcs)
+    );
+    if (vcsSpecificConfig) {
+      cascadeRates = vcsSpecificConfig.rates || cascadeConfig.normal;
+    } else {
+      // Check for special region configuration by VCS assignment
+      const assignedSpecialRegion = Object.entries(cascadeConfig.special || {}).find(([region, config]) => {
+        if (!config.vcsList) return false;
+        // Parse comma-separated VCS list and check if current VCS is in it
+        const vcsList = config.vcsList.split(',').map(v => v.trim().toUpperCase());
+        return vcsList.includes(vcs.toString().toUpperCase());
+      });
+
+      if (assignedSpecialRegion) {
+        cascadeRates = assignedSpecialRegion[1]; // Use the config object from the [region, config] tuple
+      }
+    }
+
+    const standardFF = cascadeRates.standard?.rate || 0;
+    const excessFF = cascadeRates.excess?.rate || Math.round(standardFF / 2);
+
+    // Calculate Raw Land Component: (Standard Frontage × Std Rate × Depth Factor) + (Excess × Excess Rate)
+    const rawLandComponent = Math.round(
+      (standardFrontage * standardFF * depthFactor) +
+      (excessFrontage * excessFF)
+    );
+
+    // Calculate Target Allocation Value: avgPrice × (target% / 100)
+    const targetValue = Math.round(avgPrice * (targetAllocation / 100));
+
+    // Rec Site = Target Value - Raw Land Component
+    const siteValue = targetValue - rawLandComponent;
+
+    return siteValue;
+  }, [valuationMode, marketLandData, properties, depthTables, cascadeConfig, vacantSales, specialRegions, vcsDepthTableOverrides, vcsRecommendedSites, vcsSheetData, targetAllocation, vcsTypes]);
+
   // ========== RENDER VCS SHEET TAB ==========
   const renderVCSSheetTab = () => {
     const VCS_TYPES = [
@@ -8562,7 +9184,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Type</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Description</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Method</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Typ Lot</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
+                    {valuationMode === 'ff' ? 'Typ Lot FF' : 'Typ Lot'}
+                  </th>
+                  {valuationMode === 'ff' && (
+                    <>
+                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Typ Lot Depth</th>
+                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Depth Table</th>
+                    </>
+                  )}
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Rec Site</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Act Site</th>
                   {valuationMode === 'ff' ? (
@@ -8596,7 +9226,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     onClick={() => toggleFieldCollapse('zoning')}
                     title="Click to expand/collapse"
                   >
-                    Zoning {collapsedFields.zoning ? '▶' : '▼'}
+                    Zoning {collapsedFields.zoning ? '�����' : '▼'}
                   </th>
                   {shouldShowKeyColumn && (
                     <th
@@ -8634,8 +9264,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   const type = vcsTypes[vcs] || 'Residential-Typical';
                   const isGrayedOut = !type.startsWith('Residential');
                   const description = vcsDescriptions[vcs] || getVCSDescription(vcs);
-                  const recSite = vcsRecommendedSites[vcs] || 0;
-                  // Fix: Use nullish coalescing to allow 0 values in Act Site
+                  // Calculate Rec Site using FF formula with depth table overrides
+                  const recSite = calculateRecSite(vcs);
+                  // Act Site is user-editable override, defaults to recSite if not set
                   const actSite = vcsManualSiteValues[vcs] ?? recSite;
 
                   // Determine which cascade rates to use (priority: VCS-specific > Special Region > Normal)
@@ -8650,13 +9281,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     cascadeRates = vcsSpecificConfig.rates || cascadeConfig.normal;
                     rateSource = `VCS-Specific (${vcsSpecificConfig.method?.toUpperCase()})`;
                   } else {
-                    // Check for special region configuration
-                    const vcsInSpecialRegion = vacantSales.find(sale =>
-                      sale.new_vcs === vcs && specialRegions[sale.id] && specialRegions[sale.id] !== 'Normal'
-                    );
-                    if (vcsInSpecialRegion && cascadeConfig.special?.[specialRegions[vcsInSpecialRegion.id]]) {
-                      cascadeRates = cascadeConfig.special[specialRegions[vcsInSpecialRegion.id]];
-                      rateSource = specialRegions[vcsInSpecialRegion.id];
+                    // Check for special region configuration by VCS assignment
+                    const assignedSpecialRegion = Object.entries(cascadeConfig.special || {}).find(([region, config]) => {
+                      if (!config.vcsList) return false;
+                      // Parse comma-separated VCS list and check if current VCS is in it
+                      const vcsList = config.vcsList.split(',').map(v => v.trim().toUpperCase());
+                      return vcsList.includes(vcs.toString().toUpperCase());
+                    });
+
+                    if (assignedSpecialRegion) {
+                      cascadeRates = assignedSpecialRegion[1];
+                      rateSource = assignedSpecialRegion[0]; // Region name
                     }
                   }
                   
@@ -8667,6 +9302,80 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   ) || [];
                   const typicalLot = vcsProps.length > 0 ?
                     (vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length).toFixed(2) : '';
+
+                  // Calculate typical frontage and depth for Front Foot mode
+                  let typicalFrontage = '';
+                  let typicalDepth = '';
+                  let depthTableName = '';
+
+                  if (valuationMode === 'ff') {
+                    // Get all properties in this VCS with valid frontage data
+                    const vcsPropsWithFrontage = properties?.filter(p =>
+                      p.new_vcs === vcs &&
+                      p.asset_lot_frontage && parseFloat(p.asset_lot_frontage) > 0
+                    ) || [];
+
+                    if (vcsPropsWithFrontage.length > 0) {
+                      // Calculate average frontage
+                      const avgFrontage = vcsPropsWithFrontage.reduce((sum, p) =>
+                        sum + parseFloat(p.asset_lot_frontage), 0
+                      ) / vcsPropsWithFrontage.length;
+                      typicalFrontage = Math.round(avgFrontage);
+
+                      // Calculate average depth if available
+                      const vcsPropsWithDepth = vcsPropsWithFrontage.filter(p =>
+                        p.asset_lot_depth && parseFloat(p.asset_lot_depth) > 0
+                      );
+
+                      if (vcsPropsWithDepth.length > 0) {
+                        const avgDepth = vcsPropsWithDepth.reduce((sum, p) =>
+                          sum + parseFloat(p.asset_lot_depth), 0
+                        ) / vcsPropsWithDepth.length;
+                        typicalDepth = Math.round(avgDepth);
+                      } else {
+                        // If no depth data, use standard depth of 100 ft
+                        typicalDepth = 100;
+                      }
+
+                      // Use VCS-specific override if available, otherwise get from zoning config
+                      if (vcsDepthTableOverrides[vcs]) {
+                        depthTableName = vcsDepthTableOverrides[vcs];
+                      } else {
+                        // Get depth table from zoning config
+                        // Find the most common zoning for this VCS
+                        const vcsZonings = vcsPropsWithFrontage
+                          .map(p => p.asset_zoning)
+                          .filter(z => z && z.trim() !== '');
+
+                        if (vcsZonings.length > 0) {
+                          // Get most common zoning
+                          const zoningCounts = {};
+                          vcsZonings.forEach(z => {
+                            const zKey = z.toString().trim();
+                            zoningCounts[zKey] = (zoningCounts[zKey] || 0) + 1;
+                          });
+                          const mostCommonZoning = Object.keys(zoningCounts).reduce((a, b) =>
+                            zoningCounts[a] > zoningCounts[b] ? a : b
+                          );
+
+                          // Look up depth table from zoning config
+                          const zcfg = marketLandData?.zoning_config || {};
+                          const zoneEntry = zcfg[mostCommonZoning] ||
+                                           zcfg[mostCommonZoning?.toUpperCase?.()] ||
+                                           zcfg[mostCommonZoning?.toLowerCase?.()] || null;
+
+                          if (zoneEntry) {
+                            depthTableName = zoneEntry.depth_table ||
+                                            zoneEntry.depthTable ||
+                                            zoneEntry.depth_table_name ||
+                                            'Not Set';
+                          } else {
+                            depthTableName = 'Not Set';
+                          }
+                        }
+                      }
+                    }
+                  }
 
                   // Use pre-calculated special categories to avoid re-renders
                   const vcsSpecialCategories = vcsSpecialCategoriesMap[vcs] || {
@@ -8720,7 +9429,51 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         />
                       </td>
                       <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{getMethodDisplay(type, description)}</td>
-                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{typicalLot}</td>
+                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
+                        {valuationMode === 'ff' ?
+                          (typicalFrontage !== '' ? `${typicalFrontage} ft` : 'N/A') :
+                          typicalLot
+                        }
+                      </td>
+                      {valuationMode === 'ff' && (
+                        <>
+                          <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
+                            {typicalDepth !== '' ? `${typicalDepth} ft` : 'N/A'}
+                          </td>
+                          <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
+                            <select
+                              value={vcsDepthTableOverrides[vcs] || depthTableName || ''}
+                              onChange={(e) => {
+                                const newDepthTable = e.target.value;
+                                setVcsDepthTableOverrides(prev => ({
+                                  ...prev,
+                                  [vcs]: newDepthTable
+                                }));
+                                // Trigger immediate save
+                                setTimeout(() => {
+                                  saveAnalysis();
+                                }, 100);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '2px 4px',
+                                border: '1px solid #D1D5DB',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                backgroundColor: vcsDepthTableOverrides[vcs] ? '#FEF3C7' : 'white'
+                              }}
+                              title={vcsDepthTableOverrides[vcs] ? 'VCS Override Active' : 'Using zoning default'}
+                            >
+                              <option value="">Auto (from zoning)</option>
+                              {Object.keys(depthTables).map(table => (
+                                <option key={table} value={table}>
+                                  {table}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                        </>
+                      )}
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(recSite).toLocaleString()}</td>
                       <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
                         <input
@@ -9297,7 +10050,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <option value="all">All</option>
                 <option value="1">1 — Single Family</option>
                 <option value="2">2 — Duplex / Semi-Detached</option>
-                <option value="3">3* �� Row / Townhouse</option>
+                <option value="3">3* ���� Row / Townhouse</option>
                 <option value="4">4* — MultiFamily</option>
                 <option value="5">5* — Conversions</option>
                 <option value="6">6 — Condominium</option>
@@ -9707,7 +10460,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             }}
             title={isVcsSheetComplete ? 'Click to reopen' : 'Mark VCS Reviewed/Reset complete'}
           >
-            {isVcsSheetComplete ? '✓ Mark Complete' : 'Mark Complete'}
+            {isVcsSheetComplete ? '�� Mark Complete' : 'Mark Complete'}
           </button>
         )}
 
