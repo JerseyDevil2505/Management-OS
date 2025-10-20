@@ -8820,32 +8820,38 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold', color: '#1F2937' }}>
                   {regionName} Region Analysis
                 </h4>
-                <div style={{ display: 'flex', gap: '30px', alignItems: 'center' }}>
-                  <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280' }}>Sales Included:</span>
-                    <span style={{ fontSize: '14px', fontWeight: '600', marginLeft: '8px' }}>
-                      {regionSales.length} of {vacantTestSales.filter(s => s.region === regionName).length}
-                    </span>
+                {totalRegionSales === 0 ? (
+                  <div style={{ fontSize: '13px', color: '#6B7280', fontStyle: 'italic' }}>
+                    No sales assigned to this region. Assign sales using the "Special Region" dropdown in the vacant sales table above, or configure VCS-specific settings with region assignment.
                   </div>
-                  <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280' }}>Total Land Value:</span>
-                    <span style={{ fontSize: '14px', fontWeight: '600', marginLeft: '8px' }}>
-                      ${totalLandValue.toLocaleString()}
-                    </span>
+                ) : (
+                  <div style={{ display: 'flex', gap: '30px', alignItems: 'center' }}>
+                    <div>
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>Sales Included:</span>
+                      <span style={{ fontSize: '14px', fontWeight: '600', marginLeft: '8px' }}>
+                        {regionSales.length} of {totalRegionSales}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>Total Land Value:</span>
+                      <span style={{ fontSize: '14px', fontWeight: '600', marginLeft: '8px' }}>
+                        ${totalLandValue.toLocaleString()}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>Total Sale Price:</span>
+                      <span style={{ fontSize: '14px', fontWeight: '600', marginLeft: '8px' }}>
+                        ${totalSalePrice.toLocaleString()}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '12px', color: '#6B7280' }}>Recommended:</span>
+                      <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#0EA5E9', marginLeft: '8px' }}>
+                        {regionAllocation}%
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280' }}>Total Sale Price:</span>
-                    <span style={{ fontSize: '14px', fontWeight: '600', marginLeft: '8px' }}>
-                      ${totalSalePrice.toLocaleString()}
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '12px', color: '#6B7280' }}>Recommended:</span>
-                    <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#0EA5E9', marginLeft: '8px' }}>
-                      {regionAllocation}%
-                    </span>
-                  </div>
-                </div>
+                )}
               </div>
             );
           });
