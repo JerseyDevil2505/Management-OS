@@ -5554,7 +5554,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       config.vcsList?.forEach(vcs => affectedVCS.add(vcs));
     });
 
-    // Additional notification that rates have been saved — show a concise toast instead of alert
+    // Additional notification that rates have been saved �� show a concise toast instead of alert
     const methodLabel = valuationMode ? valuationMode.toUpperCase() : 'N/A';
     const normalTiers = Object.keys(cascadeConfig.normal || {}).filter(k => cascadeConfig.normal[k]?.rate).length;
     const specialCount = Object.keys(cascadeConfig.special || {}).length;
@@ -8672,8 +8672,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${sale.vacantPrice?.toLocaleString()}</td>
                   {valuationMode === 'ff' ? (
                     <>
-                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.frontFeet?.toFixed(1) || '-'}</td>
-                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{sale.depth?.toFixed(1) || '-'}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{Math.round(sale.frontFeet) || '-'}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{Math.round(sale.depth) || '-'}</td>
                       <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{sale.zone || '-'}</td>
                       <td style={{
                         padding: '8px',
