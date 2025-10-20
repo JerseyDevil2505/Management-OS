@@ -2899,7 +2899,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         recommendedPercent: overallRecommended.toFixed(1)
       });
     }
-  }, [cascadeConfig, vacantSales, includedSales, specialRegions, calculateAcreage, properties]);
+  }, [cascadeConfig, vacantSales, includedSales, specialRegions, saleCategories, calculateAcreage, properties]);
 
   // Helper function to get unique regions from vacant test sales
   const getUniqueRegions = () => {
