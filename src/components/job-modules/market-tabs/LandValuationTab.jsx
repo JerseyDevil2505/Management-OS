@@ -2584,7 +2584,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Filter sales according to user criteria:
     // INCLUDE: Building Lots, Tear Downs, Preconstruction
-    // EXCLUDE: Raw Land, Landlocked, Wetlands, Uncategorized/unchecked
+    // EXCLUDE: Raw Land, Landlocked, Wetlands
     const filteredSales = vacantSales.filter(s => {
       // Must be included in the study
       if (!includedSales.has(s.id)) return false;
@@ -2592,9 +2592,34 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Get the category for this sale
       const category = saleCategories[s.id];
 
-      // If no category is set, exclude (uncategorized)
+      // If no category is set, check if it's a vacant land sale (class 1/3B) that should be auto-included as building lot
       if (!category) {
-        console.log(`⚠️ Excluding uncategorized sale ${s.property_block}/${s.property_lot}`);
+        // Allow vacant land sales (they should have been auto-categorized as building-lot)
+        const isVacantClass = String(s.property_m4_class).toUpperCase() === '1' ||
+                              String(s.property_m4_class).toUpperCase() === '3B';
+        if (isVacantClass) {
+          console.log(`✅ Including uncategorized vacant land sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
+          return true;
+        }
+
+        // Check for teardown (class 2 with minimal improvement)
+        const isTeardown = String(s.property_m4_class) === '2' && s.values_mod_improvement < 10000;
+        if (isTeardown) {
+          console.log(`✅ Including uncategorized teardown sale ${s.property_block}/${s.property_lot}`);
+          return true;
+        }
+
+        // Check for pre-construction (sold before built)
+        const isPreConstruction = String(s.property_m4_class) === '2' &&
+                                  s.asset_year_built &&
+                                  s.sales_date &&
+                                  new Date(s.sales_date).getFullYear() < s.asset_year_built;
+        if (isPreConstruction) {
+          console.log(`✅ Including uncategorized pre-construction sale ${s.property_block}/${s.property_lot}`);
+          return true;
+        }
+
+        console.log(`⚠️ Excluding uncategorized sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
         return false;
       }
 
@@ -2602,7 +2627,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const cat = category.toLowerCase();
 
       // EXCLUDE: Raw Land, Landlocked, Wetlands
-      if (cat.includes('raw') || cat.includes('land') && !cat.includes('building')) {
+      if (cat.includes('raw') && cat.includes('land')) {
         console.log(`⚠️ Excluding Raw Land sale ${s.property_block}/${s.property_lot}`);
         return false;
       }
@@ -2615,17 +2640,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         return false;
       }
 
-      // INCLUDE: Building Lots, Tear Downs, Preconstruction
-      if (cat.includes('building') || cat.includes('lot') ||
-          cat.includes('tear') || cat.includes('down') || cat.includes('teardown') ||
-          cat.includes('pre') || cat.includes('construction') || cat.includes('preconstruction')) {
-        console.log(`✅ Including ${category} sale ${s.property_block}/${s.property_lot}`);
-        return true;
-      }
-
-      // Default: exclude if category doesn't match any inclusion criteria
-      console.log(`⚠️ Excluding sale with unrecognized category '${category}': ${s.property_block}/${s.property_lot}`);
-      return false;
+      // INCLUDE: Building Lots, Tear Downs, Preconstruction (and any other category that isn't explicitly excluded)
+      console.log(`✅ Including sale with category '${category}': ${s.property_block}/${s.property_lot}`);
+      return true;
     });
 
     console.log(`🔍 Allocation Study Sales Filter:`, {
@@ -8352,7 +8369,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'address' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '�����') : ''}
+                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('saleDate')}
