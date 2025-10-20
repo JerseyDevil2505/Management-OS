@@ -1133,7 +1133,7 @@ const getPricePerUnit = useCallback((price, size) => {
       return;
     }
 
-    debug('🔄 Auto-save effect triggered, setting up interval');
+    debug('��� Auto-save effect triggered, setting up interval');
     const interval = setInterval(() => {
       debug('⏰ Auto-save interval triggered');
       // Use window reference to avoid hoisting issues
@@ -2817,9 +2817,23 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                                  zcfg[propZone?.toLowerCase?.()] || null;
 
             const depthTableName = propZoneEntry?.depth_table || propZoneEntry?.depthTable || '100FT Table';
+            const depthTable = depthTables[depthTableName];
 
-            // Use the imported getDepthFactor function
-            const depthFactor = getDepthFactor(depth, depthTableName, depthTables);
+            // Calculate depth factor from factors object
+            let depthFactor = 1.0;
+            if (depthTable && depthTable.factors) {
+              const factors = depthTable.factors;
+              const depths = Object.keys(factors).map(Number).sort((a, b) => a - b);
+
+              // Find the closest depth <= actual depth
+              let closestDepth = depths[0];
+              for (const d of depths) {
+                if (d <= depth) closestDepth = d;
+                else break;
+              }
+
+              depthFactor = factors[closestDepth] || 1.0;
+            }
 
             const standardFF = Math.min(frontFeet, standardMax);
             const excessFF = Math.max(0, frontFeet - standardMax);
@@ -4512,7 +4526,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     Object.entries(bracketAnalysis || {}).sort(([a],[b]) => a.localeCompare(b)).forEach(([vcs, data]) => {
       // VCS header row
-      const vcsSummary = `${data.totalSales || 0} sales • Avg $${Math.round(data.avgPrice || 0).toLocaleString()} • ${data.avgAcres != null ? Number(data.avgAcres.toFixed(2)) : ''} acres �� $${Math.round(data.avgAdjusted || 0).toLocaleString()}`;
+      const vcsSummary = `${data.totalSales || 0} sales • Avg $${Math.round(data.avgPrice || 0).toLocaleString()} �� ${data.avgAcres != null ? Number(data.avgAcres.toFixed(2)) : ''} acres �� $${Math.round(data.avgAdjusted || 0).toLocaleString()}`;
       method2Rows.push([`${vcs} - ${vcsSummary}`]);
       method2Rows.push([]);
 
@@ -6543,7 +6557,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales ���� Avg $${Math.round(data.avgPrice).toLocaleString()} ��������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales �� Avg $${Math.round(data.avgPrice).toLocaleString()} ��������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{
