@@ -4103,18 +4103,43 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const actSite = vcsManualSiteValues[vcs] ?? recSite;
       const isResidential = type.startsWith('Residential');
 
-      // Get typical lot size
+      // Get typical lot size (FF mode shows FF + Depth, Acre mode shows acres/SF)
       const vcsProps = properties?.filter(p =>
         p.new_vcs === vcs && calculateAcreage(p) > 0
       ) || [];
 
+      let typicalFF = '';
+      let typicalDepth = '';
+      let depthTableName = '';
       let typicalLot = '';
-      if (vcsProps.length > 0) {
-        const avgAcres = vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length;
-        if (valuationMode === 'sf') {
-          typicalLot = Math.round(avgAcres * 43560);
-        } else {
-          typicalLot = Number(avgAcres.toFixed(2));
+
+      if (valuationMode === 'ff') {
+        // FF mode: calculate typical front feet and depth
+        const propsWithFF = vcsProps.filter(p => p.asset_lot_frontage && p.asset_lot_depth);
+        if (propsWithFF.length > 0) {
+          const avgFF = propsWithFF.reduce((sum, p) => sum + parseFloat(p.asset_lot_frontage || 0), 0) / propsWithFF.length;
+          const avgDepth = propsWithFF.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth || 0), 0) / propsWithFF.length;
+          typicalFF = Math.round(avgFF);
+          typicalDepth = Math.round(avgDepth);
+        }
+
+        // Get depth table from zoning config
+        const firstProp = vcsProps[0];
+        if (firstProp) {
+          const zone = firstProp.asset_zoning || '';
+          const zcfg = marketLandData?.zoning_config || {};
+          const zoneEntry = zcfg[zone] || zcfg[zone?.toUpperCase?.()] || zcfg[zone?.toLowerCase?.()] || null;
+          depthTableName = zoneEntry ? (zoneEntry.depth_table || zoneEntry.depthTable || zoneEntry.depth_table_name || '') : '';
+        }
+      } else {
+        // Acre/SF mode: calculate typical lot in acres or SF
+        if (vcsProps.length > 0) {
+          const avgAcres = vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length;
+          if (valuationMode === 'sf') {
+            typicalLot = Math.round(avgAcres * 43560);
+          } else {
+            typicalLot = Number(avgAcres.toFixed(2));
+          }
         }
       }
 
