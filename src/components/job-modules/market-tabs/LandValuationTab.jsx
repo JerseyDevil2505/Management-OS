@@ -2617,9 +2617,53 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         hasCascadeRates: !!cascadeRates
       });
 
-      const rawLandValue = calculateRawLandValue(acres, cascadeRates, sale);
+      // Calculate raw land value based on current valuation mode
+      let rawLandValue = 0;
+      let siteValue = 0;
+
+      if (valuationMode === 'ff' && sale.asset_lot_frontage > 0) {
+        // Front Foot calculation using CORRECT field names
+        const frontFeet = parseFloat(sale.asset_lot_frontage) || 0;
+        const depth = parseFloat(sale.asset_lot_depth) || 100; // Default 100 if missing
+        const zone = sale.asset_zoning || 'DEFAULT';
+        const depthTable = depthTables[zone] || depthTables['DEFAULT'];
+
+        // Get depth factor
+        let depthFactor = 1.0;
+        if (depthTable && Array.isArray(depthTable)) {
+          for (const row of depthTable) {
+            if (depth >= row.min && depth <= row.max) {
+              depthFactor = row.factor;
+              break;
+            }
+          }
+        }
+
+        // Get FF rates for this VCS from cascadeRates
+        const vcsRates = cascadeRates || {};
+        const standardRate = vcsRates.standard?.rate || vcsRates.prime?.rate || 0;
+        const standardMax = vcsRates.standard?.max || vcsRates.prime?.max || 100;
+        const excessRate = vcsRates.excess?.rate || 0;
+
+        // Calculate standard and excess frontage
+        const standardFF = Math.min(frontFeet, standardMax);
+        const excessFF = Math.max(0, frontFeet - standardMax);
+
+        // Calculate raw land value: (standard + excess) * depth factor
+        const standardValue = standardFF * standardRate;
+        const excessValue = excessFF * excessRate;
+        rawLandValue = (standardValue + excessValue) * depthFactor;
+
+        console.log(`🏘️ Vacant Sale FF calc: ${frontFeet}' x ${depth}' depth, Standard: ${standardFF}' @ $${standardRate}, Excess: ${excessFF}' @ $${excessRate}, Depth Factor: ${depthFactor}, Raw Land: $${rawLandValue}`);
+
+      } else {
+        // Acre or SF mode calculation (existing method)
+        rawLandValue = calculateRawLandValue(acres, cascadeRates, sale);
+      }
+
+      // Calculate site value (what's left after raw land)
       const salePrice = sale.values_norm_time || sale.sales_price;
-      const siteValue = salePrice - rawLandValue;
+      siteValue = salePrice - rawLandValue;
 
       console.log(`💰 Sale ${sale.property_block}/${sale.property_lot} calculation:`, {
         salePrice,
