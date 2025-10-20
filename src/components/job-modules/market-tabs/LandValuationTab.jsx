@@ -2764,9 +2764,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // Helper function to calculate raw land value using cascade rates
   const calculateRawLandValue = (acresOrProperty, cascadeRates, propertyForFF = null) => {
     // If valuationMode is Front Foot and we have a property with FF data, use FF calculation
+    console.log('\u27a1\ufe0f calculateRawLandValue called:', { valuationMode, hasPropertyForFF: !!propertyForFF });
+
     if (valuationMode === 'ff' && propertyForFF) {
       const frontFeet = parseFloat(propertyForFF.land_front_feet) || 0;
       const depth = parseFloat(propertyForFF.land_depth) || 0;
+
+      console.log('\ud83d\udcca FF mode values:', { frontFeet, depth, land_front_feet: propertyForFF.land_front_feet, land_depth: propertyForFF.land_depth });
 
       if (frontFeet > 0 && depth > 0) {
         // Get depth table and zone for this property
