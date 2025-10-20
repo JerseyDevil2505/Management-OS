@@ -617,7 +617,7 @@ useEffect(() => {
   // Load cascade config from either location (prefer cascade_rates, fallback to raw_land_config)
   const savedConfig = marketLandData.cascade_rates || marketLandData.raw_land_config?.cascade_config;
   if (savedConfig && !restoredFromSession) {
-    debug('��� Loading cascade config:', {
+    debug('���� Loading cascade config:', {
       source: marketLandData.cascade_rates ? 'cascade_rates' : 'raw_land_config',
       specialCategories: savedConfig.specialCategories,
       mode: savedConfig.mode
@@ -4339,42 +4339,63 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     return csv;
   };
 
-  // Allocation export -> Excel workbook
+  // Allocation export -> Excel workbook (matches UI table structure)
   const exportAllocationExcel = () => {
     const rows = [];
-    const headers = ['VCS','Year','Region','Block/Lot','Vacant Price','$ Vacant Price','Acres','Raw Land','Site Value','Improved Sales Count','Avg Improved Price','Avg Improved Acres','Improved Raw Land Value','Total Land Value','Current %','Recommended %','Status'];
+
+    // Headers match UI table structure - different for FF vs Acre mode
+    const headers = valuationMode === 'ff'
+      ? ['VCS','Year','Block/Lot','Region','Price','Front Feet','Depth','Zone','Site Value','Count','Avg Price','Avg FF','Avg Depth','Total Land Value','Current %','Recommended %','Status']
+      : ['VCS','Year','Block/Lot','Region','Price','Acres','Site Value','Count','Avg Price','Avg Acres','Total Land Value','Current %','Recommended %','Status'];
     rows.push(headers);
 
     (vacantTestSales || []).forEach(sale => {
       const status = sale.isPositive ? 'Included' : 'Excluded';
-      const vacantPrice = sale.vacantPrice != null ? sale.vacantPrice : '';
-      const vacPriceFmt = vacantPrice !== '' ? `$${Math.round(vacantPrice).toLocaleString()}` : '';
-      const rawLandFmt = sale.rawLandValue != null ? `$${Math.round(sale.rawLandValue).toLocaleString()}` : '';
+      const vacantPrice = sale.vacantPrice != null ? `$${Math.round(sale.vacantPrice).toLocaleString()}` : '';
       const siteValueFmt = sale.siteValue != null ? `$${Math.round(sale.siteValue).toLocaleString()}` : '';
-      const improvedRawFmt = sale.improvedRawLandValue != null ? `$${Math.round(sale.improvedRawLandValue).toLocaleString()}` : '';
+      const avgPriceFmt = sale.avgImprovedPrice > 0 ? `$${Math.round(sale.avgImprovedPrice).toLocaleString()}` : '-';
       const totalLandFmt = sale.totalLandValue != null ? `$${Math.round(sale.totalLandValue).toLocaleString()}` : '';
-      const currentPct = sale.currentAllocation != null ? `${(sale.currentAllocation * 100).toFixed(1)}%` : '';
+      const currentPct = sale.currentAllocation != null ? `${(sale.currentAllocation * 100).toFixed(1)}%` : ''
       const recPct = sale.recommendedAllocation != null ? `${(sale.recommendedAllocation * 100).toFixed(1)}%` : '';
 
-      rows.push([
-        sale.vcs || '',
-        sale.year || '',
-        sale.region || '',
-        `${sale.block || ''}/${sale.lot || ''}`,
-        vacantPrice,
-        vacPriceFmt,
-        sale.acres != null ? Number(sale.acres.toFixed(2)) : '',
-        rawLandFmt,
-        siteValueFmt,
-        sale.improvedSalesCount || '',
-        sale.avgImprovedPrice || '',
-        sale.avgImprovedAcres || '',
-        improvedRawFmt,
-        totalLandFmt,
-        currentPct,
-        recPct,
-        status
-      ]);
+      if (valuationMode === 'ff') {
+        rows.push([
+          sale.vcs || '',
+          sale.year || '',
+          `${sale.block || ''}/${sale.lot || ''}`,
+          sale.region || '',
+          vacantPrice,
+          Math.round(sale.frontFeet) || '',
+          Math.round(sale.depth) || '',
+          sale.zone || '',
+          siteValueFmt,
+          sale.improvedSalesCount || 0,
+          avgPriceFmt,
+          Math.round(sale.avgImprovedFF) || '-',
+          Math.round(sale.avgImprovedDepth) || '-',
+          totalLandFmt,
+          currentPct,
+          recPct,
+          status
+        ]);
+      } else {
+        rows.push([
+          sale.vcs || '',
+          sale.year || '',
+          `${sale.block || ''}/${sale.lot || ''}`,
+          sale.region || '',
+          vacantPrice,
+          sale.acres != null ? Number(sale.acres.toFixed(2)) : '',
+          siteValueFmt,
+          sale.improvedSalesCount || 0,
+          avgPriceFmt,
+          sale.avgImprovedAcres != null ? Number(sale.avgImprovedAcres.toFixed(2)) : '-',
+          totalLandFmt,
+          currentPct,
+          recPct,
+          status
+        ]);
+      }
     });
 
     // Add summary section
@@ -4393,10 +4414,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       if (ws[ref]) ws[ref].s = { font: { bold: true }, alignment: { horizontal: 'center' } };
     }
 
-    // Column widths for Allocation sheet
-    ws['!cols'] = [
-      { wch: 8 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 8 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 10 }
-    ];
+    // Column widths for Allocation sheet (adjusted for new structure)
+    ws['!cols'] = valuationMode === 'ff'
+      ? [{ wch: 8 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 8 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 10 }]
+      : [{ wch: 8 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 12 }, { wch: 8 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 10 }];
 
     XLSX.utils.book_append_sheet(wb, ws, 'Allocation');
     return wb;
