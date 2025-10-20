@@ -2772,19 +2772,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       siteValue = (sale.sales_price || 0) - rawLandValue;
 
       // Find improved sales for this sale's year AND VCS
-      // Filter by: values_norm_time (yes=filter by year, no=include all years), type_use starts with 1, same VCS
+      // CRITICAL: Must HAVE values_norm_time (time-normalized price), filter by year, type_use starts with 1, same VCS
       const improvedSalesForYear = properties.filter(prop => {
         const hasValidSale = prop.sales_date && prop.sales_price && prop.sales_price > 0;
         const hasNormalizedPrice = prop.values_norm_time && prop.values_norm_time > 0;
         const hasValidTypeUse = prop.asset_type_use && prop.asset_type_use.toString().startsWith('1');
         const sameVCS = prop.new_vcs === vcs;
+        const yearMatch = new Date(prop.sales_date).getFullYear() === year;
 
-        // If values_norm_time exists (yes), filter by year. If not (no), include all years
-        const yearMatch = hasNormalizedPrice
-          ? new Date(prop.sales_date).getFullYear() === year
-          : true;
-
-        return hasValidSale && hasValidTypeUse && sameVCS && yearMatch;
+        // MUST have values_norm_time - this is the key filter, not optional
+        return hasValidSale && hasNormalizedPrice && hasValidTypeUse && sameVCS && yearMatch;
       });
 
       if (improvedSalesForYear.length === 0) {
@@ -3958,7 +3955,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
 
       // Use the same table that's used for loading: market_land_valuation
-      debug('💾 Saving to market_land_valuation table...');
+      debug('�� Saving to market_land_valuation table...');
       const { error } = await supabase
         .from('market_land_valuation')
         .upsert(analysisData, {
