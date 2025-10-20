@@ -2594,18 +2594,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         config.vcsList && config.vcsList.includes(vcs)
       );
 
+      // Determine actual region - use VCS-specific region if configured, otherwise use manual assignment
+      let actualRegion = region;
+      if (vcsSpecificConfig && vcsSpecificConfig.region) {
+        actualRegion = vcsSpecificConfig.region;
+      }
+
       // Get cascade rates - prioritize VCS-specific, then region-specific
       let cascadeRates;
       if (vcsSpecificConfig && vcsSpecificConfig.rates) {
         cascadeRates = vcsSpecificConfig.rates;
-        console.log(`🎯 Using VCS-specific rates for VCS ${vcs}:`, cascadeRates);
+        console.log(`🎯 Using VCS-specific rates for VCS ${vcs} (Region: ${actualRegion}):`, cascadeRates);
       } else {
-        cascadeRates = region === 'Normal' ? cascadeConfig.normal : cascadeConfig.special[region];
-        console.log(`📊 Using ${region} region rates for VCS ${vcs}:`, cascadeRates);
+        cascadeRates = actualRegion === 'Normal' ? cascadeConfig.normal : cascadeConfig.special[actualRegion];
+        console.log(`📊 Using ${actualRegion} region rates for VCS ${vcs}:`, cascadeRates);
       }
 
       if (!cascadeRates) {
-        console.warn(`⚠️ Missing cascade rates for VCS ${vcs}, region "${region}" on sale ${sale.property_block}/${sale.property_lot}`);
+        console.warn(`⚠️ Missing cascade rates for VCS ${vcs}, region "${actualRegion}" on sale ${sale.property_block}/${sale.property_lot}`);
         return;
       }
 
