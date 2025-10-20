@@ -2688,8 +2688,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
       // Calculate site value (what's left after raw land)
-      const salePrice = sale.values_norm_time || sale.sales_price;
-      siteValue = salePrice - rawLandValue;
+      siteValue = (sale.sales_price || 0) - rawLandValue;
 
       console.log(`💰 Sale ${sale.property_block}/${sale.property_lot} calculation:`, {
         salePrice,
@@ -5077,7 +5076,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
     debug('🔄 Recalculating category analysis');
-    debug('����� Total vacant sales:', vacantSales.length);
+    debug('���� Total vacant sales:', vacantSales.length);
     debug('���� Checked sales count:', checkedSales.length);
     // 🔍 COMPREHENSIVE FILTERING DEBUG - Shows exactly which sales go where
     console.log('🔍 PAIRED SALES ANALYSIS - Category Breakdown:', {
