@@ -2651,19 +2651,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const vcs = sale.new_vcs;
       const region = specialRegions[sale.id] || 'Normal';
 
-      // DEBUG: Log each sale's region assignment
-      if (region !== 'Normal') {
-        console.log(`🏖️ Processing special region sale:`, {
-          id: sale.id,
-          block: sale.property_block,
-          lot: sale.property_lot,
-          region: region,
-          vcs: vcs,
-          year: year,
-          category: saleCategories[sale.id]
-        });
-      }
-
       if (!vcs) return;
 
       // Calculate site value for this individual sale
@@ -5681,7 +5668,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           zIndex: 9999,
           animation: 'slideIn 0.3s ease'
         }}>
-          ��� Prompt copied! Paste into Claude AI
+          �� Prompt copied! Paste into Claude AI
         </div>
       )}
 
