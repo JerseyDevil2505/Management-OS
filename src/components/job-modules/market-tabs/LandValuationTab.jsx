@@ -4870,11 +4870,23 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     
     // Individual Allocation Analysis
     csv += 'INDIVIDUAL ALLOCATION ANALYSIS\n';
-    csv += 'VCS,Year,Region,Block/Lot,Vacant Price,Acres,Raw Land,Site Value,Improved Sales Count,Avg Improved Price,Avg Improved Acres,Improved Raw Land,Total Land Value,Current %,Recommended %,Status\n';
+
+    // Headers match UI - different for FF vs Acre mode
+    if (valuationMode === 'ff') {
+      csv += 'VCS,Year,Block/Lot,Region,Price,Front Feet,Depth,Zone,Site Value,Count,Avg Price,Avg FF,Avg Depth,Total Land Value,Current %,Recommended %,Status\n';
+    } else {
+      csv += 'VCS,Year,Block/Lot,Region,Price,Acres,Site Value,Count,Avg Price,Avg Acres,Total Land Value,Current %,Recommended %,Status\n';
+    }
 
     vacantTestSales.forEach(sale => {
       const status = sale.isPositive ? 'Included' : 'Excluded';
-      csv += `"${sale.vcs}",${sale.year},"${sale.region}","${sale.block}/${sale.lot}",${sale.vacantPrice},${sale.acres.toFixed(2)},${sale.rawLandValue},${sale.siteValue},${sale.improvedSalesCount},${sale.avgImprovedPrice},${sale.avgImprovedAcres},${sale.improvedRawLandValue},${sale.totalLandValue},${(sale.currentAllocation * 100).toFixed(1)},${(sale.recommendedAllocation * 100).toFixed(1)},"${status}"\n`;
+      const avgPrice = sale.avgImprovedPrice > 0 ? sale.avgImprovedPrice : 0;
+
+      if (valuationMode === 'ff') {
+        csv += `"${sale.vcs}",${sale.year},"${sale.block}/${sale.lot}","${sale.region}",${sale.vacantPrice},${Math.round(sale.frontFeet) || ''},${Math.round(sale.depth) || ''},${sale.zone || ''},${Math.round(sale.siteValue)},${sale.improvedSalesCount},${Math.round(avgPrice)},${Math.round(sale.avgImprovedFF) || ''},${Math.round(sale.avgImprovedDepth) || ''},${Math.round(sale.totalLandValue)},${(sale.currentAllocation * 100).toFixed(1)},${(sale.recommendedAllocation * 100).toFixed(1)},"${status}"\n`;
+      } else {
+        csv += `"${sale.vcs}",${sale.year},"${sale.block}/${sale.lot}","${sale.region}",${sale.vacantPrice},${sale.acres.toFixed(2)},${Math.round(sale.siteValue)},${sale.improvedSalesCount},${Math.round(avgPrice)},${sale.avgImprovedAcres?.toFixed(2) || ''},${Math.round(sale.totalLandValue)},${(sale.currentAllocation * 100).toFixed(1)},${(sale.recommendedAllocation * 100).toFixed(1)},"${status}"\n`;
+      }
     });
 
     // Summary of positive sales only
