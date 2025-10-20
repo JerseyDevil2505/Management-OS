@@ -2765,36 +2765,29 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         : 0;
 
       processedVacantSales.push({
-        // Vacant sale info
         id: sale.id,
-        vcs,
-        year,
-        region,
+        vcs: vcs,
+        year: year,
+        region: region,
         block: sale.property_block,
         lot: sale.property_lot,
-        vacantPrice: sale.values_norm_time || sale.sales_price,
-        acres,
-        frontFeet: parseFloat(sale.land_front_feet ?? sale.asset_lot_frontage ?? sale.frontage) || 0,
-        depth: parseFloat(sale.land_depth ?? sale.asset_lot_depth ?? sale.depth) || 0,
-        zone: sale.asset_zoning || sale.land_zoning || sale.zoning || 'N/A',
-        rawLandValue,
-        siteValue,
-
-        // Improved sales info for this year
+        vacantPrice: sale.sales_amount || sale.sales_price || 0,
+        acres: acres,
+        frontFeet: valuationMode === 'ff' ? (sale.asset_lot_frontage || 0) : 0,
+        depth: valuationMode === 'ff' ? (sale.asset_lot_depth || 0) : 0,
+        zone: sale.asset_zoning || 'DEFAULT',
+        rawLandValue: rawLandValue,
+        siteValue: siteValue,
         improvedSalesCount: improvedSalesForYear.length,
         avgImprovedPrice: avgImprovedPrice,
-        avgImprovedAcres: avgImprovedAcres.toFixed(2),
-        avgImprovedFF: avgImprovedFF.toFixed(1),
-        avgImprovedDepth: avgImprovedDepth.toFixed(1),
-        improvedRawLandValue: improvedRawLandValue,
-        totalLandValue: totalLandValue,
-
-        // Allocation calculations
+        avgImprovedAcres: avgImprovedAcres,
+        avgImprovedFrontage: valuationMode === 'ff' ? avgImprovedFF : 0,
+        avgImprovedDepth: valuationMode === 'ff' ? avgImprovedDepth : 0,
+        improvedRawLandValue: avgImprovedRawLand,
+        totalLandValue: avgImprovedRawLand + siteValue,
         currentAllocation: avgCurrentAllocation,
-        recommendedAllocation,
-
-        // Status
-        isPositive: siteValue > 0 && recommendedAllocation > 0
+        recommendedAllocation: (avgImprovedRawLand + siteValue) / avgImprovedPrice,
+        isPositive: siteValue > 0
       });
     });
 
@@ -3883,7 +3876,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 // Also clear sessionStorage to ensure complete cleanup
           try {
             sessionStorage.removeItem('landValuation_' + jobData.id + '_session');
-            debug('��� Cleared session storage after successful save');
+            debug('����� Cleared session storage after successful save');
           } catch (err) {
             console.warn('Failed to clear sessionStorage:', err);
           }
