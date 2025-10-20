@@ -2665,16 +2665,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       let actualRegion = region;
       if (vcsSpecificConfig && vcsSpecificConfig.region) {
         actualRegion = vcsSpecificConfig.region;
-        console.log(`🔧 VCS-specific config overriding region for ${sale.property_block}/${sale.property_lot}:`, {
-          manualRegion: region,
-          vcsSpecificRegion: vcsSpecificConfig.region,
-          finalRegion: actualRegion
-        });
-      } else if (region !== 'Normal') {
-        console.log(`✅ Using manual region assignment for ${sale.property_block}/${sale.property_lot}:`, {
-          region: region,
-          vcs: vcs
-        });
       }
 
       // Get cascade rates - prioritize VCS-specific, then region-specific
@@ -5400,7 +5390,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Debug teardown sales to see if they're incorrectly going to raw land
       if (saleCategories[s.id] === 'teardown' || (s.property_block === '5' && s.property_lot === '12.12')) {
-        debug('���� Raw Land check for teardown/5.12.12:', {
+        debug('����� Raw Land check for teardown/5.12.12:', {
           block: s.property_block,
           lot: s.property_lot,
           id: s.id,
