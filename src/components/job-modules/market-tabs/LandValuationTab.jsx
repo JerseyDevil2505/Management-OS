@@ -4468,7 +4468,88 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ? [{ wch: 8 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 8 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 10 }]
       : [{ wch: 8 }, { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 12 }, { wch: 8 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 10 }];
 
-    XLSX.utils.book_append_sheet(wb, ws, 'Allocation');
+    XLSX.utils.book_append_sheet(wb, ws, 'Individual Allocation');
+
+    // Add special region sheets (one sheet per special region)
+    const uniqueRegions = [...new Set(vacantTestSales.map(s => s.region))].filter(r => r && r !== 'Normal').sort();
+
+    uniqueRegions.forEach(regionName => {
+      const regionSales = vacantTestSales.filter(sale => sale.region === regionName);
+      if (regionSales.length === 0) return;
+
+      const regionRows = [];
+      regionRows.push(headers);
+
+      regionSales.forEach(sale => {
+        const status = sale.isPositive ? 'Included' : 'Excluded';
+        const vacantPrice = sale.vacantPrice != null ? `$${Math.round(sale.vacantPrice).toLocaleString()}` : '';
+        const siteValueFmt = sale.siteValue != null ? `$${Math.round(sale.siteValue).toLocaleString()}` : '';
+        const avgPriceFmt = sale.avgImprovedPrice > 0 ? `$${Math.round(sale.avgImprovedPrice).toLocaleString()}` : '-';
+        const totalLandFmt = sale.totalLandValue != null ? `$${Math.round(sale.totalLandValue).toLocaleString()}` : '';
+        const currentPct = sale.currentAllocation != null ? `${(sale.currentAllocation * 100).toFixed(1)}%` : '';
+        const recPct = sale.recommendedAllocation != null ? `${(sale.recommendedAllocation * 100).toFixed(1)}%` : '';
+
+        if (valuationMode === 'ff') {
+          regionRows.push([
+            sale.vcs || '',
+            sale.year || '',
+            `${sale.block || ''}/${sale.lot || ''}`,
+            sale.region || '',
+            vacantPrice,
+            Math.round(sale.frontFeet) || '',
+            Math.round(sale.depth) || '',
+            sale.zone || '',
+            siteValueFmt,
+            sale.improvedSalesCount || 0,
+            avgPriceFmt,
+            Math.round(sale.avgImprovedFF) || '-',
+            Math.round(sale.avgImprovedDepth) || '-',
+            totalLandFmt,
+            currentPct,
+            recPct,
+            status
+          ]);
+        } else {
+          regionRows.push([
+            sale.vcs || '',
+            sale.year || '',
+            `${sale.block || ''}/${sale.lot || ''}`,
+            sale.region || '',
+            vacantPrice,
+            sale.acres != null ? Number(sale.acres.toFixed(2)) : '',
+            siteValueFmt,
+            sale.improvedSalesCount || 0,
+            avgPriceFmt,
+            sale.avgImprovedAcres != null ? Number(sale.avgImprovedAcres.toFixed(2)) : '-',
+            totalLandFmt,
+            currentPct,
+            recPct,
+            status
+          ]);
+        }
+      });
+
+      // Add region summary
+      const regionStats = calculateAllocationStats(regionName);
+      regionRows.push([]);
+      regionRows.push([`${regionName} Summary`]);
+      regionRows.push(['Sales Included', regionSales.filter(s => s.isPositive).length]);
+      regionRows.push(['Total Land Value', `$${regionSales.filter(s => s.isPositive).reduce((sum, s) => sum + (s.totalLandValue || 0), 0).toLocaleString()}`]);
+      regionRows.push(['Total Sale Price', `$${regionSales.reduce((sum, s) => sum + (s.avgImprovedPrice || 0), 0).toLocaleString()}`]);
+      regionRows.push(['Recommended Allocation', `${regionStats?.averageAllocation || '0'}%`]);
+
+      const wsRegion = XLSX.utils.aoa_to_sheet(regionRows);
+      for (let c = 0; c < headerCols; c++) {
+        const ref = XLSX.utils.encode_cell({ r: 0, c });
+        if (wsRegion[ref]) wsRegion[ref].s = { font: { bold: true }, alignment: { horizontal: 'center' } };
+      }
+      wsRegion['!cols'] = ws['!cols'];
+
+      // Clean sheet name (Excel has 31 char limit and doesn't allow certain chars)
+      const cleanSheetName = regionName.substring(0, 31).replace(/[:\\/?*\[\]]/g, '_');
+      XLSX.utils.book_append_sheet(wb, wsRegion, cleanSheetName);
+    });
+
     return wb;
   };
 
@@ -8633,7 +8714,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '����������') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '������������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
@@ -10525,7 +10606,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               <thead>
                 <tr style={{ backgroundColor: '#F8F9FA', borderBottom: '2px solid #E5E7EB' }}>
                   <th onClick={() => toggleSort('vcs')} style={{ padding: '8px 4px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px', cursor: 'pointer' }}>VCS{sortField === 'vcs' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                  <th onClick={() => toggleSort('location')} style={{ padding: '8px 4px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px', cursor: 'pointer' }}>Locational Analysis{sortField === 'location' ? (sortDir === 'asc' ? ' ����' : ' ▼') : ''}</th>
+                  <th onClick={() => toggleSort('location')} style={{ padding: '8px 4px', textAlign: 'left', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px', cursor: 'pointer' }}>Locational Analysis{sortField === 'location' ? (sortDir === 'asc' ? ' ���' : ' ▼') : ''}</th>
                   <th onClick={() => toggleSort('code')} style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '11px', cursor: 'pointer' }}>Code{sortField === 'code' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                   <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>With Year Built</th>
                   <th style={{ padding: '8px 4px', textAlign: 'center', fontWeight: '600', color: '#374151', borderRight: '1px solid #E5E7EB', fontSize: '10px' }}>With Living Area</th>
