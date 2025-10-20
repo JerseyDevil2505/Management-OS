@@ -4732,6 +4732,135 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       })()]);
     }
 
+    // Implied Front Foot Rates by Zoning (FF mode only)
+    if (valuationMode === 'ff' && method2Summary && (method2Summary.mediumRange || method2Summary.largeRange || method2Summary.xlargeRange)) {
+      try {
+        method2Rows.push([]);
+        method2Rows.push(['Implied Front Foot Rates by Zoning']);
+        method2Rows.push(['Zoning', 'Zoning Lot', 'Land Value', 'Min Frontage', 'Standard FF', 'Excess FF']);
+
+        const zcfg = marketLandData?.zoning_config || {};
+        const zoneKeys = Object.keys(zcfg || {}).sort();
+
+        // Choose lowest bracket with data
+        let chosenPerAcre = null;
+        let chosenBracketKey = null;
+        if (method2Summary?.mediumRange?.perAcre && method2Summary.mediumRange.perAcre !== 'N/A') {
+          chosenPerAcre = method2Summary.mediumRange.perAcre;
+          chosenBracketKey = 'medium';
+        } else if (method2Summary?.largeRange?.perAcre && method2Summary.largeRange.perAcre !== 'N/A') {
+          chosenPerAcre = method2Summary.largeRange.perAcre;
+          chosenBracketKey = 'large';
+        } else if (method2Summary?.xlargeRange?.perAcre && method2Summary.xlargeRange.perAcre !== 'N/A') {
+          chosenPerAcre = method2Summary.xlargeRange.perAcre;
+          chosenBracketKey = 'xlarge';
+        }
+
+        // Compute overall average lot size from bracketAnalysis
+        let overallAvgAcres = null;
+        if (chosenBracketKey && typeof bracketAnalysis === 'object') {
+          const vals = Object.values(bracketAnalysis).map(a => {
+            try {
+              const b = a.brackets && a.brackets[chosenBracketKey];
+              return b && b.avgAcres ? b.avgAcres : null;
+            } catch (e) { return null; }
+          }).filter(v => v != null);
+          if (vals.length > 0) overallAvgAcres = vals.reduce((s, v) => s + v, 0) / vals.length;
+        }
+
+        const summaryTypicalSF = overallAvgAcres != null ? Math.round(overallAvgAcres * 43560) : null;
+        const perSqFtSummary = (chosenPerAcre != null && chosenPerAcre !== 'N/A') ? (parseFloat(chosenPerAcre) / 43560) : null;
+        const summaryLandValue = (perSqFtSummary && summaryTypicalSF) ? Math.round(perSqFtSummary * summaryTypicalSF) : null;
+
+        // Overall summary row
+        method2Rows.push([
+          `Overall Average (${chosenBracketKey || 'N/A'})`,
+          overallAvgAcres != null ? `${overallAvgAcres.toFixed(2)} / ${summaryTypicalSF.toLocaleString()} SF` : 'N/A',
+          summaryLandValue != null ? `$${Number(summaryLandValue).toLocaleString()}` : 'N/A',
+          '', '', ''
+        ]);
+
+        const standardFFs = [];
+        const excessFFs = [];
+
+        zoneKeys.forEach(zoneKey => {
+          const entry = zcfg[zoneKey] || zcfg[zoneKey?.toUpperCase?.()] || zcfg[zoneKey?.toLowerCase?.()] || null;
+          if (!entry) return;
+          const depthTable = entry.depth_table || entry.depthTable || entry.depth_table_name || '';
+          const minFrontage = entry.min_frontage || entry.minFrontage || null;
+          if (!depthTable || !minFrontage) return;
+
+          // Get typical lot size
+          let typicalLotAcres = '';
+          let typicalLotSF = '';
+          const cfgSize = entry.min_size || entry.minSize || entry.typical_lot || null;
+          const cfgUnit = (entry.min_size_unit || entry.minSizeUnit || '').toString().toUpperCase();
+          if (cfgSize) {
+            if (cfgUnit === 'SF') {
+              typicalLotSF = Math.round(Number(cfgSize));
+              typicalLotAcres = Number((typicalLotSF / 43560).toFixed(2));
+            } else {
+              typicalLotAcres = Number(Number(cfgSize).toFixed(2));
+              typicalLotSF = Math.round(typicalLotAcres * 43560);
+            }
+          } else {
+            const propsForZone = (properties || []).filter(p => p.asset_zoning && p.asset_zoning.toString().trim().toLowerCase() === zoneKey.toString().trim().toLowerCase());
+            let avgAcres = null;
+            if (propsForZone.length > 0) {
+              avgAcres = propsForZone.reduce((s, p) => s + (calculateAcreage(p) || 0), 0) / propsForZone.length;
+            }
+            typicalLotAcres = avgAcres !== null ? Number(avgAcres.toFixed(2)) : '';
+            typicalLotSF = avgAcres !== null ? Math.round(avgAcres * 43560) : '';
+          }
+
+          // Jim's magic formula
+          let landValue = '';
+          if (summaryTypicalSF && summaryLandValue && typicalLotSF) {
+            try {
+              const ZLS = Number(typicalLotSF);
+              const GLS = Number(summaryTypicalSF);
+              const GP = Number(summaryLandValue);
+              const adjustedLandValue = ((ZLS - GLS) * ((GP / GLS) * 0.50)) + GP;
+              landValue = Math.round(adjustedLandValue);
+            } catch (e) { landValue = ''; }
+          }
+
+          // Calculate FF rates
+          let standardFF = '';
+          let excessFF = '';
+          if (landValue && minFrontage) {
+            standardFF = Math.round(landValue / minFrontage);
+            excessFF = Math.round(standardFF / 2);
+            standardFFs.push(standardFF);
+            excessFFs.push(excessFF);
+          }
+
+          method2Rows.push([
+            zoneKey,
+            typicalLotAcres ? `${typicalLotAcres} / ${typicalLotSF.toLocaleString()} SF` : '',
+            landValue ? `$${Number(landValue).toLocaleString()}` : '',
+            minFrontage || '',
+            standardFF ? `$${Number(standardFF).toLocaleString()}` : '',
+            excessFF ? `$${Number(excessFF).toLocaleString()}` : ''
+          ]);
+        });
+
+        // Recommended row
+        if (standardFFs.length > 0 && excessFFs.length > 0) {
+          const recStandard = Math.round(standardFFs.reduce((s, v) => s + v, 0) / standardFFs.length);
+          const recExcess = Math.round(excessFFs.reduce((s, v) => s + v, 0) / excessFFs.length);
+          method2Rows.push([
+            'Recommended Front Foot',
+            '', '', '',
+            `$${recStandard.toLocaleString()}`,
+            `$${recExcess.toLocaleString()}`
+          ]);
+        }
+      } catch (e) {
+        console.warn('Error building Implied FF Rates export:', e);
+      }
+    }
+
     const ws2 = XLSX.utils.aoa_to_sheet(method2Rows);
 
     // Column widths for Method 2 to ensure content fits
