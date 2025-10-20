@@ -2785,28 +2785,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
         rawLandValue = rawBeforeDepth * depthFactor;
 
-        console.log(`🔍 VCS ${vcs} ${sale.property_block}/${sale.property_lot}:
-    Zone: ${zone}
-    Depth Table Source: ${depthTableSource}
-    Depth Table: ${depthTableName}
-    Frontage: ${frontFeet}' × Depth: ${depth}'
-    Standard: ${standardFF}' @ $${standardRate} = $${standardValue.toLocaleString()}
-    Excess: ${excessFF}' @ $${excessRate} = $${excessValue.toLocaleString()}
-    Raw before depth: $${rawBeforeDepth.toLocaleString()}
-    Depth Factor: ${depthFactor}
-    Final Raw Land: $${rawLandValue.toLocaleString()}
-    Sale Price: $${(sale.sales_price || 0).toLocaleString()}
-    Site Value: $${((sale.sales_price || 0) - rawLandValue).toLocaleString()}`);
-
-        // Log depth table details for debugging
-        const depthTable = depthTables[depthTableName];
-        if (depthTable && Array.isArray(depthTable)) {
-          console.log(`📏 Depth Table "${depthTableName}" ranges:`,
-            depthTable.map(r => `${r.min_depth || r.min}-${r.max_depth || r.max}': ${r.factor}`).join(', '));
-        } else {
-          console.warn(`⚠️ Depth table "${depthTableName}" not found or invalid!`);
-        }
-
       } else {
         // Acre or SF mode calculation (existing method)
         rawLandValue = calculateRawLandValue(acres, cascadeRates, sale);
@@ -2977,7 +2955,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const totalSalePrice = positiveSales.reduce((sum, s) => sum + s.avgImprovedPrice, 0);
       const overallRecommended = totalSalePrice > 0 ? (totalLandValue / totalSalePrice) * 100 : 0;
 
-      debug('🎯 Overall recommended allocation:', {
+      debug('���� Overall recommended allocation:', {
         positiveSalesCount: positiveSales.length,
         totalLandValue,
         totalSalePrice,
