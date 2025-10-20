@@ -617,7 +617,7 @@ useEffect(() => {
   // Load cascade config from either location (prefer cascade_rates, fallback to raw_land_config)
   const savedConfig = marketLandData.cascade_rates || marketLandData.raw_land_config?.cascade_config;
   if (savedConfig && !restoredFromSession) {
-    debug('���� Loading cascade config:', {
+    debug('��� Loading cascade config:', {
       source: marketLandData.cascade_rates ? 'cascade_rates' : 'raw_land_config',
       specialCategories: savedConfig.specialCategories,
       mode: savedConfig.mode
@@ -8951,7 +8951,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   borderRight: '2px solid #E5E7EB',
                   border: '1px solid #D1D5DB',
                   fontWeight: 'bold'
-                }} colSpan={valuationMode === 'ff' ? "6" : "4"}>Improved Sales (Same Year)</th>
+                }} colSpan={valuationMode === 'ff' ? "6" : "4"}>Improved Sales (All Years)</th>
                     {/* Allocation Results */}
                     <th style={{
                       padding: '8px',
