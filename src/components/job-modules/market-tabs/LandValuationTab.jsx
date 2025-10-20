@@ -4355,7 +4355,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const siteValueFmt = sale.siteValue != null ? `$${Math.round(sale.siteValue).toLocaleString()}` : '';
       const avgPriceFmt = sale.avgImprovedPrice > 0 ? `$${Math.round(sale.avgImprovedPrice).toLocaleString()}` : '-';
       const totalLandFmt = sale.totalLandValue != null ? `$${Math.round(sale.totalLandValue).toLocaleString()}` : '';
-      const currentPct = sale.currentAllocation != null ? `${(sale.currentAllocation * 100).toFixed(1)}%` : ''
+      const currentPct = sale.currentAllocation != null ? `${(sale.currentAllocation * 100).toFixed(1)}%` : '';
       const recPct = sale.recommendedAllocation != null ? `${(sale.recommendedAllocation * 100).toFixed(1)}%` : '';
 
       if (valuationMode === 'ff') {
@@ -5153,7 +5153,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const updateSpecialCategory = (category, rate) => {
-    debug(`������ Updating special category: ${category} = ${rate}`);
+    debug(`�������� Updating special category: ${category} = ${rate}`);
     setCascadeConfig(prev => {
       const newConfig = {
         ...prev,
@@ -9480,7 +9480,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       onClick={() => toggleFieldCollapse('map')}
                       title="Click to expand/collapse"
                     >
-                      Map {collapsedFields.map ? '▶' : '▼'}
+                      Map {collapsedFields.map ? '��' : '▼'}
                     </th>
                   )}
                 </tr>
