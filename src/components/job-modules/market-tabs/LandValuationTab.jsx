@@ -2691,7 +2691,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       siteValue = (sale.sales_price || 0) - rawLandValue;
 
       console.log(`💰 Sale ${sale.property_block}/${sale.property_lot} calculation:`, {
-        salePrice,
+        salePrice: sale.sales_price || 0,
         rawLandValue,
         siteValue
       });
@@ -5238,7 +5238,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
           // Prepare human-readable size unit for debugging
           const sizeUnitLabel = valuationMode === 'acre' ? 'acres' : valuationMode === 'sf' ? 'sqft' : 'front ft';
-          debug(`����� ${categoryType} paired analysis:`, {
+          debug(`������ ${categoryType} paired analysis:`, {
             totalProperties: filtered.length,
             possiblePairs: (filtered.length * (filtered.length - 1)) / 2,
             validPairs: pairedRates.length,
