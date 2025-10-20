@@ -4924,10 +4924,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     } else if (type === 'land-rates') {
       workbook = exportLandRatesExcel();
     } else if (type === 'complete') {
-      // Ensure allocation study is loaded before export
+      // Check if allocation study is loaded
       if (!vacantTestSales || vacantTestSales.length === 0) {
-        console.log('🔄 Loading allocation study data before export...');
-        loadAllocationStudyData();
+        console.warn('⚠️ Allocation study not loaded. Please visit the Allocation Study tab first.');
+        alert('Please open the Allocation Study tab first to load the data, then export again.');
+        return;
       }
 
       // Combine individual workbooks into one comprehensive workbook
