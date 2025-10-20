@@ -2567,7 +2567,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return newSet;
     });
 
-    debug('���️ Sale removed and tracked as excluded:', saleId);
+    debug('🗑️ Sale removed and tracked as excluded:', saleId);
   };
 
   // ========== ALLOCATION STUDY FUNCTIONS - REBUILT ==========
@@ -2640,24 +2640,27 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       let siteValue = 0;
 
       if (valuationMode === 'ff' && sale.asset_lot_frontage > 0) {
-        // Front Foot calculation using CORRECT field names
         const frontFeet = parseFloat(sale.asset_lot_frontage) || 0;
-        const depth = parseFloat(sale.asset_lot_depth) || 100; // Default 100 if missing
-        const zone = sale.asset_zoning || 'DEFAULT';
+        const depth = parseFloat(sale.asset_lot_depth) || 100;
 
-        // Get VCS-specific depth table override or fall back to zone-based table
-        const vcsCode = sale.new_vcs;
-        let depthTableName = vcsDepthTableOverrides[vcsCode];
-        if (!depthTableName) {
-          // Fall back to DEFAULT if no override
-          depthTableName = 'DEFAULT';
-        }
-        const depthTable = depthTables[depthTableName] || depthTables['DEFAULT'];
+        // Get the correct rates from cascade config
+        const standardRate = cascadeRates.standard?.rate || cascadeRates.prime?.rate || 0;
+        const standardMax = cascadeRates.standard?.max || cascadeRates.prime?.max || 50;
+        const excessRate = cascadeRates.excess?.rate || 0;
 
-        console.log(`📐 VCS ${vcsCode} using depth table: ${depthTableName} for zone ${zone}`);
+        // Calculate standard and excess frontage
+        const standardFF = Math.min(frontFeet, standardMax);
+        const excessFF = Math.max(0, frontFeet - standardMax);
 
-        // Get depth factor
+        const standardValue = standardFF * standardRate;
+        const excessValue = excessFF * excessRate;
+        const rawBeforeDepth = standardValue + excessValue;
+
+        // Get depth factor - look up the proper depth table
+        const depthTableName = vcsDepthTableOverrides[vcs] || sale.depth_table || 'DEFAULT';
+        const depthTable = depthTables[depthTableName];
         let depthFactor = 1.0;
+
         if (depthTable && Array.isArray(depthTable)) {
           for (const row of depthTable) {
             if (depth >= row.min && depth <= row.max) {
@@ -2667,27 +2670,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           }
         }
 
-        // Get VCS-specific FF rates if available, otherwise use cascadeRates
-        let vcsRates = cascadeConfig.vcsSpecific && cascadeConfig.vcsSpecific[vcsCode] && cascadeConfig.vcsSpecific[vcsCode].method === 'ff'
-          ? cascadeConfig.vcsSpecific[vcsCode].rates
-          : cascadeRates;
+        rawLandValue = rawBeforeDepth * depthFactor;
 
-        const standardRate = vcsRates?.standard?.rate || vcsRates?.prime?.rate || 0;
-        const standardMax = vcsRates?.standard?.max || vcsRates?.prime?.max || 50;
-        const excessRate = vcsRates?.excess?.rate || 0;
-
-        console.log(`📊 VCS ${vcsCode} FF Rates - Standard: $${standardRate}/FF (first ${standardMax}'), Excess: $${excessRate}/FF`);
-
-        // Calculate standard and excess frontage
-        const standardFF = Math.min(frontFeet, standardMax);
-        const excessFF = Math.max(0, frontFeet - standardMax);
-
-        // Calculate raw land value: (standard + excess) * depth factor
-        const standardValue = standardFF * standardRate;
-        const excessValue = excessFF * excessRate;
-        rawLandValue = (standardValue + excessValue) * depthFactor;
-
-        console.log(`🏘️ Vacant Sale FF calc: ${frontFeet}' x ${depth}' depth, Standard: ${standardFF}' @ $${standardRate}, Excess: ${excessFF}' @ $${excessRate}, Depth Factor: ${depthFactor}, Raw Land: $${rawLandValue}`);
+        console.log(`🔍 VCS ${vcs} ${sale.property_block}/${sale.property_lot}:
+    Frontage: ${frontFeet}' × Depth: ${depth}'
+    Standard: ${standardFF}' @ $${standardRate} = $${standardValue.toLocaleString()}
+    Excess: ${excessFF}' @ $${excessRate} = $${excessValue.toLocaleString()}
+    Raw before depth: $${rawBeforeDepth.toLocaleString()}
+    Depth Factor (${depthTableName}): ${depthFactor}
+    Final Raw Land: $${rawLandValue.toLocaleString()}
+    Sale Price: $${(sale.sales_price || 0).toLocaleString()}
+    Site Value: $${((sale.sales_price || 0) - rawLandValue).toLocaleString()}`);
 
       } else {
         // Acre or SF mode calculation (existing method)
@@ -5084,7 +5077,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
     debug('🔄 Recalculating category analysis');
-    debug('���� Total vacant sales:', vacantSales.length);
+    debug('����� Total vacant sales:', vacantSales.length);
     debug('���� Checked sales count:', checkedSales.length);
     // 🔍 COMPREHENSIVE FILTERING DEBUG - Shows exactly which sales go where
     console.log('🔍 PAIRED SALES ANALYSIS - Category Breakdown:', {
