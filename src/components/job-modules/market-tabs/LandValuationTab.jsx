@@ -3849,7 +3849,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // CRITICAL FIX: Trigger parent component data refresh to update marketLandData prop
       if (typeof onDataRefresh === 'function') {
-        debug('🔄 Triggering parent component data refresh...');
+        debug('��� Triggering parent component data refresh...');
         onDataRefresh();
       }
 
@@ -4172,11 +4172,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         vcsData.counts?.total || 0,
         type,
         cleanDescription,
-        getMethodDisplay(type, description),
-        typicalLot,
-        recSiteFmt,
-        actSiteFmt
+        getMethodDisplay(type, description)
       ];
+
+      // Add typical lot size columns (different for FF vs Acre mode)
+      if (valuationMode === 'ff') {
+        row.push(typicalFF || '', typicalDepth || '', depthTableName || '');
+      } else {
+        row.push(typicalLot || '');
+      }
+
+      row.push(recSiteFmt, actSiteFmt);
 
       // Get cascade rates
       let cascadeRates = cascadeConfig.normal;
@@ -6729,7 +6735,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           {data.totalSales} sales
                         </span>
-                        {` ��� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
+                        {` ��� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} �� $${data.impliedRate || 0}`}
                       </span>
                       </div>
                     </div>
