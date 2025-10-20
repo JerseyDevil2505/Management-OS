@@ -2796,6 +2796,22 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + (p.values_norm_time || p.sales_price), 0) / improvedSalesForYear.length;
       const avgImprovedAcres = improvedSalesForYear.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / improvedSalesForYear.length;
 
+      // Log improved sales calculation for debugging
+      if (sale.property_block === '118' || sale.property_block === '43') {
+        console.log(`📊 Improved Sales for ${sale.property_block}/${sale.property_lot} (VCS ${vcs}, Year ${year}):`, {
+          improvedSalesCount: improvedSalesForYear.length,
+          improvedSales: improvedSalesForYear.map(p => ({
+            block: p.property_block,
+            lot: p.property_lot,
+            sales_price: p.sales_price,
+            values_norm_time: p.values_norm_time,
+            used_price: p.values_norm_time || p.sales_price
+          })),
+          avgImprovedPrice: Math.round(avgImprovedPrice),
+          avgImprovedAcres: avgImprovedAcres.toFixed(2)
+        });
+      }
+
       // Calculate current allocation for this year (only for sales that have mod values)
       const salesWithModValues = improvedSalesForYear.filter(p => p.values_mod_land > 0 && p.values_mod_total > 0);
       const avgCurrentAllocation = salesWithModValues.length > 0
@@ -3859,7 +3875,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return;
     }
 
-    debug('�� Starting save...', {
+    debug('💾 Starting save...', {
       vacantSalesCount: vacantSales.length,
       excludedSalesCount: method2ExcludedSales.size,
       includedSalesCount: includedSales.size,
@@ -8321,7 +8337,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <strong>Exclude problematic sales:</strong> Uncheck sales that should not be used in Method 2 calculations
                 (teardowns, poor condition, pre-construction, etc.).
                 <span style={{ display: 'block', marginTop: '4px' }}>
-                  ����️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
+                  ���️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
                 </span>
               </p>
             </div>
@@ -9197,7 +9213,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const isCondo = vcsType.toLowerCase().includes('condo');
 
     if (isCondo) {
-      // For condos: Rec Site = Target % �� Avg Price (no land dimensions)
+      // For condos: Rec Site = Target % × Avg Price (no land dimensions)
       return Math.round(avgPrice * (targetAllocation / 100));
     }
 
@@ -9289,7 +9305,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const standardFF = cascadeRates.standard?.rate || 0;
     const excessFF = cascadeRates.excess?.rate || Math.round(standardFF / 2);
 
-    // Calculate Raw Land Component: (Standard Frontage × Std Rate �� Depth Factor) + (Excess × Excess Rate)
+    // Calculate Raw Land Component: (Standard Frontage × Std Rate × Depth Factor) + (Excess × Excess Rate)
     const rawLandComponent = Math.round(
       (standardFrontage * standardFF * depthFactor) +
       (excessFrontage * excessFF)
