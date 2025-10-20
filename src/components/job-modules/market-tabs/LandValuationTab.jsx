@@ -1077,7 +1077,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
-      debug('�������� Triggering allocation study recalculation...');
+      debug('��������� Triggering allocation study recalculation...');
       loadAllocationStudyData();
     }
   }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, specialRegions]);
@@ -2777,23 +2777,32 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                          zcfg[zone?.toUpperCase?.()] ||
                          zcfg[zone?.toLowerCase?.()] || null;
 
-        // Use VCS-specific override first, then zoning requirement, then fallback to property data
-        const depthTableName = vcsDepthTableOverrides[vcs] ||
-                              zoneEntry?.depth_table ||
-                              zoneEntry?.depthTable ||
-                              sale.depth_table ||
-                              'DEFAULT';
-        const depthTable = depthTables[depthTableName];
-        let depthFactor = 1.0;
+        // Determine depth table name - prioritize zoning over VCS override if VCS override doesn't exist
+        let depthTableName = 'DEFAULT';
+        let depthTableSource = 'Default';
 
-        if (depthTable && Array.isArray(depthTable)) {
-          for (const row of depthTable) {
-            if (depth >= row.min && depth <= row.max) {
-              depthFactor = row.factor;
-              break;
-            }
-          }
+        // Try VCS override first
+        if (vcsDepthTableOverrides[vcs] && depthTables[vcsDepthTableOverrides[vcs]]) {
+          depthTableName = vcsDepthTableOverrides[vcs];
+          depthTableSource = 'VCS Override';
         }
+        // Then zoning requirement
+        else if (zoneEntry?.depth_table && depthTables[zoneEntry.depth_table]) {
+          depthTableName = zoneEntry.depth_table;
+          depthTableSource = 'Zoning Requirement';
+        }
+        else if (zoneEntry?.depthTable && depthTables[zoneEntry.depthTable]) {
+          depthTableName = zoneEntry.depthTable;
+          depthTableSource = 'Zoning Requirement';
+        }
+        // Then property data
+        else if (sale.depth_table && depthTables[sale.depth_table]) {
+          depthTableName = sale.depth_table;
+          depthTableSource = 'Property Data';
+        }
+
+        // Use the imported getDepthFactor function from supabaseClient
+        const depthFactor = getDepthFactor(depth, depthTableName, depthTables);
 
         rawLandValue = rawBeforeDepth * depthFactor;
 
@@ -3876,7 +3885,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       let result;
       if (existing) {
-        debug('📝 Updating existing record with target allocation...');
+        debug('��� Updating existing record with target allocation...');
         result = await supabase
           .from('market_land_valuation')
           .update({
