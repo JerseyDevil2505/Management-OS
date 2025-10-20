@@ -2765,19 +2765,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
 
       if (improvedSalesForYear.length === 0) {
-        console.warn(`⚠️ SKIPPING SALE - No improved sales found:`, {
-          block: sale.property_block,
-          lot: sale.property_lot,
-          vcs: vcs,
-          year: year,
-          region: region,
-          actualRegion: actualRegion,
-          reason: 'No sales in VCS with type_use starting with 1 (year filter applied only if values_norm_time exists)'
-        });
         return;
       }
-
-      console.log(`✅ Found ${improvedSalesForYear.length} improved sales for VCS ${vcs}${improvedSalesForYear.some(p => p.values_norm_time) ? `, year ${year}` : ' (all years)'} with type_use starting with '1'`);
 
       // Calculate averages using sales_price (actual sale price, not time normalized)
       const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + p.sales_price, 0) / improvedSalesForYear.length;
@@ -5390,7 +5379,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Debug teardown sales to see if they're incorrectly going to raw land
       if (saleCategories[s.id] === 'teardown' || (s.property_block === '5' && s.property_lot === '12.12')) {
-        debug('����� Raw Land check for teardown/5.12.12:', {
+        debug('���� Raw Land check for teardown/5.12.12:', {
           block: s.property_block,
           lot: s.property_lot,
           id: s.id,
