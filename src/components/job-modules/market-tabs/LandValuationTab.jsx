@@ -2770,8 +2770,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         const excessValue = excessFF * excessRate;
         const rawBeforeDepth = standardValue + excessValue;
 
-        // Get depth factor - look up the proper depth table
-        const depthTableName = vcsDepthTableOverrides[vcs] || sale.depth_table || 'DEFAULT';
+        // Get depth factor - look up the proper depth table from zoning requirements
+        const zone = sale.asset_zoning || sale.zoning || 'DEFAULT';
+        const zcfg = marketLandData?.zoning_config || {};
+        const zoneEntry = zcfg[zone] ||
+                         zcfg[zone?.toUpperCase?.()] ||
+                         zcfg[zone?.toLowerCase?.()] || null;
+
+        // Use VCS-specific override first, then zoning requirement, then fallback to property data
+        const depthTableName = vcsDepthTableOverrides[vcs] ||
+                              zoneEntry?.depth_table ||
+                              zoneEntry?.depthTable ||
+                              sale.depth_table ||
+                              'DEFAULT';
         const depthTable = depthTables[depthTableName];
         let depthFactor = 1.0;
 
@@ -3321,7 +3332,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return;
     }
 
-    debug('���� Calculating VCS recommended site values with target allocation:', targetAllocation + '%');
+    debug('������ Calculating VCS recommended site values with target allocation:', targetAllocation + '%');
 
     const recommendedSites = {};
     const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
