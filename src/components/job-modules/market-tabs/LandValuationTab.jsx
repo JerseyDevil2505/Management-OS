@@ -2913,7 +2913,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         improvedRawLandValue: avgImprovedRawLand,
         totalLandValue: avgImprovedRawLand + siteValue,
         currentAllocation: avgCurrentAllocation,
-        recommendedAllocation: (avgImprovedRawLand + siteValue) / avgImprovedPrice,
+        recommendedAllocation: avgImprovedPrice > 0 ? (avgImprovedRawLand + siteValue) / avgImprovedPrice : 0,
         isPositive: siteValue > 0
       });
     });
