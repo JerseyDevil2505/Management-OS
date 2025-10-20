@@ -2605,7 +2605,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         // Check for teardown (class 2 with minimal improvement)
         const isTeardown = String(s.property_m4_class) === '2' && s.values_mod_improvement < 10000;
         if (isTeardown) {
-          console.log(`�� Including uncategorized teardown sale ${s.property_block}/${s.property_lot}`);
+          console.log(`���� Including uncategorized teardown sale ${s.property_block}/${s.property_lot}`);
           return true;
         }
 
@@ -2916,15 +2916,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                                  zcfg[propZone?.toUpperCase?.()] ||
                                  zcfg[propZone?.toLowerCase?.()] || null;
 
-            // Prioritize zoning over VCS override if VCS override doesn't exist
+            // Helper to check if depth table is valid (non-empty array)
+            const isValidDepthTable = (tableName) => {
+              const table = depthTables[tableName];
+              return table && Array.isArray(table) && table.length > 0;
+            };
+
+            // Prioritize zoning over VCS override if VCS override doesn't exist or is invalid
             let depthTableName = 'DEFAULT';
-            if (vcsDepthTableOverrides[vcs] && depthTables[vcsDepthTableOverrides[vcs]]) {
+            if (vcsDepthTableOverrides[vcs] && isValidDepthTable(vcsDepthTableOverrides[vcs])) {
               depthTableName = vcsDepthTableOverrides[vcs];
-            } else if (propZoneEntry?.depth_table && depthTables[propZoneEntry.depth_table]) {
+            } else if (propZoneEntry?.depth_table && isValidDepthTable(propZoneEntry.depth_table)) {
               depthTableName = propZoneEntry.depth_table;
-            } else if (propZoneEntry?.depthTable && depthTables[propZoneEntry.depthTable]) {
+            } else if (propZoneEntry?.depthTable && isValidDepthTable(propZoneEntry.depthTable)) {
               depthTableName = propZoneEntry.depthTable;
-            } else if (prop.depth_table && depthTables[prop.depth_table]) {
+            } else if (prop.depth_table && isValidDepthTable(prop.depth_table)) {
               depthTableName = prop.depth_table;
             }
 
