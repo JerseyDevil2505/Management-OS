@@ -2871,9 +2871,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           totalImprovedRawLand / validImprovedCount : 0;
       } else {
         // Acre/SF mode - calculate average raw land for improved properties
-        const improvedAcreages = improvedSalesForYear.map(p => parseFloat(calculateAcreage(p)));
-        avgImprovedRawLand = improvedAcreages.reduce((sum, acres) =>
-          sum + calculateRawLandValue(acres, cascadeRates), 0) / improvedSalesForYear.length;
+        if (improvedSalesForYear.length > 0) {
+          const improvedAcreages = improvedSalesForYear.map(p => parseFloat(calculateAcreage(p)));
+          avgImprovedRawLand = improvedAcreages.reduce((sum, acres) =>
+            sum + calculateRawLandValue(acres, cascadeRates), 0) / improvedSalesForYear.length;
+        }
       }
 
       const improvedRawLandValue = avgImprovedRawLand;
