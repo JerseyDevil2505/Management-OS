@@ -2754,6 +2754,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
         rawLandValue = rawBeforeDepth * depthFactor;
 
+        console.log(`🔍 VCS ${vcs} ${sale.property_block}/${sale.property_lot}:`, {
+          depth,
+          depthTableName,
+          depthFactor,
+          rawBeforeDepth: Math.round(rawBeforeDepth),
+          rawLandValue: Math.round(rawLandValue),
+          siteValue: Math.round((sale.sales_price || 0) - rawLandValue)
+        });
+
       } else {
         // Acre or SF mode calculation (existing method)
         rawLandValue = calculateRawLandValue(acres, cascadeRates, sale);
@@ -2782,8 +2791,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         return;
       }
 
-      // Calculate averages using sales_price (actual sale price, not time normalized)
-      const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + p.sales_price, 0) / improvedSalesForYear.length;
+      // Calculate averages using values_norm_time (time-normalized price) when available, fallback to sales_price
+      // CRITICAL FIX: User's Excel uses time-normalized prices, not actual sale prices
+      const avgImprovedPrice = improvedSalesForYear.reduce((sum, p) => sum + (p.values_norm_time || p.sales_price), 0) / improvedSalesForYear.length;
       const avgImprovedAcres = improvedSalesForYear.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / improvedSalesForYear.length;
 
       // Calculate current allocation for this year (only for sales that have mod values)
@@ -3849,7 +3859,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return;
     }
 
-    debug('💾 Starting save...', {
+    debug('�� Starting save...', {
       vacantSalesCount: vacantSales.length,
       excludedSalesCount: method2ExcludedSales.size,
       includedSalesCount: includedSales.size,
@@ -8311,7 +8321,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <strong>Exclude problematic sales:</strong> Uncheck sales that should not be used in Method 2 calculations
                 (teardowns, poor condition, pre-construction, etc.).
                 <span style={{ display: 'block', marginTop: '4px' }}>
-                  ���️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
+                  ����️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
                 </span>
               </p>
             </div>
@@ -9187,7 +9197,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const isCondo = vcsType.toLowerCase().includes('condo');
 
     if (isCondo) {
-      // For condos: Rec Site = Target % × Avg Price (no land dimensions)
+      // For condos: Rec Site = Target % �� Avg Price (no land dimensions)
       return Math.round(avgPrice * (targetAllocation / 100));
     }
 
@@ -9279,7 +9289,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const standardFF = cascadeRates.standard?.rate || 0;
     const excessFF = cascadeRates.excess?.rate || Math.round(standardFF / 2);
 
-    // Calculate Raw Land Component: (Standard Frontage × Std Rate × Depth Factor) + (Excess × Excess Rate)
+    // Calculate Raw Land Component: (Standard Frontage × Std Rate �� Depth Factor) + (Excess × Excess Rate)
     const rawLandComponent = Math.round(
       (standardFrontage * standardFF * depthFactor) +
       (excessFrontage * excessFF)
