@@ -4924,6 +4924,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     } else if (type === 'land-rates') {
       workbook = exportLandRatesExcel();
     } else if (type === 'complete') {
+      // Ensure allocation study is loaded before export
+      if (!vacantTestSales || vacantTestSales.length === 0) {
+        console.log('🔄 Loading allocation study data before export...');
+        loadAllocationStudyData();
+      }
+
       // Combine individual workbooks into one comprehensive workbook
       const combined = XLSX.utils.book_new();
       const exporters = [
