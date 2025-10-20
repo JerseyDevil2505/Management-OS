@@ -2537,7 +2537,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       
       setLandNotes(prev => ({
         ...prev, 
-        [property.id]: '��� Prompt copied! Opening Claude... (paste response here when ready)'
+        [property.id]: '�� Prompt copied! Opening Claude... (paste response here when ready)'
       }));
       
       window.open('https://claude.ai/new', '_blank');
@@ -2798,14 +2798,25 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         rawLandValue = rawBeforeDepth * depthFactor;
 
         console.log(`🔍 VCS ${vcs} ${sale.property_block}/${sale.property_lot}:
+    Zone: ${zone}
+    Depth Table Source: ${vcsDepthTableOverrides[vcs] ? 'VCS Override' : zoneEntry ? 'Zoning Requirement' : 'Property Data/Default'}
+    Depth Table: ${depthTableName}
     Frontage: ${frontFeet}' × Depth: ${depth}'
     Standard: ${standardFF}' @ $${standardRate} = $${standardValue.toLocaleString()}
     Excess: ${excessFF}' @ $${excessRate} = $${excessValue.toLocaleString()}
     Raw before depth: $${rawBeforeDepth.toLocaleString()}
-    Depth Factor (${depthTableName}): ${depthFactor}
+    Depth Factor: ${depthFactor}
     Final Raw Land: $${rawLandValue.toLocaleString()}
     Sale Price: $${(sale.sales_price || 0).toLocaleString()}
     Site Value: $${((sale.sales_price || 0) - rawLandValue).toLocaleString()}`);
+
+        // Log depth table details for debugging
+        if (depthTable && Array.isArray(depthTable)) {
+          console.log(`📏 Depth Table "${depthTableName}" ranges:`,
+            depthTable.map(r => `${r.min}-${r.max}': ${r.factor}`).join(', '));
+        } else {
+          console.warn(`⚠️ Depth table "${depthTableName}" not found or invalid!`);
+        }
 
       } else {
         // Acre or SF mode calculation (existing method)
@@ -6716,7 +6727,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           {data.totalSales} sales
                         </span>
-                        {` ���� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
+                        {` ��� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} • $${data.impliedRate || 0}`}
                       </span>
                       </div>
                     </div>
