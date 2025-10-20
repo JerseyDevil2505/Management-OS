@@ -2735,6 +2735,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         // Get depth table from zoning config (Land Rates component defines this)
         const depthTableName = zoneEntry?.depth_table || zoneEntry?.depthTable || '100FT Table';
 
+        // DEBUG: Check table structure once
+        if (sale.property_block === '118' && sale.property_lot === '6.02') {
+          console.log('🔍 DEPTH TABLE DEBUG:', {
+            depthTableName,
+            table: depthTables[depthTableName],
+            depth: depth
+          });
+        }
+
         // Use the imported getDepthFactor function from supabaseClient
         const depthFactor = getDepthFactor(depth, depthTableName, depthTables);
 
@@ -5365,7 +5374,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Debug teardown sales to see if they're incorrectly going to raw land
       if (saleCategories[s.id] === 'teardown' || (s.property_block === '5' && s.property_lot === '12.12')) {
-        debug('���� Raw Land check for teardown/5.12.12:', {
+        debug('����� Raw Land check for teardown/5.12.12:', {
           block: s.property_block,
           lot: s.property_lot,
           id: s.id,
