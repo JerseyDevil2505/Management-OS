@@ -4603,6 +4603,22 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       salesRows.push(['Wetlands', fmt(wetlands.avg), `${wetlands.count} sales`, wetlands.avgLotSize || '']);
       salesRows.push(['Landlocked', fmt(landlocked.avg), `${landlocked.count} sales`, landlocked.avgLotSize || '']);
       salesRows.push(['Conservation', fmt(conservation.avg), `${conservation.count} sales`, conservation.avgLotSize || '']);
+
+      // Add Special Regions Analysis if available
+      const specialRegions = ca.specialRegions || {};
+      if (Object.keys(specialRegions).length > 0) {
+        salesRows.push([]);
+        salesRows.push(['SPECIAL REGIONS ANALYSIS']);
+        salesRows.push(['Region', 'Avg Rate', 'Sales', 'Method']);
+        Object.entries(specialRegions).forEach(([region, data]) => {
+          salesRows.push([
+            region,
+            fmt(data.avg),
+            `${data.count} sales`,
+            data.method === 'paired' ? `Paired (${data.pairs || 0} pairs)` : data.method || 'single'
+          ]);
+        });
+      }
     } catch (e) {
       // fallback: simple counts
       salesRows.push([]);
@@ -5208,7 +5224,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           [category]: rate ? parseFloat(rate) : null
         }
       };
-      debug('����� New cascade config special categories:', newConfig.specialCategories);
+      debug('������� New cascade config special categories:', newConfig.specialCategories);
       return newConfig;
     });
   };
@@ -6667,7 +6683,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales �� Avg $${Math.round(data.avgPrice).toLocaleString()} ��������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales ��� Avg $${Math.round(data.avgPrice).toLocaleString()} ��������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{
@@ -8513,7 +8529,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'normTime' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '����' : '↓') : ''}
+                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '���' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('acres')}
