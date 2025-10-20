@@ -2605,7 +2605,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         // Check for teardown (class 2 with minimal improvement)
         const isTeardown = String(s.property_m4_class) === '2' && s.values_mod_improvement < 10000;
         if (isTeardown) {
-          console.log(`���� Including uncategorized teardown sale ${s.property_block}/${s.property_lot}`);
+          console.log(`�� Including uncategorized teardown sale ${s.property_block}/${s.property_lot}`);
           return true;
         }
 
@@ -2777,6 +2777,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                          zcfg[zone?.toUpperCase?.()] ||
                          zcfg[zone?.toLowerCase?.()] || null;
 
+        // DEBUG: Log available depth tables
+        console.log(`🔍 DEBUG Depth Table Resolution for ${sale.property_block}/${sale.property_lot}:`, {
+          zone: zone,
+          availableDepthTables: Object.keys(depthTables),
+          zoningConfig: zcfg,
+          zoneEntry: zoneEntry,
+          vcsOverride: vcsDepthTableOverrides[vcs],
+          propertyDepthTable: sale.depth_table
+        });
+
         // Determine depth table name - prioritize zoning over VCS override if VCS override doesn't exist
         let depthTableName = 'DEFAULT';
         let depthTableSource = 'Default';
@@ -2784,27 +2794,36 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         // Helper to check if depth table is valid (non-empty array)
         const isValidDepthTable = (tableName) => {
           const table = depthTables[tableName];
-          return table && Array.isArray(table) && table.length > 0;
+          const isValid = table && Array.isArray(table) && table.length > 0;
+          console.log(`  Checking table "${tableName}": ${isValid ? 'VALID ✓' : 'INVALID ✗'}`, { table });
+          return isValid;
         };
 
         // Try VCS override first - but only if it's a valid table
         if (vcsDepthTableOverrides[vcs] && isValidDepthTable(vcsDepthTableOverrides[vcs])) {
           depthTableName = vcsDepthTableOverrides[vcs];
           depthTableSource = 'VCS Override';
+          console.log(`  ✅ Using VCS Override: ${depthTableName}`);
         }
         // Then zoning requirement
         else if (zoneEntry?.depth_table && isValidDepthTable(zoneEntry.depth_table)) {
           depthTableName = zoneEntry.depth_table;
           depthTableSource = 'Zoning Requirement';
+          console.log(`  ✅ Using Zoning Requirement (depth_table): ${depthTableName}`);
         }
         else if (zoneEntry?.depthTable && isValidDepthTable(zoneEntry.depthTable)) {
           depthTableName = zoneEntry.depthTable;
           depthTableSource = 'Zoning Requirement';
+          console.log(`  ✅ Using Zoning Requirement (depthTable): ${depthTableName}`);
         }
         // Then property data
         else if (sale.depth_table && isValidDepthTable(sale.depth_table)) {
           depthTableName = sale.depth_table;
           depthTableSource = 'Property Data';
+          console.log(`  ✅ Using Property Data: ${depthTableName}`);
+        }
+        else {
+          console.warn(`  ⚠️ No valid depth table found! Falling back to DEFAULT`);
         }
 
         // Use the imported getDepthFactor function from supabaseClient
