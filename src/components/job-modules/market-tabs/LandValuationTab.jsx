@@ -2626,7 +2626,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         const frontFeet = parseFloat(sale.asset_lot_frontage) || 0;
         const depth = parseFloat(sale.asset_lot_depth) || 100; // Default 100 if missing
         const zone = sale.asset_zoning || 'DEFAULT';
-        const depthTable = depthTables[zone] || depthTables['DEFAULT'];
+
+        // Get VCS-specific depth table override or fall back to zone-based table
+        const vcsCode = sale.new_vcs;
+        let depthTableName = vcsDepthTableOverrides[vcsCode];
+        if (!depthTableName) {
+          // Fall back to DEFAULT if no override
+          depthTableName = 'DEFAULT';
+        }
+        const depthTable = depthTables[depthTableName] || depthTables['DEFAULT'];
+
+        console.log(`📐 VCS ${vcsCode} using depth table: ${depthTableName} for zone ${zone}`);
 
         // Get depth factor
         let depthFactor = 1.0;
@@ -2639,11 +2649,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           }
         }
 
-        // Get FF rates for this VCS from cascadeRates
-        const vcsRates = cascadeRates || {};
-        const standardRate = vcsRates.standard?.rate || vcsRates.prime?.rate || 0;
-        const standardMax = vcsRates.standard?.max || vcsRates.prime?.max || 100;
-        const excessRate = vcsRates.excess?.rate || 0;
+        // Get VCS-specific FF rates if available, otherwise use cascadeRates
+        let vcsRates = cascadeConfig.vcsSpecific && cascadeConfig.vcsSpecific[vcsCode] && cascadeConfig.vcsSpecific[vcsCode].method === 'ff'
+          ? cascadeConfig.vcsSpecific[vcsCode].rates
+          : cascadeRates;
+
+        const standardRate = vcsRates?.standard?.rate || vcsRates?.prime?.rate || 0;
+        const standardMax = vcsRates?.standard?.max || vcsRates?.prime?.max || 50;
+        const excessRate = vcsRates?.excess?.rate || 0;
+
+        console.log(`📊 VCS ${vcsCode} FF Rates - Standard: $${standardRate}/FF (first ${standardMax}'), Excess: $${excessRate}/FF`);
 
         // Calculate standard and excess frontage
         const standardFF = Math.min(frontFeet, standardMax);
@@ -2714,7 +2729,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             const frontFeet = parseFloat(prop.asset_lot_frontage) || 0;
             const depth = parseFloat(prop.asset_lot_depth) || 100;
             const zone = prop.asset_zoning || 'DEFAULT';
-            const depthTable = depthTables[zone] || depthTables['DEFAULT'];
+
+            // Get VCS-specific depth table override
+            const vcsCode = prop.new_vcs;
+            let depthTableName = vcsDepthTableOverrides[vcsCode];
+            if (!depthTableName) {
+              depthTableName = 'DEFAULT';
+            }
+            const depthTable = depthTables[depthTableName] || depthTables['DEFAULT'];
 
             let depthFactor = 1.0;
             if (depthTable && Array.isArray(depthTable)) {
@@ -2726,10 +2748,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               }
             }
 
-            const vcsRates = cascadeRates || {};
-            const standardRate = vcsRates.standard?.rate || vcsRates.prime?.rate || 0;
-            const standardMax = vcsRates.standard?.max || vcsRates.prime?.max || 100;
-            const excessRate = vcsRates.excess?.rate || 0;
+            // Get VCS-specific FF rates if available
+            let vcsRates = cascadeConfig.vcsSpecific && cascadeConfig.vcsSpecific[vcsCode] && cascadeConfig.vcsSpecific[vcsCode].method === 'ff'
+              ? cascadeConfig.vcsSpecific[vcsCode].rates
+              : cascadeRates;
+
+            const standardRate = vcsRates?.standard?.rate || vcsRates?.prime?.rate || 0;
+            const standardMax = vcsRates?.standard?.max || vcsRates?.prime?.max || 50;
+            const excessRate = vcsRates?.excess?.rate || 0;
 
             const standardFF = Math.min(frontFeet, standardMax);
             const excessFF = Math.max(0, frontFeet - standardMax);
@@ -2773,16 +2799,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         lot: sale.property_lot,
         vacantPrice: sale.sales_amount || sale.sales_price || 0,
         acres: acres,
-        frontFeet: valuationMode === 'ff' ? (sale.asset_lot_frontage || 0) : 0,
-        depth: valuationMode === 'ff' ? (sale.asset_lot_depth || 0) : 0,
+        frontFeet: valuationMode === 'ff' ? Math.round(sale.asset_lot_frontage || 0) : 0,
+        depth: valuationMode === 'ff' ? Math.round(sale.asset_lot_depth || 0) : 0,
         zone: sale.asset_zoning || 'DEFAULT',
         rawLandValue: rawLandValue,
         siteValue: siteValue,
         improvedSalesCount: improvedSalesForYear.length,
         avgImprovedPrice: avgImprovedPrice,
         avgImprovedAcres: avgImprovedAcres,
-        avgImprovedFrontage: valuationMode === 'ff' ? avgImprovedFF : 0,
-        avgImprovedDepth: valuationMode === 'ff' ? avgImprovedDepth : 0,
+        avgImprovedFF: valuationMode === 'ff' ? Math.round(avgImprovedFF) : 0,
+        avgImprovedDepth: valuationMode === 'ff' ? Math.round(avgImprovedDepth) : 0,
         improvedRawLandValue: avgImprovedRawLand,
         totalLandValue: avgImprovedRawLand + siteValue,
         currentAllocation: avgCurrentAllocation,
@@ -5102,7 +5128,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     debug('📋 Included sales IDs:', Array.from(includedSales));
     debug('�� Sale categories state:', saleCategories);
     debug('📋 Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
-    debug('📋 Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
+    debug('��� Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
 
     // Helper function to calculate average for a category
     const getCategoryAverage = (filterFn, categoryType) => {
