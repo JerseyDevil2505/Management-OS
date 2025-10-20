@@ -2606,8 +2606,26 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
       // Apply cascade calculation to get raw land value
+      console.log(`🔍 Calculating raw land for ${sale.property_block}/${sale.property_lot}:`, {
+        valuationMode,
+        acres,
+        land_front_feet: sale.land_front_feet,
+        asset_lot_frontage: sale.asset_lot_frontage,
+        land_depth: sale.land_depth,
+        asset_lot_depth: sale.asset_lot_depth,
+        land_zoning: sale.land_zoning,
+        hasCascadeRates: !!cascadeRates
+      });
+
       const rawLandValue = calculateRawLandValue(acres, cascadeRates, sale);
-      const siteValue = (sale.values_norm_time || sale.sales_price) - rawLandValue;
+      const salePrice = sale.values_norm_time || sale.sales_price;
+      const siteValue = salePrice - rawLandValue;
+
+      console.log(`💰 Sale ${sale.property_block}/${sale.property_lot} calculation:`, {
+        salePrice,
+        rawLandValue,
+        siteValue
+      });
 
       // Find improved sales for this sale's year AND VCS
       // IMPORTANT: Only use sales with values_norm_time (bad sales are filtered out during normalization)
