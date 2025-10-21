@@ -3071,7 +3071,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-20 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('is_outlier')}
                             >
-                              Status {normSortConfig.field === 'is_outlier' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                              Status {normSortConfig.field === 'is_outlier' && (normSortConfig.direction === 'asc' ? '↑' : '���')}
                             </th>
                             <th 
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-28 cursor-pointer hover:bg-gray-100"
@@ -3664,10 +3664,10 @@ const analyzeImportFile = async (file) => {
 
                     let csv = 'Block,Total Properties,# of Sales,Avg Normalized Value,Avg Age,Avg Size,Most Repeated Design,Age Consistency,Size Consistency,Design Consistency,Color,Bluebeam Position\n';
                     marketAnalysisData.forEach(block => {
-                      csv += `"${block.block}","${block.propertyCount}","${block.salesCount || 0}","$${block.avgNormalizedValue.toLocaleString()}",`;
-                      csv += `"${block.ageDetails.avgYear}","${block.sizeDetails.avgSize}","${block.designDetails.dominantDesign}",`;
-                      csv += `"${block.ageConsistency}","${block.sizeConsistency}","${block.designConsistency}",`;
-                      csv += `"${block.color.name}","Row ${block.color.row} Col ${block.color.col}"\n`;
+                      csv += `"${block.block || ''}","${block.propertyCount || 0}","${block.salesCount || 0}","$${(block.avgNormalizedValue || 0).toLocaleString()}",`;
+                      csv += `"${block.ageDetails?.avgYear || ''}","${block.sizeDetails?.avgSize || ''}","${block.designDetails?.dominantDesign || ''}",`;
+                      csv += `"${block.ageConsistency || ''}","${block.sizeConsistency || ''}","${block.designConsistency || ''}",`;
+                      csv += `"${block.color?.name || ''}","Row ${block.color?.row || ''} Col ${block.color?.col || ''}"\n`;
                     });
 
                     const blob = new Blob([csv], { type: 'text/csv' });
