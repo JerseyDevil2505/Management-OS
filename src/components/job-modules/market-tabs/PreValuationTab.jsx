@@ -2199,7 +2199,7 @@ const processSelectedProperties = async () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `PropertyWorksheet_${jobData.job_number}_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `PropertyWorksheet_${jobData?.job_name || 'export'}_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -3071,7 +3071,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-20 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('is_outlier')}
                             >
-                              Status {normSortConfig.field === 'is_outlier' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                              Status {normSortConfig.field === 'is_outlier' && (normSortConfig.direction === 'asc' ? '↑' : '���')}
                             </th>
                             <th 
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-28 cursor-pointer hover:bg-gray-100"
@@ -3656,20 +3656,25 @@ const analyzeImportFile = async (file) => {
                 ) : null}
                 <button
                   onClick={() => {
-                    // Export to CSV
+                    // Export to CSV with safety checks
+                    if (!marketAnalysisData || marketAnalysisData.length === 0) {
+                      alert('No market analysis data available to export. Please run the analysis first.');
+                      return;
+                    }
+
                     let csv = 'Block,Total Properties,# of Sales,Avg Normalized Value,Avg Age,Avg Size,Most Repeated Design,Age Consistency,Size Consistency,Design Consistency,Color,Bluebeam Position\n';
                     marketAnalysisData.forEach(block => {
-                      csv += `"${block.block}","${block.propertyCount}","${block.salesCount || 0}","$${block.avgNormalizedValue.toLocaleString()}",`;
-                      csv += `"${block.ageDetails.avgYear}","${block.sizeDetails.avgSize}","${block.designDetails.dominantDesign}",`;
-                      csv += `"${block.ageConsistency}","${block.sizeConsistency}","${block.designConsistency}",`;
-                      csv += `"${block.color.name}","Row ${block.color.row} Col ${block.color.col}"\n`;
+                      csv += `"${block.block || ''}","${block.propertyCount || 0}","${block.salesCount || 0}","$${(block.avgNormalizedValue || 0).toLocaleString()}",`;
+                      csv += `"${block.ageDetails?.avgYear || ''}","${block.sizeDetails?.avgSize || ''}","${block.designDetails?.dominantDesign || ''}",`;
+                      csv += `"${block.ageConsistency || ''}","${block.sizeConsistency || ''}","${block.designConsistency || ''}",`;
+                      csv += `"${block.color?.name || ''}","Row ${block.color?.row || ''} Col ${block.color?.col || ''}"\n`;
                     });
-                    
+
                     const blob = new Blob([csv], { type: 'text/csv' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `BlockAnalysis_${jobData.job_number}_${new Date().toISOString().split('T')[0]}.csv`;
+                    a.download = `BlockAnalysis_${jobData?.job_name || 'export'}_${new Date().toISOString().split('T')[0]}.csv`;
                     a.click();
                     URL.revokeObjectURL(url);
                   }}
