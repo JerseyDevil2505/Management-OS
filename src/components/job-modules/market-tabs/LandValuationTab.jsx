@@ -4123,13 +4123,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           typicalDepth = Math.round(avgDepth);
         }
 
-        // Get depth table from zoning config
+        // Get depth table - check VCS override first, then zoning config
         const firstProp = vcsProps[0];
         if (firstProp) {
           const zone = firstProp.asset_zoning || '';
           const zcfg = marketLandData?.zoning_config || {};
           const zoneEntry = zcfg[zone] || zcfg[zone?.toUpperCase?.()] || zcfg[zone?.toLowerCase?.()] || null;
-          depthTableName = zoneEntry ? (zoneEntry.depth_table || zoneEntry.depthTable || zoneEntry.depth_table_name || '') : '';
+          const zoningDepthTable = zoneEntry ? (zoneEntry.depth_table || zoneEntry.depthTable || zoneEntry.depth_table_name || '') : '';
+          // Use VCS-specific override if available, otherwise use zoning default (matches UI rendering at line 9563)
+          depthTableName = vcsDepthTableOverrides[vcs] || zoningDepthTable;
         }
       } else {
         // Acre/SF mode: calculate typical lot in acres or SF
