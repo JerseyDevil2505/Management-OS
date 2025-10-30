@@ -593,7 +593,7 @@ useEffect(() => {
 
   // ALWAYS load from database
   console.log('🟡 ABOUT TO LOAD FROM DATABASE');
-  debug('�� Loading from database:', {
+  debug('��� Loading from database:', {
     hasRawLandConfig: !!marketLandData.raw_land_config,
     hasCascadeRates: !!marketLandData.cascade_rates,
     hasVacantSales: !!marketLandData.vacant_sales_analysis?.sales?.length,
@@ -1635,7 +1635,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (hasRestrictedClass) {
-        debug(`���� Excluding package ${sale.property_block}/${sale.property_lot} - contains restricted property class`);
+        debug(`������ Excluding package ${sale.property_block}/${sale.property_lot} - contains restricted property class`);
         return false;
       }
 
@@ -3473,7 +3473,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const analyzeEconomicObsolescence = useCallback(() => {
     if (!properties) return;
 
-    debug('��� Economic Obsolescence Analysis Debug:', {
+    debug('🔍 Economic Obsolescence Analysis Debug:', {
       totalProperties: properties.length,
       withNewVCS: properties.filter(p => p.new_vcs).length,
       withLocationAnalysis: properties.filter(p => p.location_analysis).length,
@@ -6972,7 +6972,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           {data.totalSales} sales
                         </span>
-                        {` ��� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} ��� $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} �� $${data.impliedRate || 0}`}
+                        {` ��� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} �� $${data.impliedRate || 0}`}
                       </span>
                       </div>
                     </div>
@@ -7333,10 +7333,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       // Build rows array so we can append summary and recommended rows
                       const rows = [];
 
-                      // Top summary row showing overall average metrics (from chosen bracket)
+                      // Top summary row showing overall average metrics (from all positive deltas)
                       rows.push(
                         <tr key="__summary__" style={{ fontWeight: '600', backgroundColor: '#F3F4F6' }}>
-                          <td style={{ padding: '6px', border: '1px solid #E5E7EB' }}>Overall Average ({chosenBracketKey || 'N/A'})</td>
+                          <td style={{ padding: '6px', border: '1px solid #E5E7EB' }}>Overall Average (all positive deltas)</td>
                           <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{overallAvgAcres != null ? `${(Math.round(overallAvgAcres*100)/100).toFixed(2)} / ${summaryTypicalSF.toLocaleString()} SF` : 'N/A'}</td>
                           <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{summaryLandValue != null ? `$${Number(summaryLandValue).toLocaleString()}` : 'N/A'}</td>
                           <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
@@ -8797,7 +8797,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '����') : ''}
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('yearBuilt')}
