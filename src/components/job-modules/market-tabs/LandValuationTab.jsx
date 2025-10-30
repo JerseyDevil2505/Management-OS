@@ -7218,8 +7218,23 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       return valuationMode === 'sf' ? `$${avgAcre.toLocaleString()}/AC` : `$${perSqFt}/SF`;
                     })()}
                   </div>
-                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
-                    ({(method2Summary.mediumRange?.count || 0) + (method2Summary.largeRange?.count || 0) + (method2Summary.xlargeRange?.count || 0)} Total)
+                  <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '4px' }}>
+                    {(() => {
+                      // Calculate average lot size across all positive deltas
+                      const allLotAcres = [];
+                      if (method2Summary.mediumRange?.avgAcres) allLotAcres.push(method2Summary.mediumRange.avgAcres);
+                      if (method2Summary.largeRange?.avgAcres) allLotAcres.push(method2Summary.largeRange.avgAcres);
+                      if (method2Summary.xlargeRange?.avgAcres) allLotAcres.push(method2Summary.xlargeRange.avgAcres);
+
+                      if (allLotAcres.length === 0) {
+                        return `(${(method2Summary.mediumRange?.count || 0) + (method2Summary.largeRange?.count || 0) + (method2Summary.xlargeRange?.count || 0)} Total)`;
+                      }
+
+                      const avgLotAcres = allLotAcres.reduce((sum, acres) => sum + acres, 0) / allLotAcres.length;
+                      const avgLotSF = Math.round(avgLotAcres * 43560);
+
+                      return `${avgLotAcres.toFixed(2)} AC / ${avgLotSF.toLocaleString()} SF avg lot | ${(method2Summary.mediumRange?.count || 0) + (method2Summary.largeRange?.count || 0) + (method2Summary.xlargeRange?.count || 0)} Total`;
+                    })()}
                   </div>
                 </div>
 
