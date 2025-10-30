@@ -806,7 +806,7 @@ useEffect(() => {
     }
     if (marketLandData.worksheet_data.descriptions) {
       setVcsDescriptions(marketLandData.worksheet_data.descriptions);
-      debug('✅ Loaded VCS descriptions:', marketLandData.worksheet_data.descriptions);
+      debug('��� Loaded VCS descriptions:', marketLandData.worksheet_data.descriptions);
     }
     if (marketLandData.worksheet_data.types) {
       setVcsTypes(marketLandData.worksheet_data.types);
@@ -2080,6 +2080,7 @@ const getPricePerUnit = useCallback((price, size) => {
             if (acresDiff > 0 && priceDiff > 0) {
               const rate = Math.round(priceDiff / acresDiff);
               bracketRates.mediumRange.push(rate);
+              bracketAcres.mediumRange.push(brackets.medium.avgAcres);
             }
           }
         }
@@ -8762,7 +8763,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'salePrice' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '��' : '���') : ''}
+                      Sale Price {modalSortField === 'salePrice' ? (modalSortDirection === 'asc' ? '��' : '����') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('normTime')}
@@ -8776,7 +8777,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'normTime' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '�����' : '↓') : ''}
+                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '���' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('acres')}
