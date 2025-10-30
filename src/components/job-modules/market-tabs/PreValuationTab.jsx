@@ -2936,7 +2936,7 @@ const analyzeImportFile = async (file) => {
                 {!isResultsCollapsed && (
                   <>
                     <div className="flex justify-between items-center mb-4">
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap">
                         <select
                           value={salesReviewFilter}
                           onChange={(e) => setSalesReviewFilter(e.target.value)}
