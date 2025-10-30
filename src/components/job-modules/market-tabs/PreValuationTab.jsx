@@ -1171,7 +1171,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           });
 
           // Also log all property keys to see what's available
-          if (false) console.log(`��� Sale ${index + 1} ALL AVAILABLE KEYS:`, Object.keys(prop));
+          if (false) console.log(`����� Sale ${index + 1} ALL AVAILABLE KEYS:`, Object.keys(prop));
         }
         
         // Determine if outlier based on equalization ratio
@@ -1423,30 +1423,32 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       { wch: 25 }, // Location
       { wch: 8 },  // Class
       { wch: 15 }, // Type
+      { wch: 15 }, // Design
+      { wch: 10 }, // SFLA
+      { wch: 10 }, // Year Built
       { wch: 20 }, // Package
       { wch: 15 }, // Assessed Value
       { wch: 12 }, // Sale Date
       { wch: 15 }, // Sale Price
+      { wch: 10 }, // Sale NU
       { wch: 20 }, // Time Normalized Price
       { wch: 20 }, // Size Normalized Price
-      { wch: 10 }, // Sale NU
       { wch: 12 }, // Sales Ratio
       { wch: 10 }, // Status
       { wch: 10 }, // Decision
-      { wch: 10 }, // SFLA
       { wch: 15 }  // Size Adjustment
     ];
     ws['!cols'] = colWidths;
 
     // Add worksheet to workbook
-    XLSX.utils.book_append_sheet(wb, ws, 'Normalized Sales');
+    XLSX.utils.book_append_sheet(wb, ws, 'All Properties');
 
     // Generate filename with job name and date
-    const fileName = `NormalizedSales_${jobData?.job_name || 'export'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    const fileName = `PropertyMasterExport_${jobData?.job_name || 'export'}_${new Date().toISOString().split('T')[0]}.xlsx`;
 
     // Write file
     XLSX.writeFile(wb, fileName);
-  }, [timeNormalizedSales, parseCompositeKey, properties, getTypeUseDisplay, jobData]);
+  }, [timeNormalizedSales, parseCompositeKey, properties, getTypeUseDisplay, getDesignDisplay, jobData]);
 
   const runSizeNormalization = useCallback(async () => {
     setIsProcessingSize(true);
