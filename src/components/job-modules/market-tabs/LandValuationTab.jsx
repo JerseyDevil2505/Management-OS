@@ -2245,9 +2245,9 @@ const getPricePerUnit = useCallback((price, size) => {
       const includedVCSCount = Object.keys(vcsSales).filter(vcs => !excludedMethod2VCS.has(vcs)).length;
 
       setMethod2Summary({
-        mediumRange: calculateBracketSummary(bracketRates.mediumRange), // 1.00-4.99
-        largeRange: calculateBracketSummary(bracketRates.largeRange),   // 5.00-9.99
-        xlargeRange: calculateBracketSummary(bracketRates.xlargeRange), // 10.00+
+        mediumRange: calculateBracketSummary(bracketRates.mediumRange, bracketAcres.mediumRange), // 1.00-4.99
+        largeRange: calculateBracketSummary(bracketRates.largeRange, bracketAcres.largeRange),   // 5.00-9.99
+        xlargeRange: calculateBracketSummary(bracketRates.xlargeRange, bracketAcres.xlargeRange), // 10.00+
         totalVCS: includedVCSCount,
         excludedVCSCount: excludedMethod2VCS.size
       });
@@ -6915,7 +6915,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales ��� Avg $${Math.round(data.avgPrice).toLocaleString()} ��������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales ���� Avg $${Math.round(data.avgPrice).toLocaleString()} ��������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{
