@@ -2779,8 +2779,8 @@ const AdminJobManagement = ({
                           <h4 className="text-lg font-bold text-gray-900">{job.name}</h4>
                           <div className="flex items-center space-x-2">
                             <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
-                              job.vendor === 'Microsystems' 
-                                ? 'bg-blue-100 text-blue-800' 
+                              job.vendor === 'Microsystems'
+                                ? 'bg-blue-100 text-blue-800'
                                 : 'bg-orange-200 text-orange-800'
                             }`}>
                               {job.vendor}
@@ -2790,7 +2790,7 @@ const AdminJobManagement = ({
                             </span>
                           </div>
                         </div>
-                        <div className="flex items-center space-x-4 text-sm text-gray-600">
+                        <div className="flex items-center space-x-4 text-sm text-gray-600 mb-3">
                           <span className="flex items-center space-x-1">
                             <span className="font-bold text-purple-600">{job.ccdd || job.ccddCode}</span>
                             <span>•</span>
@@ -2805,6 +2805,19 @@ const AdminJobManagement = ({
                           </span>
                         </div>
                       </div>
+                    </div>
+
+                    {/* Unarchive Button */}
+                    <div className="flex justify-end pt-3 border-t border-gray-100">
+                      <button
+                        onClick={() => unarchiveJob(job)}
+                        disabled={processing}
+                        className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105 disabled:opacity-50"
+                        title="Restore this job to active"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        <span>Restore to Active</span>
+                      </button>
                     </div>
                   </div>
                 ))
