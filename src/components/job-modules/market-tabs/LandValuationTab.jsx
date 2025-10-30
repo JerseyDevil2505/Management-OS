@@ -3473,7 +3473,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const analyzeEconomicObsolescence = useCallback(() => {
     if (!properties) return;
 
-    debug('🔍 Economic Obsolescence Analysis Debug:', {
+    debug('��� Economic Obsolescence Analysis Debug:', {
       totalProperties: properties.length,
       withNewVCS: properties.filter(p => p.new_vcs).length,
       withLocationAnalysis: properties.filter(p => p.location_analysis).length,
@@ -6972,7 +6972,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           {data.totalSales} sales
                         </span>
-                        {` ��� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} �� $${data.impliedRate || 0}`}
+                        {` ��� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} ��� $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} �� $${data.impliedRate || 0}`}
                       </span>
                       </div>
                     </div>
@@ -7297,23 +7297,33 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         );
                       }
 
-                      // Choose lowest bracket with data from Method 2 summary and determine bracket key
-                      let chosenPerAcre = null;
-                      let chosenBracketKey = null;
-                      if (method2Summary?.mediumRange?.perAcre && method2Summary.mediumRange.perAcre !== 'N/A') { chosenPerAcre = method2Summary.mediumRange.perAcre; chosenBracketKey = 'medium'; }
-                      else if (method2Summary?.largeRange?.perAcre && method2Summary.largeRange.perAcre !== 'N/A') { chosenPerAcre = method2Summary.largeRange.perAcre; chosenBracketKey = 'large'; }
-                      else if (method2Summary?.xlargeRange?.perAcre && method2Summary.xlargeRange.perAcre !== 'N/A') { chosenPerAcre = method2Summary.xlargeRange.perAcre; chosenBracketKey = 'xlarge'; }
+                      // Use average across ALL positive deltas instead of just lowest bracket
+                      const allRates = [];
+                      const allLotAcres = [];
+                      if (method2Summary?.mediumRange?.perAcre && method2Summary.mediumRange.perAcre !== 'N/A') {
+                        allRates.push(method2Summary.mediumRange.perAcre);
+                        if (method2Summary.mediumRange.avgAcres) allLotAcres.push(method2Summary.mediumRange.avgAcres);
+                      }
+                      if (method2Summary?.largeRange?.perAcre && method2Summary.largeRange.perAcre !== 'N/A') {
+                        allRates.push(method2Summary.largeRange.perAcre);
+                        if (method2Summary.largeRange.avgAcres) allLotAcres.push(method2Summary.largeRange.avgAcres);
+                      }
+                      if (method2Summary?.xlargeRange?.perAcre && method2Summary.xlargeRange.perAcre !== 'N/A') {
+                        allRates.push(method2Summary.xlargeRange.perAcre);
+                        if (method2Summary.xlargeRange.avgAcres) allLotAcres.push(method2Summary.xlargeRange.avgAcres);
+                      }
 
-                      // Compute overall average lot size (acres) from bracketAnalysis for chosen bracket
+                      let chosenPerAcre = null;
                       let overallAvgAcres = null;
-                      if (chosenBracketKey && typeof bracketAnalysis === 'object') {
-                        const vals = Object.values(bracketAnalysis).map(a => {
-                          try {
-                            const b = a.brackets && a.brackets[chosenBracketKey];
-                            return b && b.avgAcres ? b.avgAcres : null;
-                          } catch (e) { return null; }
-                        }).filter(v => v != null);
-                        if (vals.length > 0) overallAvgAcres = vals.reduce((s, v) => s + v, 0) / vals.length;
+
+                      if (allRates.length > 0) {
+                        // Use average of all positive deltas
+                        chosenPerAcre = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
+                      }
+
+                      if (allLotAcres.length > 0) {
+                        // Use average lot size across all positive deltas
+                        overallAvgAcres = allLotAcres.reduce((sum, acres) => sum + acres, 0) / allLotAcres.length;
                       }
 
                       const summaryTypicalSF = overallAvgAcres != null ? Math.round(overallAvgAcres * 43560) : null;
