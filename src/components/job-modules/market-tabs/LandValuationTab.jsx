@@ -2115,16 +2115,22 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       // Calculate averages for each bracket range
-      const calculateBracketSummary = (rates) => {
-        if (rates.length === 0) return { perAcre: 'N/A', perSqFt: 'N/A', count: 0 };
+      const calculateBracketSummary = (rates, acres = []) => {
+        if (rates.length === 0) return { perAcre: 'N/A', perSqFt: 'N/A', count: 0, avgAcres: null };
 
         const avgPerAcre = Math.round(rates.reduce((sum, r) => sum + r, 0) / rates.length);
         const avgPerSqFt = (avgPerAcre / 43560).toFixed(2);
 
+        // Calculate average lot size if acres array provided
+        const avgAcres = acres.length > 0
+          ? acres.reduce((sum, a) => sum + a, 0) / acres.length
+          : null;
+
         return {
           perAcre: avgPerAcre,
           perSqFt: avgPerSqFt,
-          count: rates.length
+          count: rates.length,
+          avgAcres: avgAcres
         };
       };
 
@@ -2211,9 +2217,9 @@ const getPricePerUnit = useCallback((price, size) => {
           }
         });
 
-        // Calculate averages for each bracket range
+        // Calculate averages for each bracket range (regional version - not currently tracking acres)
         const calculateBracketSummary = (rates) => {
-          if (rates.length === 0) return { perAcre: 'N/A', perSqFt: 'N/A', count: 0 };
+          if (rates.length === 0) return { perAcre: 'N/A', perSqFt: 'N/A', count: 0, avgAcres: null };
 
           const avgPerAcre = Math.round(rates.reduce((sum, r) => sum + r, 0) / rates.length);
           const avgPerSqFt = (avgPerAcre / 43560).toFixed(2);
@@ -2221,7 +2227,8 @@ const getPricePerUnit = useCallback((price, size) => {
           return {
             perAcre: avgPerAcre,
             perSqFt: avgPerSqFt,
-            count: rates.length
+            count: rates.length,
+            avgAcres: null
           };
         };
 
