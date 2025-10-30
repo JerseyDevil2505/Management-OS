@@ -203,7 +203,7 @@ JobContainer (loads once with pagination)
 │   │   └── data-pipeline/             ← Vendor-specific file processing
 │   │       ├── brt-processor.js       ← BRT initial job creation (INSERT)
 │   │       ├── brt-updater.js         ← BRT ongoing updates (UPSERT)
-│   │       ├── microsystems-processor.js  ← Microsystems initial job creation (INSERT)
+│   │       ├─��� microsystems-processor.js  ← Microsystems initial job creation (INSERT)
 │   │       └── microsystems-updater.js    ← Microsystems ongoing updates (UPSERT)
 │   │
 │   ├── App.js                         ← Central navigation + module state hub (MAIN APP)
@@ -667,6 +667,8 @@ export const interpretCodes = {
 
 | Column | Data Type | Notes |
 |--------|-----------|-------|
+| archived_at | timestamp with time zone | **NEW** - Job archive timestamp |
+| archived_by | uuid | **NEW** - User who archived the job |
 | assessor_email | text | |
 | assessor_name | text | |
 | assigned_has_commercial | boolean | |
@@ -2616,7 +2618,7 @@ standardLocations = [
 
 **Statistics Display:**
 ```
-┌──────────────────────────────────────────���─────────────────┐
+┌──────────────────────────────────────────���───────────────���─┐
 │ Type Use │ Total │ Avg Year │ Avg Size │ Sales │ Adj Price │
 ├────────────────────────────────────────────────────────────┤
 │ Single   │ 1,234 │   1985   │  1,850   │  156  │ $285,000  │
@@ -2670,7 +2672,7 @@ floorPremium = ((floorPrice - firstFloorPrice) / firstFloorPrice) × 100
 │ 2ND FLOOR │  189  │ $162,000  │ -2%          │
 │ 3RD FLOOR │  145  │ $158,000  │ -4%          │
 │ PENTHOUSE │   12  │ $195,000  │ +18%         │
-└──────���───────────────────────────────────────┘
+└──────���─────────────���─────────────────────────┘
 ```
 
 **Bedroom Detection Logic:**
@@ -4213,7 +4215,7 @@ Deed Book 1234, Page 567 (Sale Date: 03/15/2024)
 │   ├── Flat Adjustment: +$65,000 per additional card                         │
 │   ├── Percentage: +22.81%                                                   │
 │   └── (Accounts for increased living area)                                  │
-├─────────────────────────────────────────────────────────────────────────────┤
+├─────���───────────────────────────────────────────────────────────────────────┤
 │ [Expand/Collapse] Show Individual Properties ▼                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -4245,9 +4247,9 @@ Deed Book 1234, Page 567 (Sale Date: 03/15/2024)
 
 **Sortable Columns:**
 ```
-┌─────────────────────────────────────────────────────────────���────────────────┐
+┌──────────────────────────────────────────────────��──────────���────────────────┐
 │ VCS ▲│ Block │ Lot │ Cards │ Sale Price  │ Norm Price  │ SFLA  │ Year Built │
-├──────────────────────────────────────────────────────────────────────────────┤
+├─────────────��────────────────────────────────────────────────────────────────┤
 │ A1   │  123  │  45 │  2    │  $385,000   │  $390,000   │ 2,450 │    1988    │
 │ A1   │  124  │  12 │  3    │  $425,000   │  $435,000   │ 2,850 │    1992    │
 │ B2   │  234  │  67 │  2    │  $310,000   │  $315,000   │ 2,100 │    1985    │
@@ -4765,7 +4767,7 @@ console.log('Calculation breakdown:', {
 │                                             │
 │   Suggestions:                              │
 │   • Check spelling of match value           │
-│   • Try different field                     │
+│   • Try different field                     ���
 │   • Verify field exists in raw data         │
 │   • Check property type filter              │
 └─────────────────────────────────────────────┘
