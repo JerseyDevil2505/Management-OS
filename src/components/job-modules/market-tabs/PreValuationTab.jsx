@@ -1171,7 +1171,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           });
 
           // Also log all property keys to see what's available
-          if (false) console.log(`����� Sale ${index + 1} ALL AVAILABLE KEYS:`, Object.keys(prop));
+          if (false) console.log(`��� Sale ${index + 1} ALL AVAILABLE KEYS:`, Object.keys(prop));
         }
         
         // Determine if outlier based on equalization ratio
@@ -3079,10 +3079,10 @@ const analyzeImportFile = async (file) => {
                           type="button"
                           onClick={exportNormalizedSalesToExcel}
                           className="px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 flex items-center gap-2"
-                          title="Export all normalized sales to Excel"
+                          title="Export all properties with normalization data to Excel (includes properties without sales)"
                         >
                           <Download size={16} />
-                          Export to Excel
+                          Export Master File
                         </button>
 
                       </div>
