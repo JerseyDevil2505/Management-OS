@@ -48,6 +48,14 @@
 
 ## Recent Schema Optimizations (September 2024)
 
+### Job Archive & Lifecycle Management (January 2025)
+- **New Feature**: Archive/restore jobs with checklist validation
+- **Database Fields**: Added `archived_at` (timestamp) and `archived_by` (uuid) to `jobs` table
+- **Billing Integration**: Archived jobs automatically move from Active to Legacy in BillingManagement
+- **User Experience**: Warning modal if checklist incomplete, option to archive anyway, restore button on archived jobs
+- **Filter Logic**: `activeJobs` excludes archived, `legacyJobs` includes archived regardless of job_type
+- **Data Preservation**: All payment history and job data preserved when archived
+
 ### The Performance Crisis
 - **Problem**: 50,000+ total properties across all jobs (16,000+ in largest single job)
 - **Issue**: Each property storing its own `raw_data` JSONB field created massive bottlenecks
@@ -2379,7 +2387,7 @@ Each tab receives:
 │ Properties with Issues: 342                 │
 │ Critical: 45 | Warnings: 187 | Info: 110   │
 │ Quality Score: 93.4%                        │
-└─────────────────────────────────────────────┘
+���─────────────────────────────────────────────┘
 ```
 
 **Quality Score Calculation:**
@@ -2915,7 +2923,7 @@ VCS A1 - Lot Size Analysis
 **Standard 6-Step Cascade Example:**
 ```
 VCS A1 - Residential Cascade
-┌───────────────────────────────────��─────────┐
+┌───────────────────────────���───────��─────────┐
 │ Break Point │ Rate/Acre │ Degradation      │
 ├─────────────────────────────────────────────┤
 │ 0.00 - 0.50 │ $45,000   │ BASELINE         │
@@ -3060,7 +3068,7 @@ VCS A1 - Base Rate: $45,000/acre
 ```
 ┌─────��───────────────────────────────────────────┐
 │ VCS │ Avg Allocation │ Target │ Status          │
-├─────────────────────────────────────────────────┤
+├───────��─────────────────────────────────────────┤
 │ A1  │ 28.5%          │ 30%    │ ✓ Within Range  │
 │ B2  │ 42.1%          │ 30%    │ ⚠ High - Review │
 │ C3  │ 18.2%          │ 30%    │ ⚠ Low - Review  │
@@ -4191,7 +4199,7 @@ const packagePairs = Object.values(packages).filter(group => group.length > 1);
 
 **Package Analysis Results:**
 ```
-┌─────────────────────────────────────────────────────────────────────┐
+┌────────────────��────────────────────────────────────────────────────┐
 │ Package Sales Analysis                                              │
 ├────────────────���────────────────────────────────────────────────────┤
 │ Package Pairs Found: 12                                             │
@@ -4243,7 +4251,7 @@ Deed Book 1234, Page 567 (Sale Date: 03/15/2024)
 │   └── (Accounts for increased living area)                                  │
 ├─────���──────────────────────────���────────────────────────────────────────────┤
 │ [Expand/Collapse] Show Individual Properties ▼                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────────────��───────┘
 ```
 
 **Expandable VCS Sections:**
@@ -4796,7 +4804,7 @@ console.log('Calculation breakdown:', {
 │   • Try different field                     ���
 │   • Verify field exists in raw data         │
 │   • Check property type filter              │
-└─────────────────────────────────────────────┘
+└─────────────────────────────────────────────��
 ```
 
 **3. Insufficient Data for Analysis:**
