@@ -1353,25 +1353,34 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
   };
 
   const exportNormalizedSalesToExcel = useCallback(() => {
-    if (!timeNormalizedSales || timeNormalizedSales.length === 0) {
-      alert('No normalized sales data available to export. Please run Time Normalization first.');
+    if (!properties || properties.length === 0) {
+      alert('No property data available to export.');
       return;
     }
 
-    // Prepare data for export
-    const exportData = timeNormalizedSales.map(sale => {
-      const parsed = parseCompositeKey(sale.property_composite_key);
-      const packageData = interpretCodes.getPackageSaleData(properties, sale);
+    // Create a map of normalized sales for quick lookup
+    const normalizedSalesMap = new Map();
+    if (timeNormalizedSales && timeNormalizedSales.length > 0) {
+      timeNormalizedSales.forEach(sale => {
+        normalizedSalesMap.set(sale.id, sale);
+      });
+    }
 
-      let packageInfo = '-';
+    // Prepare data for export - ALL properties
+    const exportData = properties.map(prop => {
+      const parsed = parseCompositeKey(prop.property_composite_key);
+      const normalizedData = normalizedSalesMap.get(prop.id);
+      const packageData = interpretCodes.getPackageSaleData(properties, prop);
+
+      let packageInfo = '';
       if (packageData) {
         if (packageData.is_farm_package) {
           packageInfo = `Farm (${packageData.package_count})`;
         } else if (packageData.is_additional_card) {
           packageInfo = `Addl Card (${packageData.package_count})`;
         } else {
-          const deedRef = sale.sales_book && sale.sales_page ?
-            `${sale.sales_book}/${sale.sales_page}` : 'Package';
+          const deedRef = prop.sales_book && prop.sales_page ?
+            `${prop.sales_book}/${prop.sales_page}` : 'Package';
           packageInfo = `Pkg ${deedRef} (${packageData.package_count})`;
         }
       }
@@ -1380,22 +1389,24 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         'Block': parsed.block || '',
         'Lot': parsed.lot || '',
         'Qualifier': parsed.qualifier || '',
-        'Card': parsed.card || '1',
-        'Location': sale.property_location || '',
-        'Class': sale.property_m4_class || sale.property_class || sale.asset_building_class || '',
-        'Type': getTypeUseDisplay(sale) || '',
+        'Card': parsed.card || '',
+        'Location': prop.property_location || '',
+        'Class': prop.property_m4_class || prop.property_class || prop.asset_building_class || '',
+        'Type': getTypeUseDisplay(prop) || '',
+        'Design': getDesignDisplay(prop) || '',
+        'SFLA': prop.asset_sfla || '',
+        'Year Built': prop.asset_year_built || '',
         'Package': packageInfo,
-        'Assessed Value': sale.values_mod_total || sale.assessed_value || sale.total_assessed || 0,
-        'Sale Date': sale.sales_date ? new Date(sale.sales_date).toLocaleDateString() : '',
-        'Sale Price': sale.sales_price || 0,
-        'Time Normalized Price': sale.time_normalized_price || 0,
-        'Size Normalized Price': sale.size_normalized_price || '',
-        'Sale NU': sale.sales_nu || sale.sales_instrument || sale.nu || sale.sale_nu || '',
-        'Sales Ratio': sale.sales_ratio ? (sale.sales_ratio * 100).toFixed(2) + '%' : '',
-        'Status': sale.is_outlier ? 'Outlier' : 'Valid',
-        'Decision': sale.keep_reject === 'keep' ? 'Keep' : sale.keep_reject === 'reject' ? 'Reject' : 'Pending',
-        'SFLA': sale.asset_sfla || '',
-        'Size Adjustment': sale.size_adjustment ? Math.round(sale.size_adjustment) : ''
+        'Assessed Value': prop.values_mod_total || prop.assessed_value || prop.total_assessed || '',
+        'Sale Date': prop.sales_date ? new Date(prop.sales_date).toLocaleDateString() : '',
+        'Sale Price': prop.sales_price || '',
+        'Sale NU': prop.sales_nu || prop.sales_instrument || prop.nu || prop.sale_nu || '',
+        'Time Normalized Price': normalizedData?.time_normalized_price || '',
+        'Size Normalized Price': normalizedData?.size_normalized_price || '',
+        'Sales Ratio': normalizedData?.sales_ratio ? (normalizedData.sales_ratio * 100).toFixed(2) + '%' : '',
+        'Status': normalizedData ? (normalizedData.is_outlier ? 'Outlier' : 'Valid') : '',
+        'Decision': normalizedData ? (normalizedData.keep_reject === 'keep' ? 'Keep' : normalizedData.keep_reject === 'reject' ? 'Reject' : 'Pending') : '',
+        'Size Adjustment': normalizedData?.size_adjustment ? Math.round(normalizedData.size_adjustment) : ''
       };
     });
 
