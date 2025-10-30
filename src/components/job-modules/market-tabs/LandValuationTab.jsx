@@ -2035,6 +2035,13 @@ const getPricePerUnit = useCallback((price, size) => {
         xlargeRange: [] // 10.00+ acre rates
       };
 
+      // Also collect avgAcres for each bracket range
+      const bracketAcres = {
+        mediumRange: [],
+        largeRange: [],
+        xlargeRange: []
+      };
+
       Object.keys(vcsSales).forEach(vcs => {
         // Skip excluded VCSs from summary calculation
         if (excludedMethod2VCS.has(vcs)) return;
@@ -8769,7 +8776,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'normTime' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '���' : '↓') : ''}
+                      Norm Time {modalSortField === 'normTime' ? (modalSortDirection === 'asc' ? '�����' : '↓') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('acres')}
