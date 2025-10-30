@@ -174,7 +174,7 @@ JobContainer (loads once with pagination)
 │   │   └── job-modules/               ← Job-specific workflow modules
 │   │       ├── JobContainer.jsx       ← Job module dispatcher, navigation & DATA LOADER (NEW ROLE!)
 │   │       ├── ManagementChecklist.jsx ← 29-item workflow management (IMPLEMENTED)
-│   │       ├── ProductionTracker.jsx  ← Analytics & payroll engine (IMPLEMENTED - 4,400+ lines!)
+│   ��       ├── ProductionTracker.jsx  ← Analytics & payroll engine (IMPLEMENTED - 4,400+ lines!)
 │   │       ├── FileUploadButton.jsx   ← Comparison engine & workflow orchestrator (CORRECTED LOCATION!)
 │   │       ├── MarketAnalysis.jsx     ← 6-tab valuation parent component (173 lines - orchestrator)
 │   │       ├── market-tabs/           ← Market analysis tab components (NEW PATTERN!)
@@ -203,7 +203,7 @@ JobContainer (loads once with pagination)
 │   │   └── data-pipeline/             ← Vendor-specific file processing
 │   │       ├── brt-processor.js       ← BRT initial job creation (INSERT)
 │   │       ├── brt-updater.js         ← BRT ongoing updates (UPSERT)
-│   │       ├─��� microsystems-processor.js  ← Microsystems initial job creation (INSERT)
+│   │       ├─��� microsystems-processor.js  ��� Microsystems initial job creation (INSERT)
 │   │       └── microsystems-updater.js    ← Microsystems ongoing updates (UPSERT)
 │   │
 │   ├── App.js                         ← Central navigation + module state hub (MAIN APP)
@@ -1927,6 +1927,32 @@ Each module receives the complete data package, preventing need for individual q
 - Delete planning jobs
 - Track potential contract values
 
+**Archive & Job Lifecycle Management:**
+- **Archive Job Function**: Moves completed jobs from Active to Archived status
+  - Validates checklist completion before archiving (shows warning modal if items incomplete)
+  - Option to archive anyway if checklist has open items
+  - Sets `archived_at` timestamp and `archived_by` user ID
+  - Changes job status to 'archived'
+  - Archives button only visible on Active Jobs tab
+- **Restore Job Function**: Restores archived jobs back to active status
+  - Clears `archived_at` and `archived_by` fields
+  - Changes job status back to 'active'
+  - Unarchive button only visible on Archived Jobs tab
+- **Billing Integration**: Archived jobs automatically move from Active Jobs to Legacy Jobs in BillingManagement
+  - Filter logic: `activeJobs` = standard jobs NOT archived
+  - Filter logic: `legacyJobs` = legacy_billing jobs OR archived jobs
+  - Payment history preserved when archived
+- **Checklist Integration**: Uses `checklistService.getChecklistItems()` to verify completion status
+- **User Experience**:
+  - Archive confirmation modal with clear messaging
+  - Checklist warning modal shows incomplete items by name
+  - "Restore to Active" button with green styling on archived jobs
+  - Processing states prevent double-clicks
+- **Database Fields**:
+  - `jobs.archived_at` - timestamp with time zone
+  - `jobs.archived_by` - uuid reference to users table
+  - `jobs.status` - updated to 'archived' or 'active'
+
 **Manager Assignments Display:**
 - Visual workload cards per manager
 - Color-coded workload levels (green/yellow/red)
@@ -2618,7 +2644,7 @@ standardLocations = [
 
 **Statistics Display:**
 ```
-┌──────────────────────────────────────────���───────────────���─┐
+┌─────────────────────────��────────────────���───────────────���─┐
 │ Type Use │ Total │ Avg Year │ Avg Size │ Sales │ Adj Price │
 ├────────────────────────────────────────────────────────────┤
 │ Single   │ 1,234 │   1985   │  1,850   │  156  │ $285,000  │
@@ -3697,7 +3723,7 @@ Recommended Factor: 1.12 (median)
 
 **Bottom-of-Component Display:**
 ```
-┌─────────────────────────────────────────────────────────────┐
+┌──���──────────────────────────────────────────────────────────┐
 │                    SUMMARY STATISTICS                       │
 ├─────────────────────────────────────────────────────────────┤
 │ Included Properties: 42                                     │
@@ -4025,7 +4051,7 @@ Purpose:
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Condition │ Count │ Avg SFLA │ Avg Year │ Avg Value  │ Flat Adj  │ % Adj    │
-├─────────────────────────────��────────────────────────────────────────────────┤
+├─────────────────────────────��─────────────────────────────��──────────────────┤
 │ EXCELLENT │   89  │  1,920   │   1992   │ $325,000   │ +$34,075  │ +11.95%  │
 │ GOOD ⭐   │  234  │  1,850   │   1985   │ $285,000   │ BASELINE  │ BASELINE │
 │ AVERAGE   │  156  │  1,830   │   1978   │ $255,000   │ -$30,000  │ -10.53%  │
@@ -4173,7 +4199,7 @@ const packagePairs = Object.values(packages).filter(group => group.length > 1);
 │ Average Package Price: $425,000                                     │
 │ Average Single Property (same VCS): $285,000                        │
 │ Expected Value (2 × $285,000): $570,000                             │
-│                                                                      │
+│                                                                      ��
 │ Package Discount: -$145,000 (-25.4%)                                │
 │ (Typical: Buyers pay less for bulk purchases)                       │
 └─────────────────────────────────────────────────────────────────────┘
@@ -4199,7 +4225,7 @@ Deed Book 1234, Page 567 (Sale Date: 03/15/2024)
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ VCS: A1 - DOWNTOWN RESIDENTIAL                                              │
-├─────────────────���───────────────────────────────────────────────────────────┤
+├─────────────────���───────────────────────────���───────────────────────────────┤
 │ WITH Additional Cards (23 properties):                                      │
 │   ├── Average SFLA: 2,450 SF (combined from all cards)                      │
 │   ├── Average Year Built: 1988                                              │
@@ -4215,7 +4241,7 @@ Deed Book 1234, Page 567 (Sale Date: 03/15/2024)
 │   ├── Flat Adjustment: +$65,000 per additional card                         │
 │   ├── Percentage: +22.81%                                                   │
 │   └── (Accounts for increased living area)                                  │
-├─────���───────────────────────────────────────────────────────────────────────┤
+├─────���──────────────────────────���────────────────────────────────────────────┤
 │ [Expand/Collapse] Show Individual Properties ▼                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -4247,7 +4273,7 @@ Deed Book 1234, Page 567 (Sale Date: 03/15/2024)
 
 **Sortable Columns:**
 ```
-┌──────────────────────────────────────────────────��──────────���────────────────┐
+┌──────────────────────────────────────────────────��──────────���────────────��───┐
 │ VCS ▲│ Block │ Lot │ Cards │ Sale Price  │ Norm Price  │ SFLA  │ Year Built │
 ├─────────────��────────────────────────────────────────────────────────────────┤
 │ A1   │  123  │  45 │  2    │  $385,000   │  $390,000   │ 2,450 │    1988    │
@@ -4688,7 +4714,7 @@ window.DEBUG_ATTRIBUTE_CARDS = true
 │ ├── Valid NU codes: 423                     │
 │ ├── Invalid NU codes: 18                    │
 │ ├── Missing sale price: 6                   │
-│ └── Missing sale date: 3                    │
+│ └── Missing sale date: 3                    ��
 └─────────────────────────────────────────────┘
 ```
 
