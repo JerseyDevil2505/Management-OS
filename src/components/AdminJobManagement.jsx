@@ -2527,7 +2527,7 @@ const AdminJobManagement = ({
                             <Eye className="w-4 h-4" />
                             <span>Go to Job</span>
                           </button>
-                          <button 
+                          <button
                             onClick={() => {
                               setEditingJob(job);
                               setNewJob({
@@ -2551,7 +2551,15 @@ const AdminJobManagement = ({
                             <Edit3 className="w-4 h-4" />
                             <span>Edit</span>
                           </button>
-                          <button 
+                          <button
+                            onClick={() => archiveJob(job)}
+                            className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                            title="Archive this job"
+                          >
+                            <Archive className="w-4 h-4" />
+                            <span>Archive</span>
+                          </button>
+                          <button
                             onClick={() => setShowDeleteConfirm(job)}
                             className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
                           >
