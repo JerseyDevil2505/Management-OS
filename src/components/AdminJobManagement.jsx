@@ -2195,6 +2195,76 @@ const AdminJobManagement = ({
         </div>
       )}
 
+      {/* Checklist Warning Modal */}
+      {archiveChecklistWarning && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full p-6 shadow-2xl">
+            <div className="text-center mb-4">
+              <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-yellow-600" />
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Incomplete Checklist Items</h3>
+              <p className="text-gray-600 mb-4">
+                "{archiveChecklistWarning.job.name}" has {archiveChecklistWarning.incompleteCount} incomplete checklist items:
+              </p>
+            </div>
+            <div className="max-h-60 overflow-y-auto mb-6 bg-gray-50 rounded-lg p-4">
+              <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
+                {archiveChecklistWarning.items.map((item, idx) => (
+                  <li key={idx}>{item}</li>
+                ))}
+              </ul>
+            </div>
+            <p className="text-sm text-gray-600 mb-6 text-center">
+              Are you sure you want to archive this job with incomplete items?
+            </p>
+            <div className="flex justify-center space-x-3">
+              <button
+                onClick={() => setArchiveChecklistWarning(null)}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium shadow-md hover:shadow-lg transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmArchive}
+                disabled={processing}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium shadow-md hover:shadow-lg transition-all disabled:opacity-50"
+              >
+                {processing ? 'Archiving...' : 'Archive Anyway'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Archive Confirmation Modal */}
+      {showArchiveConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-2xl">
+            <div className="text-center">
+              <Archive className="w-12 h-12 mx-auto mb-4 text-purple-600" />
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Archive Job</h3>
+              <p className="text-gray-600 mb-6">
+                Archive "{showArchiveConfirm.name}"? This will move the job to archived jobs and to Legacy Jobs in Billing. You can restore it later if needed.
+              </p>
+              <div className="flex justify-center space-x-3">
+                <button
+                  onClick={() => setShowArchiveConfirm(null)}
+                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium shadow-md hover:shadow-lg transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmArchive}
+                  disabled={processing}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium shadow-md hover:shadow-lg transition-all disabled:opacity-50"
+                >
+                  {processing ? 'Archiving...' : 'Archive Job'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
