@@ -37,6 +37,8 @@ const AdminJobManagement = ({
   const [loading, setLoading] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(null);
+  const [archiveChecklistWarning, setArchiveChecklistWarning] = useState(null);
 
   // Processing and notification state
   const [processingStatus, setProcessingStatus] = useState({
@@ -1238,6 +1240,93 @@ const AdminJobManagement = ({
     } catch (error) {
       console.error('Planning job update error:', error);
       addNotification('Error updating planning job: ' + error.message, 'error');
+    }
+  };
+
+  // Archive job function
+  const archiveJob = async (job) => {
+    try {
+      // Check checklist status
+      const checklistItems = await checklistService.getChecklistItems(job.id);
+      const incompleteItems = checklistItems.filter(item => item.status !== 'completed');
+
+      if (incompleteItems.length > 0) {
+        setArchiveChecklistWarning({
+          job: job,
+          incompleteCount: incompleteItems.length,
+          items: incompleteItems.map(i => i.item_text)
+        });
+        return;
+      }
+
+      // Proceed with archive
+      setShowArchiveConfirm(job);
+    } catch (error) {
+      addNotification('Error checking checklist status: ' + error.message, 'error');
+    }
+  };
+
+  const confirmArchive = async () => {
+    const job = showArchiveConfirm || archiveChecklistWarning?.job;
+    if (!job) return;
+
+    try {
+      setProcessing(true);
+
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const { error } = await supabase
+        .from('jobs')
+        .update({
+          archived_at: new Date().toISOString(),
+          archived_by: user?.id,
+          status: 'archived'
+        })
+        .eq('id', job.id);
+
+      if (error) throw error;
+
+      addNotification(`Job "${job.name}" archived successfully`, 'success');
+      setShowArchiveConfirm(null);
+      setArchiveChecklistWarning(null);
+
+      // Refresh data
+      if (onRefresh) {
+        await onRefresh();
+      }
+    } catch (error) {
+      addNotification('Error archiving job: ' + error.message, 'error');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // Unarchive job function
+  const unarchiveJob = async (job) => {
+    try {
+      setProcessing(true);
+
+      const { error } = await supabase
+        .from('jobs')
+        .update({
+          archived_at: null,
+          archived_by: null,
+          status: 'active'
+        })
+        .eq('id', job.id);
+
+      if (error) throw error;
+
+      addNotification(`Job "${job.name}" restored to active`, 'success');
+
+      // Refresh data
+      if (onRefresh) {
+        await onRefresh();
+      }
+    } catch (error) {
+      addNotification('Error unarchiving job: ' + error.message, 'error');
+    } finally {
+      setProcessing(false);
     }
   };
 
