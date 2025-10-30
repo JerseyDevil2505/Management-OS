@@ -3061,6 +3061,17 @@ const analyzeImportFile = async (file) => {
                           Reject All Outlier
                         </button>
 
+                        {/* Export to Excel button */}
+                        <button
+                          type="button"
+                          onClick={exportNormalizedSalesToExcel}
+                          className="px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 flex items-center gap-2"
+                          title="Export all normalized sales to Excel"
+                        >
+                          <Download size={16} />
+                          Export to Excel
+                        </button>
+
                       </div>
                     </div>
 
