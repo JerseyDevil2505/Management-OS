@@ -1248,7 +1248,13 @@ const AdminJobManagement = ({
     try {
       // Check checklist status
       const checklistItems = await checklistService.getChecklistItems(job.id);
-      const incompleteItems = checklistItems.filter(item => item.status !== 'completed');
+
+      // For reassessment, exclude analysis and completion items (they're not applicable)
+      const applicableItems = job.project_type === 'reassessment'
+        ? checklistItems.filter(item => item.category !== 'analysis' && item.category !== 'completion')
+        : checklistItems;
+
+      const incompleteItems = applicableItems.filter(item => item.status !== 'completed');
 
       if (incompleteItems.length > 0) {
         setArchiveChecklistWarning({
