@@ -48,6 +48,14 @@
 
 ## Recent Schema Optimizations (September 2024)
 
+### Job Archive & Lifecycle Management (January 2025)
+- **New Feature**: Archive/restore jobs with checklist validation
+- **Database Fields**: Added `archived_at` (timestamp) and `archived_by` (uuid) to `jobs` table
+- **Billing Integration**: Archived jobs automatically move from Active to Legacy in BillingManagement
+- **User Experience**: Warning modal if checklist incomplete, option to archive anyway, restore button on archived jobs
+- **Filter Logic**: `activeJobs` excludes archived, `legacyJobs` includes archived regardless of job_type
+- **Data Preservation**: All payment history and job data preserved when archived
+
 ### The Performance Crisis
 - **Problem**: 50,000+ total properties across all jobs (16,000+ in largest single job)
 - **Issue**: Each property storing its own `raw_data` JSONB field created massive bottlenecks
@@ -174,7 +182,7 @@ JobContainer (loads once with pagination)
 │   │   └── job-modules/               ← Job-specific workflow modules
 │   │       ├── JobContainer.jsx       ← Job module dispatcher, navigation & DATA LOADER (NEW ROLE!)
 │   │       ├── ManagementChecklist.jsx ← 29-item workflow management (IMPLEMENTED)
-│   │       ├── ProductionTracker.jsx  ← Analytics & payroll engine (IMPLEMENTED - 4,400+ lines!)
+│   ��       ├── ProductionTracker.jsx  ← Analytics & payroll engine (IMPLEMENTED - 4,400+ lines!)
 │   │       ├── FileUploadButton.jsx   ← Comparison engine & workflow orchestrator (CORRECTED LOCATION!)
 │   │       ├── MarketAnalysis.jsx     ← 6-tab valuation parent component (173 lines - orchestrator)
 │   │       ├── market-tabs/           ← Market analysis tab components (NEW PATTERN!)
@@ -203,7 +211,7 @@ JobContainer (loads once with pagination)
 │   │   └── data-pipeline/             ← Vendor-specific file processing
 │   │       ├── brt-processor.js       ← BRT initial job creation (INSERT)
 │   │       ├── brt-updater.js         ← BRT ongoing updates (UPSERT)
-│   │       ├── microsystems-processor.js  ← Microsystems initial job creation (INSERT)
+│   │       ├─��� microsystems-processor.js  ��� Microsystems initial job creation (INSERT)
 │   │       └── microsystems-updater.js    ← Microsystems ongoing updates (UPSERT)
 │   │
 │   ├── App.js                         ← Central navigation + module state hub (MAIN APP)
@@ -667,6 +675,8 @@ export const interpretCodes = {
 
 | Column | Data Type | Notes |
 |--------|-----------|-------|
+| archived_at | timestamp with time zone | **NEW** - Job archive timestamp |
+| archived_by | uuid | **NEW** - User who archived the job |
 | assessor_email | text | |
 | assessor_name | text | |
 | assigned_has_commercial | boolean | |
@@ -1806,7 +1816,7 @@ Each component receives:
 ```
 ┌─��───────────────────────────────────────────────┐
 │ Loading property records                     75% │
-│ ████████████████████████░░��░░░░░  12,450/16,600 │
+│ ███████████���████████████░░��░░░░░  12,450/16,600 │
 │ records loaded (assigned only)                   │
 └─────────────────────────────────────────────────┘
 ```
@@ -1924,6 +1934,32 @@ Each module receives the complete data package, preventing need for individual q
 - Convert planning job to active job
 - Delete planning jobs
 - Track potential contract values
+
+**Archive & Job Lifecycle Management:**
+- **Archive Job Function**: Moves completed jobs from Active to Archived status
+  - Validates checklist completion before archiving (shows warning modal if items incomplete)
+  - Option to archive anyway if checklist has open items
+  - Sets `archived_at` timestamp and `archived_by` user ID
+  - Changes job status to 'archived'
+  - Archives button only visible on Active Jobs tab
+- **Restore Job Function**: Restores archived jobs back to active status
+  - Clears `archived_at` and `archived_by` fields
+  - Changes job status back to 'active'
+  - Unarchive button only visible on Archived Jobs tab
+- **Billing Integration**: Archived jobs automatically move from Active Jobs to Legacy Jobs in BillingManagement
+  - Filter logic: `activeJobs` = standard jobs NOT archived
+  - Filter logic: `legacyJobs` = legacy_billing jobs OR archived jobs
+  - Payment history preserved when archived
+- **Checklist Integration**: Uses `checklistService.getChecklistItems()` to verify completion status
+- **User Experience**:
+  - Archive confirmation modal with clear messaging
+  - Checklist warning modal shows incomplete items by name
+  - "Restore to Active" button with green styling on archived jobs
+  - Processing states prevent double-clicks
+- **Database Fields**:
+  - `jobs.archived_at` - timestamp with time zone
+  - `jobs.archived_by` - uuid reference to users table
+  - `jobs.status` - updated to 'archived' or 'active'
 
 **Manager Assignments Display:**
 - Visual workload cards per manager
@@ -2351,7 +2387,7 @@ Each tab receives:
 │ Properties with Issues: 342                 │
 │ Critical: 45 | Warnings: 187 | Info: 110   │
 │ Quality Score: 93.4%                        │
-└─────────────────────────────────────────────┘
+���─────────────────────────────────────────────┘
 ```
 
 **Quality Score Calculation:**
@@ -2616,7 +2652,7 @@ standardLocations = [
 
 **Statistics Display:**
 ```
-┌──────────────────────────────────────────���─────────────────┐
+┌─────────────────────────��────────────────���───────────────���─┐
 │ Type Use │ Total │ Avg Year │ Avg Size │ Sales │ Adj Price │
 ├────────────────────────────────────────────────────────────┤
 │ Single   │ 1,234 │   1985   │  1,850   │  156  │ $285,000  │
@@ -2670,7 +2706,7 @@ floorPremium = ((floorPrice - firstFloorPrice) / firstFloorPrice) × 100
 │ 2ND FLOOR │  189  │ $162,000  │ -2%          │
 │ 3RD FLOOR │  145  │ $158,000  │ -4%          │
 │ PENTHOUSE │   12  │ $195,000  │ +18%         │
-└──────���───────────────────────────────────────┘
+└──────���─────────────���─────────────────────────┘
 ```
 
 **Bedroom Detection Logic:**
@@ -2887,7 +2923,7 @@ VCS A1 - Lot Size Analysis
 **Standard 6-Step Cascade Example:**
 ```
 VCS A1 - Residential Cascade
-┌───────────────────────────────────��─────────┐
+┌───────────────────────────���───────��─────────┐
 │ Break Point │ Rate/Acre │ Degradation      │
 ├─────────────────────────────────────────────┤
 │ 0.00 - 0.50 │ $45,000   │ BASELINE         │
@@ -3032,7 +3068,7 @@ VCS A1 - Base Rate: $45,000/acre
 ```
 ┌─────��───────────────────────────────────────────┐
 │ VCS │ Avg Allocation │ Target │ Status          │
-├─────────────────────────────────────────────────┤
+├───────��─────────────────────────────────────────┤
 │ A1  │ 28.5%          │ 30%    │ ✓ Within Range  │
 │ B2  │ 42.1%          │ 30%    │ ⚠ High - Review │
 │ C3  │ 18.2%          │ 30%    │ ⚠ Low - Review  │
@@ -3695,7 +3731,7 @@ Recommended Factor: 1.12 (median)
 
 **Bottom-of-Component Display:**
 ```
-┌─────────────────────────────────────────────────────────────┐
+┌──���──────────────────────────────────────────────────────────┐
 │                    SUMMARY STATISTICS                       │
 ├─────────────────────────────────────────────────────────────┤
 │ Included Properties: 42                                     │
@@ -4021,9 +4057,9 @@ Purpose:
 
 **Condition Analysis Results Table:**
 ```
-┌──────────────────────────────────────────────────────────────────────────────┐
+┌─────────────────────────────���────────────────────────────────────────────────┐
 │ Condition │ Count │ Avg SFLA │ Avg Year │ Avg Value  │ Flat Adj  │ % Adj    │
-├─────────────────────────────��────────────────────────────────────────────────┤
+├─────────────────────────────��─────────────────────────────��──────────────────┤
 │ EXCELLENT │   89  │  1,920   │   1992   │ $325,000   │ +$34,075  │ +11.95%  │
 │ GOOD ⭐   │  234  │  1,850   │   1985   │ $285,000   │ BASELINE  │ BASELINE │
 │ AVERAGE   │  156  │  1,830   │   1978   │ $255,000   │ -$30,000  │ -10.53%  │
@@ -4084,7 +4120,7 @@ Run Analysis button triggers:
 
 **Custom Attribute Results:**
 ```
-┌─────────────────────────────────────────────────────────────────────┐
+┌──────────────────��──────────────────────────────────────────────────┐
 │ Attribute: POOL = "Y"                                               │
 ├─────────────────────────────────────────────────────────────────────┤
 │ WITH Pool (89 properties):                                          │
@@ -4098,7 +4134,7 @@ Run Analysis button triggers:
 │   └── Average Normalized Value: $285,000                            │
 │                                                                      │
 │ Jim's Adjusted Impact:                                              │
-│   ├── Flat Adjustment: +$35,250                                     │
+│   ├��─ Flat Adjustment: +$35,250                                     │
 │   ├── Percentage: +12.37%                                           │
 │   └── (Size-adjusted using 50% method)                              │
 └─────────────────────────────────────────────────────────────────────┘
@@ -4163,7 +4199,7 @@ const packagePairs = Object.values(packages).filter(group => group.length > 1);
 
 **Package Analysis Results:**
 ```
-┌─────────────────────────────────────────────────────────────────────┐
+┌────────────────��────────────────────────────────────────────────────┐
 │ Package Sales Analysis                                              │
 ├────────────────���────────────────────────────────────────────────────┤
 │ Package Pairs Found: 12                                             │
@@ -4171,7 +4207,7 @@ const packagePairs = Object.values(packages).filter(group => group.length > 1);
 │ Average Package Price: $425,000                                     │
 │ Average Single Property (same VCS): $285,000                        │
 │ Expected Value (2 × $285,000): $570,000                             │
-│                                                                      │
+│                                                                      ��
 │ Package Discount: -$145,000 (-25.4%)                                │
 │ (Typical: Buyers pay less for bulk purchases)                       │
 └─────────────────────────────────────────────────────────────────────┘
@@ -4197,7 +4233,7 @@ Deed Book 1234, Page 567 (Sale Date: 03/15/2024)
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ VCS: A1 - DOWNTOWN RESIDENTIAL                                              │
-├─────────────────���───────────────────────────────────────────────────────────┤
+├─────────────────���───────────────────────────���───────────────────────────────┤
 │ WITH Additional Cards (23 properties):                                      │
 │   ├── Average SFLA: 2,450 SF (combined from all cards)                      │
 │   ├── Average Year Built: 1988                                              │
@@ -4213,9 +4249,9 @@ Deed Book 1234, Page 567 (Sale Date: 03/15/2024)
 │   ├── Flat Adjustment: +$65,000 per additional card                         │
 │   ├── Percentage: +22.81%                                                   │
 │   └── (Accounts for increased living area)                                  │
-├─────────────────────────────────────────────────────────────────────────────┤
+├─────���──────────────────────────���────────────────────────────────────────────┤
 │ [Expand/Collapse] Show Individual Properties ▼                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────────────��───────┘
 ```
 
 **Expandable VCS Sections:**
@@ -4245,9 +4281,9 @@ Deed Book 1234, Page 567 (Sale Date: 03/15/2024)
 
 **Sortable Columns:**
 ```
-┌─────────────────────────────────────────────────────────────���────────────────┐
+┌──────────────────────────────────────────────────��──────────���────────────��───┐
 │ VCS ▲│ Block │ Lot │ Cards │ Sale Price  │ Norm Price  │ SFLA  │ Year Built │
-├──────────────────────────────────────────────────────────────────────────────┤
+├─────────────��────────────────────────────────────────────────────────────────┤
 │ A1   │  123  │  45 │  2    │  $385,000   │  $390,000   │ 2,450 │    1988    │
 │ A1   │  124  │  12 │  3    │  $425,000   │  $435,000   │ 2,850 │    1992    │
 │ B2   │  234  │  67 │  2    │  $310,000   │  $315,000   │ 2,100 │    1985    │
@@ -4679,14 +4715,14 @@ window.DEBUG_ATTRIBUTE_CARDS = true
 ├─────────────────────────────────────────────┤
 │ Total Properties: 1,500                     │
 │ Expected Sales: 450 (30% sales ratio)       │
-│ Actual Valid Sales: 423                     │
+│ Actual Valid Sales: 423                     ���
 │ Excluded: 27 (invalid sales NU)             │
 │                                             │
 │ Breakdown:                                  │
 │ ├── Valid NU codes: 423                     │
 │ ├── Invalid NU codes: 18                    │
 │ ├── Missing sale price: 6                   │
-│ └── Missing sale date: 3                    │
+│ └── Missing sale date: 3                    ��
 └─────────────────────────────────────────────┘
 ```
 
@@ -4755,7 +4791,7 @@ console.log('Calculation breakdown:', {
 
 **2. No Matching Data Found:**
 ```
-┌─────────────────────────────────────────────┐
+┌────────────────────────────��────────────────┐
 │   🔍 Custom Attribute Analysis              │
 │                                             │
 │   Field: POOL                               │
@@ -4765,10 +4801,10 @@ console.log('Calculation breakdown:', {
 │                                             │
 │   Suggestions:                              │
 │   • Check spelling of match value           │
-│   • Try different field                     │
+│   • Try different field                     ���
 │   • Verify field exists in raw data         │
 │   • Check property type filter              │
-└─────────────────────────────────────────────┘
+└─────────────────────────────────────────────��
 ```
 
 **3. Insufficient Data for Analysis:**
@@ -4982,6 +5018,14 @@ console.log('Calculation breakdown:', {
 - Contract setup warnings
 - Billing completion badges
 - Quick actions: Setup Contract, Add Billing, View History
+- **Archive Integration**: Only shows jobs with `job_type = 'standard'` AND `archived_at IS NULL`
+  - Archived jobs automatically move to Legacy Jobs tab
+
+**Legacy Jobs Tab:**
+- Shows jobs with `job_type = 'legacy_billing'` OR `archived_at IS NOT NULL`
+- **Archive Integration**: Archived jobs from Active appear here automatically
+- Payment history and contract details preserved for archived jobs
+- All billing functionality remains available for archived jobs
 
 **Expenses Tab:**
 - Monthly breakdown grid

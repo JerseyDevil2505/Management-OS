@@ -3,7 +3,7 @@ import {
   Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye,
   DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X, Clock
 } from 'lucide-react';
-import { supabase, employeeService, jobService, planningJobService, utilityService, authService, propertyService } from '../lib/supabaseClient';
+import { supabase, employeeService, jobService, planningJobService, utilityService, authService, propertyService, checklistService } from '../lib/supabaseClient';
 
 // Accept jobMetrics props for live metrics integration
 const AdminJobManagement = ({ 
@@ -37,6 +37,8 @@ const AdminJobManagement = ({
   const [loading, setLoading] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(null);
+  const [archiveChecklistWarning, setArchiveChecklistWarning] = useState(null);
 
   // Processing and notification state
   const [processingStatus, setProcessingStatus] = useState({
@@ -1241,6 +1243,122 @@ const AdminJobManagement = ({
     }
   };
 
+  // Archive job function
+  const archiveJob = async (job) => {
+    try {
+      // Get checklist template items
+      const checklistItems = await checklistService.getChecklistItems(job.id);
+
+      // Get actual status for each item from checklist_item_status table
+      const { data: statusData, error: statusError } = await supabase
+        .from('checklist_item_status')
+        .select('*')
+        .eq('job_id', job.id);
+
+      if (statusError) throw statusError;
+
+      // Create a map of item statuses
+      const statusMap = new Map();
+      (statusData || []).forEach(status => {
+        statusMap.set(status.item_id, status);
+      });
+
+      // Merge template items with their actual status
+      const itemsWithStatus = checklistItems.map(item => {
+        const status = statusMap.get(item.id);
+        return {
+          ...item,
+          status: status?.status || 'pending'
+        };
+      });
+
+      // For reassessment, exclude analysis and completion items (they're not applicable)
+      const applicableItems = job.project_type === 'reassessment'
+        ? itemsWithStatus.filter(item => item.category !== 'analysis' && item.category !== 'completion')
+        : itemsWithStatus;
+
+      const incompleteItems = applicableItems.filter(item => item.status !== 'completed');
+
+      if (incompleteItems.length > 0) {
+        setArchiveChecklistWarning({
+          job: job,
+          incompleteCount: incompleteItems.length,
+          items: incompleteItems.map(i => i.item_text)
+        });
+        return;
+      }
+
+      // Proceed with archive
+      setShowArchiveConfirm(job);
+    } catch (error) {
+      addNotification('Error checking checklist status: ' + error.message, 'error');
+    }
+  };
+
+  const confirmArchive = async () => {
+    const job = showArchiveConfirm || archiveChecklistWarning?.job;
+    if (!job) return;
+
+    try {
+      setProcessing(true);
+
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const { error } = await supabase
+        .from('jobs')
+        .update({
+          archived_at: new Date().toISOString(),
+          archived_by: user?.id,
+          status: 'archived'
+        })
+        .eq('id', job.id);
+
+      if (error) throw error;
+
+      addNotification(`Job "${job.name}" archived successfully`, 'success');
+      setShowArchiveConfirm(null);
+      setArchiveChecklistWarning(null);
+
+      // Refresh data
+      if (onRefresh) {
+        await onRefresh();
+      }
+    } catch (error) {
+      addNotification('Error archiving job: ' + error.message, 'error');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // Unarchive job function
+  const unarchiveJob = async (job) => {
+    try {
+      setProcessing(true);
+
+      const { error } = await supabase
+        .from('jobs')
+        .update({
+          archived_at: null,
+          archived_by: null,
+          status: 'active'
+        })
+        .eq('id', job.id);
+
+      if (error) throw error;
+
+      addNotification(`Job "${job.name}" restored to active`, 'success');
+
+      // Refresh data
+      if (onRefresh) {
+        await onRefresh();
+      }
+    } catch (error) {
+      addNotification('Error unarchiving job: ' + error.message, 'error');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const deleteJob = async (job) => {
     try {
       await jobService.delete(job.id);
@@ -2106,6 +2224,76 @@ const AdminJobManagement = ({
         </div>
       )}
 
+      {/* Checklist Warning Modal */}
+      {archiveChecklistWarning && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full p-6 shadow-2xl">
+            <div className="text-center mb-4">
+              <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-yellow-600" />
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Incomplete Checklist Items</h3>
+              <p className="text-gray-600 mb-4">
+                "{archiveChecklistWarning.job.name}" has {archiveChecklistWarning.incompleteCount} incomplete checklist items:
+              </p>
+            </div>
+            <div className="max-h-60 overflow-y-auto mb-6 bg-gray-50 rounded-lg p-4">
+              <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
+                {archiveChecklistWarning.items.map((item, idx) => (
+                  <li key={idx}>{item}</li>
+                ))}
+              </ul>
+            </div>
+            <p className="text-sm text-gray-600 mb-6 text-center">
+              Are you sure you want to archive this job with incomplete items?
+            </p>
+            <div className="flex justify-center space-x-3">
+              <button
+                onClick={() => setArchiveChecklistWarning(null)}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium shadow-md hover:shadow-lg transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmArchive}
+                disabled={processing}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium shadow-md hover:shadow-lg transition-all disabled:opacity-50"
+              >
+                {processing ? 'Archiving...' : 'Archive Anyway'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Archive Confirmation Modal */}
+      {showArchiveConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-2xl">
+            <div className="text-center">
+              <Archive className="w-12 h-12 mx-auto mb-4 text-purple-600" />
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Archive Job</h3>
+              <p className="text-gray-600 mb-6">
+                Archive "{showArchiveConfirm.name}"? This will move the job to archived jobs and to Legacy Jobs in Billing. You can restore it later if needed.
+              </p>
+              <div className="flex justify-center space-x-3">
+                <button
+                  onClick={() => setShowArchiveConfirm(null)}
+                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium shadow-md hover:shadow-lg transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmArchive}
+                  disabled={processing}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium shadow-md hover:shadow-lg transition-all disabled:opacity-50"
+                >
+                  {processing ? 'Archiving...' : 'Archive Job'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -2438,7 +2626,7 @@ const AdminJobManagement = ({
                             <Eye className="w-4 h-4" />
                             <span>Go to Job</span>
                           </button>
-                          <button 
+                          <button
                             onClick={() => {
                               setEditingJob(job);
                               setNewJob({
@@ -2462,7 +2650,15 @@ const AdminJobManagement = ({
                             <Edit3 className="w-4 h-4" />
                             <span>Edit</span>
                           </button>
-                          <button 
+                          <button
+                            onClick={() => archiveJob(job)}
+                            className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                            title="Archive this job"
+                          >
+                            <Archive className="w-4 h-4" />
+                            <span>Archive</span>
+                          </button>
+                          <button
                             onClick={() => setShowDeleteConfirm(job)}
                             className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
                           >
@@ -2612,8 +2808,8 @@ const AdminJobManagement = ({
                           <h4 className="text-lg font-bold text-gray-900">{job.name}</h4>
                           <div className="flex items-center space-x-2">
                             <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${
-                              job.vendor === 'Microsystems' 
-                                ? 'bg-blue-100 text-blue-800' 
+                              job.vendor === 'Microsystems'
+                                ? 'bg-blue-100 text-blue-800'
                                 : 'bg-orange-200 text-orange-800'
                             }`}>
                               {job.vendor}
@@ -2623,7 +2819,7 @@ const AdminJobManagement = ({
                             </span>
                           </div>
                         </div>
-                        <div className="flex items-center space-x-4 text-sm text-gray-600">
+                        <div className="flex items-center space-x-4 text-sm text-gray-600 mb-3">
                           <span className="flex items-center space-x-1">
                             <span className="font-bold text-purple-600">{job.ccdd || job.ccddCode}</span>
                             <span>•</span>
@@ -2638,6 +2834,19 @@ const AdminJobManagement = ({
                           </span>
                         </div>
                       </div>
+                    </div>
+
+                    {/* Unarchive Button */}
+                    <div className="flex justify-end pt-3 border-t border-gray-100">
+                      <button
+                        onClick={() => unarchiveJob(job)}
+                        disabled={processing}
+                        className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105 disabled:opacity-50"
+                        title="Restore this job to active"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        <span>Restore to Active</span>
+                      </button>
                     </div>
                   </div>
                 ))

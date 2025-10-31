@@ -1352,10 +1352,108 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     }
   };
 
+  const exportNormalizedSalesToExcel = useCallback(() => {
+    if (!properties || properties.length === 0) {
+      alert('No property data available to export.');
+      return;
+    }
+
+    // Create a map of normalized sales for quick lookup
+    const normalizedSalesMap = new Map();
+    if (timeNormalizedSales && timeNormalizedSales.length > 0) {
+      timeNormalizedSales.forEach(sale => {
+        normalizedSalesMap.set(sale.id, sale);
+      });
+    }
+
+    // Prepare data for export - ALL properties
+    const exportData = properties.map(prop => {
+      const parsed = parseCompositeKey(prop.property_composite_key);
+      const normalizedData = normalizedSalesMap.get(prop.id);
+      const packageData = interpretCodes.getPackageSaleData(properties, prop);
+
+      let packageInfo = '';
+      if (packageData) {
+        if (packageData.is_farm_package) {
+          packageInfo = `Farm (${packageData.package_count})`;
+        } else if (packageData.is_additional_card) {
+          packageInfo = `Addl Card (${packageData.package_count})`;
+        } else {
+          const deedRef = prop.sales_book && prop.sales_page ?
+            `${prop.sales_book}/${prop.sales_page}` : 'Package';
+          packageInfo = `Pkg ${deedRef} (${packageData.package_count})`;
+        }
+      }
+
+      return {
+        'Block': parsed.block || '',
+        'Lot': parsed.lot || '',
+        'Qualifier': parsed.qualifier || '',
+        'Card': parsed.card || '',
+        'Location': prop.property_location || '',
+        'Class': prop.property_m4_class || prop.property_class || prop.asset_building_class || '',
+        'Type': getTypeUseDisplay(prop) || '',
+        'Design': getDesignDisplay(prop) || '',
+        'SFLA': prop.asset_sfla || '',
+        'Year Built': prop.asset_year_built || '',
+        'Package': packageInfo,
+        'Assessed Value': prop.values_mod_total || prop.assessed_value || prop.total_assessed || '',
+        'Sale Date': prop.sales_date ? new Date(prop.sales_date).toLocaleDateString() : '',
+        'Sale Price': prop.sales_price || '',
+        'Sale NU': prop.sales_nu || prop.sales_instrument || prop.nu || prop.sale_nu || '',
+        'Time Normalized Price': normalizedData?.time_normalized_price || '',
+        'Size Normalized Price': normalizedData?.size_normalized_price || '',
+        'Sales Ratio': normalizedData?.sales_ratio ? (normalizedData.sales_ratio * 100).toFixed(2) + '%' : '',
+        'Status': normalizedData ? (normalizedData.is_outlier ? 'Outlier' : 'Valid') : '',
+        'Decision': normalizedData ? (normalizedData.keep_reject === 'keep' ? 'Keep' : normalizedData.keep_reject === 'reject' ? 'Reject' : 'Pending') : '',
+        'Size Adjustment': normalizedData?.size_adjustment ? Math.round(normalizedData.size_adjustment) : ''
+      };
+    });
+
+    // Create workbook and worksheet
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(exportData);
+
+    // Set column widths for better readability
+    const colWidths = [
+      { wch: 8 },  // Block
+      { wch: 8 },  // Lot
+      { wch: 10 }, // Qualifier
+      { wch: 6 },  // Card
+      { wch: 25 }, // Location
+      { wch: 8 },  // Class
+      { wch: 15 }, // Type
+      { wch: 15 }, // Design
+      { wch: 10 }, // SFLA
+      { wch: 10 }, // Year Built
+      { wch: 20 }, // Package
+      { wch: 15 }, // Assessed Value
+      { wch: 12 }, // Sale Date
+      { wch: 15 }, // Sale Price
+      { wch: 10 }, // Sale NU
+      { wch: 20 }, // Time Normalized Price
+      { wch: 20 }, // Size Normalized Price
+      { wch: 12 }, // Sales Ratio
+      { wch: 10 }, // Status
+      { wch: 10 }, // Decision
+      { wch: 15 }  // Size Adjustment
+    ];
+    ws['!cols'] = colWidths;
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(wb, ws, 'All Properties');
+
+    // Generate filename with job name and date
+    const fileName = `PropertyMasterExport_${jobData?.job_name || 'export'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+    // Write file
+    XLSX.writeFile(wb, fileName);
+  }, [timeNormalizedSales, parseCompositeKey, properties, getTypeUseDisplay, getDesignDisplay, jobData]);
+
   const runSizeNormalization = useCallback(async () => {
     setIsProcessingSize(true);
     setSizeNormProgress({ current: 0, total: 0, message: 'Preparing size normalization...' });
-    
+
     try {
       // Create a map of existing size-normalized values
       const existingSizeNorm = {};
@@ -2851,7 +2949,7 @@ const analyzeImportFile = async (file) => {
                 {!isResultsCollapsed && (
                   <>
                     <div className="flex justify-between items-center mb-4">
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap">
                         <select
                           value={salesReviewFilter}
                           onChange={(e) => setSalesReviewFilter(e.target.value)}
@@ -2974,6 +3072,17 @@ const analyzeImportFile = async (file) => {
                           className="px-3 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700"
                         >
                           Reject All Outlier
+                        </button>
+
+                        {/* Export to Excel button */}
+                        <button
+                          type="button"
+                          onClick={exportNormalizedSalesToExcel}
+                          className="px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 flex items-center gap-2"
+                          title="Export all properties with normalization data to Excel (includes properties without sales)"
+                        >
+                          <Download size={16} />
+                          Export Master File
                         </button>
 
                       </div>

@@ -312,8 +312,9 @@ const App = () => {
           updates.archivedJobs = transformedJobs.filter(j => 
             j.status === 'archived' || j.status === 'draft'
           );
-          updates.activeJobs = transformedJobs.filter(j => j.job_type === 'standard');
-          updates.legacyJobs = transformedJobs.filter(j => j.job_type === 'legacy_billing');
+          // Archived jobs (regardless of type) should appear in Legacy
+          updates.activeJobs = transformedJobs.filter(j => j.job_type === 'standard' && !j.archived_at);
+          updates.legacyJobs = transformedJobs.filter(j => j.job_type === 'legacy_billing' || j.archived_at);
           
           // Process workflow stats for quick lookup
           updates.workflowStats = {};

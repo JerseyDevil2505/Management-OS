@@ -593,7 +593,7 @@ useEffect(() => {
 
   // ALWAYS load from database
   console.log('🟡 ABOUT TO LOAD FROM DATABASE');
-  debug('�� Loading from database:', {
+  debug('��� Loading from database:', {
     hasRawLandConfig: !!marketLandData.raw_land_config,
     hasCascadeRates: !!marketLandData.cascade_rates,
     hasVacantSales: !!marketLandData.vacant_sales_analysis?.sales?.length,
@@ -1635,7 +1635,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (hasRestrictedClass) {
-        debug(`���� Excluding package ${sale.property_block}/${sale.property_lot} - contains restricted property class`);
+        debug(`������ Excluding package ${sale.property_block}/${sale.property_lot} - contains restricted property class`);
         return false;
       }
 
@@ -2035,6 +2035,13 @@ const getPricePerUnit = useCallback((price, size) => {
         xlargeRange: [] // 10.00+ acre rates
       };
 
+      // Also collect avgAcres for each bracket range
+      const bracketAcres = {
+        mediumRange: [],
+        largeRange: [],
+        xlargeRange: []
+      };
+
       Object.keys(vcsSales).forEach(vcs => {
         // Skip excluded VCSs from summary calculation
         if (excludedMethod2VCS.has(vcs)) return;
@@ -2073,6 +2080,7 @@ const getPricePerUnit = useCallback((price, size) => {
             if (acresDiff > 0 && priceDiff > 0) {
               const rate = Math.round(priceDiff / acresDiff);
               bracketRates.mediumRange.push(rate);
+              bracketAcres.mediumRange.push(brackets.medium.avgAcres);
             }
           }
         }
@@ -2086,6 +2094,7 @@ const getPricePerUnit = useCallback((price, size) => {
             if (acresDiff > 0 && priceDiff > 0) {
               const rate = Math.round(priceDiff / acresDiff);
               bracketRates.largeRange.push(rate);
+              bracketAcres.largeRange.push(brackets.large.avgAcres);
             }
           }
         }
@@ -2099,22 +2108,29 @@ const getPricePerUnit = useCallback((price, size) => {
             if (acresDiff > 0 && priceDiff > 0) {
               const rate = Math.round(priceDiff / acresDiff);
               bracketRates.xlargeRange.push(rate);
+              bracketAcres.xlargeRange.push(brackets.xlarge.avgAcres);
             }
           }
         }
       });
 
       // Calculate averages for each bracket range
-      const calculateBracketSummary = (rates) => {
-        if (rates.length === 0) return { perAcre: 'N/A', perSqFt: 'N/A', count: 0 };
+      const calculateBracketSummary = (rates, acres = []) => {
+        if (rates.length === 0) return { perAcre: 'N/A', perSqFt: 'N/A', count: 0, avgAcres: null };
 
         const avgPerAcre = Math.round(rates.reduce((sum, r) => sum + r, 0) / rates.length);
         const avgPerSqFt = (avgPerAcre / 43560).toFixed(2);
 
+        // Calculate average lot size if acres array provided
+        const avgAcres = acres.length > 0
+          ? acres.reduce((sum, a) => sum + a, 0) / acres.length
+          : null;
+
         return {
           perAcre: avgPerAcre,
           perSqFt: avgPerSqFt,
-          count: rates.length
+          count: rates.length,
+          avgAcres: avgAcres
         };
       };
 
@@ -2201,9 +2217,9 @@ const getPricePerUnit = useCallback((price, size) => {
           }
         });
 
-        // Calculate averages for each bracket range
+        // Calculate averages for each bracket range (regional version - not currently tracking acres)
         const calculateBracketSummary = (rates) => {
-          if (rates.length === 0) return { perAcre: 'N/A', perSqFt: 'N/A', count: 0 };
+          if (rates.length === 0) return { perAcre: 'N/A', perSqFt: 'N/A', count: 0, avgAcres: null };
 
           const avgPerAcre = Math.round(rates.reduce((sum, r) => sum + r, 0) / rates.length);
           const avgPerSqFt = (avgPerAcre / 43560).toFixed(2);
@@ -2211,7 +2227,8 @@ const getPricePerUnit = useCallback((price, size) => {
           return {
             perAcre: avgPerAcre,
             perSqFt: avgPerSqFt,
-            count: rates.length
+            count: rates.length,
+            avgAcres: null
           };
         };
 
@@ -2228,9 +2245,9 @@ const getPricePerUnit = useCallback((price, size) => {
       const includedVCSCount = Object.keys(vcsSales).filter(vcs => !excludedMethod2VCS.has(vcs)).length;
 
       setMethod2Summary({
-        mediumRange: calculateBracketSummary(bracketRates.mediumRange), // 1.00-4.99
-        largeRange: calculateBracketSummary(bracketRates.largeRange),   // 5.00-9.99
-        xlargeRange: calculateBracketSummary(bracketRates.xlargeRange), // 10.00+
+        mediumRange: calculateBracketSummary(bracketRates.mediumRange, bracketAcres.mediumRange), // 1.00-4.99
+        largeRange: calculateBracketSummary(bracketRates.largeRange, bracketAcres.largeRange),   // 5.00-9.99
+        xlargeRange: calculateBracketSummary(bracketRates.xlargeRange, bracketAcres.xlargeRange), // 10.00+
         totalVCS: includedVCSCount,
         excludedVCSCount: excludedMethod2VCS.size
       });
@@ -6898,7 +6915,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales ��� Avg $${Math.round(data.avgPrice).toLocaleString()} ��������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales ���� Avg $${Math.round(data.avgPrice).toLocaleString()} ��������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{
@@ -7218,8 +7235,23 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       return valuationMode === 'sf' ? `$${avgAcre.toLocaleString()}/AC` : `$${perSqFt}/SF`;
                     })()}
                   </div>
-                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
-                    ({(method2Summary.mediumRange?.count || 0) + (method2Summary.largeRange?.count || 0) + (method2Summary.xlargeRange?.count || 0)} Total)
+                  <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '4px' }}>
+                    {(() => {
+                      // Calculate average lot size across all positive deltas
+                      const allLotAcres = [];
+                      if (method2Summary.mediumRange?.avgAcres) allLotAcres.push(method2Summary.mediumRange.avgAcres);
+                      if (method2Summary.largeRange?.avgAcres) allLotAcres.push(method2Summary.largeRange.avgAcres);
+                      if (method2Summary.xlargeRange?.avgAcres) allLotAcres.push(method2Summary.xlargeRange.avgAcres);
+
+                      if (allLotAcres.length === 0) {
+                        return `(${(method2Summary.mediumRange?.count || 0) + (method2Summary.largeRange?.count || 0) + (method2Summary.xlargeRange?.count || 0)} Total)`;
+                      }
+
+                      const avgLotAcres = allLotAcres.reduce((sum, acres) => sum + acres, 0) / allLotAcres.length;
+                      const avgLotSF = Math.round(avgLotAcres * 43560);
+
+                      return `${avgLotAcres.toFixed(2)} AC / ${avgLotSF.toLocaleString()} SF avg lot | ${(method2Summary.mediumRange?.count || 0) + (method2Summary.largeRange?.count || 0) + (method2Summary.xlargeRange?.count || 0)} Total`;
+                    })()}
                   </div>
                 </div>
 
@@ -7282,23 +7314,33 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         );
                       }
 
-                      // Choose lowest bracket with data from Method 2 summary and determine bracket key
-                      let chosenPerAcre = null;
-                      let chosenBracketKey = null;
-                      if (method2Summary?.mediumRange?.perAcre && method2Summary.mediumRange.perAcre !== 'N/A') { chosenPerAcre = method2Summary.mediumRange.perAcre; chosenBracketKey = 'medium'; }
-                      else if (method2Summary?.largeRange?.perAcre && method2Summary.largeRange.perAcre !== 'N/A') { chosenPerAcre = method2Summary.largeRange.perAcre; chosenBracketKey = 'large'; }
-                      else if (method2Summary?.xlargeRange?.perAcre && method2Summary.xlargeRange.perAcre !== 'N/A') { chosenPerAcre = method2Summary.xlargeRange.perAcre; chosenBracketKey = 'xlarge'; }
+                      // Use average across ALL positive deltas instead of just lowest bracket
+                      const allRates = [];
+                      const allLotAcres = [];
+                      if (method2Summary?.mediumRange?.perAcre && method2Summary.mediumRange.perAcre !== 'N/A') {
+                        allRates.push(method2Summary.mediumRange.perAcre);
+                        if (method2Summary.mediumRange.avgAcres) allLotAcres.push(method2Summary.mediumRange.avgAcres);
+                      }
+                      if (method2Summary?.largeRange?.perAcre && method2Summary.largeRange.perAcre !== 'N/A') {
+                        allRates.push(method2Summary.largeRange.perAcre);
+                        if (method2Summary.largeRange.avgAcres) allLotAcres.push(method2Summary.largeRange.avgAcres);
+                      }
+                      if (method2Summary?.xlargeRange?.perAcre && method2Summary.xlargeRange.perAcre !== 'N/A') {
+                        allRates.push(method2Summary.xlargeRange.perAcre);
+                        if (method2Summary.xlargeRange.avgAcres) allLotAcres.push(method2Summary.xlargeRange.avgAcres);
+                      }
 
-                      // Compute overall average lot size (acres) from bracketAnalysis for chosen bracket
+                      let chosenPerAcre = null;
                       let overallAvgAcres = null;
-                      if (chosenBracketKey && typeof bracketAnalysis === 'object') {
-                        const vals = Object.values(bracketAnalysis).map(a => {
-                          try {
-                            const b = a.brackets && a.brackets[chosenBracketKey];
-                            return b && b.avgAcres ? b.avgAcres : null;
-                          } catch (e) { return null; }
-                        }).filter(v => v != null);
-                        if (vals.length > 0) overallAvgAcres = vals.reduce((s, v) => s + v, 0) / vals.length;
+
+                      if (allRates.length > 0) {
+                        // Use average of all positive deltas
+                        chosenPerAcre = Math.round(allRates.reduce((sum, rate) => sum + rate, 0) / allRates.length);
+                      }
+
+                      if (allLotAcres.length > 0) {
+                        // Use average lot size across all positive deltas
+                        overallAvgAcres = allLotAcres.reduce((sum, acres) => sum + acres, 0) / allLotAcres.length;
                       }
 
                       const summaryTypicalSF = overallAvgAcres != null ? Math.round(overallAvgAcres * 43560) : null;
@@ -7308,10 +7350,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       // Build rows array so we can append summary and recommended rows
                       const rows = [];
 
-                      // Top summary row showing overall average metrics (from chosen bracket)
+                      // Top summary row showing overall average metrics (from all positive deltas)
                       rows.push(
                         <tr key="__summary__" style={{ fontWeight: '600', backgroundColor: '#F3F4F6' }}>
-                          <td style={{ padding: '6px', border: '1px solid #E5E7EB' }}>Overall Average ({chosenBracketKey || 'N/A'})</td>
+                          <td style={{ padding: '6px', border: '1px solid #E5E7EB' }}>Overall Average (all positive deltas)</td>
                           <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{overallAvgAcres != null ? `${(Math.round(overallAvgAcres*100)/100).toFixed(2)} / ${summaryTypicalSF.toLocaleString()} SF` : 'N/A'}</td>
                           <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}>{summaryLandValue != null ? `$${Number(summaryLandValue).toLocaleString()}` : 'N/A'}</td>
                           <td style={{ padding: '6px', textAlign: 'right', border: '1px solid #E5E7EB' }}></td>
@@ -8772,7 +8814,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '����') : ''}
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('yearBuilt')}
