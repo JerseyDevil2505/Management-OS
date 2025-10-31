@@ -1246,13 +1246,36 @@ const AdminJobManagement = ({
   // Archive job function
   const archiveJob = async (job) => {
     try {
-      // Check checklist status
+      // Get checklist template items
       const checklistItems = await checklistService.getChecklistItems(job.id);
+
+      // Get actual status for each item from checklist_item_status table
+      const { data: statusData, error: statusError } = await supabase
+        .from('checklist_item_status')
+        .select('*')
+        .eq('job_id', job.id);
+
+      if (statusError) throw statusError;
+
+      // Create a map of item statuses
+      const statusMap = new Map();
+      (statusData || []).forEach(status => {
+        statusMap.set(status.item_id, status);
+      });
+
+      // Merge template items with their actual status
+      const itemsWithStatus = checklistItems.map(item => {
+        const status = statusMap.get(item.id);
+        return {
+          ...item,
+          status: status?.status || 'pending'
+        };
+      });
 
       // For reassessment, exclude analysis and completion items (they're not applicable)
       const applicableItems = job.project_type === 'reassessment'
-        ? checklistItems.filter(item => item.category !== 'analysis' && item.category !== 'completion')
-        : checklistItems;
+        ? itemsWithStatus.filter(item => item.category !== 'analysis' && item.category !== 'completion')
+        : itemsWithStatus;
 
       const incompleteItems = applicableItems.filter(item => item.status !== 'completed');
 
