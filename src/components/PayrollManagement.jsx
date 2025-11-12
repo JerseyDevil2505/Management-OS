@@ -247,14 +247,14 @@ const PayrollManagement = ({
     if (activeTab === 'recency') {
       fetchDataRecency();
     }
-  }, [activeTab]);
+  }, [activeTab, fetchDataRecency]);
 
   useEffect(() => {
     if (payrollPeriod.endDate) {
       const hours = getStandardExpectedHours(payrollPeriod.endDate);
       setPayrollPeriod(prev => ({ ...prev, expectedHours: hours }));
     }
-  }, [payrollPeriod.endDate]);
+  }, [payrollPeriod.endDate, getStandardExpectedHours]);
 
 const loadInitialData = async () => {
     try {
