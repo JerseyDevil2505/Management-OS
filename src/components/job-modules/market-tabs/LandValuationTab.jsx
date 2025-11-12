@@ -1126,6 +1126,10 @@ const getPricePerUnit = useCallback((price, size) => {
     }
   }, [activeSubTab, properties]);
 
+  // Track auto-save failures to prevent disruptive popups
+  const autoSaveFailureCount = useRef(0);
+  const isAutoSaveDisabled = useRef(false);
+
   // Auto-save every 30 seconds - but only after initial load is complete
   useEffect(() => {
     if (!isInitialLoadComplete) {
@@ -1135,6 +1139,12 @@ const getPricePerUnit = useCallback((price, size) => {
 
     debug('��� Auto-save effect triggered, setting up interval');
     const interval = setInterval(() => {
+      // Skip auto-save if it's been disabled due to repeated failures
+      if (isAutoSaveDisabled.current) {
+        debug('⚠️ Auto-save disabled due to repeated failures');
+        return;
+      }
+
       debug('⏰ Auto-save interval triggered');
       // Use window reference to avoid hoisting issues
       if (window.landValuationSave) {
@@ -3993,6 +4003,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       debug('�� Save completed successfully');
       setLastSaved(new Date());
 
+      // Reset auto-save failure tracking on successful save
+      autoSaveFailureCount.current = 0;
+      if (isAutoSaveDisabled.current) {
+        isAutoSaveDisabled.current = false;
+        console.log('✅ Auto-save re-enabled after successful save');
+      }
+
       // Notify parent component
       if (onAnalysisUpdate) {
         onAnalysisUpdate(analysisData, options);
@@ -4043,10 +4060,36 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         errorCode: error?.code,
         errorHint: error?.hint,
         errorDetails: error?.details,
-        stackTrace: error?.stack
+        stackTrace: error?.stack,
+        isAutoSave: options?.source === 'autosave'
       });
 
-      // Show user-friendly error with more context
+      // Handle auto-save failures differently (no popup alert)
+      if (options?.source === 'autosave') {
+        autoSaveFailureCount.current++;
+        console.warn(`⚠️ Auto-save failed (${autoSaveFailureCount.current} consecutive failures):`, errorMessage);
+
+        // Disable auto-save after 3 consecutive failures
+        if (autoSaveFailureCount.current >= 3) {
+          isAutoSaveDisabled.current = true;
+          console.error('🛑 Auto-save disabled after 3 consecutive failures. Please save manually.');
+          // Dispatch event for notification system if available
+          try {
+            window.dispatchEvent(new CustomEvent('land_valuation_autosave_failed', {
+              detail: { message: 'Auto-save disabled. Please save manually.', errorMessage }
+            }));
+          } catch (e) {
+            console.warn('Could not dispatch autosave failure event:', e);
+          }
+        }
+        // Don't show alert for auto-save failures - just log to console
+        return;
+      }
+
+      // Reset failure count on any manual save attempt
+      autoSaveFailureCount.current = 0;
+
+      // Show user-friendly error for manual saves only
       const userMessage = `Failed to save analysis: ${errorMessage}\n\n` +
         `Error type: ${error?.code || 'Unknown'}\n` +
         `Please check the console for details and try again.`;

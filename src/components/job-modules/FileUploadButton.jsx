@@ -1219,7 +1219,7 @@ const handleCodeFileUpdate = async () => {
     if (job?.id) {
       fetchCurrentFileVersion();
     }
-  }, [job?.id]);
+  }, [job?.id, fetchCurrentFileVersion]);
 
   // ENHANCED: Track batch insert operations from propertyService with better capture
   const trackBatchInserts = (operation) => {
@@ -3045,14 +3045,14 @@ const handleCodeFileUpdate = async () => {
     if (job?.id) {
       loadReportCount();
     }
-  }, [job?.id]);  
+  }, [job?.id, loadReportCount]);  
 
   // Load reports when modal opens
   useEffect(() => {
     if (showReportsModal) {
       loadReportsList();
     }
-  }, [showReportsModal]);
+  }, [showReportsModal, loadReportsList]);
 
 
   const getFileStatusWithRealVersion = (timestamp, type) => {
