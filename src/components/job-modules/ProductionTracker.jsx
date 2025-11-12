@@ -955,14 +955,14 @@ const ProductionTracker = ({
       
       initializeData();
     }
-  }, [jobData?.id, properties, inspectionData, employees, latestFileVersion]); // Added employees and latestFileVersion to deps
+  }, [jobData?.id, properties, inspectionData, employees, latestFileVersion, calculateCommercialCounts, calculateUnassignedPropertyCount, calculateValidationOverrides, loadAvailableInfoByCodes, loadPersistedAnalytics, loadProjectStartDate, loadVendorSource, processEmployeeData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update employee data when external inspectors list changes
   useEffect(() => {
     if (employees && employees.length > 0) {
       processEmployeeData();
     }
-  }, [externalInspectorsList, employees]);
+  }, [externalInspectorsList, employees, processEmployeeData]);
 
   // Track unsaved changes
   useEffect(() => {

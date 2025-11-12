@@ -660,7 +660,7 @@ const loadEmployees = () => {
     if (employees.length > 0) {
       loadGlobalAnalytics();
     }
-  }, [employees.length]);  // Removed analyticsFilter - we'll handle it separately
+  }, [employees.length, loadGlobalAnalytics]);  // Removed analyticsFilter - we'll handle it separately
 
   // When filters change, reprocess cached data without reloading
   useEffect(() => {
@@ -672,7 +672,7 @@ const loadEmployees = () => {
       );
       setGlobalAnalytics(reprocessed);
     }
-  }, [analyticsFilter]);
+  }, [analyticsFilter, analyticsCache, isLoadingAnalytics]);
 
   const handleFilterChange = (filterType, value) => {
     setAnalyticsFilter(prev => ({
