@@ -980,9 +980,21 @@ const ProductionTracker = ({
     try {
       // Get actual vendor from property_records
       const actualVendor = await loadVendorSource();
-      
 
-      debugLog('ANALYTICS', 'Starting manager-focused analytics processing', { 
+      // Helper function to check if this is a primary card for billing
+      const isPrimaryCard = (cardValue, vendor) => {
+        if (!cardValue) return true; // If no card value, treat as primary (default '1')
+        const card = String(cardValue).trim().toUpperCase();
+        if (vendor === 'BRT') {
+          return card === '1' || card === '';
+        } else if (vendor === 'Microsystems') {
+          return card === 'M' || card === '';
+        }
+        // Default: if vendor is unknown, count card 1 or M as primary
+        return card === '1' || card === 'M' || card === '';
+      };
+
+      debugLog('ANALYTICS', 'Starting manager-focused analytics processing', {
         jobId: jobData.id,
         fileVersion: latestFileVersion,
         startDate: projectStartDate,
@@ -1135,7 +1147,11 @@ const ProductionTracker = ({
           if (classBreakdown[propertyClass]) {
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
-            billingByClass[propertyClass].billable++;
+            // Only count primary cards (1 for BRT, M for Microsystems) for billing
+            const cardValue = record.property_addl_card || '1';
+            if (isPrimaryCard(cardValue, actualVendor)) {
+              billingByClass[propertyClass].billable++;
+            }
           }
 
           // Initialize inspector stats for overridden properties
@@ -1503,7 +1519,11 @@ const ProductionTracker = ({
           if (classBreakdown[propertyClass]) {
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
-            billingByClass[propertyClass].billable++;
+            // Only count primary cards (1 for BRT, M for Microsystems) for billing
+            const cardValue = record.property_addl_card || '1';
+            if (isPrimaryCard(cardValue, actualVendor)) {
+              billingByClass[propertyClass].billable++;
+            }
           }
 
           // Inspector analytics - count valid inspections only
@@ -1718,7 +1738,11 @@ const ProductionTracker = ({
           if (classBreakdown[propertyClass]) {
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
-            billingByClass[propertyClass].billable++;
+            // Only count primary cards (1 for BRT, M for Microsystems) for billing
+            const cardValue = fullRecord.property_addl_card || '1';
+            if (isPrimaryCard(cardValue, actualVendor)) {
+              billingByClass[propertyClass].billable++;
+            }
           }
           
           debugLog('PROCESSING_MODAL', `Added override for ${override.composite_key} with reason: ${override.override_reason}`);
