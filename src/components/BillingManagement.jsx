@@ -275,7 +275,7 @@ Thank you for your immediate attention to this matter.`;
     if (activeTab === 'distributions' && globalMetrics.totalPaid > 0) {
       calculateDistributionMetrics();
     }
-  }, [globalMetrics.totalPaid, reserveSettings, activeTab, calculateDistributionMetrics]);
+  }, [globalMetrics.totalPaid, reserveSettings, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const calculateGlobalMetrics = async () => {
     // Use the pre-calculated metrics from App.js

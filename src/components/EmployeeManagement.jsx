@@ -42,7 +42,7 @@ const EmployeeManagement = ({
     if (propEmployees.length > 0) {
       loadEmployees();
     }
-  }, [propEmployees, loadEmployees]);
+  }, [propEmployees]); // eslint-disable-line react-hooks/exhaustive-deps
 
 const loadEmployees = () => {
     setIsLoading(true);
@@ -660,7 +660,7 @@ const loadEmployees = () => {
     if (employees.length > 0) {
       loadGlobalAnalytics();
     }
-  }, [employees.length, loadGlobalAnalytics]);  // Removed analyticsFilter - we'll handle it separately
+  }, [employees.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When filters change, reprocess cached data without reloading
   useEffect(() => {
@@ -672,7 +672,7 @@ const loadEmployees = () => {
       );
       setGlobalAnalytics(reprocessed);
     }
-  }, [analyticsFilter, analyticsCache, isLoadingAnalytics]);
+  }, [analyticsFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFilterChange = (filterType, value) => {
     setAnalyticsFilter(prev => ({

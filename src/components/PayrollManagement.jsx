@@ -247,14 +247,14 @@ const PayrollManagement = ({
     if (activeTab === 'recency') {
       fetchDataRecency();
     }
-  }, [activeTab, fetchDataRecency]);
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (payrollPeriod.endDate) {
       const hours = getStandardExpectedHours(payrollPeriod.endDate);
       setPayrollPeriod(prev => ({ ...prev, expectedHours: hours }));
     }
-  }, [payrollPeriod.endDate, getStandardExpectedHours]);
+  }, [payrollPeriod.endDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
 const loadInitialData = async () => {
     try {
