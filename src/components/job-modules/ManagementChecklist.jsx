@@ -78,7 +78,7 @@ useEffect(() => {
     window.addEventListener('checklist_status_changed', handler);
 
     return () => window.removeEventListener('checklist_status_changed', handler);
-  }, [jobData, checklistType]);
+  }, [jobData, checklistType, loadChecklistItems]);
 
   // Check if files actually exist in storage
   const verifyFiles = async (items) => {

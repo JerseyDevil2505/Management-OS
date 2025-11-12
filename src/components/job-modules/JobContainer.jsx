@@ -57,14 +57,14 @@ const JobContainer = ({
     if (selectedJob) {
       loadLatestFileVersions();
     }
-  }, [selectedJob]);
+  }, [selectedJob, loadLatestFileVersions]);
 
   // NEW: Refresh when App.js signals file processing completion
   useEffect(() => {
     if (fileRefreshTrigger > 0 && selectedJob) {
       loadLatestFileVersions();
     }
-  }, [fileRefreshTrigger, selectedJob]);
+  }, [fileRefreshTrigger, selectedJob, loadLatestFileVersions]);
 
   // SURGICAL REFRESH: Only reload marketLandData without global refresh
   const refreshMarketLandData = async () => {
