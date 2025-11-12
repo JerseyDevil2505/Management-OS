@@ -866,7 +866,7 @@ const App = () => {
     };
     
     initializeApp();
-  }, [user, loadLiveData]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ==========================================
   // URL-BASED JOB RESTORATION (FIX FOR F5)

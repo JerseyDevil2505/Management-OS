@@ -78,7 +78,7 @@ useEffect(() => {
     window.addEventListener('checklist_status_changed', handler);
 
     return () => window.removeEventListener('checklist_status_changed', handler);
-  }, [jobData, checklistType, loadChecklistItems]);
+  }, [jobData, checklistType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Check if files actually exist in storage
   const verifyFiles = async (items) => {
