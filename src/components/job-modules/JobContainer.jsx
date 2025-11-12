@@ -57,14 +57,14 @@ const JobContainer = ({
     if (selectedJob) {
       loadLatestFileVersions();
     }
-  }, [selectedJob, loadLatestFileVersions]);
+  }, [selectedJob]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // NEW: Refresh when App.js signals file processing completion
   useEffect(() => {
     if (fileRefreshTrigger > 0 && selectedJob) {
       loadLatestFileVersions();
     }
-  }, [fileRefreshTrigger, selectedJob, loadLatestFileVersions]);
+  }, [fileRefreshTrigger, selectedJob]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // SURGICAL REFRESH: Only reload marketLandData without global refresh
   const refreshMarketLandData = async () => {
