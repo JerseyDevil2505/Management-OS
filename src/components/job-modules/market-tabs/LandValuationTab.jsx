@@ -1139,6 +1139,12 @@ const getPricePerUnit = useCallback((price, size) => {
 
     debug('��� Auto-save effect triggered, setting up interval');
     const interval = setInterval(() => {
+      // Skip auto-save if it's been disabled due to repeated failures
+      if (isAutoSaveDisabled.current) {
+        debug('⚠️ Auto-save disabled due to repeated failures');
+        return;
+      }
+
       debug('⏰ Auto-save interval triggered');
       // Use window reference to avoid hoisting issues
       if (window.landValuationSave) {
