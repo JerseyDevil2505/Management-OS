@@ -594,24 +594,38 @@ useEffect(() => {
     }
   };
 
+  // Helper function to parse City, State Zip from owner_csz
+  const parseCityStateZip = (ownerCsz) => {
+    if (!ownerCsz || ownerCsz.trim() === '') {
+      return { cityState: '', zip: '' };
+    }
+
+    // Split by spaces and get the last part as zip
+    const parts = ownerCsz.trim().split(/\s+/);
+    const zip = parts[parts.length - 1];
+    const cityState = parts.slice(0, -1).join(' ');
+
+    return { cityState, zip };
+  };
+
   // ENHANCED: Direct Excel download for Initial Mailing List
   const generateMailingListExcel = async () => {
     try {
       setGeneratingLists(prev => ({ ...prev, initial: true }));
       console.log('📊 Generating Initial Mailing List as Excel...');
-      
+
       // Get ALL property records with pagination
       const mailingData = await getAllPropertyRecords(jobData.id);
-      
+
       // Filter for residential properties and specific class 15s
       const filteredData = mailingData.filter(record => {
         const propClass = record.property_m4_class?.toUpperCase() || '';
-        
+
         // Include residential classes
         if (['1', '2', '3A', '3B', '4A', '4B', '4C'].includes(propClass)) {
           return true;
         }
-        
+
         // Include class 15 variants (15A, 15B, 15C, 15D, 15E, 15F) with specific facility names
         if (propClass.startsWith('15') && record.property_facility) {
           const facilityLower = record.property_facility.toLowerCase();
@@ -621,48 +635,56 @@ useEffect(() => {
                  facilityLower.includes('widow') ||
                  facilityLower.includes('tdv');
         }
-        
+
         return false;
       });
-      
+
       console.log(`✅ Filtered to ${filteredData.length} residential properties`);
-      
-      // Transform data for Excel
-      const excelData = filteredData.map(record => ({
-        'Block': record.property_block,
-        'Lot': record.property_lot,
-        'Qualifier': record.property_qualifier || '',
-        'Property Class': record.property_m4_class,
-        'Location': record.property_location,
-        'Owner': record.owner_name,
-        'Mailing Address': `${record.owner_street || ''} ${record.owner_csz || ''}`.trim()
-      }));
-      
+
+      // Transform data for Excel with separated address columns
+      const excelData = filteredData.map(record => {
+        const { cityState, zip } = parseCityStateZip(record.owner_csz);
+
+        return {
+          'Block': record.property_block,
+          'Lot': record.property_lot,
+          'Qualifier': record.property_qualifier || '',
+          'Property Class': record.property_m4_class,
+          'Location': record.property_location,
+          'Owner': record.owner_name,
+          'Address': record.owner_street || '',
+          'City, State': cityState,
+          'Zip': zip
+        };
+      });
+
       // Create workbook and worksheet
       const ws = XLSX.utils.json_to_sheet(excelData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Mailing List');
-      
+
       // Set column widths to fit content properly
       const colWidths = [
         { wch: 12 }, // Block
         { wch: 15 }, // Lot
         { wch: 12 }, // Qualifier
         { wch: 15 }, // Property Class
-        { wch: 45 }, // Location - wider for full addresses
-        { wch: 35 }, // Owner - good width for names
-        { wch: 50 }  // Mailing Address - wide for full addresses
+        { wch: 45 }, // Location
+        { wch: 35 }, // Owner
+        { wch: 40 }, // Address
+        { wch: 30 }, // City, State
+        { wch: 12 }  // Zip
       ];
       ws['!cols'] = colWidths;
-      
+
       // Generate Excel file and download
-      const fileName = jobData?.job_name ? 
-        `${jobData.job_name.replace(/[^a-z0-9]/gi, '_')}_Initial_Mailing_List.xlsx` : 
+      const fileName = jobData?.job_name ?
+        `${jobData.job_name.replace(/[^a-z0-9]/gi, '_')}_Initial_Mailing_List.xlsx` :
         `Initial_Mailing_List_${new Date().toISOString().split('T')[0]}.xlsx`;
       XLSX.writeFile(wb, fileName);
-      
+
       console.log(`✅ Excel file downloaded with ${excelData.length} properties`);
-      
+
     } catch (error) {
       console.error('Error generating mailing list:', error);
       alert('Failed to generate mailing list. Please ensure property data is loaded.');
@@ -727,18 +749,20 @@ useEffect(() => {
       
       console.log(`✅ Found ${secondAttemptProperties.length} properties for 2nd attempt`);
       
-      // Transform data for Excel
+      // Transform data for Excel with separated address columns
       const excelData = secondAttemptProperties.map(property => {
-        const inspection = property.property_composite_key ? 
+        const inspection = property.property_composite_key ?
           inspectionMap.get(property.property_composite_key) : null;
-        
+
         let reason = 'Not Inspected';
         if (inspection) {
           if (refusalCategories.includes(inspection.info_by_code)) {
             reason = inspection.info_by_code;
           }
         }
-        
+
+        const { cityState, zip } = parseCityStateZip(property.owner_csz);
+
         return {
           'Block': property.property_block,
           'Lot': property.property_lot,
@@ -746,16 +770,18 @@ useEffect(() => {
           'Property Class': property.property_m4_class,
           'Location': property.property_location,
           'Owner': property.owner_name,
-          'Mailing Address': `${property.owner_street || ''} ${property.owner_csz || ''}`.trim(),
+          'Address': property.owner_street || '',
+          'City, State': cityState,
+          'Zip': zip,
           'Reason': reason
         };
       });
-      
+
       // Create workbook and worksheet
       const ws = XLSX.utils.json_to_sheet(excelData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, '2nd Attempt Mailer');
-      
+
       // Set column widths to fit content properly
       const colWidths = [
         { wch: 12 }, // Block
@@ -764,7 +790,9 @@ useEffect(() => {
         { wch: 15 }, // Property Class
         { wch: 45 }, // Location
         { wch: 35 }, // Owner
-        { wch: 50 }, // Mailing Address
+        { wch: 40 }, // Address
+        { wch: 30 }, // City, State
+        { wch: 12 }, // Zip
         { wch: 20 }  // Reason
       ];
       ws['!cols'] = colWidths;
@@ -837,18 +865,20 @@ useEffect(() => {
       
       console.log(`✅ Found ${thirdAttemptProperties.length} properties for 3rd attempt`);
       
-      // Transform data for Excel
+      // Transform data for Excel with separated address columns
       const excelData = thirdAttemptProperties.map(property => {
-        const inspection = property.property_composite_key ? 
+        const inspection = property.property_composite_key ?
           inspectionMap.get(property.property_composite_key) : null;
-        
+
         let reason = 'Not Inspected';
         if (inspection) {
           if (refusalCategories.includes(inspection.info_by_code)) {
             reason = inspection.info_by_code;
           }
         }
-        
+
+        const { cityState, zip } = parseCityStateZip(property.owner_csz);
+
         return {
           'Block': property.property_block,
           'Lot': property.property_lot,
@@ -856,16 +886,18 @@ useEffect(() => {
           'Property Class': property.property_m4_class,
           'Location': property.property_location,
           'Owner': property.owner_name,
-          'Mailing Address': `${property.owner_street || ''} ${property.owner_csz || ''}`.trim(),
+          'Address': property.owner_street || '',
+          'City, State': cityState,
+          'Zip': zip,
           'Reason': reason
         };
       });
-      
+
       // Create workbook and worksheet
       const ws = XLSX.utils.json_to_sheet(excelData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, '3rd Attempt Mailer');
-      
+
       // Set column widths to fit content properly
       const colWidths = [
         { wch: 12 }, // Block
@@ -874,7 +906,9 @@ useEffect(() => {
         { wch: 15 }, // Property Class
         { wch: 45 }, // Location
         { wch: 35 }, // Owner
-        { wch: 50 }, // Mailing Address
+        { wch: 40 }, // Address
+        { wch: 30 }, // City, State
+        { wch: 12 }, // Zip
         { wch: 20 }  // Reason
       ];
       ws['!cols'] = colWidths;
