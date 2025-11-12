@@ -1126,6 +1126,10 @@ const getPricePerUnit = useCallback((price, size) => {
     }
   }, [activeSubTab, properties]);
 
+  // Track auto-save failures to prevent disruptive popups
+  const autoSaveFailureCount = useRef(0);
+  const isAutoSaveDisabled = useRef(false);
+
   // Auto-save every 30 seconds - but only after initial load is complete
   useEffect(() => {
     if (!isInitialLoadComplete) {
