@@ -4003,6 +4003,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       debug('�� Save completed successfully');
       setLastSaved(new Date());
 
+      // Reset auto-save failure tracking on successful save
+      autoSaveFailureCount.current = 0;
+      if (isAutoSaveDisabled.current) {
+        isAutoSaveDisabled.current = false;
+        console.log('✅ Auto-save re-enabled after successful save');
+      }
+
       // Notify parent component
       if (onAnalysisUpdate) {
         onAnalysisUpdate(analysisData, options);
