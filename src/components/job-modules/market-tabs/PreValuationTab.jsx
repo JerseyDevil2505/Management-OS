@@ -184,6 +184,7 @@ const PreValuationTab = ({
   const [selectedUnitRateCodes, setSelectedUnitRateCodes] = useState(new Set());
   const [isCalculatingUnitSizes, setIsCalculatingUnitSizes] = useState(false);
   const [isSavingUnitConfig, setIsSavingUnitConfig] = useState(false);
+  const [isExportingLotSizes, setIsExportingLotSizes] = useState(false);
   const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
 
   // Unit rate mappings editor state
