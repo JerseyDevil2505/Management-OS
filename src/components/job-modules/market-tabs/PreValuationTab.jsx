@@ -184,6 +184,7 @@ const PreValuationTab = ({
   const [selectedUnitRateCodes, setSelectedUnitRateCodes] = useState(new Set());
   const [isCalculatingUnitSizes, setIsCalculatingUnitSizes] = useState(false);
   const [isSavingUnitConfig, setIsSavingUnitConfig] = useState(false);
+  const [isExportingLotSizes, setIsExportingLotSizes] = useState(false);
   const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
 
   // Unit rate mappings editor state
@@ -882,6 +883,97 @@ useEffect(() => {
       alert(`Calculation failed: ${formatError(e)}`);
     } finally {
       setIsCalculatingUnitSizes(false);
+    }
+  };
+
+  const exportLotSizeReport = async () => {
+    if (!jobData?.id) return;
+    setIsExportingLotSizes(true);
+    try {
+      // Query properties with lot size data from property_market_analysis
+      const { data: propsWithLotData, error: queryError } = await supabase
+        .from('property_records')
+        .select(`
+          property_composite_key,
+          property_location,
+          asset_lot_frontage,
+          asset_lot_depth
+        `)
+        .eq('job_id', jobData.id)
+        .order('property_composite_key');
+
+      if (queryError) throw queryError;
+
+      // Query lot size data from property_market_analysis
+      const { data: lotSizeData, error: lotError } = await supabase
+        .from('property_market_analysis')
+        .select('property_composite_key, market_manual_lot_acre, market_manual_lot_sf')
+        .eq('job_id', jobData.id);
+
+      if (lotError) throw lotError;
+
+      // Create a map for quick lookup
+      const lotSizeMap = new Map();
+      if (lotSizeData) {
+        lotSizeData.forEach(item => {
+          lotSizeMap.set(item.property_composite_key, {
+            acre: item.market_manual_lot_acre,
+            sf: item.market_manual_lot_sf
+          });
+        });
+      }
+
+      // Prepare export data
+      const exportData = propsWithLotData.map(prop => {
+        const parsed = parseCompositeKey(prop.property_composite_key);
+        const lotData = lotSizeMap.get(prop.property_composite_key) || {};
+
+        return {
+          'Block': parsed.block || '',
+          'Lot': parsed.lot || '',
+          'Qualifier': parsed.qualifier || '',
+          'Card': parsed.card || '',
+          'Location': prop.property_location || '',
+          'Total Front Foot': prop.asset_lot_frontage || '',
+          'Avg Depth': prop.asset_lot_depth || '',
+          'Lot Size Acre': lotData.acre || '',
+          'Lot Size SF': lotData.sf || ''
+        };
+      });
+
+      // Create workbook and worksheet
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportData);
+
+      // Set column widths
+      const colWidths = [
+        { wch: 10 },  // Block
+        { wch: 10 },  // Lot
+        { wch: 12 },  // Qualifier
+        { wch: 8 },   // Card
+        { wch: 30 },  // Location
+        { wch: 15 },  // Total Front Foot
+        { wch: 12 },  // Avg Depth
+        { wch: 15 },  // Lot Size Acre
+        { wch: 15 }   // Lot Size SF
+      ];
+      ws['!cols'] = colWidths;
+
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(wb, ws, 'Lot Size Report');
+
+      // Generate filename
+      const fileName = `LotSizeReport_${jobData?.job_name || 'export'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+      // Write file
+      XLSX.writeFile(wb, fileName);
+
+      alert(`Exported ${exportData.length} properties to ${fileName}`);
+    } catch (e) {
+      console.error('Error exporting lot size report:', e);
+      alert(`Export failed: ${formatError(e)}`);
+    } finally {
+      setIsExportingLotSizes(false);
     }
   };
 
@@ -3567,6 +3659,15 @@ const analyzeImportFile = async (file) => {
                   className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
                 >
                   {isCalculatingUnitSizes ? 'Calculating...' : 'Calculate Lot Size'}
+                </button>
+                <button
+                  onClick={exportLotSizeReport}
+                  disabled={isExportingLotSizes}
+                  className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
+                  title="Export lot size data for all properties"
+                >
+                  <Download size={16} />
+                  {isExportingLotSizes ? 'Exporting...' : 'Export Report'}
                 </button>
               </div>
             </div>
