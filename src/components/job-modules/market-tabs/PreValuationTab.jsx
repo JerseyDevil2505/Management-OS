@@ -3200,7 +3200,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('qualifier')}
                             >
-                              Qual {normSortConfig.field === 'qualifier' && (normSortConfig.direction === 'asc' ? '���' : '��')}
+                              Qual {normSortConfig.field === 'qualifier' && (normSortConfig.direction === 'asc' ? '↑' : '��')}
                             </th>
                             <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
@@ -3659,6 +3659,15 @@ const analyzeImportFile = async (file) => {
                   className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
                 >
                   {isCalculatingUnitSizes ? 'Calculating...' : 'Calculate Lot Size'}
+                </button>
+                <button
+                  onClick={exportLotSizeReport}
+                  disabled={isExportingLotSizes}
+                  className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
+                  title="Export lot size data for all properties"
+                >
+                  <Download size={16} />
+                  {isExportingLotSizes ? 'Exporting...' : 'Export Report'}
                 </button>
               </div>
             </div>
@@ -4419,7 +4428,7 @@ const analyzeImportFile = async (file) => {
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 bg-blue-50 cursor-pointer hover:bg-blue-100"
                           onClick={() => handleSort('worksheet_notes')}
                         >
-                          Notes {sortConfig.field === 'worksheet_notes' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          Notes {sortConfig.field === 'worksheet_notes' && (sortConfig.direction === 'asc' ? '��' : '↓')}
                         </th>
                         <th 
                           className="px-3 py-2 text-center text-xs font-medium text-gray-700 bg-green-50 cursor-pointer hover:bg-green-100"
