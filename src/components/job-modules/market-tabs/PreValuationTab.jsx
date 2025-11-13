@@ -886,6 +886,97 @@ useEffect(() => {
     }
   };
 
+  const exportLotSizeReport = async () => {
+    if (!jobData?.id) return;
+    setIsExportingLotSizes(true);
+    try {
+      // Query properties with lot size data from property_market_analysis
+      const { data: propsWithLotData, error: queryError } = await supabase
+        .from('property_records')
+        .select(`
+          property_composite_key,
+          property_location,
+          asset_front_foot,
+          asset_depth
+        `)
+        .eq('job_id', jobData.id)
+        .order('property_composite_key');
+
+      if (queryError) throw queryError;
+
+      // Query lot size data from property_market_analysis
+      const { data: lotSizeData, error: lotError } = await supabase
+        .from('property_market_analysis')
+        .select('property_composite_key, market_manual_lot_acre, market_manual_lot_sf')
+        .eq('job_id', jobData.id);
+
+      if (lotError) throw lotError;
+
+      // Create a map for quick lookup
+      const lotSizeMap = new Map();
+      if (lotSizeData) {
+        lotSizeData.forEach(item => {
+          lotSizeMap.set(item.property_composite_key, {
+            acre: item.market_manual_lot_acre,
+            sf: item.market_manual_lot_sf
+          });
+        });
+      }
+
+      // Prepare export data
+      const exportData = propsWithLotData.map(prop => {
+        const parsed = parseCompositeKey(prop.property_composite_key);
+        const lotData = lotSizeMap.get(prop.property_composite_key) || {};
+
+        return {
+          'Block': parsed.block || '',
+          'Lot': parsed.lot || '',
+          'Qualifier': parsed.qualifier || '',
+          'Card': parsed.card || '',
+          'Location': prop.property_location || '',
+          'Total Front Foot': prop.asset_front_foot || '',
+          'Avg Depth': prop.asset_depth || '',
+          'Lot Size Acre': lotData.acre || '',
+          'Lot Size SF': lotData.sf || ''
+        };
+      });
+
+      // Create workbook and worksheet
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportData);
+
+      // Set column widths
+      const colWidths = [
+        { wch: 10 },  // Block
+        { wch: 10 },  // Lot
+        { wch: 12 },  // Qualifier
+        { wch: 8 },   // Card
+        { wch: 30 },  // Location
+        { wch: 15 },  // Total Front Foot
+        { wch: 12 },  // Avg Depth
+        { wch: 15 },  // Lot Size Acre
+        { wch: 15 }   // Lot Size SF
+      ];
+      ws['!cols'] = colWidths;
+
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(wb, ws, 'Lot Size Report');
+
+      // Generate filename
+      const fileName = `LotSizeReport_${jobData?.job_name || 'export'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+      // Write file
+      XLSX.writeFile(wb, fileName);
+
+      alert(`Exported ${exportData.length} properties to ${fileName}`);
+    } catch (e) {
+      console.error('Error exporting lot size report:', e);
+      alert(`Export failed: ${formatError(e)}`);
+    } finally {
+      setIsExportingLotSizes(false);
+    }
+  };
+
 // ==================== WORKSHEET INITIALIZATION ====================
   useEffect(() => {
     if (properties && properties.length > 0) {
@@ -3109,7 +3200,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('qualifier')}
                             >
-                              Qual {normSortConfig.field === 'qualifier' && (normSortConfig.direction === 'asc' ? '↑' : '��')}
+                              Qual {normSortConfig.field === 'qualifier' && (normSortConfig.direction === 'asc' ? '���' : '��')}
                             </th>
                             <th 
                               className="px-4 py-3 text-left text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
