@@ -896,8 +896,8 @@ useEffect(() => {
         .select(`
           property_composite_key,
           property_location,
-          asset_front_foot,
-          asset_depth
+          asset_lot_frontage,
+          asset_lot_depth
         `)
         .eq('job_id', jobData.id)
         .order('property_composite_key');
@@ -934,8 +934,8 @@ useEffect(() => {
           'Qualifier': parsed.qualifier || '',
           'Card': parsed.card || '',
           'Location': prop.property_location || '',
-          'Total Front Foot': prop.asset_front_foot || '',
-          'Avg Depth': prop.asset_depth || '',
+          'Total Front Foot': prop.asset_lot_frontage || '',
+          'Avg Depth': prop.asset_lot_depth || '',
           'Lot Size Acre': lotData.acre || '',
           'Lot Size SF': lotData.sf || ''
         };
@@ -4428,7 +4428,7 @@ const analyzeImportFile = async (file) => {
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 bg-blue-50 cursor-pointer hover:bg-blue-100"
                           onClick={() => handleSort('worksheet_notes')}
                         >
-                          Notes {sortConfig.field === 'worksheet_notes' && (sortConfig.direction === 'asc' ? '��' : '↓')}
+                          Notes {sortConfig.field === 'worksheet_notes' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                         </th>
                         <th 
                           className="px-3 py-2 text-center text-xs font-medium text-gray-700 bg-green-50 cursor-pointer hover:bg-green-100"
