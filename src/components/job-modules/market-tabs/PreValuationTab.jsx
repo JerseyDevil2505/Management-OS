@@ -722,7 +722,7 @@ useEffect(() => {
     const outThreshold = config.outlierThreshold || '';
 
     if (false) console.log(`�� Setting equalizationRatio: "${eqRatio}" (was: "${equalizationRatio}")`);
-    if (false) console.log(`🔧 Setting outlierThreshold: "${outThreshold}" (was: "${outlierThreshold}")`);
+    if (false) console.log(`���� Setting outlierThreshold: "${outThreshold}" (was: "${outlierThreshold}")`);
 
     setEqualizationRatio(eqRatio);
     setOutlierThreshold(outThreshold);
@@ -900,7 +900,8 @@ useEffect(() => {
           asset_lot_depth
         `)
         .eq('job_id', jobData.id)
-        .order('property_composite_key');
+        .order('property_composite_key')
+        .limit(50000);
 
       if (queryError) throw queryError;
 
@@ -908,7 +909,8 @@ useEffect(() => {
       const { data: lotSizeData, error: lotError } = await supabase
         .from('property_market_analysis')
         .select('property_composite_key, market_manual_lot_acre, market_manual_lot_sf')
-        .eq('job_id', jobData.id);
+        .eq('job_id', jobData.id)
+        .limit(50000);
 
       if (lotError) throw lotError;
 
