@@ -2546,20 +2546,7 @@ export async function generateLotSizesForJob(jobId) {
 
   const props = allProps;
 
-  console.log(`\n📊 Loaded ${props.length} total properties in ${Math.ceil(props.length / BATCH_SIZE)} batch(es)`);
-
-  // Debug: Check structure of first property
-  if (props.length > 0) {
-    const sample = props[0];
-    console.log(`\n🔍 Sample property structure:`, {
-      composite_key: sample.property_composite_key,
-      property_vcs: sample.property_vcs,
-      market_analysis_structure: sample.property_market_analysis,
-      is_array: Array.isArray(sample.property_market_analysis),
-      new_vcs_attempt_1: sample.property_market_analysis?.new_vcs,
-      new_vcs_attempt_2: Array.isArray(sample.property_market_analysis) ? sample.property_market_analysis[0]?.new_vcs : null
-    });
-  }
+  // Properties loaded successfully
 
   const updates = [];
   const diagnostics = {
@@ -2573,38 +2560,7 @@ export async function generateLotSizesForJob(jobId) {
     vcsSummary: {}
   };
 
-  // Count CRHL properties
-  let crhlCount = 0;
-  const crhlSamples = [];
-  for (const p of props) {
-    // Prefer new_vcs from property_market_analysis over property_vcs
-    // Handle both object and array returns from Supabase JOIN
-    let newVcs = null;
-    if (Array.isArray(p.property_market_analysis)) {
-      newVcs = p.property_market_analysis[0]?.new_vcs;
-    } else {
-      newVcs = p.property_market_analysis?.new_vcs;
-    }
-
-    const rawVcs = newVcs || p.property_vcs;
-    const normalizedVcs = rawVcs ? String(rawVcs).trim().replace(/^0+/, '') : null;
-    if (normalizedVcs === 'CRHL') {
-      crhlCount++;
-      if (crhlSamples.length < 3) {
-        crhlSamples.push({
-          key: p.property_composite_key,
-          property_vcs: p.property_vcs,
-          new_vcs: newVcs,
-          using: normalizedVcs
-        });
-      }
-    }
-  }
-  console.log(`\n🔍 Found ${crhlCount} properties with VCS = "CRHL" in database`);
-  if (crhlSamples.length > 0) {
-    console.log(`   Sample CRHL properties:`, crhlSamples);
-  }
-  console.log('');
+  // Ready to process properties
 
   for (const p of props) {
     // Prefer new_vcs from property_market_analysis over property_vcs
@@ -2645,24 +2601,6 @@ export async function generateLotSizesForJob(jobId) {
     let hasAnyLandurData = false;
     let processedAnyCodes = false;
 
-    // DEBUG: Special logging for CRHL properties
-    const isCRHL = vcs === 'CRHL';
-    if (isCRHL) {
-      console.log(`\n🔍 CRHL PROPERTY DEBUG: ${p.property_composite_key}`);
-      console.log(`   property_vcs: "${p.property_vcs}"`);
-      console.log(`   new_vcs extracted: "${newVcs}"`);
-      console.log(`   Using VCS: "${vcs}" (${newVcs ? 'from new_vcs' : 'from property_vcs'})`);
-      console.log(`   Mapping found:`, mapForVcs);
-      console.log(`   Raw LANDUR data:`);
-      for (let i = 1; i <= 6; i++) {
-        const code = p[`landur_${i}`];
-        const units = p[`landurunits_${i}`];
-        if (code || units) {
-          console.log(`      LANDUR_${i}: code="${code}" (type: ${typeof code}), units=${units}`);
-        }
-      }
-    }
-
     // Process LANDUR codes 1-6
     for (let i = 1; i <= 6; i++) {
       const code = p[`landur_${i}`];
@@ -2673,55 +2611,37 @@ export async function generateLotSizesForJob(jobId) {
       hasAnyLandurData = true;
       const codeStr = String(code).padStart(2, '0');
 
-      if (isCRHL) {
-        console.log(`   Processing LANDUR_${i}: raw="${code}" → padded="${codeStr}", units=${units}`);
-      }
-
       // Check mapping
       if (Array.isArray(mapForVcs.exclude) && mapForVcs.exclude.includes(codeStr)) {
-        if (isCRHL) console.log(`      ❌ Code ${codeStr} is EXCLUDED`);
         continue; // Skip excluded codes
       }
 
       if (Array.isArray(mapForVcs.acre) && mapForVcs.acre.includes(codeStr)) {
-        if (isCRHL) console.log(`      ✅ Code ${codeStr} is in ACRE bucket → adding ${units} acres`);
         totalAcres += Number(units) || 0;
         processedAnyCodes = true;
         continue;
       }
 
       if (Array.isArray(mapForVcs.sf) && mapForVcs.sf.includes(codeStr)) {
-        if (isCRHL) console.log(`      ✅ Code ${codeStr} is in SF bucket → adding ${units} SF`);
         totalSf += Number(units) || 0;
         processedAnyCodes = true;
         continue;
       }
 
       // Code not in any bucket - track as unmapped
-      if (isCRHL) console.log(`      ⚠️ Code ${codeStr} is UNMAPPED (not in acre/sf/exclude)`);
       diagnostics.unmappedCodes.add(`${vcs}::${codeStr}`);
-    }
-
-    if (isCRHL) {
-      console.log(`   Summary after processing all codes:`);
-      console.log(`      hasAnyLandurData: ${hasAnyLandurData}`);
-      console.log(`      processedAnyCodes: ${processedAnyCodes}`);
-      console.log(`      totalAcres: ${totalAcres}`);
-      console.log(`      totalSf: ${totalSf}`);
     }
 
     // Track diagnostics
     if (!hasAnyLandurData) {
       diagnostics.skipped++;
       diagnostics.noLandurData++;
-      if (isCRHL) console.log(`   ❌ CRHL PROPERTY SKIPPED: No LANDUR data\n`);
       continue;
     }
 
     if (!processedAnyCodes) {
       diagnostics.skipped++;
       diagnostics.allCodesExcluded++;
-      if (isCRHL) console.log(`   ❌ CRHL PROPERTY SKIPPED: All codes excluded\n`);
       continue;
     }
 
@@ -2745,12 +2665,6 @@ export async function generateLotSizesForJob(jobId) {
       // No data
       finalAcres = null;
       finalSf = null;
-    }
-
-    if (isCRHL) {
-      console.log(`   ✅ CRHL PROPERTY PROCESSED:`);
-      console.log(`      Final Acres: ${finalAcres}`);
-      console.log(`      Final SF: ${finalSf}\n`);
     }
 
     updates.push({
