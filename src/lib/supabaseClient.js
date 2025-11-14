@@ -2542,15 +2542,21 @@ export async function generateLotSizesForJob(jobId) {
   // Count CRHL properties
   let crhlCount = 0;
   for (const p of props) {
-    const rawVcs = p.property_vcs ? String(p.property_vcs).trim() : null;
-    if (rawVcs === 'CRHL' || rawVcs?.replace(/^0+/, '') === 'CRHL') {
+    // Prefer new_vcs from property_market_analysis over property_vcs
+    const newVcs = p.property_market_analysis?.new_vcs;
+    const rawVcs = newVcs || p.property_vcs;
+    const normalizedVcs = rawVcs ? String(rawVcs).trim().replace(/^0+/, '') : null;
+    if (normalizedVcs === 'CRHL') {
       crhlCount++;
     }
   }
   console.log(`\n🔍 Found ${crhlCount} properties with VCS = "CRHL" in database\n`);
 
   for (const p of props) {
-    let vcs = p.property_vcs ? String(p.property_vcs).trim().replace(/^0+/, '') : null;
+    // Prefer new_vcs from property_market_analysis over property_vcs
+    const newVcs = p.property_market_analysis?.new_vcs;
+    const rawVcs = newVcs || p.property_vcs;
+    let vcs = rawVcs ? String(rawVcs).trim().replace(/^0+/, '') : null;
 
     // Try to resolve VCS name to numeric key
     let mapForVcs = null;
