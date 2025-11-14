@@ -2588,7 +2588,9 @@ export async function generateLotSizesForJob(jobId) {
     const isCRHL = vcs === 'CRHL';
     if (isCRHL) {
       console.log(`\n🔍 CRHL PROPERTY DEBUG: ${p.property_composite_key}`);
-      console.log(`   VCS: "${vcs}"`);
+      console.log(`   property_vcs: "${p.property_vcs}"`);
+      console.log(`   new_vcs: "${p.property_market_analysis?.new_vcs}"`);
+      console.log(`   Using VCS: "${vcs}" (${newVcs ? 'from new_vcs' : 'from property_vcs'})`);
       console.log(`   Mapping found:`, mapForVcs);
       console.log(`   Raw LANDUR data:`);
       for (let i = 1; i <= 6; i++) {
@@ -3337,7 +3339,7 @@ export const checklistService = {
       
       if (error) throw error;
       
-      console.log(`✅ Loaded ${data?.length || 0} checklist items`);
+      console.log(`�� Loaded ${data?.length || 0} checklist items`);
       return data || [];
     } catch (error) {
       console.error('Checklist items fetch error:', error);
