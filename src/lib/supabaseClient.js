@@ -2550,9 +2550,6 @@ export async function generateLotSizesForJob(jobId) {
     if (!mapForVcs) {
       diagnostics.skipped++;
       diagnostics.noVcsMapping++;
-      if (vcs) {
-        console.log(`⚠️ No mapping found for VCS "${vcs}" on property ${p.property_composite_key}`);
-      }
       continue; // Skip if no mapping found
     }
 
@@ -2614,7 +2611,6 @@ export async function generateLotSizesForJob(jobId) {
       // Code not in any bucket - track as unmapped
       if (isCRHL) console.log(`      ⚠️ Code ${codeStr} is UNMAPPED (not in acre/sf/exclude)`);
       diagnostics.unmappedCodes.add(`${vcs}::${codeStr}`);
-      console.log(`⚠️ Unmapped code ${codeStr} for VCS "${vcs}" on property ${p.property_composite_key} (${units} units)`);
     }
 
     if (isCRHL) {
@@ -2629,7 +2625,6 @@ export async function generateLotSizesForJob(jobId) {
     if (!hasAnyLandurData) {
       diagnostics.skipped++;
       diagnostics.noLandurData++;
-      console.log(`⚠️ No LANDUR data for property ${p.property_composite_key} (VCS: ${vcs})`);
       if (isCRHL) console.log(`   ❌ CRHL PROPERTY SKIPPED: No LANDUR data\n`);
       continue;
     }
@@ -2637,7 +2632,6 @@ export async function generateLotSizesForJob(jobId) {
     if (!processedAnyCodes) {
       diagnostics.skipped++;
       diagnostics.allCodesExcluded++;
-      console.log(`⚠️ All codes excluded for property ${p.property_composite_key} (VCS: ${vcs})`);
       if (isCRHL) console.log(`   ❌ CRHL PROPERTY SKIPPED: All codes excluded\n`);
       continue;
     }
@@ -2689,23 +2683,7 @@ export async function generateLotSizesForJob(jobId) {
     if (finalAcres) diagnostics.vcsSummary[vcs].totalAcres += finalAcres;
   }
 
-  // Log summary
-  console.log('\n📊 LOT SIZE CALCULATION SUMMARY:');
-  console.log(`   Total Properties: ${diagnostics.totalProperties}`);
-  console.log(`   ✅ Processed: ${diagnostics.processed}`);
-  console.log(`   ⏭️  Skipped: ${diagnostics.skipped}`);
-  console.log(`      - No VCS mapping: ${diagnostics.noVcsMapping}`);
-  console.log(`      - No LANDUR data: ${diagnostics.noLandurData}`);
-  console.log(`      - All codes excluded: ${diagnostics.allCodesExcluded}`);
-  if (diagnostics.unmappedCodes.size > 0) {
-    console.log(`   ⚠️  Unmapped codes found: ${Array.from(diagnostics.unmappedCodes).join(', ')}`);
-  }
-  console.log('\n📋 BY VCS:');
-  Object.keys(diagnostics.vcsSummary).forEach(vcs => {
-    const summary = diagnostics.vcsSummary[vcs];
-    console.log(`   ${vcs}: ${summary.processed} properties`);
-  });
-  console.log('');
+  // Summary only in diagnostics return object, not logged
 
   // Batch upsert
   const batchSize = 500;
