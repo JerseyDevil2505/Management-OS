@@ -2527,6 +2527,21 @@ export async function generateLotSizesForJob(jobId) {
 
   if (propsErr) throw propsErr;
 
+  console.log(`\n📊 Query loaded ${props.length} total properties`);
+
+  // Debug: Check structure of first property
+  if (props.length > 0) {
+    const sample = props[0];
+    console.log(`\n🔍 Sample property structure:`, {
+      composite_key: sample.property_composite_key,
+      property_vcs: sample.property_vcs,
+      market_analysis_structure: sample.property_market_analysis,
+      is_array: Array.isArray(sample.property_market_analysis),
+      new_vcs_attempt_1: sample.property_market_analysis?.new_vcs,
+      new_vcs_attempt_2: Array.isArray(sample.property_market_analysis) ? sample.property_market_analysis[0]?.new_vcs : null
+    });
+  }
+
   const updates = [];
   const diagnostics = {
     totalProperties: props.length,
@@ -2541,16 +2556,36 @@ export async function generateLotSizesForJob(jobId) {
 
   // Count CRHL properties
   let crhlCount = 0;
+  const crhlSamples = [];
   for (const p of props) {
     // Prefer new_vcs from property_market_analysis over property_vcs
-    const newVcs = p.property_market_analysis?.new_vcs;
+    // Handle both object and array returns from Supabase JOIN
+    let newVcs = null;
+    if (Array.isArray(p.property_market_analysis)) {
+      newVcs = p.property_market_analysis[0]?.new_vcs;
+    } else {
+      newVcs = p.property_market_analysis?.new_vcs;
+    }
+
     const rawVcs = newVcs || p.property_vcs;
     const normalizedVcs = rawVcs ? String(rawVcs).trim().replace(/^0+/, '') : null;
     if (normalizedVcs === 'CRHL') {
       crhlCount++;
+      if (crhlSamples.length < 3) {
+        crhlSamples.push({
+          key: p.property_composite_key,
+          property_vcs: p.property_vcs,
+          new_vcs: newVcs,
+          using: normalizedVcs
+        });
+      }
     }
   }
-  console.log(`\n🔍 Found ${crhlCount} properties with VCS = "CRHL" in database\n`);
+  console.log(`\n🔍 Found ${crhlCount} properties with VCS = "CRHL" in database`);
+  if (crhlSamples.length > 0) {
+    console.log(`   Sample CRHL properties:`, crhlSamples);
+  }
+  console.log('');
 
   for (const p of props) {
     // Prefer new_vcs from property_market_analysis over property_vcs
@@ -3555,7 +3590,7 @@ export const checklistService = {
         .single();
       
       if (error) throw error;
-      console.log('��� Updated assessor email:', assessorEmail);
+      console.log('✅ Updated assessor email:', assessorEmail);
       return data;
     } catch (error) {
       console.error('Assessor email update error:', error);
