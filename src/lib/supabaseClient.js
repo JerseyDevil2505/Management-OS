@@ -2546,7 +2546,7 @@ export async function generateLotSizesForJob(jobId) {
 
   const props = allProps;
 
-  console.log(`\n📊 Query loaded ${props.length} total properties`);
+  console.log(`\n📊 Loaded ${props.length} total properties in ${Math.ceil(props.length / BATCH_SIZE)} batch(es)`);
 
   // Debug: Check structure of first property
   if (props.length > 0) {
