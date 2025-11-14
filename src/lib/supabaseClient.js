@@ -2518,6 +2518,16 @@ export async function generateLotSizesForJob(jobId) {
   if (propsErr) throw propsErr;
 
   const updates = [];
+  const diagnostics = {
+    totalProperties: props.length,
+    processed: 0,
+    skipped: 0,
+    noVcsMapping: 0,
+    noLandurData: 0,
+    allCodesExcluded: 0,
+    unmappedCodes: new Set(),
+    vcsSummary: {}
+  };
 
   for (const p of props) {
     let vcs = p.property_vcs ? String(p.property_vcs).trim().replace(/^0+/, '') : null;
@@ -2537,10 +2547,19 @@ export async function generateLotSizesForJob(jobId) {
       }
     }
 
-    if (!mapForVcs) continue; // Skip if no mapping found
+    if (!mapForVcs) {
+      diagnostics.skipped++;
+      diagnostics.noVcsMapping++;
+      if (vcs) {
+        console.log(`⚠️ No mapping found for VCS "${vcs}" on property ${p.property_composite_key}`);
+      }
+      continue; // Skip if no mapping found
+    }
 
     let totalAcres = 0;
     let totalSf = 0;
+    let hasAnyLandurData = false;
+    let processedAnyCodes = false;
 
     // Process LANDUR codes 1-6
     for (let i = 1; i <= 6; i++) {
@@ -2549,6 +2568,7 @@ export async function generateLotSizesForJob(jobId) {
 
       if (!code || units === null || units === undefined) continue;
 
+      hasAnyLandurData = true;
       const codeStr = String(code).padStart(2, '0');
 
       // Check mapping
@@ -2558,26 +2578,94 @@ export async function generateLotSizesForJob(jobId) {
 
       if (Array.isArray(mapForVcs.acre) && mapForVcs.acre.includes(codeStr)) {
         totalAcres += Number(units) || 0;
+        processedAnyCodes = true;
         continue;
       }
 
       if (Array.isArray(mapForVcs.sf) && mapForVcs.sf.includes(codeStr)) {
         totalSf += Number(units) || 0;
+        processedAnyCodes = true;
         continue;
       }
+
+      // Code not in any bucket - track as unmapped
+      diagnostics.unmappedCodes.add(`${vcs}::${codeStr}`);
+      console.log(`⚠️ Unmapped code ${codeStr} for VCS "${vcs}" on property ${p.property_composite_key} (${units} units)`);
     }
 
-    const finalAcres = parseFloat((totalAcres + (totalSf / 43560)).toFixed(2));
-    const finalSf = finalAcres > 0 ? Math.round(finalAcres * 43560) : null;
+    // Track diagnostics
+    if (!hasAnyLandurData) {
+      diagnostics.skipped++;
+      diagnostics.noLandurData++;
+      console.log(`⚠️ No LANDUR data for property ${p.property_composite_key} (VCS: ${vcs})`);
+      continue;
+    }
+
+    if (!processedAnyCodes) {
+      diagnostics.skipped++;
+      diagnostics.allCodesExcluded++;
+      console.log(`⚠️ All codes excluded for property ${p.property_composite_key} (VCS: ${vcs})`);
+      continue;
+    }
+
+    // Calculate final values - PRESERVE ORIGINAL SF WHEN POSSIBLE
+    let finalAcres;
+    let finalSf;
+
+    if (totalAcres > 0 && totalSf > 0) {
+      // Mixed: have both acres and SF - must convert
+      finalAcres = parseFloat((totalAcres + (totalSf / 43560)).toFixed(2));
+      finalSf = Math.round(finalAcres * 43560);
+    } else if (totalAcres > 0) {
+      // Only acres - convert to SF
+      finalAcres = parseFloat(totalAcres.toFixed(2));
+      finalSf = Math.round(totalAcres * 43560);
+    } else if (totalSf > 0) {
+      // Only SF - PRESERVE ORIGINAL SF, calculate acres from it
+      finalSf = totalSf;
+      finalAcres = parseFloat((totalSf / 43560).toFixed(2));
+    } else {
+      // No data
+      finalAcres = null;
+      finalSf = null;
+    }
 
     updates.push({
       job_id: jobId,
       property_composite_key: p.property_composite_key,
-      market_manual_lot_acre: finalAcres > 0 ? finalAcres : null,
+      market_manual_lot_acre: finalAcres,
       market_manual_lot_sf: finalSf,
       updated_at: new Date().toISOString()
     });
+
+    diagnostics.processed++;
+
+    // Track VCS summary
+    if (!diagnostics.vcsSummary[vcs]) {
+      diagnostics.vcsSummary[vcs] = { processed: 0, totalSf: 0, totalAcres: 0 };
+    }
+    diagnostics.vcsSummary[vcs].processed++;
+    if (finalSf) diagnostics.vcsSummary[vcs].totalSf += finalSf;
+    if (finalAcres) diagnostics.vcsSummary[vcs].totalAcres += finalAcres;
   }
+
+  // Log summary
+  console.log('\n📊 LOT SIZE CALCULATION SUMMARY:');
+  console.log(`   Total Properties: ${diagnostics.totalProperties}`);
+  console.log(`   ✅ Processed: ${diagnostics.processed}`);
+  console.log(`   ⏭️  Skipped: ${diagnostics.skipped}`);
+  console.log(`      - No VCS mapping: ${diagnostics.noVcsMapping}`);
+  console.log(`      - No LANDUR data: ${diagnostics.noLandurData}`);
+  console.log(`      - All codes excluded: ${diagnostics.allCodesExcluded}`);
+  if (diagnostics.unmappedCodes.size > 0) {
+    console.log(`   ⚠️  Unmapped codes found: ${Array.from(diagnostics.unmappedCodes).join(', ')}`);
+  }
+  console.log('\n📋 BY VCS:');
+  Object.keys(diagnostics.vcsSummary).forEach(vcs => {
+    const summary = diagnostics.vcsSummary[vcs];
+    console.log(`   ${vcs}: ${summary.processed} properties`);
+  });
+  console.log('');
 
   // Batch upsert
   const batchSize = 500;
@@ -2589,7 +2677,20 @@ export async function generateLotSizesForJob(jobId) {
     if (error) throw error;
   }
 
-  return { job_id: jobId, updated: updates.length };
+  return {
+    job_id: jobId,
+    updated: updates.length,
+    diagnostics: {
+      totalProperties: diagnostics.totalProperties,
+      processed: diagnostics.processed,
+      skipped: diagnostics.skipped,
+      noVcsMapping: diagnostics.noVcsMapping,
+      noLandurData: diagnostics.noLandurData,
+      allCodesExcluded: diagnostics.allCodesExcluded,
+      unmappedCodes: Array.from(diagnostics.unmappedCodes),
+      vcsSummary: diagnostics.vcsSummary
+    }
+  };
 }
 
 // Save unit rate mappings (merge into existing mappings)
