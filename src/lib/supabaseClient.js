@@ -2521,7 +2521,7 @@ export async function generateLotSizesForJob(jobId) {
       landur_4, landurunits_4,
       landur_5, landurunits_5,
       landur_6, landurunits_6,
-      property_market_analysis!inner(new_vcs)
+      property_market_analysis(new_vcs)
     `)
     .eq('job_id', jobId);
 
@@ -3555,7 +3555,7 @@ export const checklistService = {
         .single();
       
       if (error) throw error;
-      console.log('✅ Updated assessor email:', assessorEmail);
+      console.log('��� Updated assessor email:', assessorEmail);
       return data;
     } catch (error) {
       console.error('Assessor email update error:', error);
