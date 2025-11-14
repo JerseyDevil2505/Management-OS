@@ -2631,7 +2631,7 @@ export async function generateLotSizesForJob(jobId) {
     if (isCRHL) {
       console.log(`\n🔍 CRHL PROPERTY DEBUG: ${p.property_composite_key}`);
       console.log(`   property_vcs: "${p.property_vcs}"`);
-      console.log(`   new_vcs: "${p.property_market_analysis?.new_vcs}"`);
+      console.log(`   new_vcs extracted: "${newVcs}"`);
       console.log(`   Using VCS: "${vcs}" (${newVcs ? 'from new_vcs' : 'from property_vcs'})`);
       console.log(`   Mapping found:`, mapForVcs);
       console.log(`   Raw LANDUR data:`);
