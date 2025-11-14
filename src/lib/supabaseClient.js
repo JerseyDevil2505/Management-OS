@@ -2509,10 +2509,20 @@ export async function generateLotSizesForJob(jobId) {
     });
   }
 
-  // Get properties with LANDUR fields
+  // Get properties with LANDUR fields and VCS (prefer new_vcs from market analysis)
   const { data: props, error: propsErr } = await supabase
     .from('property_records')
-    .select('property_composite_key, property_vcs, landur_1, landurunits_1, landur_2, landurunits_2, landur_3, landurunits_3, landur_4, landurunits_4, landur_5, landurunits_5, landur_6, landurunits_6')
+    .select(`
+      property_composite_key,
+      property_vcs,
+      landur_1, landurunits_1,
+      landur_2, landurunits_2,
+      landur_3, landurunits_3,
+      landur_4, landurunits_4,
+      landur_5, landurunits_5,
+      landur_6, landurunits_6,
+      property_market_analysis!inner(new_vcs)
+    `)
     .eq('job_id', jobId);
 
   if (propsErr) throw propsErr;
