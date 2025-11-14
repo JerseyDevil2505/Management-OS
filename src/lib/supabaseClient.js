@@ -2509,23 +2509,42 @@ export async function generateLotSizesForJob(jobId) {
     });
   }
 
-  // Get properties with LANDUR fields and VCS (prefer new_vcs from market analysis)
-  const { data: props, error: propsErr } = await supabase
-    .from('property_records')
-    .select(`
-      property_composite_key,
-      property_vcs,
-      landur_1, landurunits_1,
-      landur_2, landurunits_2,
-      landur_3, landurunits_3,
-      landur_4, landurunits_4,
-      landur_5, landurunits_5,
-      landur_6, landurunits_6,
-      property_market_analysis(new_vcs)
-    `)
-    .eq('job_id', jobId);
+  // Get properties with LANDUR fields and VCS - use batch loading to handle >5000 records
+  const BATCH_SIZE = 1000;
+  let allProps = [];
+  let offset = 0;
+  let hasMore = true;
 
-  if (propsErr) throw propsErr;
+  while (hasMore) {
+    const { data: batch, error: propsErr } = await supabase
+      .from('property_records')
+      .select(`
+        property_composite_key,
+        property_vcs,
+        landur_1, landurunits_1,
+        landur_2, landurunits_2,
+        landur_3, landurunits_3,
+        landur_4, landurunits_4,
+        landur_5, landurunits_5,
+        landur_6, landurunits_6,
+        property_market_analysis(new_vcs)
+      `)
+      .eq('job_id', jobId)
+      .order('property_composite_key')
+      .range(offset, offset + BATCH_SIZE - 1);
+
+    if (propsErr) throw propsErr;
+
+    if (batch && batch.length > 0) {
+      allProps = allProps.concat(batch);
+      offset += BATCH_SIZE;
+      hasMore = batch.length === BATCH_SIZE;
+    } else {
+      hasMore = false;
+    }
+  }
+
+  const props = allProps;
 
   console.log(`\n📊 Query loaded ${props.length} total properties`);
 
