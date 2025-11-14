@@ -890,31 +890,63 @@ useEffect(() => {
     if (!jobData?.id) return;
     setIsExportingLotSizes(true);
     try {
-      // Query properties with lot size data from property_market_analysis
-      // Using range() instead of limit() to bypass potential server limits
-      const { data: propsWithLotData, error: queryError } = await supabase
-        .from('property_records')
-        .select(`
-          property_composite_key,
-          property_location,
-          property_m4_class,
-          asset_lot_frontage,
-          asset_lot_depth
-        `)
-        .eq('job_id', jobData.id)
-        .order('property_composite_key')
-        .range(0, 99999);
+      // Fetch all properties in batches to bypass 5000 record limit
+      const BATCH_SIZE = 1000;
+      let allProps = [];
+      let offset = 0;
+      let hasMore = true;
 
-      if (queryError) throw queryError;
+      while (hasMore) {
+        const { data: batch, error: queryError } = await supabase
+          .from('property_records')
+          .select(`
+            property_composite_key,
+            property_location,
+            property_m4_class,
+            asset_lot_frontage,
+            asset_lot_depth
+          `)
+          .eq('job_id', jobData.id)
+          .order('property_composite_key')
+          .range(offset, offset + BATCH_SIZE - 1);
 
-      // Query lot size data from property_market_analysis
-      const { data: lotSizeData, error: lotError } = await supabase
-        .from('property_market_analysis')
-        .select('property_composite_key, market_manual_lot_acre, market_manual_lot_sf')
-        .eq('job_id', jobData.id)
-        .range(0, 99999);
+        if (queryError) throw queryError;
 
-      if (lotError) throw lotError;
+        if (batch && batch.length > 0) {
+          allProps = allProps.concat(batch);
+          offset += BATCH_SIZE;
+          hasMore = batch.length === BATCH_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      const propsWithLotData = allProps;
+
+      // Fetch lot size data in batches
+      let allLotSizeData = [];
+      offset = 0;
+      hasMore = true;
+
+      while (hasMore) {
+        const { data: batch, error: lotError } = await supabase
+          .from('property_market_analysis')
+          .select('property_composite_key, market_manual_lot_acre, market_manual_lot_sf')
+          .eq('job_id', jobData.id)
+          .range(offset, offset + BATCH_SIZE - 1);
+
+        if (lotError) throw lotError;
+
+        if (batch && batch.length > 0) {
+          allLotSizeData = allLotSizeData.concat(batch);
+          offset += BATCH_SIZE;
+          hasMore = batch.length === BATCH_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      const lotSizeData = allLotSizeData;
 
       // Create a map for quick lookup
       const lotSizeMap = new Map();
