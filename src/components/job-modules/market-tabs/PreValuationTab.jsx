@@ -876,8 +876,7 @@ useEffect(() => {
       // Use generateLotSizesForJob which applies staged mappings (jobs.staged_unit_rate_config) directly
       const res = await generateLotSizesForJob(jobData.id);
       const updated = res?.updated ?? 0;
-      console.log(`\n✅ Generated lot sizes for ${updated} properties`);
-      console.log(`💡 Scroll up to see CRHL-specific debugging\n`);
+      console.log(`✅ Generated lot sizes for ${updated} properties`);
 
       // Do NOT auto-refresh job to avoid supabase 500 spikes
       // Keep local UI state as-is; user can refresh manually if needed
