@@ -2664,6 +2664,12 @@ export async function generateLotSizesForJob(jobId) {
       finalSf = null;
     }
 
+    if (isCRHL) {
+      console.log(`   ✅ CRHL PROPERTY PROCESSED:`);
+      console.log(`      Final Acres: ${finalAcres}`);
+      console.log(`      Final SF: ${finalSf}\n`);
+    }
+
     updates.push({
       job_id: jobId,
       property_composite_key: p.property_composite_key,
