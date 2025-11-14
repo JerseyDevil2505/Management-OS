@@ -237,7 +237,39 @@ const PreValuationTab = ({
     setIsGeneratingLotSizes(true);
     try {
       const res = await generateLotSizesForJob(jobData.id);
-      alert(`Generated lot sizes for ${res.updated} properties`);
+      const updated = res?.updated ?? 0;
+      const diag = res?.diagnostics;
+
+      let message = `✅ Generated lot sizes for ${updated} properties\n\n`;
+
+      if (diag) {
+        message += `📊 Summary:\n`;
+        message += `   Total Properties: ${diag.totalProperties}\n`;
+        message += `   ✅ Processed: ${diag.processed}\n`;
+
+        if (diag.skipped > 0) {
+          message += `   ⏭️  Skipped: ${diag.skipped}\n`;
+          if (diag.noVcsMapping > 0) message += `      - No VCS mapping: ${diag.noVcsMapping}\n`;
+          if (diag.noLandurData > 0) message += `      - No LANDUR data: ${diag.noLandurData}\n`;
+          if (diag.allCodesExcluded > 0) message += `      - All codes excluded: ${diag.allCodesExcluded}\n`;
+        }
+
+        if (diag.unmappedCodes && diag.unmappedCodes.length > 0) {
+          message += `\n⚠️  Unmapped codes: ${diag.unmappedCodes.join(', ')}\n`;
+        }
+
+        if (diag.vcsSummary && Object.keys(diag.vcsSummary).length > 0) {
+          message += `\n📋 By VCS:\n`;
+          Object.keys(diag.vcsSummary).forEach(vcs => {
+            const summary = diag.vcsSummary[vcs];
+            message += `   ${vcs}: ${summary.processed} properties\n`;
+          });
+        }
+
+        message += `\n💡 Check browser console for detailed property-level diagnostics`;
+      }
+
+      alert(message);
       if (onUpdateJobCache) callRefresh(null);
     } catch (e) {
       console.error('Generate failed', e);
