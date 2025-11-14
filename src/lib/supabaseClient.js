@@ -2589,7 +2589,14 @@ export async function generateLotSizesForJob(jobId) {
 
   for (const p of props) {
     // Prefer new_vcs from property_market_analysis over property_vcs
-    const newVcs = p.property_market_analysis?.new_vcs;
+    // Handle both object and array returns from Supabase JOIN
+    let newVcs = null;
+    if (Array.isArray(p.property_market_analysis)) {
+      newVcs = p.property_market_analysis[0]?.new_vcs;
+    } else {
+      newVcs = p.property_market_analysis?.new_vcs;
+    }
+
     const rawVcs = newVcs || p.property_vcs;
     let vcs = rawVcs ? String(rawVcs).trim().replace(/^0+/, '') : null;
 
