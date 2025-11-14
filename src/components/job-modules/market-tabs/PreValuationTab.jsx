@@ -238,8 +238,7 @@ const PreValuationTab = ({
     try {
       const res = await generateLotSizesForJob(jobData.id);
       const updated = res?.updated ?? 0;
-      console.log(`\n✅ Generated lot sizes for ${updated} properties`);
-      console.log(`💡 Scroll up to see CRHL-specific debugging\n`);
+      console.log(`✅ Generated lot sizes for ${updated} properties`);
       if (onUpdateJobCache) callRefresh(null);
     } catch (e) {
       console.error('Generate failed', e);
