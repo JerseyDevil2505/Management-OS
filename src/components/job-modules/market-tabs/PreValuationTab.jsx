@@ -237,7 +237,8 @@ const PreValuationTab = ({
     setIsGeneratingLotSizes(true);
     try {
       const res = await generateLotSizesForJob(jobData.id);
-      alert(`Generated lot sizes for ${res.updated} properties`);
+      const updated = res?.updated ?? 0;
+      console.log(`✅ Generated lot sizes for ${updated} properties`);
       if (onUpdateJobCache) callRefresh(null);
     } catch (e) {
       console.error('Generate failed', e);
@@ -874,7 +875,7 @@ useEffect(() => {
       // Use generateLotSizesForJob which applies staged mappings (jobs.staged_unit_rate_config) directly
       const res = await generateLotSizesForJob(jobData.id);
       const updated = res?.updated ?? 0;
-      alert(`Generated lot sizes for ${updated} properties`);
+      console.log(`✅ Generated lot sizes for ${updated} properties`);
 
       // Do NOT auto-refresh job to avoid supabase 500 spikes
       // Keep local UI state as-is; user can refresh manually if needed
