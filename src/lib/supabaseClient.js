@@ -2561,6 +2561,22 @@ export async function generateLotSizesForJob(jobId) {
     let hasAnyLandurData = false;
     let processedAnyCodes = false;
 
+    // DEBUG: Special logging for CRHL properties
+    const isCRHL = vcs === 'CRHL';
+    if (isCRHL) {
+      console.log(`\n🔍 CRHL PROPERTY DEBUG: ${p.property_composite_key}`);
+      console.log(`   VCS: "${vcs}"`);
+      console.log(`   Mapping found:`, mapForVcs);
+      console.log(`   Raw LANDUR data:`);
+      for (let i = 1; i <= 6; i++) {
+        const code = p[`landur_${i}`];
+        const units = p[`landurunits_${i}`];
+        if (code || units) {
+          console.log(`      LANDUR_${i}: code="${code}" (type: ${typeof code}), units=${units}`);
+        }
+      }
+    }
+
     // Process LANDUR codes 1-6
     for (let i = 1; i <= 6; i++) {
       const code = p[`landur_${i}`];
@@ -2571,8 +2587,13 @@ export async function generateLotSizesForJob(jobId) {
       hasAnyLandurData = true;
       const codeStr = String(code).padStart(2, '0');
 
+      if (isCRHL) {
+        console.log(`   Processing LANDUR_${i}: raw="${code}" → padded="${codeStr}", units=${units}`);
+      }
+
       // Check mapping
       if (Array.isArray(mapForVcs.exclude) && mapForVcs.exclude.includes(codeStr)) {
+        if (isCRHL) console.log(`      ❌ Code ${codeStr} is EXCLUDED`);
         continue; // Skip excluded codes
       }
 
