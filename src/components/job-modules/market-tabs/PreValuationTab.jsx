@@ -891,17 +891,19 @@ useEffect(() => {
     setIsExportingLotSizes(true);
     try {
       // Query properties with lot size data from property_market_analysis
+      // Using range() instead of limit() to bypass potential server limits
       const { data: propsWithLotData, error: queryError } = await supabase
         .from('property_records')
         .select(`
           property_composite_key,
           property_location,
+          property_m4_class,
           asset_lot_frontage,
           asset_lot_depth
         `)
         .eq('job_id', jobData.id)
         .order('property_composite_key')
-        .limit(50000);
+        .range(0, 99999);
 
       if (queryError) throw queryError;
 
@@ -910,7 +912,7 @@ useEffect(() => {
         .from('property_market_analysis')
         .select('property_composite_key, market_manual_lot_acre, market_manual_lot_sf')
         .eq('job_id', jobData.id)
-        .limit(50000);
+        .range(0, 99999);
 
       if (lotError) throw lotError;
 
@@ -935,6 +937,7 @@ useEffect(() => {
           'Lot': parsed.lot || '',
           'Qualifier': parsed.qualifier || '',
           'Card': parsed.card || '',
+          'Property Class': prop.property_m4_class || '',
           'Location': prop.property_location || '',
           'Total Front Foot': prop.asset_lot_frontage || '',
           'Avg Depth': prop.asset_lot_depth || '',
@@ -953,6 +956,7 @@ useEffect(() => {
         { wch: 10 },  // Lot
         { wch: 12 },  // Qualifier
         { wch: 8 },   // Card
+        { wch: 12 },  // Property Class
         { wch: 30 },  // Location
         { wch: 15 },  // Total Front Foot
         { wch: 12 },  // Avg Depth
