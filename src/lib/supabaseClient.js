@@ -2529,6 +2529,16 @@ export async function generateLotSizesForJob(jobId) {
     vcsSummary: {}
   };
 
+  // Count CRHL properties
+  let crhlCount = 0;
+  for (const p of props) {
+    const rawVcs = p.property_vcs ? String(p.property_vcs).trim() : null;
+    if (rawVcs === 'CRHL' || rawVcs?.replace(/^0+/, '') === 'CRHL') {
+      crhlCount++;
+    }
+  }
+  console.log(`\n🔍 Found ${crhlCount} properties with VCS = "CRHL" in database\n`);
+
   for (const p of props) {
     let vcs = p.property_vcs ? String(p.property_vcs).trim().replace(/^0+/, '') : null;
 
