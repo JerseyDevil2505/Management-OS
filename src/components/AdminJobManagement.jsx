@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye,
-  DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X, Clock
+  DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X, Clock, Download
 } from 'lucide-react';
 import { supabase, employeeService, jobService, planningJobService, utilityService, authService, propertyService, checklistService } from '../lib/supabaseClient';
 
