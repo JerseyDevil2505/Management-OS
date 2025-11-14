@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Upload, Plus, Edit3, Users, FileText, Calendar, MapPin, Database, Settings, Eye,
-  DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X, Clock
+  DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X, Clock, Download
 } from 'lucide-react';
 import { supabase, employeeService, jobService, planningJobService, utilityService, authService, propertyService, checklistService } from '../lib/supabaseClient';
 
@@ -727,7 +727,7 @@ const AdminJobManagement = ({
       setImportingHpi(true);
       const fileContent = await hpiFile.text();
       const lines = fileContent.split('\n').filter(line => line.trim());
-      
+
       if (lines.length < 2) {
         addNotification('Invalid CSV file format', 'error');
         return;
@@ -748,7 +748,7 @@ const AdminJobManagement = ({
         if (values.length >= 2) {
           const dateStr = values[dateColumnIndex].trim();
           const hpiValue = parseFloat(values[hpiColumnIndex]);
-          
+
           if (dateStr && !isNaN(hpiValue)) {
             const year = parseInt(dateStr.split('-')[0]);
             hpiRecords.push({
@@ -777,7 +777,7 @@ const AdminJobManagement = ({
       if (insertError) {
         throw new Error('Database insert failed: ' + insertError.message);
       }
-      
+
       // Update local state
       setCountyHpiData(prev => ({
         ...prev,
@@ -787,13 +787,53 @@ const AdminJobManagement = ({
       addNotification(`Successfully imported ${hpiRecords.length} HPI records for ${county} County`, 'success');
       setShowHpiImport(null);
       setHpiFile(null);
-      
+
     } catch (error) {
       console.error('HPI import error:', error);
       addNotification('Error importing HPI data: ' + error.message, 'error');
     } finally {
       setImportingHpi(false);
     }
+  };
+
+  const exportCountyHpi = (county) => {
+    const hpiData = countyHpiData[county] || [];
+
+    if (hpiData.length === 0) {
+      addNotification('No HPI data to export for this county', 'error');
+      return;
+    }
+
+    const sortedData = [...hpiData].sort((a, b) => a.observation_year - b.observation_year);
+    const mostRecentYear = Math.max(...sortedData.map(d => d.observation_year));
+    const baseYearData = sortedData.find(d => d.observation_year === mostRecentYear);
+    const baseHPI = baseYearData?.hpi_index || 100;
+
+    const csvRows = [
+      ['Year', 'HPI Index', `Multiplier (Base Year: ${mostRecentYear})`].join(',')
+    ];
+
+    sortedData.forEach(record => {
+      const year = record.observation_year;
+      const hpiIndex = record.hpi_index.toFixed(2);
+      const multiplier = (baseHPI / record.hpi_index).toFixed(6);
+
+      csvRows.push([year, hpiIndex, multiplier].join(','));
+    });
+
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${county}_County_HPI_Data_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    addNotification(`Successfully exported ${sortedData.length} HPI records for ${county} County`, 'success');
   };
 
 // Update state when props change
@@ -2900,16 +2940,29 @@ const AdminJobManagement = ({
                         </div>
                       )}
 
-                      <button
-                        onClick={() => setShowHpiImport(county)}
-                        className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                          hasData 
-                            ? 'bg-blue-100 text-blue-800 hover:bg-blue-200' 
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                      >
-                        {hasData ? '🔄 Update HPI Data' : '📊 Import HPI Data'}
-                      </button>
+                      <div className={hasData ? "flex gap-2" : ""}>
+                        <button
+                          onClick={() => setShowHpiImport(county)}
+                          className={`${hasData ? 'flex-1' : 'w-full'} px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                            hasData
+                              ? 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {hasData ? '🔄 Update HPI Data' : '📊 Import HPI Data'}
+                        </button>
+
+                        {hasData && (
+                          <button
+                            onClick={() => exportCountyHpi(county)}
+                            className="px-3 py-2 rounded-lg text-sm font-medium transition-all bg-green-100 text-green-800 hover:bg-green-200 flex items-center gap-1"
+                            title="Export HPI Data"
+                          >
+                            <Download className="w-4 h-4" />
+                            Export
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })
