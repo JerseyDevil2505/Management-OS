@@ -2598,20 +2598,31 @@ export async function generateLotSizesForJob(jobId) {
       }
 
       if (Array.isArray(mapForVcs.acre) && mapForVcs.acre.includes(codeStr)) {
+        if (isCRHL) console.log(`      ✅ Code ${codeStr} is in ACRE bucket → adding ${units} acres`);
         totalAcres += Number(units) || 0;
         processedAnyCodes = true;
         continue;
       }
 
       if (Array.isArray(mapForVcs.sf) && mapForVcs.sf.includes(codeStr)) {
+        if (isCRHL) console.log(`      ✅ Code ${codeStr} is in SF bucket → adding ${units} SF`);
         totalSf += Number(units) || 0;
         processedAnyCodes = true;
         continue;
       }
 
       // Code not in any bucket - track as unmapped
+      if (isCRHL) console.log(`      ⚠️ Code ${codeStr} is UNMAPPED (not in acre/sf/exclude)`);
       diagnostics.unmappedCodes.add(`${vcs}::${codeStr}`);
       console.log(`⚠️ Unmapped code ${codeStr} for VCS "${vcs}" on property ${p.property_composite_key} (${units} units)`);
+    }
+
+    if (isCRHL) {
+      console.log(`   Summary after processing all codes:`);
+      console.log(`      hasAnyLandurData: ${hasAnyLandurData}`);
+      console.log(`      processedAnyCodes: ${processedAnyCodes}`);
+      console.log(`      totalAcres: ${totalAcres}`);
+      console.log(`      totalSf: ${totalSf}`);
     }
 
     // Track diagnostics
@@ -2619,6 +2630,7 @@ export async function generateLotSizesForJob(jobId) {
       diagnostics.skipped++;
       diagnostics.noLandurData++;
       console.log(`⚠️ No LANDUR data for property ${p.property_composite_key} (VCS: ${vcs})`);
+      if (isCRHL) console.log(`   ❌ CRHL PROPERTY SKIPPED: No LANDUR data\n`);
       continue;
     }
 
@@ -2626,6 +2638,7 @@ export async function generateLotSizesForJob(jobId) {
       diagnostics.skipped++;
       diagnostics.allCodesExcluded++;
       console.log(`⚠️ All codes excluded for property ${p.property_composite_key} (VCS: ${vcs})`);
+      if (isCRHL) console.log(`   ❌ CRHL PROPERTY SKIPPED: All codes excluded\n`);
       continue;
     }
 
