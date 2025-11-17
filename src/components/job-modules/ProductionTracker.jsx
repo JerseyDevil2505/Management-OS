@@ -2278,12 +2278,9 @@ const exportValidationReport = () => {
       .forEach(inspector => {
         const issues = validationReport.detailed_issues[inspector];
         const inspectorInfo = validationReport.summary.inspector_breakdown.find(i => i.inspector_code === inspector);
-        
+
+        // Reorganized: Headers first, data rows, then summary at bottom
         const inspectorData = [
-          [`Inspector: ${inspector}`],
-          [`Name: ${inspectorInfo?.inspector_name || 'Unknown'}`],
-          [`Total Issues: ${issues.length}`],
-          [],
           ['Block', 'Lot', 'Qualifier', 'Card', 'Property Location', 'Issues', 'Override Status']
         ];
 
@@ -2291,7 +2288,7 @@ const exportValidationReport = () => {
           const propertyKey = issue.composite_key || `${issue.block}-${issue.lot}-${issue.qualifier || ''}`;
           const isOverridden = overrideMap && overrideMap[propertyKey]?.override_applied;
           const overrideStatus = isOverridden ? `Overridden: ${overrideMap[propertyKey]?.override_reason}` : 'Not Overridden';
-          
+
           inspectorData.push([
             issue.block,
             issue.lot,
@@ -2303,21 +2300,30 @@ const exportValidationReport = () => {
           ]);
         });
 
+        // Add inspector summary at the bottom
+        inspectorData.push([]);
+        inspectorData.push([`Inspector: ${inspector}`]);
+        inspectorData.push([`Name: ${inspectorInfo?.inspector_name || 'Unknown'}`]);
+        inspectorData.push([`Total Issues: ${issues.length}`]);
+
         const inspectorSheet = XLSX.utils.aoa_to_sheet(inspectorData);
 
         // Apply styling to inspector sheet
         const inspectorRange = XLSX.utils.decode_range(inspectorSheet['!ref']);
+        const lastDataRow = inspectorData.length - 4; // Last data row before summary section
+
         for (let R = inspectorRange.s.r; R <= inspectorRange.e.r; ++R) {
           for (let C = inspectorRange.s.c; C <= inspectorRange.e.c; ++C) {
             const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
             if (!inspectorSheet[cellAddress]) continue;
 
-            // Header rows are 0, 1, 2, 4 (inspector info and column headers)
-            const isHeader = R === 0 || R === 1 || R === 2 || R === 4;
+            // Header is row 0, summary is last 3 rows
+            const isHeader = R === 0;
+            const isSummary = R > lastDataRow;
 
             inspectorSheet[cellAddress].s = {
               font: { name: 'Leelawadee', sz: 10, bold: isHeader },
-              alignment: { horizontal: 'center', vertical: 'center' }
+              alignment: { horizontal: isSummary ? 'left' : 'center', vertical: 'center' }
             };
           }
         }
