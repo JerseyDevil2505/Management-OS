@@ -1661,41 +1661,42 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         // Size Normalized Price (S) - Jim's complete 50% formula and currency format
         // Formula: ((AvgSFLA - CurrentSFLA) * ((TimeNormPrice / CurrentSFLA) * 0.5)) + TimeNormPrice
         if (C === colSizeNormalized) {
-          const avgSFLACell = XLSX.utils.encode_cell({ r: R, c: colAvgSFLA });
-          const sflaCell = XLSX.utils.encode_cell({ r: R, c: colSFLA });
-          const timeNormCell = XLSX.utils.encode_cell({ r: R, c: colTimeNormalized });
+          const dataIndex = R - 1; // R=0 is header, data starts at R=1
+          if (dataIndex >= 0 && dataIndex < rawDataForFormulas.length) {
+            const rawData = rawDataForFormulas[dataIndex];
 
-          const avgSFLAValue = ws[avgSFLACell]?.v;
-          const sflaValue = ws[sflaCell]?.v;
-          const timeNormValue = ws[timeNormCell]?.v;
+            // Only apply formula if property has been time normalized
+            if (rawData.avgSFLA && rawData.sfla && rawData.timeNormPrice && rawData.sfla > 0) {
+              const avgSFLACell = XLSX.utils.encode_cell({ r: R, c: colAvgSFLA });
+              const sflaCell = XLSX.utils.encode_cell({ r: R, c: colSFLA });
+              const timeNormCell = XLSX.utils.encode_cell({ r: R, c: colTimeNormalized });
 
-          // Only apply formula if property has been time normalized (has time_normalized_price)
-          if (avgSFLAValue && sflaValue && timeNormValue && sflaValue > 0) {
-            ws[cellAddress] = {
-              f: `((${avgSFLACell}-${sflaCell})*((${timeNormCell}/${sflaCell})*0.5))+${timeNormCell}`,
-              t: 'n',
-              s: { ...baseStyle, numFmt: '$#,##0' }
-            };
-          } else if (ws[cellAddress] && ws[cellAddress].v) {
-            ws[cellAddress].s = { ...baseStyle, numFmt: '$#,##0' };
+              ws[cellAddress] = {
+                f: `((${avgSFLACell}-${sflaCell})*((${timeNormCell}/${sflaCell})*0.5))+${timeNormCell}`,
+                t: 'n',
+                s: { ...baseStyle, numFmt: '$#,##0' }
+              };
+            }
           }
         }
 
         // Sales Ratio (T) - TimeNormalized / SalePrice as percentage, no decimals
         if (C === colSalesRatio) {
-          const timeNormCell = XLSX.utils.encode_cell({ r: R, c: colTimeNormalized });
-          const salePriceCell = XLSX.utils.encode_cell({ r: R, c: colSalePrice });
+          const dataIndex = R - 1; // R=0 is header, data starts at R=1
+          if (dataIndex >= 0 && dataIndex < rawDataForFormulas.length) {
+            const rawData = rawDataForFormulas[dataIndex];
 
-          const timeNormValue = ws[timeNormCell]?.v;
-          const salePriceValue = ws[salePriceCell]?.v;
+            // Only apply formula if property has been time normalized
+            if (rawData.timeNormPrice && rawData.salePrice && rawData.salePrice > 0) {
+              const timeNormCell = XLSX.utils.encode_cell({ r: R, c: colTimeNormalized });
+              const salePriceCell = XLSX.utils.encode_cell({ r: R, c: colSalePrice });
 
-          // Only apply formula if property has been time normalized
-          if (timeNormValue && salePriceValue && salePriceValue > 0) {
-            ws[cellAddress] = {
-              f: `${timeNormCell}/${salePriceCell}`,
-              t: 'n',
-              s: { ...baseStyle, numFmt: '0%' }
-            };
+              ws[cellAddress] = {
+                f: `${timeNormCell}/${salePriceCell}`,
+                t: 'n',
+                s: { ...baseStyle, numFmt: '0%' }
+              };
+            }
           }
         }
       }
@@ -2249,7 +2250,7 @@ const handleSalesDecision = (saleId, decision) => {
         callRefresh(null);
       }
 
-      if (false) console.log(`��� Batch save complete: ${keeps.length} keeps saved, ${rejects.length} rejects cleared`);
+      if (false) console.log(`����� Batch save complete: ${keeps.length} keeps saved, ${rejects.length} rejects cleared`);
       alert(`✅ Successfully saved ${keeps.length} keeps and cleared ${rejects.length} rejects from database`);
 
     } catch (error) {
@@ -4587,7 +4588,7 @@ const analyzeImportFile = async (file) => {
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('property_vcs')}
                         >
-                          Current VCS {sortConfig.field === 'property_vcs' && (sortConfig.direction === 'asc' ? '↑' : '���')}
+                          Current VCS {sortConfig.field === 'property_vcs' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                         </th>
                         <th></th>
                         <th 
