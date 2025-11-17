@@ -1585,9 +1585,8 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     const colHPIMultiplier = 15; // Column P (HPI Multiplier)
     const colTimeNormalized = 16; // Column Q (Time Normalized Price)
     const colAvgSFLA = 17; // Column R (Avg SFLA Type Group)
-    const colSizeAdjustment = 18; // Column S (Size Adjustment)
-    const colSizeNormalized = 19; // Column T (Size Normalized Price)
-    const colSalesRatio = 20; // Column U (Sales Ratio)
+    const colSizeNormalized = 18; // Column S (Size Normalized Price)
+    const colSalesRatio = 19; // Column T (Sales Ratio)
 
     // Apply styling and formatting to all cells
     for (let R = range.s.r; R <= range.e.r; ++R) {
@@ -1636,8 +1635,9 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           }
         }
 
-        // Size Adjustment (S) - Jim's 50% formula and currency format
-        if (C === colSizeAdjustment) {
+        // Size Normalized Price (S) - Jim's complete 50% formula and currency format
+        // Formula: ((AvgSFLA - CurrentSFLA) * ((TimeNormPrice / CurrentSFLA) * 0.5)) + TimeNormPrice
+        if (C === colSizeNormalized) {
           const avgSFLACell = XLSX.utils.encode_cell({ r: R, c: colAvgSFLA });
           const sflaCell = XLSX.utils.encode_cell({ r: R, c: colSFLA });
           const timeNormCell = XLSX.utils.encode_cell({ r: R, c: colTimeNormalized });
@@ -1646,10 +1646,10 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           const sflaValue = ws[sflaCell]?.v;
           const timeNormValue = ws[timeNormCell]?.v;
 
-          // Jim's 50% formula: (avgSFLA - currentSFLA) × (timeNormPrice / currentSFLA) × 0.5
+          // Only apply formula if property has been time normalized (has time_normalized_price)
           if (avgSFLAValue && sflaValue && timeNormValue && sflaValue > 0) {
             ws[cellAddress] = {
-              f: `(${avgSFLACell}-${sflaCell})*(${timeNormCell}/${sflaCell})*0.5`,
+              f: `((${avgSFLACell}-${sflaCell})*((${timeNormCell}/${sflaCell})*0.5))+${timeNormCell}`,
               t: 'n',
               s: { ...baseStyle, numFmt: '$#,##0' }
             };
@@ -1658,41 +1658,21 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           }
         }
 
-        // Size Normalized Price (T) - formula and currency format
-        if (C === colSizeNormalized) {
-          const timeNormCell = XLSX.utils.encode_cell({ r: R, c: colTimeNormalized });
-          const sizeAdjCell = XLSX.utils.encode_cell({ r: R, c: colSizeAdjustment });
-
-          const timeNormValue = ws[timeNormCell]?.v;
-          const sizeAdjValue = ws[sizeAdjCell]?.v;
-
-          if (timeNormValue && sizeAdjValue) {
-            ws[cellAddress] = {
-              f: `${timeNormCell}+${sizeAdjCell}`,
-              t: 'n',
-              s: { ...baseStyle, numFmt: '$#,##0' }
-            };
-          } else if (ws[cellAddress].v) {
-            ws[cellAddress].s.numFmt = '$#,##0';
-          }
-        }
-
-        // Sales Ratio (U) - formula and percentage format
+        // Sales Ratio (T) - TimeNormalized / SalePrice as percentage, no decimals
         if (C === colSalesRatio) {
-          const assessedCell = XLSX.utils.encode_cell({ r: R, c: colAssessedValue });
           const timeNormCell = XLSX.utils.encode_cell({ r: R, c: colTimeNormalized });
+          const salePriceCell = XLSX.utils.encode_cell({ r: R, c: colSalePrice });
 
-          const assessedValue = ws[assessedCell]?.v;
           const timeNormValue = ws[timeNormCell]?.v;
+          const salePriceValue = ws[salePriceCell]?.v;
 
-          if (assessedValue && timeNormValue && timeNormValue > 0) {
+          // Only apply formula if property has been time normalized
+          if (timeNormValue && salePriceValue && salePriceValue > 0) {
             ws[cellAddress] = {
-              f: `${assessedCell}/${timeNormCell}`,
+              f: `${timeNormCell}/${salePriceCell}`,
               t: 'n',
-              s: { ...baseStyle, numFmt: '0.00%' }
+              s: { ...baseStyle, numFmt: '0%' }
             };
-          } else if (ws[cellAddress].v) {
-            ws[cellAddress].s.numFmt = '0.00%';
           }
         }
       }
@@ -4585,7 +4565,7 @@ const analyzeImportFile = async (file) => {
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('property_vcs')}
                         >
-                          Current VCS {sortConfig.field === 'property_vcs' && (sortConfig.direction === 'asc' ? '��' : '↓')}
+                          Current VCS {sortConfig.field === 'property_vcs' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                         </th>
                         <th></th>
                         <th 
