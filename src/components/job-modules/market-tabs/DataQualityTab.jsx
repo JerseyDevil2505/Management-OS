@@ -1190,25 +1190,34 @@ const generateQCFormPDF = () => {
     // LIVING AREA & YEAR BUILT
     const sfla = property.asset_sfla || 0;
     const yearBuilt = property.asset_year_built;
-    
-    if ((m4Class === '2' || m4Class === '3A') && sfla === 0) {
-      results.characteristics.push({
-        check: 'missing_sfla',
-        severity: 'warning',
-        property_key: property.property_composite_key,
-        message: `Class ${m4Class} property missing living area`,
-        details: property
-      });
+
+    // Only flag missing living area for residential classes when they have valid type, use, design, and building class
+    // This excludes exempt properties (disabled veterans, etc.) and detached structures (pools, garages)
+    const residentialClasses = ['2', '3A', '15A', '15B', '15C', '15D', '15E', '15F'];
+    if (residentialClasses.includes(m4Class) && sfla === 0) {
+      // Only flag if property has all required fields indicating it's a real building
+      if (hasValidTypeUse && hasValidDesign && buildingClass && parseInt(buildingClass) > 10) {
+        results.characteristics.push({
+          check: 'missing_sfla',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Class ${m4Class} property missing living area`,
+          details: property
+        });
+      }
     }
-    
+
     if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10 && !yearBuilt) {
-      results.characteristics.push({
-        check: 'missing_year_built',
-        severity: 'warning',
-        property_key: property.property_composite_key,
-        message: 'Improved property missing year built',
-        details: property
-      });
+      // Only flag missing year built if property has valid type, use, and design
+      if (hasValidTypeUse && hasValidDesign) {
+        results.characteristics.push({
+          check: 'missing_year_built',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Improved property missing year built',
+          details: property
+        });
+      }
     }
     
     // VCS CHECK
