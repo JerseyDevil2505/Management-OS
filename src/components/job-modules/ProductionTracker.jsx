@@ -907,7 +907,7 @@ const ProductionTracker = ({
     // If overrides were applied, suggest reprocessing to update reports
     const overrideCount = Object.values(processedValidationDecisions).filter(d => d.action === 'override').length;
     if (overrideCount > 0) {
-      addNotification(`📊 ${overrideCount} overrides applied. Run processing again to update validation reports.`, 'info');
+      addNotification(`��� ${overrideCount} overrides applied. Run processing again to update validation reports.`, 'info');
     }
   };
 
@@ -2244,10 +2244,29 @@ const exportValidationReport = () => {
     summaryData.push(['Manager Overrides Applied', validationOverrides.length]);
 
     const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+
+    // Apply styling to summary sheet
+    const summaryRange = XLSX.utils.decode_range(summarySheet['!ref']);
+    for (let R = summaryRange.s.r; R <= summaryRange.e.r; ++R) {
+      for (let C = summaryRange.s.c; C <= summaryRange.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!summarySheet[cellAddress]) continue;
+
+        // Determine if this is a header row (row 0, 5, 7)
+        const isHeader = R === 0 || R === 5 || R === 7;
+
+        summarySheet[cellAddress].s = {
+          font: { name: 'Leelawadee', sz: 10, bold: isHeader },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      }
+    }
+
     XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
 
-    // Create a sheet for each inspector
+    // Create a sheet for each inspector (only if they have issues)
     Object.keys(validationReport.detailed_issues)
+      .filter(inspector => validationReport.detailed_issues[inspector].length > 0)
       .sort((a, b) => validationReport.detailed_issues[b].length - validationReport.detailed_issues[a].length)
       .forEach(inspector => {
         const issues = validationReport.detailed_issues[inspector];
@@ -2278,6 +2297,24 @@ const exportValidationReport = () => {
         });
 
         const inspectorSheet = XLSX.utils.aoa_to_sheet(inspectorData);
+
+        // Apply styling to inspector sheet
+        const inspectorRange = XLSX.utils.decode_range(inspectorSheet['!ref']);
+        for (let R = inspectorRange.s.r; R <= inspectorRange.e.r; ++R) {
+          for (let C = inspectorRange.s.c; C <= inspectorRange.e.c; ++C) {
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            if (!inspectorSheet[cellAddress]) continue;
+
+            // Header rows are 0, 1, 2, 4 (inspector info and column headers)
+            const isHeader = R === 0 || R === 1 || R === 2 || R === 4;
+
+            inspectorSheet[cellAddress].s = {
+              font: { name: 'Leelawadee', sz: 10, bold: isHeader },
+              alignment: { horizontal: 'center', vertical: 'center' }
+            };
+          }
+        }
+
         // Truncate sheet name if too long (Excel limit is 31 characters)
         const sheetName = inspector.length > 31 ? inspector.substring(0, 31) : inspector;
         XLSX.utils.book_append_sheet(wb, inspectorSheet, sheetName);
