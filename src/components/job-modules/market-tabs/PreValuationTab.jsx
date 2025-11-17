@@ -1614,17 +1614,13 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           alignment: { horizontal: 'center', vertical: 'center' }
         };
 
-        // Skip cells that don't exist and aren't formula columns
-        const isFormulaColumn = C === colSizeNormalized || C === colSalesRatio;
-        if (!ws[cellAddress] && !isFormulaColumn) continue;
-
-        // Initialize cell if it doesn't exist (for formula columns)
+        // Initialize cell if it doesn't exist
         if (!ws[cellAddress]) {
-          ws[cellAddress] = { t: 's', v: '' };
+          ws[cellAddress] = { t: 's', v: '', s: { ...baseStyle } };
+        } else {
+          // Apply base style to existing cells
+          ws[cellAddress].s = { ...baseStyle };
         }
-
-        // Apply base style
-        ws[cellAddress].s = { ...baseStyle };
 
         // Header row (row 0) - just bold, already applied above
         if (R === 0) continue;
@@ -2250,7 +2246,7 @@ const handleSalesDecision = (saleId, decision) => {
         callRefresh(null);
       }
 
-      if (false) console.log(`����� Batch save complete: ${keeps.length} keeps saved, ${rejects.length} rejects cleared`);
+      if (false) console.log(`��� Batch save complete: ${keeps.length} keeps saved, ${rejects.length} rejects cleared`);
       alert(`✅ Successfully saved ${keeps.length} keeps and cleared ${rejects.length} rejects from database`);
 
     } catch (error) {
