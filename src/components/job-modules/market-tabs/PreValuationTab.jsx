@@ -1588,6 +1588,12 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     const colSizeNormalized = 18; // Column S (Size Normalized Price)
     const colSalesRatio = 19; // Column T (Sales Ratio)
 
+    // Ensure range extends to include all columns (Sales Ratio is the last)
+    if (range.e.c < colSalesRatio) {
+      range.e.c = colSalesRatio;
+      ws['!ref'] = XLSX.utils.encode_range(range);
+    }
+
     // Apply styling and formatting to all cells
     for (let R = range.s.r; R <= range.e.r; ++R) {
       for (let C = range.s.c; C <= range.e.c; ++C) {
@@ -4096,7 +4102,7 @@ const analyzeImportFile = async (file) => {
                   style={{ backgroundColor: preValChecklist.market_analysis ? '#10B981' : '#E5E7EB', color: preValChecklist.market_analysis ? 'white' : '#374151' }}
                   title={preValChecklist.market_analysis ? 'Click to reopen' : 'Mark Market Analysis complete'}
                 >
-                  {preValChecklist.market_analysis ? '��� Mark Complete' : 'Mark Complete'}
+                  {preValChecklist.market_analysis ? '✓ Mark Complete' : 'Mark Complete'}
                 </button>
 
               </div>
