@@ -677,6 +677,27 @@ useEffect(() => {
       ];
       ws['!cols'] = colWidths;
 
+      // Apply styling: Leelawadee font size 10, centered data, bold headers
+      const headerCells = ['A1', 'B1', 'C1', 'D1', 'E1', 'F1', 'G1', 'H1', 'I1'];
+      const range = XLSX.utils.decode_range(ws['!ref']);
+
+      // Style all cells
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!ws[cellAddress]) continue;
+
+          // Initialize cell style if it doesn't exist
+          if (!ws[cellAddress].s) ws[cellAddress].s = {};
+
+          // Apply font and alignment to all cells
+          ws[cellAddress].s = {
+            font: { name: 'Leelawadee', sz: 10, bold: R === 0 }, // Bold for header row
+            alignment: { horizontal: 'center', vertical: 'center' }
+          };
+        }
+      }
+
       // Generate Excel file and download
       const fileName = jobData?.job_name ?
         `${jobData.job_name.replace(/[^a-z0-9]/gi, '_')}_Initial_Mailing_List.xlsx` :
@@ -796,6 +817,26 @@ useEffect(() => {
         { wch: 20 }  // Reason
       ];
       ws['!cols'] = colWidths;
+
+      // Apply styling: Leelawadee font size 10, centered data, bold headers
+      const range = XLSX.utils.decode_range(ws['!ref']);
+
+      // Style all cells
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!ws[cellAddress]) continue;
+
+          // Initialize cell style if it doesn't exist
+          if (!ws[cellAddress].s) ws[cellAddress].s = {};
+
+          // Apply font and alignment to all cells
+          ws[cellAddress].s = {
+            font: { name: 'Leelawadee', sz: 10, bold: R === 0 }, // Bold for header row
+            alignment: { horizontal: 'center', vertical: 'center' }
+          };
+        }
+      }
       
       // Generate Excel file and download
       XLSX.writeFile(wb, `${jobData.job_name}_2nd_Attempt_Mailer.xlsx`);
@@ -912,6 +953,26 @@ useEffect(() => {
         { wch: 20 }  // Reason
       ];
       ws['!cols'] = colWidths;
+
+      // Apply styling: Leelawadee font size 10, centered data, bold headers
+      const range = XLSX.utils.decode_range(ws['!ref']);
+
+      // Style all cells
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!ws[cellAddress]) continue;
+
+          // Initialize cell style if it doesn't exist
+          if (!ws[cellAddress].s) ws[cellAddress].s = {};
+
+          // Apply font and alignment to all cells
+          ws[cellAddress].s = {
+            font: { name: 'Leelawadee', sz: 10, bold: R === 0 }, // Bold for header row
+            alignment: { horizontal: 'center', vertical: 'center' }
+          };
+        }
+      }
       
       // Generate Excel file and download
       XLSX.writeFile(wb, `${jobData.job_name}_3rd_Attempt_Mailer.xlsx`);
