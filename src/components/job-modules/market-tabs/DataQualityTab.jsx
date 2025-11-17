@@ -1401,17 +1401,21 @@ const generateQCFormPDF = () => {
           break;
         }
       }
-      
-      if (hasLandAdjustments) {
+
+      // Only flag land adjustments if location_analysis is NOT populated
+      // If location_analysis exists, the adjustments are intentional from page-by-page analysis
+      const hasLocationAnalysisBRT = property.location_analysis && property.location_analysis.trim() !== '';
+
+      if (hasLandAdjustments && !hasLocationAnalysisBRT) {
         results.special.push({
           check: 'land_adjustments_exist',
           severity: 'info',
           property_key: property.property_composite_key,
-          message: 'Property has land adjustments applied',
+          message: 'Property has land adjustments applied without location analysis',
           details: property
         });
       }
-      
+
     } else if (vendor === 'Microsystems') {
       let hasLandAdjustments = false;
       
@@ -1460,13 +1464,17 @@ const generateQCFormPDF = () => {
           hasLandAdjustments = true;
         }
       }
-      
-      if (hasLandAdjustments) {
+
+      // Only flag land adjustments if location_analysis is NOT populated
+      // If location_analysis exists, the adjustments are intentional from page-by-page analysis
+      const hasLocationAnalysisMS = property.location_analysis && property.location_analysis.trim() !== '';
+
+      if (hasLandAdjustments && !hasLocationAnalysisMS) {
         results.special.push({
           check: 'land_adjustments_exist',
           severity: 'info',
           property_key: property.property_composite_key,
-          message: 'Property has land adjustments applied',
+          message: 'Property has land adjustments applied without location analysis',
           details: property
         });
       }
