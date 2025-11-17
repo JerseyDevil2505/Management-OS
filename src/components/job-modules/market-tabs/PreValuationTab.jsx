@@ -1653,8 +1653,8 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
               t: 'n',
               s: { ...baseStyle, numFmt: '$#,##0' }
             };
-          } else if (ws[cellAddress].v) {
-            ws[cellAddress].s.numFmt = '$#,##0';
+          } else if (ws[cellAddress] && ws[cellAddress].v) {
+            ws[cellAddress].s = { ...baseStyle, numFmt: '$#,##0' };
           }
         }
 
