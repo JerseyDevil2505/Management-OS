@@ -1497,6 +1497,31 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       });
     }
 
+    // Calculate average SFLA per type/use group (for kept sales only)
+    const keptSales = timeNormalizedSales.filter(s => s.keep_reject === 'keep');
+    const typeUseGroups = {
+      '1': [], '2': [], '3': [], '4': [], '5': [], '6': []
+    };
+
+    keptSales.forEach(sale => {
+      const typeUse = sale.asset_type_use?.toString().trim();
+      if (typeUse && typeUse.length > 0) {
+        const prefix = typeUse[0];
+        if (typeUseGroups[prefix]) {
+          typeUseGroups[prefix].push(sale);
+        }
+      }
+    });
+
+    // Calculate average SFLA for each group
+    const avgSFLAByGroup = {};
+    Object.entries(typeUseGroups).forEach(([prefix, sales]) => {
+      if (sales.length > 0) {
+        const totalSFLA = sales.reduce((sum, s) => sum + (s.asset_sfla || 0), 0);
+        avgSFLAByGroup[prefix] = totalSFLA / sales.length;
+      }
+    });
+
     // Prepare data for export - ALL properties
     const exportData = properties.map(prop => {
       const parsed = parseCompositeKey(prop.property_composite_key);
@@ -1516,6 +1541,10 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         }
       }
 
+      // Get average SFLA for this property's type/use group
+      const typeUse = prop.asset_type_use?.toString().trim();
+      const avgSFLA = (typeUse && typeUse.length > 0) ? avgSFLAByGroup[typeUse[0]] || '' : '';
+
       return {
         'Block': parsed.block || '',
         'Lot': parsed.lot || '',
@@ -1534,11 +1563,12 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         'Sale NU': prop.sales_nu || prop.sales_instrument || prop.nu || prop.sale_nu || '',
         'HPI Multiplier': normalizedData?.hpi_multiplier || '',
         'Time Normalized Price': normalizedData?.time_normalized_price || '',
+        'Avg SFLA (Type Group)': avgSFLA ? Math.round(avgSFLA) : '',
+        'Size Adjustment': normalizedData?.size_adjustment ? Math.round(normalizedData.size_adjustment) : '',
         'Size Normalized Price': normalizedData?.size_normalized_price || '',
-        'Sales Ratio': normalizedData?.sales_ratio ? (normalizedData.sales_ratio * 100).toFixed(2) + '%' : '',
+        'Sales Ratio': normalizedData?.sales_ratio || '',
         'Status': normalizedData ? (normalizedData.is_outlier ? 'Outlier' : 'Valid') : '',
-        'Decision': normalizedData ? (normalizedData.keep_reject === 'keep' ? 'Keep' : normalizedData.keep_reject === 'reject' ? 'Reject' : 'Pending') : '',
-        'Size Adjustment': normalizedData?.size_adjustment ? Math.round(normalizedData.size_adjustment) : ''
+        'Decision': normalizedData ? (normalizedData.keep_reject === 'keep' ? 'Keep' : normalizedData.keep_reject === 'reject' ? 'Reject' : 'Pending') : ''
       };
     });
 
