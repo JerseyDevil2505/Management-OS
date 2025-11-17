@@ -1564,9 +1564,8 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         'HPI Multiplier': normalizedData?.hpi_multiplier || '',
         'Time Normalized Price': normalizedData?.time_normalized_price || '',
         'Avg SFLA (Type Group)': avgSFLA ? Math.round(avgSFLA) : '',
-        'Size Adjustment': normalizedData?.size_adjustment ? Math.round(normalizedData.size_adjustment) : '',
         'Size Normalized Price': normalizedData?.size_normalized_price || '',
-        'Sales Ratio': normalizedData?.sales_ratio || '',
+        'Sales Ratio': '',
         'Status': normalizedData ? (normalizedData.is_outlier ? 'Outlier' : 'Valid') : '',
         'Decision': normalizedData ? (normalizedData.keep_reject === 'keep' ? 'Keep' : normalizedData.keep_reject === 'reject' ? 'Reject' : 'Pending') : ''
       };
@@ -4586,7 +4585,7 @@ const analyzeImportFile = async (file) => {
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('property_vcs')}
                         >
-                          Current VCS {sortConfig.field === 'property_vcs' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          Current VCS {sortConfig.field === 'property_vcs' && (sortConfig.direction === 'asc' ? '��' : '↓')}
                         </th>
                         <th></th>
                         <th 
