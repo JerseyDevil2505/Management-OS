@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase, interpretCodes, worksheetService, checklistService, runUnitRateLotCalculation, runUnitRateLotCalculation_v2, computeLotAcreForProperty, persistComputedLotAcre, normalizeSelectedCodes, saveUnitRateMappings, generateLotSizesForJob } from '../../../lib/supabaseClient';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import './sharedTabNav.css';
 import { 
   TrendingUp, 
@@ -1497,7 +1497,33 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       });
     }
 
-    // Prepare data for export - ALL properties
+    // Calculate average SFLA per type/use group (for kept sales only)
+    const keptSales = timeNormalizedSales.filter(s => s.keep_reject === 'keep');
+    const typeUseGroups = {
+      '1': [], '2': [], '3': [], '4': [], '5': [], '6': []
+    };
+
+    keptSales.forEach(sale => {
+      const typeUse = sale.asset_type_use?.toString().trim();
+      if (typeUse && typeUse.length > 0) {
+        const prefix = typeUse[0];
+        if (typeUseGroups[prefix]) {
+          typeUseGroups[prefix].push(sale);
+        }
+      }
+    });
+
+    // Calculate average SFLA for each group
+    const avgSFLAByGroup = {};
+    Object.entries(typeUseGroups).forEach(([prefix, sales]) => {
+      if (sales.length > 0) {
+        const totalSFLA = sales.reduce((sum, s) => sum + (s.asset_sfla || 0), 0);
+        avgSFLAByGroup[prefix] = totalSFLA / sales.length;
+      }
+    });
+
+    // Prepare data for export - ALL properties, keeping track of raw values for formulas
+    const rawDataForFormulas = [];
     const exportData = properties.map(prop => {
       const parsed = parseCompositeKey(prop.property_composite_key);
       const normalizedData = normalizedSalesMap.get(prop.id);
@@ -1516,6 +1542,18 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         }
       }
 
+      // Get average SFLA for this property's type/use group (only if time normalized)
+      const typeUse = prop.asset_type_use?.toString().trim();
+      const avgSFLA = (normalizedData && typeUse && typeUse.length > 0) ? avgSFLAByGroup[typeUse[0]] || '' : '';
+
+      // Store raw values for formula logic
+      rawDataForFormulas.push({
+        sfla: prop.asset_sfla,
+        avgSFLA: avgSFLA,
+        timeNormPrice: normalizedData?.time_normalized_price,
+        salePrice: prop.sales_price
+      });
+
       return {
         'Block': parsed.block || '',
         'Lot': parsed.lot || '',
@@ -1532,18 +1570,133 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         'Sale Date': prop.sales_date ? new Date(prop.sales_date).toLocaleDateString() : '',
         'Sale Price': prop.sales_price || '',
         'Sale NU': prop.sales_nu || prop.sales_instrument || prop.nu || prop.sale_nu || '',
+        'HPI Multiplier': normalizedData?.hpi_multiplier || '',
         'Time Normalized Price': normalizedData?.time_normalized_price || '',
-        'Size Normalized Price': normalizedData?.size_normalized_price || '',
-        'Sales Ratio': normalizedData?.sales_ratio ? (normalizedData.sales_ratio * 100).toFixed(2) + '%' : '',
+        'Avg SFLA (Type Group)': avgSFLA ? Math.round(avgSFLA) : '',
+        'Size Normalized Price': '',
+        'Sales Ratio': '',
         'Status': normalizedData ? (normalizedData.is_outlier ? 'Outlier' : 'Valid') : '',
-        'Decision': normalizedData ? (normalizedData.keep_reject === 'keep' ? 'Keep' : normalizedData.keep_reject === 'reject' ? 'Reject' : 'Pending') : '',
-        'Size Adjustment': normalizedData?.size_adjustment ? Math.round(normalizedData.size_adjustment) : ''
+        'Decision': normalizedData ? (normalizedData.keep_reject === 'keep' ? 'Keep' : normalizedData.keep_reject === 'reject' ? 'Reject' : 'Pending') : ''
       };
     });
 
     // Create workbook and worksheet
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(exportData);
+
+    // Get worksheet range
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    // Column indices (0-based)
+    const colSFLA = 8; // Column I (SFLA)
+    const colAssessedValue = 11; // Column L (Assessed Value)
+    const colSalePrice = 13; // Column N (Sale Price)
+    const colHPIMultiplier = 15; // Column P (HPI Multiplier)
+    const colTimeNormalized = 16; // Column Q (Time Normalized Price)
+    const colAvgSFLA = 17; // Column R (Avg SFLA Type Group)
+    const colSizeNormalized = 18; // Column S (Size Normalized Price)
+    const colSalesRatio = 19; // Column T (Sales Ratio)
+
+    // Ensure range extends to include all columns (Sales Ratio is the last)
+    if (range.e.c < colSalesRatio) {
+      range.e.c = colSalesRatio;
+      ws['!ref'] = XLSX.utils.encode_range(range);
+    }
+
+    // Apply styling and formatting to all cells
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+
+        // Base style for all cells
+        const baseStyle = {
+          font: { name: 'Leelawadee', sz: 10, bold: R === 0 },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+
+        // Initialize cell if it doesn't exist
+        if (!ws[cellAddress]) {
+          ws[cellAddress] = { t: 's', v: '', s: { ...baseStyle } };
+        } else {
+          // Apply base style to existing cells
+          ws[cellAddress].s = { ...baseStyle };
+        }
+
+        // Header row (row 0) - just bold, already applied above
+        if (R === 0) continue;
+
+        // Format SFLA column (I) and Avg SFLA (R) - number with comma, no decimals
+        if ((C === colSFLA || C === colAvgSFLA) && ws[cellAddress].v) {
+          ws[cellAddress].s.numFmt = '#,##0';
+        }
+
+        // Format Assessed Value (L), Sale Price (N) - currency with $, no decimals
+        if ((C === colAssessedValue || C === colSalePrice) && ws[cellAddress].v) {
+          ws[cellAddress].s.numFmt = '$#,##0';
+        }
+
+        // Time Normalized Price (Q) - formula and currency format
+        if (C === colTimeNormalized) {
+          const salePriceCell = XLSX.utils.encode_cell({ r: R, c: colSalePrice });
+          const hpiMultiplierCell = XLSX.utils.encode_cell({ r: R, c: colHPIMultiplier });
+
+          const salePriceValue = ws[salePriceCell]?.v;
+          const hpiMultiplierValue = ws[hpiMultiplierCell]?.v;
+
+          if (salePriceValue && hpiMultiplierValue) {
+            ws[cellAddress] = {
+              f: `${salePriceCell}*${hpiMultiplierCell}`,
+              t: 'n',
+              s: { ...baseStyle, numFmt: '$#,##0' }
+            };
+          } else if (ws[cellAddress].v) {
+            ws[cellAddress].s.numFmt = '$#,##0';
+          }
+        }
+
+        // Size Normalized Price (S) - Jim's complete 50% formula and currency format
+        // Formula: ((AvgSFLA - CurrentSFLA) * ((TimeNormPrice / CurrentSFLA) * 0.5)) + TimeNormPrice
+        if (C === colSizeNormalized) {
+          const dataIndex = R - 1; // R=0 is header, data starts at R=1
+          if (dataIndex >= 0 && dataIndex < rawDataForFormulas.length) {
+            const rawData = rawDataForFormulas[dataIndex];
+
+            // Only apply formula if property has been time normalized
+            if (rawData.avgSFLA && rawData.sfla && rawData.timeNormPrice && rawData.sfla > 0) {
+              const avgSFLACell = XLSX.utils.encode_cell({ r: R, c: colAvgSFLA });
+              const sflaCell = XLSX.utils.encode_cell({ r: R, c: colSFLA });
+              const timeNormCell = XLSX.utils.encode_cell({ r: R, c: colTimeNormalized });
+
+              ws[cellAddress] = {
+                f: `((${avgSFLACell}-${sflaCell})*((${timeNormCell}/${sflaCell})*0.5))+${timeNormCell}`,
+                t: 'n',
+                s: { ...baseStyle, numFmt: '$#,##0' }
+              };
+            }
+          }
+        }
+
+        // Sales Ratio (T) - TimeNormalized / SalePrice as percentage, no decimals
+        if (C === colSalesRatio) {
+          const dataIndex = R - 1; // R=0 is header, data starts at R=1
+          if (dataIndex >= 0 && dataIndex < rawDataForFormulas.length) {
+            const rawData = rawDataForFormulas[dataIndex];
+
+            // Only apply formula if property has been time normalized
+            if (rawData.timeNormPrice && rawData.salePrice && rawData.salePrice > 0) {
+              const timeNormCell = XLSX.utils.encode_cell({ r: R, c: colTimeNormalized });
+              const salePriceCell = XLSX.utils.encode_cell({ r: R, c: colSalePrice });
+
+              ws[cellAddress] = {
+                f: `${timeNormCell}/${salePriceCell}`,
+                t: 'n',
+                s: { ...baseStyle, numFmt: '0%' }
+              };
+            }
+          }
+        }
+      }
+    }
 
     // Set column widths for better readability
     const colWidths = [
@@ -1562,12 +1715,13 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       { wch: 12 }, // Sale Date
       { wch: 15 }, // Sale Price
       { wch: 10 }, // Sale NU
+      { wch: 15 }, // HPI Multiplier
       { wch: 20 }, // Time Normalized Price
-      { wch: 20 }, // Size Normalized Price
+      { wch: 15 }, // Avg SFLA (Type Group)
+      { wch: 25 }, // Size Normalized Price
       { wch: 12 }, // Sales Ratio
       { wch: 10 }, // Status
-      { wch: 10 }, // Decision
-      { wch: 15 }  // Size Adjustment
+      { wch: 10 }  // Decision
     ];
     ws['!cols'] = colWidths;
 
