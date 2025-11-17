@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  AlertCircle, 
+import {
+  AlertCircle,
   RefreshCw,
   Download,
   Check,
@@ -8,7 +8,7 @@ import {
   ChevronRight,
   ChevronLeft
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import './sharedTabNav.css';
 import { supabase, interpretCodes, propertyService, checklistService } from '../../../lib/supabaseClient';
 
@@ -264,7 +264,26 @@ const DataQualityTab = ({
       { wch: 18 },
       { wch: 18 }
     ];
-    
+
+    // Apply styling to summary sheet
+    const summaryRange = XLSX.utils.decode_range(summarySheet['!ref']);
+    const headerRows = [0, 2, 9, 18]; // Title, Job Info, Overall Metrics, Issues by Category
+    const tableHeaderRow = summaryData.findIndex(row => row[0] === 'Category');
+
+    for (let R = summaryRange.s.r; R <= summaryRange.e.r; ++R) {
+      for (let C = summaryRange.s.c; C <= summaryRange.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!summarySheet[cellAddress]) continue;
+
+        const isHeader = headerRows.includes(R) || R === tableHeaderRow;
+
+        summarySheet[cellAddress].s = {
+          font: { name: 'Leelawadee', sz: 10, bold: isHeader },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      }
+    }
+
     XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
     
     // DETAILS SHEET
@@ -282,7 +301,7 @@ const DataQualityTab = ({
               property.property_block || '',
               property.property_lot || '',
               property.property_qualifier || '',
-              property.property_card || '',
+              property.property_card || '1',
               property.property_location || '',
               property.property_m4_class || '',
               getCheckTitle(issue.check),
@@ -303,7 +322,7 @@ const DataQualityTab = ({
               block,
               lot || '',
               qualifier || '',
-              card,
+              card || '1',
               location,
               '',
               getCheckTitle(issue.check),
@@ -327,15 +346,21 @@ const DataQualityTab = ({
       { wch: 12 },
       { wch: 60 }
     ];
-    
+
+    // Apply styling to details sheet
     const range = XLSX.utils.decode_range(detailsSheet['!ref']);
-    for (let C = range.s.c; C <= range.e.c; ++C) {
-      const address = XLSX.utils.encode_col(C) + "1";
-      if (!detailsSheet[address]) continue;
-      detailsSheet[address].s = {
-        font: { bold: true },
-        fill: { fgColor: { rgb: "EEEEEE" } }
-      };
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!detailsSheet[cellAddress]) continue;
+
+        const isHeader = R === 0;
+
+        detailsSheet[cellAddress].s = {
+          font: { name: 'Leelawadee', sz: 10, bold: isHeader },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      }
     }
     
     XLSX.utils.book_append_sheet(wb, detailsSheet, 'Details');
