@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 
 const ProductionTracker = ({ 
   jobData, 
