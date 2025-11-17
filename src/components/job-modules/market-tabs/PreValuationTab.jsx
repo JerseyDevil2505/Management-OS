@@ -1579,15 +1579,16 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     // Get worksheet range
     const range = XLSX.utils.decode_range(ws['!ref']);
 
-    // Column indices
+    // Column indices (0-based)
     const colSFLA = 8; // Column I (SFLA)
     const colAssessedValue = 11; // Column L (Assessed Value)
     const colSalePrice = 13; // Column N (Sale Price)
     const colHPIMultiplier = 15; // Column P (HPI Multiplier)
     const colTimeNormalized = 16; // Column Q (Time Normalized Price)
-    const colSizeAdjustment = 21; // Column V (Size Adjustment)
-    const colSizeNormalized = 17; // Column R (Size Normalized Price)
-    const colSalesRatio = 18; // Column S (Sales Ratio)
+    const colAvgSFLA = 17; // Column R (Avg SFLA Type Group)
+    const colSizeAdjustment = 18; // Column S (Size Adjustment)
+    const colSizeNormalized = 19; // Column T (Size Normalized Price)
+    const colSalesRatio = 20; // Column U (Sales Ratio)
 
     // Apply styling and formatting to all cells
     for (let R = range.s.r; R <= range.e.r; ++R) {
@@ -1607,13 +1608,13 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         // Header row (row 0) - just bold, already applied above
         if (R === 0) continue;
 
-        // Format SFLA column (I) - number with comma, no decimals
-        if (C === colSFLA && ws[cellAddress].v) {
+        // Format SFLA column (I) and Avg SFLA (R) - number with comma, no decimals
+        if ((C === colSFLA || C === colAvgSFLA) && ws[cellAddress].v) {
           ws[cellAddress].s.numFmt = '#,##0';
         }
 
-        // Format Assessed Value (L), Sale Price (N), Size Adjustment (V) - currency with $, no decimals
-        if ((C === colAssessedValue || C === colSalePrice || C === colSizeAdjustment) && ws[cellAddress].v) {
+        // Format Assessed Value (L), Sale Price (N) - currency with $, no decimals
+        if ((C === colAssessedValue || C === colSalePrice) && ws[cellAddress].v) {
           ws[cellAddress].s.numFmt = '$#,##0';
         }
 
@@ -1622,7 +1623,6 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           const salePriceCell = XLSX.utils.encode_cell({ r: R, c: colSalePrice });
           const hpiMultiplierCell = XLSX.utils.encode_cell({ r: R, c: colHPIMultiplier });
 
-          // Only add formula if we have both sale price and HPI multiplier
           const salePriceValue = ws[salePriceCell]?.v;
           const hpiMultiplierValue = ws[hpiMultiplierCell]?.v;
 
@@ -1637,12 +1637,33 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           }
         }
 
-        // Size Normalized Price (R) - formula and currency format
+        // Size Adjustment (S) - Jim's 50% formula and currency format
+        if (C === colSizeAdjustment) {
+          const avgSFLACell = XLSX.utils.encode_cell({ r: R, c: colAvgSFLA });
+          const sflaCell = XLSX.utils.encode_cell({ r: R, c: colSFLA });
+          const timeNormCell = XLSX.utils.encode_cell({ r: R, c: colTimeNormalized });
+
+          const avgSFLAValue = ws[avgSFLACell]?.v;
+          const sflaValue = ws[sflaCell]?.v;
+          const timeNormValue = ws[timeNormCell]?.v;
+
+          // Jim's 50% formula: (avgSFLA - currentSFLA) × (timeNormPrice / currentSFLA) × 0.5
+          if (avgSFLAValue && sflaValue && timeNormValue && sflaValue > 0) {
+            ws[cellAddress] = {
+              f: `(${avgSFLACell}-${sflaCell})*(${timeNormCell}/${sflaCell})*0.5`,
+              t: 'n',
+              s: { ...baseStyle, numFmt: '$#,##0' }
+            };
+          } else if (ws[cellAddress].v) {
+            ws[cellAddress].s.numFmt = '$#,##0';
+          }
+        }
+
+        // Size Normalized Price (T) - formula and currency format
         if (C === colSizeNormalized) {
           const timeNormCell = XLSX.utils.encode_cell({ r: R, c: colTimeNormalized });
           const sizeAdjCell = XLSX.utils.encode_cell({ r: R, c: colSizeAdjustment });
 
-          // Only add formula if we have both time normalized and size adjustment
           const timeNormValue = ws[timeNormCell]?.v;
           const sizeAdjValue = ws[sizeAdjCell]?.v;
 
@@ -1657,21 +1678,22 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
           }
         }
 
-        // Sales Ratio (S) - formula and percentage format
+        // Sales Ratio (U) - formula and percentage format
         if (C === colSalesRatio) {
           const assessedCell = XLSX.utils.encode_cell({ r: R, c: colAssessedValue });
           const timeNormCell = XLSX.utils.encode_cell({ r: R, c: colTimeNormalized });
 
-          // Only add formula if we have both assessed value and time normalized price
           const assessedValue = ws[assessedCell]?.v;
           const timeNormValue = ws[timeNormCell]?.v;
 
-          if (assessedValue && timeNormValue) {
+          if (assessedValue && timeNormValue && timeNormValue > 0) {
             ws[cellAddress] = {
               f: `${assessedCell}/${timeNormCell}`,
               t: 'n',
               s: { ...baseStyle, numFmt: '0.00%' }
             };
+          } else if (ws[cellAddress].v) {
+            ws[cellAddress].s.numFmt = '0.00%';
           }
         }
       }
@@ -1696,11 +1718,12 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       { wch: 10 }, // Sale NU
       { wch: 15 }, // HPI Multiplier
       { wch: 20 }, // Time Normalized Price
+      { wch: 15 }, // Avg SFLA (Type Group)
+      { wch: 20 }, // Size Adjustment
       { wch: 20 }, // Size Normalized Price
       { wch: 12 }, // Sales Ratio
       { wch: 10 }, // Status
-      { wch: 10 }, // Decision
-      { wch: 15 }  // Size Adjustment
+      { wch: 10 }  // Decision
     ];
     ws['!cols'] = colWidths;
 
