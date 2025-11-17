@@ -1404,7 +1404,14 @@ const generateQCFormPDF = () => {
 
       // Only flag land adjustments if location_analysis is NOT populated
       // If location_analysis exists, the adjustments are intentional from page-by-page analysis
-      const hasLocationAnalysisBRT = property.location_analysis && property.location_analysis.trim() !== '';
+      // Handle nested property_market_analysis structure (can be array or object from Supabase JOIN)
+      let locationAnalysis = null;
+      if (Array.isArray(property.property_market_analysis)) {
+        locationAnalysis = property.property_market_analysis[0]?.location_analysis;
+      } else if (property.property_market_analysis) {
+        locationAnalysis = property.property_market_analysis?.location_analysis;
+      }
+      const hasLocationAnalysisBRT = locationAnalysis && locationAnalysis.trim() !== '';
 
       if (hasLandAdjustments && !hasLocationAnalysisBRT) {
         results.special.push({
@@ -1418,31 +1425,31 @@ const generateQCFormPDF = () => {
 
     } else if (vendor === 'Microsystems') {
       let hasLandAdjustments = false;
-      
+
       for (let i = 1; i <= 3; i++) {
         const netAdj = rawData[`Net Adjustment${i}`];
         const adjCode = rawData[`Adj Reason Code${i}`];
         const netAdjValue = parseFloat(netAdj) || 0;
-        
+
         if (netAdjValue !== 0 || !interpretCodes.isFieldEmpty(adjCode)) {
           hasLandAdjustments = true;
           break;
         }
       }
-      
+
       if (!hasLandAdjustments) {
         for (let i = 1; i <= 4; i++) {
           const overallPercent = rawData[`Overall Adj Percent${i}`];
           const overallReason = rawData[`Overall Adj Reason${i}`];
           const percentValue = parseFloat(overallPercent) || 0;
-          
+
           if ((percentValue !== 0 && percentValue !== 100) || !interpretCodes.isFieldEmpty(overallReason)) {
             hasLandAdjustments = true;
             break;
           }
         }
       }
-      
+
       if (!hasLandAdjustments) {
         const unitAdj1 = rawData['Unit Adjustment1'];
         const unitAdj2 = rawData['Unit Adjustment2'];
@@ -1450,12 +1457,12 @@ const generateQCFormPDF = () => {
         const unitCode1 = rawData['Unit Adj Code1'];
         const unitCode2 = rawData['Unit Adj Code2'];
         const unitCode = rawData['Unit Adj Code'];
-        
+
         const unitAdj1Value = parseFloat(unitAdj1) || 0;
         const unitAdj2Value = parseFloat(unitAdj2) || 0;
         const unitAdjValue = parseFloat(unitAdj) || 0;
-        
-        if (unitAdj1Value !== 0 || 
+
+        if (unitAdj1Value !== 0 ||
             unitAdj2Value !== 0 ||
             unitAdjValue !== 0 ||
             !interpretCodes.isFieldEmpty(unitCode1) ||
@@ -1467,7 +1474,14 @@ const generateQCFormPDF = () => {
 
       // Only flag land adjustments if location_analysis is NOT populated
       // If location_analysis exists, the adjustments are intentional from page-by-page analysis
-      const hasLocationAnalysisMS = property.location_analysis && property.location_analysis.trim() !== '';
+      // Handle nested property_market_analysis structure (can be array or object from Supabase JOIN)
+      let locationAnalysisMS = null;
+      if (Array.isArray(property.property_market_analysis)) {
+        locationAnalysisMS = property.property_market_analysis[0]?.location_analysis;
+      } else if (property.property_market_analysis) {
+        locationAnalysisMS = property.property_market_analysis?.location_analysis;
+      }
+      const hasLocationAnalysisMS = locationAnalysisMS && locationAnalysisMS.trim() !== '';
 
       if (hasLandAdjustments && !hasLocationAnalysisMS) {
         results.special.push({
