@@ -1522,7 +1522,8 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       }
     });
 
-    // Prepare data for export - ALL properties
+    // Prepare data for export - ALL properties, keeping track of raw values for formulas
+    const rawDataForFormulas = [];
     const exportData = properties.map(prop => {
       const parsed = parseCompositeKey(prop.property_composite_key);
       const normalizedData = normalizedSalesMap.get(prop.id);
@@ -1544,6 +1545,14 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       // Get average SFLA for this property's type/use group (only if time normalized)
       const typeUse = prop.asset_type_use?.toString().trim();
       const avgSFLA = (normalizedData && typeUse && typeUse.length > 0) ? avgSFLAByGroup[typeUse[0]] || '' : '';
+
+      // Store raw values for formula logic
+      rawDataForFormulas.push({
+        sfla: prop.asset_sfla,
+        avgSFLA: avgSFLA,
+        timeNormPrice: normalizedData?.time_normalized_price,
+        salePrice: prop.sales_price
+      });
 
       return {
         'Block': parsed.block || '',
@@ -4578,7 +4587,7 @@ const analyzeImportFile = async (file) => {
                           className="px-3 py-2 text-left text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-100"
                           onClick={() => handleSort('property_vcs')}
                         >
-                          Current VCS {sortConfig.field === 'property_vcs' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          Current VCS {sortConfig.field === 'property_vcs' && (sortConfig.direction === 'asc' ? '↑' : '���')}
                         </th>
                         <th></th>
                         <th 
