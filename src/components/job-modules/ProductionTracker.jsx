@@ -2247,13 +2247,17 @@ const exportValidationReport = () => {
 
     // Apply styling to summary sheet
     const summaryRange = XLSX.utils.decode_range(summarySheet['!ref']);
+
+    // Find the row index for "STATISTICS" dynamically
+    const statisticsRowIndex = summaryData.findIndex(row => row[0] === 'STATISTICS');
+
     for (let R = summaryRange.s.r; R <= summaryRange.e.r; ++R) {
       for (let C = summaryRange.s.c; C <= summaryRange.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
         if (!summarySheet[cellAddress]) continue;
 
-        // Determine if this is a header row (row 0, 5, 7)
-        const isHeader = R === 0 || R === 5 || R === 7;
+        // Bold only: title row (0), column headers row (5), and STATISTICS row
+        const isHeader = R === 0 || R === 5 || R === statisticsRowIndex;
 
         summarySheet[cellAddress].s = {
           font: { name: 'Leelawadee', sz: 10, bold: isHeader },
