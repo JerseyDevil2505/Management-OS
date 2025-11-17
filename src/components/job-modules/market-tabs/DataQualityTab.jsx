@@ -1015,9 +1015,10 @@ const generateQCFormPDF = () => {
       }
     }
     
-    // For residential classes (2, 3A), only flag building class 10 if they have BOTH design style AND type/use
-    // If either is missing, the property might be exempt (e.g., disabled veteran) so don't flag
-    if ((m4Class === '2' || m4Class === '3A') && parseInt(buildingClass) === 10) {
+    // For residential classes, only flag building class 10 if they have BOTH design style AND type/use
+    // If either is missing, the property might be exempt (disabled veteran) or detached structure (pool, garage)
+    const residentialClassesCheck = ['2', '3A', '15A', '15B', '15C', '15D', '15E', '15F'];
+    if (residentialClassesCheck.includes(m4Class) && parseInt(buildingClass) === 10) {
       if (hasValidDesign && hasValidTypeUse) {
         results.characteristics.push({
           check: 'residential_building_class_10',
