@@ -989,15 +989,29 @@ const generateQCFormPDF = () => {
       }
     }
     
-    if (m4Class && m4Class !== '2' && m4Class !== '3A') {
-      if (buildingClass && parseInt(buildingClass) !== 10) {
-        results.characteristics.push({
-          check: 'non_residential_wrong_building_class',
-          severity: 'warning',
-          property_key: property.property_composite_key,
-          message: `Class ${m4Class} should have building class 10 (has ${buildingClass})`,
-          details: property
-        });
+    // Only flag building class issues for specific property classes when they have BOTH design style AND type/use
+    // Classes to check: 2, 3A, 15A, 15B, 15C, 15D, 15E, 15F
+    const classesToCheck = ['2', '3A', '15A', '15B', '15C', '15D', '15E', '15F'];
+    const hasValidDesign = designStyle && designStyle.trim() !== '';
+    const hasValidTypeUse = typeUse && typeUse.trim() !== '';
+
+    if (m4Class && classesToCheck.includes(m4Class)) {
+      // Only check building class if BOTH design style AND type/use are valid
+      if (hasValidDesign && hasValidTypeUse) {
+        // For residential classes (2, 3A), building class should be > 10
+        if ((m4Class === '2' || m4Class === '3A') && buildingClass && parseInt(buildingClass) <= 10) {
+          // This is already handled by another check below, skip here
+        }
+        // For facility classes (15A-15F), building class should be 10
+        else if (m4Class.startsWith('15') && buildingClass && parseInt(buildingClass) !== 10) {
+          results.characteristics.push({
+            check: 'facility_wrong_building_class',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: `Class ${m4Class} should have building class 10 (has ${buildingClass})`,
+            details: property
+          });
+        }
       }
     }
     
