@@ -1698,8 +1698,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       { wch: 15 }, // HPI Multiplier
       { wch: 20 }, // Time Normalized Price
       { wch: 15 }, // Avg SFLA (Type Group)
-      { wch: 20 }, // Size Adjustment
-      { wch: 20 }, // Size Normalized Price
+      { wch: 25 }, // Size Normalized Price
       { wch: 12 }, // Sales Ratio
       { wch: 10 }, // Status
       { wch: 10 }  // Decision
