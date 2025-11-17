@@ -6,7 +6,7 @@ import {
   Square, FileDown, Printer, Archive, Save, X, XCircle, ArrowRight
 } from 'lucide-react';
 import { supabase, checklistService } from '../../lib/supabaseClient';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 
 const ManagementChecklist = ({ jobData, onBackToJobs, activeSubModule = 'checklist', onSubModuleChange, properties = [], inspectionData = [], onJobUpdate }) => {
   const [editableAssessorName, setEditableAssessorName] = useState(jobData?.assessor_name || '');
