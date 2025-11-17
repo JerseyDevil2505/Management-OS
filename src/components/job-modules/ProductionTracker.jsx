@@ -2262,6 +2262,13 @@ const exportValidationReport = () => {
       }
     }
 
+    // Set column widths for summary sheet
+    summarySheet['!cols'] = [
+      { wch: 30 }, // Column A: Labels and inspector codes
+      { wch: 25 }, // Column B: Inspector names
+      { wch: 15 }  // Column C: Total issues
+    ];
+
     XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
 
     // Create a sheet for each inspector (only if they have issues)
@@ -2314,6 +2321,17 @@ const exportValidationReport = () => {
             };
           }
         }
+
+        // Set column widths for inspector sheet
+        inspectorSheet['!cols'] = [
+          { wch: 10 }, // Block
+          { wch: 10 }, // Lot
+          { wch: 12 }, // Qualifier
+          { wch: 8 },  // Card
+          { wch: 40 }, // Property Location
+          { wch: 50 }, // Issues
+          { wch: 30 }  // Override Status
+        ];
 
         // Truncate sheet name if too long (Excel limit is 31 characters)
         const sheetName = inspector.length > 31 ? inspector.substring(0, 31) : inspector;
