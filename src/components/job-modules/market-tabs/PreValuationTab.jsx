@@ -1541,9 +1541,9 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         }
       }
 
-      // Get average SFLA for this property's type/use group
+      // Get average SFLA for this property's type/use group (only if time normalized)
       const typeUse = prop.asset_type_use?.toString().trim();
-      const avgSFLA = (typeUse && typeUse.length > 0) ? avgSFLAByGroup[typeUse[0]] || '' : '';
+      const avgSFLA = (normalizedData && typeUse && typeUse.length > 0) ? avgSFLAByGroup[typeUse[0]] || '' : '';
 
       return {
         'Block': parsed.block || '',
@@ -1564,7 +1564,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         'HPI Multiplier': normalizedData?.hpi_multiplier || '',
         'Time Normalized Price': normalizedData?.time_normalized_price || '',
         'Avg SFLA (Type Group)': avgSFLA ? Math.round(avgSFLA) : '',
-        'Size Normalized Price': normalizedData?.size_normalized_price || '',
+        'Size Normalized Price': '',
         'Sales Ratio': '',
         'Status': normalizedData ? (normalizedData.is_outlier ? 'Outlier' : 'Valid') : '',
         'Decision': normalizedData ? (normalizedData.keep_reject === 'keep' ? 'Keep' : normalizedData.keep_reject === 'reject' ? 'Reject' : 'Pending') : ''
