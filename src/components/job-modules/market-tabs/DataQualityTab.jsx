@@ -1233,24 +1233,27 @@ const generateQCFormPDF = () => {
     }
     
     // CONDITION CHECKS
+    // Only check conditions for residential classes when they have valid type, use, and design
     if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
-      if (!property.asset_ext_cond) {
-        results.characteristics.push({
-          check: 'missing_ext_condition',
-          severity: 'warning',
-          property_key: property.property_composite_key,
-          message: 'Improved property missing exterior condition',
-          details: property
-        });
-      }
-      if (!property.asset_int_cond) {
-        results.characteristics.push({
-          check: 'missing_int_condition',
-          severity: 'warning',
-          property_key: property.property_composite_key,
-          message: 'Improved property missing interior condition',
-          details: property
-        });
+      if (hasValidTypeUse && hasValidDesign) {
+        if (!property.asset_ext_cond) {
+          results.characteristics.push({
+            check: 'missing_ext_condition',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: 'Improved property missing exterior condition',
+            details: property
+          });
+        }
+        if (!property.asset_int_cond) {
+          results.characteristics.push({
+            check: 'missing_int_condition',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: 'Improved property missing interior condition',
+            details: property
+          });
+        }
       }
     }
     
