@@ -1096,8 +1096,14 @@ const generateQCFormPDF = () => {
         });
       }
     }
-    
+
   // LOT SIZE CHECKS - Use the enhanced getTotalLotSize function
+  // Skip lot size checks for additional cards (only check primary cards: 1 for BRT, M for Microsystems)
+  const cardValue = property.property_addl_card || '1';
+  const isPrimaryCard = (vendor === 'BRT' && cardValue === '1') ||
+                        (vendor === 'Microsystems' && (cardValue === 'M' || cardValue === 'm'));
+
+  if (isPrimaryCard) {
     const totalLotSize = await interpretCodes.getTotalLotSize(property, vendor, codeDefinitions);
     const lotFrontage = property.asset_lot_frontage || 0;
 
@@ -1162,6 +1168,7 @@ const generateQCFormPDF = () => {
         });
       }
     }
+  }
     // LIVING AREA & YEAR BUILT
     const sfla = property.asset_sfla || 0;
     const yearBuilt = property.asset_year_built;
