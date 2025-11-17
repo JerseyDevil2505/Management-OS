@@ -2387,7 +2387,7 @@ Each tab receives:
 │ Properties with Issues: 342                 │
 │ Critical: 45 | Warnings: 187 | Info: 110   │
 │ Quality Score: 93.4%                        │
-���─────────────────────────────────────────────┘
+���──────────────────────────────────────��──────┘
 ```
 
 **Quality Score Calculation:**
@@ -2654,7 +2654,7 @@ standardLocations = [
 ```
 ┌─────────────────────────��────────────────���───────────────���─┐
 │ Type Use │ Total │ Avg Year │ Avg Size │ Sales │ Adj Price │
-├────────────────────────────────────────────────────────────┤
+├───────────────────────────────────────────���────────────────┤
 │ Single   │ 1,234 │   1985   │  1,850   │  156  │ $285,000  │
 │ Multi    │   432 │   1972   │  1,450   │   45  │ $225,000  │
 │ Condo    │   789 │   1998   │  1,100   │   89  │ $165,000  │
@@ -3066,7 +3066,7 @@ VCS A1 - Base Rate: $45,000/acre
 
 **Allocation Study Results:**
 ```
-┌─────��───────────────────────────────────────────┐
+┌─────��────────────────────────��──────────────────┐
 │ VCS │ Avg Allocation │ Target │ Status          │
 ├───────��─────────────────────────────────────────┤
 │ A1  │ 28.5%          │ 30%    │ ✓ Within Range  │
@@ -3442,7 +3442,7 @@ const filteredProperties = properties.filter(p => {
 Property Type: [Group 1 ▼]
   ├── Group 1 (Single Family) - 1,234 properties
   ├── Group 2 (Two Family) - 89 properties
-  ├── Group 3 (Three Family) - 45 properties
+  ├─��� Group 3 (Three Family) - 45 properties
   └── Group 4 (Multi/Commercial) - 234 properties
 ```
 
@@ -4251,7 +4251,7 @@ Deed Book 1234, Page 567 (Sale Date: 03/15/2024)
 │   └── (Accounts for increased living area)                                  │
 ├─────���──────────────────────────���────────────────────────────────────────────┤
 │ [Expand/Collapse] Show Individual Properties ▼                              │
-└─────────────────────────────────────────────────────────────────────��───────┘
+└───────────────────────────��─────────────────────────────────────────��───────┘
 ```
 
 **Expandable VCS Sections:**
@@ -4283,7 +4283,7 @@ Deed Book 1234, Page 567 (Sale Date: 03/15/2024)
 ```
 ┌──────────────────────────────────────────────────��──────────���────────────��───┐
 │ VCS ▲│ Block │ Lot │ Cards │ Sale Price  │ Norm Price  │ SFLA  │ Year Built │
-├─────────────��────────────────────────────────────────────────────────────────┤
+├─────────────��───────────────────────────────────────────────���────────────────┤
 │ A1   │  123  │  45 │  2    │  $385,000   │  $390,000   │ 2,450 │    1988    │
 │ A1   │  124  │  12 │  3    │  $425,000   │  $435,000   │ 2,850 │    1992    │
 │ B2   │  234  │  67 │  2    │  $310,000   │  $315,000   │ 2,100 │    1985    │
@@ -4710,7 +4710,7 @@ window.DEBUG_ATTRIBUTE_CARDS = true
 
 **1. Expected vs Actual Sales Counts:**
 ```
-┌────────────────────────────────���────────────┐
+┌───────────────────���────────────���────────────┐
 │ 🐛 DEBUG INFO                               │
 ├─────────────────────────────────────────────┤
 │ Total Properties: 1,500                     │
@@ -5524,3 +5524,80 @@ Key Functions:
 Updates checklist item completion when data is entered
 Marks items as auto-completed based on module activity
 Syncs with ManagementChecklist component
+
+---
+
+## 📋 TODO: Export Formatting & Formula Implementation
+
+**Status**: In Progress (Branch work)
+**Last Updated**: January 2025
+**Component**: PreValuationTab.jsx and related market analysis tabs
+
+### ✅ Completed:
+1. **Normalization Export (PreValuationTab.jsx)**
+   - ✅ Bold headers with Leelawadee font, size 10
+   - ✅ Centered alignment (horizontal and vertical)
+   - ✅ SFLA column: Number format with comma, no decimals (`#,##0`)
+   - ✅ Assessed Value, Sale Price: Currency format with $, no decimals (`$#,##0`)
+   - ✅ Time Normalized Price: Formula `=SalePrice*HPIMultiplier`, currency format
+   - ✅ Size Normalized Price: Jim's 50% formula `=((AvgSFLA-CurrentSFLA)*((TimeNormPrice/CurrentSFLA)*0.5))+TimeNormPrice`
+   - ✅ Sales Ratio: Formula `=TimeNormPrice/SalePrice`, percentage format no decimals (`0%`)
+   - ✅ Avg SFLA column: Only shows for time normalized sales
+   - ✅ Formulas only apply to properties with time normalization data
+
+### 🔲 Remaining Work:
+
+#### 1. **Market Analysis Exports**
+   **Location**: PreValuationTab.jsx (or related market tabs)
+   - [ ] Apply consistent formatting (Leelawadee, size 10, centered)
+   - [ ] Identify columns needing number/currency formatting
+   - [ ] Add formulas where calculations are displayed
+   - [ ] Set appropriate column widths
+   - [ ] Ensure formulas match UI display
+
+#### 2. **Unit Rate Config Export**
+   **Location**: PreValuationTab.jsx - Unit Rate Configuration section
+   - [ ] Apply consistent formatting (Leelawadee, size 10, centered)
+   - [ ] Format unit rate values appropriately
+   - [ ] Format lot size calculations
+   - [ ] Add formulas for calculated fields
+   - [ ] Set appropriate column widths
+   - [ ] Review BRT vs Microsystems vendor-specific exports
+
+#### 3. **Page by Page Export**
+   **Location**: LandValuationTab.jsx or related worksheet component
+   - [ ] Apply consistent formatting (Leelawadee, size 10, centered)
+   - [ ] Identify columns needing formatting (currency, percentage, number)
+   - [ ] Add formulas for calculated adjustments
+   - [ ] Set appropriate column widths
+   - [ ] Ensure formulas display for verification
+
+### 📐 Standard Formatting Template:
+```javascript
+// Base style for all cells
+const baseStyle = {
+  font: { name: 'Leelawadee', sz: 10, bold: R === 0 }, // Bold headers only
+  alignment: { horizontal: 'center', vertical: 'center' }
+};
+
+// Number formats
+'#,##0'        // Number with comma, no decimals (SFLA, counts)
+'$#,##0'       // Currency with $, no decimals (prices, values)
+'0%'           // Percentage, no decimals
+'0.00%'        // Percentage, 2 decimals (if needed)
+```
+
+### 🔑 Key Pattern (from Normalization Export):
+1. Create `rawDataForFormulas` array during export data mapping
+2. Store actual data values (not just worksheet cell references)
+3. Check raw data values to determine if formulas should be applied
+4. Extend worksheet range to include formula columns
+5. Initialize cells for formula columns even if initially empty
+6. Only apply formulas when source data exists (e.g., time normalization complete)
+
+### 📝 Notes:
+- All exports should use `xlsx-js-style` (not plain `xlsx`) for formatting support
+- Formulas should be visible in Excel for user verification
+- Column widths should be set for readability (use `ws['!cols']`)
+- Test with actual data to ensure formulas calculate correctly
+- Reference PreValuationTab.jsx `exportNormalizedSalesToExcel` function as template
