@@ -1592,13 +1592,21 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     for (let R = range.s.r; R <= range.e.r; ++R) {
       for (let C = range.s.c; C <= range.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-        if (!ws[cellAddress]) continue;
 
         // Base style for all cells
         const baseStyle = {
           font: { name: 'Leelawadee', sz: 10, bold: R === 0 },
           alignment: { horizontal: 'center', vertical: 'center' }
         };
+
+        // Skip cells that don't exist and aren't formula columns
+        const isFormulaColumn = C === colSizeNormalized || C === colSalesRatio;
+        if (!ws[cellAddress] && !isFormulaColumn) continue;
+
+        // Initialize cell if it doesn't exist (for formula columns)
+        if (!ws[cellAddress]) {
+          ws[cellAddress] = { t: 's', v: '' };
+        }
 
         // Apply base style
         ws[cellAddress].s = { ...baseStyle };
@@ -4088,7 +4096,7 @@ const analyzeImportFile = async (file) => {
                   style={{ backgroundColor: preValChecklist.market_analysis ? '#10B981' : '#E5E7EB', color: preValChecklist.market_analysis ? 'white' : '#374151' }}
                   title={preValChecklist.market_analysis ? 'Click to reopen' : 'Mark Market Analysis complete'}
                 >
-                  {preValChecklist.market_analysis ? '✓ Mark Complete' : 'Mark Complete'}
+                  {preValChecklist.market_analysis ? '��� Mark Complete' : 'Mark Complete'}
                 </button>
 
               </div>
