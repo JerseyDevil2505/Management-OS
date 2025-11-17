@@ -407,6 +407,33 @@ const DataQualityTab = ({
     });
 
     const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+
+    // Apply styling to summary sheet
+    const summaryRange = XLSX.utils.decode_range(summarySheet['!ref']);
+    const tableHeaderRow = summaryData.findIndex(row => row[0] === 'Category');
+
+    for (let R = summaryRange.s.r; R <= summaryRange.e.r; ++R) {
+      for (let C = summaryRange.s.c; C <= summaryRange.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!summarySheet[cellAddress]) continue;
+
+        const isHeader = R === 0 || R === tableHeaderRow;
+
+        summarySheet[cellAddress].s = {
+          font: { name: 'Leelawadee', sz: 10, bold: isHeader },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      }
+    }
+
+    summarySheet['!cols'] = [
+      { wch: 35 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 18 }
+    ];
+
     XLSX.utils.book_append_sheet(wb, summarySheet, 'Ignored Summary');
 
     // DETAILS SHEET
@@ -422,7 +449,7 @@ const DataQualityTab = ({
             property.property_block || '',
             property.property_lot || '',
             property.property_qualifier || '',
-            property.property_card || '',
+            property.property_card || '1',
             property.property_location || '',
             property.property_m4_class || '',
             getCheckTitle(issue.check),
@@ -434,6 +461,35 @@ const DataQualityTab = ({
     });
 
     const detailsSheet = XLSX.utils.aoa_to_sheet(detailsData);
+
+    // Apply styling to details sheet
+    const detailsRange = XLSX.utils.decode_range(detailsSheet['!ref']);
+    for (let R = detailsRange.s.r; R <= detailsRange.e.r; ++R) {
+      for (let C = detailsRange.s.c; C <= detailsRange.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!detailsSheet[cellAddress]) continue;
+
+        const isHeader = R === 0;
+
+        detailsSheet[cellAddress].s = {
+          font: { name: 'Leelawadee', sz: 10, bold: isHeader },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      }
+    }
+
+    detailsSheet['!cols'] = [
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 12 },
+      { wch: 10 },
+      { wch: 20 },
+      { wch: 10 },
+      { wch: 45 },
+      { wch: 12 },
+      { wch: 60 }
+    ];
+
     XLSX.utils.book_append_sheet(wb, detailsSheet, 'Ignored Details');
 
     XLSX.writeFile(wb, `DQ_Ignored_${jobInfo}_${timestamp}.xlsx`);
