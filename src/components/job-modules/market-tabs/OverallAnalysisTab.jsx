@@ -1525,7 +1525,7 @@ const OverallAnalysisTab = ({
 
       for (let i = 0; i < data.length; i++) {
         const deltaValue = data[i][deltaColIndex];
-        if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+        if (deltaValue === 'BASELINE' || deltaValue === 0) {
           baselineRowIndex = i + 1; // +1 because row 0 is headers
           break;
         }
@@ -1544,7 +1544,7 @@ const OverallAnalysisTab = ({
           // Check if this is the baseline row - no formula needed
           const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
           const deltaValue = ws[deltaCell]?.v;
-          if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+          if (deltaValue === 'BASELINE' || deltaValue === 0) {
             return null; // Baseline row doesn't get adjusted
           }
 
@@ -1575,7 +1575,7 @@ const OverallAnalysisTab = ({
           // Check if this is the baseline row - no formula needed
           const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
           const deltaValue = ws[deltaCell]?.v;
-          if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+          if (deltaValue === 'BASELINE' || deltaValue === 0) {
             return null; // Baseline row shows 'BASELINE'
           }
 
@@ -1587,8 +1587,8 @@ const OverallAnalysisTab = ({
           // Only apply formula if both values exist and are numbers
           if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
               baselineSalePriceValue > 0) {
-            // Delta % = (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
-            return `(${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell}`;
+            // Delta % = (Current Adj Price - Baseline Sale Price) / Baseline Sale Price * 100
+            return `((${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell})*100`;
           }
           return null;
         }
