@@ -348,7 +348,7 @@ const PreValuationTab = ({
   const [isAnalyzingImport, setIsAnalyzingImport] = useState(false);
   const [importOptions, setImportOptions] = useState({
     updateExisting: true,
-    useAddressFuzzyMatch: true,
+    useAddressFuzzyMatch: false,
     fuzzyMatchThreshold: 0.8,
     markImportedAsReady: true
   });
@@ -2296,7 +2296,7 @@ const handleSalesDecision = (saleId, decision) => {
           const batch = rejects.slice(i, i + 500);
           const rejectCompositeKeys = batch.map(s => s.property_composite_key);
 
-          if (false) console.log(`���️ Reject batch ${Math.floor(i/500) + 1}: Clearing ${batch.length} properties...`);
+          if (false) console.log(`�����️ Reject batch ${Math.floor(i/500) + 1}: Clearing ${batch.length} properties...`);
 
           // CRITICAL: Clear BOTH time and size normalized values for rejected sales
           await supabase
@@ -4908,7 +4908,7 @@ const analyzeImportFile = async (file) => {
                                 
                                 if (parentCard && parentCard.new_vcs) {
                                   handleWorksheetChange(prop.property_composite_key, 'new_vcs', parentCard.new_vcs);
-                                  if (false) console.log(`✅ Copied VCS "${parentCard.new_vcs}" from parent card to ${prop.card}`);
+                                  if (false) console.log(`�� Copied VCS "${parentCard.new_vcs}" from parent card to ${prop.card}`);
                                 } else if (parentCard) {
                                   alert('Parent card does not have a New VCS value to copy');
                                 } else {
