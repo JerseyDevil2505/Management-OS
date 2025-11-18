@@ -1858,7 +1858,7 @@ const OverallAnalysisTab = ({
                   </div>
                   <div className="mt-4 flex justify-end">
                     <button
-                      onClick={() => exportToCSV('typeUse')}
+                      onClick={() => exportToExcel('typeUse')}
                       className="text-sm text-blue-600 hover:text-blue-800"
                     >
                       Export Type & Use Data
@@ -1979,7 +1979,7 @@ const OverallAnalysisTab = ({
                   </div>
                   <div className="mt-4 flex justify-end">
                     <button
-                      onClick={() => exportToCSV('design')}
+                      onClick={() => exportToExcel('design')}
                       className="text-sm text-blue-600 hover:text-blue-800"
                     >
                       Export Design Data
@@ -2071,7 +2071,7 @@ const OverallAnalysisTab = ({
                   </div>
                   <div className="mt-4 flex justify-end">
                     <button
-                      onClick={() => exportToCSV('yearBuilt')}
+                      onClick={() => exportToExcel('yearBuilt')}
                       className="text-sm text-blue-600 hover:text-blue-800"
                     >
                       Export Year Built Data
