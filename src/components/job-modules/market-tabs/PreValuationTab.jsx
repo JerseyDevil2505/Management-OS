@@ -371,43 +371,44 @@ const PreValuationTab = ({
   const [showBlockDetailModal, setShowBlockDetailModal] = useState(false);
   const [isProcessingBlocks, setIsProcessingBlocks] = useState(false);
 
-  // Bluebeam Revu 32-color palette
+  // Market Analysis Color Scale - Consistent Red → Purple progression
+  // Two variations per color range: pastel (lower half) and bright (upper half)
+  // Default: $100k increments with $50k steps = 2 steps per $100k
   const bluebeamPalette = [
-    // Row 1 - Light colors
-    { hex: "#FFFFFF", name: "White", row: 1, col: 1 },
-    { hex: "#FFCCCC", name: "Light Pink", row: 1, col: 2 },
-    { hex: "#FFE6CC", name: "Light Orange", row: 1, col: 3 },
-    { hex: "#FFFFCC", name: "Light Yellow", row: 1, col: 4 },
-    { hex: "#E6FFCC", name: "Light Green", row: 1, col: 5 },
-    { hex: "#CCFFFF", name: "Light Cyan", row: 1, col: 6 },
-    { hex: "#CCE6FF", name: "Light Blue", row: 1, col: 7 },
-    { hex: "#E6CCFF", name: "Light Purple", row: 1, col: 8 },
-    // Row 2 - Medium colors
-    { hex: "#CCCCCC", name: "Light Gray", row: 2, col: 1 },
-    { hex: "#FF9999", name: "Pink", row: 2, col: 2 },
-    { hex: "#FFCC99", name: "Peach", row: 2, col: 3 },
-    { hex: "#FFFF99", name: "Yellow", row: 2, col: 4 },
-    { hex: "#CCFF99", name: "Light Green", row: 2, col: 5 },
-    { hex: "#99FFFF", name: "Cyan", row: 2, col: 6 },
-    { hex: "#99CCFF", name: "Sky Blue", row: 2, col: 7 },
-    { hex: "#CC99FF", name: "Purple", row: 2, col: 8 },
-    // Row 3 - Darker colors
-    { hex: "#999999", name: "Gray", row: 3, col: 1 },
-    { hex: "#FF6666", name: "Red", row: 3, col: 2 },
-    { hex: "#FF9966", name: "Orange", row: 3, col: 3 },
-    { hex: "#FFFF66", name: "Bright Yellow", row: 3, col: 4 },
-    { hex: "#99FF66", name: "Green", row: 3, col: 5 },
-    { hex: "#66FFFF", name: "Bright Cyan", row: 3, col: 6 },
-    { hex: "#6699FF", name: "Bright Blue", row: 3, col: 7 },
-    { hex: "#9966FF", name: "Bright Purple", row: 3, col: 8 },
-    // Row 4 - Saturated colors
-    { hex: "#666666", name: "Dark Gray", row: 4, col: 1 },
-    { hex: "#FF3333", name: "Bright Red", row: 4, col: 2 },
-    { hex: "#FF6633", name: "Bright Orange", row: 4, col: 3 },
-    { hex: "#FFFF33", name: "Neon Yellow", row: 4, col: 4 },
-    { hex: "#66FF33", name: "Neon Green", row: 4, col: 5 },
-    { hex: "#33FFFF", name: "Electric Cyan", row: 4, col: 6 },
-    { hex: "#3366FF", name: "Electric Blue", row: 4, col: 7 },
+    // Gray for no data only
+    { hex: "#CCCCCC", name: "No Data", row: 0, col: 0 },
+
+    // Red range ($0-99k)
+    { hex: "#FFCCCC", name: "Light Red", row: 1, col: 1 },      // $0-49k
+    { hex: "#FF6666", name: "Bright Red", row: 1, col: 2 },     // $50k-99k
+
+    // Pink range ($100k-199k)
+    { hex: "#FFB3D9", name: "Light Pink", row: 2, col: 1 },     // $100k-149k
+    { hex: "#FF66B2", name: "Bright Pink", row: 2, col: 2 },    // $150k-199k
+
+    // Orange range ($200k-299k)
+    { hex: "#FFD9B3", name: "Light Orange", row: 3, col: 1 },   // $200k-249k
+    { hex: "#FF9966", name: "Bright Orange", row: 3, col: 2 },  // $250k-299k
+
+    // Yellow range ($300k-399k)
+    { hex: "#FFFF99", name: "Light Yellow", row: 4, col: 1 },   // $300k-349k
+    { hex: "#FFFF33", name: "Bright Yellow", row: 4, col: 2 },  // $350k-399k
+
+    // Green range ($400k-499k)
+    { hex: "#CCFFCC", name: "Light Green", row: 5, col: 1 },    // $400k-449k
+    { hex: "#66FF66", name: "Bright Green", row: 5, col: 2 },   // $450k-499k
+
+    // Teal range ($500k-599k)
+    { hex: "#B3F0F0", name: "Light Teal", row: 6, col: 1 },     // $500k-549k
+    { hex: "#33CCCC", name: "Bright Teal", row: 6, col: 2 },    // $550k-599k
+
+    // Blue range ($600k-699k)
+    { hex: "#99CCFF", name: "Light Blue", row: 7, col: 1 },     // $600k-649k
+    { hex: "#3399FF", name: "Bright Blue", row: 7, col: 2 },    // $650k-699k
+
+    // Purple range ($700k+)
+    { hex: "#CCAAFF", name: "Light Purple", row: 8, col: 1 },   // $700k-749k
+    { hex: "#9966FF", name: "Bright Purple", row: 8, col: 2 },  // $750k+
     { hex: "#6633FF", name: "Electric Purple", row: 4, col: 8 }
   ];
   const [isResultsCollapsed, setIsResultsCollapsed] = useState(false);
@@ -4105,11 +4106,10 @@ const analyzeImportFile = async (file) => {
                       alignment: { horizontal: 'center', vertical: 'center' }
                     };
 
-                    // Header style (bold)
+                    // Header style (bold, no fill)
                     const headerStyle = {
                       font: { name: 'Leelawadee', sz: 10, bold: true },
-                      alignment: { horizontal: 'center', vertical: 'center' },
-                      fill: { fgColor: { rgb: 'E5E7EB' } }
+                      alignment: { horizontal: 'center', vertical: 'center' }
                     };
 
                     // Apply formatting to all cells
