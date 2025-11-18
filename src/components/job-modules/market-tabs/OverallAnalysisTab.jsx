@@ -1434,6 +1434,12 @@ const OverallAnalysisTab = ({
           return (headerLower.includes('price') || headerLower.includes('adj')) ? i : -1;
         }).filter(i => i !== -1);
 
+      // Identify delta/percentage columns
+      const deltaColumnIndices = headers.map((h, i) => {
+        const headerLower = h.toLowerCase();
+        return (headerLower.includes('delta') || headerLower === 'delta %') ? i : -1;
+      }).filter(i => i !== -1);
+
       // Color columns to apply background fill
       const colorColumnsToApply = colorColumns.length > 0 ? colorColumns :
         (colorColumnIndex >= 0 ? [colorColumnIndex] : []);
