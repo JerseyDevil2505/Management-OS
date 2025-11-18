@@ -1420,7 +1420,7 @@ const OverallAnalysisTab = ({
     };
 
     // Export Type & Use Analysis
-    if (analysis.typeUse && (sectionType === 'all' || sectionType === 'typeUse')) {
+    if (analysis.typeUse && analysis.typeUse.groups && analysis.typeUse.groups.length > 0 && (sectionType === 'all' || sectionType === 'typeUse')) {
       const headers = [
         'Description',
         'Total Properties',
