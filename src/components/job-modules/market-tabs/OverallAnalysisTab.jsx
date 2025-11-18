@@ -1502,26 +1502,47 @@ const OverallAnalysisTab = ({
         group.cmeBracket ? group.cmeBracket.color : ''
       ]);
 
-      // Formula configuration - Jim's 50% size adjustment: ((AvgSize-AvgSize)*((SalePrice/AvgSize)*0.5))+SalePrice
-      // Since we're using the same avg for all in group, formula simplifies but we show it for clarity
+      // Find the baseline row (deltaPercent === 0 or marked as 'BASELINE')
+      const deltaColIndex = headers.indexOf('Delta');
+      let baselineRowIndex = -1;
+
+      for (let i = 0; i < data.length; i++) {
+        const deltaValue = data[i][deltaColIndex];
+        if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+          baselineRowIndex = i + 1; // +1 because row 0 is headers
+          break;
+        }
+      }
+
+      // Formula configuration - Jim's 50% size adjustment normalized to baseline
       const formulaColumns = [{
         column: 'Adj Price',
         getFormula: (R, C, headers, ws) => {
           const avgSizeCol = headers.indexOf('Avg Size (Sales)');
           const salePriceCol = headers.indexOf('Sale Price');
+          const deltaCol = headers.indexOf('Delta');
 
-          if (avgSizeCol === -1 || salePriceCol === -1) return null;
+          if (avgSizeCol === -1 || salePriceCol === -1 || baselineRowIndex === -1) return null;
 
-          const avgSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+          // Check if this is the baseline row - no formula needed
+          const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
+          const deltaValue = ws[deltaCell]?.v;
+          if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+            return null; // Baseline row doesn't get adjusted
+          }
+
+          const baselineSizeCell = XLSX.utils.encode_cell({ r: baselineRowIndex, c: avgSizeCol });
+          const currentSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
           const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
-          const avgSizeValue = ws[avgSizeCell]?.v;
+          const baselineSizeValue = ws[baselineSizeCell]?.v;
+          const currentSizeValue = ws[currentSizeCell]?.v;
           const salePriceValue = ws[salePriceCell]?.v;
 
-          // Only apply formula if both values exist and are numbers
-          if (typeof avgSizeValue === 'number' && typeof salePriceValue === 'number' && avgSizeValue > 0) {
-            // Jim's Formula: ((AVG-AVG)*((SALE/AVG)*0.5))+SALE
-            // For group averages this simplifies to SALE, but we show full formula
-            return `((${avgSizeCell}-${avgSizeCell})*((${salePriceCell}/${avgSizeCell})*0.5))+${salePriceCell}`;
+          // Only apply formula if all values exist and are numbers
+          if (typeof baselineSizeValue === 'number' && typeof currentSizeValue === 'number' &&
+              typeof salePriceValue === 'number' && currentSizeValue > 0) {
+            // Jim's Formula: ((BASELINE_SIZE - CURRENT_SIZE) * ((SALE_PRICE / CURRENT_SIZE) * 0.5)) + SALE_PRICE
+            return `(($${baselineSizeCell}-${currentSizeCell})*((${salePriceCell}/${currentSizeCell})*0.5))+${salePriceCell}`;
           }
           return null;
         }
