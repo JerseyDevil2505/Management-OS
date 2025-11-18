@@ -1963,7 +1963,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
             propertyCount: allProps.length,  // Total properties in block
             salesCount: allProps.filter(p => p.values_norm_size && p.values_norm_size > 0).length,  // Size normalized sales
             avgNormalizedValue: 0,
-            color: { hex: "#E5E7EB", name: "No Data", row: 0, col: 0 },
+            color: bluebeamPalette[0],  // Gray "No Data" color
             ageConsistency: 'N/A',
             sizeConsistency: 'N/A',
             designConsistency: 'N/A',
@@ -2011,11 +2011,12 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         else if (uniqueDesigns <= 4 && dominantPercent >= 25) designConsistency = 'Low';
         
         // Assign color based on value
+        // Index 0 is reserved for "No Data" gray, so actual colors start at index 1
         const colorIndex = Math.min(
-          Math.floor((avgValue - colorScaleStart) / colorScaleIncrement),
+          Math.floor((avgValue - colorScaleStart) / colorScaleIncrement) + 1,
           bluebeamPalette.length - 1
         );
-        const assignedColor = bluebeamPalette[Math.max(0, colorIndex)];
+        const assignedColor = bluebeamPalette[Math.max(1, colorIndex)];
         
         return {
           block,
