@@ -4257,11 +4257,11 @@ const analyzeImportFile = async (file) => {
             </div>
             
             <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
-              <strong>Color Scale:</strong> 
-              <br/>• First color: $0 - ${(colorScaleIncrement - 1).toLocaleString()}
-              <br/>• Second color: ${colorScaleIncrement.toLocaleString()} - ${((colorScaleIncrement * 2) - 1).toLocaleString()}
-              <br/>��� Third color: ${(colorScaleIncrement * 2).toLocaleString()} - ${((colorScaleIncrement * 3) - 1).toLocaleString()}
-              <br/>• And so on... Total of {marketAnalysisData.length} blocks analyzed.
+              <strong>Color Scale:</strong> Red → Pink → Orange → Yellow → Green → Teal → Blue → Purple
+              <br/>• Each color has 2 steps (pastel & bright) at ${colorScaleIncrement.toLocaleString()} intervals
+              <br/>• Red: $0-${(colorScaleIncrement * 2 - 1).toLocaleString()} • Pink: ${(colorScaleIncrement * 2).toLocaleString()}-${(colorScaleIncrement * 4 - 1).toLocaleString()} • Orange: ${(colorScaleIncrement * 4).toLocaleString()}-${(colorScaleIncrement * 6 - 1).toLocaleString()} • Yellow: ${(colorScaleIncrement * 6).toLocaleString()}-${(colorScaleIncrement * 8 - 1).toLocaleString()}
+              <br/>• Green: ${(colorScaleIncrement * 8).toLocaleString()}-${(colorScaleIncrement * 10 - 1).toLocaleString()} • Teal: ${(colorScaleIncrement * 10).toLocaleString()}-${(colorScaleIncrement * 12 - 1).toLocaleString()} • Blue: ${(colorScaleIncrement * 12).toLocaleString()}-${(colorScaleIncrement * 14 - 1).toLocaleString()} • Purple: ${(colorScaleIncrement * 14).toLocaleString()}+
+              <br/>• Total: {marketAnalysisData.length} blocks analyzed • Gray = No Data
             </div>
           </div>
           
