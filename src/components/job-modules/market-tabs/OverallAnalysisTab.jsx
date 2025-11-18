@@ -1513,7 +1513,7 @@ const OverallAnalysisTab = ({
         group.avgYearSales || '—',
         group.avgSizeSales ? Math.round(group.avgSizeSales) : '—',
         group.salesCount > 0 ? Math.round(group.avgPrice) : '—',
-        group.salesCount > 0 ? Math.round(group.avgAdjustedPrice) : '—',
+        group.salesCount === 0 ? '—' : group.isBaseline ? '—' : Math.round(group.avgAdjustedPrice),
         group.salesCount > 0 && group.deltaPercent !== 0 ? `${group.deltaPercent.toFixed(0)}%` : group.salesCount === 0 ? '—' : 'BASELINE',
         group.cmeBracket ? group.cmeBracket.label : '—',
         group.cmeBracket ? group.cmeBracket.color : ''
@@ -1560,6 +1560,35 @@ const OverallAnalysisTab = ({
               typeof salePriceValue === 'number' && currentSizeValue > 0) {
             // Jim's Formula: ((BASELINE_SIZE - CURRENT_SIZE) * ((SALE_PRICE / CURRENT_SIZE) * 0.5)) + SALE_PRICE
             return `(($${baselineSizeCell}-${currentSizeCell})*((${salePriceCell}/${currentSizeCell})*0.5))+${salePriceCell}`;
+          }
+          return null;
+        }
+      }, {
+        column: 'Delta',
+        getFormula: (R, C, headers, ws) => {
+          const adjPriceCol = headers.indexOf('Adj Price');
+          const salePriceCol = headers.indexOf('Sale Price');
+          const deltaCol = headers.indexOf('Delta');
+
+          if (adjPriceCol === -1 || salePriceCol === -1 || baselineRowIndex === -1) return null;
+
+          // Check if this is the baseline row - no formula needed
+          const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
+          const deltaValue = ws[deltaCell]?.v;
+          if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+            return null; // Baseline row shows 'BASELINE'
+          }
+
+          const currentAdjPriceCell = XLSX.utils.encode_cell({ r: R, c: adjPriceCol });
+          const baselineSalePriceCell = XLSX.utils.encode_cell({ r: baselineRowIndex, c: salePriceCol });
+          const currentAdjPriceValue = ws[currentAdjPriceCell]?.v;
+          const baselineSalePriceValue = ws[baselineSalePriceCell]?.v;
+
+          // Only apply formula if both values exist and are numbers
+          if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
+              baselineSalePriceValue > 0) {
+            // Delta % = (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
+            return `(${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell}`;
           }
           return null;
         }
