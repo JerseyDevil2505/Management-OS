@@ -1716,7 +1716,7 @@ const OverallAnalysisTab = ({
                     data.push([
                       '',
                       'Design',
-                      `  �� ${designGroup.name}`,
+                      `  └ ${designGroup.name}`,
                       designGroup.propertyCount,
                       designGroup.salesCount,
                       designGroup.avgYearAll || '—',
@@ -1738,7 +1738,28 @@ const OverallAnalysisTab = ({
         });
 
       if (data.length > 0) {
-        const ws = createFormattedSheet(headers, data, { colorColumnIndex: 13 });
+        const formulaColumns = [{
+          column: 'Adj Price',
+          getFormula: (R, C, headers, ws) => {
+            const avgSizeCol = headers.indexOf('Avg Size (Sales)');
+            const salePriceCol = headers.indexOf('Sale Price');
+
+            if (avgSizeCol === -1 || salePriceCol === -1) return null;
+
+            const avgSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+            const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
+            const avgSizeValue = ws[avgSizeCell]?.v;
+            const salePriceValue = ws[salePriceCell]?.v;
+
+            if (typeof avgSizeValue === 'number' && typeof salePriceValue === 'number' && avgSizeValue > 0) {
+              // Jim's 50% Size Adjustment Formula: ((AVG-AVG)*((SALE/AVG)*0.5))+SALE
+              return `((${avgSizeCell}-${avgSizeCell})*((${salePriceCell}/${avgSizeCell})*0.5))+${salePriceCell}`;
+            }
+            return null;
+          }
+        }];
+
+        const ws = createFormattedSheet(headers, data, { colorColumnIndex: 13, formulaColumns });
         XLSX.utils.book_append_sheet(wb, ws, 'VCS by Type');
       }
     }
