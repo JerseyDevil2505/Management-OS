@@ -1716,7 +1716,7 @@ const OverallAnalysisTab = ({
                     data.push([
                       '',
                       'Design',
-                      `  └ ${designGroup.name}`,
+                      `  �� ${designGroup.name}`,
                       designGroup.propertyCount,
                       designGroup.salesCount,
                       designGroup.avgYearAll || '—',
@@ -1765,7 +1765,27 @@ const OverallAnalysisTab = ({
           group.deltaPercent ? `${group.deltaPercent.toFixed(0)}%` : 'BASELINE'
         ]);
 
-        const ws = createFormattedSheet(headers, data, {});
+        const formulaColumns = [{
+          column: 'Avg Adjusted Price',
+          getFormula: (R, C, headers, ws) => {
+            const avgSizeCol = headers.indexOf('Avg Size');
+            const salePriceCol = headers.indexOf('Avg Sale Price');
+
+            if (avgSizeCol === -1 || salePriceCol === -1) return null;
+
+            const avgSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+            const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
+            const avgSizeValue = ws[avgSizeCell]?.v;
+            const salePriceValue = ws[salePriceCell]?.v;
+
+            if (typeof avgSizeValue === 'number' && typeof salePriceValue === 'number' && avgSizeValue > 0) {
+              return `((${avgSizeCell}-${avgSizeCell})*((${salePriceCell}/${avgSizeCell})*0.5))+${salePriceCell}`;
+            }
+            return null;
+          }
+        }];
+
+        const ws = createFormattedSheet(headers, data, { formulaColumns });
         XLSX.utils.book_append_sheet(wb, ws, 'Condo Design');
       }
 
@@ -1801,7 +1821,27 @@ const OverallAnalysisTab = ({
         });
 
         if (data.length > 0) {
-          const ws = createFormattedSheet(headers, data, {});
+          const formulaColumns = [{
+            column: 'Avg Adjusted Price',
+            getFormula: (R, C, headers, ws) => {
+              const avgSizeCol = headers.indexOf('Avg Size (All)');
+              const salePriceCol = headers.indexOf('Avg Sale Price');
+
+              if (avgSizeCol === -1 || salePriceCol === -1) return null;
+
+              const avgSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+              const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
+              const avgSizeValue = ws[avgSizeCell]?.v;
+              const salePriceValue = ws[salePriceCell]?.v;
+
+              if (typeof avgSizeValue === 'number' && typeof salePriceValue === 'number' && avgSizeValue > 0) {
+                return `((${avgSizeCell}-${avgSizeCell})*((${salePriceCell}/${avgSizeCell})*0.5))+${salePriceCell}`;
+              }
+              return null;
+            }
+          }];
+
+          const ws = createFormattedSheet(headers, data, { formulaColumns });
           XLSX.utils.book_append_sheet(wb, ws, 'Condo Bedroom');
         }
       }
@@ -1826,7 +1866,27 @@ const OverallAnalysisTab = ({
           group.deltaPercent ? `${group.deltaPercent.toFixed(0)}%` : '—'
         ]);
 
-        const ws = createFormattedSheet(headers, data, {});
+        const formulaColumns = [{
+          column: 'Avg Adjusted Price',
+          getFormula: (R, C, headers, ws) => {
+            const avgSizeCol = headers.indexOf('Avg Size');
+            const salePriceCol = headers.indexOf('Avg Sale Price');
+
+            if (avgSizeCol === -1 || salePriceCol === -1) return null;
+
+            const avgSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+            const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
+            const avgSizeValue = ws[avgSizeCell]?.v;
+            const salePriceValue = ws[salePriceCell]?.v;
+
+            if (typeof avgSizeValue === 'number' && typeof salePriceValue === 'number' && avgSizeValue > 0) {
+              return `((${avgSizeCell}-${avgSizeCell})*((${salePriceCell}/${avgSizeCell})*0.5))+${salePriceCell}`;
+            }
+            return null;
+          }
+        }];
+
+        const ws = createFormattedSheet(headers, data, { formulaColumns });
         XLSX.utils.book_append_sheet(wb, ws, 'Condo Floor');
       }
     }
