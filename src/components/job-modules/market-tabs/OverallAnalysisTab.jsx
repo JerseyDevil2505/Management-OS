@@ -1593,6 +1593,7 @@ const OverallAnalysisTab = ({
             .filter(type => type.salesCount > 0)
             .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
             .forEach((typeGroup) => {
+              const typeCME = typeGroup.avgAdjustedPrice > 0 ? getCMEBracket(typeGroup.avgAdjustedPrice) : null;
               data.push([
                 '',
                 'Type',
@@ -1606,7 +1607,8 @@ const OverallAnalysisTab = ({
                 typeGroup.avgPrice ? Math.round(typeGroup.avgPrice) : '—',
                 typeGroup.avgAdjustedPrice ? Math.round(typeGroup.avgAdjustedPrice) : '—',
                 typeGroup.deltaPercent !== 0 ? `${typeGroup.deltaPercent.toFixed(0)}%` : 'VCS BASE',
-                ''
+                typeCME ? typeCME.label : '',
+                typeCME ? typeCME.color : ''
               ]);
 
               // Add Design-level rows if multiple designs
@@ -1615,6 +1617,7 @@ const OverallAnalysisTab = ({
                   .filter(design => design.salesCount > 0)
                   .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
                   .forEach((designGroup) => {
+                    const designCME = designGroup.avgAdjustedPrice > 0 ? getCMEBracket(designGroup.avgAdjustedPrice) : null;
                     data.push([
                       '',
                       'Design',
@@ -1628,18 +1631,19 @@ const OverallAnalysisTab = ({
                       designGroup.avgPrice ? Math.round(designGroup.avgPrice) : '—',
                       designGroup.avgAdjustedPrice ? Math.round(designGroup.avgAdjustedPrice) : '—',
                       designGroup.deltaPercent !== 0 ? `${designGroup.deltaPercent.toFixed(0)}%` : 'TYPE BASE',
-                      ''
+                      designCME ? designCME.label : '',
+                      designCME ? designCME.color : ''
                     ]);
                   });
               }
             });
 
           // Add empty row between VCS sections
-          data.push(['', '', '', '', '', '', '', '', '', '', '', '', '']);
+          data.push(['', '', '', '', '', '', '', '', '', '', '', '', '', '']);
         });
 
       if (data.length > 0) {
-        const ws = createFormattedSheet(headers, data);
+        const ws = createFormattedSheet(headers, data, { colorColumnIndex: 13 });
         XLSX.utils.book_append_sheet(wb, ws, 'VCS by Type');
       }
     }
