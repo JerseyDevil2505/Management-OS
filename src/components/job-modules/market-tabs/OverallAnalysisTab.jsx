@@ -1514,7 +1514,7 @@ const OverallAnalysisTab = ({
         group.avgSizeSales ? Math.round(group.avgSizeSales) : '—',
         group.salesCount > 0 ? Math.round(group.avgPrice) : '—',
         group.salesCount === 0 ? '—' : group.isBaseline ? '—' : Math.round(group.avgAdjustedPrice),
-        group.salesCount > 0 && group.deltaPercent !== 0 ? `${group.deltaPercent.toFixed(0)}%` : group.salesCount === 0 ? '—' : 'BASELINE',
+        group.salesCount > 0 && group.deltaPercent !== 0 ? Math.round(group.deltaPercent) : group.salesCount === 0 ? '—' : 'BASELINE',
         group.cmeBracket ? group.cmeBracket.label : '—',
         group.cmeBracket ? group.cmeBracket.color : ''
       ]);
@@ -2989,7 +2989,7 @@ const OverallAnalysisTab = ({
                                   <td className="px-3 py-2 text-sm font-medium">{bedroom.label}</td>
                                   <td className="px-3 py-2 text-sm text-center">{bedroom.salesCount}</td>
                                   <td className="px-3 py-2 text-sm text-center">
-                                    {bedroom.avgSize > 0 ? formatNumber(bedroom.avgSize) : '���'}
+                                    {bedroom.avgSize > 0 ? formatNumber(bedroom.avgSize) : '����'}
                                   </td>
                                   <td className="px-3 py-2 text-sm text-center">
                                     {bedroom.avgPrice > 0 ? formatCurrency(bedroom.avgPrice) : <span className="text-gray-500 text-xs">NO DATA</span>}
