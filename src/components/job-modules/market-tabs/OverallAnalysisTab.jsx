@@ -1738,7 +1738,7 @@ const OverallAnalysisTab = ({
             vcsData.propertyCount,
             vcsData.salesCount,
             vcsData.avgYearAll || '—',
-            vcsData.avgSizeAll ? Math.round(vcsData.avgSizeAll) : '—',
+            vcsData.avgSizeAll ? Math.round(vcsData.avgSizeAll) : '���',
             vcsData.avgYearSales || '—',
             vcsData.avgSizeSales ? Math.round(vcsData.avgSizeSales) : '—',
             vcsData.avgPrice ? Math.round(vcsData.avgPrice) : '—',
@@ -1851,21 +1851,43 @@ const OverallAnalysisTab = ({
           group.deltaPercent ? `${group.deltaPercent.toFixed(0)}%` : 'BASELINE'
         ]);
 
+        // Find the baseline row for Condo Design analysis
+        const deltaColIndexCD = headers.indexOf('Delta %');
+        let baselineRowIndexCD = -1;
+
+        for (let i = 0; i < data.length; i++) {
+          const deltaValue = data[i][deltaColIndexCD];
+          if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+            baselineRowIndexCD = i + 1;
+            break;
+          }
+        }
+
         const formulaColumns = [{
           column: 'Avg Adjusted Price',
           getFormula: (R, C, headers, ws) => {
             const avgSizeCol = headers.indexOf('Avg Size');
             const salePriceCol = headers.indexOf('Avg Sale Price');
+            const deltaCol = headers.indexOf('Delta %');
 
-            if (avgSizeCol === -1 || salePriceCol === -1) return null;
+            if (avgSizeCol === -1 || salePriceCol === -1 || baselineRowIndexCD === -1) return null;
 
-            const avgSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+            const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
+            const deltaValue = ws[deltaCell]?.v;
+            if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+              return null;
+            }
+
+            const baselineSizeCell = XLSX.utils.encode_cell({ r: baselineRowIndexCD, c: avgSizeCol });
+            const currentSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
             const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
-            const avgSizeValue = ws[avgSizeCell]?.v;
+            const baselineSizeValue = ws[baselineSizeCell]?.v;
+            const currentSizeValue = ws[currentSizeCell]?.v;
             const salePriceValue = ws[salePriceCell]?.v;
 
-            if (typeof avgSizeValue === 'number' && typeof salePriceValue === 'number' && avgSizeValue > 0) {
-              return `((${avgSizeCell}-${avgSizeCell})*((${salePriceCell}/${avgSizeCell})*0.5))+${salePriceCell}`;
+            if (typeof baselineSizeValue === 'number' && typeof currentSizeValue === 'number' &&
+                typeof salePriceValue === 'number' && currentSizeValue > 0) {
+              return `(($${baselineSizeCell}-${currentSizeCell})*((${salePriceCell}/${currentSizeCell})*0.5))+${salePriceCell}`;
             }
             return null;
           }
