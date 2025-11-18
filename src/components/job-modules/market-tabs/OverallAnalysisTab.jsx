@@ -1469,6 +1469,10 @@ const OverallAnalysisTab = ({
               // Apply currency format to price columns
               if (priceColumnIndices.includes(C)) {
                 ws[cellAddress].s.numFmt = '$#,##0';
+              } else if (deltaColumnIndices.includes(C)) {
+                // Apply percentage format to delta columns
+                ws[cellAddress].s.numFmt = '0';
+                ws[cellAddress].t = 'n';
               } else {
                 // Apply regular number format to other numeric columns
                 ws[cellAddress].s.numFmt = '#,##0';
