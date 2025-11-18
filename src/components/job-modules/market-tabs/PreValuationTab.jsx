@@ -2802,13 +2802,13 @@ const analyzeImportFile = async (file) => {
         let location;
         if (vendorType === 'Microsystems') {
           // Prefer explicit Property Location if present (this is the address field). Fallback to Location if not.
-          location = row.PROPERTY_LOCATION?.toString() || row['Property Location']?.toString() || row.Location?.toString() || '';
+          location = row['Property Location']?.toString() || row.PROPERTY_LOCATION?.toString() || row.Address?.toString() || row.Location?.toString() || '';
           // If location seems empty or is the analysis field, try other patterns
           if (!location || location.toLowerCase().includes('analysis')) {
             location = row['Property Location']?.toString() || row.Address?.toString() || 'NONE';
           }
         } else { // BRT
-          location = row.PROPERTY_LOCATION?.toString() || row['Property Location']?.toString() || row.Location?.toString() || 'NONE';
+          location = row['Property Location']?.toString() || row.PROPERTY_LOCATION?.toString() || row.Address?.toString() || row.Location?.toString() || 'NONE';
         }
 
         // If address components were split across columns (e.g. number in Location and street in Location Analysis),
