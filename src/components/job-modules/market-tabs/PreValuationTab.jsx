@@ -2637,30 +2637,110 @@ const processSelectedProperties = async () => {
   // ==================== IMPORT/EXPORT FUNCTIONS ====================
   
   const exportWorksheetToExcel = () => {
-    // Export using the canonical property_location (address) and explicit Location Analysis field.
-    let csv = 'Block,Lot,Qualifier,Card,Address,Class,Current VCS,Building,Type/Use,Design,New VCS,Location Analysis,Zoning,Map Page,Key Page,Notes,Ready\n';
+    // Export to Excel with formatting
+    const headers = [
+      'Block',
+      'Lot',
+      'Qualifier',
+      'Card',
+      'Property Location',
+      'Class',
+      'Current VCS',
+      'Building',
+      'Type/Use',
+      'Design',
+      'New VCS',
+      'Location Analysis',
+      'Zoning',
+      'Map Page',
+      'Key Page',
+      'Notes',
+      'Ready'
+    ];
 
-    // Debug sample: log first 10 property_location values to help detect truncation
-    try {
-      (filteredWorksheetProps || []).slice(0,10).forEach(p => console.log('EXPORT SAMPLE:', p.property_composite_key, '->', p.property_location));
-    } catch (e) {}
+    const data = filteredWorksheetProps.map(prop => [
+      prop.block || '',
+      prop.lot || '',  // Will be formatted as text to preserve trailing zeros
+      prop.qualifier || '',
+      prop.card || '',
+      prop.property_location || '',
+      prop.property_class || '',
+      prop.property_vcs || '',
+      prop.building_class_display || '',
+      prop.type_use_display || '',
+      prop.design_display || '',
+      prop.new_vcs || '',
+      prop.location_analysis || '',
+      prop.asset_zoning || '',
+      prop.asset_map_page || '',
+      prop.asset_key_page || '',
+      prop.worksheet_notes || '',
+      readyProperties.has(prop.property_composite_key) ? 'Yes' : 'No'
+    ]);
 
-    filteredWorksheetProps.forEach(prop => {
-      csv += `"${prop.block}","${prop.lot}","${prop.qualifier || ''}","${prop.card || ''}","${prop.property_location || ''}",`;
-      csv += `"${prop.property_class}","${prop.property_vcs}",`;
-      csv += `"${prop.building_class_display}","${prop.type_use_display}","${prop.design_display}",`;
-      csv += `"${prop.new_vcs}","${prop.location_analysis}","${prop.asset_zoning}",`;
-      csv += `"${prop.asset_map_page}","${prop.asset_key_page}","${prop.worksheet_notes}",`;
-      csv += `"${readyProperties.has(prop.property_composite_key) ? 'Yes' : 'No'}"\n`;
-    });
-    
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `PropertyWorksheet_${jobData?.job_name || 'export'}_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    // Create worksheet from array of arrays
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+
+    // Base style for all cells
+    const baseStyle = {
+      font: { name: 'Leelawadee', sz: 10 },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    // Header style (bold, no fill)
+    const headerStyle = {
+      font: { name: 'Leelawadee', sz: 10, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    // Apply formatting to all cells
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws[cellAddress]) continue;
+
+        // Apply header style to first row
+        if (R === 0) {
+          ws[cellAddress].s = headerStyle;
+        } else {
+          ws[cellAddress].s = { ...baseStyle };
+
+          // Column B (Lot) - format as text to preserve trailing zeros like .10
+          if (C === 1) {
+            ws[cellAddress].t = 's';  // Force text type
+            ws[cellAddress].z = '@';   // Text format
+          }
+        }
+      }
+    }
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 10 },  // Block
+      { wch: 10 },  // Lot
+      { wch: 12 },  // Qualifier
+      { wch: 8 },   // Card
+      { wch: 30 },  // Property Location
+      { wch: 10 },  // Class
+      { wch: 12 },  // Current VCS
+      { wch: 15 },  // Building
+      { wch: 15 },  // Type/Use
+      { wch: 15 },  // Design
+      { wch: 12 },  // New VCS
+      { wch: 25 },  // Location Analysis
+      { wch: 10 },  // Zoning
+      { wch: 10 },  // Map Page
+      { wch: 10 },  // Key Page
+      { wch: 30 },  // Notes
+      { wch: 8 }    // Ready
+    ];
+
+    // Create workbook and export
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Property Worksheet');
+    XLSX.writeFile(wb, `PropertyWorksheet_${jobData?.job_name || 'export'}_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
 const analyzeImportFile = async (file) => {
