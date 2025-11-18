@@ -1472,7 +1472,7 @@ const OverallAnalysisTab = ({
         group.cmeBracket ? group.cmeBracket.color : ''
       ]);
 
-      const ws = createFormattedSheet(headers, data, 11); // Color column index
+      const ws = createFormattedSheet(headers, data, { colorColumnIndex: 11 });
       XLSX.utils.book_append_sheet(wb, ws, 'Type & Use');
     }
 
@@ -1504,7 +1504,7 @@ const OverallAnalysisTab = ({
         group.salesCount > 0 && group.deltaPercent !== 0 ? `${group.deltaPercent.toFixed(0)}%` : group.salesCount === 0 ? '—' : 'BASELINE'
       ]);
 
-      const ws = createFormattedSheet(headers, data);
+      const ws = createFormattedSheet(headers, data, {});
       XLSX.utils.book_append_sheet(wb, ws, 'Design');
     }
 
@@ -1538,7 +1538,7 @@ const OverallAnalysisTab = ({
         group.isCCF ? 'YES' : ''
       ]);
 
-      const ws = createFormattedSheet(headers, data);
+      const ws = createFormattedSheet(headers, data, {});
       XLSX.utils.book_append_sheet(wb, ws, 'Year Built');
     }
 
