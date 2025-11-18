@@ -1604,7 +1604,10 @@ const OverallAnalysisTab = ({
     }
 
     // Write file
-    XLSX.writeFile(wb, `OverallAnalysis_${jobData?.job_name || 'export'}_${timestamp}.xlsx`);
+    const filename = sectionType === 'all'
+      ? `OverallAnalysis_${jobData?.job_name || 'export'}_${timestamp}.xlsx`
+      : `OverallAnalysis_${sectionType}_${jobData?.job_name || 'export'}_${timestamp}.xlsx`;
+    XLSX.writeFile(wb, filename);
   };
 
   // ==================== MAIN RENDER ====================
@@ -1940,7 +1943,7 @@ const OverallAnalysisTab = ({
                             </td>
                             <td className="px-4 py-3 text-sm text-center">{group.propertyCount}</td>
                             <td className="px-4 py-3 text-sm text-center">
-                              {group.avgYearAll > 0 ? group.avgYearAll : '��'}
+                              {group.avgYearAll > 0 ? group.avgYearAll : '—'}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {group.avgSizeAll > 0 ? formatNumber(group.avgSizeAll) : '—'}
