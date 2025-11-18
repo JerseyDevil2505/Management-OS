@@ -408,8 +408,7 @@ const PreValuationTab = ({
 
     // Purple range ($700k+)
     { hex: "#CCAAFF", name: "Light Purple", row: 8, col: 1 },   // $700k-749k
-    { hex: "#9966FF", name: "Bright Purple", row: 8, col: 2 },  // $750k+
-    { hex: "#6633FF", name: "Electric Purple", row: 4, col: 8 }
+    { hex: "#9966FF", name: "Bright Purple", row: 8, col: 2 }   // $750k+
   ];
   const [isResultsCollapsed, setIsResultsCollapsed] = useState(false);
   const [preValChecklist, setPreValChecklist] = useState({
@@ -3594,7 +3593,7 @@ const analyzeImportFile = async (file) => {
                                       // DEBUG: Check all possible sales NU fields
                                       const salesNU = sale.sales_nu || sale.sales_instrument || sale.nu || sale.sale_nu || '';
                                       if (sale.id && sale.id.toString().endsWith('0')) { // Log every 10th for debugging
-                                        if (false) console.log(`������ Table render sales_nu for sale ${sale.id}:`, {
+                                        if (false) console.log(`�������� Table render sales_nu for sale ${sale.id}:`, {
                                           sales_nu: sale.sales_nu,
                                           sales_instrument: sale.sales_instrument,
                                           nu: sale.nu,
