@@ -1623,7 +1623,7 @@ const OverallAnalysisTab = ({
         group.avgSizeSales ? Math.round(group.avgSizeSales) : '—',
         group.salesCount > 0 ? Math.round(group.avgPrice) : '—',
         group.salesCount === 0 ? '—' : group.isBaseline ? '—' : Math.round(group.avgAdjustedPrice),
-        group.salesCount > 0 && group.deltaPercent !== 0 ? `${group.deltaPercent.toFixed(0)}%` : group.salesCount === 0 ? '—' : 'BASELINE'
+        group.salesCount > 0 && group.deltaPercent !== 0 ? Math.round(group.deltaPercent) : group.salesCount === 0 ? '—' : 'BASELINE'
       ]);
 
       // Find the baseline row for Design analysis
@@ -1632,7 +1632,7 @@ const OverallAnalysisTab = ({
 
       for (let i = 0; i < data.length; i++) {
         const deltaValue = data[i][deltaColIndex];
-        if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+        if (deltaValue === 'BASELINE' || deltaValue === 0) {
           baselineRowIndex = i + 1;
           break;
         }
@@ -1649,7 +1649,7 @@ const OverallAnalysisTab = ({
 
           const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
           const deltaValue = ws[deltaCell]?.v;
-          if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+          if (deltaValue === 'BASELINE' || deltaValue === 0) {
             return null;
           }
 
@@ -1677,7 +1677,7 @@ const OverallAnalysisTab = ({
 
           const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
           const deltaValue = ws[deltaCell]?.v;
-          if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+          if (deltaValue === 'BASELINE' || deltaValue === 0) {
             return null;
           }
 
@@ -1688,7 +1688,7 @@ const OverallAnalysisTab = ({
 
           if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
               baselineSalePriceValue > 0) {
-            return `(${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell}`;
+            return `((${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell})*100`;
           }
           return null;
         }
