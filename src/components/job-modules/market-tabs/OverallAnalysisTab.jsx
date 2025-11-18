@@ -1456,7 +1456,7 @@ const OverallAnalysisTab = ({
     }
 
     // Export Design Analysis
-    if (analysis.design) {
+    if (analysis.design && (sectionType === 'all' || sectionType === 'design')) {
       const headers = [
         'Description',
         'Total Properties',
@@ -1488,7 +1488,7 @@ const OverallAnalysisTab = ({
     }
 
     // Export Year Built Analysis
-    if (analysis.yearBuilt) {
+    if (analysis.yearBuilt && (sectionType === 'all' || sectionType === 'yearBuilt')) {
       const headers = [
         'Category',
         'Total Properties',
@@ -1522,7 +1522,7 @@ const OverallAnalysisTab = ({
     }
 
     // Export Condo Analysis if available
-    if (analysis.condo) {
+    if (analysis.condo && (sectionType === 'all' || sectionType === 'condo')) {
       // Condo Design Analysis
       if (analysis.condo.designGroups) {
         const headers = [
@@ -1940,7 +1940,7 @@ const OverallAnalysisTab = ({
                             </td>
                             <td className="px-4 py-3 text-sm text-center">{group.propertyCount}</td>
                             <td className="px-4 py-3 text-sm text-center">
-                              {group.avgYearAll > 0 ? group.avgYearAll : '—'}
+                              {group.avgYearAll > 0 ? group.avgYearAll : '��'}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {group.avgSizeAll > 0 ? formatNumber(group.avgSizeAll) : '—'}
