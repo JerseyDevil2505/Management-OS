@@ -1558,7 +1558,8 @@ const OverallAnalysisTab = ({
         'Sale Price',
         'Adj Price',
         'Delta %',
-        'CME Bracket'
+        'CME Bracket',
+        'Color'
       ];
 
       const data = [];
@@ -1583,7 +1584,8 @@ const OverallAnalysisTab = ({
             vcsData.avgPrice ? Math.round(vcsData.avgPrice) : '—',
             Math.round(vcsData.avgAdjustedPrice),
             'VCS AVG',
-            vcsCME.label
+            vcsCME.label,
+            vcsCME.color
           ]);
 
           // Add Type-level rows
