@@ -1524,23 +1524,23 @@ const OverallAnalysisTab = ({
     // Export Condo Analysis if available
     if (analysis.condo && (sectionType === 'all' || sectionType === 'condo')) {
       // Condo Design Analysis
-      if (analysis.condo.designGroups) {
+      if (analysis.condo.designGroups && analysis.condo.designGroups.length > 0) {
         const headers = [
           'Design',
           'Total Condos',
-          'Avg Year',
           'Avg Size',
-          'Total Sales',
-          'Avg Sale Price'
+          'Avg Sale Price',
+          'Avg Adjusted Price',
+          'Delta %'
         ];
 
         const data = analysis.condo.designGroups.map(group => [
-          group.design,
+          `${group.code} - ${group.name}`,
           group.count,
-          group.avgYear || '—',
           group.avgSize ? Math.round(group.avgSize) : '—',
-          group.salesCount,
-          group.avgPrice ? Math.round(group.avgPrice) : '—'
+          group.avgPrice ? Math.round(group.avgPrice) : '—',
+          group.avgAdjustedPrice ? Math.round(group.avgAdjustedPrice) : '—',
+          group.deltaPercent ? `${group.deltaPercent.toFixed(0)}%` : 'BASELINE'
         ]);
 
         const ws = createFormattedSheet(headers, data);
@@ -1548,54 +1548,60 @@ const OverallAnalysisTab = ({
       }
 
       // Condo Bedroom Analysis
-      if (analysis.condo.vcsBedroomGroups) {
+      if (analysis.condo.vcsBedroomGroups && Object.keys(analysis.condo.vcsBedroomGroups).length > 0) {
         const headers = [
           'VCS',
           'Bedrooms',
-          'Total Condos',
-          'Avg Year',
-          'Avg Size',
+          'Total Properties',
           'Total Sales',
-          'Avg Sale Price'
+          'Avg Size (All)',
+          'Avg Sale Price',
+          'Avg Adjusted Price',
+          'Delta %'
         ];
 
         const data = [];
-        Object.entries(analysis.condo.vcsBedroomGroups).forEach(([vcs, bedroomGroups]) => {
-          Object.entries(bedroomGroups).forEach(([bedrooms, group]) => {
-            data.push([
-              vcs,
-              bedrooms,
-              group.count,
-              group.avgYear || '—',
-              group.avgSize ? Math.round(group.avgSize) : '—',
-              group.salesCount,
-              group.avgPrice ? Math.round(group.avgPrice) : '—'
-            ]);
-          });
+        Object.entries(analysis.condo.vcsBedroomGroups).forEach(([vcs, vcsGroup]) => {
+          if (vcsGroup.bedrooms) {
+            Object.entries(vcsGroup.bedrooms).forEach(([bedrooms, group]) => {
+              data.push([
+                vcsGroup.description || vcs,
+                group.label,
+                group.propertiesCount || 0,
+                group.salesCount || 0,
+                group.avgSize ? Math.round(group.avgSize) : '—',
+                group.avgPrice ? Math.round(group.avgPrice) : '—',
+                group.avgAdjustedPrice ? Math.round(group.avgAdjustedPrice) : '—',
+                group.deltaPercent ? `${group.deltaPercent.toFixed(0)}%` : group.salesCount > 0 ? 'BASELINE' : '—'
+              ]);
+            });
+          }
         });
 
-        const ws = createFormattedSheet(headers, data);
-        XLSX.utils.book_append_sheet(wb, ws, 'Condo Bedroom');
+        if (data.length > 0) {
+          const ws = createFormattedSheet(headers, data);
+          XLSX.utils.book_append_sheet(wb, ws, 'Condo Bedroom');
+        }
       }
 
       // Condo Floor Analysis
-      if (analysis.condo.floorGroups) {
+      if (analysis.condo.floorGroups && analysis.condo.floorGroups.length > 0) {
         const headers = [
           'Floor Level',
           'Total Condos',
-          'Avg Year',
           'Avg Size',
-          'Total Sales',
-          'Avg Sale Price'
+          'Avg Sale Price',
+          'Avg Adjusted Price',
+          'Delta %'
         ];
 
         const data = analysis.condo.floorGroups.map(group => [
-          group.floor,
+          group.label,
           group.count,
-          group.avgYear || '—',
           group.avgSize ? Math.round(group.avgSize) : '—',
-          group.salesCount,
-          group.avgPrice ? Math.round(group.avgPrice) : '—'
+          group.avgPrice ? Math.round(group.avgPrice) : '—',
+          group.avgAdjustedPrice ? Math.round(group.avgAdjustedPrice) : '—',
+          group.deltaPercent ? `${group.deltaPercent.toFixed(0)}%` : '—'
         ]);
 
         const ws = createFormattedSheet(headers, data);
