@@ -1611,7 +1611,7 @@ const OverallAnalysisTab = ({
 
     // Check if any sheets were added to the workbook
     if (!wb.SheetNames || wb.SheetNames.length === 0) {
-      alert('No data available to export for the selected section. Please ensure the analysis has valid data with sales.');
+      alert('No data available to export. Please ensure the analysis has been run and contains valid property data.');
       return;
     }
 
