@@ -1374,12 +1374,37 @@ const OverallAnalysisTab = ({
       alignment: { horizontal: 'center', vertical: 'center' }
     };
 
+    // Helper function to apply formulas to worksheet
+    const applyFormulas = (ws, range, headers, options = {}) => {
+      const { formulaColumns = [] } = options;
+
+      // Apply formulas for specified columns
+      formulaColumns.forEach(({ column, getFormula }) => {
+        const colIndex = headers.indexOf(column);
+        if (colIndex === -1) return;
+
+        for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: colIndex });
+          const formula = getFormula(R, colIndex, headers, ws);
+
+          if (formula && ws[cellAddress]) {
+            ws[cellAddress] = {
+              f: formula,
+              t: 'n',
+              s: ws[cellAddress].s || baseStyle
+            };
+          }
+        }
+      });
+    };
+
     // Helper function to create and format worksheet
     const createFormattedSheet = (headers, data, options = {}) => {
       const {
         colorColumnIndex = -1,
         priceColumns = [],
-        colorColumns = []
+        colorColumns = [],
+        formulaColumns = []
       } = options;
 
       const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
@@ -1428,6 +1453,11 @@ const OverallAnalysisTab = ({
             }
           }
         }
+      }
+
+      // Apply formulas after formatting
+      if (formulaColumns.length > 0) {
+        applyFormulas(ws, range, headers, { formulaColumns });
       }
 
       // Set column widths
