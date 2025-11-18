@@ -1887,7 +1887,7 @@ const OverallAnalysisTab = ({
                       designGroup.avgYearSales || '—',
                       designGroup.avgSizeSales ? Math.round(designGroup.avgSizeSales) : '—',
                       designGroup.avgPrice ? Math.round(designGroup.avgPrice) : '—',
-                      designGroup.avgAdjustedPrice ? Math.round(designGroup.avgAdjustedPrice) : '—',
+                      designGroup.avgAdjustedPrice === 0 ? '—' : designGroup.isBaseline ? '—' : Math.round(designGroup.avgAdjustedPrice),
                       designGroup.deltaPercent !== 0 ? `${designGroup.deltaPercent.toFixed(0)}%` : 'TYPE BASE',
                       designCME ? designCME.label : '',
                       designCME ? designCME.color : ''
