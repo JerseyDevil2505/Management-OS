@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { interpretCodes } from '../../../lib/supabaseClient';
-import { 
+import {
   TrendingUp, RefreshCw, Download, Filter, ChevronDown, ChevronUp,
   AlertCircle, Home, Building, Calendar, MapPin, Layers, DollarSign
 } from 'lucide-react';
+import * as XLSX from 'xlsx-js-style';
 import './sharedTabNav.css';
 
 const OverallAnalysisTab = ({ 
