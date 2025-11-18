@@ -1068,7 +1068,7 @@ useEffect(() => {
       // Write file
       XLSX.writeFile(wb, fileName);
 
-      alert(`Exported ${exportData.length} properties to ${fileName}`);
+      alert(`Exported ${data.length} properties to ${fileName}`);
     } catch (e) {
       console.error('Error exporting lot size report:', e);
       alert(`Export failed: ${formatError(e)}`);
@@ -3485,7 +3485,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('package')}
                             >
-                              Package {normSortConfig.field === 'package' && (normSortConfig.direction === 'asc' ? '��' : '↓')}
+                              Package {normSortConfig.field === 'package' && (normSortConfig.direction === 'asc' ? '��' : '��')}
                             </th>
                             <th 
                               className="px-4 py-3 text-right text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
