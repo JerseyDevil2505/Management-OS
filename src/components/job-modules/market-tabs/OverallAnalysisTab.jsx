@@ -2691,7 +2691,7 @@ const OverallAnalysisTab = ({
                                       </div>
                                       <div className="col-span-1 text-center text-xs">
                                         {designGroup.salesCount === 0 ? (
-                                          <span className="text-gray-400">—</span>
+                                          <span className="text-gray-400">���</span>
                                         ) : designGroup.deltaPercent !== 0 ? (
                                           <span className={designGroup.deltaPercent > 0 ? 'text-green-600' : 'text-red-600'}>
                                             {designGroup.deltaPercent > 0 ? '+' : ''}{designGroup.deltaPercent.toFixed(0)}%
@@ -2930,7 +2930,13 @@ const OverallAnalysisTab = ({
                               {floor.avgPrice > 0 ? formatCurrency(floor.avgPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
                             </td>
                             <td className="px-4 py-3 text-sm text-center font-medium">
-                              {floor.avgAdjustedPrice > 0 ? formatCurrency(floor.avgAdjustedPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
+                              {floor.avgAdjustedPrice === 0 ? (
+                                <span className="text-gray-500 text-xs">NO SALES DATA</span>
+                              ) : floor.isBaseline ? (
+                                <span className="text-gray-400">—</span>
+                              ) : (
+                                formatCurrency(floor.avgAdjustedPrice)
+                              )}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {floor.label === '1ST FLOOR' ? (
