@@ -1806,19 +1806,46 @@ const OverallAnalysisTab = ({
         const formulaColumns = [{
           column: 'Adj Price',
           getFormula: (R, C, headers, ws) => {
+            const levelCol = headers.indexOf('Level');
             const avgSizeCol = headers.indexOf('Avg Size (Sales)');
             const salePriceCol = headers.indexOf('Sale Price');
 
-            if (avgSizeCol === -1 || salePriceCol === -1) return null;
+            if (levelCol === -1 || avgSizeCol === -1 || salePriceCol === -1) return null;
 
-            const avgSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+            const levelCell = XLSX.utils.encode_cell({ r: R, c: levelCol });
+            const levelValue = ws[levelCell]?.v;
+
+            // Only apply formula to Design-level rows
+            if (levelValue !== 'Design') {
+              return null; // VCS and Type rows don't get formulas
+            }
+
+            // Find the parent Type row (look backwards from current row)
+            let parentTypeRow = -1;
+            for (let searchR = R - 1; searchR > 0; searchR--) {
+              const searchLevelCell = XLSX.utils.encode_cell({ r: searchR, c: levelCol });
+              const searchLevelValue = ws[searchLevelCell]?.v;
+              if (searchLevelValue === 'Type') {
+                parentTypeRow = searchR;
+                break;
+              }
+            }
+
+            if (parentTypeRow === -1) return null; // No parent Type found
+
+            // Use parent Type's size as normalization target
+            const typeSizeCell = XLSX.utils.encode_cell({ r: parentTypeRow, c: avgSizeCol });
+            const currentSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
             const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
-            const avgSizeValue = ws[avgSizeCell]?.v;
+
+            const typeSizeValue = ws[typeSizeCell]?.v;
+            const currentSizeValue = ws[currentSizeCell]?.v;
             const salePriceValue = ws[salePriceCell]?.v;
 
-            if (typeof avgSizeValue === 'number' && typeof salePriceValue === 'number' && avgSizeValue > 0) {
-              // Jim's 50% Size Adjustment Formula: ((AVG-AVG)*((SALE/AVG)*0.5))+SALE
-              return `((${avgSizeCell}-${avgSizeCell})*((${salePriceCell}/${avgSizeCell})*0.5))+${salePriceCell}`;
+            if (typeof typeSizeValue === 'number' && typeof currentSizeValue === 'number' &&
+                typeof salePriceValue === 'number' && currentSizeValue > 0) {
+              // Jim's Formula: Normalize Design to parent Type's average size
+              return `(($${typeSizeCell}-${currentSizeCell})*((${salePriceCell}/${currentSizeCell})*0.5))+${salePriceCell}`;
             }
             return null;
           }
