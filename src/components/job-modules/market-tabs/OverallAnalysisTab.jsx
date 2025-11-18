@@ -1356,7 +1356,7 @@ const OverallAnalysisTab = ({
     a.click();
   };
 
-  const exportToExcel = () => {
+  const exportToExcel = (sectionType = 'all') => {
     if (!analysis) return;
 
     const wb = XLSX.utils.book_new();
@@ -2197,7 +2197,7 @@ const OverallAnalysisTab = ({
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearSales > 0 ? designGroup.avgYearSales : '—'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeSales > 0 ? formatNumber(designGroup.avgSizeSales) : '�����'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">
-                                        {designGroup.salesCount > 0 ? formatCurrency(designGroup.avgPrice) : '—'}
+                                        {designGroup.salesCount > 0 ? formatCurrency(designGroup.avgPrice) : '��'}
                                       </div>
                                       <div className="col-span-1 text-center text-xs font-medium">
                                         {designGroup.salesCount > 0 ? formatCurrency(designGroup.avgAdjustedPrice) : '—'}
