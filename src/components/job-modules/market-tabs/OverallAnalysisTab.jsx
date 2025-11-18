@@ -1521,6 +1521,106 @@ const OverallAnalysisTab = ({
       XLSX.utils.book_append_sheet(wb, ws, 'Year Built');
     }
 
+    // Export VCS by Type Analysis
+    if (analysis.vcsType && Object.keys(analysis.vcsType).length > 0 && (sectionType === 'all' || sectionType === 'vcsType')) {
+      // Create a flattened data structure for export
+      const headers = [
+        'VCS',
+        'Level',
+        'Type/Design',
+        'Total Properties',
+        'Total Sales',
+        'Avg Year (All)',
+        'Avg Size (All)',
+        'Avg Year (Sales)',
+        'Avg Size (Sales)',
+        'Sale Price',
+        'Adj Price',
+        'Delta %',
+        'CME Bracket'
+      ];
+
+      const data = [];
+
+      // Filter and sort VCS entries by adjusted price
+      Object.entries(analysis.vcsType)
+        .filter(([vcs, vcsData]) => vcsData.salesCount > 0)
+        .sort((a, b) => b[1].avgAdjustedPrice - a[1].avgAdjustedPrice)
+        .forEach(([vcs, vcsData]) => {
+          // Add VCS-level row
+          const vcsCME = getCMEBracket(vcsData.avgAdjustedPrice);
+          data.push([
+            vcsData.description || vcs,
+            'VCS',
+            `${vcsData.propertyCount} properties | ${vcsData.salesCount} sales`,
+            vcsData.propertyCount,
+            vcsData.salesCount,
+            vcsData.avgYearAll || '—',
+            vcsData.avgSizeAll ? Math.round(vcsData.avgSizeAll) : '—',
+            vcsData.avgYearSales || '—',
+            vcsData.avgSizeSales ? Math.round(vcsData.avgSizeSales) : '—',
+            vcsData.avgPrice ? Math.round(vcsData.avgPrice) : '—',
+            Math.round(vcsData.avgAdjustedPrice),
+            'VCS AVG',
+            vcsCME.label
+          ]);
+
+          // Add Type-level rows
+          Object.values(vcsData.types)
+            .filter(type => type.salesCount > 0)
+            .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
+            .forEach((typeGroup) => {
+              data.push([
+                '',
+                'Type',
+                typeGroup.name,
+                typeGroup.propertyCount,
+                typeGroup.salesCount,
+                typeGroup.avgYearAll || '—',
+                typeGroup.avgSizeAll ? Math.round(typeGroup.avgSizeAll) : '—',
+                typeGroup.avgYearSales || '—',
+                typeGroup.avgSizeSales ? Math.round(typeGroup.avgSizeSales) : '—',
+                typeGroup.avgPrice ? Math.round(typeGroup.avgPrice) : '—',
+                typeGroup.avgAdjustedPrice ? Math.round(typeGroup.avgAdjustedPrice) : '—',
+                typeGroup.deltaPercent !== 0 ? `${typeGroup.deltaPercent.toFixed(0)}%` : 'VCS BASE',
+                ''
+              ]);
+
+              // Add Design-level rows if multiple designs
+              if (Object.keys(typeGroup.designs).length > 1) {
+                Object.values(typeGroup.designs)
+                  .filter(design => design.salesCount > 0)
+                  .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
+                  .forEach((designGroup) => {
+                    data.push([
+                      '',
+                      'Design',
+                      `  └ ${designGroup.name}`,
+                      designGroup.propertyCount,
+                      designGroup.salesCount,
+                      designGroup.avgYearAll || '—',
+                      designGroup.avgSizeAll ? Math.round(designGroup.avgSizeAll) : '—',
+                      designGroup.avgYearSales || '—',
+                      designGroup.avgSizeSales ? Math.round(designGroup.avgSizeSales) : '—',
+                      designGroup.avgPrice ? Math.round(designGroup.avgPrice) : '—',
+                      designGroup.avgAdjustedPrice ? Math.round(designGroup.avgAdjustedPrice) : '—',
+                      designGroup.deltaPercent !== 0 ? `${designGroup.deltaPercent.toFixed(0)}%` : 'TYPE BASE',
+                      ''
+                    ]);
+                  });
+              }
+            });
+
+          // Add empty row between VCS sections
+          data.push(['', '', '', '', '', '', '', '', '', '', '', '', '']);
+        });
+
+      if (data.length > 0) {
+        const ws = createFormattedSheet(headers, data);
+        XLSX.utils.book_append_sheet(wb, ws, 'VCS by Type');
+      }
+    }
+
     // Export Condo Analysis if available
     if (analysis.condo && (sectionType === 'all' || sectionType === 'condo')) {
       // Condo Design Analysis
