@@ -961,30 +961,89 @@ useEffect(() => {
       }
 
       // Prepare export data
-      const exportData = propsWithLotData.map(prop => {
+      const headers = [
+        'Block',
+        'Lot',
+        'Qualifier',
+        'Card',
+        'Property Class',
+        'Location',
+        'Total Front Foot',
+        'Avg Depth',
+        'Lot Size Acre',
+        'Lot Size SF'
+      ];
+
+      const data = propsWithLotData.map(prop => {
         const parsed = parseCompositeKey(prop.property_composite_key);
         const lotData = lotSizeMap.get(prop.property_composite_key) || {};
 
-        return {
-          'Block': parsed.block || '',
-          'Lot': parsed.lot || '',
-          'Qualifier': parsed.qualifier || '',
-          'Card': parsed.card || '',
-          'Property Class': prop.property_m4_class || '',
-          'Location': prop.property_location || '',
-          'Total Front Foot': prop.asset_lot_frontage || '',
-          'Avg Depth': prop.asset_lot_depth || '',
-          'Lot Size Acre': lotData.acre || '',
-          'Lot Size SF': lotData.sf || ''
-        };
+        return [
+          parsed.block || '',
+          parsed.lot || '',
+          parsed.qualifier || '',
+          parsed.card || '',
+          prop.property_m4_class || '',
+          prop.property_location || '',
+          prop.asset_lot_frontage || '',
+          prop.asset_lot_depth || '',
+          lotData.acre || '',
+          lotData.sf || ''
+        ];
       });
 
-      // Create workbook and worksheet
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet(exportData);
+      // Create worksheet from array of arrays
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+
+      // Base style for all cells
+      const baseStyle = {
+        font: { name: 'Leelawadee', sz: 10 },
+        alignment: { horizontal: 'center', vertical: 'center' }
+      };
+
+      // Header style (bold, no fill)
+      const headerStyle = {
+        font: { name: 'Leelawadee', sz: 10, bold: true },
+        alignment: { horizontal: 'center', vertical: 'center' }
+      };
+
+      // Apply formatting to all cells
+      const range = XLSX.utils.decode_range(ws['!ref']);
+
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!ws[cellAddress]) continue;
+
+          // Apply header style to first row
+          if (R === 0) {
+            ws[cellAddress].s = headerStyle;
+          } else {
+            ws[cellAddress].s = { ...baseStyle };
+
+            // Apply specific formatting based on column
+            // Column G (Total Front Foot) - no decimals
+            if (C === 6) {
+              ws[cellAddress].s.numFmt = '#,##0';
+            }
+            // Column H (Avg Depth) - no decimals
+            else if (C === 7) {
+              ws[cellAddress].s.numFmt = '#,##0';
+            }
+            // Column I (Lot Size Acre) - max 2 decimals
+            else if (C === 8) {
+              ws[cellAddress].s.numFmt = '0.00';
+            }
+            // Column J (Lot Size SF) - no decimals with comma
+            else if (C === 9) {
+              ws[cellAddress].s.numFmt = '#,##0';
+            }
+          }
+        }
+      }
 
       // Set column widths
-      const colWidths = [
+      ws['!cols'] = [
         { wch: 10 },  // Block
         { wch: 10 },  // Lot
         { wch: 12 },  // Qualifier
@@ -996,7 +1055,9 @@ useEffect(() => {
         { wch: 15 },  // Lot Size Acre
         { wch: 15 }   // Lot Size SF
       ];
-      ws['!cols'] = colWidths;
+
+      // Create workbook
+      const wb = XLSX.utils.book_new();
 
       // Add worksheet to workbook
       XLSX.utils.book_append_sheet(wb, ws, 'Lot Size Report');
