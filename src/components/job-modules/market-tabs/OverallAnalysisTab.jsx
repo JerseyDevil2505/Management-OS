@@ -1456,7 +1456,7 @@ const OverallAnalysisTab = ({
     }
 
     // Export Design Analysis
-    if (analysis.design && (sectionType === 'all' || sectionType === 'design')) {
+    if (analysis.design && analysis.design.groups && analysis.design.groups.length > 0 && (sectionType === 'all' || sectionType === 'design')) {
       const headers = [
         'Description',
         'Total Properties',
@@ -1488,7 +1488,7 @@ const OverallAnalysisTab = ({
     }
 
     // Export Year Built Analysis
-    if (analysis.yearBuilt && (sectionType === 'all' || sectionType === 'yearBuilt')) {
+    if (analysis.yearBuilt && analysis.yearBuilt.groups && analysis.yearBuilt.groups.length > 0 && (sectionType === 'all' || sectionType === 'yearBuilt')) {
       const headers = [
         'Category',
         'Total Properties',
