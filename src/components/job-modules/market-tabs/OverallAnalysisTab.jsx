@@ -1330,7 +1330,7 @@ const OverallAnalysisTab = ({
         csv = 'YEAR BUILT ANALYSIS\n';
         csv += 'CATEGORY,TOTAL PROPERTIES,AVG YEAR (ALL),AVG SIZE (ALL),TOTAL SALES,AVG YEAR (SALES),AVG SIZE (SALES),SALE PRICE,ADJ PRICE,DELTA,CCF\n';
         analysis.yearBuilt.groups.forEach(group => {
-          const yearAll = group.avgYearAll || '—';
+          const yearAll = group.avgYearAll || '���';
           const sizeAll = group.avgSizeAll ? Math.round(group.avgSizeAll) : '—';
           const yearSales = group.avgYearSales || '—';
           const sizeSales = group.avgSizeSales ? Math.round(group.avgSizeSales) : '—';
@@ -1355,6 +1355,258 @@ const OverallAnalysisTab = ({
     a.download = `overall_analysis_${analysisType}_${timestamp}.csv`;
     a.click();
   };
+
+  const exportToExcel = () => {
+    if (!analysis) return;
+
+    const wb = XLSX.utils.book_new();
+    const timestamp = new Date().toISOString().split('T')[0];
+
+    // Base style for all cells
+    const baseStyle = {
+      font: { name: 'Leelawadee', sz: 10 },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    // Header style (bold, no fill)
+    const headerStyle = {
+      font: { name: 'Leelawadee', sz: 10, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    // Helper function to create and format worksheet
+    const createFormattedSheet = (headers, data, colorColumnIndex = -1) => {
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+      const range = XLSX.utils.decode_range(ws['!ref']);
+
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!ws[cellAddress]) continue;
+
+          if (R === 0) {
+            // Header row
+            ws[cellAddress].s = headerStyle;
+          } else {
+            ws[cellAddress].s = { ...baseStyle };
+
+            // Apply CME bracket color if this is the color column
+            if (C === colorColumnIndex && data[R - 1] && data[R - 1][colorColumnIndex]) {
+              const colorHex = data[R - 1][colorColumnIndex];
+              if (colorHex && colorHex.startsWith('#')) {
+                ws[cellAddress].s.fill = { fgColor: { rgb: colorHex.replace('#', '') } };
+              }
+            }
+
+            // Apply number formatting to numeric columns
+            if (C > 0 && C < headers.length - 1) {
+              const value = data[R - 1]?.[C];
+              if (typeof value === 'number') {
+                ws[cellAddress].s.numFmt = '#,##0';
+              }
+            }
+          }
+        }
+      }
+
+      // Set column widths
+      ws['!cols'] = headers.map((h, i) => {
+        if (i === 0) return { wch: 30 }; // Description column
+        if (h.includes('CME')) return { wch: 25 };
+        return { wch: 15 };
+      });
+
+      return ws;
+    };
+
+    // Export Type & Use Analysis
+    if (analysis.typeUse) {
+      const headers = [
+        'Description',
+        'Total Properties',
+        'Avg Year (All)',
+        'Avg Size (All)',
+        'Total Sales',
+        'Avg Year (Sales)',
+        'Avg Size (Sales)',
+        'Sale Price',
+        'Adj Price',
+        'Delta',
+        'CME Bracket',
+        'Color'
+      ];
+
+      const data = analysis.typeUse.groups.map(group => [
+        `${group.code} - ${group.name}`,
+        group.propertyCount,
+        group.avgYearAll || '—',
+        group.avgSizeAll ? Math.round(group.avgSizeAll) : '—',
+        group.salesCount,
+        group.avgYearSales || '—',
+        group.avgSizeSales ? Math.round(group.avgSizeSales) : '—',
+        group.salesCount > 0 ? Math.round(group.avgPrice) : '—',
+        group.salesCount > 0 ? Math.round(group.avgAdjustedPrice) : '—',
+        group.salesCount > 0 && group.deltaPercent !== 0 ? `${group.deltaPercent.toFixed(0)}%` : group.salesCount === 0 ? '—' : 'BASELINE',
+        group.cmeBracket ? group.cmeBracket.label : '—',
+        group.cmeBracket ? group.cmeBracket.color : ''
+      ]);
+
+      const ws = createFormattedSheet(headers, data, 11); // Color column index
+      XLSX.utils.book_append_sheet(wb, ws, 'Type & Use');
+    }
+
+    // Export Design Analysis
+    if (analysis.design) {
+      const headers = [
+        'Description',
+        'Total Properties',
+        'Avg Year (All)',
+        'Avg Size (All)',
+        'Total Sales',
+        'Avg Year (Sales)',
+        'Avg Size (Sales)',
+        'Sale Price',
+        'Adj Price',
+        'Delta'
+      ];
+
+      const data = analysis.design.groups.map(group => [
+        group.name,
+        group.propertyCount,
+        group.avgYearAll || '—',
+        group.avgSizeAll ? Math.round(group.avgSizeAll) : '—',
+        group.salesCount,
+        group.avgYearSales || '—',
+        group.avgSizeSales ? Math.round(group.avgSizeSales) : '—',
+        group.salesCount > 0 ? Math.round(group.avgPrice) : '—',
+        group.salesCount > 0 ? Math.round(group.avgAdjustedPrice) : '—',
+        group.salesCount > 0 && group.deltaPercent !== 0 ? `${group.deltaPercent.toFixed(0)}%` : group.salesCount === 0 ? '—' : 'BASELINE'
+      ]);
+
+      const ws = createFormattedSheet(headers, data);
+      XLSX.utils.book_append_sheet(wb, ws, 'Design');
+    }
+
+    // Export Year Built Analysis
+    if (analysis.yearBuilt) {
+      const headers = [
+        'Category',
+        'Total Properties',
+        'Avg Year (All)',
+        'Avg Size (All)',
+        'Total Sales',
+        'Avg Year (Sales)',
+        'Avg Size (Sales)',
+        'Sale Price',
+        'Adj Price',
+        'Delta',
+        'CCF'
+      ];
+
+      const data = analysis.yearBuilt.groups.map(group => [
+        group.label,
+        group.propertyCount,
+        group.avgYearAll || '—',
+        group.avgSizeAll ? Math.round(group.avgSizeAll) : '—',
+        group.salesCount,
+        group.avgYearSales || '—',
+        group.avgSizeSales ? Math.round(group.avgSizeSales) : '—',
+        group.salesCount > 0 ? Math.round(group.avgPrice) : '—',
+        group.salesCount > 0 ? Math.round(group.avgAdjustedPrice) : '—',
+        group.salesCount > 0 && group.deltaPercent !== 0 ? `${group.deltaPercent.toFixed(0)}%` : group.salesCount === 0 ? '—' : 'BASELINE',
+        group.isCCF ? 'YES' : ''
+      ]);
+
+      const ws = createFormattedSheet(headers, data);
+      XLSX.utils.book_append_sheet(wb, ws, 'Year Built');
+    }
+
+    // Export Condo Analysis if available
+    if (analysis.condo) {
+      // Condo Design Analysis
+      if (analysis.condo.designGroups) {
+        const headers = [
+          'Design',
+          'Total Condos',
+          'Avg Year',
+          'Avg Size',
+          'Total Sales',
+          'Avg Sale Price'
+        ];
+
+        const data = analysis.condo.designGroups.map(group => [
+          group.design,
+          group.count,
+          group.avgYear || '—',
+          group.avgSize ? Math.round(group.avgSize) : '—',
+          group.salesCount,
+          group.avgPrice ? Math.round(group.avgPrice) : '—'
+        ]);
+
+        const ws = createFormattedSheet(headers, data);
+        XLSX.utils.book_append_sheet(wb, ws, 'Condo Design');
+      }
+
+      // Condo Bedroom Analysis
+      if (analysis.condo.vcsBedroomGroups) {
+        const headers = [
+          'VCS',
+          'Bedrooms',
+          'Total Condos',
+          'Avg Year',
+          'Avg Size',
+          'Total Sales',
+          'Avg Sale Price'
+        ];
+
+        const data = [];
+        Object.entries(analysis.condo.vcsBedroomGroups).forEach(([vcs, bedroomGroups]) => {
+          Object.entries(bedroomGroups).forEach(([bedrooms, group]) => {
+            data.push([
+              vcs,
+              bedrooms,
+              group.count,
+              group.avgYear || '—',
+              group.avgSize ? Math.round(group.avgSize) : '—',
+              group.salesCount,
+              group.avgPrice ? Math.round(group.avgPrice) : '—'
+            ]);
+          });
+        });
+
+        const ws = createFormattedSheet(headers, data);
+        XLSX.utils.book_append_sheet(wb, ws, 'Condo Bedroom');
+      }
+
+      // Condo Floor Analysis
+      if (analysis.condo.floorGroups) {
+        const headers = [
+          'Floor Level',
+          'Total Condos',
+          'Avg Year',
+          'Avg Size',
+          'Total Sales',
+          'Avg Sale Price'
+        ];
+
+        const data = analysis.condo.floorGroups.map(group => [
+          group.floor,
+          group.count,
+          group.avgYear || '—',
+          group.avgSize ? Math.round(group.avgSize) : '—',
+          group.salesCount,
+          group.avgPrice ? Math.round(group.avgPrice) : '—'
+        ]);
+
+        const ws = createFormattedSheet(headers, data);
+        XLSX.utils.book_append_sheet(wb, ws, 'Condo Floor');
+      }
+    }
+
+    // Write file
+    XLSX.writeFile(wb, `OverallAnalysis_${jobData?.job_name || 'export'}_${timestamp}.xlsx`);
+  };
+
   // ==================== MAIN RENDER ====================
   
   return (
