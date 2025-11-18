@@ -323,16 +323,19 @@ const OverallAnalysisTab = ({
     }
 
     // Calculate deltas from baseline (baselineGroup may have been overridden to SF)
+    // Delta is calculated as: (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
     Object.values(groups).forEach(group => {
       if (baselineGroup && group !== baselineGroup && group.salesCount > 0) {
-        const delta = group.avgAdjustedPrice - baselineGroup.avgAdjustedPrice;
+        const delta = group.avgAdjustedPrice - baselineGroup.avgPrice;
         group.delta = delta;
-        group.deltaPercent = baselineGroup.avgAdjustedPrice > 0 ?
-          (delta / baselineGroup.avgAdjustedPrice * 100) : 0;
+        group.deltaPercent = baselineGroup.avgPrice > 0 ?
+          (delta / baselineGroup.avgPrice * 100) : 0;
       } else {
         group.delta = 0;
         group.deltaPercent = 0;
       }
+      // Mark baseline row - it should not show adjusted price
+      group.isBaseline = (group === baselineGroup);
 
       // Get CME bracket only if there are sales
       if (group.salesCount > 0) {
@@ -446,16 +449,19 @@ const OverallAnalysisTab = ({
       baselineGroup;
 
     // Calculate deltas from baseline
+    // Delta is calculated as: (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
     Object.values(groups).forEach(group => {
       if (actualBaseline && group !== actualBaseline && group.salesCount > 0) {
-        const delta = group.avgAdjustedPrice - actualBaseline.avgAdjustedPrice;
+        const delta = group.avgAdjustedPrice - actualBaseline.avgPrice;
         group.delta = delta;
-        group.deltaPercent = actualBaseline.avgAdjustedPrice > 0 ? 
-          (delta / actualBaseline.avgAdjustedPrice * 100) : 0;
+        group.deltaPercent = actualBaseline.avgPrice > 0 ?
+          (delta / actualBaseline.avgPrice * 100) : 0;
       } else if (group === actualBaseline || group.salesCount === 0) {
         group.delta = 0;
         group.deltaPercent = 0;
       }
+      // Mark baseline row - it should not show adjusted price
+      group.isBaseline = (group === actualBaseline);
     });
 
     return { groups: Object.values(groups), baseline: actualBaseline };
@@ -605,16 +611,19 @@ const OverallAnalysisTab = ({
     });
 
     // Calculate deltas from baseline
+    // Delta is calculated as: (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
     Object.values(groups).forEach(group => {
       if (baselineGroup && group !== baselineGroup && group.salesCount > 0) {
-        const delta = group.avgAdjustedPrice - baselineGroup.avgAdjustedPrice;
+        const delta = group.avgAdjustedPrice - baselineGroup.avgPrice;
         group.delta = delta;
-        group.deltaPercent = baselineGroup.avgAdjustedPrice > 0 ? 
-          (delta / baselineGroup.avgAdjustedPrice * 100) : 0;
+        group.deltaPercent = baselineGroup.avgPrice > 0 ?
+          (delta / baselineGroup.avgPrice * 100) : 0;
       } else {
         group.delta = 0;
         group.deltaPercent = 0;
       }
+      // Mark baseline row - it should not show adjusted price
+      group.isBaseline = (group === baselineGroup);
     });
 
     return { groups: Object.values(groups), baseline: baselineGroup };
@@ -829,26 +838,30 @@ const OverallAnalysisTab = ({
         });
         
         // Calculate design deltas within type
+        // Delta is calculated as: (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
         Object.values(typeGroup.designs).forEach(designGroup => {
           if (baselineDesign && designGroup !== baselineDesign && designGroup.salesCount > 0) {
-            designGroup.deltaPercent = baselineDesign.avgAdjustedPrice > 0 ? 
-              ((designGroup.avgAdjustedPrice - baselineDesign.avgAdjustedPrice) / baselineDesign.avgAdjustedPrice * 100) : 0;
+            designGroup.deltaPercent = baselineDesign.avgPrice > 0 ?
+              ((designGroup.avgAdjustedPrice - baselineDesign.avgPrice) / baselineDesign.avgPrice * 100) : 0;
           } else {
             designGroup.deltaPercent = 0;
           }
+          designGroup.isBaseline = (designGroup === baselineDesign);
         });
         
         typeGroup.baselineDesign = baselineDesign;
       });
       
       // Calculate type deltas within VCS
+      // Delta is calculated as: (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
       Object.values(vcsGroup.types).forEach(typeGroup => {
         if (baselineType && typeGroup !== baselineType && typeGroup.salesCount > 0) {
-          typeGroup.deltaPercent = baselineType.avgAdjustedPrice > 0 ? 
-            ((typeGroup.avgAdjustedPrice - baselineType.avgAdjustedPrice) / baselineType.avgAdjustedPrice * 100) : 0;
+          typeGroup.deltaPercent = baselineType.avgPrice > 0 ?
+            ((typeGroup.avgAdjustedPrice - baselineType.avgPrice) / baselineType.avgPrice * 100) : 0;
         } else {
           typeGroup.deltaPercent = 0;
         }
+        typeGroup.isBaseline = (typeGroup === baselineType);
       });
       
       vcsGroup.baselineType = baselineType;
@@ -927,13 +940,15 @@ const OverallAnalysisTab = ({
     });
 
     // Calculate design deltas
+    // Delta is calculated as: (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
     Object.values(designGroups).forEach(group => {
       if (baselineDesign && group !== baselineDesign) {
-        group.deltaPercent = baselineDesign.avgAdjustedPrice > 0 ? 
-          ((group.avgAdjustedPrice - baselineDesign.avgAdjustedPrice) / baselineDesign.avgAdjustedPrice * 100) : 0;
+        group.deltaPercent = baselineDesign.avgPrice > 0 ?
+          ((group.avgAdjustedPrice - baselineDesign.avgPrice) / baselineDesign.avgPrice * 100) : 0;
       } else {
         group.deltaPercent = 0;
       }
+      group.isBaseline = (group === baselineDesign);
     });
 
     // VCS Bedroom Analysis
@@ -1169,14 +1184,16 @@ const OverallAnalysisTab = ({
     });
 
     // Calculate floor premiums
+    // Delta is calculated as: (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
     const firstFloor = floorGroups['1ST FLOOR'];
-    if (firstFloor && firstFloor.avgAdjustedPrice > 0) {
+    if (firstFloor && firstFloor.avgPrice > 0) {
       Object.values(floorGroups).forEach(group => {
         if (group !== firstFloor) {
-          group.deltaPercent = ((group.avgAdjustedPrice - firstFloor.avgAdjustedPrice) / firstFloor.avgAdjustedPrice * 100);
+          group.deltaPercent = ((group.avgAdjustedPrice - firstFloor.avgPrice) / firstFloor.avgPrice * 100);
         } else {
           group.deltaPercent = 0;
         }
+        group.isBaseline = (group === firstFloor);
       });
     }
 
