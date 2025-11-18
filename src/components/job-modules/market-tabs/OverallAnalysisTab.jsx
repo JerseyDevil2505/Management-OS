@@ -1722,12 +1722,12 @@ const OverallAnalysisTab = ({
             </button>
             
             <button
-              onClick={exportToExcel}
+              onClick={() => exportToExcel()}
               disabled={!analysis}
               className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2"
             >
               <Download className="h-4 w-4" />
-              Export All
+              Export
             </button>
           </div>
         </div>
@@ -1868,14 +1868,6 @@ const OverallAnalysisTab = ({
                       </tbody>
                     </table>
                   </div>
-                  <div className="mt-4 flex justify-end">
-                    <button
-                      onClick={() => exportToExcel('typeUse')}
-                      className="text-sm text-blue-600 hover:text-blue-800"
-                    >
-                      Export Type & Use Data
-                    </button>
-                  </div>
                 </>
               )}
             </div>
@@ -1989,14 +1981,6 @@ const OverallAnalysisTab = ({
                       </tbody>
                     </table>
                   </div>
-                  <div className="mt-4 flex justify-end">
-                    <button
-                      onClick={() => exportToExcel('design')}
-                      className="text-sm text-blue-600 hover:text-blue-800"
-                    >
-                      Export Design Data
-                    </button>
-                  </div>
                 </>
               )}
             </div>
@@ -2080,14 +2064,6 @@ const OverallAnalysisTab = ({
                         ))}
                       </tbody>
                     </table>
-                  </div>
-                  <div className="mt-4 flex justify-end">
-                    <button
-                      onClick={() => exportToExcel('yearBuilt')}
-                      className="text-sm text-blue-600 hover:text-blue-800"
-                    >
-                      Export Year Built Data
-                    </button>
                   </div>
                 </>
               )}
