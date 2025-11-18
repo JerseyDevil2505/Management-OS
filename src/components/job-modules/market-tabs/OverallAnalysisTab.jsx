@@ -1972,7 +1972,7 @@ const OverallAnalysisTab = ({
           group.count,
           group.avgSize ? Math.round(group.avgSize) : '—',
           group.avgPrice ? Math.round(group.avgPrice) : '—',
-          group.avgAdjustedPrice ? Math.round(group.avgAdjustedPrice) : '—',
+          group.avgAdjustedPrice === 0 ? '—' : group.isBaseline ? '—' : Math.round(group.avgAdjustedPrice),
           group.deltaPercent ? `${group.deltaPercent.toFixed(0)}%` : 'BASELINE'
         ]);
 
@@ -2013,6 +2013,32 @@ const OverallAnalysisTab = ({
             if (typeof baselineSizeValue === 'number' && typeof currentSizeValue === 'number' &&
                 typeof salePriceValue === 'number' && currentSizeValue > 0) {
               return `(($${baselineSizeCell}-${currentSizeCell})*((${salePriceCell}/${currentSizeCell})*0.5))+${salePriceCell}`;
+            }
+            return null;
+          }
+        }, {
+          column: 'Delta %',
+          getFormula: (R, C, headers, ws) => {
+            const adjPriceCol = headers.indexOf('Avg Adjusted Price');
+            const salePriceCol = headers.indexOf('Avg Sale Price');
+            const deltaCol = headers.indexOf('Delta %');
+
+            if (adjPriceCol === -1 || salePriceCol === -1 || baselineRowIndexCD === -1) return null;
+
+            const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
+            const deltaValue = ws[deltaCell]?.v;
+            if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+              return null;
+            }
+
+            const currentAdjPriceCell = XLSX.utils.encode_cell({ r: R, c: adjPriceCol });
+            const baselineSalePriceCell = XLSX.utils.encode_cell({ r: baselineRowIndexCD, c: salePriceCol });
+            const currentAdjPriceValue = ws[currentAdjPriceCell]?.v;
+            const baselineSalePriceValue = ws[baselineSalePriceCell]?.v;
+
+            if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
+                baselineSalePriceValue > 0) {
+              return `(${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell}`;
             }
             return null;
           }
@@ -2117,7 +2143,7 @@ const OverallAnalysisTab = ({
           group.count,
           group.avgSize ? Math.round(group.avgSize) : '—',
           group.avgPrice ? Math.round(group.avgPrice) : '—',
-          group.avgAdjustedPrice ? Math.round(group.avgAdjustedPrice) : '—',
+          group.avgAdjustedPrice === 0 ? '—' : group.isBaseline ? '—' : Math.round(group.avgAdjustedPrice),
           group.deltaPercent ? `${group.deltaPercent.toFixed(0)}%` : '—'
         ]);
 
@@ -2158,6 +2184,32 @@ const OverallAnalysisTab = ({
             if (typeof baselineSizeValue === 'number' && typeof currentSizeValue === 'number' &&
                 typeof salePriceValue === 'number' && currentSizeValue > 0) {
               return `(($${baselineSizeCell}-${currentSizeCell})*((${salePriceCell}/${currentSizeCell})*0.5))+${salePriceCell}`;
+            }
+            return null;
+          }
+        }, {
+          column: 'Delta %',
+          getFormula: (R, C, headers, ws) => {
+            const adjPriceCol = headers.indexOf('Avg Adjusted Price');
+            const salePriceCol = headers.indexOf('Avg Sale Price');
+            const deltaCol = headers.indexOf('Delta %');
+
+            if (adjPriceCol === -1 || salePriceCol === -1 || baselineRowIndexCF === -1) return null;
+
+            const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
+            const deltaValue = ws[deltaCell]?.v;
+            if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+              return null;
+            }
+
+            const currentAdjPriceCell = XLSX.utils.encode_cell({ r: R, c: adjPriceCol });
+            const baselineSalePriceCell = XLSX.utils.encode_cell({ r: baselineRowIndexCF, c: salePriceCol });
+            const currentAdjPriceValue = ws[currentAdjPriceCell]?.v;
+            const baselineSalePriceValue = ws[baselineSalePriceCell]?.v;
+
+            if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
+                baselineSalePriceValue > 0) {
+              return `(${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell}`;
             }
             return null;
           }
