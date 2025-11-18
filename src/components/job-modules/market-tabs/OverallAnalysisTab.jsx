@@ -1502,7 +1502,32 @@ const OverallAnalysisTab = ({
         group.cmeBracket ? group.cmeBracket.color : ''
       ]);
 
-      const ws = createFormattedSheet(headers, data, { colorColumnIndex: 11 });
+      // Formula configuration - Jim's 50% size adjustment: ((AvgSize-AvgSize)*((SalePrice/AvgSize)*0.5))+SalePrice
+      // Since we're using the same avg for all in group, formula simplifies but we show it for clarity
+      const formulaColumns = [{
+        column: 'Adj Price',
+        getFormula: (R, C, headers, ws) => {
+          const avgSizeCol = headers.indexOf('Avg Size (Sales)');
+          const salePriceCol = headers.indexOf('Sale Price');
+
+          if (avgSizeCol === -1 || salePriceCol === -1) return null;
+
+          const avgSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+          const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
+          const avgSizeValue = ws[avgSizeCell]?.v;
+          const salePriceValue = ws[salePriceCell]?.v;
+
+          // Only apply formula if both values exist and are numbers
+          if (typeof avgSizeValue === 'number' && typeof salePriceValue === 'number' && avgSizeValue > 0) {
+            // Jim's Formula: ((AVG-AVG)*((SALE/AVG)*0.5))+SALE
+            // For group averages this simplifies to SALE, but we show full formula
+            return `((${avgSizeCell}-${avgSizeCell})*((${salePriceCell}/${avgSizeCell})*0.5))+${salePriceCell}`;
+          }
+          return null;
+        }
+      }];
+
+      const ws = createFormattedSheet(headers, data, { colorColumnIndex: 11, formulaColumns });
       XLSX.utils.book_append_sheet(wb, ws, 'Type & Use');
     }
 
@@ -1563,7 +1588,7 @@ const OverallAnalysisTab = ({
         group.avgYearSales || '—',
         group.avgSizeSales ? Math.round(group.avgSizeSales) : '—',
         group.salesCount > 0 ? Math.round(group.avgPrice) : '—',
-        group.salesCount > 0 ? Math.round(group.avgAdjustedPrice) : '—',
+        group.salesCount > 0 ? Math.round(group.avgAdjustedPrice) : '���',
         group.salesCount > 0 && group.deltaPercent !== 0 ? `${group.deltaPercent.toFixed(0)}%` : group.salesCount === 0 ? '—' : 'BASELINE',
         group.isCCF ? 'YES' : ''
       ]);
