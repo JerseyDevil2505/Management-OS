@@ -1559,7 +1559,27 @@ const OverallAnalysisTab = ({
         group.salesCount > 0 && group.deltaPercent !== 0 ? `${group.deltaPercent.toFixed(0)}%` : group.salesCount === 0 ? '—' : 'BASELINE'
       ]);
 
-      const ws = createFormattedSheet(headers, data, {});
+      const formulaColumns = [{
+        column: 'Adj Price',
+        getFormula: (R, C, headers, ws) => {
+          const avgSizeCol = headers.indexOf('Avg Size (Sales)');
+          const salePriceCol = headers.indexOf('Sale Price');
+
+          if (avgSizeCol === -1 || salePriceCol === -1) return null;
+
+          const avgSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+          const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
+          const avgSizeValue = ws[avgSizeCell]?.v;
+          const salePriceValue = ws[salePriceCell]?.v;
+
+          if (typeof avgSizeValue === 'number' && typeof salePriceValue === 'number' && avgSizeValue > 0) {
+            return `((${avgSizeCell}-${avgSizeCell})*((${salePriceCell}/${avgSizeCell})*0.5))+${salePriceCell}`;
+          }
+          return null;
+        }
+      }];
+
+      const ws = createFormattedSheet(headers, data, { formulaColumns });
       XLSX.utils.book_append_sheet(wb, ws, 'Design');
     }
 
@@ -1588,12 +1608,32 @@ const OverallAnalysisTab = ({
         group.avgYearSales || '—',
         group.avgSizeSales ? Math.round(group.avgSizeSales) : '—',
         group.salesCount > 0 ? Math.round(group.avgPrice) : '—',
-        group.salesCount > 0 ? Math.round(group.avgAdjustedPrice) : '���',
+        group.salesCount > 0 ? Math.round(group.avgAdjustedPrice) : '—',
         group.salesCount > 0 && group.deltaPercent !== 0 ? `${group.deltaPercent.toFixed(0)}%` : group.salesCount === 0 ? '—' : 'BASELINE',
         group.isCCF ? 'YES' : ''
       ]);
 
-      const ws = createFormattedSheet(headers, data, {});
+      const formulaColumns = [{
+        column: 'Adj Price',
+        getFormula: (R, C, headers, ws) => {
+          const avgSizeCol = headers.indexOf('Avg Size (Sales)');
+          const salePriceCol = headers.indexOf('Sale Price');
+
+          if (avgSizeCol === -1 || salePriceCol === -1) return null;
+
+          const avgSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+          const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
+          const avgSizeValue = ws[avgSizeCell]?.v;
+          const salePriceValue = ws[salePriceCell]?.v;
+
+          if (typeof avgSizeValue === 'number' && typeof salePriceValue === 'number' && avgSizeValue > 0) {
+            return `((${avgSizeCell}-${avgSizeCell})*((${salePriceCell}/${avgSizeCell})*0.5))+${salePriceCell}`;
+          }
+          return null;
+        }
+      }];
+
+      const ws = createFormattedSheet(headers, data, { formulaColumns });
       XLSX.utils.book_append_sheet(wb, ws, 'Year Built');
     }
 
