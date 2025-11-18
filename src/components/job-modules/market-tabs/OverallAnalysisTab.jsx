@@ -2313,7 +2313,13 @@ const OverallAnalysisTab = ({
                               {group.salesCount > 0 ? formatCurrency(group.avgPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
                             </td>
                             <td className="px-4 py-3 text-sm text-center font-medium">
-                              {group.salesCount > 0 ? formatCurrency(group.avgAdjustedPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
+                              {group.salesCount === 0 ? (
+                                <span className="text-gray-500 text-xs">NO SALES DATA</span>
+                              ) : group.isBaseline ? (
+                                <span className="text-gray-400">—</span>
+                              ) : (
+                                formatCurrency(group.avgAdjustedPrice)
+                              )}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {group.salesCount === 0 ? (
@@ -2328,9 +2334,9 @@ const OverallAnalysisTab = ({
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {group.salesCount > 0 && group.cmeBracket ? (
-                                <span 
+                                <span
                                   className="px-2 py-1 text-xs rounded font-medium"
-                                  style={{ 
+                                  style={{
                                     backgroundColor: group.cmeBracket.color,
                                     color: group.cmeBracket.textColor
                                   }}
@@ -2663,7 +2669,7 @@ const OverallAnalysisTab = ({
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.salesCount}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearAll > 0 ? designGroup.avgYearAll : '—'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeAll > 0 ? formatNumber(designGroup.avgSizeAll) : '—'}</div>
-                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearSales > 0 ? designGroup.avgYearSales : '—'}</div>
+                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearSales > 0 ? designGroup.avgYearSales : '��'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeSales > 0 ? formatNumber(designGroup.avgSizeSales) : '�����'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">
                                         {designGroup.salesCount > 0 ? formatCurrency(designGroup.avgPrice) : '—'}
