@@ -922,7 +922,21 @@ useEffect(() => {
         }
       }
 
-      const propsWithLotData = allProps;
+      // Filter: only include main cards (card 1 for BRT, card M for Microsystems)
+      const isMainCard = (card) => {
+        const cardUpper = String(card || '').toUpperCase();
+        if (vendorType === 'Microsystems') {
+          return cardUpper === 'M' || cardUpper === '';
+        } else {
+          // BRT or default
+          return cardUpper === '1' || cardUpper === '';
+        }
+      };
+
+      const propsWithLotData = allProps.filter(prop => {
+        const parsed = parseCompositeKey(prop.property_composite_key);
+        return isMainCard(parsed.card);
+      });
 
       // Fetch lot size data in batches
       let allLotSizeData = [];
