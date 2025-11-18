@@ -1580,21 +1580,43 @@ const OverallAnalysisTab = ({
         group.salesCount > 0 && group.deltaPercent !== 0 ? `${group.deltaPercent.toFixed(0)}%` : group.salesCount === 0 ? '—' : 'BASELINE'
       ]);
 
+      // Find the baseline row for Design analysis
+      const deltaColIndex = headers.indexOf('Delta');
+      let baselineRowIndex = -1;
+
+      for (let i = 0; i < data.length; i++) {
+        const deltaValue = data[i][deltaColIndex];
+        if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+          baselineRowIndex = i + 1;
+          break;
+        }
+      }
+
       const formulaColumns = [{
         column: 'Adj Price',
         getFormula: (R, C, headers, ws) => {
           const avgSizeCol = headers.indexOf('Avg Size (Sales)');
           const salePriceCol = headers.indexOf('Sale Price');
+          const deltaCol = headers.indexOf('Delta');
 
-          if (avgSizeCol === -1 || salePriceCol === -1) return null;
+          if (avgSizeCol === -1 || salePriceCol === -1 || baselineRowIndex === -1) return null;
 
-          const avgSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+          const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
+          const deltaValue = ws[deltaCell]?.v;
+          if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+            return null;
+          }
+
+          const baselineSizeCell = XLSX.utils.encode_cell({ r: baselineRowIndex, c: avgSizeCol });
+          const currentSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
           const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
-          const avgSizeValue = ws[avgSizeCell]?.v;
+          const baselineSizeValue = ws[baselineSizeCell]?.v;
+          const currentSizeValue = ws[currentSizeCell]?.v;
           const salePriceValue = ws[salePriceCell]?.v;
 
-          if (typeof avgSizeValue === 'number' && typeof salePriceValue === 'number' && avgSizeValue > 0) {
-            return `((${avgSizeCell}-${avgSizeCell})*((${salePriceCell}/${avgSizeCell})*0.5))+${salePriceCell}`;
+          if (typeof baselineSizeValue === 'number' && typeof currentSizeValue === 'number' &&
+              typeof salePriceValue === 'number' && currentSizeValue > 0) {
+            return `(($${baselineSizeCell}-${currentSizeCell})*((${salePriceCell}/${currentSizeCell})*0.5))+${salePriceCell}`;
           }
           return null;
         }
