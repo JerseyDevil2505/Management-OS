@@ -1330,7 +1330,7 @@ const OverallAnalysisTab = ({
         csv = 'YEAR BUILT ANALYSIS\n';
         csv += 'CATEGORY,TOTAL PROPERTIES,AVG YEAR (ALL),AVG SIZE (ALL),TOTAL SALES,AVG YEAR (SALES),AVG SIZE (SALES),SALE PRICE,ADJ PRICE,DELTA,CCF\n';
         analysis.yearBuilt.groups.forEach(group => {
-          const yearAll = group.avgYearAll || '���';
+          const yearAll = group.avgYearAll || '—';
           const sizeAll = group.avgSizeAll ? Math.round(group.avgSizeAll) : '—';
           const yearSales = group.avgYearSales || '—';
           const sizeSales = group.avgSizeSales ? Math.round(group.avgSizeSales) : '—';
@@ -1707,7 +1707,7 @@ const OverallAnalysisTab = ({
             </button>
             
             <button
-              onClick={() => exportToCSV('all')}
+              onClick={exportToExcel}
               disabled={!analysis}
               className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2"
             >
