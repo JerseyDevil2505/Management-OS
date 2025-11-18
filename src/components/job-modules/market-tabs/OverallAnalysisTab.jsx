@@ -2781,7 +2781,13 @@ const OverallAnalysisTab = ({
                               {group.avgPrice > 0 ? formatCurrency(group.avgPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
                             </td>
                             <td className="px-4 py-3 text-sm text-center font-medium">
-                              {group.avgAdjustedPrice > 0 ? formatCurrency(group.avgAdjustedPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
+                              {group.avgAdjustedPrice === 0 ? (
+                                <span className="text-gray-500 text-xs">NO SALES DATA</span>
+                              ) : group.isBaseline ? (
+                                <span className="text-gray-400">—</span>
+                              ) : (
+                                formatCurrency(group.avgAdjustedPrice)
+                              )}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {group.avgAdjustedPrice === 0 ? (
