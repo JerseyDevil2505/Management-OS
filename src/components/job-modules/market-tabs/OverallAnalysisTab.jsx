@@ -1395,6 +1395,12 @@ const OverallAnalysisTab = ({
     const applyFormulas = (ws, range, headers, options = {}) => {
       const { formulaColumns = [] } = options;
 
+      // Identify delta columns for percentage formatting
+      const deltaColumnIndices = headers.map((h, i) => {
+        const headerLower = h.toLowerCase();
+        return (headerLower.includes('delta') || headerLower === 'delta %') ? i : -1;
+      }).filter(i => i !== -1);
+
       // Apply formulas for specified columns
       formulaColumns.forEach(({ column, getFormula }) => {
         const colIndex = headers.indexOf(column);
@@ -1405,10 +1411,15 @@ const OverallAnalysisTab = ({
           const formula = getFormula(R, colIndex, headers, ws);
 
           if (formula && ws[cellAddress]) {
+            const cellStyle = ws[cellAddress].s || baseStyle;
+            // Apply percentage format if this is a delta column
+            if (deltaColumnIndices.includes(colIndex)) {
+              cellStyle.numFmt = '0';
+            }
             ws[cellAddress] = {
               f: formula,
               t: 'n',
-              s: ws[cellAddress].s || baseStyle
+              s: cellStyle
             };
           }
         }
