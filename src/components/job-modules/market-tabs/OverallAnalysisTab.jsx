@@ -1884,7 +1884,7 @@ const OverallAnalysisTab = ({
                       designGroup.salesCount,
                       designGroup.avgYearAll || '—',
                       designGroup.avgSizeAll ? Math.round(designGroup.avgSizeAll) : '—',
-                      designGroup.avgYearSales || '—',
+                      designGroup.avgYearSales || '��',
                       designGroup.avgSizeSales ? Math.round(designGroup.avgSizeSales) : '—',
                       designGroup.avgPrice ? Math.round(designGroup.avgPrice) : '—',
                       designGroup.avgAdjustedPrice === 0 ? '—' : designGroup.isBaseline ? '—' : Math.round(designGroup.avgAdjustedPrice),
@@ -1973,7 +1973,7 @@ const OverallAnalysisTab = ({
           group.avgSize ? Math.round(group.avgSize) : '—',
           group.avgPrice ? Math.round(group.avgPrice) : '—',
           group.avgAdjustedPrice === 0 ? '—' : group.isBaseline ? '—' : Math.round(group.avgAdjustedPrice),
-          group.deltaPercent ? `${group.deltaPercent.toFixed(0)}%` : 'BASELINE'
+          group.deltaPercent ? Math.round(group.deltaPercent) : 'BASELINE'
         ]);
 
         // Find the baseline row for Condo Design analysis
@@ -1982,7 +1982,7 @@ const OverallAnalysisTab = ({
 
         for (let i = 0; i < data.length; i++) {
           const deltaValue = data[i][deltaColIndexCD];
-          if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+          if (deltaValue === 'BASELINE' || deltaValue === 0) {
             baselineRowIndexCD = i + 1;
             break;
           }
@@ -1999,7 +1999,7 @@ const OverallAnalysisTab = ({
 
             const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
             const deltaValue = ws[deltaCell]?.v;
-            if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+            if (deltaValue === 'BASELINE' || deltaValue === 0) {
               return null;
             }
 
@@ -2027,7 +2027,7 @@ const OverallAnalysisTab = ({
 
             const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
             const deltaValue = ws[deltaCell]?.v;
-            if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+            if (deltaValue === 'BASELINE' || deltaValue === 0) {
               return null;
             }
 
@@ -2038,7 +2038,7 @@ const OverallAnalysisTab = ({
 
             if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
                 baselineSalePriceValue > 0) {
-              return `(${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell}`;
+              return `((${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell})*100`;
             }
             return null;
           }
