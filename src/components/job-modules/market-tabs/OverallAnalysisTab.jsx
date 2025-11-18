@@ -1375,9 +1375,26 @@ const OverallAnalysisTab = ({
     };
 
     // Helper function to create and format worksheet
-    const createFormattedSheet = (headers, data, colorColumnIndex = -1) => {
+    const createFormattedSheet = (headers, data, options = {}) => {
+      const {
+        colorColumnIndex = -1,
+        priceColumns = [],
+        colorColumns = []
+      } = options;
+
       const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
       const range = XLSX.utils.decode_range(ws['!ref']);
+
+      // Identify price columns by header names if not explicitly provided
+      const priceColumnIndices = priceColumns.length > 0 ? priceColumns :
+        headers.map((h, i) => {
+          const headerLower = h.toLowerCase();
+          return (headerLower.includes('price') || headerLower.includes('adj')) ? i : -1;
+        }).filter(i => i !== -1);
+
+      // Color columns to apply background fill
+      const colorColumnsToApply = colorColumns.length > 0 ? colorColumns :
+        (colorColumnIndex >= 0 ? [colorColumnIndex] : []);
 
       for (let R = range.s.r; R <= range.e.r; ++R) {
         for (let C = range.s.c; C <= range.e.c; ++C) {
@@ -1390,18 +1407,22 @@ const OverallAnalysisTab = ({
           } else {
             ws[cellAddress].s = { ...baseStyle };
 
-            // Apply CME bracket color if this is the color column
-            if (C === colorColumnIndex && data[R - 1] && data[R - 1][colorColumnIndex]) {
-              const colorHex = data[R - 1][colorColumnIndex];
+            // Apply CME bracket color if this is a color column
+            if (colorColumnsToApply.includes(C) && data[R - 1] && data[R - 1][C]) {
+              const colorHex = data[R - 1][C];
               if (colorHex && colorHex.startsWith('#')) {
                 ws[cellAddress].s.fill = { fgColor: { rgb: colorHex.replace('#', '') } };
               }
             }
 
-            // Apply number formatting to numeric columns
-            if (C > 0 && C < headers.length - 1) {
-              const value = data[R - 1]?.[C];
-              if (typeof value === 'number') {
+            // Apply formatting to numeric columns
+            const value = data[R - 1]?.[C];
+            if (typeof value === 'number') {
+              // Apply currency format to price columns
+              if (priceColumnIndices.includes(C)) {
+                ws[cellAddress].s.numFmt = '$#,##0';
+              } else {
+                // Apply regular number format to other numeric columns
                 ws[cellAddress].s.numFmt = '#,##0';
               }
             }
