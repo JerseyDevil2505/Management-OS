@@ -1670,7 +1670,7 @@ const OverallAnalysisTab = ({
           group.deltaPercent ? `${group.deltaPercent.toFixed(0)}%` : 'BASELINE'
         ]);
 
-        const ws = createFormattedSheet(headers, data);
+        const ws = createFormattedSheet(headers, data, {});
         XLSX.utils.book_append_sheet(wb, ws, 'Condo Design');
       }
 
@@ -1706,7 +1706,7 @@ const OverallAnalysisTab = ({
         });
 
         if (data.length > 0) {
-          const ws = createFormattedSheet(headers, data);
+          const ws = createFormattedSheet(headers, data, {});
           XLSX.utils.book_append_sheet(wb, ws, 'Condo Bedroom');
         }
       }
@@ -1731,7 +1731,7 @@ const OverallAnalysisTab = ({
           group.deltaPercent ? `${group.deltaPercent.toFixed(0)}%` : '—'
         ]);
 
-        const ws = createFormattedSheet(headers, data);
+        const ws = createFormattedSheet(headers, data, {});
         XLSX.utils.book_append_sheet(wb, ws, 'Condo Floor');
       }
     }
