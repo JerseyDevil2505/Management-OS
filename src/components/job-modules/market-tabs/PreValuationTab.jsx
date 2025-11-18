@@ -4059,31 +4059,126 @@ const analyzeImportFile = async (file) => {
                 ) : null}
                 <button
                   onClick={() => {
-                    // Export to CSV with safety checks
+                    // Export to Excel with formatting and colors
                     if (!marketAnalysisData || marketAnalysisData.length === 0) {
                       alert('No market analysis data available to export. Please run the analysis first.');
                       return;
                     }
 
-                    let csv = 'Block,Total Properties,# of Sales,Avg Normalized Value,Avg Age,Avg Size,Most Repeated Design,Age Consistency,Size Consistency,Design Consistency,Color,Bluebeam Position\n';
-                    marketAnalysisData.forEach(block => {
-                      csv += `"${block.block || ''}","${block.propertyCount || 0}","${block.salesCount || 0}","$${(block.avgNormalizedValue || 0).toLocaleString()}",`;
-                      csv += `"${block.ageDetails?.avgYear || ''}","${block.sizeDetails?.avgSize || ''}","${block.designDetails?.dominantDesign || ''}",`;
-                      csv += `"${block.ageConsistency || ''}","${block.sizeConsistency || ''}","${block.designConsistency || ''}",`;
-                      csv += `"${block.color?.name || ''}","Row ${block.color?.row || ''} Col ${block.color?.col || ''}"\n`;
-                    });
+                    // Prepare data with headers
+                    const headers = [
+                      'Block',
+                      'Total Properties',
+                      '# of Sales',
+                      'Avg Normalized Value',
+                      'Avg Age',
+                      'Avg Size',
+                      'Most Common Design',
+                      'Age Consistency',
+                      'Size Consistency',
+                      'Design Consistency',
+                      'Color',
+                      'Bluebeam Position'
+                    ];
 
-                    const blob = new Blob([csv], { type: 'text/csv' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `BlockAnalysis_${jobData?.job_name || 'export'}_${new Date().toISOString().split('T')[0]}.csv`;
-                    a.click();
-                    URL.revokeObjectURL(url);
+                    const data = marketAnalysisData.map(block => [
+                      block.block || '',
+                      block.propertyCount || 0,
+                      block.salesCount || 0,
+                      block.avgNormalizedValue || 0,
+                      block.ageDetails?.avgYear || '',
+                      block.sizeDetails?.avgSize || '',
+                      block.designDetails?.dominantDesign || '',
+                      block.ageConsistency || '',
+                      block.sizeConsistency || '',
+                      block.designConsistency || '',
+                      block.color?.name || '',
+                      `Row ${block.color?.row || ''} Col ${block.color?.col || ''}`
+                    ]);
+
+                    // Create worksheet from array of arrays
+                    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+
+                    // Base style for all cells
+                    const baseStyle = {
+                      font: { name: 'Leelawadee', sz: 10 },
+                      alignment: { horizontal: 'center', vertical: 'center' }
+                    };
+
+                    // Header style (bold)
+                    const headerStyle = {
+                      font: { name: 'Leelawadee', sz: 10, bold: true },
+                      alignment: { horizontal: 'center', vertical: 'center' },
+                      fill: { fgColor: { rgb: 'E5E7EB' } }
+                    };
+
+                    // Apply formatting to all cells
+                    const range = XLSX.utils.decode_range(ws['!ref']);
+
+                    for (let R = range.s.r; R <= range.e.r; ++R) {
+                      for (let C = range.s.c; C <= range.e.c; ++C) {
+                        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+                        if (!ws[cellAddress]) continue;
+
+                        // Apply header style to first row
+                        if (R === 0) {
+                          ws[cellAddress].s = headerStyle;
+                        } else {
+                          ws[cellAddress].s = { ...baseStyle };
+
+                          // Apply specific formatting based on column
+                          // Column B (Total Properties) and C (# of Sales) - number format
+                          if (C === 1 || C === 2) {
+                            ws[cellAddress].s.numFmt = '#,##0';
+                          }
+                          // Column D (Avg Normalized Value) - currency format
+                          else if (C === 3) {
+                            ws[cellAddress].s.numFmt = '$#,##0';
+                          }
+                          // Column F (Avg Size) - number format
+                          else if (C === 5) {
+                            ws[cellAddress].s.numFmt = '#,##0';
+                          }
+                          // Column K (Color) - apply the actual color as background
+                          else if (C === 10) {
+                            const colorName = marketAnalysisData[R - 1]?.color?.hex;
+                            if (colorName) {
+                              ws[cellAddress].s.fill = { fgColor: { rgb: colorName.replace('#', '') } };
+                              // If color is dark, use white text
+                              const isDark = parseInt(colorName.replace('#', '').substring(0, 2), 16) < 128;
+                              if (isDark) {
+                                ws[cellAddress].s.font = { ...ws[cellAddress].s.font, color: { rgb: 'FFFFFF' } };
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+
+                    // Set column widths
+                    ws['!cols'] = [
+                      { wch: 12 },  // Block
+                      { wch: 15 },  // Total Properties
+                      { wch: 12 },  // # of Sales
+                      { wch: 20 },  // Avg Normalized Value
+                      { wch: 10 },  // Avg Age
+                      { wch: 12 },  // Avg Size
+                      { wch: 25 },  // Most Common Design
+                      { wch: 15 },  // Age Consistency
+                      { wch: 15 },  // Size Consistency
+                      { wch: 17 },  // Design Consistency
+                      { wch: 20 },  // Color
+                      { wch: 18 }   // Bluebeam Position
+                    ];
+
+                    // Create workbook and export
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'Block Analysis');
+                    XLSX.writeFile(wb, `BlockAnalysis_${jobData?.job_name || 'export'}_${new Date().toISOString().split('T')[0]}.xlsx`);
                   }}
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
-                  Export to CSV
+                  Export to Excel
                 </button>
 
                 {/* Mark Complete for Market Analysis (next to Export) */}
