@@ -2458,6 +2458,7 @@ const OverallAnalysisTab = ({
         });
 
         if (data.length > 0) {
+          console.log('[Export] Condo Bedroom - processing', data.length, 'rows');
           // Pre-compute VCS baseline row lookup (optimization to avoid O(n²) loops)
           const vcsBaselineMap = {};
           const vcsCol = headers.indexOf('VCS');
