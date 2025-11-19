@@ -776,69 +776,76 @@ const OverallAnalysisTab = ({
         vcsGroup.avgAdjustedPrice = 0;
       }
       
-      // Find baseline for this VCS (highest adjusted price)
-      let maxTypePrice = 0;
-      let baselineType = null;
-      
-      // Type level calculations
+      // Type level: Calculate averages first
       Object.values(vcsGroup.types).forEach(typeGroup => {
         typeGroup.avgSizeAll = typeGroup.propertyCount > 0 ? typeGroup.totalSizeAll / typeGroup.propertyCount : 0;
         typeGroup.avgYearAll = typeGroup.propertyCount > 0 ? Math.round(typeGroup.totalYearAll / typeGroup.propertyCount) : 0;
-        
+
         typeGroup.avgPrice = typeGroup.salesCount > 0 ? typeGroup.totalPrice / typeGroup.salesCount : 0;
         typeGroup.avgSizeSales = typeGroup.salesCount > 0 ? typeGroup.totalSizeSales / typeGroup.salesCount : 0;
         typeGroup.avgYearSales = typeGroup.salesCount > 0 ? Math.round(typeGroup.totalYearSales / typeGroup.salesCount) : 0;
-        
-        // Calculate type adjusted price
-        let typeTotalAdjusted = 0;
-        if (typeGroup.salesCount > 0) {
+      });
+
+      // Find baseline type (highest priced)
+      let baselineType = null;
+      let maxTypePrice = 0;
+      Object.values(vcsGroup.types).forEach(typeGroup => {
+        if (typeGroup.salesCount > 0 && typeGroup.avgPrice > maxTypePrice) {
+          maxTypePrice = typeGroup.avgPrice;
+          baselineType = typeGroup;
+        }
+      });
+
+      // Calculate type adjusted prices using BASELINE type size
+      Object.values(vcsGroup.types).forEach(typeGroup => {
+        if (typeGroup.salesCount > 0 && baselineType) {
+          let typeTotalAdjusted = 0;
           typeGroup.salesProperties.forEach(p => {
             const adjusted = calculateAdjustedPrice(
               (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
               p.asset_sfla || 0,
-              typeGroup.avgSizeSales
+              baselineType.avgSizeSales  // Use BASELINE type size
             );
             typeTotalAdjusted += adjusted;
           });
           typeGroup.avgAdjustedPrice = typeTotalAdjusted / typeGroup.salesCount;
-          
-          if (typeGroup.avgAdjustedPrice > maxTypePrice) {
-            maxTypePrice = typeGroup.avgAdjustedPrice;
-            baselineType = typeGroup;
-          }
         } else {
           typeGroup.avgAdjustedPrice = 0;
         }
         
-        // Design level calculations
-        let maxDesignPrice = 0;
-        let baselineDesign = null;
-        
+        // Design level: Calculate averages first
         Object.values(typeGroup.designs).forEach(designGroup => {
           designGroup.avgSizeAll = designGroup.propertyCount > 0 ? designGroup.totalSizeAll / designGroup.propertyCount : 0;
           designGroup.avgYearAll = designGroup.propertyCount > 0 ? Math.round(designGroup.totalYearAll / designGroup.propertyCount) : 0;
-          
+
           designGroup.avgPrice = designGroup.salesCount > 0 ? designGroup.totalPrice / designGroup.salesCount : 0;
           designGroup.avgSizeSales = designGroup.salesCount > 0 ? designGroup.totalSizeSales / designGroup.salesCount : 0;
           designGroup.avgYearSales = designGroup.salesCount > 0 ? Math.round(designGroup.totalYearSales / designGroup.salesCount) : 0;
-          
-          // Calculate design adjusted price
-          let designTotalAdjusted = 0;
-          if (designGroup.salesCount > 0) {
+        });
+
+        // Find baseline design (highest priced)
+        let baselineDesign = null;
+        let maxDesignPrice = 0;
+        Object.values(typeGroup.designs).forEach(designGroup => {
+          if (designGroup.salesCount > 0 && designGroup.avgPrice > maxDesignPrice) {
+            maxDesignPrice = designGroup.avgPrice;
+            baselineDesign = designGroup;
+          }
+        });
+
+        // Calculate design adjusted prices using BASELINE design size
+        Object.values(typeGroup.designs).forEach(designGroup => {
+          if (designGroup.salesCount > 0 && baselineDesign) {
+            let designTotalAdjusted = 0;
             designGroup.salesProperties.forEach(p => {
               const adjusted = calculateAdjustedPrice(
                 (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
                 p.asset_sfla || 0,
-                designGroup.avgSizeSales
+                baselineDesign.avgSizeSales  // Use BASELINE design size
               );
               designTotalAdjusted += adjusted;
             });
             designGroup.avgAdjustedPrice = designTotalAdjusted / designGroup.salesCount;
-            
-            if (designGroup.avgAdjustedPrice > maxDesignPrice) {
-              maxDesignPrice = designGroup.avgAdjustedPrice;
-              baselineDesign = designGroup;
-            }
           } else {
             designGroup.avgAdjustedPrice = 0;
           }
