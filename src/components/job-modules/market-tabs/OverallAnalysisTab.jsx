@@ -2097,11 +2097,9 @@ const OverallAnalysisTab = ({
 
           const currentAdjPriceCell = XLSX.utils.encode_cell({ r: R, c: adjPriceCol });
           const baselineSalePriceCell = XLSX.utils.encode_cell({ r: baselineRowIndex, c: salePriceCol });
-          const currentAdjPriceValue = ws[currentAdjPriceCell]?.v;
           const baselineSalePriceValue = ws[baselineSalePriceCell]?.v;
 
-          if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
-              baselineSalePriceValue > 0) {
+          if (ws[currentAdjPriceCell] && typeof baselineSalePriceValue === 'number' && baselineSalePriceValue > 0) {
             return `(${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell}`;
           }
           return null;
