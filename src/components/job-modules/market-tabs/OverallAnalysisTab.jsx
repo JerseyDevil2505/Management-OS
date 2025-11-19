@@ -3192,7 +3192,11 @@ const OverallAnalysisTab = ({
                   </div>
                   <div className="bg-gray-50 rounded-lg p-4">
                     <div className="text-sm text-gray-600">Floor Levels</div>
-                    <div className="text-2xl font-bold">{analysis.condo.floorGroups.length}</div>
+                    <div className="text-2xl font-bold">
+                      {analysis.condo.vcsFloorGroups ?
+                        new Set(Object.values(analysis.condo.vcsFloorGroups).flatMap(vcs => Object.keys(vcs.floors))).size
+                        : 0}
+                    </div>
                   </div>
                 </div>
               </div>
