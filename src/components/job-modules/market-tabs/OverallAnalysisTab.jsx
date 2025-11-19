@@ -1235,9 +1235,7 @@ const OverallAnalysisTab = ({
   const [analysis, setAnalysis] = useState(null);
 
   const runAnalysis = useCallback(async (options = { skipBedroomEnrichment: false }) => {
-    console.log('🔄 runAnalysis called');
     setIsProcessing(true);
-    console.log('🔄 isProcessing set to true');
 
     try {
       const typeUseAnalysis = analyzeTypeUse();
