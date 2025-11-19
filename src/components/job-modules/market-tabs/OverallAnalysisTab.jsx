@@ -1314,45 +1314,112 @@ const OverallAnalysisTab = ({
       floorGroup.totalSize += p.asset_sfla || 0;
     });
 
-    // Calculate floor averages first
-    Object.values(floorGroups).forEach(group => {
-      group.avgPrice = group.count > 0 ? group.totalPrice / group.count : 0;
-      group.avgSize = group.count > 0 ? group.totalSize / group.count : 0;
-    });
+    // Calculate VCS floor averages and adjusted prices
+    Object.values(vcsFloorGroups).forEach(vcsGroup => {
+      // Calculate averages for each floor in this VCS
+      Object.values(vcsGroup.floors).forEach(floorGroup => {
+        floorGroup.avgPrice = floorGroup.count > 0 ? floorGroup.totalPrice / floorGroup.count : 0;
+        floorGroup.avgSize = floorGroup.count > 0 ? floorGroup.totalSize / floorGroup.count : 0;
+      });
 
-    // Identify baseline (1st floor)
-    const firstFloor = floorGroups['1ST FLOOR'];
+      // Identify baseline (1st floor) for this VCS
+      const firstFloor = vcsGroup.floors['1ST FLOOR'];
 
-    // Calculate adjusted prices using BASELINE (1st floor) size
-    Object.values(floorGroups).forEach(group => {
-      if (group.count > 0 && firstFloor) {
-        let totalAdjusted = 0;
-        group.properties.forEach(p => {
-          const adjusted = calculateAdjustedPrice(
-            p._time_normalized_price,  // Always valid due to filtering above
-            p.asset_sfla || 0,
-            firstFloor.avgSize  // Use BASELINE (1st floor) size
-          );
-          totalAdjusted += adjusted;
+      if (firstFloor) {
+        // Calculate adjusted prices using 1ST FLOOR size as baseline
+        Object.values(vcsGroup.floors).forEach(floorGroup => {
+          if (floorGroup.count > 0) {
+            let totalAdjusted = 0;
+            floorGroup.properties.forEach(p => {
+              const adjusted = calculateAdjustedPrice(
+                p._time_normalized_price,
+                p.asset_sfla || 0,
+                firstFloor.avgSize
+              );
+              totalAdjusted += adjusted;
+            });
+            floorGroup.avgAdjustedPrice = totalAdjusted / floorGroup.count;
+          } else {
+            floorGroup.avgAdjustedPrice = 0;
+          }
         });
-        group.avgAdjustedPrice = totalAdjusted / group.count;
-      } else {
-        group.avgAdjustedPrice = 0;
+
+        // Calculate deltas (vs 1st floor baseline)
+        Object.values(vcsGroup.floors).forEach(floorGroup => {
+          if (floorGroup !== firstFloor && firstFloor.avgPrice > 0) {
+            floorGroup.deltaPercent = ((floorGroup.avgAdjustedPrice - firstFloor.avgPrice) / firstFloor.avgPrice * 100);
+            floorGroup.deltaCurrency = floorGroup.avgAdjustedPrice - firstFloor.avgPrice;
+          } else {
+            floorGroup.deltaPercent = 0;
+            floorGroup.deltaCurrency = 0;
+          }
+          floorGroup.isBaseline = (floorGroup === firstFloor);
+        });
       }
     });
 
-    // Calculate floor premiums
-    // Delta is calculated as: (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
-    if (firstFloor && firstFloor.avgPrice > 0) {
-      Object.values(floorGroups).forEach(group => {
-        if (group !== firstFloor) {
-          group.deltaPercent = ((group.avgAdjustedPrice - firstFloor.avgPrice) / firstFloor.avgPrice * 100);
-        } else {
-          group.deltaPercent = 0;
+    // Calculate floor premium summary across all VCS
+    const floorSummary = {
+      firstToSecond: { count: 0, avgDelta: 0, avgDeltaPct: 0, hasData: false },
+      firstToThird: { count: 0, avgDelta: 0, avgDeltaPct: 0, hasData: false },
+      firstToTop: { count: 0, avgDelta: 0, avgDeltaPct: 0, hasData: false },
+      firstToPenthouse: { count: 0, avgDelta: 0, avgDeltaPct: 0, hasData: false }
+    };
+
+    Object.values(vcsFloorGroups).forEach(vcsGroup => {
+      const floors = vcsGroup.floors;
+      const firstFlr = floors['1ST FLOOR'];
+
+      if (firstFlr && firstFlr.avgPrice > 0) {
+        // 1st to 2nd Floor
+        if (floors['2ND FLOOR']?.avgAdjustedPrice > 0) {
+          const delta = floors['2ND FLOOR'].avgAdjustedPrice - firstFlr.avgPrice;
+          const deltaPct = (delta / firstFlr.avgPrice) * 100;
+          floorSummary.firstToSecond.avgDelta += delta;
+          floorSummary.firstToSecond.avgDeltaPct += deltaPct;
+          floorSummary.firstToSecond.count++;
+          floorSummary.firstToSecond.hasData = true;
         }
-        group.isBaseline = (group === firstFloor);
-      });
-    }
+
+        // 1st to 3rd Floor
+        if (floors['3RD FLOOR']?.avgAdjustedPrice > 0) {
+          const delta = floors['3RD FLOOR'].avgAdjustedPrice - firstFlr.avgPrice;
+          const deltaPct = (delta / firstFlr.avgPrice) * 100;
+          floorSummary.firstToThird.avgDelta += delta;
+          floorSummary.firstToThird.avgDeltaPct += deltaPct;
+          floorSummary.firstToThird.count++;
+          floorSummary.firstToThird.hasData = true;
+        }
+
+        // 1st to Top Floor
+        if (floors['TOP FLOOR']?.avgAdjustedPrice > 0) {
+          const delta = floors['TOP FLOOR'].avgAdjustedPrice - firstFlr.avgPrice;
+          const deltaPct = (delta / firstFlr.avgPrice) * 100;
+          floorSummary.firstToTop.avgDelta += delta;
+          floorSummary.firstToTop.avgDeltaPct += deltaPct;
+          floorSummary.firstToTop.count++;
+          floorSummary.firstToTop.hasData = true;
+        }
+
+        // 1st to Penthouse
+        if (floors['PENTHOUSE']?.avgAdjustedPrice > 0) {
+          const delta = floors['PENTHOUSE'].avgAdjustedPrice - firstFlr.avgPrice;
+          const deltaPct = (delta / firstFlr.avgPrice) * 100;
+          floorSummary.firstToPenthouse.avgDelta += delta;
+          floorSummary.firstToPenthouse.avgDeltaPct += deltaPct;
+          floorSummary.firstToPenthouse.count++;
+          floorSummary.firstToPenthouse.hasData = true;
+        }
+      }
+    });
+
+    // Calculate averages
+    Object.values(floorSummary).forEach(summary => {
+      if (summary.count > 0) {
+        summary.avgDelta = summary.avgDelta / summary.count;
+        summary.avgDeltaPct = summary.avgDeltaPct / summary.count;
+      }
+    });
 
     // Calculate bedroom summary across all VCS
     const bedroomSummary = {
