@@ -1314,7 +1314,13 @@ const OverallAnalysisTab = ({
           properties: [],
           totalPrice: 0,
           totalSize: 0,
-          count: 0
+          count: 0,
+          avgPrice: 0,
+          avgSize: 0,
+          avgAdjustedPrice: 0,
+          deltaPercent: 0,
+          deltaCurrency: 0,
+          isBaseline: false
         };
       }
 
