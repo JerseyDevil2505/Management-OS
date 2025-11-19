@@ -3690,7 +3690,7 @@ const OverallAnalysisTab = ({
                                     <td className="px-3 py-2 text-sm text-center">
                                       {floor.isBaseline ? (
                                         <span className="text-gray-400 text-xs">BASELINE</span>
-                                      ) : floor.deltaPercent !== 0 ? (
+                                      ) : (floor.deltaPercent !== 0 && floor.deltaPercent != null) ? (
                                         <span className={floor.deltaPercent > 0 ? 'text-green-600' : 'text-red-600'}>
                                           {floor.deltaPercent > 0 ? '+' : ''}{floor.deltaPercent.toFixed(0)}%
                                         </span>
