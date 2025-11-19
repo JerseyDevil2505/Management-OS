@@ -2711,9 +2711,7 @@ const OverallAnalysisTab = ({
           floor.avgSize ? Math.round(floor.avgSize) : '',
           floor.avgPrice ? Math.round(floor.avgPrice) : '',
           floor.avgAdjustedPrice === 0 ? '' : floor.isBaseline ? '' : Math.round(floor.avgAdjustedPrice),
-          floor.deltaPercent !== undefined && floor.deltaPercent !== 0 ? floor.deltaPercent : floor.isBaseline ? 'BASELINE' : '���',
-          floor.avgAdjustedPrice === 0 ? '' : floor.isBaseline ? '' : Math.round(floor.avgAdjustedPrice),
-          floor.deltaPercent !== undefined && floor.deltaPercent !== 0 ? floor.deltaPercent : floor.isBaseline ? 'BASELINE' : ''
+          floor.deltaPercent !== undefined && floor.deltaPercent !== 0 ? floor.deltaPercent : floor.isBaseline ? 'BASELINE' : '',
         ]);
 
         // Find the baseline row for Condo Floor analysis
