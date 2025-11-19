@@ -3524,86 +3524,156 @@ const OverallAnalysisTab = ({
                 </div>
               )}
 
-              {/* Floor Analysis */}
+              {/* Floor Premium Analysis */}
               <div className="bg-white rounded-lg shadow-sm p-6">
-                <div 
+                <div
                   onClick={() => toggleSection('condoFloor')}
                   className="flex justify-between items-center mb-4 cursor-pointer hover:bg-gray-50 -m-2 p-2 rounded"
                 >
-                  <h3 className="text-lg font-semibold">Floor Premium Analysis</h3>
+                  <div>
+                    <h3 className="text-lg font-semibold">VCS Floor Premium Analysis</h3>
+                    <div className="text-xs text-gray-500 mt-1">Only condos with "CONDO" in story height description</div>
+                  </div>
                   {expandedSections.condoFloor ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                 </div>
-                
-                {expandedSections.condoFloor && (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Floor</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Sales</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Avg Size</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Sale Price</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Adj Sale Price</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Premium vs 1st</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {analysis.condo.floorGroups
-                          .sort((a, b) => {
-                            const order = ['1ST FLOOR', '2ND FLOOR', '3RD FLOOR', 'TOP FLOOR', 'Unknown'];
-                            return order.indexOf(a.label) - order.indexOf(b.label);
-                          })
-                          .map((floor) => (
-                          <tr key={floor.label} className={floor.label === '1ST FLOOR' ? 'bg-yellow-50' : ''}>
-                            <td className="px-4 py-3 text-sm font-medium">{floor.label}</td>
-                            <td className="px-4 py-3 text-sm text-center">{floor.count}</td>
-                            <td className="px-4 py-3 text-sm text-center">{formatNumber(floor.avgSize)}</td>
-                            <td className="px-4 py-3 text-sm text-center">
-                              {floor.avgPrice > 0 ? formatCurrency(floor.avgPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-center font-medium">
-                              {floor.avgAdjustedPrice === 0 ? (
-                                <span className="text-gray-500 text-xs">NO SALES DATA</span>
-                              ) : floor.isBaseline ? (
-                                <span className="text-gray-400">—</span>
-                              ) : (
-                                formatCurrency(floor.avgAdjustedPrice)
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-center">
-                              {floor.label === '1ST FLOOR' ? (
-                                <span className="text-gray-400">BASELINE</span>
-                              ) : floor.deltaPercent !== undefined ? (
-                                <span className={floor.deltaPercent > 0 ? 'text-green-600' : 'text-red-600'}>
-                                  {floor.deltaPercent > 0 ? '+' : ''}{floor.deltaPercent.toFixed(0)}%
-                                </span>
-                              ) : (
-                                '—'
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
 
-              {/* Data Quality Notice */}
-              {analysis.condo.floorGroups.some(g => g.label === 'Unknown' && g.count > 0) && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
-                    <div>
-                      <div className="font-medium text-yellow-900">Limited Floor Data</div>
-                      <div className="text-sm text-yellow-800 mt-1">
-                        {analysis.condo.floorGroups.find(g => g.label === 'Unknown')?.count || 0} condos 
-                        without floor designation. Update story height field in code file to improve analysis.
+                {expandedSections.condoFloor && (
+                  <>
+                    {/* Floor Premium Summary Banner */}
+                    <div className="mb-6 bg-purple-50 border border-purple-200 rounded-lg p-4">
+                      <h4 className="font-medium text-purple-900 mb-3">Overall Floor Premium Summary</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-white rounded p-3">
+                          <div className="text-xs text-gray-600 mb-1">1st → 2nd Floor</div>
+                          {analysis.condo.floorSummary.firstToSecond.hasData ? (
+                            <>
+                              <div className="text-sm font-semibold text-gray-900">
+                                {formatCurrency(analysis.condo.floorSummary.firstToSecond.avgDelta)}
+                              </div>
+                              <div className={`text-xs ${analysis.condo.floorSummary.firstToSecond.avgDeltaPct > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {analysis.condo.floorSummary.firstToSecond.avgDeltaPct > 0 ? '+' : ''}
+                                {analysis.condo.floorSummary.firstToSecond.avgDeltaPct.toFixed(1)}%
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-sm text-gray-400">No data</div>
+                          )}
+                        </div>
+                        <div className="bg-white rounded p-3">
+                          <div className="text-xs text-gray-600 mb-1">1st → 3rd Floor</div>
+                          {analysis.condo.floorSummary.firstToThird.hasData ? (
+                            <>
+                              <div className="text-sm font-semibold text-gray-900">
+                                {formatCurrency(analysis.condo.floorSummary.firstToThird.avgDelta)}
+                              </div>
+                              <div className={`text-xs ${analysis.condo.floorSummary.firstToThird.avgDeltaPct > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {analysis.condo.floorSummary.firstToThird.avgDeltaPct > 0 ? '+' : ''}
+                                {analysis.condo.floorSummary.firstToThird.avgDeltaPct.toFixed(1)}%
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-sm text-gray-400">No data</div>
+                          )}
+                        </div>
+                        <div className="bg-white rounded p-3">
+                          <div className="text-xs text-gray-600 mb-1">1st → Top Floor</div>
+                          {analysis.condo.floorSummary.firstToTop.hasData ? (
+                            <>
+                              <div className="text-sm font-semibold text-gray-900">
+                                {formatCurrency(analysis.condo.floorSummary.firstToTop.avgDelta)}
+                              </div>
+                              <div className={`text-xs ${analysis.condo.floorSummary.firstToTop.avgDeltaPct > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {analysis.condo.floorSummary.firstToTop.avgDeltaPct > 0 ? '+' : ''}
+                                {analysis.condo.floorSummary.firstToTop.avgDeltaPct.toFixed(1)}%
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-sm text-gray-400">No data</div>
+                          )}
+                        </div>
+                        <div className="bg-white rounded p-3">
+                          <div className="text-xs text-gray-600 mb-1">1st → Penthouse</div>
+                          {analysis.condo.floorSummary.firstToPenthouse.hasData ? (
+                            <>
+                              <div className="text-sm font-semibold text-gray-900">
+                                {formatCurrency(analysis.condo.floorSummary.firstToPenthouse.avgDelta)}
+                              </div>
+                              <div className={`text-xs ${analysis.condo.floorSummary.firstToPenthouse.avgDeltaPct > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {analysis.condo.floorSummary.firstToPenthouse.avgDeltaPct > 0 ? '+' : ''}
+                                {analysis.condo.floorSummary.firstToPenthouse.avgDeltaPct.toFixed(1)}%
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-sm text-gray-400">No data</div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-              )}
+
+                    {/* VCS Breakdown */}
+                    <div className="space-y-6">
+                      {Object.entries(analysis.condo.vcsFloorGroups).map(([vcs, vcsData]) => (
+                        <div key={vcs} className="border border-gray-200 rounded-lg p-4">
+                          <h4 className="font-medium text-gray-900 mb-3">VCS {vcsData.code}</h4>
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Floor</th>
+                                  <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Sales</th>
+                                  <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Size</th>
+                                  <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Sale Price</th>
+                                  <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Adj Sale Price</th>
+                                  <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Premium vs 1st</th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {Object.values(vcsData.floors)
+                                  .sort((a, b) => {
+                                    const order = ['1ST FLOOR', '2ND FLOOR', '3RD FLOOR', '4TH FLOOR', '5TH FLOOR', 'TOP FLOOR', 'PENTHOUSE', 'Unknown'];
+                                    return order.indexOf(a.label) - order.indexOf(b.label);
+                                  })
+                                  .map((floor) => (
+                                  <tr key={floor.label} className={floor.isBaseline ? 'bg-yellow-50' : ''}>
+                                    <td className="px-3 py-2 text-sm font-medium">{floor.label}</td>
+                                    <td className="px-3 py-2 text-sm text-center">{floor.count}</td>
+                                    <td className="px-3 py-2 text-sm text-center">
+                                      {floor.avgSize > 0 ? formatNumber(floor.avgSize) : '—'}
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-center">
+                                      {floor.avgPrice > 0 ? formatCurrency(floor.avgPrice) : <span className="text-gray-500 text-xs">NO DATA</span>}
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-center font-medium">
+                                      {floor.isBaseline ? (
+                                        <span className="text-gray-400">—</span>
+                                      ) : floor.avgAdjustedPrice > 0 ? (
+                                        formatCurrency(floor.avgAdjustedPrice)
+                                      ) : (
+                                        <span className="text-gray-500 text-xs">NO DATA</span>
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-center">
+                                      {floor.isBaseline ? (
+                                        <span className="text-gray-400 text-xs">BASELINE</span>
+                                      ) : floor.deltaPercent !== 0 ? (
+                                        <span className={floor.deltaPercent > 0 ? 'text-green-600' : 'text-red-600'}>
+                                          {floor.deltaPercent > 0 ? '+' : ''}{floor.deltaPercent.toFixed(0)}%
+                                        </span>
+                                      ) : (
+                                        '—'
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </>
           ) : (
             <div className="bg-gray-50 rounded-lg p-8 text-center">
