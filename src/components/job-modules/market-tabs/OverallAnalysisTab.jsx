@@ -2740,7 +2740,7 @@ const OverallAnalysisTab = ({
 
             const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
             const deltaValue = ws[deltaCell]?.v;
-            if (deltaValue === 'BASELINE' || deltaValue === 0) {
+            if (deltaValue === 'BASELINE') {
               return null;
             }
 
