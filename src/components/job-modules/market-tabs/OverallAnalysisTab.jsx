@@ -577,38 +577,41 @@ const OverallAnalysisTab = ({
       }
     });
 
-    // Calculate averages and adjusted prices
-    let maxAdjustedPrice = 0;
-    let baselineGroup = null;
-
+    // Calculate averages first
     Object.values(groups).forEach(group => {
       // Averages for ALL properties
       group.avgSizeAll = group.propertyCount > 0 ? group.totalSizeAll / group.propertyCount : 0;
       group.avgYearAll = group.propertyCount > 0 ? Math.round(group.totalYearAll / group.propertyCount) : 0;
-      
+
       // Averages for SALES only
       group.avgPrice = group.salesCount > 0 ? group.totalPrice / group.salesCount : 0;
       group.avgSizeSales = group.salesCount > 0 ? group.totalSizeSales / group.salesCount : 0;
       group.avgYearSales = group.salesCount > 0 ? Math.round(group.totalYearSales / group.salesCount) : 0;
-      
-      // Calculate adjusted prices using sales average size
-      let totalAdjusted = 0;
-      if (group.salesCount > 0) {
+    });
+
+    // Identify baseline (highest priced group)
+    let baselineGroup = null;
+    let maxPrice = 0;
+    Object.values(groups).forEach(group => {
+      if (group.salesCount > 0 && group.avgPrice > maxPrice) {
+        maxPrice = group.avgPrice;
+        baselineGroup = group;
+      }
+    });
+
+    // Calculate adjusted prices using BASELINE size
+    Object.values(groups).forEach(group => {
+      if (group.salesCount > 0 && baselineGroup) {
+        let totalAdjusted = 0;
         group.salesProperties.forEach(p => {
           const adjusted = calculateAdjustedPrice(
             (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
             p.asset_sfla || 0,
-            group.avgSizeSales
+            baselineGroup.avgSizeSales  // Use BASELINE size
           );
           totalAdjusted += adjusted;
         });
-        
         group.avgAdjustedPrice = totalAdjusted / group.salesCount;
-        
-        if (group.avgAdjustedPrice > maxAdjustedPrice) {
-          maxAdjustedPrice = group.avgAdjustedPrice;
-          baselineGroup = group;
-        }
       } else {
         group.avgAdjustedPrice = 0;
       }
@@ -1535,7 +1538,7 @@ const OverallAnalysisTab = ({
       const data = analysis.typeUse.groups.map(group => [
         `${group.code} - ${group.name}`,
         group.propertyCount,
-        group.avgYearAll || '—',
+        group.avgYearAll || '���',
         group.avgSizeAll ? Math.round(group.avgSizeAll) : '—',
         group.salesCount,
         group.avgYearSales || '—',
