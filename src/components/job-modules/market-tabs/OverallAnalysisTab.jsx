@@ -1299,7 +1299,7 @@ const OverallAnalysisTab = ({
     if (filteredProperties.length > 0) {
       runAnalysis();
     }
-  }, [filteredProperties.length]); // Only re-run when count changes
+  }, [filteredProperties.length, runAnalysis]); // Re-run when count changes or runAnalysis updates
 
   // ==================== EXPORT FUNCTIONS ====================
   
