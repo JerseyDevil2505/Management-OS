@@ -1299,7 +1299,8 @@ const OverallAnalysisTab = ({
     if (filteredProperties.length > 0) {
       runAnalysis();
     }
-  }, [filteredProperties.length, runAnalysis]); // Re-run when count changes or runAnalysis updates
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredProperties.length]); // Only re-run when count changes
 
   // ==================== EXPORT FUNCTIONS ====================
   
