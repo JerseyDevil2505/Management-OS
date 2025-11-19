@@ -3120,14 +3120,90 @@ const OverallAnalysisTab = ({
 
               {/* VCS Bedroom Analysis */}
               <div className="bg-white rounded-lg shadow-sm p-6">
-                <div 
+                <div
                   onClick={() => toggleSection('condoBedroom')}
                   className="flex justify-between items-center mb-4 cursor-pointer hover:bg-gray-50 -m-2 p-2 rounded"
                 >
                   <h3 className="text-lg font-semibold">VCS Bedroom Analysis</h3>
                   {expandedSections.condoBedroom ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                 </div>
-                
+
+                {expandedSections.condoBedroom && (
+                  <>
+                    {/* Bedroom Summary Banner */}
+                    <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <h4 className="font-medium text-blue-900 mb-3">Overall Bedroom Adjustment Summary</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-white rounded p-3">
+                          <div className="text-xs text-gray-600 mb-1">Studio → 1 Bed</div>
+                          {analysis.condo.bedroomSummary.studioTo1Bed.hasData ? (
+                            <>
+                              <div className="text-sm font-semibold text-gray-900">
+                                {formatCurrency(analysis.condo.bedroomSummary.studioTo1Bed.avgDelta)}
+                              </div>
+                              <div className={`text-xs ${analysis.condo.bedroomSummary.studioTo1Bed.avgDeltaPct > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {analysis.condo.bedroomSummary.studioTo1Bed.avgDeltaPct > 0 ? '+' : ''}
+                                {analysis.condo.bedroomSummary.studioTo1Bed.avgDeltaPct.toFixed(1)}%
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-sm text-gray-400">No data</div>
+                          )}
+                        </div>
+                        <div className="bg-white rounded p-3">
+                          <div className="text-xs text-gray-600 mb-1">1 Bed → 2 Bed</div>
+                          {analysis.condo.bedroomSummary.oneBedTo2Bed.hasData ? (
+                            <>
+                              <div className="text-sm font-semibold text-gray-900">
+                                {formatCurrency(analysis.condo.bedroomSummary.oneBedTo2Bed.avgDelta)}
+                              </div>
+                              <div className={`text-xs ${analysis.condo.bedroomSummary.oneBedTo2Bed.avgDeltaPct > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {analysis.condo.bedroomSummary.oneBedTo2Bed.avgDeltaPct > 0 ? '+' : ''}
+                                {analysis.condo.bedroomSummary.oneBedTo2Bed.avgDeltaPct.toFixed(1)}%
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-sm text-gray-400">No data</div>
+                          )}
+                        </div>
+                        <div className="bg-white rounded p-3">
+                          <div className="text-xs text-gray-600 mb-1">2 Bed → 3 Bed</div>
+                          {analysis.condo.bedroomSummary.twoBedTo3Bed.hasData ? (
+                            <>
+                              <div className="text-sm font-semibold text-gray-900">
+                                {formatCurrency(analysis.condo.bedroomSummary.twoBedTo3Bed.avgDelta)}
+                              </div>
+                              <div className={`text-xs ${analysis.condo.bedroomSummary.twoBedTo3Bed.avgDeltaPct > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {analysis.condo.bedroomSummary.twoBedTo3Bed.avgDeltaPct > 0 ? '+' : ''}
+                                {analysis.condo.bedroomSummary.twoBedTo3Bed.avgDeltaPct.toFixed(1)}%
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-sm text-gray-400">No data</div>
+                          )}
+                        </div>
+                        <div className="bg-white rounded p-3">
+                          <div className="text-xs text-gray-600 mb-1">3 Bed → 4 Bed</div>
+                          {analysis.condo.bedroomSummary.threeBedTo4Bed.hasData ? (
+                            <>
+                              <div className="text-sm font-semibold text-gray-900">
+                                {formatCurrency(analysis.condo.bedroomSummary.threeBedTo4Bed.avgDelta)}
+                              </div>
+                              <div className={`text-xs ${analysis.condo.bedroomSummary.threeBedTo4Bed.avgDeltaPct > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {analysis.condo.bedroomSummary.threeBedTo4Bed.avgDeltaPct > 0 ? '+' : ''}
+                                {analysis.condo.bedroomSummary.threeBedTo4Bed.avgDeltaPct.toFixed(1)}%
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-sm text-gray-400">No data</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                  </>
+                )}
+
                 {expandedSections.condoBedroom && (
                   <div className="space-y-6">
                     {Object.entries(analysis.condo.vcsBedroomGroups).map(([vcs, vcsData]) => (
