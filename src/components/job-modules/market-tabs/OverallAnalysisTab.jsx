@@ -2697,13 +2697,12 @@ const OverallAnalysisTab = ({
 
         if (flattenedFloors.length === 0) return; // Skip if no floor data
         const headers = [
-          'VCS',
-          'Floor Level',
-          'Total Condos',
+          'VCS Unit Type',
+          'Count',
           'Avg Size',
-          'Avg Sale Price',
-          'Avg Adjusted Price',
-          'Delta %'
+          'Sale Price',
+          'Adj Price',
+          'Delta'
         ];
 
         const data = flattenedFloors.map(floor => [
