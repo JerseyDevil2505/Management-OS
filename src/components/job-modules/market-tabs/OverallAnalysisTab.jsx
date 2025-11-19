@@ -2587,7 +2587,7 @@ const OverallAnalysisTab = ({
             {
               column: 'Adj Price',
               getFormula: (R, C, headers, ws) => {
-                const unitTypeCol = headers.indexOf('VCS Unit Type');
+                const unitTypeCol = headers.indexOf('End/Int Type');
                 const avgSizeCol = headers.indexOf('Avg Size');
                 const salePriceCol = headers.indexOf('Sale Price');
 
@@ -2597,7 +2597,7 @@ const OverallAnalysisTab = ({
                 const unitTypeValue = ws[unitTypeCell]?.v;
 
                 // Only apply formula to End Unit rows
-                if (!unitTypeValue || unitTypeValue.indexOf('End Unit') === -1) {
+                if (!unitTypeValue || unitTypeValue !== 'End Unit') {
                   return null;
                 }
 
@@ -3487,7 +3487,7 @@ const OverallAnalysisTab = ({
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {group.avgAdjustedPrice === 0 ? (
-                                <span className="text-gray-500">—</span>
+                                <span className="text-gray-500">��</span>
                               ) : (
                                 <span className={group.deltaPercent > 0 ? 'text-green-600' : group.deltaPercent < 0 ? 'text-red-600' : 'text-gray-600'}>
                                   {group.deltaPercent > 0 ? '+' : ''}{group.deltaPercent.toFixed(0)}%
