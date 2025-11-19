@@ -2383,7 +2383,7 @@ const OverallAnalysisTab = ({
           group.avgSize ? Math.round(group.avgSize) : '',
           group.avgPrice ? Math.round(group.avgPrice) : '',
           group.avgAdjustedPrice === 0 ? '' : group.isBaseline ? '' : Math.round(group.avgAdjustedPrice),
-          group.deltaPercent ? Math.round(group.deltaPercent) : 'BASELINE'
+          group.isBaseline ? 'BASELINE' : ''
         ]);
 
         // Find the baseline row for Condo Design analysis
@@ -2479,7 +2479,7 @@ const OverallAnalysisTab = ({
                 group.avgSize ? Math.round(group.avgSize) : '',
                 group.avgPrice ? Math.round(group.avgPrice) : '',
                 group.avgAdjustedPrice ? Math.round(group.avgAdjustedPrice) : '',
-                group.deltaPercent !== undefined && group.deltaPercent !== 0 ? group.deltaPercent : group.salesCount > 0 ? 'BASELINE' : ''
+                group.isBaseline ? 'BASELINE' : ''
               ]);
             });
           }
@@ -2595,7 +2595,7 @@ const OverallAnalysisTab = ({
               vcsGroup.endUnits.avgSize ? Math.round(vcsGroup.endUnits.avgSize) : '',
               vcsGroup.endUnits.avgPrice ? Math.round(vcsGroup.endUnits.avgPrice) : '',
               vcsGroup.endUnits.avgAdjustedPrice ? Math.round(vcsGroup.endUnits.avgAdjustedPrice) : '',
-              vcsGroup.deltaPercent !== undefined ? vcsGroup.deltaPercent : ''
+              ''
             ]);
           }
         });
@@ -2706,7 +2706,7 @@ const OverallAnalysisTab = ({
           floor.avgSize ? Math.round(floor.avgSize) : '',
           floor.avgPrice ? Math.round(floor.avgPrice) : '',
           floor.avgAdjustedPrice === 0 ? '' : floor.isBaseline ? '' : Math.round(floor.avgAdjustedPrice),
-          floor.deltaPercent !== undefined && floor.deltaPercent !== 0 ? floor.deltaPercent : floor.isBaseline ? 'BASELINE' : '',
+          floor.isBaseline ? 'BASELINE' : '',
         ]);
 
         // Find the baseline row for Condo Floor analysis
