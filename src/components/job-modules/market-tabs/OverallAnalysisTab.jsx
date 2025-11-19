@@ -1251,12 +1251,15 @@ const OverallAnalysisTab = ({
       let storyHeightDecoded = '';
 
       if (storyHeightCode && codeDefinitions) {
+        // Create a temp property with string version for interpreter (expects strings)
+        const pWithStringCode = { ...p, asset_story_height: String(storyHeightCode) };
+
         if (vendorType === 'BRT') {
           // BRT: Look up in section 22 (story height section)
-          storyHeightDecoded = interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_story_height', '22') || '';
+          storyHeightDecoded = interpretCodes.getBRTValue?.(pWithStringCode, codeDefinitions, 'asset_story_height', '22') || '';
         } else if (vendorType === 'Microsystems') {
           // Microsystems: Use 510 prefix for story height
-          storyHeightDecoded = interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_story_height') || '';
+          storyHeightDecoded = interpretCodes.getMicrosystemsValue?.(pWithStringCode, codeDefinitions, 'asset_story_height') || '';
         }
       }
 
@@ -2883,7 +2886,7 @@ const OverallAnalysisTab = ({
                               {group.avgYearSales > 0 ? group.avgYearSales : '���'}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
-                              {group.avgSizeSales > 0 ? formatNumber(group.avgSizeSales) : '��'}
+                              {group.avgSizeSales > 0 ? formatNumber(group.avgSizeSales) : '—'}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {group.salesCount > 0 ? formatCurrency(group.avgPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
