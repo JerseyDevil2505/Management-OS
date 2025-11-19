@@ -947,6 +947,7 @@ export const interpretCodes = {
     'asset_int_cond': '491',
     'asset_type_use': '500',
     'asset_stories': '510',
+    'asset_story_height': '510',
     'asset_design_style': '520',
     // Raw data fields
     'topo': '115',
@@ -3980,7 +3981,7 @@ export const propertyService = {
       console.log(`✅ Preserved ${preservedDataMap.size} property assignments`);
 
     } catch (error) {
-      console.error(`❌ Error in preserved fields handler:`, error.message);
+      console.error(`�� Error in preserved fields handler:`, error.message);
     }
 
     return preservedDataMap;
