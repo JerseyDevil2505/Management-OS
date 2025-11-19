@@ -2728,12 +2728,13 @@ const OverallAnalysisTab = ({
           }
         }
 
-        const formulaColumns = [{
-          column: 'Avg Adjusted Price',
+        const formulaColumns = [
+          {
+          column: 'Adj Price',
           getFormula: (R, C, headers, ws) => {
             const avgSizeCol = headers.indexOf('Avg Size');
-            const salePriceCol = headers.indexOf('Avg Sale Price');
-            const deltaCol = headers.indexOf('Delta %');
+            const salePriceCol = headers.indexOf('Sale Price');
+            const deltaCol = headers.indexOf('Delta');
 
             if (avgSizeCol === -1 || salePriceCol === -1 || baselineRowIndexCF === -1) return null;
 
