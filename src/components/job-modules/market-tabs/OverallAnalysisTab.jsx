@@ -1927,7 +1927,7 @@ const OverallAnalysisTab = ({
         group.avgSizeAll ? Math.round(group.avgSizeAll) : '—',
         group.salesCount,
         group.avgYearSales || '—',
-        group.avgSizeSales ? Math.round(group.avgSizeSales) : '—',
+        group.avgSizeSales ? Math.round(group.avgSizeSales) : '��',
         group.salesCount > 0 ? Math.round(group.avgPrice) : '—',
         group.salesCount === 0 ? '—' : group.isBaseline ? '—' : Math.round(group.avgAdjustedPrice),
         group.salesCount > 0 && group.deltaPercent !== 0 ? Math.round(group.deltaPercent) : group.salesCount === 0 ? '—' : 'BASELINE',
@@ -2717,12 +2717,12 @@ const OverallAnalysisTab = ({
         ]);
 
         // Find the baseline row for Condo Floor analysis
-        const deltaColIndexCF = headers.indexOf('Delta %');
+        const deltaColIndexCF = headers.indexOf('Delta');
         let baselineRowIndexCF = -1;
 
         for (let i = 0; i < data.length; i++) {
           const deltaValue = data[i][deltaColIndexCF];
-          if (deltaValue === 'BASELINE' || deltaValue === 0) {
+          if (deltaValue === 'BASELINE') {
             baselineRowIndexCF = i + 1;
             break;
           }
