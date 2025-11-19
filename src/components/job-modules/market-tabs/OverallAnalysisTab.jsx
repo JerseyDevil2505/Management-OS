@@ -495,78 +495,114 @@ const OverallAnalysisTab = ({
     const validSales = filteredProperties.filter(p => p.values_norm_time && p.values_norm_time > 0);
     
     const groups = {
-      'New': { 
-        label: 'New (0-10 years)', 
+      'New': {
+        label: 'New (0-10 years)',
         minYear: currentYear - 10,
         isCCF: true,
         allProperties: [],
-        salesProperties: [], 
+        salesProperties: [],
         // Totals for ALL
         totalSizeAll: 0,
         totalYearAll: 0,
         // Totals for SALES
-        totalPrice: 0, 
+        totalPrice: 0,
         totalSizeSales: 0,
         totalYearSales: 0,
         // Counts
         propertyCount: 0,
-        salesCount: 0 
+        salesCount: 0,
+        // Calculated metrics
+        avgPrice: 0,
+        avgSize: 0,
+        avgSizeSales: 0,
+        avgAdjustedPrice: 0,
+        delta: 0,
+        deltaPercent: 0,
+        isBaseline: false
       },
-      'Newer': { 
-        label: 'Newer (11-20 years)', 
+      'Newer': {
+        label: 'Newer (11-20 years)',
         minYear: currentYear - 20,
         maxYear: currentYear - 11,
         isCCF: true,
         allProperties: [],
-        salesProperties: [], 
+        salesProperties: [],
         totalSizeAll: 0,
         totalYearAll: 0,
-        totalPrice: 0, 
+        totalPrice: 0,
         totalSizeSales: 0,
         totalYearSales: 0,
         propertyCount: 0,
-        salesCount: 0 
+        salesCount: 0,
+        avgPrice: 0,
+        avgSize: 0,
+        avgSizeSales: 0,
+        avgAdjustedPrice: 0,
+        delta: 0,
+        deltaPercent: 0,
+        isBaseline: false
       },
-      'Moderate': { 
-        label: 'Moderate (21-35 years)', 
+      'Moderate': {
+        label: 'Moderate (21-35 years)',
         minYear: currentYear - 35,
         maxYear: currentYear - 21,
         allProperties: [],
-        salesProperties: [], 
+        salesProperties: [],
         totalSizeAll: 0,
         totalYearAll: 0,
-        totalPrice: 0, 
+        totalPrice: 0,
         totalSizeSales: 0,
         totalYearSales: 0,
         propertyCount: 0,
-        salesCount: 0 
+        salesCount: 0,
+        avgPrice: 0,
+        avgSize: 0,
+        avgSizeSales: 0,
+        avgAdjustedPrice: 0,
+        delta: 0,
+        deltaPercent: 0,
+        isBaseline: false
       },
-      'Older': { 
-        label: 'Older (36-50 years)', 
+      'Older': {
+        label: 'Older (36-50 years)',
         minYear: currentYear - 50,
         maxYear: currentYear - 36,
         allProperties: [],
-        salesProperties: [], 
+        salesProperties: [],
         totalSizeAll: 0,
         totalYearAll: 0,
-        totalPrice: 0, 
+        totalPrice: 0,
         totalSizeSales: 0,
         totalYearSales: 0,
         propertyCount: 0,
-        salesCount: 0 
+        salesCount: 0,
+        avgPrice: 0,
+        avgSize: 0,
+        avgSizeSales: 0,
+        avgAdjustedPrice: 0,
+        delta: 0,
+        deltaPercent: 0,
+        isBaseline: false
       },
-      'Historic': { 
-        label: 'Historic (50+ years)', 
+      'Historic': {
+        label: 'Historic (50+ years)',
         maxYear: currentYear - 51,
         allProperties: [],
-        salesProperties: [], 
+        salesProperties: [],
         totalSizeAll: 0,
         totalYearAll: 0,
-        totalPrice: 0, 
+        totalPrice: 0,
         totalSizeSales: 0,
         totalYearSales: 0,
         propertyCount: 0,
-        salesCount: 0 
+        salesCount: 0,
+        avgPrice: 0,
+        avgSize: 0,
+        avgSizeSales: 0,
+        avgAdjustedPrice: 0,
+        delta: 0,
+        deltaPercent: 0,
+        isBaseline: false
       }
     };
 
