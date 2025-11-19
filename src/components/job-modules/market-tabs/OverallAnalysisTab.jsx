@@ -2568,6 +2568,120 @@ const OverallAnalysisTab = ({
         }
       }
 
+      // Condo End vs Interior Analysis
+      if (analysis.condo.endIntGroups && Object.keys(analysis.condo.endIntGroups).length > 0) {
+        const headers = [
+          'VCS Unit Type',
+          'Count',
+          'Avg Size',
+          'Sale Price',
+          'Adj Price',
+          'Delta'
+        ];
+
+        const data = [];
+        Object.entries(analysis.condo.endIntGroups).forEach(([vcs, vcsGroup]) => {
+          // Interior Unit (baseline)
+          if (vcsGroup.interiorUnits && vcsGroup.interiorUnits.count > 0) {
+            data.push([
+              vcs + '-Interior Unit',
+              vcsGroup.interiorUnits.count,
+              vcsGroup.interiorUnits.avgSize ? Math.round(vcsGroup.interiorUnits.avgSize) : '',
+              vcsGroup.interiorUnits.avgPrice ? Math.round(vcsGroup.interiorUnits.avgPrice) : '',
+              '',
+              'BASELINE'
+            ]);
+          }
+          // End Unit
+          if (vcsGroup.endUnits && vcsGroup.endUnits.count > 0) {
+            data.push([
+              vcs + '-End Unit',
+              vcsGroup.endUnits.count,
+              vcsGroup.endUnits.avgSize ? Math.round(vcsGroup.endUnits.avgSize) : '',
+              vcsGroup.endUnits.avgPrice ? Math.round(vcsGroup.endUnits.avgPrice) : '',
+              vcsGroup.endUnits.avgAdjustedPrice ? Math.round(vcsGroup.endUnits.avgAdjustedPrice) : '',
+              vcsGroup.deltaPercent !== undefined ? vcsGroup.deltaPercent : ''
+            ]);
+          }
+        });
+
+        if (data.length > 0) {
+          const formulaColumns = [
+            {
+              column: 'Adj Price',
+              getFormula: (R, C, headers, ws) => {
+                const unitTypeCol = headers.indexOf('VCS Unit Type');
+                const avgSizeCol = headers.indexOf('Avg Size');
+                const salePriceCol = headers.indexOf('Sale Price');
+
+                if (unitTypeCol === -1 || avgSizeCol === -1 || salePriceCol === -1) return null;
+
+                const unitTypeCell = XLSX.utils.encode_cell({ r: R, c: unitTypeCol });
+                const unitTypeValue = ws[unitTypeCell]?.v;
+
+                // Only apply formula to End Unit rows
+                if (!unitTypeValue || unitTypeValue.indexOf('End Unit') === -1) {
+                  return null;
+                }
+
+                // Find the corresponding Interior Unit row (previous row should be interior)
+                const baselineRow = R - 1;
+                if (baselineRow < 1) return null;
+
+                const baselineSizeCell = XLSX.utils.encode_cell({ r: baselineRow, c: avgSizeCol });
+                const currentSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+                const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
+                const baselineSizeValue = ws[baselineSizeCell]?.v;
+                const currentSizeValue = ws[currentSizeCell]?.v;
+                const salePriceValue = ws[salePriceCell]?.v;
+
+                if (typeof baselineSizeValue === 'number' && typeof currentSizeValue === 'number' &&
+                    typeof salePriceValue === 'number' && currentSizeValue > 0) {
+                  return `(($${baselineSizeCell}-${currentSizeCell})*((${salePriceCell}/${currentSizeCell})*0.5))+${salePriceCell}`;
+                }
+                return null;
+              }
+            },
+            {
+              column: 'Delta',
+              getFormula: (R, C, headers, ws) => {
+                const unitTypeCol = headers.indexOf('VCS Unit Type');
+                const adjPriceCol = headers.indexOf('Adj Price');
+                const salePriceCol = headers.indexOf('Sale Price');
+
+                if (unitTypeCol === -1 || adjPriceCol === -1 || salePriceCol === -1) return null;
+
+                const unitTypeCell = XLSX.utils.encode_cell({ r: R, c: unitTypeCol });
+                const unitTypeValue = ws[unitTypeCell]?.v;
+
+                // Only apply formula to End Unit rows
+                if (!unitTypeValue || unitTypeValue.indexOf('End Unit') === -1) {
+                  return null;
+                }
+
+                // Find the corresponding Interior Unit row (previous row should be interior)
+                const baselineRow = R - 1;
+                if (baselineRow < 1) return null;
+
+                const currentAdjPriceCell = XLSX.utils.encode_cell({ r: R, c: adjPriceCol });
+                const baselineSalePriceCell = XLSX.utils.encode_cell({ r: baselineRow, c: salePriceCol });
+                const currentAdjPriceValue = ws[currentAdjPriceCell]?.v;
+                const baselineSalePriceValue = ws[baselineSalePriceCell]?.v;
+
+                if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
+                    baselineSalePriceValue > 0) {
+                  return { f: `((${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell})`, z: '0.0%' };
+                }
+                return null;
+              }
+            }
+          ];
+
+          const ws = createFormattedSheet(headers, data, { formulaColumns });
+          XLSX.utils.book_append_sheet(wb, ws, 'Condo End-Interior');
+        }
+      }
+
       // Condo Floor Analysis (now VCS-based, export flattened version)
       if (analysis.condo.vcsFloorGroups && Object.keys(analysis.condo.vcsFloorGroups).length > 0) {
         // Flatten VCS floor data for Excel export
