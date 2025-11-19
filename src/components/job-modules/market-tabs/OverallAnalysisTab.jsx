@@ -1113,11 +1113,17 @@ const OverallAnalysisTab = ({
       bedroomGroup.properties.push(p);
       bedroomGroup.propertiesCount++;
       bedroomGroup.totalSize += p.asset_sfla || 0;
+
       // If this property has a normalized sale, count it as a sale
-      if (p.values_norm_time && p.values_norm_time > 0) {
-        bedroomGroup.salesProperties.push(p);
+      // (prefer PMA lookup, fallback to property field)
+      const keyForLookup = p.property_composite_key;
+      const timeNormFromPMA = timeNormalizedLookup.get(keyForLookup);
+      const timePrice = (timeNormFromPMA && timeNormFromPMA > 0) ? timeNormFromPMA : (p.values_norm_time && p.values_norm_time > 0 ? p.values_norm_time : null);
+
+      if (timePrice) {
+        bedroomGroup.salesProperties.push({ ...p, _time_normalized_price: timePrice });
         bedroomGroup.salesCount++;
-        bedroomGroup.totalPrice += (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0));
+        bedroomGroup.totalPrice += timePrice;
         bedroomGroup.totalSizeSales += p.asset_sfla || 0;
       }
     });
