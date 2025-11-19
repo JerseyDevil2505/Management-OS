@@ -1930,7 +1930,7 @@ const OverallAnalysisTab = ({
         group.avgSizeSales ? Math.round(group.avgSizeSales) : '',
         group.salesCount > 0 ? Math.round(group.avgPrice) : '',
         group.salesCount === 0 ? '' : group.isBaseline ? '' : Math.round(group.avgAdjustedPrice),
-        group.salesCount > 0 && group.deltaPercent !== 0 ? Math.round(group.deltaPercent) : group.salesCount === 0 ? '' : 'BASELINE',
+        group.isBaseline ? 'BASELINE' : '',
         group.cmeBracket ? group.cmeBracket.label : '',
         group.cmeBracket ? group.cmeBracket.color : ''
       ]);
@@ -3462,7 +3462,7 @@ const OverallAnalysisTab = ({
                 >
                   <div>
                     <h3 className="text-lg font-semibold">Condo Design Analysis</h3>
-                    <div className="text-xs text-gray-500 mt-1">Average-based comparison • Overall Avg: {formatCurrency(analysis.condo.overallAvgPrice)} @ {formatNumber(analysis.condo.overallAvgSize)} SF</div>
+                    <div className="text-xs text-gray-500 mt-1">Average-based comparison ��� Overall Avg: {formatCurrency(analysis.condo.overallAvgPrice)} @ {formatNumber(analysis.condo.overallAvgSize)} SF</div>
                   </div>
                   {expandedSections.condoDesign ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                 </div>
