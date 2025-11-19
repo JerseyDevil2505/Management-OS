@@ -1801,7 +1801,8 @@ const OverallAnalysisTab = ({
         const colIndex = headers.indexOf(column);
         if (colIndex === -1) return;
 
-        for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+        const maxRows = Math.min(range.e.r, range.s.r + 10000); // Safety limit: max 10000 rows
+        for (let R = range.s.r + 1; R <= maxRows; ++R) {
           const cellAddress = XLSX.utils.encode_cell({ r: R, c: colIndex });
           const formula = getFormula(R, colIndex, headers, ws);
 
@@ -1850,8 +1851,10 @@ const OverallAnalysisTab = ({
       const colorColumnsToApply = colorColumns.length > 0 ? colorColumns :
         (colorColumnIndex >= 0 ? [colorColumnIndex] : []);
 
-      for (let R = range.s.r; R <= range.e.r; ++R) {
-        for (let C = range.s.c; C <= range.e.c; ++C) {
+      const maxRows = Math.min(range.e.r, 10000); // Safety limit: max 10000 rows
+      const maxCols = Math.min(range.e.c, 100); // Safety limit: max 100 columns
+      for (let R = range.s.r; R <= maxRows; ++R) {
+        for (let C = range.s.c; C <= maxCols; ++C) {
           const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
           if (!ws[cellAddress]) continue;
 
