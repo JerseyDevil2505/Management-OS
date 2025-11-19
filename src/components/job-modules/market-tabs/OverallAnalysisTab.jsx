@@ -2757,18 +2757,19 @@ const OverallAnalysisTab = ({
             }
             return null;
           }
-        }, {
-          column: 'Delta %',
+        },
+          {
+          column: 'Delta',
           getFormula: (R, C, headers, ws) => {
-            const adjPriceCol = headers.indexOf('Avg Adjusted Price');
-            const salePriceCol = headers.indexOf('Avg Sale Price');
-            const deltaCol = headers.indexOf('Delta %');
+            const adjPriceCol = headers.indexOf('Adj Price');
+            const salePriceCol = headers.indexOf('Sale Price');
+            const deltaCol = headers.indexOf('Delta');
 
             if (adjPriceCol === -1 || salePriceCol === -1 || baselineRowIndexCF === -1) return null;
 
             const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
             const deltaValue = ws[deltaCell]?.v;
-            if (deltaValue === 'BASELINE' || deltaValue === 0) {
+            if (deltaValue === 'BASELINE') {
               return null;
             }
 
@@ -2779,11 +2780,12 @@ const OverallAnalysisTab = ({
 
             if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
                 baselineSalePriceValue > 0) {
-              return `((${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell})*100`;
+              return { f: `((${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell})`, z: '0.0%' };
             }
             return null;
           }
-        }];
+        }
+        ];
 
         const ws = createFormattedSheet(headers, data, { formulaColumns });
         XLSX.utils.book_append_sheet(wb, ws, 'Condo Floor');
@@ -3385,7 +3387,7 @@ const OverallAnalysisTab = ({
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearAll > 0 ? designGroup.avgYearAll : '—'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeAll > 0 ? formatNumber(designGroup.avgSizeAll) : '—'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearSales > 0 ? designGroup.avgYearSales : '��'}</div>
-                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeSales > 0 ? formatNumber(designGroup.avgSizeSales) : '������'}</div>
+                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeSales > 0 ? formatNumber(designGroup.avgSizeSales) : '�������'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">
                                         {designGroup.salesCount > 0 ? formatCurrency(designGroup.avgPrice) : '—'}
                                       </div>
