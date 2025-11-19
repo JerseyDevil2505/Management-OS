@@ -2279,7 +2279,7 @@ const OverallAnalysisTab = ({
                 typeGroup.avgYearSales || '—',
                 typeGroup.avgSizeSales ? Math.round(typeGroup.avgSizeSales) : '—',
                 typeGroup.avgPrice ? Math.round(typeGroup.avgPrice) : '—',
-                typeGroup.avgAdjustedPrice === 0 ? '—' : typeGroup.isBaseline ? '—' : Math.round(typeGroup.avgAdjustedPrice),
+                typeGroup.avgAdjustedPrice === 0 ? '��' : typeGroup.isBaseline ? '—' : Math.round(typeGroup.avgAdjustedPrice),
                 typeGroup.deltaPercent !== 0 ? `${typeGroup.deltaPercent.toFixed(0)}%` : 'VCS BASE',
                 typeCME ? typeCME.label : '',
                 typeCME ? typeCME.color : ''
@@ -2713,7 +2713,7 @@ const OverallAnalysisTab = ({
           floor.avgAdjustedPrice === 0 ? '' : floor.isBaseline ? '' : Math.round(floor.avgAdjustedPrice),
           floor.deltaPercent !== undefined && floor.deltaPercent !== 0 ? floor.deltaPercent : floor.isBaseline ? 'BASELINE' : '���',
           floor.avgAdjustedPrice === 0 ? '—' : floor.isBaseline ? '—' : Math.round(floor.avgAdjustedPrice),
-          floor.deltaPercent ? Math.round(floor.deltaPercent) : floor.isBaseline ? 'BASELINE' : '—'
+          floor.deltaPercent !== undefined && floor.deltaPercent !== 0 ? floor.deltaPercent : floor.isBaseline ? 'BASELINE' : ''
         ]);
 
         // Find the baseline row for Condo Floor analysis
