@@ -2134,7 +2134,7 @@ const OverallAnalysisTab = ({
         group.label,
         group.propertyCount,
         group.avgYearAll || '—',
-        group.avgSizeAll ? Math.round(group.avgSizeAll) : '���',
+        group.avgSizeAll ? Math.round(group.avgSizeAll) : '—',
         group.salesCount,
         group.avgYearSales || '—',
         group.avgSizeSales ? Math.round(group.avgSizeSales) : '—',
@@ -2493,46 +2493,75 @@ const OverallAnalysisTab = ({
 
         if (data.length > 0) {
           // Find the baseline row for Condo Bedroom analysis
-          const deltaColIndexCB = headers.indexOf('Delta %');
+          const deltaColIndexCB = headers.indexOf('Delta');
           let baselineRowIndexCB = -1;
 
           for (let i = 0; i < data.length; i++) {
             const deltaValue = data[i][deltaColIndexCB];
-            if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+            if (deltaValue === 'BASELINE') {
               baselineRowIndexCB = i + 1;
               break;
             }
           }
 
-          const formulaColumns = [{
-            column: 'Avg Adjusted Price',
-            getFormula: (R, C, headers, ws) => {
-              const avgSizeCol = headers.indexOf('Avg Size (All)');
-              const salePriceCol = headers.indexOf('Avg Sale Price');
-              const deltaCol = headers.indexOf('Delta %');
+          const formulaColumns = [
+            {
+              column: 'Adj Price',
+              getFormula: (R, C, headers, ws) => {
+                const avgSizeCol = headers.indexOf('Avg Size');
+                const salePriceCol = headers.indexOf('Sale Price');
+                const deltaCol = headers.indexOf('Delta');
 
-              if (avgSizeCol === -1 || salePriceCol === -1 || baselineRowIndexCB === -1) return null;
+                if (avgSizeCol === -1 || salePriceCol === -1 || baselineRowIndexCB === -1) return null;
 
-              const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
-              const deltaValue = ws[deltaCell]?.v;
-              if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+                const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
+                const deltaValue = ws[deltaCell]?.v;
+                if (deltaValue === 'BASELINE') {
+                  return null;
+                }
+
+                const baselineSizeCell = XLSX.utils.encode_cell({ r: baselineRowIndexCB, c: avgSizeCol });
+                const currentSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+                const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
+                const baselineSizeValue = ws[baselineSizeCell]?.v;
+                const currentSizeValue = ws[currentSizeCell]?.v;
+                const salePriceValue = ws[salePriceCell]?.v;
+
+                if (typeof baselineSizeValue === 'number' && typeof currentSizeValue === 'number' &&
+                    typeof salePriceValue === 'number' && currentSizeValue > 0) {
+                  return `(($${baselineSizeCell}-${currentSizeCell})*((${salePriceCell}/${currentSizeCell})*0.5))+${salePriceCell}`;
+                }
                 return null;
               }
+            },
+            {
+              column: 'Delta',
+              getFormula: (R, C, headers, ws) => {
+                const adjPriceCol = headers.indexOf('Adj Price');
+                const salePriceCol = headers.indexOf('Sale Price');
+                const deltaCol = headers.indexOf('Delta');
 
-              const baselineSizeCell = XLSX.utils.encode_cell({ r: baselineRowIndexCB, c: avgSizeCol });
-              const currentSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
-              const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
-              const baselineSizeValue = ws[baselineSizeCell]?.v;
-              const currentSizeValue = ws[currentSizeCell]?.v;
-              const salePriceValue = ws[salePriceCell]?.v;
+                if (adjPriceCol === -1 || salePriceCol === -1 || baselineRowIndexCB === -1) return null;
 
-              if (typeof baselineSizeValue === 'number' && typeof currentSizeValue === 'number' &&
-                  typeof salePriceValue === 'number' && currentSizeValue > 0) {
-                return `(($${baselineSizeCell}-${currentSizeCell})*((${salePriceCell}/${currentSizeCell})*0.5))+${salePriceCell}`;
+                const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
+                const deltaValue = ws[deltaCell]?.v;
+                if (deltaValue === 'BASELINE') {
+                  return null;
+                }
+
+                const currentAdjPriceCell = XLSX.utils.encode_cell({ r: R, c: adjPriceCol });
+                const baselineSalePriceCell = XLSX.utils.encode_cell({ r: baselineRowIndexCB, c: salePriceCol });
+                const currentAdjPriceValue = ws[currentAdjPriceCell]?.v;
+                const baselineSalePriceValue = ws[baselineSalePriceCell]?.v;
+
+                if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
+                    baselineSalePriceValue > 0) {
+                  return { f: `((${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell})`, z: '0.0%' };
+                }
+                return null;
               }
-              return null;
             }
-          }];
+          ];
 
           const ws = createFormattedSheet(headers, data, { formulaColumns });
           XLSX.utils.book_append_sheet(wb, ws, 'Condo Bedroom');
@@ -3241,7 +3270,7 @@ const OverallAnalysisTab = ({
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearAll > 0 ? designGroup.avgYearAll : '—'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeAll > 0 ? formatNumber(designGroup.avgSizeAll) : '—'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearSales > 0 ? designGroup.avgYearSales : '��'}</div>
-                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeSales > 0 ? formatNumber(designGroup.avgSizeSales) : '�������'}</div>
+                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeSales > 0 ? formatNumber(designGroup.avgSizeSales) : '������'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">
                                         {designGroup.salesCount > 0 ? formatCurrency(designGroup.avgPrice) : '—'}
                                       </div>
