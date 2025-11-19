@@ -1102,7 +1102,7 @@ const { data, error} = await supabase.storage
 hr-documents/
 ├── employee-handbook.pdf
 ├── i9-form.pdf
-└── time-off-request-form.pdf
+��── time-off-request-form.pdf
 ```
 
 **Access Pattern:**
@@ -1163,6 +1163,57 @@ LEFT JOIN employees e ON ja.employee_id = e.id;
 **Status:** Referenced in code but not yet created
 
 **Implementation Note:** These views should be created in a migration script to improve query performance and simplify component code.
+
+---
+
+## 🔄 Latest Session Summary (January 2025)
+
+### ✅ Completed: Overall Analysis Tab - Baseline Normalization & Excel Export
+
+**Context:** Fixed adjusted price calculations and Excel export formulas to use correct baseline normalization methodology.
+
+**Key Changes:**
+1. **Baseline Normalization Logic** - All sections now normalize to the correct baseline:
+   - **Type & Use**: Normalizes to Single Family (or highest priced group)
+   - **Design Analysis**: Normalizes to highest priced design
+   - **Year Built**: Normalizes to highest priced year bracket
+   - **VCS by Type**: Hierarchical - each level normalizes to its own baseline
+   - **Condo Design**: Normalizes to highest priced condo design
+   - **Condo Floor**: Normalizes to 1st Floor
+
+2. **Delta Calculation Fix**: Changed from `(Adj Price - Baseline Adj Price) / Baseline Adj Price` to `(Adj Price - Baseline Sale Price) / Baseline Sale Price`
+
+3. **UI Display**: Baseline rows now show "—" for Adj Price column (not a calculated value)
+
+4. **Excel Export Enhancements**:
+   - Added formulas for "Adj Price" columns using Jim's 50% size adjustment
+   - Added formulas for "Delta" columns: `((Adj Price - Baseline Sale Price) / Baseline Sale Price) * 100`
+   - Baseline rows export as "—" for Adj Price, "BASELINE" for Delta
+   - All formulas reference actual Excel cells (not hardcoded values)
+   - Proper percentage formatting applied
+
+**Files Modified:**
+- `src/components/job-modules/market-tabs/OverallAnalysisTab.jsx` (~3,300 lines)
+
+**Status:** ✅ Complete and tested. Analysis refreshes correctly, exports show formulas.
+
+---
+
+### 📋 Next Session: Land & Cost Valuation Excel Exports
+
+**Pending Work:**
+1. **LandValuationTab.jsx** (~10,000 lines) - Add Excel export functionality
+2. **CostValuationTab.jsx** (~800 lines) - Add Excel export functionality
+
+**Approach:** Follow the pattern established in OverallAnalysisTab:
+- Use `xlsx-js-style` library
+- Create formatted worksheets with proper styling
+- Apply formulas where calculations can be represented
+- Include proper headers, column widths, and cell formatting
+
+**Note:** These are complex tabs with multiple sections. Consider breaking exports into separate worksheets within the same workbook.
+
+---
 
 ### Missing Table Clarifications
 
@@ -1814,7 +1865,7 @@ Each component receives:
 
 **Loading Progress Display:**
 ```
-┌─��───────────────────────────────────────────────┐
+┌─��───────────────────────────���───────────────────┐
 │ Loading property records                     75% │
 │ ███████████���████████████░░��░░░░░  12,450/16,600 │
 │ records loaded (assigned only)                   │
@@ -2524,7 +2575,7 @@ Formula: (((Group Avg Size - Sale Size) × ((Sale Price ÷ Sale Size) × 0.50)) 
 ┌─────────────────────────────────────────────┐
 │ Total Sales: 1,234                          │
 │ Time Normalized: 1,234                      │
-│ Average Ratio: 68.5%                        │
+�� Average Ratio: 68.5%                        │
 │ Flagged Outliers: 142                       │
 │ Pending Review: 42                          │
 │ Kept: 89 | Rejected: 11                     │
@@ -3585,7 +3636,7 @@ The component displays a detailed analysis table with the following columns:
 
 **Configuration:**
 ```
-┌─────────────────────────────────────────┐
+┌──────���──────────────────────────────────┐
 │ Sale Year Range:                        │
 │ From: [2021 ▼]  To: [2024 ▼]           │
 │                                         │
@@ -4202,7 +4253,7 @@ const packagePairs = Object.values(packages).filter(group => group.length > 1);
 ┌────────────────��────────────────────────────────────────────────────┐
 │ Package Sales Analysis                                              │
 ├────────────────���────────────────────────────────────────────────────┤
-│ Package Pairs Found: 12                                             │
+│ Package Pairs Found: 12                                             ���
 │                                                                      │
 │ Average Package Price: $425,000                                     │
 │ Average Single Property (same VCS): $285,000                        │
@@ -4231,7 +4282,7 @@ Deed Book 1234, Page 567 (Sale Date: 03/15/2024)
 
 **VCS Rollup Results:**
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
+┌────────────────────────��────────────────────────────────────────────────────┐
 │ VCS: A1 - DOWNTOWN RESIDENTIAL                                              │
 ├─────────────────���───────────────────────────���───────────────────────────────┤
 │ WITH Additional Cards (23 properties):                                      │
@@ -4786,7 +4837,7 @@ console.log('Calculation breakdown:', {
 │                                             │
 │   This will analyze property condition      │
 │   impacts on value using Jim's formula.     │
-└─────────────────────────────────────────────┘
+└───────────��─────────────────────────────────┘
 ```
 
 **2. No Matching Data Found:**
