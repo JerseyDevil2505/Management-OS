@@ -930,25 +930,27 @@ const OverallAnalysisTab = ({
       group.avgSize = group.count > 0 ? group.totalSize / group.count : 0;
     });
 
-    // Find baseline design (highest priced)
-    let baselineDesign = null;
-    let maxDesignPrice = 0;
+    // Calculate OVERALL average size and price across ALL designs (instead of baseline)
+    let overallTotalPrice = 0;
+    let overallTotalSize = 0;
+    let overallCount = 0;
     Object.values(designGroups).forEach(group => {
-      if (group.count > 0 && group.avgPrice > maxDesignPrice) {
-        maxDesignPrice = group.avgPrice;
-        baselineDesign = group;
-      }
+      overallTotalPrice += group.totalPrice;
+      overallTotalSize += group.totalSize;
+      overallCount += group.count;
     });
+    const overallAvgPrice = overallCount > 0 ? overallTotalPrice / overallCount : 0;
+    const overallAvgSize = overallCount > 0 ? overallTotalSize / overallCount : 0;
 
-    // Calculate adjusted prices using BASELINE size
+    // Calculate adjusted prices using OVERALL AVERAGE size
     Object.values(designGroups).forEach(group => {
-      if (group.count > 0 && baselineDesign) {
+      if (group.count > 0 && overallAvgSize > 0) {
         let totalAdjusted = 0;
         group.properties.forEach(p => {
           const adjusted = calculateAdjustedPrice(
             (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
             p.asset_sfla || 0,
-            baselineDesign.avgSize  // Use BASELINE size
+            overallAvgSize  // Use OVERALL AVERAGE size
           );
           totalAdjusted += adjusted;
         });
@@ -959,15 +961,81 @@ const OverallAnalysisTab = ({
     });
 
     // Calculate design deltas
-    // Delta is calculated as: (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
+    // Delta is calculated as: (Current Adj Price - Overall Avg Price) / Overall Avg Price
     Object.values(designGroups).forEach(group => {
-      if (baselineDesign && group !== baselineDesign) {
-        group.deltaPercent = baselineDesign.avgPrice > 0 ?
-          ((group.avgAdjustedPrice - baselineDesign.avgPrice) / baselineDesign.avgPrice * 100) : 0;
+      if (overallAvgPrice > 0) {
+        group.deltaPercent = ((group.avgAdjustedPrice - overallAvgPrice) / overallAvgPrice * 100);
       } else {
         group.deltaPercent = 0;
       }
-      group.isBaseline = (group === baselineDesign);
+    });
+
+    // End vs Interior Analysis (NEW)
+    const endIntGroups = {};
+    condos.forEach(p => {
+      const vcs = p.new_vcs || p.property_vcs || 'Unknown';
+      const designName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || '' : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || '' : p.asset_design_style || '')) : p.asset_design_style || '';
+      const designUpper = String(designName).toUpperCase();
+
+      let unitType = 'Unknown';
+      if (designUpper.includes('END')) unitType = 'End Unit';
+      else if (designUpper.includes('INT')) unitType = 'Interior Unit';
+
+      // Skip unknown types
+      if (unitType === 'Unknown') return;
+
+      if (!endIntGroups[vcs]) {
+        endIntGroups[vcs] = {
+          code: vcs,
+          endUnits: { properties: [], totalPrice: 0, totalSize: 0, count: 0 },
+          interiorUnits: { properties: [], totalPrice: 0, totalSize: 0, count: 0 }
+        };
+      }
+
+      const targetGroup = unitType === 'End Unit' ? endIntGroups[vcs].endUnits : endIntGroups[vcs].interiorUnits;
+      targetGroup.properties.push(p);
+      targetGroup.count++;
+      targetGroup.totalPrice += (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0));
+      targetGroup.totalSize += p.asset_sfla || 0;
+    });
+
+    // Calculate End/Int averages and adjusted prices
+    Object.values(endIntGroups).forEach(vcsGroup => {
+      ['endUnits', 'interiorUnits'].forEach(key => {
+        const group = vcsGroup[key];
+        group.avgPrice = group.count > 0 ? group.totalPrice / group.count : 0;
+        group.avgSize = group.count > 0 ? group.totalSize / group.count : 0;
+      });
+
+      // Use interior unit size as baseline for adjustment (interior is typically more common)
+      const baselineSize = vcsGroup.interiorUnits.avgSize > 0 ? vcsGroup.interiorUnits.avgSize : vcsGroup.endUnits.avgSize;
+
+      ['endUnits', 'interiorUnits'].forEach(key => {
+        const group = vcsGroup[key];
+        if (group.count > 0 && baselineSize > 0) {
+          let totalAdjusted = 0;
+          group.properties.forEach(p => {
+            const adjusted = calculateAdjustedPrice(
+              (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
+              p.asset_sfla || 0,
+              baselineSize
+            );
+            totalAdjusted += adjusted;
+          });
+          group.avgAdjustedPrice = totalAdjusted / group.count;
+        } else {
+          group.avgAdjustedPrice = 0;
+        }
+      });
+
+      // Calculate delta (End vs Interior)
+      if (vcsGroup.interiorUnits.avgPrice > 0 && vcsGroup.endUnits.avgAdjustedPrice > 0) {
+        vcsGroup.deltaPercent = ((vcsGroup.endUnits.avgAdjustedPrice - vcsGroup.interiorUnits.avgPrice) / vcsGroup.interiorUnits.avgPrice * 100);
+        vcsGroup.deltaCurrency = vcsGroup.endUnits.avgAdjustedPrice - vcsGroup.interiorUnits.avgPrice;
+      } else {
+        vcsGroup.deltaPercent = 0;
+        vcsGroup.deltaCurrency = 0;
+      }
     });
 
     // VCS Bedroom Analysis
@@ -1162,10 +1230,11 @@ const OverallAnalysisTab = ({
       const designStr = String(designName).toUpperCase();
       let floor = 'Unknown';
 
-      if (storyStr.includes('1ST') || designStr.includes('1ST FLOOR')) floor = '1ST FLOOR';
-      else if (storyStr.includes('2ND') || designStr.includes('2ND FLOOR')) floor = '2ND FLOOR';
-      else if (storyStr.includes('3RD') || designStr.includes('3RD FLOOR')) floor = '3RD FLOOR';
-      else if (storyStr.includes('TOP') || designStr.includes('TOP FLOOR')) floor = 'TOP FLOOR';
+      // Check for floor patterns (including STRY/STORY in addition to FLR/FLOOR)
+      if (storyStr.includes('1ST') || designStr.includes('1ST')) floor = '1ST FLOOR';
+      else if (storyStr.includes('2ND') || designStr.includes('2ND')) floor = '2ND FLOOR';
+      else if (storyStr.includes('3RD') || designStr.includes('3RD')) floor = '3RD FLOOR';
+      else if (storyStr.includes('TOP') || designStr.includes('TOP')) floor = 'TOP FLOOR';
       
       if (!floorGroups[floor]) {
         floorGroups[floor] = {
@@ -1223,12 +1292,75 @@ const OverallAnalysisTab = ({
       });
     }
 
+    // Calculate bedroom summary across all VCS
+    const bedroomSummary = {
+      studioTo1Bed: { count: 0, avgDelta: 0, avgDeltaPct: 0, hasData: false },
+      oneBedTo2Bed: { count: 0, avgDelta: 0, avgDeltaPct: 0, hasData: false },
+      twoBedTo3Bed: { count: 0, avgDelta: 0, avgDeltaPct: 0, hasData: false },
+      threeBedTo4Bed: { count: 0, avgDelta: 0, avgDeltaPct: 0, hasData: false }
+    };
+
+    Object.values(vcsBedroomGroups).forEach(vcsGroup => {
+      const beds = vcsGroup.bedrooms;
+
+      // Studio to 1 Bed
+      if (beds['STUDIO']?.avgAdjustedPrice > 0 && beds['1BED']?.avgAdjustedPrice > 0) {
+        const delta = beds['1BED'].avgAdjustedPrice - beds['STUDIO'].avgAdjustedPrice;
+        const deltaPct = (delta / beds['STUDIO'].avgAdjustedPrice) * 100;
+        bedroomSummary.studioTo1Bed.avgDelta += delta;
+        bedroomSummary.studioTo1Bed.avgDeltaPct += deltaPct;
+        bedroomSummary.studioTo1Bed.count++;
+        bedroomSummary.studioTo1Bed.hasData = true;
+      }
+
+      // 1 Bed to 2 Bed
+      if (beds['1BED']?.avgAdjustedPrice > 0 && beds['2BED']?.avgAdjustedPrice > 0) {
+        const delta = beds['2BED'].avgAdjustedPrice - beds['1BED'].avgAdjustedPrice;
+        const deltaPct = (delta / beds['1BED'].avgAdjustedPrice) * 100;
+        bedroomSummary.oneBedTo2Bed.avgDelta += delta;
+        bedroomSummary.oneBedTo2Bed.avgDeltaPct += deltaPct;
+        bedroomSummary.oneBedTo2Bed.count++;
+        bedroomSummary.oneBedTo2Bed.hasData = true;
+      }
+
+      // 2 Bed to 3 Bed
+      if (beds['2BED']?.avgAdjustedPrice > 0 && beds['3BED']?.avgAdjustedPrice > 0) {
+        const delta = beds['3BED'].avgAdjustedPrice - beds['2BED'].avgAdjustedPrice;
+        const deltaPct = (delta / beds['2BED'].avgAdjustedPrice) * 100;
+        bedroomSummary.twoBedTo3Bed.avgDelta += delta;
+        bedroomSummary.twoBedTo3Bed.avgDeltaPct += deltaPct;
+        bedroomSummary.twoBedTo3Bed.count++;
+        bedroomSummary.twoBedTo3Bed.hasData = true;
+      }
+
+      // 3 Bed to 4 Bed
+      if (beds['3BED']?.avgAdjustedPrice > 0 && beds['4BED']?.avgAdjustedPrice > 0) {
+        const delta = beds['4BED'].avgAdjustedPrice - beds['3BED'].avgAdjustedPrice;
+        const deltaPct = (delta / beds['3BED'].avgAdjustedPrice) * 100;
+        bedroomSummary.threeBedTo4Bed.avgDelta += delta;
+        bedroomSummary.threeBedTo4Bed.avgDeltaPct += deltaPct;
+        bedroomSummary.threeBedTo4Bed.count++;
+        bedroomSummary.threeBedTo4Bed.hasData = true;
+      }
+    });
+
+    // Calculate averages
+    Object.values(bedroomSummary).forEach(summary => {
+      if (summary.count > 0) {
+        summary.avgDelta = summary.avgDelta / summary.count;
+        summary.avgDeltaPct = summary.avgDeltaPct / summary.count;
+      }
+    });
+
     return {
       totalCondos: condos.length,
       designGroups: Object.values(designGroups),
+      overallAvgPrice,
+      overallAvgSize,
       vcsBedroomGroups,
-      floorGroups: Object.values(floorGroups),
-      baselineDesign
+      bedroomSummary,
+      endIntGroups,
+      floorGroups: Object.values(floorGroups)
     };
   }, [filteredProperties, codeDefinitions, vendorType]);
   // ==================== MAIN ANALYSIS ====================
