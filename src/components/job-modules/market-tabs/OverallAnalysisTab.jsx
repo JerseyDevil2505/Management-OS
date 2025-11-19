@@ -2702,6 +2702,7 @@ const OverallAnalysisTab = ({
           floor.isBaseline ? 'BASELINE' : '',
         ]);
 
+        console.log('[Export] Condo Floor - processing', data.length, 'rows');
         // Pre-compute VCS baseline row lookup (optimization to avoid O(n²) loops)
         const vcsBaselineMapFloor = {};
         const vcsColFloor = headers.indexOf('VCS');
@@ -2717,6 +2718,7 @@ const OverallAnalysisTab = ({
               vcsBaselineMapFloor[vcs] = index + 1; // +1 for Excel row (0-indexed to 1-indexed)
             }
           });
+          console.log('[Export] Condo Floor - baseline map:', vcsBaselineMapFloor);
         }
 
         const formulaColumns = [
