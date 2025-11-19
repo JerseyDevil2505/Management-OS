@@ -983,6 +983,7 @@ brtParsedStructureMap: {
   'asset_building_class': { parent: '6', section: '20' },
   'asset_type_use': { parent: '7', section: '21' },
   'asset_stories': { parent: '8', section: '22' },
+  'asset_story_height': { parent: '8', section: '22' },
   'asset_ext_cond': { parent: '34', section: '60' },
   'asset_int_cond': { parent: '34', section: '60' },
   'inspection_info_by': { parent: '30', section: '53' },
@@ -3981,7 +3982,7 @@ export const propertyService = {
       console.log(`✅ Preserved ${preservedDataMap.size} property assignments`);
 
     } catch (error) {
-      console.error(`�� Error in preserved fields handler:`, error.message);
+      console.error(`❌ Error in preserved fields handler:`, error.message);
     }
 
     return preservedDataMap;
