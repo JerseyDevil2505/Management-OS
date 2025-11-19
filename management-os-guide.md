@@ -1102,7 +1102,7 @@ const { data, error} = await supabase.storage
 hr-documents/
 ├── employee-handbook.pdf
 ├── i9-form.pdf
-��── time-off-request-form.pdf
+└── time-off-request-form.pdf
 ```
 
 **Access Pattern:**
@@ -1865,7 +1865,7 @@ Each component receives:
 
 **Loading Progress Display:**
 ```
-┌─��───────────────────────────���───────────────────┐
+┌─��───────────────────────────────────────────────┐
 │ Loading property records                     75% │
 │ ███████████���████████████░░��░░░░░  12,450/16,600 │
 │ records loaded (assigned only)                   │
@@ -2575,7 +2575,7 @@ Formula: (((Group Avg Size - Sale Size) × ((Sale Price ÷ Sale Size) × 0.50)) 
 ┌─────────────────────────────────────────────┐
 │ Total Sales: 1,234                          │
 │ Time Normalized: 1,234                      │
-�� Average Ratio: 68.5%                        │
+│ Average Ratio: 68.5%                        │
 │ Flagged Outliers: 142                       │
 │ Pending Review: 42                          │
 │ Kept: 89 | Rejected: 11                     │
@@ -2703,7 +2703,7 @@ standardLocations = [
 
 **Statistics Display:**
 ```
-┌─────────────────────────��────────────────���───────────────���─┐
+┌─────────────────────────��────────────────���───────────────���─��
 │ Type Use │ Total │ Avg Year │ Avg Size │ Sales │ Adj Price │
 ├───────────────────────────────────────────���────────────────┤
 │ Single   │ 1,234 │   1985   │  1,850   │  156  │ $285,000  │
@@ -2757,7 +2757,7 @@ floorPremium = ((floorPrice - firstFloorPrice) / firstFloorPrice) × 100
 │ 2ND FLOOR │  189  │ $162,000  │ -2%          │
 │ 3RD FLOOR │  145  │ $158,000  │ -4%          │
 │ PENTHOUSE │   12  │ $195,000  │ +18%         │
-└──────���─────────────���─────────────────────────┘
+└──────���─────────────����─────────────────────────┘
 ```
 
 **Bedroom Detection Logic:**
@@ -3455,7 +3455,7 @@ Component allows switching between two price calculation methods:
 
 **Price Basis Configuration:**
 ```
-┌─────────────────────────────────────────┐
+┌─────��───────────────────────────────────┐
 │ Price Basis: ⦿ Price Time              │
 │              ○ Sale Price               │
 │                                         │
@@ -3636,7 +3636,7 @@ The component displays a detailed analysis table with the following columns:
 
 **Configuration:**
 ```
-┌──────���──────────────────────────────────┐
+┌─────────────────────────────────────────┐
 │ Sale Year Range:                        │
 │ From: [2021 ▼]  To: [2024 ▼]           │
 │                                         │
@@ -3784,7 +3784,7 @@ Recommended Factor: 1.12 (median)
 ```
 ┌──���──────────────────────────────────────────────────────────┐
 │                    SUMMARY STATISTICS                       │
-├─────────────────────────────────────────────────────────────┤
+├────────────���────────────────────────────────────────────────┤
 │ Included Properties: 42                                     │
 │                                                             │
 │ Sum of Sale Prices:      $12,450,000                        │
@@ -4253,7 +4253,7 @@ const packagePairs = Object.values(packages).filter(group => group.length > 1);
 ┌────────────────��────────────────────────────────────────────────────┐
 │ Package Sales Analysis                                              │
 ├────────────────���────────────────────────────────────────────────────┤
-│ Package Pairs Found: 12                                             ���
+│ Package Pairs Found: 12                                             │
 │                                                                      │
 │ Average Package Price: $425,000                                     │
 │ Average Single Property (same VCS): $285,000                        │
@@ -4282,7 +4282,7 @@ Deed Book 1234, Page 567 (Sale Date: 03/15/2024)
 
 **VCS Rollup Results:**
 ```
-┌────────────────────────��────────────────────────────────────────────────────┐
+┌─────────────────────────────────────────────────────────────────────────────┐
 │ VCS: A1 - DOWNTOWN RESIDENTIAL                                              │
 ├─────────────────���───────────────────────────���───────────────────────────────┤
 │ WITH Additional Cards (23 properties):                                      │
@@ -4837,7 +4837,7 @@ console.log('Calculation breakdown:', {
 │                                             │
 │   This will analyze property condition      │
 │   impacts on value using Jim's formula.     │
-└───────────��─────────────────────────────────┘
+└─────────────────────────────────────────────┘
 ```
 
 **2. No Matching Data Found:**
@@ -5576,79 +5576,3 @@ Updates checklist item completion when data is entered
 Marks items as auto-completed based on module activity
 Syncs with ManagementChecklist component
 
----
-
-## 📋 TODO: Export Formatting & Formula Implementation
-
-**Status**: In Progress (Branch work)
-**Last Updated**: January 2025
-**Component**: PreValuationTab.jsx and related market analysis tabs
-
-### ✅ Completed:
-1. **Normalization Export (PreValuationTab.jsx)**
-   - ✅ Bold headers with Leelawadee font, size 10
-   - ✅ Centered alignment (horizontal and vertical)
-   - ✅ SFLA column: Number format with comma, no decimals (`#,##0`)
-   - ✅ Assessed Value, Sale Price: Currency format with $, no decimals (`$#,##0`)
-   - ✅ Time Normalized Price: Formula `=SalePrice*HPIMultiplier`, currency format
-   - ✅ Size Normalized Price: Jim's 50% formula `=((AvgSFLA-CurrentSFLA)*((TimeNormPrice/CurrentSFLA)*0.5))+TimeNormPrice`
-   - ✅ Sales Ratio: Formula `=TimeNormPrice/SalePrice`, percentage format no decimals (`0%`)
-   - ✅ Avg SFLA column: Only shows for time normalized sales
-   - ✅ Formulas only apply to properties with time normalization data
-
-### 🔲 Remaining Work:
-
-#### 1. **Market Analysis Exports**
-   **Location**: PreValuationTab.jsx (or related market tabs)
-   - [ ] Apply consistent formatting (Leelawadee, size 10, centered)
-   - [ ] Identify columns needing number/currency formatting
-   - [ ] Add formulas where calculations are displayed
-   - [ ] Set appropriate column widths
-   - [ ] Ensure formulas match UI display
-
-#### 2. **Unit Rate Config Export**
-   **Location**: PreValuationTab.jsx - Unit Rate Configuration section
-   - [ ] Apply consistent formatting (Leelawadee, size 10, centered)
-   - [ ] Format unit rate values appropriately
-   - [ ] Format lot size calculations
-   - [ ] Add formulas for calculated fields
-   - [ ] Set appropriate column widths
-   - [ ] Review BRT vs Microsystems vendor-specific exports
-
-#### 3. **Page by Page Export**
-   **Location**: LandValuationTab.jsx or related worksheet component
-   - [ ] Apply consistent formatting (Leelawadee, size 10, centered)
-   - [ ] Identify columns needing formatting (currency, percentage, number)
-   - [ ] Add formulas for calculated adjustments
-   - [ ] Set appropriate column widths
-   - [ ] Ensure formulas display for verification
-
-### 📐 Standard Formatting Template:
-```javascript
-// Base style for all cells
-const baseStyle = {
-  font: { name: 'Leelawadee', sz: 10, bold: R === 0 }, // Bold headers only
-  alignment: { horizontal: 'center', vertical: 'center' }
-};
-
-// Number formats
-'#,##0'        // Number with comma, no decimals (SFLA, counts)
-'$#,##0'       // Currency with $, no decimals (prices, values)
-'0%'           // Percentage, no decimals
-'0.00%'        // Percentage, 2 decimals (if needed)
-```
-
-### 🔑 Key Pattern (from Normalization Export):
-1. Create `rawDataForFormulas` array during export data mapping
-2. Store actual data values (not just worksheet cell references)
-3. Check raw data values to determine if formulas should be applied
-4. Extend worksheet range to include formula columns
-5. Initialize cells for formula columns even if initially empty
-6. Only apply formulas when source data exists (e.g., time normalization complete)
-
-### 📝 Notes:
-- All exports should use `xlsx-js-style` (not plain `xlsx`) for formatting support
-- Formulas should be visible in Excel for user verification
-- Column widths should be set for readability (use `ws['!cols']`)
-- Test with actual data to ensure formulas calculate correctly
-- Reference PreValuationTab.jsx `exportNormalizedSalesToExcel` function as template
