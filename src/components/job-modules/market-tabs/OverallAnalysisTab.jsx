@@ -2699,27 +2699,16 @@ const OverallAnalysisTab = ({
           floor.isBaseline ? 'BASELINE' : '',
         ]);
 
-        // Find the baseline row for Condo Floor analysis
-        const deltaColIndexCF = headers.indexOf('Delta');
-        let baselineRowIndexCF = -1;
-
-        for (let i = 0; i < data.length; i++) {
-          const deltaValue = data[i][deltaColIndexCF];
-          if (deltaValue === 'BASELINE') {
-            baselineRowIndexCF = i + 1;
-            break;
-          }
-        }
-
         const formulaColumns = [
           {
           column: 'Adj Price',
           getFormula: (R, C, headers, ws) => {
+            const vcsCol = headers.indexOf('VCS');
             const avgSizeCol = headers.indexOf('Avg Size');
             const salePriceCol = headers.indexOf('Sale Price');
             const deltaCol = headers.indexOf('Delta');
 
-            if (avgSizeCol === -1 || salePriceCol === -1 || baselineRowIndexCF === -1) return null;
+            if (vcsCol === -1 || avgSizeCol === -1 || salePriceCol === -1) return null;
 
             const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
             const deltaValue = ws[deltaCell]?.v;
@@ -2727,7 +2716,24 @@ const OverallAnalysisTab = ({
               return null;
             }
 
-            const baselineSizeCell = XLSX.utils.encode_cell({ r: baselineRowIndexCF, c: avgSizeCol });
+            // Find baseline (1ST FLOOR) for this VCS
+            const currentVcsCell = XLSX.utils.encode_cell({ r: R, c: vcsCol });
+            const currentVcs = ws[currentVcsCell]?.v;
+            let baselineRow = -1;
+
+            // Search for baseline row with matching VCS
+            for (let r = 1; r <= ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']).e.r : R; r++) {
+              const vcsCell = XLSX.utils.encode_cell({ r, c: vcsCol });
+              const deltaCheckCell = XLSX.utils.encode_cell({ r, c: deltaCol });
+              if (ws[vcsCell]?.v === currentVcs && ws[deltaCheckCell]?.v === 'BASELINE') {
+                baselineRow = r;
+                break;
+              }
+            }
+
+            if (baselineRow === -1) return null;
+
+            const baselineSizeCell = XLSX.utils.encode_cell({ r: baselineRow, c: avgSizeCol });
             const currentSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
             const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
             const baselineSizeValue = ws[baselineSizeCell]?.v;
@@ -2744,11 +2750,12 @@ const OverallAnalysisTab = ({
           {
           column: 'Delta',
           getFormula: (R, C, headers, ws) => {
+            const vcsCol = headers.indexOf('VCS');
             const adjPriceCol = headers.indexOf('Adj Price');
             const salePriceCol = headers.indexOf('Sale Price');
             const deltaCol = headers.indexOf('Delta');
 
-            if (adjPriceCol === -1 || salePriceCol === -1 || baselineRowIndexCF === -1) return null;
+            if (vcsCol === -1 || adjPriceCol === -1 || salePriceCol === -1) return null;
 
             const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
             const deltaValue = ws[deltaCell]?.v;
@@ -2756,8 +2763,25 @@ const OverallAnalysisTab = ({
               return null;
             }
 
+            // Find baseline (1ST FLOOR) for this VCS
+            const currentVcsCell = XLSX.utils.encode_cell({ r: R, c: vcsCol });
+            const currentVcs = ws[currentVcsCell]?.v;
+            let baselineRow = -1;
+
+            // Search for baseline row with matching VCS
+            for (let r = 1; r <= ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']).e.r : R; r++) {
+              const vcsCell = XLSX.utils.encode_cell({ r, c: vcsCol });
+              const deltaCheckCell = XLSX.utils.encode_cell({ r, c: deltaCol });
+              if (ws[vcsCell]?.v === currentVcs && ws[deltaCheckCell]?.v === 'BASELINE') {
+                baselineRow = r;
+                break;
+              }
+            }
+
+            if (baselineRow === -1) return null;
+
             const currentAdjPriceCell = XLSX.utils.encode_cell({ r: R, c: adjPriceCol });
-            const baselineSalePriceCell = XLSX.utils.encode_cell({ r: baselineRowIndexCF, c: salePriceCol });
+            const baselineSalePriceCell = XLSX.utils.encode_cell({ r: baselineRow, c: salePriceCol });
             const baselineSalePriceValue = ws[baselineSalePriceCell]?.v;
 
             if (ws[currentAdjPriceCell] && typeof baselineSalePriceValue === 'number' && baselineSalePriceValue > 0) {
