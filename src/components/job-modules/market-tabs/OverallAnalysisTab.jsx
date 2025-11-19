@@ -2382,71 +2382,25 @@ const OverallAnalysisTab = ({
           group.count,
           group.avgSize ? Math.round(group.avgSize) : '',
           group.avgPrice ? Math.round(group.avgPrice) : '',
-          group.avgAdjustedPrice === 0 ? '' : group.isBaseline ? '' : Math.round(group.avgAdjustedPrice),
-          group.isBaseline ? 'BASELINE' : ''
+          group.avgAdjustedPrice === 0 ? '' : Math.round(group.avgAdjustedPrice),
+          ''
         ]);
 
-        // Find the baseline row for Condo Design analysis
-        const deltaColIndexCD = headers.indexOf('Delta %');
-        let baselineRowIndexCD = -1;
-
-        for (let i = 0; i < data.length; i++) {
-          const deltaValue = data[i][deltaColIndexCD];
-          if (deltaValue === 'BASELINE' || deltaValue === 0) {
-            baselineRowIndexCD = i + 1;
-            break;
-          }
-        }
-
         const formulaColumns = [{
-          column: 'Avg Adjusted Price',
-          getFormula: (R, C, headers, ws) => {
-            const avgSizeCol = headers.indexOf('Avg Size');
-            const salePriceCol = headers.indexOf('Avg Sale Price');
-            const deltaCol = headers.indexOf('Delta %');
-
-            if (avgSizeCol === -1 || salePriceCol === -1 || baselineRowIndexCD === -1) return null;
-
-            const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
-            const deltaValue = ws[deltaCell]?.v;
-            if (deltaValue === 'BASELINE' || deltaValue === 0) {
-              return null;
-            }
-
-            const baselineSizeCell = XLSX.utils.encode_cell({ r: baselineRowIndexCD, c: avgSizeCol });
-            const currentSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
-            const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
-            const baselineSizeValue = ws[baselineSizeCell]?.v;
-            const currentSizeValue = ws[currentSizeCell]?.v;
-            const salePriceValue = ws[salePriceCell]?.v;
-
-            if (typeof baselineSizeValue === 'number' && typeof currentSizeValue === 'number' &&
-                typeof salePriceValue === 'number' && currentSizeValue > 0) {
-              return `(($${baselineSizeCell}-${currentSizeCell})*((${salePriceCell}/${currentSizeCell})*0.5))+${salePriceCell}`;
-            }
-            return null;
-          }
-        }, {
           column: 'Delta %',
           getFormula: (R, C, headers, ws) => {
             const adjPriceCol = headers.indexOf('Avg Adjusted Price');
             const salePriceCol = headers.indexOf('Avg Sale Price');
-            const deltaCol = headers.indexOf('Delta %');
 
-            if (adjPriceCol === -1 || salePriceCol === -1 || baselineRowIndexCD === -1) return null;
+            if (adjPriceCol === -1 || salePriceCol === -1) return null;
 
-            const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
-            const deltaValue = ws[deltaCell]?.v;
-            if (deltaValue === 'BASELINE' || deltaValue === 0) {
-              return null;
-            }
+            const adjPriceCell = XLSX.utils.encode_cell({ r: R, c: adjPriceCol });
+            const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
+            const salePriceValue = ws[salePriceCell]?.v;
 
-            const currentAdjPriceCell = XLSX.utils.encode_cell({ r: R, c: adjPriceCol });
-            const baselineSalePriceCell = XLSX.utils.encode_cell({ r: baselineRowIndexCD, c: salePriceCol });
-            const baselineSalePriceValue = ws[baselineSalePriceCell]?.v;
-
-            if (ws[currentAdjPriceCell] && typeof baselineSalePriceValue === 'number' && baselineSalePriceValue > 0) {
-              return `(${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell}`;
+            // Compare Adj Price to Avg Sale Price (not baseline)
+            if (ws[adjPriceCell] && typeof salePriceValue === 'number' && salePriceValue > 0) {
+              return `(${adjPriceCell}-${salePriceCell})/${salePriceCell}`;
             }
             return null;
           }
@@ -2471,7 +2425,19 @@ const OverallAnalysisTab = ({
         const data = [];
         Object.entries(analysis.condo.vcsBedroomGroups).forEach(([vcs, vcsGroup]) => {
           if (vcsGroup.bedrooms) {
-            Object.entries(vcsGroup.bedrooms).forEach(([bedrooms, group]) => {
+            // Filter out Unknown bedrooms and sort by bed count
+            const bedOrderValue = (label) => {
+              if (!label) return 999;
+              if (label === 'STUDIO') return 0;
+              const m = label.match(/^(\d+)BED$/);
+              if (m) return parseInt(m[1], 10);
+              return 999;
+            };
+            const sortedBeds = Object.entries(vcsGroup.bedrooms)
+              .filter(([bedrooms, group]) => bedrooms !== 'Unknown' && group.salesCount > 0)
+              .sort(([a], [b]) => bedOrderValue(a) - bedOrderValue(b));
+
+            sortedBeds.forEach(([bedrooms, group], index) => {
               data.push([
                 vcsGroup.description || vcs,
                 group.label,
@@ -2479,7 +2445,7 @@ const OverallAnalysisTab = ({
                 group.avgSize ? Math.round(group.avgSize) : '',
                 group.avgPrice ? Math.round(group.avgPrice) : '',
                 group.avgAdjustedPrice ? Math.round(group.avgAdjustedPrice) : '',
-                group.isBaseline ? 'BASELINE' : ''
+                index === 0 ? 'BASELINE' : ''
               ]);
             });
           }
