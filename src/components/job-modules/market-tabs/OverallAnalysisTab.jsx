@@ -2037,7 +2037,7 @@ const OverallAnalysisTab = ({
         group.avgSizeSales ? Math.round(group.avgSizeSales) : '',
         group.salesCount > 0 ? Math.round(group.avgPrice) : '',
         group.salesCount === 0 ? '' : group.isBaseline ? '' : Math.round(group.avgAdjustedPrice),
-        group.salesCount > 0 && group.deltaPercent !== 0 ? Math.round(group.deltaPercent) : group.salesCount === 0 ? '' : 'BASELINE'
+        group.isBaseline ? 'BASELINE' : ''
       ]);
 
       // Find the baseline row for Design analysis
@@ -2136,7 +2136,7 @@ const OverallAnalysisTab = ({
         group.avgSizeSales ? Math.round(group.avgSizeSales) : '',
         group.salesCount > 0 ? Math.round(group.avgPrice) : '',
         group.salesCount === 0 ? '' : group.isBaseline ? '' : Math.round(group.avgAdjustedPrice),
-        group.salesCount > 0 && group.deltaPercent !== 0 ? Math.round(group.deltaPercent) : group.salesCount === 0 ? '' : 'BASELINE',
+        group.isBaseline ? 'BASELINE' : '',
         group.isCCF ? 'YES' : ''
       ]);
 
