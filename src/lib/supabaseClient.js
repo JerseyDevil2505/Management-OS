@@ -2486,7 +2486,7 @@ export async function generateLotSizesForJob(jobId) {
   // Get job data with parsed code definitions
   const { data: jobRow, error: jobErr } = await supabase
     .from('jobs')
-    .select('unit_rate_config, parsed_code_definitions')
+    .select('unit_rate_config, parsed_code_definitions, vendor_type')
     .eq('id', jobId)
     .single();
 
@@ -2494,8 +2494,30 @@ export async function generateLotSizesForJob(jobId) {
 
   const mappings = jobRow.unit_rate_config;
   const codeDefinitions = jobRow.parsed_code_definitions;
+  const vendorType = jobRow.vendor_type;
 
   if (!mappings) throw new Error('No unit rate mappings found');
+
+  // Helper function to parse composite key and extract card
+  const parseCompositeKey = (compositeKey) => {
+    if (!compositeKey) return { card: '' };
+    // Format: YEAR+CCDD-BLOCK-LOT_QUALIFIER-CARD-LOCATION
+    const parts = compositeKey.split('-');
+    return {
+      card: parts[3] === 'NONE' ? '' : parts[3] || ''
+    };
+  };
+
+  // Determine valid main cards based on vendor type
+  const isMainCard = (card) => {
+    const cardUpper = String(card || '').toUpperCase();
+    if (vendorType === 'Microsystems') {
+      return cardUpper === 'M' || cardUpper === '';
+    } else {
+      // BRT or default
+      return cardUpper === '1' || cardUpper === '';
+    }
+  };
 
   // Build VCS name-to-key lookup
   const vcsNameToKey = new Map();
@@ -2563,6 +2585,12 @@ export async function generateLotSizesForJob(jobId) {
   // Ready to process properties
 
   for (const p of props) {
+    // Filter: only process main cards (card 1 for BRT, card M for Microsystems)
+    const parsed = parseCompositeKey(p.property_composite_key);
+    if (!isMainCard(parsed.card)) {
+      diagnostics.skipped++;
+      continue;
+    }
     // Prefer new_vcs from property_market_analysis over property_vcs
     // Handle both object and array returns from Supabase JOIN
     let newVcs = null;

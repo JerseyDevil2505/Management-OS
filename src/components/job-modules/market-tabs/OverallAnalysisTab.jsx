@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { interpretCodes } from '../../../lib/supabaseClient';
-import { 
+import {
   TrendingUp, RefreshCw, Download, Filter, ChevronDown, ChevronUp,
   AlertCircle, Home, Building, Calendar, MapPin, Layers, DollarSign
 } from 'lucide-react';
+import * as XLSX from 'xlsx-js-style';
 import './sharedTabNav.css';
 
 const OverallAnalysisTab = ({ 
@@ -277,61 +278,65 @@ const OverallAnalysisTab = ({
       }
     });
 
-    // Calculate averages and adjusted prices
-    let maxAdjustedPrice = 0;
-    let baselineGroup = null;
-
+    // Calculate averages first (no adjusted prices yet)
     Object.values(groups).forEach(group => {
       // Averages for ALL properties in this group
       group.avgSizeAll = group.propertyCount > 0 ? group.totalSizeAll / group.propertyCount : 0;
       group.avgYearAll = group.propertyCount > 0 ? Math.round(group.totalYearAll / group.propertyCount) : 0;
-      
+
       // Averages for SALES only
       group.avgPrice = group.salesCount > 0 ? group.totalPrice / group.salesCount : 0;
       group.avgSizeSales = group.salesCount > 0 ? group.totalSizeSales / group.salesCount : 0;
       group.avgYearSales = group.salesCount > 0 ? Math.round(group.totalYearSales / group.salesCount) : 0;
-      
-      // Calculate adjusted prices using sales average size
-      let totalAdjusted = 0;
-      if (group.salesCount > 0) {
+    });
+
+    // Identify baseline group (prefer Single Family if available with sales)
+    const groupsArray = Object.values(groups);
+    let baselineGroup = groupsArray.find(g => g.code && g.code.toString().startsWith('1') && g.salesCount > 0);
+
+    // If no Single Family, use the highest priced group
+    if (!baselineGroup) {
+      let maxPrice = 0;
+      groupsArray.forEach(group => {
+        if (group.salesCount > 0 && group.avgPrice > maxPrice) {
+          maxPrice = group.avgPrice;
+          baselineGroup = group;
+        }
+      });
+    }
+
+    // Now calculate adjusted prices using BASELINE size for normalization
+    Object.values(groups).forEach(group => {
+      if (group.salesCount > 0 && baselineGroup) {
+        let totalAdjusted = 0;
         group.salesProperties.forEach(p => {
           const adjusted = calculateAdjustedPrice(
             (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
             p.asset_sfla || 0,
-            group.avgSizeSales  // Use sales average for normalization
+            baselineGroup.avgSizeSales  // Use BASELINE sales average for normalization
           );
           totalAdjusted += adjusted;
         });
-        
         group.avgAdjustedPrice = totalAdjusted / group.salesCount;
-        
-        if (group.avgAdjustedPrice > maxAdjustedPrice) {
-          maxAdjustedPrice = group.avgAdjustedPrice;
-          baselineGroup = group;
-        }
       } else {
         group.avgAdjustedPrice = 0;
       }
     });
 
-    // After computing avgAdjustedPrice, prefer Single Family as baseline if available with sales
-    const groupsArray = Object.values(groups);
-    const sfGroup = groupsArray.find(g => g.code && g.code.toString().startsWith('1') && g.salesCount > 0);
-    if (sfGroup) {
-      baselineGroup = sfGroup;
-    }
-
     // Calculate deltas from baseline (baselineGroup may have been overridden to SF)
+    // Delta is calculated as: (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
     Object.values(groups).forEach(group => {
       if (baselineGroup && group !== baselineGroup && group.salesCount > 0) {
-        const delta = group.avgAdjustedPrice - baselineGroup.avgAdjustedPrice;
+        const delta = group.avgAdjustedPrice - baselineGroup.avgPrice;
         group.delta = delta;
-        group.deltaPercent = baselineGroup.avgAdjustedPrice > 0 ?
-          (delta / baselineGroup.avgAdjustedPrice * 100) : 0;
+        group.deltaPercent = baselineGroup.avgPrice > 0 ?
+          (delta / baselineGroup.avgPrice * 100) : 0;
       } else {
         group.delta = 0;
         group.deltaPercent = 0;
       }
+      // Mark baseline row - it should not show adjusted price
+      group.isBaseline = (group === baselineGroup);
 
       // Get CME bracket only if there are sales
       if (group.salesCount > 0) {
@@ -402,59 +407,65 @@ const OverallAnalysisTab = ({
       }
     });
 
-    // Calculate averages and adjusted prices
-    let maxAdjustedPrice = 0;
-    let baselineGroup = null;
-
+    // Calculate averages first
     Object.values(groups).forEach(group => {
       // Averages for ALL properties in this group
       group.avgSizeAll = group.propertyCount > 0 ? group.totalSizeAll / group.propertyCount : 0;
       group.avgYearAll = group.propertyCount > 0 ? Math.round(group.totalYearAll / group.propertyCount) : 0;
-      
+
       // Averages for SALES only
       group.avgPrice = group.salesCount > 0 ? group.totalPrice / group.salesCount : 0;
       group.avgSizeSales = group.salesCount > 0 ? group.totalSizeSales / group.salesCount : 0;
       group.avgYearSales = group.salesCount > 0 ? Math.round(group.totalYearSales / group.salesCount) : 0;
-      
-      // Calculate adjusted prices using sales average size
-      let totalAdjusted = 0;
-      if (group.salesCount > 0) {
+    });
+
+    // Identify baseline (prefer highest priced)
+    let baselineGroup = null;
+    let maxPrice = 0;
+    Object.values(groups).forEach(group => {
+      if (group.salesCount > 0 && group.avgPrice > maxPrice) {
+        maxPrice = group.avgPrice;
+        baselineGroup = group;
+      }
+    });
+
+    // Use custom baseline if set
+    const actualBaseline = customBaselines.design ?
+      Object.values(groups).find(g => g.code === customBaselines.design) || baselineGroup :
+      baselineGroup;
+
+    // Calculate adjusted prices using BASELINE size
+    Object.values(groups).forEach(group => {
+      if (group.salesCount > 0 && actualBaseline) {
+        let totalAdjusted = 0;
         group.salesProperties.forEach(p => {
           const adjusted = calculateAdjustedPrice(
             (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
             p.asset_sfla || 0,
-            group.avgSizeSales  // Use sales average for normalization
+            actualBaseline.avgSizeSales  // Use BASELINE size
           );
           totalAdjusted += adjusted;
         });
-        
         group.avgAdjustedPrice = totalAdjusted / group.salesCount;
-        
-        if (group.avgAdjustedPrice > maxAdjustedPrice) {
-          maxAdjustedPrice = group.avgAdjustedPrice;
-          baselineGroup = group;
-        }
       } else {
         group.avgAdjustedPrice = 0;
       }
     });
 
-    // Use custom baseline if set, otherwise use highest adjusted price
-    const actualBaseline = customBaselines.design ? 
-      Object.values(groups).find(g => g.code === customBaselines.design) || baselineGroup :
-      baselineGroup;
-
     // Calculate deltas from baseline
+    // Delta is calculated as: (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
     Object.values(groups).forEach(group => {
       if (actualBaseline && group !== actualBaseline && group.salesCount > 0) {
-        const delta = group.avgAdjustedPrice - actualBaseline.avgAdjustedPrice;
+        const delta = group.avgAdjustedPrice - actualBaseline.avgPrice;
         group.delta = delta;
-        group.deltaPercent = actualBaseline.avgAdjustedPrice > 0 ? 
-          (delta / actualBaseline.avgAdjustedPrice * 100) : 0;
+        group.deltaPercent = actualBaseline.avgPrice > 0 ?
+          (delta / actualBaseline.avgPrice * 100) : 0;
       } else if (group === actualBaseline || group.salesCount === 0) {
         group.delta = 0;
         group.deltaPercent = 0;
       }
+      // Mark baseline row - it should not show adjusted price
+      group.isBaseline = (group === actualBaseline);
     });
 
     return { groups: Object.values(groups), baseline: actualBaseline };
@@ -566,54 +577,60 @@ const OverallAnalysisTab = ({
       }
     });
 
-    // Calculate averages and adjusted prices
-    let maxAdjustedPrice = 0;
-    let baselineGroup = null;
-
+    // Calculate averages first
     Object.values(groups).forEach(group => {
       // Averages for ALL properties
       group.avgSizeAll = group.propertyCount > 0 ? group.totalSizeAll / group.propertyCount : 0;
       group.avgYearAll = group.propertyCount > 0 ? Math.round(group.totalYearAll / group.propertyCount) : 0;
-      
+
       // Averages for SALES only
       group.avgPrice = group.salesCount > 0 ? group.totalPrice / group.salesCount : 0;
       group.avgSizeSales = group.salesCount > 0 ? group.totalSizeSales / group.salesCount : 0;
       group.avgYearSales = group.salesCount > 0 ? Math.round(group.totalYearSales / group.salesCount) : 0;
-      
-      // Calculate adjusted prices using sales average size
-      let totalAdjusted = 0;
-      if (group.salesCount > 0) {
+    });
+
+    // Identify baseline (highest priced group)
+    let baselineGroup = null;
+    let maxPrice = 0;
+    Object.values(groups).forEach(group => {
+      if (group.salesCount > 0 && group.avgPrice > maxPrice) {
+        maxPrice = group.avgPrice;
+        baselineGroup = group;
+      }
+    });
+
+    // Calculate adjusted prices using BASELINE size
+    Object.values(groups).forEach(group => {
+      if (group.salesCount > 0 && baselineGroup) {
+        let totalAdjusted = 0;
         group.salesProperties.forEach(p => {
           const adjusted = calculateAdjustedPrice(
             (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
             p.asset_sfla || 0,
-            group.avgSizeSales
+            baselineGroup.avgSizeSales  // Use BASELINE size
           );
           totalAdjusted += adjusted;
         });
-        
         group.avgAdjustedPrice = totalAdjusted / group.salesCount;
-        
-        if (group.avgAdjustedPrice > maxAdjustedPrice) {
-          maxAdjustedPrice = group.avgAdjustedPrice;
-          baselineGroup = group;
-        }
       } else {
         group.avgAdjustedPrice = 0;
       }
     });
 
     // Calculate deltas from baseline
+    // Delta is calculated as: (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
     Object.values(groups).forEach(group => {
       if (baselineGroup && group !== baselineGroup && group.salesCount > 0) {
-        const delta = group.avgAdjustedPrice - baselineGroup.avgAdjustedPrice;
+        const delta = group.avgAdjustedPrice - baselineGroup.avgPrice;
         group.delta = delta;
-        group.deltaPercent = baselineGroup.avgAdjustedPrice > 0 ? 
-          (delta / baselineGroup.avgAdjustedPrice * 100) : 0;
+        group.deltaPercent = baselineGroup.avgPrice > 0 ?
+          (delta / baselineGroup.avgPrice * 100) : 0;
       } else {
         group.delta = 0;
         group.deltaPercent = 0;
       }
+      // Mark baseline row - it should not show adjusted price
+      group.isBaseline = (group === baselineGroup);
     });
 
     return { groups: Object.values(groups), baseline: baselineGroup };
@@ -759,95 +776,106 @@ const OverallAnalysisTab = ({
         vcsGroup.avgAdjustedPrice = 0;
       }
       
-      // Find baseline for this VCS (highest adjusted price)
-      let maxTypePrice = 0;
-      let baselineType = null;
-      
-      // Type level calculations
+      // Type level: Calculate averages first
       Object.values(vcsGroup.types).forEach(typeGroup => {
         typeGroup.avgSizeAll = typeGroup.propertyCount > 0 ? typeGroup.totalSizeAll / typeGroup.propertyCount : 0;
         typeGroup.avgYearAll = typeGroup.propertyCount > 0 ? Math.round(typeGroup.totalYearAll / typeGroup.propertyCount) : 0;
-        
+
         typeGroup.avgPrice = typeGroup.salesCount > 0 ? typeGroup.totalPrice / typeGroup.salesCount : 0;
         typeGroup.avgSizeSales = typeGroup.salesCount > 0 ? typeGroup.totalSizeSales / typeGroup.salesCount : 0;
         typeGroup.avgYearSales = typeGroup.salesCount > 0 ? Math.round(typeGroup.totalYearSales / typeGroup.salesCount) : 0;
-        
-        // Calculate type adjusted price
-        let typeTotalAdjusted = 0;
-        if (typeGroup.salesCount > 0) {
+      });
+
+      // Find baseline type (highest priced)
+      let baselineType = null;
+      let maxTypePrice = 0;
+      Object.values(vcsGroup.types).forEach(typeGroup => {
+        if (typeGroup.salesCount > 0 && typeGroup.avgPrice > maxTypePrice) {
+          maxTypePrice = typeGroup.avgPrice;
+          baselineType = typeGroup;
+        }
+      });
+
+      // Calculate type adjusted prices using BASELINE type size
+      Object.values(vcsGroup.types).forEach(typeGroup => {
+        if (typeGroup.salesCount > 0 && baselineType) {
+          let typeTotalAdjusted = 0;
           typeGroup.salesProperties.forEach(p => {
             const adjusted = calculateAdjustedPrice(
               (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
               p.asset_sfla || 0,
-              typeGroup.avgSizeSales
+              baselineType.avgSizeSales  // Use BASELINE type size
             );
             typeTotalAdjusted += adjusted;
           });
           typeGroup.avgAdjustedPrice = typeTotalAdjusted / typeGroup.salesCount;
-          
-          if (typeGroup.avgAdjustedPrice > maxTypePrice) {
-            maxTypePrice = typeGroup.avgAdjustedPrice;
-            baselineType = typeGroup;
-          }
         } else {
           typeGroup.avgAdjustedPrice = 0;
         }
         
-        // Design level calculations
-        let maxDesignPrice = 0;
-        let baselineDesign = null;
-        
+        // Design level: Calculate averages first
         Object.values(typeGroup.designs).forEach(designGroup => {
           designGroup.avgSizeAll = designGroup.propertyCount > 0 ? designGroup.totalSizeAll / designGroup.propertyCount : 0;
           designGroup.avgYearAll = designGroup.propertyCount > 0 ? Math.round(designGroup.totalYearAll / designGroup.propertyCount) : 0;
-          
+
           designGroup.avgPrice = designGroup.salesCount > 0 ? designGroup.totalPrice / designGroup.salesCount : 0;
           designGroup.avgSizeSales = designGroup.salesCount > 0 ? designGroup.totalSizeSales / designGroup.salesCount : 0;
           designGroup.avgYearSales = designGroup.salesCount > 0 ? Math.round(designGroup.totalYearSales / designGroup.salesCount) : 0;
-          
-          // Calculate design adjusted price
-          let designTotalAdjusted = 0;
-          if (designGroup.salesCount > 0) {
+        });
+
+        // Find baseline design (highest priced)
+        let baselineDesign = null;
+        let maxDesignPrice = 0;
+        Object.values(typeGroup.designs).forEach(designGroup => {
+          if (designGroup.salesCount > 0 && designGroup.avgPrice > maxDesignPrice) {
+            maxDesignPrice = designGroup.avgPrice;
+            baselineDesign = designGroup;
+          }
+        });
+
+        // Calculate design adjusted prices using BASELINE design size
+        Object.values(typeGroup.designs).forEach(designGroup => {
+          if (designGroup.salesCount > 0 && baselineDesign) {
+            let designTotalAdjusted = 0;
             designGroup.salesProperties.forEach(p => {
               const adjusted = calculateAdjustedPrice(
                 (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
                 p.asset_sfla || 0,
-                designGroup.avgSizeSales
+                baselineDesign.avgSizeSales  // Use BASELINE design size
               );
               designTotalAdjusted += adjusted;
             });
             designGroup.avgAdjustedPrice = designTotalAdjusted / designGroup.salesCount;
-            
-            if (designGroup.avgAdjustedPrice > maxDesignPrice) {
-              maxDesignPrice = designGroup.avgAdjustedPrice;
-              baselineDesign = designGroup;
-            }
           } else {
             designGroup.avgAdjustedPrice = 0;
           }
         });
         
         // Calculate design deltas within type
+        // Delta is calculated as: (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
         Object.values(typeGroup.designs).forEach(designGroup => {
           if (baselineDesign && designGroup !== baselineDesign && designGroup.salesCount > 0) {
-            designGroup.deltaPercent = baselineDesign.avgAdjustedPrice > 0 ? 
-              ((designGroup.avgAdjustedPrice - baselineDesign.avgAdjustedPrice) / baselineDesign.avgAdjustedPrice * 100) : 0;
+            designGroup.deltaPercent = baselineDesign.avgPrice > 0 ?
+              ((designGroup.avgAdjustedPrice - baselineDesign.avgPrice) / baselineDesign.avgPrice * 100) : 0;
           } else {
             designGroup.deltaPercent = 0;
           }
+          designGroup.isBaseline = (designGroup === baselineDesign);
         });
         
         typeGroup.baselineDesign = baselineDesign;
       });
       
       // Calculate type deltas within VCS
+      // Delta is calculated as: (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
       Object.values(vcsGroup.types).forEach(typeGroup => {
         if (baselineType && typeGroup !== baselineType && typeGroup.salesCount > 0) {
-          typeGroup.deltaPercent = baselineType.avgAdjustedPrice > 0 ? 
-            ((typeGroup.avgAdjustedPrice - baselineType.avgAdjustedPrice) / baselineType.avgAdjustedPrice * 100) : 0;
+          typeGroup.deltaPercent = baselineType.avgPrice > 0 ?
+            ((typeGroup.avgAdjustedPrice - baselineType.avgPrice) / baselineType.avgPrice * 100) : 0;
         } else {
           typeGroup.deltaPercent = 0;
         }
+        typeGroup.isBaseline = (typeGroup === baselineType);
       });
       
       vcsGroup.baselineType = baselineType;
@@ -896,43 +924,50 @@ const OverallAnalysisTab = ({
       designGroups[key].totalSize += p.asset_sfla || 0;
     });
 
-    // Calculate averages for designs
+    // Calculate averages first
     Object.values(designGroups).forEach(group => {
       group.avgPrice = group.count > 0 ? group.totalPrice / group.count : 0;
       group.avgSize = group.count > 0 ? group.totalSize / group.count : 0;
-      
-      // Calculate adjusted prices
-      let totalAdjusted = 0;
-      group.properties.forEach(p => {
-        const adjusted = calculateAdjustedPrice(
-          (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
-          p.asset_sfla || 0,
-          group.avgSize
-        );
-        totalAdjusted += adjusted;
-      });
-      
-      group.avgAdjustedPrice = group.count > 0 ? totalAdjusted / group.count : 0;
     });
 
-    // Find baseline design
-    let maxDesignPrice = 0;
+    // Find baseline design (highest priced)
     let baselineDesign = null;
+    let maxDesignPrice = 0;
     Object.values(designGroups).forEach(group => {
-      if (group.avgAdjustedPrice > maxDesignPrice) {
-        maxDesignPrice = group.avgAdjustedPrice;
+      if (group.count > 0 && group.avgPrice > maxDesignPrice) {
+        maxDesignPrice = group.avgPrice;
         baselineDesign = group;
       }
     });
 
+    // Calculate adjusted prices using BASELINE size
+    Object.values(designGroups).forEach(group => {
+      if (group.count > 0 && baselineDesign) {
+        let totalAdjusted = 0;
+        group.properties.forEach(p => {
+          const adjusted = calculateAdjustedPrice(
+            (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
+            p.asset_sfla || 0,
+            baselineDesign.avgSize  // Use BASELINE size
+          );
+          totalAdjusted += adjusted;
+        });
+        group.avgAdjustedPrice = totalAdjusted / group.count;
+      } else {
+        group.avgAdjustedPrice = 0;
+      }
+    });
+
     // Calculate design deltas
+    // Delta is calculated as: (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
     Object.values(designGroups).forEach(group => {
       if (baselineDesign && group !== baselineDesign) {
-        group.deltaPercent = baselineDesign.avgAdjustedPrice > 0 ? 
-          ((group.avgAdjustedPrice - baselineDesign.avgAdjustedPrice) / baselineDesign.avgAdjustedPrice * 100) : 0;
+        group.deltaPercent = baselineDesign.avgPrice > 0 ?
+          ((group.avgAdjustedPrice - baselineDesign.avgPrice) / baselineDesign.avgPrice * 100) : 0;
       } else {
         group.deltaPercent = 0;
       }
+      group.isBaseline = (group === baselineDesign);
     });
 
     // VCS Bedroom Analysis
@@ -1148,34 +1183,43 @@ const OverallAnalysisTab = ({
       floorGroups[floor].totalSize += p.asset_sfla || 0;
     });
 
-    // Calculate floor averages
+    // Calculate floor averages first
     Object.values(floorGroups).forEach(group => {
       group.avgPrice = group.count > 0 ? group.totalPrice / group.count : 0;
       group.avgSize = group.count > 0 ? group.totalSize / group.count : 0;
-      
-      // Calculate adjusted prices
-      let totalAdjusted = 0;
-      group.properties.forEach(p => {
-        const adjusted = calculateAdjustedPrice(
-          (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
-          p.asset_sfla || 0,
-          group.avgSize
-        );
-        totalAdjusted += adjusted;
-      });
-      
-      group.avgAdjustedPrice = group.count > 0 ? totalAdjusted / group.count : 0;
+    });
+
+    // Identify baseline (1st floor)
+    const firstFloor = floorGroups['1ST FLOOR'];
+
+    // Calculate adjusted prices using BASELINE (1st floor) size
+    Object.values(floorGroups).forEach(group => {
+      if (group.count > 0 && firstFloor) {
+        let totalAdjusted = 0;
+        group.properties.forEach(p => {
+          const adjusted = calculateAdjustedPrice(
+            (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
+            p.asset_sfla || 0,
+            firstFloor.avgSize  // Use BASELINE (1st floor) size
+          );
+          totalAdjusted += adjusted;
+        });
+        group.avgAdjustedPrice = totalAdjusted / group.count;
+      } else {
+        group.avgAdjustedPrice = 0;
+      }
     });
 
     // Calculate floor premiums
-    const firstFloor = floorGroups['1ST FLOOR'];
-    if (firstFloor && firstFloor.avgAdjustedPrice > 0) {
+    // Delta is calculated as: (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
+    if (firstFloor && firstFloor.avgPrice > 0) {
       Object.values(floorGroups).forEach(group => {
         if (group !== firstFloor) {
-          group.deltaPercent = ((group.avgAdjustedPrice - firstFloor.avgAdjustedPrice) / firstFloor.avgAdjustedPrice * 100);
+          group.deltaPercent = ((group.avgAdjustedPrice - firstFloor.avgPrice) / firstFloor.avgPrice * 100);
         } else {
           group.deltaPercent = 0;
         }
+        group.isBaseline = (group === firstFloor);
       });
     }
 
@@ -1281,6 +1325,7 @@ const OverallAnalysisTab = ({
     if (filteredProperties.length > 0) {
       runAnalysis();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredProperties.length]); // Only re-run when count changes
 
   // ==================== EXPORT FUNCTIONS ====================
@@ -1354,6 +1399,888 @@ const OverallAnalysisTab = ({
     a.download = `overall_analysis_${analysisType}_${timestamp}.csv`;
     a.click();
   };
+
+  const exportToExcel = (sectionType = 'all') => {
+    if (!analysis) return;
+
+    const wb = XLSX.utils.book_new();
+    const timestamp = new Date().toISOString().split('T')[0];
+
+    // Base style for all cells
+    const baseStyle = {
+      font: { name: 'Leelawadee', sz: 10 },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    // Header style (bold, no fill)
+    const headerStyle = {
+      font: { name: 'Leelawadee', sz: 10, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    // Helper function to apply formulas to worksheet
+    const applyFormulas = (ws, range, headers, options = {}) => {
+      const { formulaColumns = [] } = options;
+
+      // Identify delta columns for percentage formatting
+      const deltaColumnIndices = headers.map((h, i) => {
+        const headerLower = h.toLowerCase();
+        return (headerLower.includes('delta') || headerLower === 'delta %') ? i : -1;
+      }).filter(i => i !== -1);
+
+      // Apply formulas for specified columns
+      formulaColumns.forEach(({ column, getFormula }) => {
+        const colIndex = headers.indexOf(column);
+        if (colIndex === -1) return;
+
+        for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: colIndex });
+          const formula = getFormula(R, colIndex, headers, ws);
+
+          if (formula && ws[cellAddress]) {
+            const cellStyle = ws[cellAddress].s || baseStyle;
+            // Apply percentage format if this is a delta column
+            if (deltaColumnIndices.includes(colIndex)) {
+              cellStyle.numFmt = '0';
+            }
+            ws[cellAddress] = {
+              f: formula,
+              t: 'n',
+              s: cellStyle
+            };
+          }
+        }
+      });
+    };
+
+    // Helper function to create and format worksheet
+    const createFormattedSheet = (headers, data, options = {}) => {
+      const {
+        colorColumnIndex = -1,
+        priceColumns = [],
+        colorColumns = [],
+        formulaColumns = []
+      } = options;
+
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+      const range = XLSX.utils.decode_range(ws['!ref']);
+
+      // Identify price columns by header names if not explicitly provided
+      const priceColumnIndices = priceColumns.length > 0 ? priceColumns :
+        headers.map((h, i) => {
+          const headerLower = h.toLowerCase();
+          return (headerLower.includes('price') || headerLower.includes('adj')) ? i : -1;
+        }).filter(i => i !== -1);
+
+      // Identify delta/percentage columns
+      const deltaColumnIndices = headers.map((h, i) => {
+        const headerLower = h.toLowerCase();
+        return (headerLower.includes('delta') || headerLower === 'delta %') ? i : -1;
+      }).filter(i => i !== -1);
+
+      // Color columns to apply background fill
+      const colorColumnsToApply = colorColumns.length > 0 ? colorColumns :
+        (colorColumnIndex >= 0 ? [colorColumnIndex] : []);
+
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!ws[cellAddress]) continue;
+
+          if (R === 0) {
+            // Header row
+            ws[cellAddress].s = headerStyle;
+          } else {
+            ws[cellAddress].s = { ...baseStyle };
+
+            // Apply CME bracket color if this is a color column
+            if (colorColumnsToApply.includes(C) && data[R - 1] && data[R - 1][C]) {
+              const colorHex = data[R - 1][C];
+              if (colorHex && colorHex.startsWith('#')) {
+                ws[cellAddress].s.fill = { fgColor: { rgb: colorHex.replace('#', '') } };
+              }
+            }
+
+            // Apply formatting to numeric columns
+            const value = data[R - 1]?.[C];
+            if (typeof value === 'number') {
+              // Apply currency format to price columns
+              if (priceColumnIndices.includes(C)) {
+                ws[cellAddress].s.numFmt = '$#,##0';
+              } else if (deltaColumnIndices.includes(C)) {
+                // Apply percentage format to delta columns
+                ws[cellAddress].s.numFmt = '0';
+                ws[cellAddress].t = 'n';
+              } else {
+                // Apply regular number format to other numeric columns
+                ws[cellAddress].s.numFmt = '#,##0';
+              }
+            }
+          }
+        }
+      }
+
+      // Apply formulas after formatting
+      if (formulaColumns.length > 0) {
+        applyFormulas(ws, range, headers, { formulaColumns });
+      }
+
+      // Set column widths
+      ws['!cols'] = headers.map((h, i) => {
+        if (i === 0) return { wch: 30 }; // Description column
+        if (h.includes('CME')) return { wch: 25 };
+        return { wch: 15 };
+      });
+
+      return ws;
+    };
+
+    // Export Type & Use Analysis
+    if (analysis.typeUse && analysis.typeUse.groups && analysis.typeUse.groups.length > 0 && (sectionType === 'all' || sectionType === 'typeUse')) {
+      const headers = [
+        'Description',
+        'Total Properties',
+        'Avg Year (All)',
+        'Avg Size (All)',
+        'Total Sales',
+        'Avg Year (Sales)',
+        'Avg Size (Sales)',
+        'Sale Price',
+        'Adj Price',
+        'Delta',
+        'CME Bracket',
+        'Color'
+      ];
+
+      const data = analysis.typeUse.groups.map(group => [
+        `${group.code} - ${group.name}`,
+        group.propertyCount,
+        group.avgYearAll || '���',
+        group.avgSizeAll ? Math.round(group.avgSizeAll) : '—',
+        group.salesCount,
+        group.avgYearSales || '—',
+        group.avgSizeSales ? Math.round(group.avgSizeSales) : '—',
+        group.salesCount > 0 ? Math.round(group.avgPrice) : '—',
+        group.salesCount === 0 ? '—' : group.isBaseline ? '—' : Math.round(group.avgAdjustedPrice),
+        group.salesCount > 0 && group.deltaPercent !== 0 ? Math.round(group.deltaPercent) : group.salesCount === 0 ? '—' : 'BASELINE',
+        group.cmeBracket ? group.cmeBracket.label : '—',
+        group.cmeBracket ? group.cmeBracket.color : ''
+      ]);
+
+      // Find the baseline row (deltaPercent === 0 or marked as 'BASELINE')
+      const deltaColIndex = headers.indexOf('Delta');
+      let baselineRowIndex = -1;
+
+      for (let i = 0; i < data.length; i++) {
+        const deltaValue = data[i][deltaColIndex];
+        if (deltaValue === 'BASELINE' || deltaValue === 0) {
+          baselineRowIndex = i + 1; // +1 because row 0 is headers
+          break;
+        }
+      }
+
+      // Formula configuration - Jim's 50% size adjustment normalized to baseline
+      const formulaColumns = [{
+        column: 'Adj Price',
+        getFormula: (R, C, headers, ws) => {
+          const avgSizeCol = headers.indexOf('Avg Size (Sales)');
+          const salePriceCol = headers.indexOf('Sale Price');
+          const deltaCol = headers.indexOf('Delta');
+
+          if (avgSizeCol === -1 || salePriceCol === -1 || baselineRowIndex === -1) return null;
+
+          // Check if this is the baseline row - no formula needed
+          const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
+          const deltaValue = ws[deltaCell]?.v;
+          if (deltaValue === 'BASELINE' || deltaValue === 0) {
+            return null; // Baseline row doesn't get adjusted
+          }
+
+          const baselineSizeCell = XLSX.utils.encode_cell({ r: baselineRowIndex, c: avgSizeCol });
+          const currentSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+          const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
+          const baselineSizeValue = ws[baselineSizeCell]?.v;
+          const currentSizeValue = ws[currentSizeCell]?.v;
+          const salePriceValue = ws[salePriceCell]?.v;
+
+          // Only apply formula if all values exist and are numbers
+          if (typeof baselineSizeValue === 'number' && typeof currentSizeValue === 'number' &&
+              typeof salePriceValue === 'number' && currentSizeValue > 0) {
+            // Jim's Formula: ((BASELINE_SIZE - CURRENT_SIZE) * ((SALE_PRICE / CURRENT_SIZE) * 0.5)) + SALE_PRICE
+            return `(($${baselineSizeCell}-${currentSizeCell})*((${salePriceCell}/${currentSizeCell})*0.5))+${salePriceCell}`;
+          }
+          return null;
+        }
+      }, {
+        column: 'Delta',
+        getFormula: (R, C, headers, ws) => {
+          const adjPriceCol = headers.indexOf('Adj Price');
+          const salePriceCol = headers.indexOf('Sale Price');
+          const deltaCol = headers.indexOf('Delta');
+
+          if (adjPriceCol === -1 || salePriceCol === -1 || baselineRowIndex === -1) return null;
+
+          // Check if this is the baseline row - no formula needed
+          const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
+          const deltaValue = ws[deltaCell]?.v;
+          if (deltaValue === 'BASELINE' || deltaValue === 0) {
+            return null; // Baseline row shows 'BASELINE'
+          }
+
+          const currentAdjPriceCell = XLSX.utils.encode_cell({ r: R, c: adjPriceCol });
+          const baselineSalePriceCell = XLSX.utils.encode_cell({ r: baselineRowIndex, c: salePriceCol });
+          const currentAdjPriceValue = ws[currentAdjPriceCell]?.v;
+          const baselineSalePriceValue = ws[baselineSalePriceCell]?.v;
+
+          // Only apply formula if both values exist and are numbers
+          if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
+              baselineSalePriceValue > 0) {
+            // Delta % = (Current Adj Price - Baseline Sale Price) / Baseline Sale Price * 100
+            return `((${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell})*100`;
+          }
+          return null;
+        }
+      }];
+
+      const ws = createFormattedSheet(headers, data, { colorColumnIndex: 11, formulaColumns });
+      XLSX.utils.book_append_sheet(wb, ws, 'Type & Use');
+    }
+
+    // Export Design Analysis
+    if (analysis.design && analysis.design.groups && analysis.design.groups.length > 0 && (sectionType === 'all' || sectionType === 'design')) {
+      const headers = [
+        'Description',
+        'Total Properties',
+        'Avg Year (All)',
+        'Avg Size (All)',
+        'Total Sales',
+        'Avg Year (Sales)',
+        'Avg Size (Sales)',
+        'Sale Price',
+        'Adj Price',
+        'Delta'
+      ];
+
+      const data = analysis.design.groups.map(group => [
+        group.name,
+        group.propertyCount,
+        group.avgYearAll || '—',
+        group.avgSizeAll ? Math.round(group.avgSizeAll) : '—',
+        group.salesCount,
+        group.avgYearSales || '—',
+        group.avgSizeSales ? Math.round(group.avgSizeSales) : '—',
+        group.salesCount > 0 ? Math.round(group.avgPrice) : '—',
+        group.salesCount === 0 ? '—' : group.isBaseline ? '—' : Math.round(group.avgAdjustedPrice),
+        group.salesCount > 0 && group.deltaPercent !== 0 ? Math.round(group.deltaPercent) : group.salesCount === 0 ? '—' : 'BASELINE'
+      ]);
+
+      // Find the baseline row for Design analysis
+      const deltaColIndex = headers.indexOf('Delta');
+      let baselineRowIndex = -1;
+
+      for (let i = 0; i < data.length; i++) {
+        const deltaValue = data[i][deltaColIndex];
+        if (deltaValue === 'BASELINE' || deltaValue === 0) {
+          baselineRowIndex = i + 1;
+          break;
+        }
+      }
+
+      const formulaColumns = [{
+        column: 'Adj Price',
+        getFormula: (R, C, headers, ws) => {
+          const avgSizeCol = headers.indexOf('Avg Size (Sales)');
+          const salePriceCol = headers.indexOf('Sale Price');
+          const deltaCol = headers.indexOf('Delta');
+
+          if (avgSizeCol === -1 || salePriceCol === -1 || baselineRowIndex === -1) return null;
+
+          const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
+          const deltaValue = ws[deltaCell]?.v;
+          if (deltaValue === 'BASELINE' || deltaValue === 0) {
+            return null;
+          }
+
+          const baselineSizeCell = XLSX.utils.encode_cell({ r: baselineRowIndex, c: avgSizeCol });
+          const currentSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+          const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
+          const baselineSizeValue = ws[baselineSizeCell]?.v;
+          const currentSizeValue = ws[currentSizeCell]?.v;
+          const salePriceValue = ws[salePriceCell]?.v;
+
+          if (typeof baselineSizeValue === 'number' && typeof currentSizeValue === 'number' &&
+              typeof salePriceValue === 'number' && currentSizeValue > 0) {
+            return `(($${baselineSizeCell}-${currentSizeCell})*((${salePriceCell}/${currentSizeCell})*0.5))+${salePriceCell}`;
+          }
+          return null;
+        }
+      }, {
+        column: 'Delta',
+        getFormula: (R, C, headers, ws) => {
+          const adjPriceCol = headers.indexOf('Adj Price');
+          const salePriceCol = headers.indexOf('Sale Price');
+          const deltaCol = headers.indexOf('Delta');
+
+          if (adjPriceCol === -1 || salePriceCol === -1 || baselineRowIndex === -1) return null;
+
+          const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
+          const deltaValue = ws[deltaCell]?.v;
+          if (deltaValue === 'BASELINE' || deltaValue === 0) {
+            return null;
+          }
+
+          const currentAdjPriceCell = XLSX.utils.encode_cell({ r: R, c: adjPriceCol });
+          const baselineSalePriceCell = XLSX.utils.encode_cell({ r: baselineRowIndex, c: salePriceCol });
+          const currentAdjPriceValue = ws[currentAdjPriceCell]?.v;
+          const baselineSalePriceValue = ws[baselineSalePriceCell]?.v;
+
+          if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
+              baselineSalePriceValue > 0) {
+            return `((${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell})*100`;
+          }
+          return null;
+        }
+      }];
+
+      const ws = createFormattedSheet(headers, data, { formulaColumns });
+      XLSX.utils.book_append_sheet(wb, ws, 'Design');
+    }
+
+    // Export Year Built Analysis
+    if (analysis.yearBuilt && analysis.yearBuilt.groups && analysis.yearBuilt.groups.length > 0 && (sectionType === 'all' || sectionType === 'yearBuilt')) {
+      const headers = [
+        'Category',
+        'Total Properties',
+        'Avg Year (All)',
+        'Avg Size (All)',
+        'Total Sales',
+        'Avg Year (Sales)',
+        'Avg Size (Sales)',
+        'Sale Price',
+        'Adj Price',
+        'Delta',
+        'CCF'
+      ];
+
+      const data = analysis.yearBuilt.groups.map(group => [
+        group.label,
+        group.propertyCount,
+        group.avgYearAll || '—',
+        group.avgSizeAll ? Math.round(group.avgSizeAll) : '—',
+        group.salesCount,
+        group.avgYearSales || '—',
+        group.avgSizeSales ? Math.round(group.avgSizeSales) : '—',
+        group.salesCount > 0 ? Math.round(group.avgPrice) : '—',
+        group.salesCount === 0 ? '—' : group.isBaseline ? '—' : Math.round(group.avgAdjustedPrice),
+        group.salesCount > 0 && group.deltaPercent !== 0 ? Math.round(group.deltaPercent) : group.salesCount === 0 ? '—' : 'BASELINE',
+        group.isCCF ? 'YES' : ''
+      ]);
+
+      // Find the baseline row for Year Built analysis
+      const deltaColIndexYB = headers.indexOf('Delta');
+      let baselineRowIndexYB = -1;
+
+      for (let i = 0; i < data.length; i++) {
+        const deltaValue = data[i][deltaColIndexYB];
+        if (deltaValue === 'BASELINE' || deltaValue === 0) {
+          baselineRowIndexYB = i + 1;
+          break;
+        }
+      }
+
+      const formulaColumns = [{
+        column: 'Adj Price',
+        getFormula: (R, C, headers, ws) => {
+          const avgSizeCol = headers.indexOf('Avg Size (Sales)');
+          const salePriceCol = headers.indexOf('Sale Price');
+          const deltaCol = headers.indexOf('Delta');
+
+          if (avgSizeCol === -1 || salePriceCol === -1 || baselineRowIndexYB === -1) return null;
+
+          const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
+          const deltaValue = ws[deltaCell]?.v;
+          if (deltaValue === 'BASELINE' || deltaValue === 0) {
+            return null;
+          }
+
+          const baselineSizeCell = XLSX.utils.encode_cell({ r: baselineRowIndexYB, c: avgSizeCol });
+          const currentSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+          const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
+          const baselineSizeValue = ws[baselineSizeCell]?.v;
+          const currentSizeValue = ws[currentSizeCell]?.v;
+          const salePriceValue = ws[salePriceCell]?.v;
+
+          if (typeof baselineSizeValue === 'number' && typeof currentSizeValue === 'number' &&
+              typeof salePriceValue === 'number' && currentSizeValue > 0) {
+            return `(($${baselineSizeCell}-${currentSizeCell})*((${salePriceCell}/${currentSizeCell})*0.5))+${salePriceCell}`;
+          }
+          return null;
+        }
+      }, {
+        column: 'Delta',
+        getFormula: (R, C, headers, ws) => {
+          const adjPriceCol = headers.indexOf('Adj Price');
+          const salePriceCol = headers.indexOf('Sale Price');
+          const deltaCol = headers.indexOf('Delta');
+
+          if (adjPriceCol === -1 || salePriceCol === -1 || baselineRowIndexYB === -1) return null;
+
+          const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
+          const deltaValue = ws[deltaCell]?.v;
+          if (deltaValue === 'BASELINE' || deltaValue === 0) {
+            return null;
+          }
+
+          const currentAdjPriceCell = XLSX.utils.encode_cell({ r: R, c: adjPriceCol });
+          const baselineSalePriceCell = XLSX.utils.encode_cell({ r: baselineRowIndexYB, c: salePriceCol });
+          const currentAdjPriceValue = ws[currentAdjPriceCell]?.v;
+          const baselineSalePriceValue = ws[baselineSalePriceCell]?.v;
+
+          if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
+              baselineSalePriceValue > 0) {
+            return `((${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell})*100`;
+          }
+          return null;
+        }
+      }];
+
+      const ws = createFormattedSheet(headers, data, { formulaColumns });
+      XLSX.utils.book_append_sheet(wb, ws, 'Year Built');
+    }
+
+    // Export VCS by Type Analysis
+    if (analysis.vcsType && Object.keys(analysis.vcsType).length > 0 && (sectionType === 'all' || sectionType === 'vcsType')) {
+      // Create a flattened data structure for export
+      const headers = [
+        'VCS',
+        'Level',
+        'Type/Design',
+        'Total Properties',
+        'Total Sales',
+        'Avg Year (All)',
+        'Avg Size (All)',
+        'Avg Year (Sales)',
+        'Avg Size (Sales)',
+        'Sale Price',
+        'Adj Price',
+        'Delta %',
+        'CME Bracket',
+        'Color'
+      ];
+
+      const data = [];
+
+      // Filter and sort VCS entries by adjusted price
+      Object.entries(analysis.vcsType)
+        .filter(([vcs, vcsData]) => vcsData.salesCount > 0)
+        .sort((a, b) => b[1].avgAdjustedPrice - a[1].avgAdjustedPrice)
+        .forEach(([vcs, vcsData]) => {
+          // Add VCS-level row
+          const vcsCME = getCMEBracket(vcsData.avgAdjustedPrice);
+          data.push([
+            vcsData.description || vcs,
+            'VCS',
+            `${vcsData.propertyCount} properties | ${vcsData.salesCount} sales`,
+            vcsData.propertyCount,
+            vcsData.salesCount,
+            vcsData.avgYearAll || '—',
+            vcsData.avgSizeAll ? Math.round(vcsData.avgSizeAll) : '—',
+            vcsData.avgYearSales || '—',
+            vcsData.avgSizeSales ? Math.round(vcsData.avgSizeSales) : '—',
+            vcsData.avgPrice ? Math.round(vcsData.avgPrice) : '—',
+            Math.round(vcsData.avgAdjustedPrice),
+            'VCS AVG',
+            vcsCME.label,
+            vcsCME.color
+          ]);
+
+          // Add Type-level rows
+          Object.values(vcsData.types)
+            .filter(type => type.salesCount > 0)
+            .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
+            .forEach((typeGroup) => {
+              const typeCME = typeGroup.avgAdjustedPrice > 0 ? getCMEBracket(typeGroup.avgAdjustedPrice) : null;
+              data.push([
+                '',
+                'Type',
+                typeGroup.name,
+                typeGroup.propertyCount,
+                typeGroup.salesCount,
+                typeGroup.avgYearAll || '—',
+                typeGroup.avgSizeAll ? Math.round(typeGroup.avgSizeAll) : '—',
+                typeGroup.avgYearSales || '—',
+                typeGroup.avgSizeSales ? Math.round(typeGroup.avgSizeSales) : '—',
+                typeGroup.avgPrice ? Math.round(typeGroup.avgPrice) : '—',
+                typeGroup.avgAdjustedPrice === 0 ? '—' : typeGroup.isBaseline ? '—' : Math.round(typeGroup.avgAdjustedPrice),
+                typeGroup.deltaPercent !== 0 ? `${typeGroup.deltaPercent.toFixed(0)}%` : 'VCS BASE',
+                typeCME ? typeCME.label : '',
+                typeCME ? typeCME.color : ''
+              ]);
+
+              // Add Design-level rows if multiple designs
+              if (Object.keys(typeGroup.designs).length > 1) {
+                Object.values(typeGroup.designs)
+                  .filter(design => design.salesCount > 0)
+                  .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
+                  .forEach((designGroup) => {
+                    const designCME = designGroup.avgAdjustedPrice > 0 ? getCMEBracket(designGroup.avgAdjustedPrice) : null;
+                    data.push([
+                      '',
+                      'Design',
+                      `  └ ${designGroup.name}`,
+                      designGroup.propertyCount,
+                      designGroup.salesCount,
+                      designGroup.avgYearAll || '—',
+                      designGroup.avgSizeAll ? Math.round(designGroup.avgSizeAll) : '—',
+                      designGroup.avgYearSales || '—',
+                      designGroup.avgSizeSales ? Math.round(designGroup.avgSizeSales) : '—',
+                      designGroup.avgPrice ? Math.round(designGroup.avgPrice) : '—',
+                      designGroup.avgAdjustedPrice === 0 ? '—' : designGroup.isBaseline ? '—' : Math.round(designGroup.avgAdjustedPrice),
+                      designGroup.deltaPercent !== 0 ? `${designGroup.deltaPercent.toFixed(0)}%` : 'TYPE BASE',
+                      designCME ? designCME.label : '',
+                      designCME ? designCME.color : ''
+                    ]);
+                  });
+              }
+            });
+
+          // Add empty row between VCS sections
+          data.push(['', '', '', '', '', '', '', '', '', '', '', '', '', '']);
+        });
+
+      if (data.length > 0) {
+        const formulaColumns = [{
+          column: 'Adj Price',
+          getFormula: (R, C, headers, ws) => {
+            const levelCol = headers.indexOf('Level');
+            const avgSizeCol = headers.indexOf('Avg Size (Sales)');
+            const salePriceCol = headers.indexOf('Sale Price');
+
+            if (levelCol === -1 || avgSizeCol === -1 || salePriceCol === -1) return null;
+
+            const levelCell = XLSX.utils.encode_cell({ r: R, c: levelCol });
+            const levelValue = ws[levelCell]?.v;
+
+            // Only apply formula to Design-level rows
+            if (levelValue !== 'Design') {
+              return null; // VCS and Type rows don't get formulas
+            }
+
+            // Find the parent Type row (look backwards from current row)
+            let parentTypeRow = -1;
+            for (let searchR = R - 1; searchR > 0; searchR--) {
+              const searchLevelCell = XLSX.utils.encode_cell({ r: searchR, c: levelCol });
+              const searchLevelValue = ws[searchLevelCell]?.v;
+              if (searchLevelValue === 'Type') {
+                parentTypeRow = searchR;
+                break;
+              }
+            }
+
+            if (parentTypeRow === -1) return null; // No parent Type found
+
+            // Use parent Type's size as normalization target
+            const typeSizeCell = XLSX.utils.encode_cell({ r: parentTypeRow, c: avgSizeCol });
+            const currentSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+            const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
+
+            const typeSizeValue = ws[typeSizeCell]?.v;
+            const currentSizeValue = ws[currentSizeCell]?.v;
+            const salePriceValue = ws[salePriceCell]?.v;
+
+            if (typeof typeSizeValue === 'number' && typeof currentSizeValue === 'number' &&
+                typeof salePriceValue === 'number' && currentSizeValue > 0) {
+              // Jim's Formula: Normalize Design to parent Type's average size
+              return `(($${typeSizeCell}-${currentSizeCell})*((${salePriceCell}/${currentSizeCell})*0.5))+${salePriceCell}`;
+            }
+            return null;
+          }
+        }];
+
+        const ws = createFormattedSheet(headers, data, { colorColumnIndex: 13, formulaColumns });
+        XLSX.utils.book_append_sheet(wb, ws, 'VCS by Type');
+      }
+    }
+
+    // Export Condo Analysis if available
+    if (analysis.condo && (sectionType === 'all' || sectionType === 'condo')) {
+      // Condo Design Analysis
+      if (analysis.condo.designGroups && analysis.condo.designGroups.length > 0) {
+        const headers = [
+          'Design',
+          'Total Condos',
+          'Avg Size',
+          'Avg Sale Price',
+          'Avg Adjusted Price',
+          'Delta %'
+        ];
+
+        const data = analysis.condo.designGroups.map(group => [
+          `${group.code} - ${group.name}`,
+          group.count,
+          group.avgSize ? Math.round(group.avgSize) : '—',
+          group.avgPrice ? Math.round(group.avgPrice) : '—',
+          group.avgAdjustedPrice === 0 ? '—' : group.isBaseline ? '—' : Math.round(group.avgAdjustedPrice),
+          group.deltaPercent ? Math.round(group.deltaPercent) : 'BASELINE'
+        ]);
+
+        // Find the baseline row for Condo Design analysis
+        const deltaColIndexCD = headers.indexOf('Delta %');
+        let baselineRowIndexCD = -1;
+
+        for (let i = 0; i < data.length; i++) {
+          const deltaValue = data[i][deltaColIndexCD];
+          if (deltaValue === 'BASELINE' || deltaValue === 0) {
+            baselineRowIndexCD = i + 1;
+            break;
+          }
+        }
+
+        const formulaColumns = [{
+          column: 'Avg Adjusted Price',
+          getFormula: (R, C, headers, ws) => {
+            const avgSizeCol = headers.indexOf('Avg Size');
+            const salePriceCol = headers.indexOf('Avg Sale Price');
+            const deltaCol = headers.indexOf('Delta %');
+
+            if (avgSizeCol === -1 || salePriceCol === -1 || baselineRowIndexCD === -1) return null;
+
+            const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
+            const deltaValue = ws[deltaCell]?.v;
+            if (deltaValue === 'BASELINE' || deltaValue === 0) {
+              return null;
+            }
+
+            const baselineSizeCell = XLSX.utils.encode_cell({ r: baselineRowIndexCD, c: avgSizeCol });
+            const currentSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+            const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
+            const baselineSizeValue = ws[baselineSizeCell]?.v;
+            const currentSizeValue = ws[currentSizeCell]?.v;
+            const salePriceValue = ws[salePriceCell]?.v;
+
+            if (typeof baselineSizeValue === 'number' && typeof currentSizeValue === 'number' &&
+                typeof salePriceValue === 'number' && currentSizeValue > 0) {
+              return `(($${baselineSizeCell}-${currentSizeCell})*((${salePriceCell}/${currentSizeCell})*0.5))+${salePriceCell}`;
+            }
+            return null;
+          }
+        }, {
+          column: 'Delta %',
+          getFormula: (R, C, headers, ws) => {
+            const adjPriceCol = headers.indexOf('Avg Adjusted Price');
+            const salePriceCol = headers.indexOf('Avg Sale Price');
+            const deltaCol = headers.indexOf('Delta %');
+
+            if (adjPriceCol === -1 || salePriceCol === -1 || baselineRowIndexCD === -1) return null;
+
+            const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
+            const deltaValue = ws[deltaCell]?.v;
+            if (deltaValue === 'BASELINE' || deltaValue === 0) {
+              return null;
+            }
+
+            const currentAdjPriceCell = XLSX.utils.encode_cell({ r: R, c: adjPriceCol });
+            const baselineSalePriceCell = XLSX.utils.encode_cell({ r: baselineRowIndexCD, c: salePriceCol });
+            const currentAdjPriceValue = ws[currentAdjPriceCell]?.v;
+            const baselineSalePriceValue = ws[baselineSalePriceCell]?.v;
+
+            if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
+                baselineSalePriceValue > 0) {
+              return `((${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell})*100`;
+            }
+            return null;
+          }
+        }];
+
+        const ws = createFormattedSheet(headers, data, { formulaColumns });
+        XLSX.utils.book_append_sheet(wb, ws, 'Condo Design');
+      }
+
+      // Condo Bedroom Analysis
+      if (analysis.condo.vcsBedroomGroups && Object.keys(analysis.condo.vcsBedroomGroups).length > 0) {
+        const headers = [
+          'VCS',
+          'Bedrooms',
+          'Total Properties',
+          'Total Sales',
+          'Avg Size (All)',
+          'Avg Sale Price',
+          'Avg Adjusted Price',
+          'Delta %'
+        ];
+
+        const data = [];
+        Object.entries(analysis.condo.vcsBedroomGroups).forEach(([vcs, vcsGroup]) => {
+          if (vcsGroup.bedrooms) {
+            Object.entries(vcsGroup.bedrooms).forEach(([bedrooms, group]) => {
+              data.push([
+                vcsGroup.description || vcs,
+                group.label,
+                group.propertiesCount || 0,
+                group.salesCount || 0,
+                group.avgSize ? Math.round(group.avgSize) : '��',
+                group.avgPrice ? Math.round(group.avgPrice) : '—',
+                group.avgAdjustedPrice ? Math.round(group.avgAdjustedPrice) : '—',
+                group.deltaPercent ? `${group.deltaPercent.toFixed(0)}%` : group.salesCount > 0 ? 'BASELINE' : '—'
+              ]);
+            });
+          }
+        });
+
+        if (data.length > 0) {
+          // Find the baseline row for Condo Bedroom analysis
+          const deltaColIndexCB = headers.indexOf('Delta %');
+          let baselineRowIndexCB = -1;
+
+          for (let i = 0; i < data.length; i++) {
+            const deltaValue = data[i][deltaColIndexCB];
+            if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+              baselineRowIndexCB = i + 1;
+              break;
+            }
+          }
+
+          const formulaColumns = [{
+            column: 'Avg Adjusted Price',
+            getFormula: (R, C, headers, ws) => {
+              const avgSizeCol = headers.indexOf('Avg Size (All)');
+              const salePriceCol = headers.indexOf('Avg Sale Price');
+              const deltaCol = headers.indexOf('Delta %');
+
+              if (avgSizeCol === -1 || salePriceCol === -1 || baselineRowIndexCB === -1) return null;
+
+              const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
+              const deltaValue = ws[deltaCell]?.v;
+              if (deltaValue === 'BASELINE' || deltaValue === '0%') {
+                return null;
+              }
+
+              const baselineSizeCell = XLSX.utils.encode_cell({ r: baselineRowIndexCB, c: avgSizeCol });
+              const currentSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+              const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
+              const baselineSizeValue = ws[baselineSizeCell]?.v;
+              const currentSizeValue = ws[currentSizeCell]?.v;
+              const salePriceValue = ws[salePriceCell]?.v;
+
+              if (typeof baselineSizeValue === 'number' && typeof currentSizeValue === 'number' &&
+                  typeof salePriceValue === 'number' && currentSizeValue > 0) {
+                return `(($${baselineSizeCell}-${currentSizeCell})*((${salePriceCell}/${currentSizeCell})*0.5))+${salePriceCell}`;
+              }
+              return null;
+            }
+          }];
+
+          const ws = createFormattedSheet(headers, data, { formulaColumns });
+          XLSX.utils.book_append_sheet(wb, ws, 'Condo Bedroom');
+        }
+      }
+
+      // Condo Floor Analysis
+      if (analysis.condo.floorGroups && analysis.condo.floorGroups.length > 0) {
+        const headers = [
+          'Floor Level',
+          'Total Condos',
+          'Avg Size',
+          'Avg Sale Price',
+          'Avg Adjusted Price',
+          'Delta %'
+        ];
+
+        const data = analysis.condo.floorGroups.map(group => [
+          group.label,
+          group.count,
+          group.avgSize ? Math.round(group.avgSize) : '—',
+          group.avgPrice ? Math.round(group.avgPrice) : '—',
+          group.avgAdjustedPrice === 0 ? '—' : group.isBaseline ? '—' : Math.round(group.avgAdjustedPrice),
+          group.deltaPercent ? Math.round(group.deltaPercent) : '—'
+        ]);
+
+        // Find the baseline row for Condo Floor analysis
+        const deltaColIndexCF = headers.indexOf('Delta %');
+        let baselineRowIndexCF = -1;
+
+        for (let i = 0; i < data.length; i++) {
+          const deltaValue = data[i][deltaColIndexCF];
+          if (deltaValue === 'BASELINE' || deltaValue === 0) {
+            baselineRowIndexCF = i + 1;
+            break;
+          }
+        }
+
+        const formulaColumns = [{
+          column: 'Avg Adjusted Price',
+          getFormula: (R, C, headers, ws) => {
+            const avgSizeCol = headers.indexOf('Avg Size');
+            const salePriceCol = headers.indexOf('Avg Sale Price');
+            const deltaCol = headers.indexOf('Delta %');
+
+            if (avgSizeCol === -1 || salePriceCol === -1 || baselineRowIndexCF === -1) return null;
+
+            const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
+            const deltaValue = ws[deltaCell]?.v;
+            if (deltaValue === 'BASELINE' || deltaValue === 0) {
+              return null;
+            }
+
+            const baselineSizeCell = XLSX.utils.encode_cell({ r: baselineRowIndexCF, c: avgSizeCol });
+            const currentSizeCell = XLSX.utils.encode_cell({ r: R, c: avgSizeCol });
+            const salePriceCell = XLSX.utils.encode_cell({ r: R, c: salePriceCol });
+            const baselineSizeValue = ws[baselineSizeCell]?.v;
+            const currentSizeValue = ws[currentSizeCell]?.v;
+            const salePriceValue = ws[salePriceCell]?.v;
+
+            if (typeof baselineSizeValue === 'number' && typeof currentSizeValue === 'number' &&
+                typeof salePriceValue === 'number' && currentSizeValue > 0) {
+              return `(($${baselineSizeCell}-${currentSizeCell})*((${salePriceCell}/${currentSizeCell})*0.5))+${salePriceCell}`;
+            }
+            return null;
+          }
+        }, {
+          column: 'Delta %',
+          getFormula: (R, C, headers, ws) => {
+            const adjPriceCol = headers.indexOf('Avg Adjusted Price');
+            const salePriceCol = headers.indexOf('Avg Sale Price');
+            const deltaCol = headers.indexOf('Delta %');
+
+            if (adjPriceCol === -1 || salePriceCol === -1 || baselineRowIndexCF === -1) return null;
+
+            const deltaCell = XLSX.utils.encode_cell({ r: R, c: deltaCol });
+            const deltaValue = ws[deltaCell]?.v;
+            if (deltaValue === 'BASELINE' || deltaValue === 0) {
+              return null;
+            }
+
+            const currentAdjPriceCell = XLSX.utils.encode_cell({ r: R, c: adjPriceCol });
+            const baselineSalePriceCell = XLSX.utils.encode_cell({ r: baselineRowIndexCF, c: salePriceCol });
+            const currentAdjPriceValue = ws[currentAdjPriceCell]?.v;
+            const baselineSalePriceValue = ws[baselineSalePriceCell]?.v;
+
+            if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
+                baselineSalePriceValue > 0) {
+              return `((${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell})*100`;
+            }
+            return null;
+          }
+        }];
+
+        const ws = createFormattedSheet(headers, data, { formulaColumns });
+        XLSX.utils.book_append_sheet(wb, ws, 'Condo Floor');
+      }
+    }
+
+    // Check if any sheets were added to the workbook
+    if (!wb.SheetNames || wb.SheetNames.length === 0) {
+      alert('No data available to export. Please ensure the analysis has been run and contains valid property data.');
+      return;
+    }
+
+    // Write file
+    const filename = sectionType === 'all'
+      ? `OverallAnalysis_${jobData?.job_name || 'export'}_${timestamp}.xlsx`
+      : `OverallAnalysis_${sectionType}_${jobData?.job_name || 'export'}_${timestamp}.xlsx`;
+    XLSX.writeFile(wb, filename);
+  };
+
   // ==================== MAIN RENDER ====================
   
   return (
@@ -1445,7 +2372,7 @@ const OverallAnalysisTab = ({
             </select>
             
             <button
-              onClick={runAnalysis}
+              onClick={() => runAnalysis()}
               disabled={isProcessing}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
             >
@@ -1454,12 +2381,12 @@ const OverallAnalysisTab = ({
             </button>
             
             <button
-              onClick={() => exportToCSV('all')}
+              onClick={() => exportToExcel()}
               disabled={!analysis}
               className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2"
             >
               <Download className="h-4 w-4" />
-              Export All
+              Export
             </button>
           </div>
         </div>
@@ -1567,7 +2494,13 @@ const OverallAnalysisTab = ({
                               {group.salesCount > 0 ? formatCurrency(group.avgPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
                             </td>
                             <td className="px-4 py-3 text-sm text-center font-medium">
-                              {group.salesCount > 0 ? formatCurrency(group.avgAdjustedPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
+                              {group.salesCount === 0 ? (
+                                <span className="text-gray-500 text-xs">NO SALES DATA</span>
+                              ) : group.isBaseline ? (
+                                <span className="text-gray-400">—</span>
+                              ) : (
+                                formatCurrency(group.avgAdjustedPrice)
+                              )}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {group.salesCount === 0 ? (
@@ -1582,9 +2515,9 @@ const OverallAnalysisTab = ({
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {group.salesCount > 0 && group.cmeBracket ? (
-                                <span 
+                                <span
                                   className="px-2 py-1 text-xs rounded font-medium"
-                                  style={{ 
+                                  style={{
                                     backgroundColor: group.cmeBracket.color,
                                     color: group.cmeBracket.textColor
                                   }}
@@ -1599,14 +2532,6 @@ const OverallAnalysisTab = ({
                         ))}
                       </tbody>
                     </table>
-                  </div>
-                  <div className="mt-4 flex justify-end">
-                    <button
-                      onClick={() => exportToCSV('typeUse')}
-                      className="text-sm text-blue-600 hover:text-blue-800"
-                    >
-                      Export Type & Use Data
-                    </button>
                   </div>
                 </>
               )}
@@ -1703,7 +2628,13 @@ const OverallAnalysisTab = ({
                               {group.salesCount > 0 ? formatCurrency(group.avgPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
                             </td>
                             <td className="px-4 py-3 text-sm text-center font-medium">
-                              {group.salesCount > 0 ? formatCurrency(group.avgAdjustedPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
+                              {group.salesCount === 0 ? (
+                                <span className="text-gray-500 text-xs">NO SALES DATA</span>
+                              ) : group.isBaseline ? (
+                                <span className="text-gray-400">—</span>
+                              ) : (
+                                formatCurrency(group.avgAdjustedPrice)
+                              )}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {group.salesCount === 0 ? (
@@ -1720,14 +2651,6 @@ const OverallAnalysisTab = ({
                         ))}
                       </tbody>
                     </table>
-                  </div>
-                  <div className="mt-4 flex justify-end">
-                    <button
-                      onClick={() => exportToCSV('design')}
-                      className="text-sm text-blue-600 hover:text-blue-800"
-                    >
-                      Export Design Data
-                    </button>
                   </div>
                 </>
               )}
@@ -1788,7 +2711,13 @@ const OverallAnalysisTab = ({
                               {group.salesCount > 0 ? formatCurrency(group.avgPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
                             </td>
                             <td className="px-4 py-3 text-sm text-center font-medium">
-                              {group.salesCount > 0 ? formatCurrency(group.avgAdjustedPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
+                              {group.salesCount === 0 ? (
+                                <span className="text-gray-500 text-xs">NO SALES DATA</span>
+                              ) : group.isBaseline ? (
+                                <span className="text-gray-400">—</span>
+                              ) : (
+                                formatCurrency(group.avgAdjustedPrice)
+                              )}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {group.salesCount === 0 ? (
@@ -1812,14 +2741,6 @@ const OverallAnalysisTab = ({
                         ))}
                       </tbody>
                     </table>
-                  </div>
-                  <div className="mt-4 flex justify-end">
-                    <button
-                      onClick={() => exportToCSV('yearBuilt')}
-                      className="text-sm text-blue-600 hover:text-blue-800"
-                    >
-                      Export Year Built Data
-                    </button>
                   </div>
                 </>
               )}
@@ -1941,7 +2862,7 @@ const OverallAnalysisTab = ({
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.salesCount}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearAll > 0 ? designGroup.avgYearAll : '—'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeAll > 0 ? formatNumber(designGroup.avgSizeAll) : '—'}</div>
-                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearSales > 0 ? designGroup.avgYearSales : '—'}</div>
+                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearSales > 0 ? designGroup.avgYearSales : '��'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeSales > 0 ? formatNumber(designGroup.avgSizeSales) : '�����'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">
                                         {designGroup.salesCount > 0 ? formatCurrency(designGroup.avgPrice) : '—'}
@@ -1951,7 +2872,7 @@ const OverallAnalysisTab = ({
                                       </div>
                                       <div className="col-span-1 text-center text-xs">
                                         {designGroup.salesCount === 0 ? (
-                                          <span className="text-gray-400">—</span>
+                                          <span className="text-gray-400">���</span>
                                         ) : designGroup.deltaPercent !== 0 ? (
                                           <span className={designGroup.deltaPercent > 0 ? 'text-green-600' : 'text-red-600'}>
                                             {designGroup.deltaPercent > 0 ? '+' : ''}{designGroup.deltaPercent.toFixed(0)}%
@@ -2041,7 +2962,13 @@ const OverallAnalysisTab = ({
                               {group.avgPrice > 0 ? formatCurrency(group.avgPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
                             </td>
                             <td className="px-4 py-3 text-sm text-center font-medium">
-                              {group.avgAdjustedPrice > 0 ? formatCurrency(group.avgAdjustedPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
+                              {group.avgAdjustedPrice === 0 ? (
+                                <span className="text-gray-500 text-xs">NO SALES DATA</span>
+                              ) : group.isBaseline ? (
+                                <span className="text-gray-400">—</span>
+                              ) : (
+                                formatCurrency(group.avgAdjustedPrice)
+                              )}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {group.avgAdjustedPrice === 0 ? (
@@ -2110,7 +3037,7 @@ const OverallAnalysisTab = ({
                                   <td className="px-3 py-2 text-sm font-medium">{bedroom.label}</td>
                                   <td className="px-3 py-2 text-sm text-center">{bedroom.salesCount}</td>
                                   <td className="px-3 py-2 text-sm text-center">
-                                    {bedroom.avgSize > 0 ? formatNumber(bedroom.avgSize) : '���'}
+                                    {bedroom.avgSize > 0 ? formatNumber(bedroom.avgSize) : '����'}
                                   </td>
                                   <td className="px-3 py-2 text-sm text-center">
                                     {bedroom.avgPrice > 0 ? formatCurrency(bedroom.avgPrice) : <span className="text-gray-500 text-xs">NO DATA</span>}
@@ -2184,7 +3111,13 @@ const OverallAnalysisTab = ({
                               {floor.avgPrice > 0 ? formatCurrency(floor.avgPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
                             </td>
                             <td className="px-4 py-3 text-sm text-center font-medium">
-                              {floor.avgAdjustedPrice > 0 ? formatCurrency(floor.avgAdjustedPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
+                              {floor.avgAdjustedPrice === 0 ? (
+                                <span className="text-gray-500 text-xs">NO SALES DATA</span>
+                              ) : floor.isBaseline ? (
+                                <span className="text-gray-400">—</span>
+                              ) : (
+                                formatCurrency(floor.avgAdjustedPrice)
+                              )}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {floor.label === '1ST FLOOR' ? (

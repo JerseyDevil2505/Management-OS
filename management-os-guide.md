@@ -1164,6 +1164,57 @@ LEFT JOIN employees e ON ja.employee_id = e.id;
 
 **Implementation Note:** These views should be created in a migration script to improve query performance and simplify component code.
 
+---
+
+## 🔄 Latest Session Summary (January 2025)
+
+### ✅ Completed: Overall Analysis Tab - Baseline Normalization & Excel Export
+
+**Context:** Fixed adjusted price calculations and Excel export formulas to use correct baseline normalization methodology.
+
+**Key Changes:**
+1. **Baseline Normalization Logic** - All sections now normalize to the correct baseline:
+   - **Type & Use**: Normalizes to Single Family (or highest priced group)
+   - **Design Analysis**: Normalizes to highest priced design
+   - **Year Built**: Normalizes to highest priced year bracket
+   - **VCS by Type**: Hierarchical - each level normalizes to its own baseline
+   - **Condo Design**: Normalizes to highest priced condo design
+   - **Condo Floor**: Normalizes to 1st Floor
+
+2. **Delta Calculation Fix**: Changed from `(Adj Price - Baseline Adj Price) / Baseline Adj Price` to `(Adj Price - Baseline Sale Price) / Baseline Sale Price`
+
+3. **UI Display**: Baseline rows now show "—" for Adj Price column (not a calculated value)
+
+4. **Excel Export Enhancements**:
+   - Added formulas for "Adj Price" columns using Jim's 50% size adjustment
+   - Added formulas for "Delta" columns: `((Adj Price - Baseline Sale Price) / Baseline Sale Price) * 100`
+   - Baseline rows export as "—" for Adj Price, "BASELINE" for Delta
+   - All formulas reference actual Excel cells (not hardcoded values)
+   - Proper percentage formatting applied
+
+**Files Modified:**
+- `src/components/job-modules/market-tabs/OverallAnalysisTab.jsx` (~3,300 lines)
+
+**Status:** ✅ Complete and tested. Analysis refreshes correctly, exports show formulas.
+
+---
+
+### 📋 Next Session: Land & Cost Valuation Excel Exports
+
+**Pending Work:**
+1. **LandValuationTab.jsx** (~10,000 lines) - Add Excel export functionality
+2. **CostValuationTab.jsx** (~800 lines) - Add Excel export functionality
+
+**Approach:** Follow the pattern established in OverallAnalysisTab:
+- Use `xlsx-js-style` library
+- Create formatted worksheets with proper styling
+- Apply formulas where calculations can be represented
+- Include proper headers, column widths, and cell formatting
+
+**Note:** These are complex tabs with multiple sections. Consider breaking exports into separate worksheets within the same workbook.
+
+---
+
 ### Missing Table Clarifications
 
 #### **payroll_entries** - Intentionally Not Implemented
@@ -2652,7 +2703,7 @@ standardLocations = [
 
 **Statistics Display:**
 ```
-┌─────────────────────────��────────────────���───────────────���─┐
+┌─────────────────────────��────────────────���───────────────���─��
 │ Type Use │ Total │ Avg Year │ Avg Size │ Sales │ Adj Price │
 ├───────────────────────────────────────────���────────────────┤
 │ Single   │ 1,234 │   1985   │  1,850   │  156  │ $285,000  │
@@ -2706,7 +2757,7 @@ floorPremium = ((floorPrice - firstFloorPrice) / firstFloorPrice) × 100
 │ 2ND FLOOR │  189  │ $162,000  │ -2%          │
 │ 3RD FLOOR │  145  │ $158,000  │ -4%          │
 │ PENTHOUSE │   12  │ $195,000  │ +18%         │
-└──────���─────────────���─────────────────────────┘
+└──────���─────────────����─────────────────────────┘
 ```
 
 **Bedroom Detection Logic:**
@@ -3404,7 +3455,7 @@ Component allows switching between two price calculation methods:
 
 **Price Basis Configuration:**
 ```
-┌─────────────────────────────────────────┐
+┌─────��───────────────────────────────────┐
 │ Price Basis: ⦿ Price Time              │
 │              ○ Sale Price               │
 │                                         │
@@ -3733,7 +3784,7 @@ Recommended Factor: 1.12 (median)
 ```
 ┌──���──────────────────────────────────────────────────────────┐
 │                    SUMMARY STATISTICS                       │
-├─────────────────────────────────────────────────────────────┤
+├────────────���────────────────────────────────────────────────┤
 │ Included Properties: 42                                     │
 │                                                             │
 │ Sum of Sale Prices:      $12,450,000                        │
@@ -5525,79 +5576,3 @@ Updates checklist item completion when data is entered
 Marks items as auto-completed based on module activity
 Syncs with ManagementChecklist component
 
----
-
-## 📋 TODO: Export Formatting & Formula Implementation
-
-**Status**: In Progress (Branch work)
-**Last Updated**: January 2025
-**Component**: PreValuationTab.jsx and related market analysis tabs
-
-### ✅ Completed:
-1. **Normalization Export (PreValuationTab.jsx)**
-   - ✅ Bold headers with Leelawadee font, size 10
-   - ✅ Centered alignment (horizontal and vertical)
-   - ✅ SFLA column: Number format with comma, no decimals (`#,##0`)
-   - ✅ Assessed Value, Sale Price: Currency format with $, no decimals (`$#,##0`)
-   - ✅ Time Normalized Price: Formula `=SalePrice*HPIMultiplier`, currency format
-   - ✅ Size Normalized Price: Jim's 50% formula `=((AvgSFLA-CurrentSFLA)*((TimeNormPrice/CurrentSFLA)*0.5))+TimeNormPrice`
-   - ✅ Sales Ratio: Formula `=TimeNormPrice/SalePrice`, percentage format no decimals (`0%`)
-   - ✅ Avg SFLA column: Only shows for time normalized sales
-   - ✅ Formulas only apply to properties with time normalization data
-
-### 🔲 Remaining Work:
-
-#### 1. **Market Analysis Exports**
-   **Location**: PreValuationTab.jsx (or related market tabs)
-   - [ ] Apply consistent formatting (Leelawadee, size 10, centered)
-   - [ ] Identify columns needing number/currency formatting
-   - [ ] Add formulas where calculations are displayed
-   - [ ] Set appropriate column widths
-   - [ ] Ensure formulas match UI display
-
-#### 2. **Unit Rate Config Export**
-   **Location**: PreValuationTab.jsx - Unit Rate Configuration section
-   - [ ] Apply consistent formatting (Leelawadee, size 10, centered)
-   - [ ] Format unit rate values appropriately
-   - [ ] Format lot size calculations
-   - [ ] Add formulas for calculated fields
-   - [ ] Set appropriate column widths
-   - [ ] Review BRT vs Microsystems vendor-specific exports
-
-#### 3. **Page by Page Export**
-   **Location**: LandValuationTab.jsx or related worksheet component
-   - [ ] Apply consistent formatting (Leelawadee, size 10, centered)
-   - [ ] Identify columns needing formatting (currency, percentage, number)
-   - [ ] Add formulas for calculated adjustments
-   - [ ] Set appropriate column widths
-   - [ ] Ensure formulas display for verification
-
-### 📐 Standard Formatting Template:
-```javascript
-// Base style for all cells
-const baseStyle = {
-  font: { name: 'Leelawadee', sz: 10, bold: R === 0 }, // Bold headers only
-  alignment: { horizontal: 'center', vertical: 'center' }
-};
-
-// Number formats
-'#,##0'        // Number with comma, no decimals (SFLA, counts)
-'$#,##0'       // Currency with $, no decimals (prices, values)
-'0%'           // Percentage, no decimals
-'0.00%'        // Percentage, 2 decimals (if needed)
-```
-
-### 🔑 Key Pattern (from Normalization Export):
-1. Create `rawDataForFormulas` array during export data mapping
-2. Store actual data values (not just worksheet cell references)
-3. Check raw data values to determine if formulas should be applied
-4. Extend worksheet range to include formula columns
-5. Initialize cells for formula columns even if initially empty
-6. Only apply formulas when source data exists (e.g., time normalization complete)
-
-### 📝 Notes:
-- All exports should use `xlsx-js-style` (not plain `xlsx`) for formatting support
-- Formulas should be visible in Excel for user verification
-- Column widths should be set for readability (use `ws['!cols']`)
-- Test with actual data to ensure formulas calculate correctly
-- Reference PreValuationTab.jsx `exportNormalizedSalesToExcel` function as template
