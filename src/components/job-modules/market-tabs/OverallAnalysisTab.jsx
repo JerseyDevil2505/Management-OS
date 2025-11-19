@@ -2134,7 +2134,7 @@ const OverallAnalysisTab = ({
         group.label,
         group.propertyCount,
         group.avgYearAll || '—',
-        group.avgSizeAll ? Math.round(group.avgSizeAll) : '—',
+        group.avgSizeAll ? Math.round(group.avgSizeAll) : '���',
         group.salesCount,
         group.avgYearSales || '—',
         group.avgSizeSales ? Math.round(group.avgSizeSales) : '—',
@@ -2480,14 +2480,12 @@ const OverallAnalysisTab = ({
           if (vcsGroup.bedrooms) {
             Object.entries(vcsGroup.bedrooms).forEach(([bedrooms, group]) => {
               data.push([
-                vcsGroup.description || vcs,
-                group.label,
-                group.propertiesCount || 0,
+                (vcsGroup.description || vcs) + '-' + group.label,
                 group.salesCount || 0,
-                group.avgSize ? Math.round(group.avgSize) : '��',
-                group.avgPrice ? Math.round(group.avgPrice) : '—',
-                group.avgAdjustedPrice ? Math.round(group.avgAdjustedPrice) : '—',
-                group.deltaPercent ? `${group.deltaPercent.toFixed(0)}%` : group.salesCount > 0 ? 'BASELINE' : '—'
+                group.avgSize ? Math.round(group.avgSize) : '',
+                group.avgPrice ? Math.round(group.avgPrice) : '',
+                group.avgAdjustedPrice ? Math.round(group.avgAdjustedPrice) : '',
+                group.deltaPercent !== undefined && group.deltaPercent !== 0 ? group.deltaPercent : group.salesCount > 0 ? 'BASELINE' : ''
               ]);
             });
           }
@@ -3243,7 +3241,7 @@ const OverallAnalysisTab = ({
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearAll > 0 ? designGroup.avgYearAll : '—'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeAll > 0 ? formatNumber(designGroup.avgSizeAll) : '—'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgYearSales > 0 ? designGroup.avgYearSales : '��'}</div>
-                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeSales > 0 ? formatNumber(designGroup.avgSizeSales) : '������'}</div>
+                                      <div className="col-span-1 text-center text-xs text-gray-600">{designGroup.avgSizeSales > 0 ? formatNumber(designGroup.avgSizeSales) : '�������'}</div>
                                       <div className="col-span-1 text-center text-xs text-gray-600">
                                         {designGroup.salesCount > 0 ? formatCurrency(designGroup.avgPrice) : '—'}
                                       </div>
