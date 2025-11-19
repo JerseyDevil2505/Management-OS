@@ -957,7 +957,7 @@ const OverallAnalysisTab = ({
         let totalAdjusted = 0;
         group.properties.forEach(p => {
           const adjusted = calculateAdjustedPrice(
-            (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
+            p._time_normalized_price,  // Always valid due to filtering above
             p.asset_sfla || 0,
             overallAvgSize  // Use OVERALL AVERAGE size
           );
@@ -1033,7 +1033,7 @@ const OverallAnalysisTab = ({
           let totalAdjusted = 0;
           group.properties.forEach(p => {
             const adjusted = calculateAdjustedPrice(
-              (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
+              p._time_normalized_price,  // Always valid due to filtering above
               p.asset_sfla || 0,
               baselineSize
             );
@@ -1292,7 +1292,7 @@ const OverallAnalysisTab = ({
         let totalAdjusted = 0;
         group.properties.forEach(p => {
           const adjusted = calculateAdjustedPrice(
-            (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
+            p._time_normalized_price,  // Always valid due to filtering above
             p.asset_sfla || 0,
             firstFloor.avgSize  // Use BASELINE (1st floor) size
           );
