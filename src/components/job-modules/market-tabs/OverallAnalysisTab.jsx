@@ -1004,8 +1004,9 @@ const OverallAnalysisTab = ({
       if (!endIntGroups[vcs]) {
         endIntGroups[vcs] = {
           code: vcs,
-          endUnits: { properties: [], totalPrice: 0, totalSize: 0, count: 0 },
-          interiorUnits: { properties: [], totalPrice: 0, totalSize: 0, count: 0 }
+          endUnits: { properties: [], totalPrice: 0, totalSize: 0, count: 0, avgPrice: 0, avgSize: 0, avgAdjustedPrice: 0 },
+          interiorUnits: { properties: [], totalPrice: 0, totalSize: 0, count: 0, avgPrice: 0, avgSize: 0, avgAdjustedPrice: 0 },
+          deltaPercent: 0
         };
       }
 
