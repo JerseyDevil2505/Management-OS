@@ -2452,6 +2452,7 @@ const OverallAnalysisTab = ({
 
         if (flattenedFloors.length === 0) return; // Skip if no floor data
         const headers = [
+          'VCS',
           'Floor Level',
           'Total Condos',
           'Avg Size',
@@ -2460,13 +2461,14 @@ const OverallAnalysisTab = ({
           'Delta %'
         ];
 
-        const data = analysis.condo.floorGroups.map(group => [
-          group.label,
-          group.count,
-          group.avgSize ? Math.round(group.avgSize) : '—',
-          group.avgPrice ? Math.round(group.avgPrice) : '—',
-          group.avgAdjustedPrice === 0 ? '—' : group.isBaseline ? '—' : Math.round(group.avgAdjustedPrice),
-          group.deltaPercent ? Math.round(group.deltaPercent) : '—'
+        const data = flattenedFloors.map(floor => [
+          floor.vcs,
+          floor.label,
+          floor.count,
+          floor.avgSize ? Math.round(floor.avgSize) : '—',
+          floor.avgPrice ? Math.round(floor.avgPrice) : '—',
+          floor.avgAdjustedPrice === 0 ? '—' : floor.isBaseline ? '—' : Math.round(floor.avgAdjustedPrice),
+          floor.deltaPercent ? Math.round(floor.deltaPercent) : floor.isBaseline ? 'BASELINE' : '—'
         ]);
 
         // Find the baseline row for Condo Floor analysis
