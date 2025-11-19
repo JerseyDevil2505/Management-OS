@@ -1094,6 +1094,7 @@ getBRTValue: function(property, codeDefinitions, fieldName) {
     'asset_building_class': '20',
     'asset_type_use': '21',
     'asset_stories': '22',
+    'asset_story_height': '22',
     'asset_ext_cond': '60',
     'asset_int_cond': '60',
     'inspection_info_by': '53'
