@@ -1771,6 +1771,9 @@ const OverallAnalysisTab = ({
   const exportToExcel = (sectionType = 'all') => {
     if (!analysis) return;
 
+    console.log('[Export] Starting export...', sectionType);
+    const startTime = Date.now();
+
     const wb = XLSX.utils.book_new();
     const timestamp = new Date().toISOString().split('T')[0];
 
@@ -2804,7 +2807,11 @@ const OverallAnalysisTab = ({
     const filename = sectionType === 'all'
       ? `OverallAnalysis_${jobData?.job_name || 'export'}_${timestamp}.xlsx`
       : `OverallAnalysis_${sectionType}_${jobData?.job_name || 'export'}_${timestamp}.xlsx`;
+
+    console.log('[Export] Writing file...', filename);
     XLSX.writeFile(wb, filename);
+    const elapsed = Date.now() - startTime;
+    console.log(`[Export] Complete in ${elapsed}ms`);
   };
 
   // ==================== MAIN RENDER ====================
