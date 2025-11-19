@@ -3278,6 +3278,123 @@ const OverallAnalysisTab = ({
                 )}
               </div>
 
+              {/* End vs Interior Unit Analysis */}
+              {Object.keys(analysis.condo.endIntGroups).length > 0 && (
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                  <div
+                    onClick={() => toggleSection('condoEndInt')}
+                    className="flex justify-between items-center mb-4 cursor-pointer hover:bg-gray-50 -m-2 p-2 rounded"
+                  >
+                    <h3 className="text-lg font-semibold">End Unit vs Interior Unit Analysis</h3>
+                    {expandedSections.condoEndInt ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                  </div>
+
+                  {expandedSections.condoEndInt && (
+                    <>
+                      {/* Summary Banner */}
+                      <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+                        <h4 className="font-medium text-green-900 mb-3">Overall End Unit Premium</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          {(() => {
+                            const validVCS = Object.values(analysis.condo.endIntGroups).filter(vcs =>
+                              vcs.endUnits.count > 0 && vcs.interiorUnits.count > 0
+                            );
+                            if (validVCS.length === 0) return <div className="col-span-2 text-sm text-gray-600">Insufficient data for comparison</div>;
+
+                            const avgDelta = validVCS.reduce((sum, vcs) => sum + vcs.deltaCurrency, 0) / validVCS.length;
+                            const avgDeltaPct = validVCS.reduce((sum, vcs) => sum + vcs.deltaPercent, 0) / validVCS.length;
+
+                            return (
+                              <>
+                                <div className="bg-white rounded p-3">
+                                  <div className="text-xs text-gray-600 mb-1">Average Premium (Currency)</div>
+                                  <div className="text-lg font-semibold text-gray-900">
+                                    {formatCurrency(avgDelta)}
+                                  </div>
+                                </div>
+                                <div className="bg-white rounded p-3">
+                                  <div className="text-xs text-gray-600 mb-1">Average Premium (Percent)</div>
+                                  <div className={`text-lg font-semibold ${avgDeltaPct > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {avgDeltaPct > 0 ? '+' : ''}{avgDeltaPct.toFixed(1)}%
+                                  </div>
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </div>
+
+                      {/* VCS Breakdown */}
+                      <div className="space-y-6">
+                        {Object.entries(analysis.condo.endIntGroups)
+                          .filter(([_, vcsGroup]) => vcsGroup.endUnits.count > 0 || vcsGroup.interiorUnits.count > 0)
+                          .map(([vcs, vcsGroup]) => (
+                          <div key={vcs} className="border border-gray-200 rounded-lg p-4">
+                            <h4 className="font-medium text-gray-900 mb-3">
+                              VCS {vcsGroup.code}
+                            </h4>
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Type</th>
+                                    <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Count</th>
+                                    <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Avg Size</th>
+                                    <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Sale Price</th>
+                                    <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Adj Sale Price</th>
+                                    <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Delta</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                  <tr className="bg-yellow-50">
+                                    <td className="px-3 py-2 text-sm font-medium">Interior Unit</td>
+                                    <td className="px-3 py-2 text-sm text-center">{vcsGroup.interiorUnits.count}</td>
+                                    <td className="px-3 py-2 text-sm text-center">
+                                      {vcsGroup.interiorUnits.avgSize > 0 ? formatNumber(vcsGroup.interiorUnits.avgSize) : '—'}
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-center">
+                                      {vcsGroup.interiorUnits.avgPrice > 0 ? formatCurrency(vcsGroup.interiorUnits.avgPrice) : <span className="text-gray-500 text-xs">NO DATA</span>}
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-center font-medium">
+                                      <span className="text-gray-400">—</span>
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-center">
+                                      <span className="text-gray-400 text-xs">BASELINE</span>
+                                    </td>
+                                  </tr>
+                                  <tr>
+                                    <td className="px-3 py-2 text-sm font-medium">End Unit</td>
+                                    <td className="px-3 py-2 text-sm text-center">{vcsGroup.endUnits.count}</td>
+                                    <td className="px-3 py-2 text-sm text-center">
+                                      {vcsGroup.endUnits.avgSize > 0 ? formatNumber(vcsGroup.endUnits.avgSize) : '—'}
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-center">
+                                      {vcsGroup.endUnits.avgPrice > 0 ? formatCurrency(vcsGroup.endUnits.avgPrice) : <span className="text-gray-500 text-xs">NO DATA</span>}
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-center font-medium">
+                                      {vcsGroup.endUnits.avgAdjustedPrice > 0 ? formatCurrency(vcsGroup.endUnits.avgAdjustedPrice) : <span className="text-gray-500 text-xs">NO DATA</span>}
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-center">
+                                      {vcsGroup.endUnits.count > 0 && vcsGroup.interiorUnits.count > 0 ? (
+                                        <span className={vcsGroup.deltaPercent > 0 ? 'text-green-600' : 'text-red-600'}>
+                                          {vcsGroup.deltaPercent > 0 ? '+' : ''}{vcsGroup.deltaPercent.toFixed(0)}%
+                                        </span>
+                                      ) : (
+                                        <span className="text-gray-500">—</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
               {/* Floor Analysis */}
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <div 
