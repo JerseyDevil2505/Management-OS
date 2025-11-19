@@ -1243,8 +1243,8 @@ const OverallAnalysisTab = ({
       vcsGroup.baseline = null;
     });
 
-    // Floor Analysis - ONLY VALID SALES
-    const floorGroups = {};
+    // Floor Analysis - VCS BREAKDOWN (like bedroom analysis)
+    const vcsFloorGroups = {};
     condos.forEach(p => {
       // DECODE story height CODE using code interpreter (e.g., code "10" → "CONDO 1ST STY")
       const storyHeightCode = p.asset_story_height;
@@ -1263,19 +1263,21 @@ const OverallAnalysisTab = ({
         }
       }
 
-      // Also get design name for fallback
-      const designName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || '' : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || '' : p.asset_design_style || '')) : p.asset_design_style || '';
-
       // Convert to uppercase for pattern matching
       const storyStr = String(storyHeightDecoded).toUpperCase();
-      const designStr = String(designName).toUpperCase();
-      let floor = 'Unknown';
 
-      // Check for floor patterns in DECODED story height or design description
-      if (storyStr.includes('1ST') || designStr.includes('1ST')) floor = '1ST FLOOR';
-      else if (storyStr.includes('2ND') || designStr.includes('2ND')) floor = '2ND FLOOR';
-      else if (storyStr.includes('3RD') || designStr.includes('3RD')) floor = '3RD FLOOR';
-      else if (storyStr.includes('TOP') || designStr.includes('TOP')) floor = 'TOP FLOOR';
+      // REQUIREMENT: Only process if "CONDO" appears in the decoded story height
+      if (!storyStr.includes('CONDO')) return;
+
+      // Parse floor level from the CONDO description
+      let floor = 'Unknown';
+      if (storyStr.includes('1ST')) floor = '1ST FLOOR';
+      else if (storyStr.includes('2ND')) floor = '2ND FLOOR';
+      else if (storyStr.includes('3RD')) floor = '3RD FLOOR';
+      else if (storyStr.includes('4TH')) floor = '4TH FLOOR';
+      else if (storyStr.includes('5TH')) floor = '5TH FLOOR';
+      else if (storyStr.includes('TOP')) floor = 'TOP FLOOR';
+      else if (storyStr.includes('PENT') || storyStr.includes('PHSE') || storyStr.includes('PENTHOUSE')) floor = 'PENTHOUSE';
 
       // Get time-normalized price (prefer PMA lookup, fallback to property field)
       const keyForLookup = p.property_composite_key;
@@ -1285,8 +1287,18 @@ const OverallAnalysisTab = ({
       // Skip if no valid sale price
       if (!timePrice) return;
 
-      if (!floorGroups[floor]) {
-        floorGroups[floor] = {
+      // Group by VCS
+      const vcs = p.new_vcs || p.property_vcs || 'Unknown';
+
+      if (!vcsFloorGroups[vcs]) {
+        vcsFloorGroups[vcs] = {
+          code: vcs,
+          floors: {}
+        };
+      }
+
+      if (!vcsFloorGroups[vcs].floors[floor]) {
+        vcsFloorGroups[vcs].floors[floor] = {
           label: floor,
           properties: [],
           totalPrice: 0,
@@ -1295,10 +1307,11 @@ const OverallAnalysisTab = ({
         };
       }
 
-      floorGroups[floor].properties.push({ ...p, _time_normalized_price: timePrice });
-      floorGroups[floor].count++;
-      floorGroups[floor].totalPrice += timePrice;
-      floorGroups[floor].totalSize += p.asset_sfla || 0;
+      const floorGroup = vcsFloorGroups[vcs].floors[floor];
+      floorGroup.properties.push({ ...p, _time_normalized_price: timePrice });
+      floorGroup.count++;
+      floorGroup.totalPrice += timePrice;
+      floorGroup.totalSize += p.asset_sfla || 0;
     });
 
     // Calculate floor averages first
