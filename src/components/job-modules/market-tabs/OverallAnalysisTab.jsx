@@ -1183,28 +1183,35 @@ const OverallAnalysisTab = ({
       floorGroups[floor].totalSize += p.asset_sfla || 0;
     });
 
-    // Calculate floor averages
+    // Calculate floor averages first
     Object.values(floorGroups).forEach(group => {
       group.avgPrice = group.count > 0 ? group.totalPrice / group.count : 0;
       group.avgSize = group.count > 0 ? group.totalSize / group.count : 0;
-      
-      // Calculate adjusted prices
-      let totalAdjusted = 0;
-      group.properties.forEach(p => {
-        const adjusted = calculateAdjustedPrice(
-          (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
-          p.asset_sfla || 0,
-          group.avgSize
-        );
-        totalAdjusted += adjusted;
-      });
-      
-      group.avgAdjustedPrice = group.count > 0 ? totalAdjusted / group.count : 0;
+    });
+
+    // Identify baseline (1st floor)
+    const firstFloor = floorGroups['1ST FLOOR'];
+
+    // Calculate adjusted prices using BASELINE (1st floor) size
+    Object.values(floorGroups).forEach(group => {
+      if (group.count > 0 && firstFloor) {
+        let totalAdjusted = 0;
+        group.properties.forEach(p => {
+          const adjusted = calculateAdjustedPrice(
+            (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
+            p.asset_sfla || 0,
+            firstFloor.avgSize  // Use BASELINE (1st floor) size
+          );
+          totalAdjusted += adjusted;
+        });
+        group.avgAdjustedPrice = totalAdjusted / group.count;
+      } else {
+        group.avgAdjustedPrice = 0;
+      }
     });
 
     // Calculate floor premiums
     // Delta is calculated as: (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
-    const firstFloor = floorGroups['1ST FLOOR'];
     if (firstFloor && firstFloor.avgPrice > 0) {
       Object.values(floorGroups).forEach(group => {
         if (group !== firstFloor) {
