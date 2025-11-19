@@ -2709,7 +2709,9 @@ const OverallAnalysisTab = ({
           floor.vcs + '-' + floor.label,
           floor.count,
           floor.avgSize ? Math.round(floor.avgSize) : '',
-          floor.avgPrice ? Math.round(floor.avgPrice) : '���',
+          floor.avgPrice ? Math.round(floor.avgPrice) : '',
+          floor.avgAdjustedPrice === 0 ? '' : floor.isBaseline ? '' : Math.round(floor.avgAdjustedPrice),
+          floor.deltaPercent !== undefined && floor.deltaPercent !== 0 ? floor.deltaPercent : floor.isBaseline ? 'BASELINE' : '���',
           floor.avgAdjustedPrice === 0 ? '—' : floor.isBaseline ? '—' : Math.round(floor.avgAdjustedPrice),
           floor.deltaPercent ? Math.round(floor.deltaPercent) : floor.isBaseline ? 'BASELINE' : '—'
         ]);
@@ -3224,7 +3226,7 @@ const OverallAnalysisTab = ({
                               {group.avgYearSales > 0 ? group.avgYearSales : '���'}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
-                              {group.avgSizeSales > 0 ? formatNumber(group.avgSizeSales) : '—'}
+                              {group.avgSizeSales > 0 ? formatNumber(group.avgSizeSales) : '���'}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {group.salesCount > 0 ? formatCurrency(group.avgPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
