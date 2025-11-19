@@ -2437,8 +2437,20 @@ const OverallAnalysisTab = ({
         }
       }
 
-      // Condo Floor Analysis
-      if (analysis.condo.floorGroups && analysis.condo.floorGroups.length > 0) {
+      // Condo Floor Analysis (now VCS-based, export flattened version)
+      if (analysis.condo.vcsFloorGroups && Object.keys(analysis.condo.vcsFloorGroups).length > 0) {
+        // Flatten VCS floor data for Excel export
+        const flattenedFloors = [];
+        Object.entries(analysis.condo.vcsFloorGroups).forEach(([vcs, vcsData]) => {
+          Object.values(vcsData.floors).forEach(floor => {
+            flattenedFloors.push({
+              vcs: vcs,
+              ...floor
+            });
+          });
+        });
+
+        if (flattenedFloors.length === 0) return; // Skip if no floor data
         const headers = [
           'Floor Level',
           'Total Condos',
