@@ -947,6 +947,7 @@ export const interpretCodes = {
     'asset_int_cond': '491',
     'asset_type_use': '500',
     'asset_stories': '510',
+    'asset_story_height': '510',
     'asset_design_style': '520',
     // Raw data fields
     'topo': '115',
@@ -982,6 +983,7 @@ brtParsedStructureMap: {
   'asset_building_class': { parent: '6', section: '20' },
   'asset_type_use': { parent: '7', section: '21' },
   'asset_stories': { parent: '8', section: '22' },
+  'asset_story_height': { parent: '8', section: '22' },
   'asset_ext_cond': { parent: '34', section: '60' },
   'asset_int_cond': { parent: '34', section: '60' },
   'inspection_info_by': { parent: '30', section: '53' },
@@ -1092,6 +1094,7 @@ getBRTValue: function(property, codeDefinitions, fieldName) {
     'asset_building_class': '20',
     'asset_type_use': '21',
     'asset_stories': '22',
+    'asset_story_height': '22',
     'asset_ext_cond': '60',
     'asset_int_cond': '60',
     'inspection_info_by': '53'

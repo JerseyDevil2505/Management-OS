@@ -437,7 +437,7 @@ export class MicrosystemsProcessor {
       asset_lot_sf: this.parseInteger(rawRecord['Lot Size In Sf']),
       asset_neighborhood: rawRecord['Neighborhood'],
       asset_sfla: this.parseNumeric(rawRecord['Livable Area']),
-      asset_story_height: this.parseNumeric(rawRecord['Story Height']),
+      asset_story_height: rawRecord['Story Height'] || null,  // Keep as text for floor analysis
       asset_type_use: rawRecord['Type Use Code'],
       asset_view: null, // Not available in Microsystems
       asset_year_built: this.parseInteger(rawRecord['Year Built']),
