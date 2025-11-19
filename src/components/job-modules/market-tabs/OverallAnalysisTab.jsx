@@ -684,7 +684,14 @@ const OverallAnalysisTab = ({
           totalSizeSales: 0,
           totalYearAll: 0,
           totalYearSales: 0,
-          types: {}
+          types: {},
+          avgPrice: 0,
+          avgSize: 0,
+          avgSizeSales: 0,
+          avgAdjustedPrice: 0,
+          delta: 0,
+          deltaPercent: 0,
+          isBaseline: false
         };
       }
       
