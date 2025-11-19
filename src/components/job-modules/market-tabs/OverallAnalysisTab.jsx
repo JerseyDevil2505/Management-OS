@@ -1246,14 +1246,29 @@ const OverallAnalysisTab = ({
     // Floor Analysis - ONLY VALID SALES
     const floorGroups = {};
     condos.forEach(p => {
-      // Look for floor info in story height or design - use only synchronous decoding
-      const storyHeight = p.asset_story_height || '';
-      const storyStr = String(storyHeight).toUpperCase();
+      // DECODE story height CODE using code interpreter (e.g., code "10" → "CONDO 1ST STY")
+      const storyHeightCode = p.asset_story_height;
+      let storyHeightDecoded = '';
+
+      if (storyHeightCode && codeDefinitions) {
+        if (vendorType === 'BRT') {
+          // BRT: Look up in section 22 (story height section)
+          storyHeightDecoded = interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_story_height', '22') || '';
+        } else if (vendorType === 'Microsystems') {
+          // Microsystems: Use 510 prefix for story height
+          storyHeightDecoded = interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_story_height') || '';
+        }
+      }
+
+      // Also get design name for fallback
       const designName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || '' : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_design_style') || p.asset_design_style || '' : p.asset_design_style || '')) : p.asset_design_style || '';
+
+      // Convert to uppercase for pattern matching
+      const storyStr = String(storyHeightDecoded).toUpperCase();
       const designStr = String(designName).toUpperCase();
       let floor = 'Unknown';
 
-      // Check for floor patterns (including STRY/STORY in addition to FLR/FLOOR)
+      // Check for floor patterns in DECODED story height or design description
       if (storyStr.includes('1ST') || designStr.includes('1ST')) floor = '1ST FLOOR';
       else if (storyStr.includes('2ND') || designStr.includes('2ND')) floor = '2ND FLOOR';
       else if (storyStr.includes('3RD') || designStr.includes('3RD')) floor = '3RD FLOOR';
@@ -2868,7 +2883,7 @@ const OverallAnalysisTab = ({
                               {group.avgYearSales > 0 ? group.avgYearSales : '���'}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
-                              {group.avgSizeSales > 0 ? formatNumber(group.avgSizeSales) : '—'}
+                              {group.avgSizeSales > 0 ? formatNumber(group.avgSizeSales) : '��'}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {group.salesCount > 0 ? formatCurrency(group.avgPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
