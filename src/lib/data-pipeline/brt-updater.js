@@ -567,7 +567,7 @@ export class BRTUpdater {
       asset_lot_sf: this.calculateLotSquareFeet(rawRecord),
       asset_neighborhood: rawRecord.NBHD,
       asset_sfla: this.parseNumeric(rawRecord.SFLA_TOTAL),
-      asset_story_height: this.parseNumeric(rawRecord.STORYHGT),
+      asset_story_height: rawRecord.STORYHGT || null,  // Keep as text for floor analysis
       asset_type_use: rawRecord.TYPEUSE,
       asset_view: rawRecord.VIEW,
       asset_year_built: this.parseInteger(rawRecord.YEARBUILT),
