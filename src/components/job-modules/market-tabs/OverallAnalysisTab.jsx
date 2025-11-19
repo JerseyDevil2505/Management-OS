@@ -2473,6 +2473,7 @@ const OverallAnalysisTab = ({
                 vcsBaselineMap[vcs] = index + 1; // +1 for Excel row (0-indexed to 1-indexed)
               }
             });
+            console.log('[Export] Condo Bedroom - baseline map:', vcsBaselineMap);
           }
 
           const formulaColumns = [
