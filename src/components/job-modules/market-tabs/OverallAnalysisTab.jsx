@@ -2708,7 +2708,7 @@ const OverallAnalysisTab = ({
         const data = flattenedFloors.map(floor => [
           floor.vcs + '-' + floor.label,
           floor.count,
-          floor.avgSize ? Math.round(floor.avgSize) : '—',
+          floor.avgSize ? Math.round(floor.avgSize) : '',
           floor.avgPrice ? Math.round(floor.avgPrice) : '���',
           floor.avgAdjustedPrice === 0 ? '—' : floor.isBaseline ? '—' : Math.round(floor.avgAdjustedPrice),
           floor.deltaPercent ? Math.round(floor.deltaPercent) : floor.isBaseline ? 'BASELINE' : '—'
