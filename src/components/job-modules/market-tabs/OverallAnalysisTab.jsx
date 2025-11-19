@@ -1458,68 +1458,74 @@ const OverallAnalysisTab = ({
       }
     });
 
-    // Calculate floor premium summary across all VCS
-    const floorSummary = {
-      firstToSecond: { count: 0, avgDelta: 0, avgDeltaPct: 0, hasData: false },
-      firstToThird: { count: 0, avgDelta: 0, avgDeltaPct: 0, hasData: false },
-      firstToTop: { count: 0, avgDelta: 0, avgDeltaPct: 0, hasData: false },
-      firstToPenthouse: { count: 0, avgDelta: 0, avgDeltaPct: 0, hasData: false }
-    };
-
+    // Calculate incremental floor-to-floor premium summary across all VCS
+    // Build ordered list of all unique floor levels across all VCS
+    const allFloorNames = new Set();
     Object.values(vcsFloorGroups).forEach(vcsGroup => {
-      const floors = vcsGroup.floors;
-      const firstFlr = floors['1ST FLOOR'];
-
-      if (firstFlr && firstFlr.avgPrice > 0) {
-        // 1st to 2nd Floor
-        if (floors['2ND FLOOR']?.avgAdjustedPrice > 0) {
-          const delta = floors['2ND FLOOR'].avgAdjustedPrice - firstFlr.avgPrice;
-          const deltaPct = (delta / firstFlr.avgPrice) * 100;
-          floorSummary.firstToSecond.avgDelta += delta;
-          floorSummary.firstToSecond.avgDeltaPct += deltaPct;
-          floorSummary.firstToSecond.count++;
-          floorSummary.firstToSecond.hasData = true;
-        }
-
-        // 1st to 3rd Floor
-        if (floors['3RD FLOOR']?.avgAdjustedPrice > 0) {
-          const delta = floors['3RD FLOOR'].avgAdjustedPrice - firstFlr.avgPrice;
-          const deltaPct = (delta / firstFlr.avgPrice) * 100;
-          floorSummary.firstToThird.avgDelta += delta;
-          floorSummary.firstToThird.avgDeltaPct += deltaPct;
-          floorSummary.firstToThird.count++;
-          floorSummary.firstToThird.hasData = true;
-        }
-
-        // 1st to Top Floor
-        if (floors['TOP FLOOR']?.avgAdjustedPrice > 0) {
-          const delta = floors['TOP FLOOR'].avgAdjustedPrice - firstFlr.avgPrice;
-          const deltaPct = (delta / firstFlr.avgPrice) * 100;
-          floorSummary.firstToTop.avgDelta += delta;
-          floorSummary.firstToTop.avgDeltaPct += deltaPct;
-          floorSummary.firstToTop.count++;
-          floorSummary.firstToTop.hasData = true;
-        }
-
-        // 1st to Penthouse
-        if (floors['PENTHOUSE']?.avgAdjustedPrice > 0) {
-          const delta = floors['PENTHOUSE'].avgAdjustedPrice - firstFlr.avgPrice;
-          const deltaPct = (delta / firstFlr.avgPrice) * 100;
-          floorSummary.firstToPenthouse.avgDelta += delta;
-          floorSummary.firstToPenthouse.avgDeltaPct += deltaPct;
-          floorSummary.firstToPenthouse.count++;
-          floorSummary.firstToPenthouse.hasData = true;
-        }
-      }
+      Object.keys(vcsGroup.floors).forEach(floorName => {
+        allFloorNames.add(floorName);
+      });
     });
 
-    // Calculate averages
-    Object.values(floorSummary).forEach(summary => {
-      if (summary.count > 0) {
-        summary.avgDelta = summary.avgDelta / summary.count;
-        summary.avgDeltaPct = summary.avgDeltaPct / summary.count;
-      }
+    // Sort floor names by typical order
+    const floorOrder = ['1ST FLOOR', '2ND FLOOR', '3RD FLOOR', '4TH FLOOR', '5TH FLOOR',
+                       '6TH FLOOR', '7TH FLOOR', '8TH FLOOR', '9TH FLOOR', '10TH FLOOR',
+                       '11TH FLOOR', '12TH FLOOR', '13TH FLOOR', '14TH FLOOR', '15TH FLOOR',
+                       '16TH FLOOR', '17TH FLOOR', '18TH FLOOR', '19TH FLOOR', '20TH FLOOR',
+                       '21ST FLOOR', '22ND FLOOR', '23RD FLOOR', '24TH FLOOR', '25TH FLOOR',
+                       '26TH FLOOR', '27TH FLOOR', '28TH FLOOR', '29TH FLOOR', '30TH FLOOR',
+                       '31ST FLOOR', '32ND FLOOR', '33RD FLOOR', '34TH FLOOR', '35TH FLOOR',
+                       '36TH FLOOR', '37TH FLOOR', '38TH FLOOR', '39TH FLOOR', '40TH FLOOR',
+                       'TOP FLOOR', 'PENTHOUSE'];
+
+    const sortedFloors = Array.from(allFloorNames).sort((a, b) => {
+      const aIndex = floorOrder.indexOf(a);
+      const bIndex = floorOrder.indexOf(b);
+      if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
+      if (aIndex === -1) return 1;
+      if (bIndex === -1) return -1;
+      return aIndex - bIndex;
     });
+
+    // Calculate incremental floor-to-floor premiums (each floor vs previous floor)
+    const floorSummary = {};
+
+    for (let i = 1; i < sortedFloors.length; i++) {
+      const prevFloor = sortedFloors[i - 1];
+      const currFloor = sortedFloors[i];
+      const key = `${prevFloor}_to_${currFloor}`;
+
+      floorSummary[key] = {
+        fromFloor: prevFloor,
+        toFloor: currFloor,
+        count: 0,
+        avgDelta: 0,
+        avgDeltaPct: 0,
+        hasData: false
+      };
+
+      // Aggregate across all VCS groups that have both floors
+      Object.values(vcsFloorGroups).forEach(vcsGroup => {
+        const prevFloorData = vcsGroup.floors[prevFloor];
+        const currFloorData = vcsGroup.floors[currFloor];
+
+        if (prevFloorData?.avgAdjustedPrice > 0 && currFloorData?.avgAdjustedPrice > 0) {
+          const delta = currFloorData.avgAdjustedPrice - prevFloorData.avgAdjustedPrice;
+          const deltaPct = (delta / prevFloorData.avgAdjustedPrice) * 100;
+
+          floorSummary[key].avgDelta += delta;
+          floorSummary[key].avgDeltaPct += deltaPct;
+          floorSummary[key].count++;
+          floorSummary[key].hasData = true;
+        }
+      });
+
+      // Calculate averages
+      if (floorSummary[key].count > 0) {
+        floorSummary[key].avgDelta = floorSummary[key].avgDelta / floorSummary[key].count;
+        floorSummary[key].avgDeltaPct = floorSummary[key].avgDeltaPct / floorSummary[key].count;
+      }
+    }
 
     // Calculate bedroom summary across all VCS
     const bedroomSummary = {
@@ -2295,7 +2301,7 @@ const OverallAnalysisTab = ({
                       designGroup.avgYearAll || '—',
                       designGroup.avgSizeAll ? Math.round(designGroup.avgSizeAll) : '—',
                       designGroup.avgYearSales || '—',
-                      designGroup.avgSizeSales ? Math.round(designGroup.avgSizeSales) : '—',
+                      designGroup.avgSizeSales ? Math.round(designGroup.avgSizeSales) : '��',
                       designGroup.avgPrice ? Math.round(designGroup.avgPrice) : '—',
                       designGroup.avgAdjustedPrice === 0 ? '—' : designGroup.isBaseline ? '—' : Math.round(designGroup.avgAdjustedPrice),
                       designGroup.deltaPercent !== 0 ? `${designGroup.deltaPercent.toFixed(0)}%` : 'TYPE BASE',
