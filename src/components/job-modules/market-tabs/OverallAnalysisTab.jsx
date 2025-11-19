@@ -2348,7 +2348,7 @@ const OverallAnalysisTab = ({
             </select>
             
             <button
-              onClick={runAnalysis}
+              onClick={() => runAnalysis()}
               disabled={isProcessing}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
             >
