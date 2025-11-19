@@ -924,32 +924,37 @@ const OverallAnalysisTab = ({
       designGroups[key].totalSize += p.asset_sfla || 0;
     });
 
-    // Calculate averages for designs
+    // Calculate averages first
     Object.values(designGroups).forEach(group => {
       group.avgPrice = group.count > 0 ? group.totalPrice / group.count : 0;
       group.avgSize = group.count > 0 ? group.totalSize / group.count : 0;
-      
-      // Calculate adjusted prices
-      let totalAdjusted = 0;
-      group.properties.forEach(p => {
-        const adjusted = calculateAdjustedPrice(
-          (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
-          p.asset_sfla || 0,
-          group.avgSize
-        );
-        totalAdjusted += adjusted;
-      });
-      
-      group.avgAdjustedPrice = group.count > 0 ? totalAdjusted / group.count : 0;
     });
 
-    // Find baseline design
-    let maxDesignPrice = 0;
+    // Find baseline design (highest priced)
     let baselineDesign = null;
+    let maxDesignPrice = 0;
     Object.values(designGroups).forEach(group => {
-      if (group.avgAdjustedPrice > maxDesignPrice) {
-        maxDesignPrice = group.avgAdjustedPrice;
+      if (group.count > 0 && group.avgPrice > maxDesignPrice) {
+        maxDesignPrice = group.avgPrice;
         baselineDesign = group;
+      }
+    });
+
+    // Calculate adjusted prices using BASELINE size
+    Object.values(designGroups).forEach(group => {
+      if (group.count > 0 && baselineDesign) {
+        let totalAdjusted = 0;
+        group.properties.forEach(p => {
+          const adjusted = calculateAdjustedPrice(
+            (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
+            p.asset_sfla || 0,
+            baselineDesign.avgSize  // Use BASELINE size
+          );
+          totalAdjusted += adjusted;
+        });
+        group.avgAdjustedPrice = totalAdjusted / group.count;
+      } else {
+        group.avgAdjustedPrice = 0;
       }
     });
 
