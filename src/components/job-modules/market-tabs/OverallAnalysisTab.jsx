@@ -2274,7 +2274,7 @@ const OverallAnalysisTab = ({
                 typeGroup.name,
                 typeGroup.propertyCount,
                 typeGroup.salesCount,
-                typeGroup.avgYearAll || '—',
+                typeGroup.avgYearAll || '���',
                 typeGroup.avgSizeAll ? Math.round(typeGroup.avgSizeAll) : '—',
                 typeGroup.avgYearSales || '—',
                 typeGroup.avgSizeSales ? Math.round(typeGroup.avgSizeSales) : '—',
@@ -2467,14 +2467,12 @@ const OverallAnalysisTab = ({
       // Condo Bedroom Analysis
       if (analysis.condo.vcsBedroomGroups && Object.keys(analysis.condo.vcsBedroomGroups).length > 0) {
         const headers = [
-          'VCS',
-          'Bedrooms',
-          'Total Properties',
-          'Total Sales',
-          'Avg Size (All)',
-          'Avg Sale Price',
-          'Avg Adjusted Price',
-          'Delta %'
+          'VCS Unit Type',
+          'Count',
+          'Avg Size',
+          'Sale Price',
+          'Adj Price',
+          'Delta'
         ];
 
         const data = [];
