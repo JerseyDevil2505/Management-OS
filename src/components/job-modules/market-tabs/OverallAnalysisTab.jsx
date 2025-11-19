@@ -2456,13 +2456,18 @@ const OverallAnalysisTab = ({
           const vcsBaselineMap = {};
           const vcsCol = headers.indexOf('VCS');
           const deltaCol = headers.indexOf('Delta');
-          data.forEach((row, index) => {
-            const vcs = row[vcsCol];
-            const delta = row[deltaCol];
-            if (delta === 'BASELINE' && !vcsBaselineMap[vcs]) {
-              vcsBaselineMap[vcs] = index + 1; // +1 for Excel row (0-indexed to 1-indexed)
-            }
-          });
+
+          // Safety check: only pre-compute if columns exist
+          if (vcsCol !== -1 && deltaCol !== -1) {
+            data.forEach((row, index) => {
+              if (!row || !Array.isArray(row)) return; // Skip invalid rows
+              const vcs = row[vcsCol];
+              const delta = row[deltaCol];
+              if (delta === 'BASELINE' && vcs && !vcsBaselineMap[vcs]) {
+                vcsBaselineMap[vcs] = index + 1; // +1 for Excel row (0-indexed to 1-indexed)
+              }
+            });
+          }
 
           const formulaColumns = [
             {
@@ -2695,13 +2700,18 @@ const OverallAnalysisTab = ({
         const vcsBaselineMapFloor = {};
         const vcsColFloor = headers.indexOf('VCS');
         const deltaColFloor = headers.indexOf('Delta');
-        data.forEach((row, index) => {
-          const vcs = row[vcsColFloor];
-          const delta = row[deltaColFloor];
-          if (delta === 'BASELINE' && !vcsBaselineMapFloor[vcs]) {
-            vcsBaselineMapFloor[vcs] = index + 1; // +1 for Excel row (0-indexed to 1-indexed)
-          }
-        });
+
+        // Safety check: only pre-compute if columns exist
+        if (vcsColFloor !== -1 && deltaColFloor !== -1) {
+          data.forEach((row, index) => {
+            if (!row || !Array.isArray(row)) return; // Skip invalid rows
+            const vcs = row[vcsColFloor];
+            const delta = row[deltaColFloor];
+            if (delta === 'BASELINE' && vcs && !vcsBaselineMapFloor[vcs]) {
+              vcsBaselineMapFloor[vcs] = index + 1; // +1 for Excel row (0-indexed to 1-indexed)
+            }
+          });
+        }
 
         const formulaColumns = [
           {
