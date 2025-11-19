@@ -893,21 +893,29 @@ const OverallAnalysisTab = ({
 
     if (condos.length === 0) return null;
 
-    // Design Analysis
+    // Design Analysis - ONLY VALID SALES
     const designGroups = {};
     condos.forEach(p => {
       const designCode = p.asset_design_style || 'Unknown';
       // Use only synchronous Microsystems decoding to avoid async rendering issues
       const designName = codeDefinitions ? (vendorType === 'Microsystems' ? interpretCodes.getMicrosystemsValue?.(p, codeDefinitions, 'asset_design_style') || designCode : (vendorType === 'BRT' ? interpretCodes.getBRTValue?.(p, codeDefinitions, 'asset_design_style') || designCode : designCode)) : designCode;
-      
+
       // Skip unknown/empty designs
-      if (!designCode || designCode === 'Unknown' || designCode === '' || 
+      if (!designCode || designCode === 'Unknown' || designCode === '' ||
           designName === 'Unknown' || designName === '') {
         return;
       }
-      
+
+      // Get time-normalized price (prefer PMA lookup, fallback to property field)
+      const keyForLookup = p.property_composite_key;
+      const timeNormFromPMA = timeNormalizedLookup.get(keyForLookup);
+      const timePrice = (timeNormFromPMA && timeNormFromPMA > 0) ? timeNormFromPMA : (p.values_norm_time && p.values_norm_time > 0 ? p.values_norm_time : null);
+
+      // Skip if no valid sale price
+      if (!timePrice) return;
+
       const key = `${designCode}-${designName}`;
-      
+
       if (!designGroups[key]) {
         designGroups[key] = {
           code: designCode,
@@ -918,10 +926,10 @@ const OverallAnalysisTab = ({
           count: 0
         };
       }
-      
-      designGroups[key].properties.push(p);
+
+      designGroups[key].properties.push({ ...p, _time_normalized_price: timePrice });
       designGroups[key].count++;
-      designGroups[key].totalPrice += (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0));
+      designGroups[key].totalPrice += timePrice;
       designGroups[key].totalSize += p.asset_sfla || 0;
     });
 
@@ -971,7 +979,7 @@ const OverallAnalysisTab = ({
       }
     });
 
-    // End vs Interior Analysis (NEW)
+    // End vs Interior Analysis (NEW) - ONLY VALID SALES
     const endIntGroups = {};
     condos.forEach(p => {
       const vcs = p.new_vcs || p.property_vcs || 'Unknown';
@@ -985,6 +993,14 @@ const OverallAnalysisTab = ({
       // Skip unknown types
       if (unitType === 'Unknown') return;
 
+      // Get time-normalized price (prefer PMA lookup, fallback to property field)
+      const keyForLookup = p.property_composite_key;
+      const timeNormFromPMA = timeNormalizedLookup.get(keyForLookup);
+      const timePrice = (timeNormFromPMA && timeNormFromPMA > 0) ? timeNormFromPMA : (p.values_norm_time && p.values_norm_time > 0 ? p.values_norm_time : null);
+
+      // Skip if no valid sale price
+      if (!timePrice) return;
+
       if (!endIntGroups[vcs]) {
         endIntGroups[vcs] = {
           code: vcs,
@@ -994,9 +1010,9 @@ const OverallAnalysisTab = ({
       }
 
       const targetGroup = unitType === 'End Unit' ? endIntGroups[vcs].endUnits : endIntGroups[vcs].interiorUnits;
-      targetGroup.properties.push(p);
+      targetGroup.properties.push({ ...p, _time_normalized_price: timePrice });
       targetGroup.count++;
-      targetGroup.totalPrice += (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0));
+      targetGroup.totalPrice += timePrice;
       targetGroup.totalSize += p.asset_sfla || 0;
     });
 
@@ -1221,7 +1237,7 @@ const OverallAnalysisTab = ({
       vcsGroup.baseline = null;
     });
 
-    // Floor Analysis
+    // Floor Analysis - ONLY VALID SALES
     const floorGroups = {};
     condos.forEach(p => {
       // Look for floor info in story height or design - use only synchronous decoding
@@ -1236,7 +1252,15 @@ const OverallAnalysisTab = ({
       else if (storyStr.includes('2ND') || designStr.includes('2ND')) floor = '2ND FLOOR';
       else if (storyStr.includes('3RD') || designStr.includes('3RD')) floor = '3RD FLOOR';
       else if (storyStr.includes('TOP') || designStr.includes('TOP')) floor = 'TOP FLOOR';
-      
+
+      // Get time-normalized price (prefer PMA lookup, fallback to property field)
+      const keyForLookup = p.property_composite_key;
+      const timeNormFromPMA = timeNormalizedLookup.get(keyForLookup);
+      const timePrice = (timeNormFromPMA && timeNormFromPMA > 0) ? timeNormFromPMA : (p.values_norm_time && p.values_norm_time > 0 ? p.values_norm_time : null);
+
+      // Skip if no valid sale price
+      if (!timePrice) return;
+
       if (!floorGroups[floor]) {
         floorGroups[floor] = {
           label: floor,
@@ -1246,10 +1270,10 @@ const OverallAnalysisTab = ({
           count: 0
         };
       }
-      
-      floorGroups[floor].properties.push(p);
+
+      floorGroups[floor].properties.push({ ...p, _time_normalized_price: timePrice });
       floorGroups[floor].count++;
-      floorGroups[floor].totalPrice += (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0));
+      floorGroups[floor].totalPrice += timePrice;
       floorGroups[floor].totalSize += p.asset_sfla || 0;
     });
 
