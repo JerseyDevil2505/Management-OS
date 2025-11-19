@@ -278,49 +278,50 @@ const OverallAnalysisTab = ({
       }
     });
 
-    // Calculate averages and adjusted prices
-    let maxAdjustedPrice = 0;
-    let baselineGroup = null;
-
+    // Calculate averages first (no adjusted prices yet)
     Object.values(groups).forEach(group => {
       // Averages for ALL properties in this group
       group.avgSizeAll = group.propertyCount > 0 ? group.totalSizeAll / group.propertyCount : 0;
       group.avgYearAll = group.propertyCount > 0 ? Math.round(group.totalYearAll / group.propertyCount) : 0;
-      
+
       // Averages for SALES only
       group.avgPrice = group.salesCount > 0 ? group.totalPrice / group.salesCount : 0;
       group.avgSizeSales = group.salesCount > 0 ? group.totalSizeSales / group.salesCount : 0;
       group.avgYearSales = group.salesCount > 0 ? Math.round(group.totalYearSales / group.salesCount) : 0;
-      
-      // Calculate adjusted prices using sales average size
-      let totalAdjusted = 0;
-      if (group.salesCount > 0) {
+    });
+
+    // Identify baseline group (prefer Single Family if available with sales)
+    const groupsArray = Object.values(groups);
+    let baselineGroup = groupsArray.find(g => g.code && g.code.toString().startsWith('1') && g.salesCount > 0);
+
+    // If no Single Family, use the highest priced group
+    if (!baselineGroup) {
+      let maxPrice = 0;
+      groupsArray.forEach(group => {
+        if (group.salesCount > 0 && group.avgPrice > maxPrice) {
+          maxPrice = group.avgPrice;
+          baselineGroup = group;
+        }
+      });
+    }
+
+    // Now calculate adjusted prices using BASELINE size for normalization
+    Object.values(groups).forEach(group => {
+      if (group.salesCount > 0 && baselineGroup) {
+        let totalAdjusted = 0;
         group.salesProperties.forEach(p => {
           const adjusted = calculateAdjustedPrice(
             (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
             p.asset_sfla || 0,
-            group.avgSizeSales  // Use sales average for normalization
+            baselineGroup.avgSizeSales  // Use BASELINE sales average for normalization
           );
           totalAdjusted += adjusted;
         });
-        
         group.avgAdjustedPrice = totalAdjusted / group.salesCount;
-        
-        if (group.avgAdjustedPrice > maxAdjustedPrice) {
-          maxAdjustedPrice = group.avgAdjustedPrice;
-          baselineGroup = group;
-        }
       } else {
         group.avgAdjustedPrice = 0;
       }
     });
-
-    // After computing avgAdjustedPrice, prefer Single Family as baseline if available with sales
-    const groupsArray = Object.values(groups);
-    const sfGroup = groupsArray.find(g => g.code && g.code.toString().startsWith('1') && g.salesCount > 0);
-    if (sfGroup) {
-      baselineGroup = sfGroup;
-    }
 
     // Calculate deltas from baseline (baselineGroup may have been overridden to SF)
     // Delta is calculated as: (Current Adj Price - Baseline Sale Price) / Baseline Sale Price
