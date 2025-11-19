@@ -1489,7 +1489,8 @@ const OverallAnalysisTab = ({
       vcsBedroomGroups,
       bedroomSummary,
       endIntGroups,
-      floorGroups: Object.values(floorGroups)
+      vcsFloorGroups,
+      floorSummary
     };
   }, [filteredProperties, codeDefinitions, vendorType]);
   // ==================== MAIN ANALYSIS ====================
