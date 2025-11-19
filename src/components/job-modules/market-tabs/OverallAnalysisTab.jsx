@@ -1809,7 +1809,7 @@ const OverallAnalysisTab = ({
             const cellStyle = ws[cellAddress].s || baseStyle;
             // Apply percentage format if this is a delta column
             if (deltaColumnIndices.includes(colIndex)) {
-              cellStyle.numFmt = '0';
+              cellStyle.numFmt = '0%';
             }
             ws[cellAddress] = {
               f: formula,
@@ -1877,7 +1877,7 @@ const OverallAnalysisTab = ({
                 ws[cellAddress].s.numFmt = '$#,##0';
               } else if (deltaColumnIndices.includes(C)) {
                 // Apply percentage format to delta columns
-                ws[cellAddress].s.numFmt = '0';
+                ws[cellAddress].s.numFmt = '0%';
                 ws[cellAddress].t = 'n';
               } else {
                 // Apply regular number format to other numeric columns
@@ -2003,8 +2003,8 @@ const OverallAnalysisTab = ({
           // Only apply formula if both values exist and are numbers
           if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
               baselineSalePriceValue > 0) {
-            // Delta % = (Current Adj Price - Baseline Sale Price) / Baseline Sale Price * 100
-            return `((${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell})*100`;
+            // Delta % = (Current Adj Price - Baseline Sale Price) / Baseline Sale Price (as decimal for % format)
+            return `(${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell}`;
           }
           return null;
         }
@@ -2032,14 +2032,14 @@ const OverallAnalysisTab = ({
       const data = analysis.design.groups.map(group => [
         group.name,
         group.propertyCount,
-        group.avgYearAll || '—',
-        group.avgSizeAll ? Math.round(group.avgSizeAll) : '—',
+        group.avgYearAll || '',
+        group.avgSizeAll ? Math.round(group.avgSizeAll) : '',
         group.salesCount,
-        group.avgYearSales || '—',
-        group.avgSizeSales ? Math.round(group.avgSizeSales) : '—',
-        group.salesCount > 0 ? Math.round(group.avgPrice) : '—',
-        group.salesCount === 0 ? '—' : group.isBaseline ? '—' : Math.round(group.avgAdjustedPrice),
-        group.salesCount > 0 && group.deltaPercent !== 0 ? Math.round(group.deltaPercent) : group.salesCount === 0 ? '—' : 'BASELINE'
+        group.avgYearSales || '',
+        group.avgSizeSales ? Math.round(group.avgSizeSales) : '',
+        group.salesCount > 0 ? Math.round(group.avgPrice) : '',
+        group.salesCount === 0 ? '' : group.isBaseline ? '' : Math.round(group.avgAdjustedPrice),
+        group.salesCount > 0 && group.deltaPercent !== 0 ? Math.round(group.deltaPercent) : group.salesCount === 0 ? '' : 'BASELINE'
       ]);
 
       // Find the baseline row for Design analysis
@@ -2104,7 +2104,7 @@ const OverallAnalysisTab = ({
 
           if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
               baselineSalePriceValue > 0) {
-            return `((${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell})*100`;
+            return `(${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell}`;
           }
           return null;
         }
@@ -2133,14 +2133,14 @@ const OverallAnalysisTab = ({
       const data = analysis.yearBuilt.groups.map(group => [
         group.label,
         group.propertyCount,
-        group.avgYearAll || '—',
-        group.avgSizeAll ? Math.round(group.avgSizeAll) : '—',
+        group.avgYearAll || '',
+        group.avgSizeAll ? Math.round(group.avgSizeAll) : '',
         group.salesCount,
-        group.avgYearSales || '—',
-        group.avgSizeSales ? Math.round(group.avgSizeSales) : '—',
-        group.salesCount > 0 ? Math.round(group.avgPrice) : '—',
-        group.salesCount === 0 ? '—' : group.isBaseline ? '—' : Math.round(group.avgAdjustedPrice),
-        group.salesCount > 0 && group.deltaPercent !== 0 ? Math.round(group.deltaPercent) : group.salesCount === 0 ? '—' : 'BASELINE',
+        group.avgYearSales || '',
+        group.avgSizeSales ? Math.round(group.avgSizeSales) : '',
+        group.salesCount > 0 ? Math.round(group.avgPrice) : '',
+        group.salesCount === 0 ? '' : group.isBaseline ? '' : Math.round(group.avgAdjustedPrice),
+        group.salesCount > 0 && group.deltaPercent !== 0 ? Math.round(group.deltaPercent) : group.salesCount === 0 ? '' : 'BASELINE',
         group.isCCF ? 'YES' : ''
       ]);
 
@@ -2206,7 +2206,7 @@ const OverallAnalysisTab = ({
 
           if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
               baselineSalePriceValue > 0) {
-            return `((${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell})*100`;
+            return `(${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell}`;
           }
           return null;
         }
@@ -2251,11 +2251,11 @@ const OverallAnalysisTab = ({
             `${vcsData.propertyCount} properties | ${vcsData.salesCount} sales`,
             vcsData.propertyCount,
             vcsData.salesCount,
-            vcsData.avgYearAll || '—',
-            vcsData.avgSizeAll ? Math.round(vcsData.avgSizeAll) : '—',
-            vcsData.avgYearSales || '—',
-            vcsData.avgSizeSales ? Math.round(vcsData.avgSizeSales) : '—',
-            vcsData.avgPrice ? Math.round(vcsData.avgPrice) : '—',
+            vcsData.avgYearAll || '',
+            vcsData.avgSizeAll ? Math.round(vcsData.avgSizeAll) : '',
+            vcsData.avgYearSales || '',
+            vcsData.avgSizeSales ? Math.round(vcsData.avgSizeSales) : '',
+            vcsData.avgPrice ? Math.round(vcsData.avgPrice) : '',
             Math.round(vcsData.avgAdjustedPrice),
             'VCS AVG',
             vcsCME.label,
@@ -2298,12 +2298,12 @@ const OverallAnalysisTab = ({
                       `  └ ${designGroup.name}`,
                       designGroup.propertyCount,
                       designGroup.salesCount,
-                      designGroup.avgYearAll || '—',
-                      designGroup.avgSizeAll ? Math.round(designGroup.avgSizeAll) : '—',
-                      designGroup.avgYearSales || '—',
-                      designGroup.avgSizeSales ? Math.round(designGroup.avgSizeSales) : '—',
-                      designGroup.avgPrice ? Math.round(designGroup.avgPrice) : '—',
-                      designGroup.avgAdjustedPrice === 0 ? '—' : designGroup.isBaseline ? '—' : Math.round(designGroup.avgAdjustedPrice),
+                      designGroup.avgYearAll || '',
+                      designGroup.avgSizeAll ? Math.round(designGroup.avgSizeAll) : '',
+                      designGroup.avgYearSales || '',
+                      designGroup.avgSizeSales ? Math.round(designGroup.avgSizeSales) : '',
+                      designGroup.avgPrice ? Math.round(designGroup.avgPrice) : '',
+                      designGroup.avgAdjustedPrice === 0 ? '' : designGroup.isBaseline ? '' : Math.round(designGroup.avgAdjustedPrice),
                       designGroup.deltaPercent !== 0 ? `${designGroup.deltaPercent.toFixed(0)}%` : 'TYPE BASE',
                       designCME ? designCME.label : '',
                       designCME ? designCME.color : ''
@@ -2386,9 +2386,9 @@ const OverallAnalysisTab = ({
         const data = analysis.condo.designGroups.map(group => [
           `${group.code} - ${group.name}`,
           group.count,
-          group.avgSize ? Math.round(group.avgSize) : '—',
-          group.avgPrice ? Math.round(group.avgPrice) : '—',
-          group.avgAdjustedPrice === 0 ? '—' : group.isBaseline ? '—' : Math.round(group.avgAdjustedPrice),
+          group.avgSize ? Math.round(group.avgSize) : '',
+          group.avgPrice ? Math.round(group.avgPrice) : '',
+          group.avgAdjustedPrice === 0 ? '' : group.isBaseline ? '' : Math.round(group.avgAdjustedPrice),
           group.deltaPercent ? Math.round(group.deltaPercent) : 'BASELINE'
         ]);
 
@@ -2454,7 +2454,7 @@ const OverallAnalysisTab = ({
 
             if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
                 baselineSalePriceValue > 0) {
-              return `((${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell})*100`;
+              return `(${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell}`;
             }
             return null;
           }
@@ -2556,7 +2556,7 @@ const OverallAnalysisTab = ({
 
                 if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
                     baselineSalePriceValue > 0) {
-                  return { f: `((${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell})`, z: '0.0%' };
+                  return `(${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell}`;
                 }
                 return null;
               }
@@ -2670,7 +2670,7 @@ const OverallAnalysisTab = ({
 
                 if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
                     baselineSalePriceValue > 0) {
-                  return { f: `((${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell})`, z: '0.0%' };
+                  return `(${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell}`;
                 }
                 return null;
               }
@@ -2780,7 +2780,7 @@ const OverallAnalysisTab = ({
 
             if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
                 baselineSalePriceValue > 0) {
-              return { f: `((${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell})`, z: '0.0%' };
+              return `(${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell}`;
             }
             return null;
           }
@@ -3229,7 +3229,7 @@ const OverallAnalysisTab = ({
                               {group.avgYearSales > 0 ? group.avgYearSales : '���'}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
-                              {group.avgSizeSales > 0 ? formatNumber(group.avgSizeSales) : '���'}
+                              {group.avgSizeSales > 0 ? formatNumber(group.avgSizeSales) : '����'}
                             </td>
                             <td className="px-4 py-3 text-sm text-center">
                               {group.salesCount > 0 ? formatCurrency(group.avgPrice) : <span className="text-gray-500 text-xs">NO SALES DATA</span>}
@@ -3880,7 +3880,7 @@ const OverallAnalysisTab = ({
                                           {floor.deltaPercent > 0 ? '+' : ''}{floor.deltaPercent.toFixed(0)}%
                                         </span>
                                       ) : (
-                                        '—'
+                                        '��'
                                       )}
                                     </td>
                                   </tr>
