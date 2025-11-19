@@ -2467,7 +2467,8 @@ const OverallAnalysisTab = ({
       // Condo Bedroom Analysis
       if (analysis.condo.vcsBedroomGroups && Object.keys(analysis.condo.vcsBedroomGroups).length > 0) {
         const headers = [
-          'VCS Unit Type',
+          'VCS',
+          'Bed Type',
           'Count',
           'Avg Size',
           'Sale Price',
@@ -2480,7 +2481,8 @@ const OverallAnalysisTab = ({
           if (vcsGroup.bedrooms) {
             Object.entries(vcsGroup.bedrooms).forEach(([bedrooms, group]) => {
               data.push([
-                (vcsGroup.description || vcs) + '-' + group.label,
+                vcsGroup.description || vcs,
+                group.label,
                 group.salesCount || 0,
                 group.avgSize ? Math.round(group.avgSize) : '',
                 group.avgPrice ? Math.round(group.avgPrice) : '',
@@ -2571,7 +2573,8 @@ const OverallAnalysisTab = ({
       // Condo End vs Interior Analysis
       if (analysis.condo.endIntGroups && Object.keys(analysis.condo.endIntGroups).length > 0) {
         const headers = [
-          'VCS Unit Type',
+          'VCS',
+          'End/Int Type',
           'Count',
           'Avg Size',
           'Sale Price',
@@ -2584,7 +2587,8 @@ const OverallAnalysisTab = ({
           // Interior Unit (baseline)
           if (vcsGroup.interiorUnits && vcsGroup.interiorUnits.count > 0) {
             data.push([
-              vcs + '-Interior Unit',
+              vcs,
+              'Interior Unit',
               vcsGroup.interiorUnits.count,
               vcsGroup.interiorUnits.avgSize ? Math.round(vcsGroup.interiorUnits.avgSize) : '',
               vcsGroup.interiorUnits.avgPrice ? Math.round(vcsGroup.interiorUnits.avgPrice) : '',
@@ -2595,7 +2599,8 @@ const OverallAnalysisTab = ({
           // End Unit
           if (vcsGroup.endUnits && vcsGroup.endUnits.count > 0) {
             data.push([
-              vcs + '-End Unit',
+              vcs,
+              'End Unit',
               vcsGroup.endUnits.count,
               vcsGroup.endUnits.avgSize ? Math.round(vcsGroup.endUnits.avgSize) : '',
               vcsGroup.endUnits.avgPrice ? Math.round(vcsGroup.endUnits.avgPrice) : '',
@@ -2645,7 +2650,7 @@ const OverallAnalysisTab = ({
             {
               column: 'Delta',
               getFormula: (R, C, headers, ws) => {
-                const unitTypeCol = headers.indexOf('VCS Unit Type');
+                const unitTypeCol = headers.indexOf('End/Int Type');
                 const adjPriceCol = headers.indexOf('Adj Price');
                 const salePriceCol = headers.indexOf('Sale Price');
 
@@ -2655,7 +2660,7 @@ const OverallAnalysisTab = ({
                 const unitTypeValue = ws[unitTypeCell]?.v;
 
                 // Only apply formula to End Unit rows
-                if (!unitTypeValue || unitTypeValue.indexOf('End Unit') === -1) {
+                if (!unitTypeValue || unitTypeValue !== 'End Unit') {
                   return null;
                 }
 
@@ -2697,7 +2702,8 @@ const OverallAnalysisTab = ({
 
         if (flattenedFloors.length === 0) return; // Skip if no floor data
         const headers = [
-          'VCS Unit Type',
+          'VCS',
+          'Floor Type',
           'Count',
           'Avg Size',
           'Sale Price',
@@ -2706,7 +2712,8 @@ const OverallAnalysisTab = ({
         ];
 
         const data = flattenedFloors.map(floor => [
-          floor.vcs + '-' + floor.label,
+          floor.vcs,
+          floor.label,
           floor.count,
           floor.avgSize ? Math.round(floor.avgSize) : '',
           floor.avgPrice ? Math.round(floor.avgPrice) : '',
