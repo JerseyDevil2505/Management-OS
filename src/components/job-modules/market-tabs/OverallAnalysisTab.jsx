@@ -3062,7 +3062,7 @@ const OverallAnalysisTab = ({
                 >
                   <div>
                     <h3 className="text-lg font-semibold">Condo Design Analysis</h3>
-                    <div className="text-xs text-gray-500 mt-1">Type Use: 6 (Microsystems) / 60 (BRT)</div>
+                    <div className="text-xs text-gray-500 mt-1">Average-based comparison • Overall Avg: {formatCurrency(analysis.condo.overallAvgPrice)} @ {formatNumber(analysis.condo.overallAvgSize)} SF</div>
                   </div>
                   {expandedSections.condoDesign ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                 </div>
@@ -3084,7 +3084,7 @@ const OverallAnalysisTab = ({
                         {analysis.condo.designGroups
                           .sort((a, b) => b.avgAdjustedPrice - a.avgAdjustedPrice)
                           .map((group) => (
-                          <tr key={group.code} className={group === analysis.condo.baselineDesign ? 'bg-yellow-50' : ''}>
+                          <tr key={group.code}>
                             <td className="px-4 py-3 text-sm font-medium">
                               <div>{group.name}</div>
                               <div className="text-xs text-gray-500 mt-1">{group.code}</div>
@@ -3097,8 +3097,6 @@ const OverallAnalysisTab = ({
                             <td className="px-4 py-3 text-sm text-center font-medium">
                               {group.avgAdjustedPrice === 0 ? (
                                 <span className="text-gray-500 text-xs">NO SALES DATA</span>
-                              ) : group.isBaseline ? (
-                                <span className="text-gray-400">—</span>
                               ) : (
                                 formatCurrency(group.avgAdjustedPrice)
                               )}
@@ -3106,12 +3104,10 @@ const OverallAnalysisTab = ({
                             <td className="px-4 py-3 text-sm text-center">
                               {group.avgAdjustedPrice === 0 ? (
                                 <span className="text-gray-500">—</span>
-                              ) : group.deltaPercent !== 0 ? (
-                                <span className={group.deltaPercent > 0 ? 'text-green-600' : 'text-red-600'}>
+                              ) : (
+                                <span className={group.deltaPercent > 0 ? 'text-green-600' : group.deltaPercent < 0 ? 'text-red-600' : 'text-gray-600'}>
                                   {group.deltaPercent > 0 ? '+' : ''}{group.deltaPercent.toFixed(0)}%
                                 </span>
-                              ) : (
-                                <span className="text-gray-400">BASELINE</span>
                               )}
                             </td>
                           </tr>
