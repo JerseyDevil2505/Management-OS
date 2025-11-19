@@ -394,7 +394,15 @@ const OverallAnalysisTab = ({
           totalYearSales: 0,
           // Counts
           propertyCount: 0,
-          salesCount: 0
+          salesCount: 0,
+          // Calculated metrics
+          avgPrice: 0,
+          avgSize: 0,
+          avgSizeSales: 0,
+          avgAdjustedPrice: 0,
+          delta: 0,
+          deltaPercent: 0,
+          isBaseline: false
         };
       }
       
