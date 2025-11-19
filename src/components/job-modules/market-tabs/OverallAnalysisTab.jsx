@@ -26,6 +26,7 @@ const OverallAnalysisTab = ({
     vcsTypeDesign: false,
     condoDesign: true,
     condoBedroom: true,
+    condoEndInt: true,
     condoFloor: true
   });
 
