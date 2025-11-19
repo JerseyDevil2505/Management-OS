@@ -1266,6 +1266,17 @@ const OverallAnalysisTab = ({
       // Convert to uppercase for pattern matching
       const storyStr = String(storyHeightDecoded).toUpperCase();
 
+      // DEBUG: Log first few decodings to see what we're getting
+      if (condos.indexOf(p) < 5) {
+        console.log('Floor Debug:', {
+          code: storyHeightCode,
+          decoded: storyHeightDecoded,
+          upper: storyStr,
+          hasCondo: storyStr.includes('CONDO'),
+          vendorType
+        });
+      }
+
       // REQUIREMENT: Only process if "CONDO" appears in the decoded story height
       if (!storyStr.includes('CONDO')) return;
 
