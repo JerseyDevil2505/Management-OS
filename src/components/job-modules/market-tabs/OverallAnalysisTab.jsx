@@ -1997,12 +1997,10 @@ const OverallAnalysisTab = ({
 
           const currentAdjPriceCell = XLSX.utils.encode_cell({ r: R, c: adjPriceCol });
           const baselineSalePriceCell = XLSX.utils.encode_cell({ r: baselineRowIndex, c: salePriceCol });
-          const currentAdjPriceValue = ws[currentAdjPriceCell]?.v;
           const baselineSalePriceValue = ws[baselineSalePriceCell]?.v;
 
-          // Only apply formula if both values exist and are numbers
-          if (typeof currentAdjPriceValue === 'number' && typeof baselineSalePriceValue === 'number' &&
-              baselineSalePriceValue > 0) {
+          // Check if Adj Price cell exists (has formula or value) and baseline has a sale price
+          if (ws[currentAdjPriceCell] && typeof baselineSalePriceValue === 'number' && baselineSalePriceValue > 0) {
             // Delta % = (Current Adj Price - Baseline Sale Price) / Baseline Sale Price (as decimal for % format)
             return `(${currentAdjPriceCell}-${baselineSalePriceCell})/${baselineSalePriceCell}`;
           }
