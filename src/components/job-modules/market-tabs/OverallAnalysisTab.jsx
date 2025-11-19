@@ -2301,7 +2301,7 @@ const OverallAnalysisTab = ({
                       designGroup.avgYearAll || '—',
                       designGroup.avgSizeAll ? Math.round(designGroup.avgSizeAll) : '—',
                       designGroup.avgYearSales || '—',
-                      designGroup.avgSizeSales ? Math.round(designGroup.avgSizeSales) : '��',
+                      designGroup.avgSizeSales ? Math.round(designGroup.avgSizeSales) : '—',
                       designGroup.avgPrice ? Math.round(designGroup.avgPrice) : '—',
                       designGroup.avgAdjustedPrice === 0 ? '—' : designGroup.isBaseline ? '—' : Math.round(designGroup.avgAdjustedPrice),
                       designGroup.deltaPercent !== 0 ? `${designGroup.deltaPercent.toFixed(0)}%` : 'TYPE BASE',
@@ -3663,74 +3663,28 @@ const OverallAnalysisTab = ({
 
                 {expandedSections.condoFloor && (
                   <>
-                    {/* Floor Premium Summary Banner */}
+                    {/* Floor-to-Floor Incremental Premium Summary Banner */}
                     <div className="mb-6 bg-purple-50 border border-purple-200 rounded-lg p-4">
-                      <h4 className="font-medium text-purple-900 mb-3">Overall Floor Premium Summary</h4>
+                      <h4 className="font-medium text-purple-900 mb-3">Incremental Floor-to-Floor Premium Summary</h4>
+                      <div className="text-xs text-purple-700 mb-3">Shows premium change for each level vs. the floor immediately below</div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-white rounded p-3">
-                          <div className="text-xs text-gray-600 mb-1">1st → 2nd Floor</div>
-                          {analysis.condo.floorSummary.firstToSecond.hasData ? (
-                            <>
+                        {Object.entries(analysis.condo.floorSummary).map(([key, summary]) => (
+                          summary.hasData && (
+                            <div key={key} className="bg-white rounded p-3">
+                              <div className="text-xs text-gray-600 mb-1">{summary.fromFloor} → {summary.toFloor}</div>
                               <div className="text-sm font-semibold text-gray-900">
-                                {formatCurrency(analysis.condo.floorSummary.firstToSecond.avgDelta)}
+                                {formatCurrency(summary.avgDelta)}
                               </div>
-                              <div className={`text-xs ${analysis.condo.floorSummary.firstToSecond.avgDeltaPct > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {analysis.condo.floorSummary.firstToSecond.avgDeltaPct > 0 ? '+' : ''}
-                                {analysis.condo.floorSummary.firstToSecond.avgDeltaPct.toFixed(1)}%
+                              <div className={`text-xs ${summary.avgDeltaPct > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {summary.avgDeltaPct > 0 ? '+' : ''}
+                                {summary.avgDeltaPct.toFixed(1)}%
                               </div>
-                            </>
-                          ) : (
-                            <div className="text-sm text-gray-400">No data</div>
-                          )}
-                        </div>
-                        <div className="bg-white rounded p-3">
-                          <div className="text-xs text-gray-600 mb-1">1st → 3rd Floor</div>
-                          {analysis.condo.floorSummary.firstToThird.hasData ? (
-                            <>
-                              <div className="text-sm font-semibold text-gray-900">
-                                {formatCurrency(analysis.condo.floorSummary.firstToThird.avgDelta)}
-                              </div>
-                              <div className={`text-xs ${analysis.condo.floorSummary.firstToThird.avgDeltaPct > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {analysis.condo.floorSummary.firstToThird.avgDeltaPct > 0 ? '+' : ''}
-                                {analysis.condo.floorSummary.firstToThird.avgDeltaPct.toFixed(1)}%
-                              </div>
-                            </>
-                          ) : (
-                            <div className="text-sm text-gray-400">No data</div>
-                          )}
-                        </div>
-                        <div className="bg-white rounded p-3">
-                          <div className="text-xs text-gray-600 mb-1">1st → Top Floor</div>
-                          {analysis.condo.floorSummary.firstToTop.hasData ? (
-                            <>
-                              <div className="text-sm font-semibold text-gray-900">
-                                {formatCurrency(analysis.condo.floorSummary.firstToTop.avgDelta)}
-                              </div>
-                              <div className={`text-xs ${analysis.condo.floorSummary.firstToTop.avgDeltaPct > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {analysis.condo.floorSummary.firstToTop.avgDeltaPct > 0 ? '+' : ''}
-                                {analysis.condo.floorSummary.firstToTop.avgDeltaPct.toFixed(1)}%
-                              </div>
-                            </>
-                          ) : (
-                            <div className="text-sm text-gray-400">No data</div>
-                          )}
-                        </div>
-                        <div className="bg-white rounded p-3">
-                          <div className="text-xs text-gray-600 mb-1">1st → Penthouse</div>
-                          {analysis.condo.floorSummary.firstToPenthouse.hasData ? (
-                            <>
-                              <div className="text-sm font-semibold text-gray-900">
-                                {formatCurrency(analysis.condo.floorSummary.firstToPenthouse.avgDelta)}
-                              </div>
-                              <div className={`text-xs ${analysis.condo.floorSummary.firstToPenthouse.avgDeltaPct > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {analysis.condo.floorSummary.firstToPenthouse.avgDeltaPct > 0 ? '+' : ''}
-                                {analysis.condo.floorSummary.firstToPenthouse.avgDeltaPct.toFixed(1)}%
-                              </div>
-                            </>
-                          ) : (
-                            <div className="text-sm text-gray-400">No data</div>
-                          )}
-                        </div>
+                            </div>
+                          )
+                        ))}
+                        {Object.values(analysis.condo.floorSummary).every(s => !s.hasData) && (
+                          <div className="col-span-full text-sm text-gray-400 text-center py-2">No floor-to-floor data available</div>
+                        )}
                       </div>
                     </div>
 
