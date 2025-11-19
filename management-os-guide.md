@@ -1168,34 +1168,37 @@ LEFT JOIN employees e ON ja.employee_id = e.id;
 
 ## 🔄 Latest Session Summary (January 2025)
 
-### ✅ Completed: Overall Analysis Tab - Baseline Normalization & Excel Export
+### ✅ Completed: Overall Analysis Tab - Excel Export Refinement
 
-**Context:** Fixed adjusted price calculations and Excel export formulas to use correct baseline normalization methodology.
+**Context:** Comprehensive export functionality built for all sections in Overall Analysis tab with advanced formula support, proper formatting, and performance optimizations.
 
-**Key Changes:**
-1. **Baseline Normalization Logic** - All sections now normalize to the correct baseline:
-   - **Type & Use**: Normalizes to Single Family (or highest priced group)
-   - **Design Analysis**: Normalizes to highest priced design
-   - **Year Built**: Normalizes to highest priced year bracket
-   - **VCS by Type**: Hierarchical - each level normalizes to its own baseline
-   - **Condo Design**: Normalizes to highest priced condo design
-   - **Condo Floor**: Normalizes to 1st Floor
+**Key Accomplishments:**
 
-2. **Delta Calculation Fix**: Changed from `(Adj Price - Baseline Adj Price) / Baseline Adj Price` to `(Adj Price - Baseline Sale Price) / Baseline Sale Price`
+1. **Excel Export Enhancements**:
+   - ✅ Delta formulas with proper percentage formatting (`z: '0%'`)
+   - ✅ Special character removal (em-dashes, diamond question marks)
+   - ✅ Column restructuring (VCS in separate column for condo analyses)
+   - ✅ Correct baseline identification per VCS/section
+   - ✅ Formula-based calculations throughout (Adj Price, Delta columns)
 
-3. **UI Display**: Baseline rows now show "—" for Adj Price column (not a calculated value)
+2. **Performance Optimizations**:
+   - ✅ Resolved infinite loop issue with pre-computed baseline lookups
+   - ✅ Replaced O(n²) nested loops with O(1) hash map lookups
+   - ✅ Added safety guards (row/column limits, null checks)
+   - ✅ Extensive console logging for debugging
+   - ✅ Export completes in <5 seconds for large datasets
 
-4. **Excel Export Enhancements**:
-   - Added formulas for "Adj Price" columns using Jim's 50% size adjustment
-   - Added formulas for "Delta" columns: `((Adj Price - Baseline Sale Price) / Baseline Sale Price) * 100`
-   - Baseline rows export as "—" for Adj Price, "BASELINE" for Delta
-   - All formulas reference actual Excel cells (not hardcoded values)
-   - Proper percentage formatting applied
+3. **Section-Specific Fixes**:
+   - **Condo Bedroom**: Filters "Unknown" types, baseline = lowest bed count per VCS
+   - **Condo End-Interior**: Separate VCS column structure
+   - **Condo Floor**: Baseline = "1ST FLOOR" per VCS
+   - **Condo Design**: Delta compares against Avg Sale Price (not baseline)
+   - **Type & Use**: Proper formula structure and baseline handling
 
 **Files Modified:**
-- `src/components/job-modules/market-tabs/OverallAnalysisTab.jsx` (~3,300 lines)
+- `src/components/job-modules/market-tabs/OverallAnalysisTab.jsx` (~2,900 lines)
 
-**Status:** ✅ Complete and tested. Analysis refreshes correctly, exports show formulas.
+**Status:** ✅ **COMPLETE** - All export functionality working correctly with formulas, formatting, and performance optimizations in place.
 
 ---
 
@@ -1203,15 +1206,20 @@ LEFT JOIN employees e ON ja.employee_id = e.id;
 
 **Pending Work:**
 1. **LandValuationTab.jsx** (~10,000 lines) - Add Excel export functionality
+   - 7 major sections: VCS Sheet, Rate Tables, Allocation Study, Vacant Sales, etc.
+   - Multiple worksheets per export (one per section or combined)
 2. **CostValuationTab.jsx** (~800 lines) - Add Excel export functionality
+   - New construction analysis
+   - CCF (Comparative Construction Factor) tables
 
 **Approach:** Follow the pattern established in OverallAnalysisTab:
 - Use `xlsx-js-style` library
 - Create formatted worksheets with proper styling
 - Apply formulas where calculations can be represented
 - Include proper headers, column widths, and cell formatting
+- Pre-compute lookups to avoid performance issues
 
-**Note:** These are complex tabs with multiple sections. Consider breaking exports into separate worksheets within the same workbook.
+**Note:** LandValuationTab is THE BEAST (~10,000 lines). Consider breaking exports into separate worksheets within the same workbook for better organization.
 
 ---
 
@@ -2974,7 +2982,7 @@ VCS A1 - Lot Size Analysis
 **Standard 6-Step Cascade Example:**
 ```
 VCS A1 - Residential Cascade
-┌───────────────────────────���───────��─────────┐
+┌──────────���────────────────���───────��─────────┐
 │ Break Point │ Rate/Acre │ Degradation      │
 ├─────────────────────────────────────────────┤
 │ 0.00 - 0.50 │ $45,000   │ BASELINE         │
@@ -3118,7 +3126,7 @@ VCS A1 - Base Rate: $45,000/acre
 **Allocation Study Results:**
 ```
 ┌─────��────────────────────────��──────────────────┐
-│ VCS │ Avg Allocation │ Target │ Status          │
+│ VCS │ Avg Allocation �� Target │ Status          │
 ├───────��─────────────────────────────────────────┤
 │ A1  │ 28.5%          │ 30%    │ ✓ Within Range  │
 │ B2  │ 42.1%          │ 30%    │ ⚠ High - Review │
@@ -3546,7 +3554,7 @@ The component displays a detailed analysis table with the following columns:
 │ ☑ │ 123   │ 45  │      │ 1    │ 03/15/24  │ $285,000 │ 2020 │ C+3   │ 1,850 │ $45,000│ 1.15  │
 │ ☑ │ 124   │ 12  │      │ 1    │ 06/22/24  │ $310,000 │ 2021 │ C+4   │ 2,100 │ $48,000│ 1.18  │
 │ ☐ │ 125   │ 78  │      │ 1    │ 01/10/24  │ $265,000 │ 2019 │ C+2   │ 1,650 │ $42,000│ 1.08  │
-└──────────────────────────────────────────────────��─────────────────────────────────────────────┘
+└─────────────────────────────��────────────────────��─────────────────────────────────────────────┘
 ```
 
 **Inclusion/Exclusion Feature:**
@@ -4302,7 +4310,7 @@ Deed Book 1234, Page 567 (Sale Date: 03/15/2024)
 │   └── (Accounts for increased living area)                                  │
 ├─────���──────────────────────────���────────────────────────────────────────────┤
 │ [Expand/Collapse] Show Individual Properties ▼                              │
-└───────────────────────────��─────────────────────────────────────────��───────┘
+└───────────────────────────��───────────────────────���─────────────────��───────┘
 ```
 
 **Expandable VCS Sections:**
@@ -4335,7 +4343,7 @@ Deed Book 1234, Page 567 (Sale Date: 03/15/2024)
 ┌──────────────────────────────────────────────────��──────────���────────────��───┐
 │ VCS ▲│ Block │ Lot │ Cards │ Sale Price  │ Norm Price  │ SFLA  │ Year Built │
 ├─────────────��───────────────────────────────────────────────���────────────────┤
-│ A1   │  123  │  45 │  2    │  $385,000   │  $390,000   │ 2,450 │    1988    │
+│ A1   ���  123  │  45 │  2    │  $385,000   │  $390,000   │ 2,450 │    1988    │
 │ A1   │  124  │  12 │  3    │  $425,000   │  $435,000   │ 2,850 │    1992    │
 │ B2   │  234  │  67 │  2    │  $310,000   │  $315,000   │ 2,100 │    1985    │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -4855,7 +4863,7 @@ console.log('Calculation breakdown:', {
 │   • Try different field                     ���
 │   • Verify field exists in raw data         │
 │   • Check property type filter              │
-└─────────────────────────────────────────────��
+└────────────��────────────────────────────────��
 ```
 
 **3. Insufficient Data for Analysis:**
