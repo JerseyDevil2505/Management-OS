@@ -1174,7 +1174,7 @@ const OverallAnalysisTab = ({
           if (!propSize) return;
 
           const adjusted = calculateAdjustedPrice(
-            (p._time_normalized_price !== undefined ? p._time_normalized_price : (p.values_norm_time || 0)),
+            p._time_normalized_price,  // Always valid due to filtering above
             propSize,
             baselineSizeToUse
           );
@@ -1526,7 +1526,7 @@ const OverallAnalysisTab = ({
           const yearSales = group.avgYearSales || '—';
           const sizeSales = group.avgSizeSales ? Math.round(group.avgSizeSales) : '—';
           const salePrice = group.salesCount > 0 ? Math.round(group.avgPrice) : '—';
-          const adjPrice = group.salesCount > 0 ? Math.round(group.avgAdjustedPrice) : '—';
+          const adjPrice = group.salesCount > 0 ? Math.round(group.avgAdjustedPrice) : '��';
           const delta = group.salesCount > 0 && group.deltaPercent !== 0 ? `${group.deltaPercent.toFixed(0)}%` : group.salesCount === 0 ? '—' : 'BASELINE';
           
           csv += `"${group.name}",${group.propertyCount},${yearAll},${sizeAll},${group.salesCount},${yearSales},${sizeSales},${salePrice},${adjPrice},${delta}\n`;
