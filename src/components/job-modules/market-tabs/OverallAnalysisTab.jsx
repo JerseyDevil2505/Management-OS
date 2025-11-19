@@ -257,7 +257,15 @@ const OverallAnalysisTab = ({
           totalYearSales: 0,
           // Counts
           propertyCount: 0,  // Total inventory
-          salesCount: 0      // Valid sales only
+          salesCount: 0,      // Valid sales only
+          // Calculated metrics
+          avgPrice: 0,
+          avgSize: 0,
+          avgSizeSales: 0,
+          avgAdjustedPrice: 0,
+          delta: 0,
+          deltaPercent: 0,
+          isBaseline: false
         };
       }
       
@@ -2493,7 +2501,7 @@ const OverallAnalysisTab = ({
           floor.label,
           floor.count,
           floor.avgSize ? Math.round(floor.avgSize) : '—',
-          floor.avgPrice ? Math.round(floor.avgPrice) : '—',
+          floor.avgPrice ? Math.round(floor.avgPrice) : '���',
           floor.avgAdjustedPrice === 0 ? '—' : floor.isBaseline ? '—' : Math.round(floor.avgAdjustedPrice),
           floor.deltaPercent ? Math.round(floor.deltaPercent) : floor.isBaseline ? 'BASELINE' : '—'
         ]);
