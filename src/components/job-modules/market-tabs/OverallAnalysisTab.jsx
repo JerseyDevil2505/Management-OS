@@ -1247,19 +1247,19 @@ const OverallAnalysisTab = ({
     const vcsFloorGroups = {};
     condos.forEach(p => {
       // DECODE story height CODE using code interpreter (e.g., code "10" → "CONDO 1ST STY")
-      const storyHeightCode = p.asset_stories;
+      const storyHeightCode = p.asset_story_height;
       let storyHeightDecoded = '';
 
       if (storyHeightCode && codeDefinitions) {
         // Create a temp property with string version for interpreter (expects strings)
-        const pWithStringCode = { ...p, asset_stories: String(storyHeightCode) };
+        const pWithStringCode = { ...p, asset_story_height: String(storyHeightCode) };
 
         if (vendorType === 'BRT') {
           // BRT: Look up in section 22 (story height section)
-          storyHeightDecoded = interpretCodes.getBRTValue?.(pWithStringCode, codeDefinitions, 'asset_stories') || '';
+          storyHeightDecoded = interpretCodes.getBRTValue?.(pWithStringCode, codeDefinitions, 'asset_story_height') || '';
         } else if (vendorType === 'Microsystems') {
           // Microsystems: Use 510 prefix for story height
-          storyHeightDecoded = interpretCodes.getMicrosystemsValue?.(pWithStringCode, codeDefinitions, 'asset_stories') || '';
+          storyHeightDecoded = interpretCodes.getMicrosystemsValue?.(pWithStringCode, codeDefinitions, 'asset_story_height') || '';
         }
       }
 
