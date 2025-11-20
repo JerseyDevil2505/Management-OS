@@ -762,13 +762,17 @@ const generateQCFormPDF = () => {
       try {
         const { data: jobInfo, error: jobError } = await supabase
           .from('jobs')
-          .select('raw_file_parsed_at, updated_at')
+          .select('raw_file_parsed_at, updated_at, raw_file_rows_count')
           .eq('id', jobData.id)
           .single();
 
         if (!jobError && jobInfo) {
           console.log('📅 Raw file last parsed:', jobInfo.raw_file_parsed_at);
           console.log('📅 Job last updated:', jobInfo.updated_at);
+          console.log('📊 Raw file rows:', jobInfo.raw_file_rows_count);
+          console.log('\n🔍 To verify raw data in database, run this SQL in Supabase:');
+          console.log(`SELECT raw_file_content FROM jobs WHERE id = '${jobData.id}';`);
+          console.log('Then search for "Block 10" or "Block 112" to see the actual MKTADJ and NCOVR values.\n');
         }
       } catch (err) {
         console.warn('Could not verify raw file timestamp:', err);
