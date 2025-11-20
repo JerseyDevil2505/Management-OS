@@ -1516,7 +1516,20 @@ const generateQCFormPDF = () => {
     // MARKET ADJUSTMENTS
     if (vendor === 'BRT') {
       const issues = [];
-      
+
+      // DEBUG: Log raw data for specific properties to diagnose stale cache issue
+      if (property.property_block === '10' && property.property_lot === '2') {
+        console.log('🔍 DEBUG Block 10 Lot 2 - rawData.MKTFUNCDESC:', rawData.MKTFUNCDESC);
+        console.log('🔍 DEBUG Block 10 Lot 2 - isFieldEmpty:', interpretCodes.isFieldEmpty(rawData.MKTFUNCDESC));
+      }
+      if (property.property_block === '112' && property.property_lot === '21') {
+        console.log('🔍 DEBUG Block 112 Lot 21 - rawData.NCOVR:', rawData.NCOVR);
+      }
+      if (property.property_block === '118' && property.property_lot === '2.01') {
+        console.log('🔍 DEBUG Block 118 Lot 2.01 - rawData.MKTADJ:', rawData.MKTADJ);
+        console.log('🔍 DEBUG Block 118 Lot 2.01 - rawData.MKTFUNCDESC:', rawData.MKTFUNCDESC);
+      }
+
       if (rawData.MKTADJ && parseFloat(rawData.MKTADJ) !== 1) {
         issues.push(`MKTADJ = ${rawData.MKTADJ} (should be 1)`);
       }
