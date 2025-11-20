@@ -992,8 +992,9 @@ const generateQCFormPDF = () => {
     // Only flag building class issues for specific property classes when they have BOTH design style AND type/use
     // Classes to check: 2, 3A, 15A, 15B, 15C, 15D, 15E, 15F
     const classesToCheck = ['2', '3A', '15A', '15B', '15C', '15D', '15E', '15F'];
-    const hasValidDesign = designStyle && designStyle.trim() !== '';
-    const hasValidTypeUse = typeUse && typeUse.trim() !== '';
+    // Treat null, empty, whitespace, and "00" as empty values (BRT uses "00" for empty fields)
+    const hasValidDesign = designStyle && designStyle.trim() !== '' && designStyle.trim() !== '00';
+    const hasValidTypeUse = typeUse && typeUse.trim() !== '' && typeUse.trim() !== '00';
 
     if (m4Class && classesToCheck.includes(m4Class)) {
       // Only check building class if BOTH design style AND type/use are valid
