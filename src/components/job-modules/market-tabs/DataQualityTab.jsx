@@ -753,6 +753,23 @@ const generateQCFormPDF = () => {
     setIsRunningChecks(true);
     setAnalysisProgress({ current: 0, total: properties.length, phase: 'Initializing...' });
 
+    // VERIFY: Check when raw file was last updated to ensure we're using the latest data
+    try {
+      const { data: jobMeta } = await supabase
+        .from('jobs')
+        .select('raw_file_parsed_at, source_file_uploaded_at, updated_at')
+        .eq('id', jobData.id)
+        .single();
+
+      if (jobMeta) {
+        console.log('📅 Raw file last parsed:', jobMeta.raw_file_parsed_at);
+        console.log('📅 Source file uploaded:', jobMeta.source_file_uploaded_at);
+        console.log('📅 Job last updated:', jobMeta.updated_at);
+      }
+    } catch (err) {
+      console.warn('Could not verify file timestamps:', err);
+    }
+
     const results = {
       mod_iv: [],
       cama: [],
@@ -866,7 +883,7 @@ const generateQCFormPDF = () => {
         // Use client-side fallback directly - much faster than RPC calls!
         rawData = (await propertyService.getRawDataForPropertyClientSide(property.job_id, property.property_composite_key)) || {};
       } catch (error) {
-        console.warn(`Failed to get raw data for ${property.property_composite_key}:`, error);
+        // Reduced console noise - only log errors, not warnings for every property
         rawData = {};
       }
       rawDataCache.set(property.property_composite_key, rawData);
@@ -950,8 +967,9 @@ const generateQCFormPDF = () => {
     // TYPE USE / BUILDING CLASS VALIDATION
     const typeUseStr = typeUse?.toString().trim();
     const buildingClassStr = buildingClass?.toString().trim();
-    
-    if (typeUseStr && buildingClassStr && parseInt(buildingClassStr) > 10) {
+
+    // Only validate if both fields have real values (not null, empty, whitespace, or "00")
+    if (typeUseStr && typeUseStr !== '00' && buildingClassStr && parseInt(buildingClassStr) > 10) {
       let validBuildingClasses = [];
       const firstChar = typeUseStr.charAt(0);
       
@@ -992,28 +1010,11 @@ const generateQCFormPDF = () => {
     // Only flag building class issues for specific property classes when they have BOTH design style AND type/use
     // Classes to check: 2, 3A, 15A, 15B, 15C, 15D, 15E, 15F
     const classesToCheck = ['2', '3A', '15A', '15B', '15C', '15D', '15E', '15F'];
-    const hasValidDesign = designStyle && designStyle.trim() !== '';
-    const hasValidTypeUse = typeUse && typeUse.trim() !== '';
+    // Treat null, empty, whitespace, and "00" as empty values (BRT uses "00" for empty fields)
+    const hasValidDesign = designStyle && designStyle.trim() !== '' && designStyle.trim() !== '00';
+    const hasValidTypeUse = typeUse && typeUse.trim() !== '' && typeUse.trim() !== '00';
 
-    if (m4Class && classesToCheck.includes(m4Class)) {
-      // Only check building class if BOTH design style AND type/use are valid
-      if (hasValidDesign && hasValidTypeUse) {
-        // For residential classes (2, 3A), building class should be > 10
-        if ((m4Class === '2' || m4Class === '3A') && buildingClass && parseInt(buildingClass) <= 10) {
-          // This is already handled by another check below, skip here
-        }
-        // For facility classes (15A-15F), building class should be 10
-        else if (m4Class.startsWith('15') && buildingClass && parseInt(buildingClass) !== 10) {
-          results.characteristics.push({
-            check: 'facility_wrong_building_class',
-            severity: 'warning',
-            property_key: property.property_composite_key,
-            message: `Class ${m4Class} should have building class 10 (has ${buildingClass})`,
-            details: property
-          });
-        }
-      }
-    }
+    // Removed incorrect facility building class check - all checks now handled below
     
     // For residential classes, only flag building class 10 if they have BOTH design style AND type/use
     // If either is missing, the property might be exempt (disabled veteran) or detached structure (pool, garage)
@@ -1031,7 +1032,7 @@ const generateQCFormPDF = () => {
     }
     
     if (buildingClass > 10) {
-      if (!designStyle) {
+      if (!designStyle || designStyle.trim() === '' || designStyle.trim() === '00') {
         results.characteristics.push({
           check: 'missing_design_style',
           severity: 'warning',
@@ -1040,7 +1041,7 @@ const generateQCFormPDF = () => {
           details: property
         });
       }
-      if (!typeUse) {
+      if (!typeUse || typeUse.trim() === '' || typeUse.trim() === '00') {
         results.characteristics.push({
           check: 'missing_type_use',
           severity: 'warning',
@@ -1051,7 +1052,7 @@ const generateQCFormPDF = () => {
       }
     }
     
-    if ((m4Class === '2' || m4Class === '3A') && designStyle && designStyle.trim() !== '') {
+    if ((m4Class === '2' || m4Class === '3A') && designStyle && designStyle.trim() !== '' && designStyle.trim() !== '00') {
       if (!buildingClass || buildingClass <= 10) {
         results.characteristics.push({
           check: 'design_without_proper_building_class',
@@ -1061,7 +1062,7 @@ const generateQCFormPDF = () => {
           details: property
         });
       }
-      if (!typeUse || typeUse.trim() === '') {
+      if (!typeUse || typeUse.trim() === '' || typeUse.trim() === '00') {
         results.characteristics.push({
           check: 'design_without_type_use',
           severity: 'warning',
@@ -1073,7 +1074,7 @@ const generateQCFormPDF = () => {
     }
     
     if (modImprovement === 0) {
-      if (designStyle && designStyle.trim() !== '') {
+      if (designStyle && designStyle.trim() !== '' && designStyle.trim() !== '00') {
         results.characteristics.push({
           check: 'zero_improvement_with_design',
           severity: 'warning',
@@ -1083,7 +1084,7 @@ const generateQCFormPDF = () => {
         });
       }
       
-      if (typeUse && typeUse.trim() !== '') {
+      if (typeUse && typeUse.trim() !== '' && typeUse.trim() !== '00') {
         results.characteristics.push({
           check: 'zero_improvement_with_type',
           severity: 'warning',
@@ -1095,7 +1096,7 @@ const generateQCFormPDF = () => {
     }
     
     if (m4Class === '4A' || m4Class === '4B' || m4Class === '4C') {
-      if (designStyle && designStyle.trim() !== '') {
+      if (designStyle && designStyle.trim() !== '' && designStyle.trim() !== '00') {
         results.characteristics.push({
           check: 'commercial_with_design',
           severity: 'warning',
@@ -1105,7 +1106,7 @@ const generateQCFormPDF = () => {
         });
       }
       
-      if (typeUse && typeUse.trim() !== '') {
+      if (typeUse && typeUse.trim() !== '' && typeUse.trim() !== '00') {
         results.characteristics.push({
           check: 'commercial_with_type',
           severity: 'warning',
@@ -1123,41 +1124,51 @@ const generateQCFormPDF = () => {
                         (vendor === 'Microsystems' && (cardValue === 'M' || cardValue === 'm'));
 
   if (isPrimaryCard) {
-    const totalLotSize = await interpretCodes.getTotalLotSize(property, vendor, codeDefinitions);
-    const lotFrontage = property.asset_lot_frontage || 0;
-
-    // Determine a usable lot acreage from multiple sources before flagging zero lot size
+    // Determine lot acreage based on vendor type:
+    // BRT: Use ONLY the calculated lot sizes from unit rate configuration (market_manual_lot_acre/sf)
+    // Microsystems: Use direct read from asset fields
     let computedLotAcres = null;
 
-    // Primary: interpretCodes.getTotalLotSize (returns acres or null)
-    if (totalLotSize !== null && totalLotSize !== undefined && totalLotSize !== '') {
-      const parsed = parseFloat(totalLotSize);
-      if (!isNaN(parsed) && parsed !== 0) computedLotAcres = parsed;
-    }
+    if (vendor === 'BRT') {
+      // For BRT, prefer the calculated lot sizes from PreValuation unit rate configuration
+      // These are stored in property_market_analysis by generateLotSizesForJob function
+      const manualAcre = property.market_manual_lot_acre;
+      const manualSf = property.market_manual_lot_sf;
+      const lotFrontage = property.asset_lot_frontage || 0;
+      const lotDepth = property.asset_lot_depth || 0;
 
-    // Fallback: explicit acreage fields (market_manual_lot_acre then asset_lot_acre)
-    const manualAcre = property.market_manual_lot_acre || property.asset_lot_acre;
-    if (!computedLotAcres && manualAcre && parseFloat(manualAcre) !== 0) {
-      computedLotAcres = parseFloat(manualAcre);
-    }
+      if (manualAcre && parseFloat(manualAcre) !== 0) {
+        computedLotAcres = parseFloat(manualAcre);
+      } else if (manualSf && parseFloat(manualSf) !== 0) {
+        computedLotAcres = parseFloat(manualSf) / 43560;
+      } else if (lotFrontage && lotDepth && parseFloat(lotFrontage) !== 0 && parseFloat(lotDepth) !== 0) {
+        // Fallback to frontage �� depth if calculated values not available yet
+        const sf = parseFloat(lotFrontage) * parseFloat(lotDepth);
+        if (!isNaN(sf) && sf !== 0) {
+          computedLotAcres = sf / 43560;
+        }
+      }
+    } else {
+      // For Microsystems, use direct asset fields
+      const assetAcre = property.asset_lot_acre;
+      const assetSf = property.asset_lot_sf;
+      const lotFrontage = property.asset_lot_frontage || 0;
+      const lotDepth = property.asset_lot_depth || 0;
 
-    // Fallback: explicit square feet fields -> convert to acres
-    const manualSf = property.market_manual_lot_sf || property.asset_lot_sf;
-    if (!computedLotAcres && manualSf && parseFloat(manualSf) !== 0) {
-      computedLotAcres = parseFloat(manualSf) / 43560;
-    }
-
-    // Fallback: compute from frontage * depth if both present
-    const lotDepth = property.asset_lot_depth || 0;
-    if (!computedLotAcres && lotFrontage && lotDepth && parseFloat(lotFrontage) !== 0 && parseFloat(lotDepth) !== 0) {
-      const sf = parseFloat(lotFrontage) * parseFloat(lotDepth);
-      if (!isNaN(sf) && sf !== 0) {
-        computedLotAcres = sf / 43560;
+      if (assetAcre && parseFloat(assetAcre) !== 0) {
+        computedLotAcres = parseFloat(assetAcre);
+      } else if (assetSf && parseFloat(assetSf) !== 0) {
+        computedLotAcres = parseFloat(assetSf) / 43560;
+      } else if (lotFrontage && lotDepth && parseFloat(lotFrontage) !== 0 && parseFloat(lotDepth) !== 0) {
+        const sf = parseFloat(lotFrontage) * parseFloat(lotDepth);
+        if (!isNaN(sf) && sf !== 0) {
+          computedLotAcres = sf / 43560;
+        }
       }
     }
 
-    // Check if we truly have zero lot size (computedLotAcres is acres or null)
-    if ((!computedLotAcres || parseFloat(computedLotAcres) === 0) && lotFrontage === 0) {
+    // Check if we truly have zero lot size
+    if (!computedLotAcres || parseFloat(computedLotAcres) === 0) {
       // Skip condos with only site value
       let skipError = false;
 
@@ -1435,14 +1446,8 @@ const generateQCFormPDF = () => {
 
       // Only flag land adjustments if location_analysis is NOT populated
       // If location_analysis exists, the adjustments are intentional from page-by-page analysis
-      // Handle nested property_market_analysis structure (can be array or object from Supabase JOIN)
-      let locationAnalysis = null;
-      if (Array.isArray(property.property_market_analysis)) {
-        locationAnalysis = property.property_market_analysis[0]?.location_analysis;
-      } else if (property.property_market_analysis) {
-        locationAnalysis = property.property_market_analysis?.location_analysis;
-      }
-      const hasLocationAnalysisBRT = locationAnalysis && locationAnalysis.trim() !== '';
+      // Use the flattened field that was already processed by JobContainer
+      const hasLocationAnalysisBRT = property.location_analysis && property.location_analysis.trim() !== '';
 
       if (hasLandAdjustments && !hasLocationAnalysisBRT) {
         results.special.push({
@@ -1505,14 +1510,8 @@ const generateQCFormPDF = () => {
 
       // Only flag land adjustments if location_analysis is NOT populated
       // If location_analysis exists, the adjustments are intentional from page-by-page analysis
-      // Handle nested property_market_analysis structure (can be array or object from Supabase JOIN)
-      let locationAnalysisMS = null;
-      if (Array.isArray(property.property_market_analysis)) {
-        locationAnalysisMS = property.property_market_analysis[0]?.location_analysis;
-      } else if (property.property_market_analysis) {
-        locationAnalysisMS = property.property_market_analysis?.location_analysis;
-      }
-      const hasLocationAnalysisMS = locationAnalysisMS && locationAnalysisMS.trim() !== '';
+      // Use the flattened field that was already processed by JobContainer
+      const hasLocationAnalysisMS = property.location_analysis && property.location_analysis.trim() !== '';
 
       if (hasLandAdjustments && !hasLocationAnalysisMS) {
         results.special.push({
@@ -1528,12 +1527,18 @@ const generateQCFormPDF = () => {
     // MARKET ADJUSTMENTS
     if (vendor === 'BRT') {
       const issues = [];
-      
+
       if (rawData.MKTADJ && parseFloat(rawData.MKTADJ) !== 1) {
+        console.log(`❌ MKTADJ issue: ${property.property_composite_key} = ${rawData.MKTADJ}`);
         issues.push(`MKTADJ = ${rawData.MKTADJ} (should be 1)`);
+        console.log(`❌ MKTADJ issue found: ${property.property_composite_key}`, {
+          MKTADJ: rawData.MKTADJ,
+          NCOVR: rawData.NCOVR
+        });
       }
-      
+
       if (rawData.NCOVR && parseFloat(rawData.NCOVR) !== 0) {
+        console.log(`❌ NCOVR issue: ${property.property_composite_key} = ${rawData.NCOVR}`);
         issues.push(`NCOVR = ${rawData.NCOVR} (should be 0)`);
       }
       

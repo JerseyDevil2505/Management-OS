@@ -133,11 +133,11 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
  * Get parsed raw data for a job (with caching)
  */
 async function getRawDataForJob(jobId) {
-  // Check cache first
+  // Check cache first - trust it since it's cleared on file updates
   const cacheKey = `job_raw_data_${jobId}`;
   const cached = dataCache.get(cacheKey);
   if (cached) {
-    console.log(`📦 Returning cached raw data for job ${jobId}`);
+    // Silent return - no console spam
     return cached;
   }
 
@@ -182,15 +182,13 @@ async function getRawDataForJob(jobId) {
       parsed_code_definitions: job.parsed_code_definitions
     };
 
-    // Cache with longer TTL since code definitions rarely change
+    // Cache - it will be cleared when files are updated via updateCSVData
     dataCache.set(cacheKey, result, CACHE_CONFIG.CODE_DEFINITIONS);
-    console.log(`💾 Cached raw data for job ${jobId}`);
 
     return result;
 
   } catch (error) {
     console.error('Error getting source file data for job:', getErrorMessage(error));
-    console.error('Error details:', error);
     return null;
   }
 }
@@ -1165,9 +1163,11 @@ getBRTValue: function(property, codeDefinitions, fieldName) {
     return typeCode;
   },
 
-  // Check if a field is empty (handles spaces, null, undefined)
+  // Check if a field is empty (handles spaces, null, undefined, and BRT's "00")
   isFieldEmpty: function(value) {
-    return !value || value.toString().trim() === '';
+    if (!value) return true;
+    const strValue = value.toString().trim();
+    return strValue === '' || strValue === '00';
   }, 
  
 // Fix getExteriorConditionName:
@@ -4125,6 +4125,13 @@ export const propertyService = {
     if (propertyRawData) return propertyRawData;
 
     return null;
+  },
+
+  // Clear raw data cache for a specific job (called before quality checks to ensure fresh data)
+  clearRawDataCache(jobId) {
+    const cacheKey = `job_raw_data_${jobId}`;
+    dataCache.clear(cacheKey);
+    console.log(`🗑️ Cleared raw data cache for job ${jobId}`);
   },
 
   // NEW: Check if job needs reprocessing due to source file changes
