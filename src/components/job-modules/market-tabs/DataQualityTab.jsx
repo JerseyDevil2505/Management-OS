@@ -950,8 +950,9 @@ const generateQCFormPDF = () => {
     // TYPE USE / BUILDING CLASS VALIDATION
     const typeUseStr = typeUse?.toString().trim();
     const buildingClassStr = buildingClass?.toString().trim();
-    
-    if (typeUseStr && buildingClassStr && parseInt(buildingClassStr) > 10) {
+
+    // Only validate if both fields have real values (not null, empty, whitespace, or "00")
+    if (typeUseStr && typeUseStr !== '00' && buildingClassStr && parseInt(buildingClassStr) > 10) {
       let validBuildingClasses = [];
       const firstChar = typeUseStr.charAt(0);
       
