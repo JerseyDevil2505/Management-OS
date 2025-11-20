@@ -1032,7 +1032,7 @@ const generateQCFormPDF = () => {
     }
     
     if (buildingClass > 10) {
-      if (!designStyle) {
+      if (!designStyle || designStyle.trim() === '' || designStyle.trim() === '00') {
         results.characteristics.push({
           check: 'missing_design_style',
           severity: 'warning',
@@ -1041,7 +1041,7 @@ const generateQCFormPDF = () => {
           details: property
         });
       }
-      if (!typeUse) {
+      if (!typeUse || typeUse.trim() === '' || typeUse.trim() === '00') {
         results.characteristics.push({
           check: 'missing_type_use',
           severity: 'warning',
