@@ -997,25 +997,7 @@ const generateQCFormPDF = () => {
     const hasValidDesign = designStyle && designStyle.trim() !== '' && designStyle.trim() !== '00';
     const hasValidTypeUse = typeUse && typeUse.trim() !== '' && typeUse.trim() !== '00';
 
-    if (m4Class && classesToCheck.includes(m4Class)) {
-      // Only check building class if BOTH design style AND type/use are valid
-      if (hasValidDesign && hasValidTypeUse) {
-        // For residential classes (2, 3A), building class should be > 10
-        if ((m4Class === '2' || m4Class === '3A') && buildingClass && parseInt(buildingClass) <= 10) {
-          // This is already handled by another check below, skip here
-        }
-        // For facility classes (15A-15F), building class should be 10
-        else if (m4Class.startsWith('15') && buildingClass && parseInt(buildingClass) !== 10) {
-          results.characteristics.push({
-            check: 'facility_wrong_building_class',
-            severity: 'warning',
-            property_key: property.property_composite_key,
-            message: `Class ${m4Class} should have building class 10 (has ${buildingClass})`,
-            details: property
-          });
-        }
-      }
-    }
+    // Removed incorrect facility building class check - all checks now handled below
     
     // For residential classes, only flag building class 10 if they have BOTH design style AND type/use
     // If either is missing, the property might be exempt (disabled veteran) or detached structure (pool, garage)
