@@ -1107,41 +1107,43 @@ const generateQCFormPDF = () => {
                         (vendor === 'Microsystems' && (cardValue === 'M' || cardValue === 'm'));
 
   if (isPrimaryCard) {
-    const totalLotSize = await interpretCodes.getTotalLotSize(property, vendor, codeDefinitions);
-    const lotFrontage = property.asset_lot_frontage || 0;
-
-    // Determine a usable lot acreage from multiple sources before flagging zero lot size
+    // Determine lot acreage based on vendor type:
+    // BRT: Use ONLY the calculated lot sizes from unit rate configuration (market_manual_lot_acre/sf)
+    // Microsystems: Use direct read from asset fields
     let computedLotAcres = null;
 
-    // Primary: interpretCodes.getTotalLotSize (returns acres or null)
-    if (totalLotSize !== null && totalLotSize !== undefined && totalLotSize !== '') {
-      const parsed = parseFloat(totalLotSize);
-      if (!isNaN(parsed) && parsed !== 0) computedLotAcres = parsed;
-    }
+    if (vendor === 'BRT') {
+      // For BRT, use the calculated lot sizes from PreValuation unit rate configuration
+      // These are stored in property_market_analysis by generateLotSizesForJob function
+      const manualAcre = property.market_manual_lot_acre;
+      const manualSf = property.market_manual_lot_sf;
 
-    // Fallback: explicit acreage fields (market_manual_lot_acre then asset_lot_acre)
-    const manualAcre = property.market_manual_lot_acre || property.asset_lot_acre;
-    if (!computedLotAcres && manualAcre && parseFloat(manualAcre) !== 0) {
-      computedLotAcres = parseFloat(manualAcre);
-    }
+      if (manualAcre && parseFloat(manualAcre) !== 0) {
+        computedLotAcres = parseFloat(manualAcre);
+      } else if (manualSf && parseFloat(manualSf) !== 0) {
+        computedLotAcres = parseFloat(manualSf) / 43560;
+      }
+    } else {
+      // For Microsystems, use direct asset fields
+      const assetAcre = property.asset_lot_acre;
+      const assetSf = property.asset_lot_sf;
+      const lotFrontage = property.asset_lot_frontage || 0;
+      const lotDepth = property.asset_lot_depth || 0;
 
-    // Fallback: explicit square feet fields -> convert to acres
-    const manualSf = property.market_manual_lot_sf || property.asset_lot_sf;
-    if (!computedLotAcres && manualSf && parseFloat(manualSf) !== 0) {
-      computedLotAcres = parseFloat(manualSf) / 43560;
-    }
-
-    // Fallback: compute from frontage * depth if both present
-    const lotDepth = property.asset_lot_depth || 0;
-    if (!computedLotAcres && lotFrontage && lotDepth && parseFloat(lotFrontage) !== 0 && parseFloat(lotDepth) !== 0) {
-      const sf = parseFloat(lotFrontage) * parseFloat(lotDepth);
-      if (!isNaN(sf) && sf !== 0) {
-        computedLotAcres = sf / 43560;
+      if (assetAcre && parseFloat(assetAcre) !== 0) {
+        computedLotAcres = parseFloat(assetAcre);
+      } else if (assetSf && parseFloat(assetSf) !== 0) {
+        computedLotAcres = parseFloat(assetSf) / 43560;
+      } else if (lotFrontage && lotDepth && parseFloat(lotFrontage) !== 0 && parseFloat(lotDepth) !== 0) {
+        const sf = parseFloat(lotFrontage) * parseFloat(lotDepth);
+        if (!isNaN(sf) && sf !== 0) {
+          computedLotAcres = sf / 43560;
+        }
       }
     }
 
-    // Check if we truly have zero lot size (computedLotAcres is acres or null)
-    if ((!computedLotAcres || parseFloat(computedLotAcres) === 0) && lotFrontage === 0) {
+    // Check if we truly have zero lot size
+    if (!computedLotAcres || parseFloat(computedLotAcres) === 0) {
       // Skip condos with only site value
       let skipError = false;
 
