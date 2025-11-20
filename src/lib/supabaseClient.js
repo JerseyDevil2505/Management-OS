@@ -133,32 +133,43 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
  * Get parsed raw data for a job (with caching)
  */
 async function getRawDataForJob(jobId) {
-  // Check cache first
+  // Check cache first AND verify it's not stale
   const cacheKey = `job_raw_data_${jobId}`;
   const cached = dataCache.get(cacheKey);
-  if (cached) {
-    console.log(`📦 Returning cached raw data for job ${jobId}`);
-    return cached;
-  }
 
   try {
-    const { data: job, error } = await supabase
+    // Always fetch the timestamp to check for staleness
+    const { data: jobMeta, error: metaError } = await supabase
       .from('jobs')
-      .select('raw_file_content, parsed_code_definitions, vendor_type, ccdd_code, start_date')
+      .select('raw_file_parsed_at, raw_file_content, parsed_code_definitions, vendor_type, ccdd_code, start_date')
       .eq('id', jobId)
       .single();
 
-    if (error || !job?.raw_file_content) {
+    if (metaError || !jobMeta?.raw_file_content) {
       return null;
     }
 
+    // If we have cached data, check if it's stale by comparing timestamps
+    if (cached && cached.cachedAt && jobMeta.raw_file_parsed_at) {
+      const cachedTime = new Date(cached.cachedAt).getTime();
+      const fileUpdatedTime = new Date(jobMeta.raw_file_parsed_at).getTime();
+
+      if (fileUpdatedTime <= cachedTime) {
+        console.log(`📦 Returning cached raw data for job ${jobId} (cache is fresh)`);
+        return cached;
+      } else {
+        console.log(`🔄 Cache is stale for job ${jobId} - file updated at ${jobMeta.raw_file_parsed_at}, cache from ${cached.cachedAt}`);
+        dataCache.clear(cacheKey);
+      }
+    }
+
     // Determine vendor type and year
-    const vendorType = job.vendor_type || detectVendorTypeFromContent(job.raw_file_content);
-    const yearCreated = new Date(job.start_date).getFullYear();
-    const ccddCode = job.ccdd_code;
+    const vendorType = jobMeta.vendor_type || detectVendorTypeFromContent(jobMeta.raw_file_content);
+    const yearCreated = new Date(jobMeta.start_date).getFullYear();
+    const ccddCode = jobMeta.ccdd_code;
 
     // Parse the source file
-    const parsedData = parseSourceFileContent(job.raw_file_content, vendorType) || [];
+    const parsedData = parseSourceFileContent(jobMeta.raw_file_content, vendorType) || [];
 
     // Create property lookup map by composite key
     const propertyMap = new Map();
@@ -178,13 +189,15 @@ async function getRawDataForJob(jobId) {
       yearCreated: yearCreated || new Date().getFullYear(),
       ccddCode: ccddCode || '',
       propertyMap: propertyMap || new Map(),
-      codeDefinitions: job.parsed_code_definitions,
-      parsed_code_definitions: job.parsed_code_definitions
+      codeDefinitions: jobMeta.parsed_code_definitions,
+      parsed_code_definitions: jobMeta.parsed_code_definitions,
+      cachedAt: new Date().toISOString(),  // Track when this was cached
+      raw_file_parsed_at: jobMeta.raw_file_parsed_at  // Track when the file was last updated
     };
 
     // Cache with longer TTL since code definitions rarely change
     dataCache.set(cacheKey, result, CACHE_CONFIG.CODE_DEFINITIONS);
-    console.log(`💾 Cached raw data for job ${jobId}`);
+    console.log(`💾 Cached raw data for job ${jobId} (parsed at ${jobMeta.raw_file_parsed_at})`);
 
     return result;
 
