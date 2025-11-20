@@ -4127,6 +4127,13 @@ export const propertyService = {
     return null;
   },
 
+  // Clear raw data cache for a specific job (called before quality checks to ensure fresh data)
+  clearRawDataCache(jobId) {
+    const cacheKey = `job_raw_data_${jobId}`;
+    dataCache.delete(cacheKey);
+    console.log(`🗑️ Cleared raw data cache for job ${jobId}`);
+  },
+
   // NEW: Check if job needs reprocessing due to source file changes
   async checkJobReprocessingStatus(jobId) {
     try {
