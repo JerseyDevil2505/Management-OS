@@ -753,8 +753,22 @@ const generateQCFormPDF = () => {
     setIsRunningChecks(true);
     setAnalysisProgress({ current: 0, total: properties.length, phase: 'Initializing...' });
 
-    // Cache is already cleared by FileUploadButton when files are updated
-    // No need to clear it here - just use the cached data
+    // VERIFY: Check when raw file was last updated to ensure we're using the latest data
+    try {
+      const { data: jobMeta } = await supabase
+        .from('jobs')
+        .select('raw_file_parsed_at, source_file_uploaded_at, updated_at')
+        .eq('id', jobData.id)
+        .single();
+
+      if (jobMeta) {
+        console.log('📅 Raw file last parsed:', jobMeta.raw_file_parsed_at);
+        console.log('📅 Source file uploaded:', jobMeta.source_file_uploaded_at);
+        console.log('📅 Job last updated:', jobMeta.updated_at);
+      }
+    } catch (err) {
+      console.warn('Could not verify file timestamps:', err);
+    }
 
     const results = {
       mod_iv: [],
