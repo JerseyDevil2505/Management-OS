@@ -1113,15 +1113,23 @@ const generateQCFormPDF = () => {
     let computedLotAcres = null;
 
     if (vendor === 'BRT') {
-      // For BRT, use the calculated lot sizes from PreValuation unit rate configuration
+      // For BRT, prefer the calculated lot sizes from PreValuation unit rate configuration
       // These are stored in property_market_analysis by generateLotSizesForJob function
       const manualAcre = property.market_manual_lot_acre;
       const manualSf = property.market_manual_lot_sf;
+      const lotFrontage = property.asset_lot_frontage || 0;
+      const lotDepth = property.asset_lot_depth || 0;
 
       if (manualAcre && parseFloat(manualAcre) !== 0) {
         computedLotAcres = parseFloat(manualAcre);
       } else if (manualSf && parseFloat(manualSf) !== 0) {
         computedLotAcres = parseFloat(manualSf) / 43560;
+      } else if (lotFrontage && lotDepth && parseFloat(lotFrontage) !== 0 && parseFloat(lotDepth) !== 0) {
+        // Fallback to frontage × depth if calculated values not available yet
+        const sf = parseFloat(lotFrontage) * parseFloat(lotDepth);
+        if (!isNaN(sf) && sf !== 0) {
+          computedLotAcres = sf / 43560;
+        }
       }
     } else {
       // For Microsystems, use direct asset fields
