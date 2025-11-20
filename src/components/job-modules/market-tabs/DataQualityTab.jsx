@@ -1435,14 +1435,8 @@ const generateQCFormPDF = () => {
 
       // Only flag land adjustments if location_analysis is NOT populated
       // If location_analysis exists, the adjustments are intentional from page-by-page analysis
-      // Handle nested property_market_analysis structure (can be array or object from Supabase JOIN)
-      let locationAnalysis = null;
-      if (Array.isArray(property.property_market_analysis)) {
-        locationAnalysis = property.property_market_analysis[0]?.location_analysis;
-      } else if (property.property_market_analysis) {
-        locationAnalysis = property.property_market_analysis?.location_analysis;
-      }
-      const hasLocationAnalysisBRT = locationAnalysis && locationAnalysis.trim() !== '';
+      // Use the flattened field that was already processed by JobContainer
+      const hasLocationAnalysisBRT = property.location_analysis && property.location_analysis.trim() !== '';
 
       if (hasLandAdjustments && !hasLocationAnalysisBRT) {
         results.special.push({
@@ -1505,14 +1499,8 @@ const generateQCFormPDF = () => {
 
       // Only flag land adjustments if location_analysis is NOT populated
       // If location_analysis exists, the adjustments are intentional from page-by-page analysis
-      // Handle nested property_market_analysis structure (can be array or object from Supabase JOIN)
-      let locationAnalysisMS = null;
-      if (Array.isArray(property.property_market_analysis)) {
-        locationAnalysisMS = property.property_market_analysis[0]?.location_analysis;
-      } else if (property.property_market_analysis) {
-        locationAnalysisMS = property.property_market_analysis?.location_analysis;
-      }
-      const hasLocationAnalysisMS = locationAnalysisMS && locationAnalysisMS.trim() !== '';
+      // Use the flattened field that was already processed by JobContainer
+      const hasLocationAnalysisMS = property.location_analysis && property.location_analysis.trim() !== '';
 
       if (hasLandAdjustments && !hasLocationAnalysisMS) {
         results.special.push({
