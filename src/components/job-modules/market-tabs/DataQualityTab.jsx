@@ -757,6 +757,22 @@ const generateQCFormPDF = () => {
     if (propertyService.clearRawDataCache) {
       propertyService.clearRawDataCache(jobData.id);
       console.log('✅ Cleared raw data cache before quality checks');
+
+      // VERIFY: Check when the raw file was last updated in the database
+      try {
+        const { data: jobInfo, error: jobError } = await supabase
+          .from('jobs')
+          .select('raw_file_parsed_at, updated_at')
+          .eq('id', jobData.id)
+          .single();
+
+        if (!jobError && jobInfo) {
+          console.log('📅 Raw file last parsed:', jobInfo.raw_file_parsed_at);
+          console.log('📅 Job last updated:', jobInfo.updated_at);
+        }
+      } catch (err) {
+        console.warn('Could not verify raw file timestamp:', err);
+      }
     }
 
     const results = {
@@ -872,7 +888,7 @@ const generateQCFormPDF = () => {
         // Use client-side fallback directly - much faster than RPC calls!
         rawData = (await propertyService.getRawDataForPropertyClientSide(property.job_id, property.property_composite_key)) || {};
       } catch (error) {
-        console.warn(`Failed to get raw data for ${property.property_composite_key}:`, error);
+        // Reduced console noise - only log errors, not warnings for every property
         rawData = {};
       }
       rawDataCache.set(property.property_composite_key, rawData);
@@ -1517,10 +1533,22 @@ const generateQCFormPDF = () => {
     if (vendor === 'BRT') {
       const issues = [];
 
+      // Debug specific properties with remaining errors
+      const debugKeys = ['Block 10 Lot 2', 'Block 112 Lot 21', 'Block 118 Lot 2.01'];
+      const isDebugProperty = debugKeys.some(key => property.property_composite_key.includes(key));
+
+      if (isDebugProperty) {
+        console.log(`🔍 DEBUG ${property.property_composite_key}:`, {
+          MKTADJ: rawData.MKTADJ,
+          NCOVR: rawData.NCOVR,
+          rawDataKeys: Object.keys(rawData).slice(0, 10)
+        });
+      }
+
       if (rawData.MKTADJ && parseFloat(rawData.MKTADJ) !== 1) {
         issues.push(`MKTADJ = ${rawData.MKTADJ} (should be 1)`);
       }
-      
+
       if (rawData.NCOVR && parseFloat(rawData.NCOVR) !== 0) {
         issues.push(`NCOVR = ${rawData.NCOVR} (should be 0)`);
       }
