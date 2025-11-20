@@ -1142,7 +1142,7 @@ const generateQCFormPDF = () => {
       } else if (manualSf && parseFloat(manualSf) !== 0) {
         computedLotAcres = parseFloat(manualSf) / 43560;
       } else if (lotFrontage && lotDepth && parseFloat(lotFrontage) !== 0 && parseFloat(lotDepth) !== 0) {
-        // Fallback to frontage × depth if calculated values not available yet
+        // Fallback to frontage �� depth if calculated values not available yet
         const sf = parseFloat(lotFrontage) * parseFloat(lotDepth);
         if (!isNaN(sf) && sf !== 0) {
           computedLotAcres = sf / 43560;
@@ -1538,11 +1538,8 @@ const generateQCFormPDF = () => {
       }
 
       if (rawData.NCOVR && parseFloat(rawData.NCOVR) !== 0) {
+        console.log(`❌ NCOVR issue: ${property.property_composite_key} = ${rawData.NCOVR}`);
         issues.push(`NCOVR = ${rawData.NCOVR} (should be 0)`);
-        console.log(`❌ NCOVR issue found: ${property.property_composite_key}`, {
-          MKTADJ: rawData.MKTADJ,
-          NCOVR: rawData.NCOVR
-        });
       }
       
       if (!interpretCodes.isFieldEmpty(rawData.NCREDIRECT)) {
