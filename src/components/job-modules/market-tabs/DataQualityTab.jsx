@@ -1529,6 +1529,7 @@ const generateQCFormPDF = () => {
       const issues = [];
 
       if (rawData.MKTADJ && parseFloat(rawData.MKTADJ) !== 1) {
+        console.log(`❌ MKTADJ issue: ${property.property_composite_key} = ${rawData.MKTADJ}`);
         issues.push(`MKTADJ = ${rawData.MKTADJ} (should be 1)`);
         console.log(`❌ MKTADJ issue found: ${property.property_composite_key}`, {
           MKTADJ: rawData.MKTADJ,
