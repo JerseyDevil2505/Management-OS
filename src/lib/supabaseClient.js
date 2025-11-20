@@ -1165,9 +1165,11 @@ getBRTValue: function(property, codeDefinitions, fieldName) {
     return typeCode;
   },
 
-  // Check if a field is empty (handles spaces, null, undefined)
+  // Check if a field is empty (handles spaces, null, undefined, and BRT's "00")
   isFieldEmpty: function(value) {
-    return !value || value.toString().trim() === '';
+    if (!value) return true;
+    const strValue = value.toString().trim();
+    return strValue === '' || strValue === '00';
   }, 
  
 // Fix getExteriorConditionName:
