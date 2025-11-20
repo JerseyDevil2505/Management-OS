@@ -1084,7 +1084,7 @@ const generateQCFormPDF = () => {
         });
       }
       
-      if (typeUse && typeUse.trim() !== '') {
+      if (typeUse && typeUse.trim() !== '' && typeUse.trim() !== '00') {
         results.characteristics.push({
           check: 'zero_improvement_with_type',
           severity: 'warning',
@@ -1096,7 +1096,7 @@ const generateQCFormPDF = () => {
     }
     
     if (m4Class === '4A' || m4Class === '4B' || m4Class === '4C') {
-      if (designStyle && designStyle.trim() !== '') {
+      if (designStyle && designStyle.trim() !== '' && designStyle.trim() !== '00') {
         results.characteristics.push({
           check: 'commercial_with_design',
           severity: 'warning',
@@ -1106,7 +1106,7 @@ const generateQCFormPDF = () => {
         });
       }
       
-      if (typeUse && typeUse.trim() !== '') {
+      if (typeUse && typeUse.trim() !== '' && typeUse.trim() !== '00') {
         results.characteristics.push({
           check: 'commercial_with_type',
           severity: 'warning',
