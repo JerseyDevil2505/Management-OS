@@ -753,31 +753,8 @@ const generateQCFormPDF = () => {
     setIsRunningChecks(true);
     setAnalysisProgress({ current: 0, total: properties.length, phase: 'Initializing...' });
 
-    // CRITICAL: Clear raw data cache to ensure we're using latest uploaded file data
-    if (propertyService.clearRawDataCache) {
-      propertyService.clearRawDataCache(jobData.id);
-      console.log('✅ Cleared raw data cache before quality checks');
-
-      // VERIFY: Check when the raw file was last updated in the database
-      try {
-        const { data: jobInfo, error: jobError } = await supabase
-          .from('jobs')
-          .select('raw_file_parsed_at, updated_at, raw_file_rows_count')
-          .eq('id', jobData.id)
-          .single();
-
-        if (!jobError && jobInfo) {
-          console.log('📅 Raw file last parsed:', jobInfo.raw_file_parsed_at);
-          console.log('📅 Job last updated:', jobInfo.updated_at);
-          console.log('📊 Raw file rows:', jobInfo.raw_file_rows_count);
-          console.log('\n🔍 To verify raw data in database, run this SQL in Supabase:');
-          console.log(`SELECT raw_file_content FROM jobs WHERE id = '${jobData.id}';`);
-          console.log('Then search for "Block 10" or "Block 112" to see the actual MKTADJ and NCOVR values.\n');
-        }
-      } catch (err) {
-        console.warn('Could not verify raw file timestamp:', err);
-      }
-    }
+    // Cache is already cleared by FileUploadButton when files are updated
+    // No need to clear it here - just use the cached data
 
     const results = {
       mod_iv: [],
