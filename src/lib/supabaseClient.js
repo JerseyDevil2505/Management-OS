@@ -4130,7 +4130,7 @@ export const propertyService = {
   // Clear raw data cache for a specific job (called before quality checks to ensure fresh data)
   clearRawDataCache(jobId) {
     const cacheKey = `job_raw_data_${jobId}`;
-    dataCache.delete(cacheKey);
+    dataCache.clear(cacheKey);
     console.log(`🗑️ Cleared raw data cache for job ${jobId}`);
   },
 
