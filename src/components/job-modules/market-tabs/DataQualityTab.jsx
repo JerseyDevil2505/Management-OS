@@ -753,6 +753,12 @@ const generateQCFormPDF = () => {
     setIsRunningChecks(true);
     setAnalysisProgress({ current: 0, total: properties.length, phase: 'Initializing...' });
 
+    // CRITICAL: Clear raw data cache to ensure we're using latest uploaded file data
+    if (propertyService.clearRawDataCache) {
+      propertyService.clearRawDataCache(jobData.id);
+      console.log('✅ Cleared raw data cache before quality checks');
+    }
+
     const results = {
       mod_iv: [],
       cama: [],
