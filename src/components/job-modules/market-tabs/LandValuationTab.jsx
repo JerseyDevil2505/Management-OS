@@ -3275,15 +3275,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const avgNormTime = avgNormTimes[vcs];
       if (!avgNormTime) return;
 
-      // Get average lot size for this VCS
+      // Get average lot size for this VCS using pre-calculated market_manual_lot_acre
       const vcsProps = properties.filter(p =>
         p.new_vcs === vcs &&
-        (p.property_m4_class === '2' || p.property_m4_class === '3A')
+        (p.property_m4_class === '2' || p.property_m4_class === '3A') &&
+        p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0
       );
 
       if (vcsProps.length === 0) return;
 
-      const avgAcres = vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length;
+      const avgAcres = vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / vcsProps.length;
 
       // Use corrected cascade logic
       const rawLandValue = calculateRawLandValue(avgAcres, cascadeConfig.normal);
