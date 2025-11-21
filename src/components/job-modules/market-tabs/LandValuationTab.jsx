@@ -3216,12 +3216,29 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         if (prop.values_norm_time > 0) {
           avgNormTime[prop.new_vcs].push(prop.values_norm_time);
           // Collect lot size based on valuation mode
+          let lotSizeAdded = false;
           if (valuationMode === 'sf' && prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
             avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_sf));
+            lotSizeAdded = true;
           } else if (valuationMode === 'acre' && prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
             avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_acre));
+            lotSizeAdded = true;
           } else if (valuationMode === 'ff' && prop.asset_lot_frontage && parseFloat(prop.asset_lot_frontage) > 0) {
             avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.asset_lot_frontage));
+            lotSizeAdded = true;
+          }
+
+          // Debug: Log first few properties with sales to see what data is available
+          if (avgNormTime[prop.new_vcs].length <= 3) {
+            console.log(`📊 Lot Size Debug - VCS ${prop.new_vcs}, Block ${prop.property_block}, Lot ${prop.property_lot}:`, {
+              valuationMode,
+              market_manual_lot_sf: prop.market_manual_lot_sf,
+              market_manual_lot_acre: prop.market_manual_lot_acre,
+              asset_lot_frontage: prop.asset_lot_frontage,
+              lotSizeAdded,
+              sales_price: prop.sales_price,
+              values_norm_time: prop.values_norm_time
+            });
           }
         }
 
@@ -3603,7 +3620,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }));
 
     // Immediate save to prevent data loss when navigating away
-    debug('���� Triggering immediate save for Act Site change');
+    debug('����� Triggering immediate save for Act Site change');
     setTimeout(() => {
       if (window.landValuationSave) {
         window.landValuationSave({ source: 'autosave' });
