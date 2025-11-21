@@ -3348,7 +3348,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         avgPriceLotSize: calculatedAvgPriceLotSize[vcs]
       };
     });
-    
+
+    // Debug: Log first VCS to verify final data
+    const firstVcs = Object.keys(sheetData)[0];
+    if (firstVcs) {
+      console.log(`📊 Final VCS Sheet Data for ${firstVcs}:`, sheetData[firstVcs]);
+    }
+
     setVcsSheetData(sheetData);
   }, [properties]);
 
@@ -5833,7 +5839,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ).map(([region, sales]) => ({ region, count: sales.length, sales }))
     });
 
-    debug('📋 Included sales IDs:', Array.from(includedSales));
+    debug('���� Included sales IDs:', Array.from(includedSales));
     debug('�� Sale categories state:', saleCategories);
     debug('���� Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
     debug('��� Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
