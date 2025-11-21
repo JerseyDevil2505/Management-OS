@@ -3034,8 +3034,35 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
     }
 
+    // SQUARE FOOT MODE - Added support
+    if (valuationMode === 'sf') {
+      const sqFeet = typeof acresOrProperty === 'number' ? acresOrProperty :
+                     (acresOrProperty?.market_manual_lot_sf ? parseFloat(acresOrProperty.market_manual_lot_sf) : 0);
+
+      if (sqFeet > 0 && cascadeRates.standard) {
+        const standardRate = cascadeRates.standard.rate || 0;
+        const standardMax = cascadeRates.standard.max || 5000;
+        const excessRate = cascadeRates.excess?.rate || 0;
+
+        const standardSF = Math.min(sqFeet, standardMax);
+        const excessSF = Math.max(0, sqFeet - standardMax);
+
+        const standardValue = standardSF * standardRate;
+        const excessValue = excessSF * excessRate;
+        const rawLandValue = standardValue + excessValue;
+
+        debug(`SF calc for ${sqFeet} sq ft: Standard: ${standardSF} SF x $${standardRate} = $${standardValue.toFixed(0)}` +
+          (excessSF > 0 ? `, Excess: ${excessSF} SF x $${excessRate} = $${excessValue.toFixed(0)}` : '') +
+          ` = $${rawLandValue.toFixed(0)}`);
+
+        return rawLandValue;
+      }
+    }
+
     // Fall back to acreage-based calculation
-    const acres = typeof acresOrProperty === 'number' ? acresOrProperty : parseFloat(calculateAcreage(acresOrProperty));
+    const acres = typeof acresOrProperty === 'number' ? acresOrProperty :
+                  (acresOrProperty?.market_manual_lot_acre ? parseFloat(acresOrProperty.market_manual_lot_acre) :
+                   parseFloat(calculateAcreage(acresOrProperty)));
     let remainingAcres = acres;
     let rawLandValue = 0;
     const breakdown = [];
