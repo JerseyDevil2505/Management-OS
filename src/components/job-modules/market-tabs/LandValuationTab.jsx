@@ -4163,45 +4163,55 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const actSite = vcsManualSiteValues[vcs] ?? recSite;
       const isResidential = type.startsWith('Residential');
 
-      // Get typical lot size (FF mode shows FF + Depth, Acre mode shows acres/SF)
-      const vcsProps = properties?.filter(p =>
-        p.new_vcs === vcs && calculateAcreage(p) > 0
-      ) || [];
-
+      // Get typical lot size (FF mode shows FF + Depth, Acre/SF mode uses pre-calculated manual lot sizes)
       let typicalFF = '';
       let typicalDepth = '';
       let depthTableName = '';
       let typicalLot = '';
 
       if (valuationMode === 'ff') {
-        // FF mode: calculate typical front feet and depth
-        const propsWithFF = vcsProps.filter(p => p.asset_lot_frontage && p.asset_lot_depth);
-        if (propsWithFF.length > 0) {
-          const avgFF = propsWithFF.reduce((sum, p) => sum + parseFloat(p.asset_lot_frontage || 0), 0) / propsWithFF.length;
-          const avgDepth = propsWithFF.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth || 0), 0) / propsWithFF.length;
+        // FF mode: calculate typical front feet and depth from vendor data
+        const vcsProps = properties?.filter(p =>
+          p.new_vcs === vcs && p.asset_lot_frontage && p.asset_lot_depth
+        ) || [];
+
+        if (vcsProps.length > 0) {
+          const avgFF = vcsProps.reduce((sum, p) => sum + parseFloat(p.asset_lot_frontage || 0), 0) / vcsProps.length;
+          const avgDepth = vcsProps.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth || 0), 0) / vcsProps.length;
           typicalFF = Math.round(avgFF);
           typicalDepth = Math.round(avgDepth);
         }
 
         // Get depth table - check VCS override first, then zoning config
-        const firstProp = vcsProps[0];
+        const firstProp = properties?.find(p => p.new_vcs === vcs);
         if (firstProp) {
           const zone = firstProp.asset_zoning || '';
           const zcfg = marketLandData?.zoning_config || {};
           const zoneEntry = zcfg[zone] || zcfg[zone?.toUpperCase?.()] || zcfg[zone?.toLowerCase?.()] || null;
           const zoningDepthTable = zoneEntry ? (zoneEntry.depth_table || zoneEntry.depthTable || zoneEntry.depth_table_name || '') : '';
-          // Use VCS-specific override if available, otherwise use zoning default (matches UI rendering at line 9563)
+          // Use VCS-specific override if available, otherwise use zoning default
           depthTableName = vcsDepthTableOverrides[vcs] || zoningDepthTable;
         }
-      } else {
-        // Acre/SF mode: calculate typical lot in acres or SF
+      } else if (valuationMode === 'sf') {
+        // SF mode: use pre-calculated market_manual_lot_sf from property_market_analysis
+        const vcsProps = properties?.filter(p =>
+          p.new_vcs === vcs &&
+          p.market_manual_lot_sf && parseFloat(p.market_manual_lot_sf) > 0
+        ) || [];
+
         if (vcsProps.length > 0) {
-          const avgAcres = vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length;
-          if (valuationMode === 'sf') {
-            typicalLot = Math.round(avgAcres * 43560);
-          } else {
-            typicalLot = Number(avgAcres.toFixed(2));
-          }
+          typicalLot = Math.round(vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / vcsProps.length);
+        }
+      } else {
+        // Acre mode: use pre-calculated market_manual_lot_acre from property_market_analysis
+        const vcsProps = properties?.filter(p =>
+          p.new_vcs === vcs &&
+          p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0
+        ) || [];
+
+        if (vcsProps.length > 0) {
+          const avgAcres = vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / vcsProps.length;
+          typicalLot = Number(avgAcres.toFixed(2));
         }
       }
 
