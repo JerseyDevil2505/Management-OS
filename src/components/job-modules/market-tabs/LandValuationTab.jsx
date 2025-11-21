@@ -257,7 +257,7 @@ const LandValuationTab = ({
       secondary: { max: 5, rate: null },
       excess: { max: 10, rate: null },
       residual: { max: null, rate: null },
-      standard: { max: 100, rate: null } // For front foot method
+      standard: { max: 100, rate: null } // For front foot AND square foot methods
     },
     special: {},
     vcsSpecific: {}, // New: VCS-specific configurations
@@ -3816,7 +3816,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     const targetValue = parseFloat(targetAllocation);
     if (isNaN(targetValue) || targetValue <= 0 || targetValue > 100) {
-      debug('��� Save target allocation cancelled: Invalid value:', targetAllocation);
+      debug('���� Save target allocation cancelled: Invalid value:', targetAllocation);
       alert('Please enter a valid target allocation percentage between 1 and 100.');
       return;
     }
@@ -7596,20 +7596,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </div>
               </>
             ) : valuationMode === 'sf' ? (
-              // SQUARE FOOT MODE: Primary + Secondary only
+              // SQUARE FOOT MODE: Standard + Excess
               <>
                 <div>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                    Primary (0-{cascadeConfig.normal.prime?.max || 5000} sq ft)
+                    Standard (0-{cascadeConfig.normal.standard?.max || 5000} sq ft)
                   </label>
                   <div style={{ display: 'flex', gap: '5px' }}>
                     <input
                       type="number"
-                      value={cascadeConfig.normal.prime?.max || ''}
-                      onChange={(e) => updateCascadeBreak('prime', 'max', e.target.value)}
+                      value={cascadeConfig.normal.standard?.max || ''}
+                      onChange={(e) => updateCascadeBreak('standard', 'max', e.target.value)}
                       placeholder="Max sq ft"
                       style={{
-                        width: '100px',
+                        width: '120px',
                         padding: '8px',
                         border: '1px solid #D1D5DB',
                         borderRadius: '4px'
@@ -7618,8 +7618,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <input
                       type="number"
                       step="0.01"
-                      value={cascadeConfig.normal.prime?.rate || ''}
-                      onChange={(e) => updateCascadeBreak('prime', 'rate', e.target.value)}
+                      value={cascadeConfig.normal.standard?.rate || ''}
+                      onChange={(e) => updateCascadeBreak('standard', 'rate', e.target.value)}
                       placeholder="Rate per sq ft"
                       style={{
                         flex: 1,
@@ -7632,13 +7632,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </div>
                 <div>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                    Secondary ({cascadeConfig.normal.prime?.max || 5000}+ sq ft)
+                    Excess ({cascadeConfig.normal.standard?.max || 5000}+ sq ft)
                   </label>
                   <input
                     type="number"
                     step="0.01"
-                    value={cascadeConfig.normal.secondary?.rate || ''}
-                    onChange={(e) => updateCascadeBreak('secondary', 'rate', e.target.value)}
+                    value={cascadeConfig.normal.excess?.rate || ''}
+                    onChange={(e) => updateCascadeBreak('excess', 'rate', e.target.value)}
                     placeholder="Rate per sq ft"
                     style={{
                       width: '100%',
@@ -7968,21 +7968,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <>
                   <div>
                     <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
-                      Primary (0-{cascadeConfig.special[region]?.prime?.max || 5000} sq ft)
+                      Standard (0-{cascadeConfig.special[region]?.standard?.max || 5000} sq ft)
                     </label>
                     <div style={{ display: 'flex', gap: '5px' }}>
                       <input
                         type="number"
-                        value={cascadeConfig.special[region]?.prime?.max || ''}
-                        onChange={(e) => updateSpecialRegionCascade(region, 'prime', 'max', e.target.value)}
+                        value={cascadeConfig.special[region]?.standard?.max || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'standard', 'max', e.target.value)}
                         placeholder="Max"
                         style={{ width: '80px', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
                       />
                       <input
                         type="number"
                         step="0.01"
-                        value={cascadeConfig.special[region]?.prime?.rate || ''}
-                        onChange={(e) => updateSpecialRegionCascade(region, 'prime', 'rate', e.target.value)}
+                        value={cascadeConfig.special[region]?.standard?.rate || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'standard', 'rate', e.target.value)}
                         placeholder="Rate"
                         style={{ flex: 1, padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
                       />
@@ -7990,13 +7990,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   </div>
                   <div>
                     <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
-                      Secondary ({cascadeConfig.special[region]?.prime?.max || 5000}+ sq ft)
+                      Excess ({cascadeConfig.special[region]?.standard?.max || 5000}+ sq ft)
                     </label>
                     <input
                       type="number"
                       step="0.01"
-                      value={cascadeConfig.special[region]?.secondary?.rate || ''}
-                      onChange={(e) => updateSpecialRegionCascade(region, 'secondary', 'rate', e.target.value)}
+                      value={cascadeConfig.special[region]?.excess?.rate || ''}
+                      onChange={(e) => updateSpecialRegionCascade(region, 'excess', 'rate', e.target.value)}
                       placeholder="Rate"
                       style={{ width: '100%', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
                     />
