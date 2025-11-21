@@ -3302,19 +3302,46 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const avgNormTime = avgNormTimes[vcs];
       if (!avgNormTime) return;
 
-      // Get average lot size for this VCS using pre-calculated market_manual_lot_acre
-      const vcsProps = properties.filter(p =>
-        p.new_vcs === vcs &&
-        (p.property_m4_class === '2' || p.property_m4_class === '3A') &&
-        p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0
-      );
+      // Get average lot size for this VCS using appropriate pre-calculated field based on mode
+      let vcsProps, avgSize, rawLandValue;
 
-      if (vcsProps.length === 0) return;
-
-      const avgAcres = vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / vcsProps.length;
-
-      // Use corrected cascade logic
-      const rawLandValue = calculateRawLandValue(avgAcres, cascadeConfig.normal);
+      if (valuationMode === 'sf') {
+        // Square Foot mode: use market_manual_lot_sf
+        vcsProps = properties.filter(p =>
+          p.new_vcs === vcs &&
+          (p.property_m4_class === '2' || p.property_m4_class === '3A') &&
+          p.market_manual_lot_sf && parseFloat(p.market_manual_lot_sf) > 0
+        );
+        if (vcsProps.length === 0) return;
+        avgSize = vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / vcsProps.length;
+        rawLandValue = calculateRawLandValue(avgSize, cascadeConfig.normal);
+      } else if (valuationMode === 'ff') {
+        // Front Foot mode: need frontage data
+        vcsProps = properties.filter(p =>
+          p.new_vcs === vcs &&
+          (p.property_m4_class === '2' || p.property_m4_class === '3A') &&
+          p.asset_lot_frontage && parseFloat(p.asset_lot_frontage) > 0
+        );
+        if (vcsProps.length === 0) return;
+        // For FF mode, we'll use an average representative property
+        const avgFrontage = vcsProps.reduce((sum, p) => sum + parseFloat(p.asset_lot_frontage), 0) / vcsProps.length;
+        const avgDepth = vcsProps.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth || 100), 0) / vcsProps.length;
+        rawLandValue = calculateRawLandValue(null, cascadeConfig.normal, {
+          land_front_feet: avgFrontage,
+          land_depth: avgDepth,
+          land_zoning: vcsProps[0]?.asset_zoning
+        });
+      } else {
+        // Acre mode: use market_manual_lot_acre
+        vcsProps = properties.filter(p =>
+          p.new_vcs === vcs &&
+          (p.property_m4_class === '2' || p.property_m4_class === '3A') &&
+          p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0
+        );
+        if (vcsProps.length === 0) return;
+        avgSize = vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / vcsProps.length;
+        rawLandValue = calculateRawLandValue(avgSize, cascadeConfig.normal);
+      }
 
       // Calculate site value using target allocation
       const totalLandValue = avgNormTime * (parseFloat(targetAllocation) / 100);
