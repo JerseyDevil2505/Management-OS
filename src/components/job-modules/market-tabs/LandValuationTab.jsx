@@ -756,7 +756,7 @@ useEffect(() => {
 
   // Only set if we found a valid value AND current state is null/empty to prevent overwrites
   if (loadedTargetAllocation !== null) {
-    console.log('🟢 LOADED TARGET ALLOCATION:', loadedTargetAllocation);
+    console.log('���� LOADED TARGET ALLOCATION:', loadedTargetAllocation);
     // Ensure it's a number to prevent caching issues
     const numericValue = typeof loadedTargetAllocation === 'string' ?
       parseFloat(loadedTargetAllocation) : loadedTargetAllocation;
@@ -3163,6 +3163,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const avgNormTime = {};
     const avgNormSize = {};
     const avgActualPrice = {};
+    const avgNormTimeLotSize = {};
+    const avgActualPriceLotSize = {};
 
     properties.forEach(prop => {
       if (!prop.new_vcs) return;
@@ -3184,6 +3186,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         avgNormTime[prop.new_vcs] = [];
         avgNormSize[prop.new_vcs] = [];
         avgActualPrice[prop.new_vcs] = [];
+        avgNormTimeLotSize[prop.new_vcs] = [];
+        avgActualPriceLotSize[prop.new_vcs] = [];
       }
       
       counts[prop.new_vcs].total++;
@@ -3209,7 +3213,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Note: VCS type filtering happens later in calculateRecSite
       if (prop.sales_price > 0 && prop.sales_date) {
         // Avg Price (t): ALL normalized time values in VCS (no date filter)
-        if (prop.values_norm_time > 0) avgNormTime[prop.new_vcs].push(prop.values_norm_time);
+        if (prop.values_norm_time > 0) {
+          avgNormTime[prop.new_vcs].push(prop.values_norm_time);
+          // Collect lot size based on valuation mode
+          if (valuationMode === 'sf' && prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
+            avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_sf));
+          } else if (valuationMode === 'acre' && prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
+            avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_acre));
+          } else if (valuationMode === 'ff' && prop.asset_lot_frontage && parseFloat(prop.asset_lot_frontage) > 0) {
+            avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.asset_lot_frontage));
+          }
+        }
 
         const saleDate = new Date(prop.sales_date);
         const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
@@ -3222,7 +3236,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           const nu = prop.sales_nu || '';
           const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
                          nu === '7' || nu.charCodeAt(0) === 32;
-          if (validNu && prop.values_norm_time > 0) avgActualPrice[prop.new_vcs].push(prop.values_norm_time);
+          if (validNu && prop.values_norm_time > 0) {
+            avgActualPrice[prop.new_vcs].push(prop.values_norm_time);
+            // Collect lot size based on valuation mode
+            if (valuationMode === 'sf' && prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
+              avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_sf));
+            } else if (valuationMode === 'acre' && prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
+              avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_acre));
+            } else if (valuationMode === 'ff' && prop.asset_lot_frontage && parseFloat(prop.asset_lot_frontage) > 0) {
+              avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.asset_lot_frontage));
+            }
+          }
         }
       }
       
@@ -3247,6 +3271,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const calculatedAvgNormTime = {};
     const calculatedAvgNormSize = {};
     const calculatedAvgPrice = {};
+    const calculatedAvgNormTimeLotSize = {};
+    const calculatedAvgPriceLotSize = {};
     
     Object.keys(zoning).forEach(vcs => {
       formattedZoning[vcs] = Array.from(zoning[vcs]).sort().join(', ');
@@ -3259,12 +3285,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       formattedKeyPages[vcs] = formatPageRanges(keys);
       
       // Calculate averages
-      calculatedAvgNormTime[vcs] = avgNormTime[vcs].length > 0 ? 
+      calculatedAvgNormTime[vcs] = avgNormTime[vcs].length > 0 ?
         Math.round(avgNormTime[vcs].reduce((sum, v) => sum + v, 0) / avgNormTime[vcs].length) : null;
-      calculatedAvgNormSize[vcs] = avgNormSize[vcs].length > 0 ? 
+      calculatedAvgNormSize[vcs] = avgNormSize[vcs].length > 0 ?
         Math.round(avgNormSize[vcs].reduce((sum, v) => sum + v, 0) / avgNormSize[vcs].length) : null;
-      calculatedAvgPrice[vcs] = avgActualPrice[vcs].length > 0 ? 
+      calculatedAvgPrice[vcs] = avgActualPrice[vcs].length > 0 ?
         Math.round(avgActualPrice[vcs].reduce((sum, v) => sum + v, 0) / avgActualPrice[vcs].length) : null;
+      calculatedAvgNormTimeLotSize[vcs] = avgNormTimeLotSize[vcs].length > 0 ?
+        (avgNormTimeLotSize[vcs].reduce((sum, v) => sum + v, 0) / avgNormTimeLotSize[vcs].length) : null;
+      calculatedAvgPriceLotSize[vcs] = avgActualPriceLotSize[vcs].length > 0 ?
+        (avgActualPriceLotSize[vcs].reduce((sum, v) => sum + v, 0) / avgActualPriceLotSize[vcs].length) : null;
     });
 
     setVcsPropertyCounts(counts);
@@ -3283,7 +3313,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         keyPages: formattedKeyPages[vcs],
         avgNormTime: calculatedAvgNormTime[vcs],
         avgNormSize: calculatedAvgNormSize[vcs],
-        avgPrice: calculatedAvgPrice[vcs]
+        avgPrice: calculatedAvgPrice[vcs],
+        avgNormTimeLotSize: calculatedAvgNormTimeLotSize[vcs],
+        avgPriceLotSize: calculatedAvgPriceLotSize[vcs]
       };
     });
     
@@ -9965,7 +9997,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Wet</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>LLocked</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Consv</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg Price (t) Lot Size</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg Price (t)</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg Price Lot Size</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg Price</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>CME</th>
                   <th
@@ -10480,7 +10514,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           `$${cascadeConfig.specialCategories.conservation.toLocaleString()}` : ''}
                       </td>
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>
+                        {data.avgNormTimeLotSize ? (
+                          valuationMode === 'ff' ? `${Math.round(data.avgNormTimeLotSize)} ft` :
+                          valuationMode === 'sf' ? `${Math.round(data.avgNormTimeLotSize).toLocaleString()} SF` :
+                          data.avgNormTimeLotSize.toFixed(2)
+                        ) : ''}
+                      </td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>
                         {data.avgNormTime ? `$${data.avgNormTime.toLocaleString()}` : ''}
+                      </td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>
+                        {data.avgPriceLotSize ? (
+                          valuationMode === 'ff' ? `${Math.round(data.avgPriceLotSize)} ft` :
+                          valuationMode === 'sf' ? `${Math.round(data.avgPriceLotSize).toLocaleString()} SF` :
+                          data.avgPriceLotSize.toFixed(2)
+                        ) : ''}
                       </td>
                       <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>
                         {data.avgPrice ? `$${data.avgPrice.toLocaleString()}` : ''}
