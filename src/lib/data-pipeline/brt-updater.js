@@ -1012,6 +1012,7 @@ export class BRTUpdater {
 
       let propertiesAdded = [];
       let propertiesRemoved = [];
+      let propertiesWithSalesChanges = [];
 
       if (previousVersion) {
         const previousKeys = new Set(previousVersion.property_composite_keys);
@@ -1022,6 +1023,63 @@ export class BRTUpdater {
         propertiesRemoved = [...previousKeys].filter(key => !currentKeys.has(key));
 
         console.log(`📊 Version ${fileVersion} changes: +${propertiesAdded.length} added, -${propertiesRemoved.length} removed`);
+
+        // Detect sale data changes for existing properties
+        console.log(`🔍 Checking for sale data changes in existing properties...`);
+
+        // Get previous version property data to compare sales fields
+        const { data: previousProperties, error: prevError } = await supabase
+          .from('property_records')
+          .select('property_composite_key, sales_price, sales_date, sales_nu')
+          .eq('job_id', jobId)
+          .eq('file_version', fileVersion - 1);
+
+        if (!prevError && previousProperties) {
+          const prevSalesMap = new Map();
+          previousProperties.forEach(p => {
+            prevSalesMap.set(p.property_composite_key, {
+              sales_price: p.sales_price,
+              sales_date: p.sales_date,
+              sales_nu: p.sales_nu
+            });
+          });
+
+          // Get current version property data
+          const { data: currentProperties, error: currError } = await supabase
+            .from('property_records')
+            .select('property_composite_key, sales_price, sales_date, sales_nu')
+            .eq('job_id', jobId)
+            .eq('file_version', fileVersion);
+
+          if (!currError && currentProperties) {
+            currentProperties.forEach(curr => {
+              const prev = prevSalesMap.get(curr.property_composite_key);
+              if (prev) {
+                // Check if any sale field changed
+                const priceChanged = prev.sales_price !== curr.sales_price;
+                const dateChanged = prev.sales_date !== curr.sales_date;
+                const nuChanged = prev.sales_nu !== curr.sales_nu;
+
+                if (priceChanged || dateChanged || nuChanged) {
+                  propertiesWithSalesChanges.push({
+                    property_composite_key: curr.property_composite_key,
+                    old_sales_price: prev.sales_price,
+                    new_sales_price: curr.sales_price,
+                    old_sales_date: prev.sales_date,
+                    new_sales_date: curr.sales_date,
+                    old_sales_nu: prev.sales_nu,
+                    new_sales_nu: curr.sales_nu
+                  });
+                }
+              }
+            });
+
+            console.log(`📊 Sale data changes detected: ${propertiesWithSalesChanges.length} properties`);
+            if (propertiesWithSalesChanges.length > 0 && propertiesWithSalesChanges.length <= 10) {
+              console.log(`   Sample changes:`, propertiesWithSalesChanges.slice(0, 5));
+            }
+          }
+        }
       } else {
         console.log(`📊 Version ${fileVersion} is the first version with ${propertyKeys.length} properties`);
       }
