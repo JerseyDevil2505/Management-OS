@@ -1220,11 +1220,16 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         }
       }
 
-      // Create a map of existing keep/reject decisions
+      // Create a map of existing keep/reject decisions with sale data
       const existingDecisions = {};
       timeNormalizedSales.forEach(sale => {
-        if (sale.keep_reject && sale.keep_reject !== 'pending') {
-          existingDecisions[sale.id] = sale.keep_reject;
+        if (sale.keep_reject) {
+          existingDecisions[sale.id] = {
+            decision: sale.keep_reject,
+            sales_price: sale.sales_price,
+            sales_date: sale.sales_date,
+            sales_nu: sale.sales_nu
+          };
         }
       });
       
