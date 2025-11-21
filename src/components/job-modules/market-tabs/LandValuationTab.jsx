@@ -3082,7 +3082,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const tier2Value = tier2Acres * (cascadeRates.secondary.rate || 0);
       rawLandValue += tier2Value;
       remainingAcres -= tier2Acres;
-      breakdown.push(`Tier 2 (1-5 acres): ${tier2Acres.toFixed(2)} × $${cascadeRates.secondary.rate || 0} = $${tier2Value.toFixed(0)}`);
+      breakdown.push(`Tier 2 (1-5 acres): ${tier2Acres.toFixed(2)} �� $${cascadeRates.secondary.rate || 0} = $${tier2Value.toFixed(0)}`);
     }
 
     // TIER 3: All remaining acres above 5 at excess rate ($5,000)
@@ -3446,16 +3446,42 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           note: 'No lot size calculation for condos'
         });
       } else {
-        // For regular properties: calculate with lot size and cascade rates
-        const avgAcres = relevantSales.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / relevantSales.length;
+        // For regular properties: calculate with lot size and cascade rates respecting valuation mode
         const totalLandValue = avgSalePrice * (parseFloat(targetAllocation) / 100);
-        const rawLandValue = calculateRawLandValue(avgAcres, cascadeConfig.normal);
+        let avgSize, rawLandValue;
+
+        if (valuationMode === 'sf') {
+          // Square Foot mode: use market_manual_lot_sf
+          const salesWithSF = relevantSales.filter(p => p.market_manual_lot_sf && parseFloat(p.market_manual_lot_sf) > 0);
+          if (salesWithSF.length === 0) return;
+          avgSize = salesWithSF.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / salesWithSF.length;
+          rawLandValue = calculateRawLandValue(avgSize, cascadeConfig.normal);
+        } else if (valuationMode === 'ff') {
+          // Front Foot mode: use frontage data
+          const salesWithFF = relevantSales.filter(p => p.asset_lot_frontage && parseFloat(p.asset_lot_frontage) > 0);
+          if (salesWithFF.length === 0) return;
+          const avgFrontage = salesWithFF.reduce((sum, p) => sum + parseFloat(p.asset_lot_frontage), 0) / salesWithFF.length;
+          const avgDepth = salesWithFF.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth || 100), 0) / salesWithFF.length;
+          avgSize = avgFrontage;
+          rawLandValue = calculateRawLandValue(null, cascadeConfig.normal, {
+            land_front_feet: avgFrontage,
+            land_depth: avgDepth,
+            land_zoning: salesWithFF[0]?.asset_zoning
+          });
+        } else {
+          // Acre mode: use market_manual_lot_acre
+          const salesWithAcres = relevantSales.filter(p => p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0);
+          if (salesWithAcres.length === 0) return;
+          avgSize = salesWithAcres.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / salesWithAcres.length;
+          rawLandValue = calculateRawLandValue(avgSize, cascadeConfig.normal);
+        }
+
         siteValue = totalLandValue - rawLandValue;
 
-        debug(`🏠 VCS ${vcs} DETAILED DEBUG:`, {
+        debug(`🏠 VCS ${vcs} DETAILED DEBUG (${valuationMode.toUpperCase()} mode):`, {
           relevantSalesCount: relevantSales.length,
           avgSalePrice: Math.round(avgSalePrice),
-          avgAcres: avgAcres.toFixed(2),
+          avgSize: typeof avgSize === 'number' ? avgSize.toFixed(2) : avgSize,
           targetAllocation: targetAllocation + '%',
           targetAllocationDecimal: parseFloat(targetAllocation) / 100,
           totalLandValue: Math.round(totalLandValue),
