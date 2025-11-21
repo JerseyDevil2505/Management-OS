@@ -1512,6 +1512,13 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
 
       setLastTimeNormalizationRun(new Date().toISOString());
 
+      // Count and notify about sale data changes
+      const salesDataChangedCount = normalized.filter(s => s.sale_data_changed).length;
+      if (salesDataChangedCount > 0) {
+        console.warn(`⚠️ ${salesDataChangedCount} properties had sale data changes - decisions reset to pending review`);
+        alert(`⚠️ IMPORTANT: ${salesDataChangedCount} properties have updated sale data.\n\nTheir Keep/Reject decisions have been automatically reset to "Pending Review".\n\nPlease review these properties in the normalization table below.`);
+      }
+
       if (false) console.log(`✅ Time normalization complete - preserved ${Object.keys(existingDecisions).length} keep/reject decisions`);
       if (false) console.log('✅ Normalized sales saved to database for persistence');
     } catch (error) {
