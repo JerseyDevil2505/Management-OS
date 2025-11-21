@@ -3343,6 +3343,31 @@ const analyzeImportFile = async (file) => {
           {/* Time Normalization Statistics */}
           {timeNormalizedSales.length > 0 && (
             <>
+              {/* Sale Data Changes Warning */}
+              {(() => {
+                const salesDataChangedCount = timeNormalizedSales.filter(s => s.sale_data_changed).length;
+                if (salesDataChangedCount > 0) {
+                  return (
+                    <div className="mb-4 p-4 bg-amber-50 border-l-4 border-amber-500 rounded-lg flex items-start gap-3">
+                      <AlertCircle className="text-amber-600 mt-0.5 flex-shrink-0" size={24} />
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-amber-900 mb-1">
+                          ⚠️ Sale Data Updates Detected
+                        </p>
+                        <p className="text-sm text-amber-800">
+                          <strong>{salesDataChangedCount}</strong> {salesDataChangedCount === 1 ? 'property has' : 'properties have'} updated sale data from the latest file upload.
+                          {salesDataChangedCount === 1 ? ' Its' : ' Their'} Keep/Reject decision{salesDataChangedCount === 1 ? ' has' : 's have'} been automatically reset to <strong>"Pending Review"</strong>.
+                        </p>
+                        <p className="text-xs text-amber-700 mt-2">
+                          💡 Please review {salesDataChangedCount === 1 ? 'this property' : 'these properties'} in the table below and update {salesDataChangedCount === 1 ? 'its' : 'their'} decision{salesDataChangedCount === 1 ? '' : 's'} as needed.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
               <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-lg font-semibold mb-4">Time Normalization Statistics (County HPI Based)</h3>
                 <div className="grid grid-cols-6 gap-4">
