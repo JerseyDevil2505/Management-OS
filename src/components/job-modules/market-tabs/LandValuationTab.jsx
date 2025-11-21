@@ -4255,6 +4255,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       headers.push('Typical Lot Size');
     }
 
+    // Add stepdown header for FF and SF modes
+    if (valuationMode === 'ff') {
+      headers.push('Stepdown (FF)');
+    } else if (valuationMode === 'sf') {
+      headers.push('Stepdown (SF)');
+    }
+
     headers.push('Rec Site Value', 'Act Site Value');
 
     // Dynamic cascade headers
@@ -4376,6 +4383,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         row.push(typicalLot || '');
       }
 
+      // Add stepdown column for FF and SF modes
+      if (valuationMode === 'ff' && isResidential) {
+        row.push(cascadeRates.standard?.max ? `${cascadeRates.standard.max} ft` : '');
+      } else if (valuationMode === 'sf' && isResidential) {
+        row.push(cascadeRates.standard?.max ? `${cascadeRates.standard.max.toLocaleString()} SF` : '');
+      } else if (valuationMode === 'ff' || valuationMode === 'sf') {
+        row.push(''); // Empty for non-residential
+      }
+
       row.push(recSiteFmt, actSiteFmt);
 
       // Get cascade rates
@@ -4467,6 +4483,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       colWidths.push({ wch: 12 }, { wch: 12 }, { wch: 15 }); // Typical FF, Typical Depth, Depth Table
     } else {
       colWidths.push({ wch: 15 }); // Typical Lot Size
+    }
+
+    // Stepdown column for FF and SF modes
+    if (valuationMode === 'ff' || valuationMode === 'sf') {
+      colWidths.push({ wch: 15 }); // Stepdown
     }
 
     colWidths.push({ wch: 15 }, { wch: 15 }); // Rec Site, Act Site
@@ -9914,6 +9935,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Depth Table</th>
                     </>
                   )}
+                  {(valuationMode === 'ff' || valuationMode === 'sf') && (
+                    <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
+                      {valuationMode === 'ff' ? 'Stepdown (FF)' : 'Stepdown (SF)'}
+                    </th>
+                  )}
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Rec Site</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Act Site</th>
                   {valuationMode === 'ff' ? (
@@ -10237,6 +10263,30 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                             </select>
                           </td>
                         </>
+                      )}
+                      {(valuationMode === 'ff' || valuationMode === 'sf') && (
+                        <td style={{
+                          padding: '8px',
+                          textAlign: 'center',
+                          border: '1px solid #E5E7EB',
+                          backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit')
+                        }}>
+                          {!isGrayedOut && cascadeRates.standard?.max ? (
+                            <span title={`Rate Source: ${rateSource}`}>
+                              {valuationMode === 'ff' ? `${cascadeRates.standard.max} ft` : `${cascadeRates.standard.max.toLocaleString()} SF`}
+                              {rateSource !== 'Normal' && (
+                                <span style={{
+                                  position: 'absolute',
+                                  top: '2px',
+                                  right: '2px',
+                                  fontSize: '8px',
+                                  color: '#92400E',
+                                  fontWeight: 'bold'
+                                }}>*</span>
+                              )}
+                            </span>
+                          ) : ''}
+                        </td>
                       )}
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(recSite).toLocaleString()}</td>
                       <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
