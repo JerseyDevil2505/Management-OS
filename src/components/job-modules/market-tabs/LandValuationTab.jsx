@@ -1621,7 +1621,7 @@ const getPricePerUnit = useCallback((price, size) => {
       const enriched = enrichProperty(prop);
       finalSales.push(enriched);
       if (enriched.autoCategory) {
-        debug(`����️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
+        debug(`������� Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
         if (!saleCategories[prop.id]) setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
       }
     });
@@ -3209,39 +3209,22 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         counts[prop.new_vcs].special++;
       }
 
-      // Collect sales averages for all properties with sales in this VCS
-      // Note: VCS type filtering happens later in calculateRecSite
-      if (prop.sales_price > 0 && prop.sales_date) {
-        // Avg Price (t): ALL normalized time values in VCS (no date filter)
-        if (prop.values_norm_time > 0) {
-          avgNormTime[prop.new_vcs].push(prop.values_norm_time);
-          // Collect lot size based on valuation mode
-          let lotSizeAdded = false;
-          if (valuationMode === 'sf' && prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
-            avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_sf));
-            lotSizeAdded = true;
-          } else if (valuationMode === 'acre' && prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
-            avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_acre));
-            lotSizeAdded = true;
-          } else if (valuationMode === 'ff' && prop.asset_lot_frontage && parseFloat(prop.asset_lot_frontage) > 0) {
-            avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.asset_lot_frontage));
-            lotSizeAdded = true;
-          }
+      // Avg Price (t) Lot Size: ALL properties with time-normalized values (no date filter, no sales requirement)
+      if (prop.values_norm_time > 0) {
+        avgNormTime[prop.new_vcs].push(prop.values_norm_time);
 
-          // Debug: Log first few properties with sales to see what data is available
-          if (avgNormTime[prop.new_vcs].length <= 3) {
-            console.log(`📊 Lot Size Debug - VCS ${prop.new_vcs}, Block ${prop.property_block}, Lot ${prop.property_lot}:`, {
-              valuationMode,
-              market_manual_lot_sf: prop.market_manual_lot_sf,
-              market_manual_lot_acre: prop.market_manual_lot_acre,
-              asset_lot_frontage: prop.asset_lot_frontage,
-              lotSizeAdded,
-              sales_price: prop.sales_price,
-              values_norm_time: prop.values_norm_time
-            });
-          }
+        // Collect lot size based on valuation mode
+        if (valuationMode === 'sf' && prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
+          avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_sf));
+        } else if (valuationMode === 'acre' && prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
+          avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_acre));
+        } else if (valuationMode === 'ff' && prop.asset_lot_frontage && parseFloat(prop.asset_lot_frontage) > 0) {
+          avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.asset_lot_frontage));
         }
+      }
 
+      // Avg Price Lot Size: Recent sales with valid NU codes + time constraint
+      if (prop.sales_date && prop.values_norm_time > 0) {
         const saleDate = new Date(prop.sales_date);
         const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
 
@@ -3253,8 +3236,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           const nu = prop.sales_nu || '';
           const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
                          nu === '7' || nu.charCodeAt(0) === 32;
-          if (validNu && prop.values_norm_time > 0) {
+          if (validNu) {
             avgActualPrice[prop.new_vcs].push(prop.values_norm_time);
+
             // Collect lot size based on valuation mode
             if (valuationMode === 'sf' && prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
               avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_sf));
@@ -4229,7 +4213,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 // Also clear sessionStorage to ensure complete cleanup
           try {
             sessionStorage.removeItem('landValuation_' + jobData.id + '_session');
-            debug('����� Cleared session storage after successful save');
+            debug('������ Cleared session storage after successful save');
           } catch (err) {
             console.warn('Failed to clear sessionStorage:', err);
           }
@@ -7278,7 +7262,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       </div>
                     </div>
                     <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
-                      ���
+                      ����
                     </span>
                   </div>
 
