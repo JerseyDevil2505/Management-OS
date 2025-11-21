@@ -1645,7 +1645,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (hasRestrictedClass) {
-        debug(`������� Excluding package ${sale.property_block}/${sale.property_lot} - contains restricted property class`);
+        debug(`������ Excluding package ${sale.property_block}/${sale.property_lot} - contains restricted property class`);
         return false;
       }
 
@@ -3448,38 +3448,79 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       } else {
         // For regular properties: calculate with lot size and cascade rates respecting valuation mode
         const totalLandValue = avgSalePrice * (parseFloat(targetAllocation) / 100);
-        let avgSize, rawLandValue;
+        let avgSize, rawLandValue, salesWithLotData;
 
         if (valuationMode === 'sf') {
           // Square Foot mode: use market_manual_lot_sf
-          const salesWithSF = relevantSales.filter(p => p.market_manual_lot_sf && parseFloat(p.market_manual_lot_sf) > 0);
-          if (salesWithSF.length === 0) return;
-          avgSize = salesWithSF.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / salesWithSF.length;
+          salesWithLotData = relevantSales.filter(p => p.market_manual_lot_sf && parseFloat(p.market_manual_lot_sf) > 0);
+          if (salesWithLotData.length === 0) {
+            console.warn(`⚠️ VCS ${vcs}: No sales with market_manual_lot_sf data (${relevantSales.length} total sales)`);
+            return;
+          }
+          avgSize = salesWithLotData.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / salesWithLotData.length;
           rawLandValue = calculateRawLandValue(avgSize, cascadeConfig.normal);
+
+          console.log(`📊 VCS ${vcs} Lot Size Calculation (SF):`, {
+            totalRelevantSales: relevantSales.length,
+            salesWithLotData: salesWithLotData.length,
+            avgLotSF: Math.round(avgSize),
+            sampleLotSizes: salesWithLotData.slice(0, 5).map(p => ({
+              block: p.property_block,
+              lot: p.property_lot,
+              market_manual_lot_sf: p.market_manual_lot_sf,
+              sales_price: p.sales_price
+            }))
+          });
         } else if (valuationMode === 'ff') {
           // Front Foot mode: use frontage data
-          const salesWithFF = relevantSales.filter(p => p.asset_lot_frontage && parseFloat(p.asset_lot_frontage) > 0);
-          if (salesWithFF.length === 0) return;
-          const avgFrontage = salesWithFF.reduce((sum, p) => sum + parseFloat(p.asset_lot_frontage), 0) / salesWithFF.length;
-          const avgDepth = salesWithFF.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth || 100), 0) / salesWithFF.length;
+          salesWithLotData = relevantSales.filter(p => p.asset_lot_frontage && parseFloat(p.asset_lot_frontage) > 0);
+          if (salesWithLotData.length === 0) {
+            console.warn(`⚠️ VCS ${vcs}: No sales with frontage data (${relevantSales.length} total sales)`);
+            return;
+          }
+          const avgFrontage = salesWithLotData.reduce((sum, p) => sum + parseFloat(p.asset_lot_frontage), 0) / salesWithLotData.length;
+          const avgDepth = salesWithLotData.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth || 100), 0) / salesWithLotData.length;
           avgSize = avgFrontage;
           rawLandValue = calculateRawLandValue(null, cascadeConfig.normal, {
             land_front_feet: avgFrontage,
             land_depth: avgDepth,
-            land_zoning: salesWithFF[0]?.asset_zoning
+            land_zoning: salesWithLotData[0]?.asset_zoning
+          });
+
+          console.log(`📊 VCS ${vcs} Lot Size Calculation (FF):`, {
+            totalRelevantSales: relevantSales.length,
+            salesWithLotData: salesWithLotData.length,
+            avgFrontage: Math.round(avgFrontage),
+            avgDepth: Math.round(avgDepth)
           });
         } else {
           // Acre mode: use market_manual_lot_acre
-          const salesWithAcres = relevantSales.filter(p => p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0);
-          if (salesWithAcres.length === 0) return;
-          avgSize = salesWithAcres.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / salesWithAcres.length;
+          salesWithLotData = relevantSales.filter(p => p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0);
+          if (salesWithLotData.length === 0) {
+            console.warn(`⚠️ VCS ${vcs}: No sales with market_manual_lot_acre data (${relevantSales.length} total sales)`);
+            return;
+          }
+          avgSize = salesWithLotData.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / salesWithLotData.length;
           rawLandValue = calculateRawLandValue(avgSize, cascadeConfig.normal);
+
+          console.log(`📊 VCS ${vcs} Lot Size Calculation (Acre):`, {
+            totalRelevantSales: relevantSales.length,
+            salesWithLotData: salesWithLotData.length,
+            avgLotAcres: avgSize.toFixed(2),
+            sampleLotSizes: salesWithLotData.slice(0, 5).map(p => ({
+              block: p.property_block,
+              lot: p.property_lot,
+              market_manual_lot_acre: p.market_manual_lot_acre,
+              sales_price: p.sales_price
+            }))
+          });
         }
 
         siteValue = totalLandValue - rawLandValue;
 
         debug(`🏠 VCS ${vcs} DETAILED DEBUG (${valuationMode.toUpperCase()} mode):`, {
           relevantSalesCount: relevantSales.length,
+          salesWithLotData: salesWithLotData?.length || 0,
           avgSalePrice: Math.round(avgSalePrice),
           avgSize: typeof avgSize === 'number' ? avgSize.toFixed(2) : avgSize,
           targetAllocation: targetAllocation + '%',
@@ -8828,7 +8869,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <strong>Exclude problematic sales:</strong> Uncheck sales that should not be used in Method 2 calculations
                 (teardowns, poor condition, pre-construction, etc.).
                 <span style={{ display: 'block', marginTop: '4px' }}>
-                  ����️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
+                  ���️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
                 </span>
               </p>
             </div>
@@ -9796,7 +9837,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const standardFF = cascadeRates.standard?.rate || 0;
     const excessFF = cascadeRates.excess?.rate || Math.round(standardFF / 2);
 
-    // Calculate Raw Land Component: (Standard Frontage �� Std Rate × Depth Factor) + (Excess × Excess Rate)
+    // Calculate Raw Land Component: (Standard Frontage × Std Rate × Depth Factor) + (Excess × Excess Rate)
     const rawLandComponent = Math.round(
       (standardFrontage * standardFF * depthFactor) +
       (excessFrontage * excessFF)
