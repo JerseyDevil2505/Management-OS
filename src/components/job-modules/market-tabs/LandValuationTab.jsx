@@ -1645,7 +1645,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (hasRestrictedClass) {
-        debug(`������ Excluding package ${sale.property_block}/${sale.property_lot} - contains restricted property class`);
+        debug(`������� Excluding package ${sale.property_block}/${sale.property_lot} - contains restricted property class`);
         return false;
       }
 
@@ -4063,7 +4063,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       };
 
       // Debug: Log the exact data being saved
-      debug('�������� Data structure being saved:', {
+      debug('��������� Data structure being saved:', {
         cascadeConfigLocation1: analysisData.raw_land_config.cascade_config.specialCategories,
         cascadeConfigLocation2: analysisData.cascade_rates.specialCategories,
         salesData: analysisData.vacant_sales_analysis.sales.slice(0, 3), // First 3 for brevity
@@ -8828,7 +8828,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <strong>Exclude problematic sales:</strong> Uncheck sales that should not be used in Method 2 calculations
                 (teardowns, poor condition, pre-construction, etc.).
                 <span style={{ display: 'block', marginTop: '4px' }}>
-                  ���️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
+                  ����️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
                 </span>
               </p>
             </div>
@@ -9796,7 +9796,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const standardFF = cascadeRates.standard?.rate || 0;
     const excessFF = cascadeRates.excess?.rate || Math.round(standardFF / 2);
 
-    // Calculate Raw Land Component: (Standard Frontage × Std Rate × Depth Factor) + (Excess × Excess Rate)
+    // Calculate Raw Land Component: (Standard Frontage �� Std Rate × Depth Factor) + (Excess × Excess Rate)
     const rawLandComponent = Math.round(
       (standardFrontage * standardFF * depthFactor) +
       (excessFrontage * excessFF)
@@ -9992,6 +9992,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     ) || [];
                     typicalLot = vcsProps.length > 0 ?
                       Math.round(vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / vcsProps.length).toLocaleString() : '';
+
+                    if (index === 0) {
+                      console.log(`📏 VCS ${vcs} Typical Lot (SF mode):`, {
+                        propertiesWithData: vcsProps.length,
+                        typicalLotSF: typicalLot,
+                        sampleValues: vcsProps.slice(0, 3).map(p => ({
+                          block: p.property_block,
+                          lot: p.property_lot,
+                          market_manual_lot_sf: p.market_manual_lot_sf
+                        }))
+                      });
+                    }
                   } else {
                     // Acre or Front Foot mode: use market_manual_lot_acre from property_market_analysis
                     vcsProps = properties?.filter(p =>
@@ -10000,6 +10012,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     ) || [];
                     typicalLot = vcsProps.length > 0 ?
                       (vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / vcsProps.length).toFixed(2) : '';
+
+                    if (index === 0) {
+                      console.log(`📏 VCS ${vcs} Typical Lot (${valuationMode} mode):`, {
+                        propertiesWithData: vcsProps.length,
+                        typicalLotAcres: typicalLot,
+                        sampleValues: vcsProps.slice(0, 3).map(p => ({
+                          block: p.property_block,
+                          lot: p.property_lot,
+                          market_manual_lot_acre: p.market_manual_lot_acre
+                        }))
+                      });
+                    }
                   }
 
                   // Calculate typical frontage and depth for Front Foot mode
