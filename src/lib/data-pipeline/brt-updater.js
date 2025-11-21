@@ -1098,7 +1098,9 @@ export class BRTUpdater {
           property_composite_keys: propertyKeys,
           properties_added: propertiesAdded,
           properties_removed: propertiesRemoved,
-          properties_modified: [], // TODO: Implement field-level change detection
+          properties_modified: [], // General field changes (legacy)
+          properties_with_sales_changes: propertiesWithSalesChanges.map(p => p.property_composite_key), // Track sale changes
+          sales_changes_detail: propertiesWithSalesChanges, // Detailed change info for reference
           uploaded_by: null, // TODO: Get actual user ID
           processing_status: 'stored'
         }])
