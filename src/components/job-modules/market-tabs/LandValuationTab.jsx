@@ -1108,7 +1108,7 @@ const getPricePerUnit = useCallback((price, size) => {
     });
 
     if (targetAllocation && cascadeConfig.normal.prime && properties?.length > 0) {
-      debug('✅ CONDITIONS MET - CALLING calculateVCSRecommendedSitesWithTarget');
+      debug('�� CONDITIONS MET - CALLING calculateVCSRecommendedSitesWithTarget');
       calculateVCSRecommendedSitesWithTarget();
     } else {
       debug('�� CONDITIONS NOT MET FOR VCS CALCULATION:', {
@@ -9820,7 +9820,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     onClick={() => toggleFieldCollapse('zoning')}
                     title="Click to expand/collapse"
                   >
-                    Zoning {collapsedFields.zoning ? '�����' : '▼'}
+                    Zoning {collapsedFields.zoning ? '�����' : '��'}
                   </th>
                   {shouldShowKeyColumn && (
                     <th
@@ -9890,24 +9890,25 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   }
                   
                   // Get typical lot size for ALL properties in this VCS (for display purposes)
+                  // Use pre-calculated values from property_market_analysis table (market_manual_lot_sf/acre)
                   let vcsProps, typicalLot;
 
                   if (valuationMode === 'sf') {
-                    // Square Foot mode: calculate typical lot in square feet
+                    // Square Foot mode: use market_manual_lot_sf from property_market_analysis
                     vcsProps = properties?.filter(p =>
                       p.new_vcs === vcs &&
-                      p.asset_lot_sf && parseFloat(p.asset_lot_sf) > 0
+                      p.market_manual_lot_sf && parseFloat(p.market_manual_lot_sf) > 0
                     ) || [];
                     typicalLot = vcsProps.length > 0 ?
-                      Math.round(vcsProps.reduce((sum, p) => sum + parseFloat(p.asset_lot_sf), 0) / vcsProps.length).toLocaleString() : '';
+                      Math.round(vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / vcsProps.length).toLocaleString() : '';
                   } else {
-                    // Acre or Front Foot mode: calculate in acres
+                    // Acre or Front Foot mode: use market_manual_lot_acre from property_market_analysis
                     vcsProps = properties?.filter(p =>
                       p.new_vcs === vcs &&
-                      calculateAcreage(p) > 0
+                      p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0
                     ) || [];
                     typicalLot = vcsProps.length > 0 ?
-                      (vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length).toFixed(2) : '';
+                      (vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / vcsProps.length).toFixed(2) : '';
                   }
 
                   // Calculate typical frontage and depth for Front Foot mode
