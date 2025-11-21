@@ -1621,7 +1621,7 @@ const getPricePerUnit = useCallback((price, size) => {
       const enriched = enrichProperty(prop);
       finalSales.push(enriched);
       if (enriched.autoCategory) {
-        debug(`������� Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
+        debug(`����️ Auto-categorizing ${prop.property_block}/${prop.property_lot} as ${enriched.autoCategory}`);
         if (!saleCategories[prop.id]) setSaleCategories(prev => ({...prev, [prop.id]: enriched.autoCategory}));
       }
     });
@@ -3297,18 +3297,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       calculatedAvgPriceLotSize[vcs] = avgActualPriceLotSize[vcs].length > 0 ?
         (avgActualPriceLotSize[vcs].reduce((sum, v) => sum + v, 0) / avgActualPriceLotSize[vcs].length) : null;
 
-      // Debug: Log first few VCS calculations
-      if (Object.keys(zoning).indexOf(vcs) < 3) {
-        console.log(`📊 VCS ${vcs} Lot Size Averages:`, {
-          valuationMode,
-          avgNormTimeSalesCount: avgNormTime[vcs].length,
-          avgNormTimeLotSizeCount: avgNormTimeLotSize[vcs].length,
-          calculatedAvgNormTimeLotSize: calculatedAvgNormTimeLotSize[vcs],
-          avgPriceSalesCount: avgActualPrice[vcs].length,
-          avgPriceLotSizeCount: avgActualPriceLotSize[vcs].length,
-          calculatedAvgPriceLotSize: calculatedAvgPriceLotSize[vcs]
-        });
-      }
     });
 
     setVcsPropertyCounts(counts);
@@ -3332,12 +3320,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         avgPriceLotSize: calculatedAvgPriceLotSize[vcs]
       };
     });
-
-    // Debug: Log first VCS to verify final data
-    const firstVcs = Object.keys(sheetData)[0];
-    if (firstVcs) {
-      console.log(`📊 Final VCS Sheet Data for ${firstVcs}:`, sheetData[firstVcs]);
-    }
 
     setVcsSheetData(sheetData);
   }, [properties]);
@@ -3506,7 +3488,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           // Square Foot mode: use market_manual_lot_sf
           salesWithLotData = relevantSales.filter(p => p.market_manual_lot_sf && parseFloat(p.market_manual_lot_sf) > 0);
           if (salesWithLotData.length === 0) {
-            console.warn(`⚠️ VCS ${vcs}: No sales with market_manual_lot_sf data (${relevantSales.length} total sales)`);
+            console.warn(`���️ VCS ${vcs}: No sales with market_manual_lot_sf data (${relevantSales.length} total sales)`);
             return;
           }
           avgSize = salesWithLotData.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / salesWithLotData.length;
@@ -4213,7 +4195,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 // Also clear sessionStorage to ensure complete cleanup
           try {
             sessionStorage.removeItem('landValuation_' + jobData.id + '_session');
-            debug('������ Cleared session storage after successful save');
+            debug('����� Cleared session storage after successful save');
           } catch (err) {
             console.warn('Failed to clear sessionStorage:', err);
           }
@@ -7262,7 +7244,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       </div>
                     </div>
                     <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
-                      ����
+                      ���
                     </span>
                   </div>
 
@@ -9082,7 +9064,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '������') : ''}
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '�������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('yearBuilt')}
