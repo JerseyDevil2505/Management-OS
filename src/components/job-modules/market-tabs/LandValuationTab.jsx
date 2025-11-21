@@ -3821,7 +3821,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return;
     }
 
-    debug('💾 Saving target allocation:', `${targetValue}%`, 'for job:', jobData.id);
+    debug('�� Saving target allocation:', `${targetValue}%`, 'for job:', jobData.id);
 
     try {
       // Check if record exists first
@@ -9774,7 +9774,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Description</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Method</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
-                    {valuationMode === 'ff' ? 'Typ Lot FF' : 'Typ Lot'}
+                    {valuationMode === 'ff' ? 'Typ Lot FF' : valuationMode === 'sf' ? 'Typ Lot (SF)' : 'Typ Lot (Acres)'}
                   </th>
                   {valuationMode === 'ff' && (
                     <>
@@ -9788,6 +9788,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <>
                       <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Std FF</th>
                       <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Exc FF</th>
+                    </>
+                  ) : valuationMode === 'sf' ? (
+                    <>
+                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Standard</th>
+                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Excess</th>
                     </>
                   ) : (
                     <>
@@ -9885,12 +9890,25 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   }
                   
                   // Get typical lot size for ALL properties in this VCS (for display purposes)
-                  const vcsProps = properties?.filter(p =>
-                    p.new_vcs === vcs &&
-                    calculateAcreage(p) > 0 // Only properties with valid acreage
-                  ) || [];
-                  const typicalLot = vcsProps.length > 0 ?
-                    (vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length).toFixed(2) : '';
+                  let vcsProps, typicalLot;
+
+                  if (valuationMode === 'sf') {
+                    // Square Foot mode: calculate typical lot in square feet
+                    vcsProps = properties?.filter(p =>
+                      p.new_vcs === vcs &&
+                      p.asset_lot_sf && parseFloat(p.asset_lot_sf) > 0
+                    ) || [];
+                    typicalLot = vcsProps.length > 0 ?
+                      Math.round(vcsProps.reduce((sum, p) => sum + parseFloat(p.asset_lot_sf), 0) / vcsProps.length).toLocaleString() : '';
+                  } else {
+                    // Acre or Front Foot mode: calculate in acres
+                    vcsProps = properties?.filter(p =>
+                      p.new_vcs === vcs &&
+                      calculateAcreage(p) > 0
+                    ) || [];
+                    typicalLot = vcsProps.length > 0 ?
+                      (vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length).toFixed(2) : '';
+                  }
 
                   // Calculate typical frontage and depth for Front Foot mode
                   let typicalFrontage = '';
@@ -10079,7 +10097,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           }}
                         />
                       </td>
-                      {valuationMode === 'ff' ? (
+                      {valuationMode === 'ff' || valuationMode === 'sf' ? (
                         <>
                           <td style={{
                             padding: '8px',
