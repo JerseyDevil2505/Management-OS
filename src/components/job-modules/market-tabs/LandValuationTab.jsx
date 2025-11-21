@@ -3992,7 +3992,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       let result;
       if (existing) {
-        debug('📝 Updating existing record with target allocation...');
+        debug('���� Updating existing record with target allocation...');
         result = await supabase
           .from('market_land_valuation')
           .update({
@@ -4307,7 +4307,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }
 
     // Special category headers
-    headers.push('Wetlands Rate', 'Landlocked Rate', 'Conservation Rate', 'Avg Price (Time Norm)', 'Avg Price (Current)', 'CME Bracket', 'Zoning');
+    headers.push('Wetlands Rate', 'Landlocked Rate', 'Conservation Rate');
+
+    // Lot size and price headers
+    headers.push('Avg Price (t) Lot Size', 'Avg Price (Time Norm)', 'Avg Price Lot Size', 'Avg Price (Current)', 'CME Bracket', 'Zoning');
     if (shouldShowKeyColumn) headers.push('Key Pages');
     if (shouldShowMapColumn) headers.push('Map Pages');
 
@@ -4478,9 +4481,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation != null ? `$${Math.round(cascadeConfig.specialCategories.conservation).toLocaleString()}` : ''
       );
 
-      // Price columns (formatted)
+      // Lot size columns (formatted based on mode)
+      const avgNormTimeLotFmt = vcsData.avgNormTimeLotSize != null ? (
+        valuationMode === 'ff' ? `${Math.round(vcsData.avgNormTimeLotSize)} ft` :
+        valuationMode === 'sf' ? `${Math.round(vcsData.avgNormTimeLotSize).toLocaleString()} SF` :
+        vcsData.avgNormTimeLotSize.toFixed(2)
+      ) : '';
+
+      const avgPriceLotFmt = vcsData.avgPriceLotSize != null ? (
+        valuationMode === 'ff' ? `${Math.round(vcsData.avgPriceLotSize)} ft` :
+        valuationMode === 'sf' ? `${Math.round(vcsData.avgPriceLotSize).toLocaleString()} SF` :
+        vcsData.avgPriceLotSize.toFixed(2)
+      ) : '';
+
+      // Price and lot size columns (formatted)
       row.push(
+        avgNormTimeLotFmt,
         vcsData.avgNormTime != null ? `$${Math.round(vcsData.avgNormTime).toLocaleString()}` : '',
+        avgPriceLotFmt,
         vcsData.avgPrice != null ? `$${Math.round(vcsData.avgPrice).toLocaleString()}` : ''
       );
 
@@ -4539,7 +4557,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       { wch: 15 },  // Wetlands
       { wch: 15 },  // Landlocked
       { wch: 15 },  // Conservation
+      { wch: 15 },  // Avg Price (t) Lot Size
       { wch: 18 },  // Avg Price (Time)
+      { wch: 15 },  // Avg Price Lot Size
       { wch: 18 },  // Avg Price
       { wch: 12 },  // CME
       { wch: 20 }   // Zoning
@@ -11340,7 +11360,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             }}
             title={isEcoObsComplete ? 'Click to reopen' : 'Mark Economic Obsolescence Study complete'}
           >
-            {isEcoObsComplete ? '✓ Mark Complete' : 'Mark Complete'}
+            {isEcoObsComplete ? '�� Mark Complete' : 'Mark Complete'}
           </button>
         )}
       </div>
