@@ -3312,6 +3312,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         (avgNormTimeLotSize[vcs].reduce((sum, v) => sum + v, 0) / avgNormTimeLotSize[vcs].length) : null;
       calculatedAvgPriceLotSize[vcs] = avgActualPriceLotSize[vcs].length > 0 ?
         (avgActualPriceLotSize[vcs].reduce((sum, v) => sum + v, 0) / avgActualPriceLotSize[vcs].length) : null;
+
+      // Debug: Log first few VCS calculations
+      if (Object.keys(zoning).indexOf(vcs) < 3) {
+        console.log(`📊 VCS ${vcs} Lot Size Averages:`, {
+          valuationMode,
+          avgNormTimeSalesCount: avgNormTime[vcs].length,
+          avgNormTimeLotSizeCount: avgNormTimeLotSize[vcs].length,
+          calculatedAvgNormTimeLotSize: calculatedAvgNormTimeLotSize[vcs],
+          avgPriceSalesCount: avgActualPrice[vcs].length,
+          avgPriceLotSizeCount: avgActualPriceLotSize[vcs].length,
+          calculatedAvgPriceLotSize: calculatedAvgPriceLotSize[vcs]
+        });
+      }
     });
 
     setVcsPropertyCounts(counts);
