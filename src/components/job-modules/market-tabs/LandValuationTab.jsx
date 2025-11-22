@@ -3508,17 +3508,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           avgSize = salesWithLotData.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / salesWithLotData.length;
           rawLandValue = calculateRawLandValue(avgSize, cascadeConfig.normal);
 
-          console.log(`📊 VCS ${vcs} Lot Size Calculation (SF):`, {
-            totalRelevantSales: relevantSales.length,
-            salesWithLotData: salesWithLotData.length,
-            avgLotSF: Math.round(avgSize),
-            sampleLotSizes: salesWithLotData.slice(0, 5).map(p => ({
-              block: p.property_block,
-              lot: p.property_lot,
-              market_manual_lot_sf: p.market_manual_lot_sf,
-              sales_price: p.sales_price
-            }))
-          });
         } else if (valuationMode === 'ff') {
           // Front Foot mode: use frontage data
           salesWithLotData = relevantSales.filter(p => p.asset_lot_frontage && parseFloat(p.asset_lot_frontage) > 0);
