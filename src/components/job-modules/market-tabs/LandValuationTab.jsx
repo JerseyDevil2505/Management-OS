@@ -3213,6 +3213,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       if (prop.values_norm_time > 0) {
         avgNormTime[prop.new_vcs].push(prop.values_norm_time);
 
+        // Debug logging for first few properties in problematic VCS
+        if ((prop.new_vcs === 'BLST' || prop.new_vcs === 'BRED') && avgNormTime[prop.new_vcs].length <= 3) {
+          console.log(`🔍 VCS ${prop.new_vcs} property ${prop.property_composite_key}:`, {
+            valuationMode,
+            market_manual_lot_sf: prop.market_manual_lot_sf,
+            market_manual_lot_acre: prop.market_manual_lot_acre,
+            values_norm_time: prop.values_norm_time,
+            parsed_sf: prop.market_manual_lot_sf ? parseFloat(prop.market_manual_lot_sf) : null
+          });
+        }
+
         // Collect lot size based on valuation mode
         if (valuationMode === 'sf') {
           if (prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
@@ -3633,7 +3644,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }));
 
     // Trigger autosave to persist the description
-    debug('💾 Triggering autosave for VCS description change');
+    debug('�� Triggering autosave for VCS description change');
     setTimeout(() => {
       if (window.landValuationSave) {
         window.landValuationSave({ source: 'autosave' });
@@ -6077,7 +6088,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
     const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
 
-    debug('�����️ Building Lot Analysis Result:', {
+    debug('���️ Building Lot Analysis Result:', {
       avg: buildingLot.avg,
       count: buildingLot.count,
       method: buildingLot.method,
