@@ -3320,6 +3320,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       calculatedAvgPriceLotSize[vcs] = avgActualPriceLotSize[vcs].length > 0 ?
         (avgActualPriceLotSize[vcs].reduce((sum, v) => sum + v, 0) / avgActualPriceLotSize[vcs].length) : null;
 
+      // Debug: Log VCS with price data but missing lot sizes
+      if (avgNormTime[vcs].length > 0 && avgNormTimeLotSize[vcs].length === 0) {
+        console.warn(`⚠️ VCS ${vcs}: Has ${avgNormTime[vcs].length} time-normalized sales but 0 lot sizes in ${valuationMode} mode`);
+      }
+      if (avgActualPrice[vcs].length > 0 && avgActualPriceLotSize[vcs].length === 0) {
+        console.warn(`⚠️ VCS ${vcs}: Has ${avgActualPrice[vcs].length} recent sales but 0 lot sizes in ${valuationMode} mode`);
+      }
+
     });
 
     setVcsPropertyCounts(counts);
@@ -3644,7 +3652,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }));
 
     // Trigger autosave to persist the description
-    debug('�� Triggering autosave for VCS description change');
+    debug('💾 Triggering autosave for VCS description change');
     setTimeout(() => {
       if (window.landValuationSave) {
         window.landValuationSave({ source: 'autosave' });
@@ -6846,7 +6854,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 )}
                 {categoryAnalysis.buildingLot.method === 'paired' && categoryAnalysis.buildingLot.pairedAnalysis && (
                   <div style={{ fontSize: '9px', color: '#2563EB', marginTop: '2px' }}>
-                    {categoryAnalysis.buildingLot.count} properties • {categoryAnalysis.buildingLot.pairedAnalysis.pairs} comparisons
+                    {categoryAnalysis.buildingLot.count} properties ��� {categoryAnalysis.buildingLot.pairedAnalysis.pairs} comparisons
                   </div>
                 )}
               </div>
