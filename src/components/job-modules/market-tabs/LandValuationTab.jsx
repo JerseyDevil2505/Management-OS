@@ -257,7 +257,7 @@ const LandValuationTab = ({
       secondary: { max: 5, rate: null },
       excess: { max: 10, rate: null },
       residual: { max: null, rate: null },
-      standard: { max: 100, rate: null } // For front foot method
+      standard: { max: 100, rate: null } // For front foot AND square foot methods
     },
     special: {},
     vcsSpecific: {}, // New: VCS-specific configurations
@@ -756,7 +756,7 @@ useEffect(() => {
 
   // Only set if we found a valid value AND current state is null/empty to prevent overwrites
   if (loadedTargetAllocation !== null) {
-    console.log('🟢 LOADED TARGET ALLOCATION:', loadedTargetAllocation);
+    console.log('���� LOADED TARGET ALLOCATION:', loadedTargetAllocation);
     // Ensure it's a number to prevent caching issues
     const numericValue = typeof loadedTargetAllocation === 'string' ?
       parseFloat(loadedTargetAllocation) : loadedTargetAllocation;
@@ -1108,7 +1108,7 @@ const getPricePerUnit = useCallback((price, size) => {
     });
 
     if (targetAllocation && cascadeConfig.normal.prime && properties?.length > 0) {
-      debug('✅ CONDITIONS MET - CALLING calculateVCSRecommendedSitesWithTarget');
+      debug('�� CONDITIONS MET - CALLING calculateVCSRecommendedSitesWithTarget');
       calculateVCSRecommendedSitesWithTarget();
     } else {
       debug('�� CONDITIONS NOT MET FOR VCS CALCULATION:', {
@@ -3034,8 +3034,35 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
     }
 
+    // SQUARE FOOT MODE - Added support
+    if (valuationMode === 'sf') {
+      const sqFeet = typeof acresOrProperty === 'number' ? acresOrProperty :
+                     (acresOrProperty?.market_manual_lot_sf ? parseFloat(acresOrProperty.market_manual_lot_sf) : 0);
+
+      if (sqFeet > 0 && cascadeRates.standard) {
+        const standardRate = cascadeRates.standard.rate || 0;
+        const standardMax = cascadeRates.standard.max || 5000;
+        const excessRate = cascadeRates.excess?.rate || 0;
+
+        const standardSF = Math.min(sqFeet, standardMax);
+        const excessSF = Math.max(0, sqFeet - standardMax);
+
+        const standardValue = standardSF * standardRate;
+        const excessValue = excessSF * excessRate;
+        const rawLandValue = standardValue + excessValue;
+
+        debug(`SF calc for ${sqFeet} sq ft: Standard: ${standardSF} SF x $${standardRate} = $${standardValue.toFixed(0)}` +
+          (excessSF > 0 ? `, Excess: ${excessSF} SF x $${excessRate} = $${excessValue.toFixed(0)}` : '') +
+          ` = $${rawLandValue.toFixed(0)}`);
+
+        return rawLandValue;
+      }
+    }
+
     // Fall back to acreage-based calculation
-    const acres = typeof acresOrProperty === 'number' ? acresOrProperty : parseFloat(calculateAcreage(acresOrProperty));
+    const acres = typeof acresOrProperty === 'number' ? acresOrProperty :
+                  (acresOrProperty?.market_manual_lot_acre ? parseFloat(acresOrProperty.market_manual_lot_acre) :
+                   parseFloat(calculateAcreage(acresOrProperty)));
     let remainingAcres = acres;
     let rawLandValue = 0;
     const breakdown = [];
@@ -3055,7 +3082,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const tier2Value = tier2Acres * (cascadeRates.secondary.rate || 0);
       rawLandValue += tier2Value;
       remainingAcres -= tier2Acres;
-      breakdown.push(`Tier 2 (1-5 acres): ${tier2Acres.toFixed(2)} × $${cascadeRates.secondary.rate || 0} = $${tier2Value.toFixed(0)}`);
+      breakdown.push(`Tier 2 (1-5 acres): ${tier2Acres.toFixed(2)} �� $${cascadeRates.secondary.rate || 0} = $${tier2Value.toFixed(0)}`);
     }
 
     // TIER 3: All remaining acres above 5 at excess rate ($5,000)
@@ -3136,6 +3163,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const avgNormTime = {};
     const avgNormSize = {};
     const avgActualPrice = {};
+    const avgNormTimeLotSize = {};
+    const avgActualPriceLotSize = {};
 
     properties.forEach(prop => {
       if (!prop.new_vcs) return;
@@ -3157,6 +3186,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         avgNormTime[prop.new_vcs] = [];
         avgNormSize[prop.new_vcs] = [];
         avgActualPrice[prop.new_vcs] = [];
+        avgNormTimeLotSize[prop.new_vcs] = [];
+        avgActualPriceLotSize[prop.new_vcs] = [];
       }
       
       counts[prop.new_vcs].total++;
@@ -3178,12 +3209,28 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         counts[prop.new_vcs].special++;
       }
 
-      // Collect sales averages for all properties with sales in this VCS
-      // Note: VCS type filtering happens later in calculateRecSite
-      if (prop.sales_price > 0 && prop.sales_date) {
-        // Avg Price (t): ALL normalized time values in VCS (no date filter)
-        if (prop.values_norm_time > 0) avgNormTime[prop.new_vcs].push(prop.values_norm_time);
+      // Avg Price (t) Lot Size: ALL properties with time-normalized values (no date filter, no sales requirement)
+      if (prop.values_norm_time > 0) {
+        avgNormTime[prop.new_vcs].push(prop.values_norm_time);
 
+        // Collect lot size based on valuation mode
+        if (valuationMode === 'sf') {
+          if (prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
+            avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_sf));
+          } else if (prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
+            // Fallback: convert acres to SF (1 acre = 43,560 SF)
+            const lotSF = parseFloat(prop.market_manual_lot_acre) * 43560;
+            avgNormTimeLotSize[prop.new_vcs].push(lotSF);
+          }
+        } else if (valuationMode === 'acre' && prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
+          avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_acre));
+        } else if (valuationMode === 'ff' && prop.asset_lot_frontage && parseFloat(prop.asset_lot_frontage) > 0) {
+          avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.asset_lot_frontage));
+        }
+      }
+
+      // Avg Price Lot Size: Recent sales with valid NU codes + time constraint
+      if (prop.sales_date && prop.values_norm_time > 0) {
         const saleDate = new Date(prop.sales_date);
         const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
 
@@ -3195,7 +3242,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           const nu = prop.sales_nu || '';
           const validNu = !nu || nu === '' || nu === ' ' || nu === '00' || nu === '07' ||
                          nu === '7' || nu.charCodeAt(0) === 32;
-          if (validNu && prop.values_norm_time > 0) avgActualPrice[prop.new_vcs].push(prop.values_norm_time);
+          if (validNu) {
+            avgActualPrice[prop.new_vcs].push(prop.values_norm_time);
+
+            // Collect lot size based on valuation mode
+            if (valuationMode === 'sf') {
+              if (prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
+                avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_sf));
+              } else if (prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
+                // Fallback: convert acres to SF (1 acre = 43,560 SF)
+                const lotSF = parseFloat(prop.market_manual_lot_acre) * 43560;
+                avgActualPriceLotSize[prop.new_vcs].push(lotSF);
+              }
+            } else if (valuationMode === 'acre' && prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
+              avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_acre));
+            } else if (valuationMode === 'ff' && prop.asset_lot_frontage && parseFloat(prop.asset_lot_frontage) > 0) {
+              avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.asset_lot_frontage));
+            }
+          }
         }
       }
       
@@ -3220,6 +3284,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const calculatedAvgNormTime = {};
     const calculatedAvgNormSize = {};
     const calculatedAvgPrice = {};
+    const calculatedAvgNormTimeLotSize = {};
+    const calculatedAvgPriceLotSize = {};
     
     Object.keys(zoning).forEach(vcs => {
       formattedZoning[vcs] = Array.from(zoning[vcs]).sort().join(', ');
@@ -3232,12 +3298,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       formattedKeyPages[vcs] = formatPageRanges(keys);
       
       // Calculate averages
-      calculatedAvgNormTime[vcs] = avgNormTime[vcs].length > 0 ? 
+      calculatedAvgNormTime[vcs] = avgNormTime[vcs].length > 0 ?
         Math.round(avgNormTime[vcs].reduce((sum, v) => sum + v, 0) / avgNormTime[vcs].length) : null;
-      calculatedAvgNormSize[vcs] = avgNormSize[vcs].length > 0 ? 
+      calculatedAvgNormSize[vcs] = avgNormSize[vcs].length > 0 ?
         Math.round(avgNormSize[vcs].reduce((sum, v) => sum + v, 0) / avgNormSize[vcs].length) : null;
-      calculatedAvgPrice[vcs] = avgActualPrice[vcs].length > 0 ? 
+      calculatedAvgPrice[vcs] = avgActualPrice[vcs].length > 0 ?
         Math.round(avgActualPrice[vcs].reduce((sum, v) => sum + v, 0) / avgActualPrice[vcs].length) : null;
+      calculatedAvgNormTimeLotSize[vcs] = avgNormTimeLotSize[vcs].length > 0 ?
+        (avgNormTimeLotSize[vcs].reduce((sum, v) => sum + v, 0) / avgNormTimeLotSize[vcs].length) : null;
+      calculatedAvgPriceLotSize[vcs] = avgActualPriceLotSize[vcs].length > 0 ?
+        (avgActualPriceLotSize[vcs].reduce((sum, v) => sum + v, 0) / avgActualPriceLotSize[vcs].length) : null;
+
+      // Lot size collection complete for this VCS
+
     });
 
     setVcsPropertyCounts(counts);
@@ -3256,12 +3329,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         keyPages: formattedKeyPages[vcs],
         avgNormTime: calculatedAvgNormTime[vcs],
         avgNormSize: calculatedAvgNormSize[vcs],
-        avgPrice: calculatedAvgPrice[vcs]
+        avgPrice: calculatedAvgPrice[vcs],
+        avgNormTimeLotSize: calculatedAvgNormTimeLotSize[vcs],
+        avgPriceLotSize: calculatedAvgPriceLotSize[vcs]
       };
     });
-    
+
     setVcsSheetData(sheetData);
-  }, [properties]);
+  }, [properties, valuationMode]);
 
   const calculateVCSRecommendedSites = useCallback((avgNormTimes, counts) => {
     if (!targetAllocation || !cascadeConfig.normal.prime) return;
@@ -3275,18 +3350,46 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const avgNormTime = avgNormTimes[vcs];
       if (!avgNormTime) return;
 
-      // Get average lot size for this VCS
-      const vcsProps = properties.filter(p =>
-        p.new_vcs === vcs &&
-        (p.property_m4_class === '2' || p.property_m4_class === '3A')
-      );
+      // Get average lot size for this VCS using appropriate pre-calculated field based on mode
+      let vcsProps, avgSize, rawLandValue;
 
-      if (vcsProps.length === 0) return;
-
-      const avgAcres = vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length;
-
-      // Use corrected cascade logic
-      const rawLandValue = calculateRawLandValue(avgAcres, cascadeConfig.normal);
+      if (valuationMode === 'sf') {
+        // Square Foot mode: use market_manual_lot_sf
+        vcsProps = properties.filter(p =>
+          p.new_vcs === vcs &&
+          (p.property_m4_class === '2' || p.property_m4_class === '3A') &&
+          p.market_manual_lot_sf && parseFloat(p.market_manual_lot_sf) > 0
+        );
+        if (vcsProps.length === 0) return;
+        avgSize = vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / vcsProps.length;
+        rawLandValue = calculateRawLandValue(avgSize, cascadeConfig.normal);
+      } else if (valuationMode === 'ff') {
+        // Front Foot mode: need frontage data
+        vcsProps = properties.filter(p =>
+          p.new_vcs === vcs &&
+          (p.property_m4_class === '2' || p.property_m4_class === '3A') &&
+          p.asset_lot_frontage && parseFloat(p.asset_lot_frontage) > 0
+        );
+        if (vcsProps.length === 0) return;
+        // For FF mode, we'll use an average representative property
+        const avgFrontage = vcsProps.reduce((sum, p) => sum + parseFloat(p.asset_lot_frontage), 0) / vcsProps.length;
+        const avgDepth = vcsProps.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth || 100), 0) / vcsProps.length;
+        rawLandValue = calculateRawLandValue(null, cascadeConfig.normal, {
+          land_front_feet: avgFrontage,
+          land_depth: avgDepth,
+          land_zoning: vcsProps[0]?.asset_zoning
+        });
+      } else {
+        // Acre mode: use market_manual_lot_acre
+        vcsProps = properties.filter(p =>
+          p.new_vcs === vcs &&
+          (p.property_m4_class === '2' || p.property_m4_class === '3A') &&
+          p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0
+        );
+        if (vcsProps.length === 0) return;
+        avgSize = vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / vcsProps.length;
+        rawLandValue = calculateRawLandValue(avgSize, cascadeConfig.normal);
+      }
 
       // Calculate site value using target allocation
       const totalLandValue = avgNormTime * (parseFloat(targetAllocation) / 100);
@@ -3301,7 +3404,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
     debug('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
-    debug('������ Input validation:', {
+    debug('������� Input validation:', {
       hasTargetAllocation: !!targetAllocation,
       targetAllocationValue: targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
@@ -3391,16 +3494,55 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           note: 'No lot size calculation for condos'
         });
       } else {
-        // For regular properties: calculate with lot size and cascade rates
-        const avgAcres = relevantSales.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / relevantSales.length;
+        // For regular properties: calculate with lot size and cascade rates respecting valuation mode
         const totalLandValue = avgSalePrice * (parseFloat(targetAllocation) / 100);
-        const rawLandValue = calculateRawLandValue(avgAcres, cascadeConfig.normal);
+        let avgSize, rawLandValue, salesWithLotData;
+
+        if (valuationMode === 'sf') {
+          // Square Foot mode: use market_manual_lot_sf
+          salesWithLotData = relevantSales.filter(p => p.market_manual_lot_sf && parseFloat(p.market_manual_lot_sf) > 0);
+          if (salesWithLotData.length === 0) {
+            console.warn(`���️ VCS ${vcs}: No sales with market_manual_lot_sf data (${relevantSales.length} total sales)`);
+            return;
+          }
+          avgSize = salesWithLotData.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / salesWithLotData.length;
+          rawLandValue = calculateRawLandValue(avgSize, cascadeConfig.normal);
+
+        } else if (valuationMode === 'ff') {
+          // Front Foot mode: use frontage data
+          salesWithLotData = relevantSales.filter(p => p.asset_lot_frontage && parseFloat(p.asset_lot_frontage) > 0);
+          if (salesWithLotData.length === 0) {
+            console.warn(`⚠️ VCS ${vcs}: No sales with frontage data (${relevantSales.length} total sales)`);
+            return;
+          }
+          const avgFrontage = salesWithLotData.reduce((sum, p) => sum + parseFloat(p.asset_lot_frontage), 0) / salesWithLotData.length;
+          const avgDepth = salesWithLotData.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth || 100), 0) / salesWithLotData.length;
+          avgSize = avgFrontage;
+          rawLandValue = calculateRawLandValue(null, cascadeConfig.normal, {
+            land_front_feet: avgFrontage,
+            land_depth: avgDepth,
+            land_zoning: salesWithLotData[0]?.asset_zoning
+          });
+
+        } else {
+          // Acre mode: use market_manual_lot_acre
+          salesWithLotData = relevantSales.filter(p => p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0);
+          if (salesWithLotData.length === 0) {
+            console.warn(`⚠️ VCS ${vcs}: No sales with market_manual_lot_acre data (${relevantSales.length} total sales)`);
+            return;
+          }
+          avgSize = salesWithLotData.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / salesWithLotData.length;
+          rawLandValue = calculateRawLandValue(avgSize, cascadeConfig.normal);
+
+        }
+
         siteValue = totalLandValue - rawLandValue;
 
-        debug(`🏠 VCS ${vcs} DETAILED DEBUG:`, {
+        debug(`🏠 VCS ${vcs} DETAILED DEBUG (${valuationMode.toUpperCase()} mode):`, {
           relevantSalesCount: relevantSales.length,
+          salesWithLotData: salesWithLotData?.length || 0,
           avgSalePrice: Math.round(avgSalePrice),
-          avgAcres: avgAcres.toFixed(2),
+          avgSize: typeof avgSize === 'number' ? avgSize.toFixed(2) : avgSize,
           targetAllocation: targetAllocation + '%',
           targetAllocationDecimal: parseFloat(targetAllocation) / 100,
           totalLandValue: Math.round(totalLandValue),
@@ -3449,7 +3591,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }));
 
     // Immediate save to prevent data loss when navigating away
-    debug('���� Triggering immediate save for Act Site change');
+    debug('����� Triggering immediate save for Act Site change');
     setTimeout(() => {
       if (window.landValuationSave) {
         window.landValuationSave({ source: 'autosave' });
@@ -3816,12 +3958,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     const targetValue = parseFloat(targetAllocation);
     if (isNaN(targetValue) || targetValue <= 0 || targetValue > 100) {
-      debug('��� Save target allocation cancelled: Invalid value:', targetAllocation);
+      debug('���� Save target allocation cancelled: Invalid value:', targetAllocation);
       alert('Please enter a valid target allocation percentage between 1 and 100.');
       return;
     }
 
-    debug('💾 Saving target allocation:', `${targetValue}%`, 'for job:', jobData.id);
+    debug('�� Saving target allocation:', `${targetValue}%`, 'for job:', jobData.id);
 
     try {
       // Check if record exists first
@@ -3838,7 +3980,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       let result;
       if (existing) {
-        debug('📝 Updating existing record with target allocation...');
+        debug('���� Updating existing record with target allocation...');
         result = await supabase
           .from('market_land_valuation')
           .update({
@@ -3982,7 +4124,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       };
 
       // Debug: Log the exact data being saved
-      debug('�������� Data structure being saved:', {
+      debug('��������� Data structure being saved:', {
         cascadeConfigLocation1: analysisData.raw_land_config.cascade_config.specialCategories,
         cascadeConfigLocation2: analysisData.cascade_rates.specialCategories,
         salesData: analysisData.vacant_sales_analysis.sales.slice(0, 3), // First 3 for brevity
@@ -4133,6 +4275,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       headers.push('Typical Lot Size');
     }
 
+    // Add stepdown header for FF and SF modes
+    if (valuationMode === 'ff') {
+      headers.push('Stepdown (FF)');
+    } else if (valuationMode === 'sf') {
+      headers.push('Stepdown (SF)');
+    }
+
     headers.push('Rec Site Value', 'Act Site Value');
 
     // Dynamic cascade headers
@@ -4146,7 +4295,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }
 
     // Special category headers
-    headers.push('Wetlands Rate', 'Landlocked Rate', 'Conservation Rate', 'Avg Price (Time Norm)', 'Avg Price (Current)', 'CME Bracket', 'Zoning');
+    headers.push('Wetlands Rate', 'Landlocked Rate', 'Conservation Rate');
+
+    // Lot size and price headers
+    headers.push('Avg Price (t) Lot Size', 'Avg Price (Time Norm)', 'Avg Price Lot Size', 'Avg Price (Current)', 'CME Bracket', 'Zoning');
     if (shouldShowKeyColumn) headers.push('Key Pages');
     if (shouldShowMapColumn) headers.push('Map Pages');
 
@@ -4163,45 +4315,55 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const actSite = vcsManualSiteValues[vcs] ?? recSite;
       const isResidential = type.startsWith('Residential');
 
-      // Get typical lot size (FF mode shows FF + Depth, Acre mode shows acres/SF)
-      const vcsProps = properties?.filter(p =>
-        p.new_vcs === vcs && calculateAcreage(p) > 0
-      ) || [];
-
+      // Get typical lot size (FF mode shows FF + Depth, Acre/SF mode uses pre-calculated manual lot sizes)
       let typicalFF = '';
       let typicalDepth = '';
       let depthTableName = '';
       let typicalLot = '';
 
       if (valuationMode === 'ff') {
-        // FF mode: calculate typical front feet and depth
-        const propsWithFF = vcsProps.filter(p => p.asset_lot_frontage && p.asset_lot_depth);
-        if (propsWithFF.length > 0) {
-          const avgFF = propsWithFF.reduce((sum, p) => sum + parseFloat(p.asset_lot_frontage || 0), 0) / propsWithFF.length;
-          const avgDepth = propsWithFF.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth || 0), 0) / propsWithFF.length;
+        // FF mode: calculate typical front feet and depth from vendor data
+        const vcsProps = properties?.filter(p =>
+          p.new_vcs === vcs && p.asset_lot_frontage && p.asset_lot_depth
+        ) || [];
+
+        if (vcsProps.length > 0) {
+          const avgFF = vcsProps.reduce((sum, p) => sum + parseFloat(p.asset_lot_frontage || 0), 0) / vcsProps.length;
+          const avgDepth = vcsProps.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth || 0), 0) / vcsProps.length;
           typicalFF = Math.round(avgFF);
           typicalDepth = Math.round(avgDepth);
         }
 
         // Get depth table - check VCS override first, then zoning config
-        const firstProp = vcsProps[0];
+        const firstProp = properties?.find(p => p.new_vcs === vcs);
         if (firstProp) {
           const zone = firstProp.asset_zoning || '';
           const zcfg = marketLandData?.zoning_config || {};
           const zoneEntry = zcfg[zone] || zcfg[zone?.toUpperCase?.()] || zcfg[zone?.toLowerCase?.()] || null;
           const zoningDepthTable = zoneEntry ? (zoneEntry.depth_table || zoneEntry.depthTable || zoneEntry.depth_table_name || '') : '';
-          // Use VCS-specific override if available, otherwise use zoning default (matches UI rendering at line 9563)
+          // Use VCS-specific override if available, otherwise use zoning default
           depthTableName = vcsDepthTableOverrides[vcs] || zoningDepthTable;
         }
-      } else {
-        // Acre/SF mode: calculate typical lot in acres or SF
+      } else if (valuationMode === 'sf') {
+        // SF mode: use pre-calculated market_manual_lot_sf from property_market_analysis
+        const vcsProps = properties?.filter(p =>
+          p.new_vcs === vcs &&
+          p.market_manual_lot_sf && parseFloat(p.market_manual_lot_sf) > 0
+        ) || [];
+
         if (vcsProps.length > 0) {
-          const avgAcres = vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length;
-          if (valuationMode === 'sf') {
-            typicalLot = Math.round(avgAcres * 43560);
-          } else {
-            typicalLot = Number(avgAcres.toFixed(2));
-          }
+          typicalLot = Math.round(vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / vcsProps.length);
+        }
+      } else {
+        // Acre mode: use pre-calculated market_manual_lot_acre from property_market_analysis
+        const vcsProps = properties?.filter(p =>
+          p.new_vcs === vcs &&
+          p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0
+        ) || [];
+
+        if (vcsProps.length > 0) {
+          const avgAcres = vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / vcsProps.length;
+          typicalLot = Number(avgAcres.toFixed(2));
         }
       }
 
@@ -4242,6 +4404,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         row.push(typicalFF || '', typicalDepth || '', depthTableName || '');
       } else {
         row.push(typicalLot || '');
+      }
+
+      // Add stepdown column for FF and SF modes
+      if (valuationMode === 'ff' && isResidential) {
+        row.push(cascadeRates.standard?.max ? `${cascadeRates.standard.max} ft` : '');
+      } else if (valuationMode === 'sf' && isResidential) {
+        row.push(cascadeRates.standard?.max ? `${cascadeRates.standard.max.toLocaleString()} SF` : '');
+      } else if (valuationMode === 'ff' || valuationMode === 'sf') {
+        row.push(''); // Empty for non-residential
       }
 
       row.push(recSiteFmt, actSiteFmt);
@@ -4298,9 +4469,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation != null ? `$${Math.round(cascadeConfig.specialCategories.conservation).toLocaleString()}` : ''
       );
 
-      // Price columns (formatted)
+      // Lot size columns (formatted based on mode)
+      const avgNormTimeLotFmt = vcsData.avgNormTimeLotSize != null ? (
+        valuationMode === 'ff' ? `${Math.round(vcsData.avgNormTimeLotSize)} ft` :
+        valuationMode === 'sf' ? `${Math.round(vcsData.avgNormTimeLotSize).toLocaleString()} SF` :
+        vcsData.avgNormTimeLotSize.toFixed(2)
+      ) : '';
+
+      const avgPriceLotFmt = vcsData.avgPriceLotSize != null ? (
+        valuationMode === 'ff' ? `${Math.round(vcsData.avgPriceLotSize)} ft` :
+        valuationMode === 'sf' ? `${Math.round(vcsData.avgPriceLotSize).toLocaleString()} SF` :
+        vcsData.avgPriceLotSize.toFixed(2)
+      ) : '';
+
+      // Price and lot size columns (formatted)
       row.push(
+        avgNormTimeLotFmt,
         vcsData.avgNormTime != null ? `$${Math.round(vcsData.avgNormTime).toLocaleString()}` : '',
+        avgPriceLotFmt,
         vcsData.avgPrice != null ? `$${Math.round(vcsData.avgPrice).toLocaleString()}` : ''
       );
 
@@ -4337,6 +4523,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       colWidths.push({ wch: 15 }); // Typical Lot Size
     }
 
+    // Stepdown column for FF and SF modes
+    if (valuationMode === 'ff' || valuationMode === 'sf') {
+      colWidths.push({ wch: 15 }); // Stepdown
+    }
+
     colWidths.push({ wch: 15 }, { wch: 15 }); // Rec Site, Act Site
 
     // Add cascade rate column widths
@@ -4354,7 +4545,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       { wch: 15 },  // Wetlands
       { wch: 15 },  // Landlocked
       { wch: 15 },  // Conservation
+      { wch: 15 },  // Avg Price (t) Lot Size
       { wch: 18 },  // Avg Price (Time)
+      { wch: 15 },  // Avg Price Lot Size
       { wch: 18 },  // Avg Price
       { wch: 12 },  // CME
       { wch: 20 }   // Zoning
@@ -5598,9 +5791,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ).map(([region, sales]) => ({ region, count: sales.length, sales }))
     });
 
-    debug('📋 Included sales IDs:', Array.from(includedSales));
+    debug('���� Included sales IDs:', Array.from(includedSales));
     debug('�� Sale categories state:', saleCategories);
-    debug('���� Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
+    debug('������ Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
     debug('��� Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
 
     // Helper function to calculate average for a category
@@ -6616,7 +6809,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 )}
                 {categoryAnalysis.buildingLot.method === 'paired' && categoryAnalysis.buildingLot.pairedAnalysis && (
                   <div style={{ fontSize: '9px', color: '#2563EB', marginTop: '2px' }}>
-                    {categoryAnalysis.buildingLot.count} properties • {categoryAnalysis.buildingLot.pairedAnalysis.pairs} comparisons
+                    {categoryAnalysis.buildingLot.count} properties ��� {categoryAnalysis.buildingLot.pairedAnalysis.pairs} comparisons
                   </div>
                 )}
               </div>
@@ -7596,20 +7789,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </div>
               </>
             ) : valuationMode === 'sf' ? (
-              // SQUARE FOOT MODE: Primary + Secondary only
+              // SQUARE FOOT MODE: Standard + Excess
               <>
                 <div>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                    Primary (0-{cascadeConfig.normal.prime?.max || 5000} sq ft)
+                    Standard (0-{cascadeConfig.normal.standard?.max || 5000} sq ft)
                   </label>
                   <div style={{ display: 'flex', gap: '5px' }}>
                     <input
                       type="number"
-                      value={cascadeConfig.normal.prime?.max || ''}
-                      onChange={(e) => updateCascadeBreak('prime', 'max', e.target.value)}
+                      value={cascadeConfig.normal.standard?.max || ''}
+                      onChange={(e) => updateCascadeBreak('standard', 'max', e.target.value)}
                       placeholder="Max sq ft"
                       style={{
-                        width: '100px',
+                        width: '120px',
                         padding: '8px',
                         border: '1px solid #D1D5DB',
                         borderRadius: '4px'
@@ -7618,8 +7811,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     <input
                       type="number"
                       step="0.01"
-                      value={cascadeConfig.normal.prime?.rate || ''}
-                      onChange={(e) => updateCascadeBreak('prime', 'rate', e.target.value)}
+                      value={cascadeConfig.normal.standard?.rate || ''}
+                      onChange={(e) => updateCascadeBreak('standard', 'rate', e.target.value)}
                       placeholder="Rate per sq ft"
                       style={{
                         flex: 1,
@@ -7632,13 +7825,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 </div>
                 <div>
                   <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
-                    Secondary ({cascadeConfig.normal.prime?.max || 5000}+ sq ft)
+                    Excess ({cascadeConfig.normal.standard?.max || 5000}+ sq ft)
                   </label>
                   <input
                     type="number"
                     step="0.01"
-                    value={cascadeConfig.normal.secondary?.rate || ''}
-                    onChange={(e) => updateCascadeBreak('secondary', 'rate', e.target.value)}
+                    value={cascadeConfig.normal.excess?.rate || ''}
+                    onChange={(e) => updateCascadeBreak('excess', 'rate', e.target.value)}
                     placeholder="Rate per sq ft"
                     style={{
                       width: '100%',
@@ -7968,21 +8161,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <>
                   <div>
                     <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
-                      Primary (0-{cascadeConfig.special[region]?.prime?.max || 5000} sq ft)
+                      Standard (0-{cascadeConfig.special[region]?.standard?.max || 5000} sq ft)
                     </label>
                     <div style={{ display: 'flex', gap: '5px' }}>
                       <input
                         type="number"
-                        value={cascadeConfig.special[region]?.prime?.max || ''}
-                        onChange={(e) => updateSpecialRegionCascade(region, 'prime', 'max', e.target.value)}
+                        value={cascadeConfig.special[region]?.standard?.max || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'standard', 'max', e.target.value)}
                         placeholder="Max"
                         style={{ width: '80px', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
                       />
                       <input
                         type="number"
                         step="0.01"
-                        value={cascadeConfig.special[region]?.prime?.rate || ''}
-                        onChange={(e) => updateSpecialRegionCascade(region, 'prime', 'rate', e.target.value)}
+                        value={cascadeConfig.special[region]?.standard?.rate || ''}
+                        onChange={(e) => updateSpecialRegionCascade(region, 'standard', 'rate', e.target.value)}
                         placeholder="Rate"
                         style={{ flex: 1, padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
                       />
@@ -7990,13 +8183,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   </div>
                   <div>
                     <label style={{ fontSize: '12px', color: '#1E40AF', display: 'block', marginBottom: '4px' }}>
-                      Secondary ({cascadeConfig.special[region]?.prime?.max || 5000}+ sq ft)
+                      Excess ({cascadeConfig.special[region]?.standard?.max || 5000}+ sq ft)
                     </label>
                     <input
                       type="number"
                       step="0.01"
-                      value={cascadeConfig.special[region]?.secondary?.rate || ''}
-                      onChange={(e) => updateSpecialRegionCascade(region, 'secondary', 'rate', e.target.value)}
+                      value={cascadeConfig.special[region]?.excess?.rate || ''}
+                      onChange={(e) => updateSpecialRegionCascade(region, 'excess', 'rate', e.target.value)}
                       placeholder="Rate"
                       style={{ width: '100%', padding: '6px', border: '1px solid #BFDBFE', borderRadius: '4px' }}
                     />
@@ -8857,7 +9050,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '������') : ''}
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '�������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('yearBuilt')}
@@ -9774,7 +9967,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Description</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Method</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
-                    {valuationMode === 'ff' ? 'Typ Lot FF' : 'Typ Lot'}
+                    {valuationMode === 'ff' ? 'Typ Lot FF' : valuationMode === 'sf' ? 'Typ Lot (SF)' : 'Typ Lot (Acres)'}
                   </th>
                   {valuationMode === 'ff' && (
                     <>
@@ -9782,12 +9975,22 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Depth Table</th>
                     </>
                   )}
+                  {(valuationMode === 'ff' || valuationMode === 'sf') && (
+                    <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
+                      {valuationMode === 'ff' ? 'Stepdown (FF)' : 'Stepdown (SF)'}
+                    </th>
+                  )}
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Rec Site</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Act Site</th>
                   {valuationMode === 'ff' ? (
                     <>
                       <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Std FF</th>
                       <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Exc FF</th>
+                    </>
+                  ) : valuationMode === 'sf' ? (
+                    <>
+                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Standard</th>
+                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Excess</th>
                     </>
                   ) : (
                     <>
@@ -9802,7 +10005,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Wet</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>LLocked</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Consv</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg Price (t) Lot Size</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg Price (t)</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg Price Lot Size</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Avg Price</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>CME</th>
                   <th
@@ -9815,7 +10020,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     onClick={() => toggleFieldCollapse('zoning')}
                     title="Click to expand/collapse"
                   >
-                    Zoning {collapsedFields.zoning ? '�����' : '▼'}
+                    Zoning {collapsedFields.zoning ? '�����' : '��'}
                   </th>
                   {shouldShowKeyColumn && (
                     <th
@@ -9885,12 +10090,28 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   }
                   
                   // Get typical lot size for ALL properties in this VCS (for display purposes)
-                  const vcsProps = properties?.filter(p =>
-                    p.new_vcs === vcs &&
-                    calculateAcreage(p) > 0 // Only properties with valid acreage
-                  ) || [];
-                  const typicalLot = vcsProps.length > 0 ?
-                    (vcsProps.reduce((sum, p) => sum + parseFloat(calculateAcreage(p)), 0) / vcsProps.length).toFixed(2) : '';
+                  // Use pre-calculated values from property_market_analysis table (market_manual_lot_sf/acre)
+                  let vcsProps, typicalLot;
+
+                  if (valuationMode === 'sf') {
+                    // Square Foot mode: use market_manual_lot_sf from property_market_analysis
+                    vcsProps = properties?.filter(p =>
+                      p.new_vcs === vcs &&
+                      p.market_manual_lot_sf && parseFloat(p.market_manual_lot_sf) > 0
+                    ) || [];
+                    typicalLot = vcsProps.length > 0 ?
+                      Math.round(vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / vcsProps.length).toLocaleString() : '';
+
+                  } else {
+                    // Acre or Front Foot mode: use market_manual_lot_acre from property_market_analysis
+                    vcsProps = properties?.filter(p =>
+                      p.new_vcs === vcs &&
+                      p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0
+                    ) || [];
+                    typicalLot = vcsProps.length > 0 ?
+                      (vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / vcsProps.length).toFixed(2) : '';
+
+                  }
 
                   // Calculate typical frontage and depth for Front Foot mode
                   let typicalFrontage = '';
@@ -10063,6 +10284,30 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           </td>
                         </>
                       )}
+                      {(valuationMode === 'ff' || valuationMode === 'sf') && (
+                        <td style={{
+                          padding: '8px',
+                          textAlign: 'center',
+                          border: '1px solid #E5E7EB',
+                          backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit')
+                        }}>
+                          {!isGrayedOut && cascadeRates.standard?.max ? (
+                            <span title={`Rate Source: ${rateSource}`}>
+                              {valuationMode === 'ff' ? `${cascadeRates.standard.max} ft` : `${cascadeRates.standard.max.toLocaleString()} SF`}
+                              {rateSource !== 'Normal' && (
+                                <span style={{
+                                  position: 'absolute',
+                                  top: '2px',
+                                  right: '2px',
+                                  fontSize: '8px',
+                                  color: '#92400E',
+                                  fontWeight: 'bold'
+                                }}>*</span>
+                              )}
+                            </span>
+                          ) : ''}
+                        </td>
+                      )}
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(recSite).toLocaleString()}</td>
                       <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
                         <input
@@ -10079,7 +10324,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           }}
                         />
                       </td>
-                      {valuationMode === 'ff' ? (
+                      {valuationMode === 'ff' || valuationMode === 'sf' ? (
                         <>
                           <td style={{
                             padding: '8px',
@@ -10255,7 +10500,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           `$${cascadeConfig.specialCategories.conservation.toLocaleString()}` : ''}
                       </td>
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>
+                        {data.avgNormTimeLotSize ? (
+                          valuationMode === 'ff' ? `${Math.round(data.avgNormTimeLotSize)} ft` :
+                          valuationMode === 'sf' ? `${Math.round(data.avgNormTimeLotSize).toLocaleString()} SF` :
+                          data.avgNormTimeLotSize.toFixed(2)
+                        ) : ''}
+                      </td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>
                         {data.avgNormTime ? `$${data.avgNormTime.toLocaleString()}` : ''}
+                      </td>
+                      <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>
+                        {data.avgPriceLotSize ? (
+                          valuationMode === 'ff' ? `${Math.round(data.avgPriceLotSize)} ft` :
+                          valuationMode === 'sf' ? `${Math.round(data.avgPriceLotSize).toLocaleString()} SF` :
+                          data.avgPriceLotSize.toFixed(2)
+                        ) : ''}
                       </td>
                       <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', border: '1px solid #E5E7EB' }}>
                         {data.avgPrice ? `$${data.avgPrice.toLocaleString()}` : ''}
@@ -11067,7 +11326,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             }}
             title={isEcoObsComplete ? 'Click to reopen' : 'Mark Economic Obsolescence Study complete'}
           >
-            {isEcoObsComplete ? '✓ Mark Complete' : 'Mark Complete'}
+            {isEcoObsComplete ? '�� Mark Complete' : 'Mark Complete'}
           </button>
         )}
       </div>

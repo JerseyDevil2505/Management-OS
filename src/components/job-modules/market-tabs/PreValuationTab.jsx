@@ -1220,11 +1220,16 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         }
       }
 
-      // Create a map of existing keep/reject decisions
+      // Create a map of existing keep/reject decisions with sale data
       const existingDecisions = {};
       timeNormalizedSales.forEach(sale => {
-        if (sale.keep_reject && sale.keep_reject !== 'pending') {
-          existingDecisions[sale.id] = sale.keep_reject;
+        if (sale.keep_reject) {
+          existingDecisions[sale.id] = {
+            decision: sale.keep_reject,
+            sales_price: sale.sales_price,
+            sales_date: sale.sales_date,
+            sales_nu: sale.sales_nu
+          };
         }
       });
       
@@ -1385,18 +1390,50 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         const outThreshold = parseFloat(outlierThreshold);
         const isOutlier = eqRatio && outThreshold ?
           Math.abs((salesRatio * 100) - eqRatio) > outThreshold : false;
-        
+
         // Check if we have an existing decision for this property
-        const existingDecision = existingDecisions[prop.id];
-        
+        const existingDecisionData = existingDecisions[prop.id];
+        let finalDecision = 'pending';
+        let saleDataChanged = false;
+
+        if (existingDecisionData) {
+          // Check if sale data changed since the decision was made
+          const priceChanged = existingDecisionData.sales_price !== prop.sales_price;
+          const dateChanged = existingDecisionData.sales_date !== prop.sales_date;
+          const nuChanged = existingDecisionData.sales_nu !== prop.sales_nu;
+
+          saleDataChanged = priceChanged || dateChanged || nuChanged;
+
+          if (saleDataChanged) {
+            // Sale data changed - reset to pending and log the change
+            finalDecision = 'pending';
+            console.log(`⚠️ Sale data changed for ${prop.property_composite_key} - resetting decision to pending`, {
+              old: {
+                price: existingDecisionData.sales_price,
+                date: existingDecisionData.sales_date,
+                nu: existingDecisionData.sales_nu
+              },
+              new: {
+                price: prop.sales_price,
+                date: prop.sales_date,
+                nu: prop.sales_nu
+              },
+              previousDecision: existingDecisionData.decision
+            });
+          } else {
+            // Sale data unchanged - preserve existing decision
+            finalDecision = existingDecisionData.decision;
+          }
+        }
+
         return {
           ...prop,
           time_normalized_price: timeNormalizedPrice,
           hpi_multiplier: hpiMultiplier,
           sales_ratio: salesRatio,
           is_outlier: isOutlier,
-          // Preserve existing decision if it exists, otherwise set to pending
-          keep_reject: existingDecision || 'pending'
+          keep_reject: finalDecision,
+          sale_data_changed: saleDataChanged // Track if data changed for UI indication
         };
       });
 
@@ -1474,6 +1511,13 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       }
 
       setLastTimeNormalizationRun(new Date().toISOString());
+
+      // Count and notify about sale data changes
+      const salesDataChangedCount = normalized.filter(s => s.sale_data_changed).length;
+      if (salesDataChangedCount > 0) {
+        console.warn(`⚠️ ${salesDataChangedCount} properties had sale data changes - decisions reset to pending review`);
+        alert(`⚠️ IMPORTANT: ${salesDataChangedCount} properties have updated sale data.\n\nTheir Keep/Reject decisions have been automatically reset to "Pending Review".\n\nPlease review these properties in the normalization table below.`);
+      }
 
       if (false) console.log(`✅ Time normalization complete - preserved ${Object.keys(existingDecisions).length} keep/reject decisions`);
       if (false) console.log('✅ Normalized sales saved to database for persistence');
@@ -3299,6 +3343,31 @@ const analyzeImportFile = async (file) => {
           {/* Time Normalization Statistics */}
           {timeNormalizedSales.length > 0 && (
             <>
+              {/* Sale Data Changes Warning */}
+              {(() => {
+                const salesDataChangedCount = timeNormalizedSales.filter(s => s.sale_data_changed).length;
+                if (salesDataChangedCount > 0) {
+                  return (
+                    <div className="mb-4 p-4 bg-amber-50 border-l-4 border-amber-500 rounded-lg flex items-start gap-3">
+                      <AlertCircle className="text-amber-600 mt-0.5 flex-shrink-0" size={24} />
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-amber-900 mb-1">
+                          ⚠️ Sale Data Updates Detected
+                        </p>
+                        <p className="text-sm text-amber-800">
+                          <strong>{salesDataChangedCount}</strong> {salesDataChangedCount === 1 ? 'property has' : 'properties have'} updated sale data from the latest file upload.
+                          {salesDataChangedCount === 1 ? ' Its' : ' Their'} Keep/Reject decision{salesDataChangedCount === 1 ? ' has' : 's have'} been automatically reset to <strong>"Pending Review"</strong>.
+                        </p>
+                        <p className="text-xs text-amber-700 mt-2">
+                          💡 Please review {salesDataChangedCount === 1 ? 'this property' : 'these properties'} in the table below and update {salesDataChangedCount === 1 ? 'its' : 'their'} decision{salesDataChangedCount === 1 ? '' : 's'} as needed.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
               <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-lg font-semibold mb-4">Time Normalization Statistics (County HPI Based)</h3>
                 <div className="grid grid-cols-6 gap-4">

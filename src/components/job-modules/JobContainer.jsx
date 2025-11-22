@@ -350,6 +350,7 @@ const JobContainer = ({
                   sales_history: marketAnalysis.sales_history || null,
                   // Ensure manual/calculated lot acreage and applied unit codes are available to UI
                   market_manual_lot_acre: marketAnalysis.market_manual_lot_acre ?? property.market_manual_lot_acre ?? null,
+                  market_manual_lot_sf: marketAnalysis.market_manual_lot_sf ?? property.market_manual_lot_sf ?? null,
                   market_manual_acre: marketAnalysis.market_manual_acre ?? property.market_manual_acre ?? null,
                   // Use job-level applied codes map stored in marketLandData; per-property column removed
                   unit_rate_codes_applied: (marketLandData?.unit_rate_codes_applied ? marketLandData.unit_rate_codes_applied[property.property_composite_key] : null) ?? null,
