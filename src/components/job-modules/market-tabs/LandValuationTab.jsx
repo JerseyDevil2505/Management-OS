@@ -3353,7 +3353,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     setVcsSheetData(sheetData);
-  }, [properties]);
+  }, [properties, valuationMode]);
 
   const calculateVCSRecommendedSites = useCallback((avgNormTimes, counts) => {
     if (!targetAllocation || !cascadeConfig.normal.prime) return;
@@ -5838,7 +5838,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     debug('���� Included sales IDs:', Array.from(includedSales));
     debug('�� Sale categories state:', saleCategories);
-    debug('���� Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
+    debug('������ Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
     debug('��� Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
 
     // Helper function to calculate average for a category
