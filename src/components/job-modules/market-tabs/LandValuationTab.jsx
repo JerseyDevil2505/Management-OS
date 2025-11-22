@@ -3214,8 +3214,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         avgNormTime[prop.new_vcs].push(prop.values_norm_time);
 
         // Collect lot size based on valuation mode
-        if (valuationMode === 'sf' && prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
-          avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_sf));
+        if (valuationMode === 'sf') {
+          if (prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
+            avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_sf));
+          } else if (prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
+            // Fallback: convert acres to SF (1 acre = 43,560 SF)
+            const lotSF = parseFloat(prop.market_manual_lot_acre) * 43560;
+            avgNormTimeLotSize[prop.new_vcs].push(lotSF);
+          }
         } else if (valuationMode === 'acre' && prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
           avgNormTimeLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_acre));
         } else if (valuationMode === 'ff' && prop.asset_lot_frontage && parseFloat(prop.asset_lot_frontage) > 0) {
@@ -3240,8 +3246,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             avgActualPrice[prop.new_vcs].push(prop.values_norm_time);
 
             // Collect lot size based on valuation mode
-            if (valuationMode === 'sf' && prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
-              avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_sf));
+            if (valuationMode === 'sf') {
+              if (prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
+                avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_sf));
+              } else if (prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
+                // Fallback: convert acres to SF (1 acre = 43,560 SF)
+                const lotSF = parseFloat(prop.market_manual_lot_acre) * 43560;
+                avgActualPriceLotSize[prop.new_vcs].push(lotSF);
+              }
             } else if (valuationMode === 'acre' && prop.market_manual_lot_acre && parseFloat(prop.market_manual_lot_acre) > 0) {
               avgActualPriceLotSize[prop.new_vcs].push(parseFloat(prop.market_manual_lot_acre));
             } else if (valuationMode === 'ff' && prop.asset_lot_frontage && parseFloat(prop.asset_lot_frontage) > 0) {
@@ -6065,7 +6077,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
     const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
 
-    debug('���️ Building Lot Analysis Result:', {
+    debug('�����️ Building Lot Analysis Result:', {
       avg: buildingLot.avg,
       count: buildingLot.count,
       method: buildingLot.method,
