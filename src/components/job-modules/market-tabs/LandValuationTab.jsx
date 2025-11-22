@@ -3404,7 +3404,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
     debug('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
-    debug('������ Input validation:', {
+    debug('������� Input validation:', {
       hasTargetAllocation: !!targetAllocation,
       targetAllocationValue: targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
@@ -3524,12 +3524,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             land_zoning: salesWithLotData[0]?.asset_zoning
           });
 
-          console.log(`📊 VCS ${vcs} Lot Size Calculation (FF):`, {
-            totalRelevantSales: relevantSales.length,
-            salesWithLotData: salesWithLotData.length,
-            avgFrontage: Math.round(avgFrontage),
-            avgDepth: Math.round(avgDepth)
-          });
         } else {
           // Acre mode: use market_manual_lot_acre
           salesWithLotData = relevantSales.filter(p => p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0);
@@ -3540,17 +3534,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           avgSize = salesWithLotData.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / salesWithLotData.length;
           rawLandValue = calculateRawLandValue(avgSize, cascadeConfig.normal);
 
-          console.log(`📊 VCS ${vcs} Lot Size Calculation (Acre):`, {
-            totalRelevantSales: relevantSales.length,
-            salesWithLotData: salesWithLotData.length,
-            avgLotAcres: avgSize.toFixed(2),
-            sampleLotSizes: salesWithLotData.slice(0, 5).map(p => ({
-              block: p.property_block,
-              lot: p.property_lot,
-              market_manual_lot_acre: p.market_manual_lot_acre,
-              sales_price: p.sales_price
-            }))
-          });
         }
 
         siteValue = totalLandValue - rawLandValue;
