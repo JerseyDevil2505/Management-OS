@@ -3213,17 +3213,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       if (prop.values_norm_time > 0) {
         avgNormTime[prop.new_vcs].push(prop.values_norm_time);
 
-        // Debug logging for first few properties in problematic VCS
-        if ((prop.new_vcs === 'BLST' || prop.new_vcs === 'BRED') && avgNormTime[prop.new_vcs].length <= 3) {
-          console.log(`🔍 VCS ${prop.new_vcs} property ${prop.property_composite_key}:`, {
-            valuationMode,
-            market_manual_lot_sf: prop.market_manual_lot_sf,
-            market_manual_lot_acre: prop.market_manual_lot_acre,
-            values_norm_time: prop.values_norm_time,
-            parsed_sf: prop.market_manual_lot_sf ? parseFloat(prop.market_manual_lot_sf) : null
-          });
-        }
-
         // Collect lot size based on valuation mode
         if (valuationMode === 'sf') {
           if (prop.market_manual_lot_sf && parseFloat(prop.market_manual_lot_sf) > 0) {
@@ -3320,13 +3309,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       calculatedAvgPriceLotSize[vcs] = avgActualPriceLotSize[vcs].length > 0 ?
         (avgActualPriceLotSize[vcs].reduce((sum, v) => sum + v, 0) / avgActualPriceLotSize[vcs].length) : null;
 
-      // Debug: Log VCS with price data but missing lot sizes
-      if (avgNormTime[vcs].length > 0 && avgNormTimeLotSize[vcs].length === 0) {
-        console.warn(`⚠️ VCS ${vcs}: Has ${avgNormTime[vcs].length} time-normalized sales but 0 lot sizes in ${valuationMode} mode`);
-      }
-      if (avgActualPrice[vcs].length > 0 && avgActualPriceLotSize[vcs].length === 0) {
-        console.warn(`⚠️ VCS ${vcs}: Has ${avgActualPrice[vcs].length} recent sales but 0 lot sizes in ${valuationMode} mode`);
-      }
+      // Lot size collection complete for this VCS
 
     });
 
@@ -10147,17 +10130,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     typicalLot = vcsProps.length > 0 ?
                       Math.round(vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / vcsProps.length).toLocaleString() : '';
 
-                    if (index === 0) {
-                      console.log(`📏 VCS ${vcs} Typical Lot (SF mode):`, {
-                        propertiesWithData: vcsProps.length,
-                        typicalLotSF: typicalLot,
-                        sampleValues: vcsProps.slice(0, 3).map(p => ({
-                          block: p.property_block,
-                          lot: p.property_lot,
-                          market_manual_lot_sf: p.market_manual_lot_sf
-                        }))
-                      });
-                    }
                   } else {
                     // Acre or Front Foot mode: use market_manual_lot_acre from property_market_analysis
                     vcsProps = properties?.filter(p =>
@@ -10167,17 +10139,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     typicalLot = vcsProps.length > 0 ?
                       (vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / vcsProps.length).toFixed(2) : '';
 
-                    if (index === 0) {
-                      console.log(`📏 VCS ${vcs} Typical Lot (${valuationMode} mode):`, {
-                        propertiesWithData: vcsProps.length,
-                        typicalLotAcres: typicalLot,
-                        sampleValues: vcsProps.slice(0, 3).map(p => ({
-                          block: p.property_block,
-                          lot: p.property_lot,
-                          market_manual_lot_acre: p.market_manual_lot_acre
-                        }))
-                      });
-                    }
                   }
 
                   // Calculate typical frontage and depth for Front Foot mode
