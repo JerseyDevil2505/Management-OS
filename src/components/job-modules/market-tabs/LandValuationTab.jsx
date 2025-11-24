@@ -2719,7 +2719,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           return true;
         }
 
-        console.log(`⚠����� Excluding uncategorized sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
+        console.log(`⚠������� Excluding uncategorized sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
         return false;
       }
 
@@ -3708,7 +3708,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const updateManualSiteValue = (vcs, value) => {
-    debug(`🔧 Updating manual site value for VCS ${vcs}:`, value);
+    debug(`���� Updating manual site value for VCS ${vcs}:`, value);
     setVcsManualSiteValues(prev => ({
       ...prev,
       // Fix: Use nullish coalescing - allow 0 values, only null for empty strings
@@ -4356,7 +4356,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 // Also clear sessionStorage to ensure complete cleanup
           try {
             sessionStorage.removeItem('landValuation_' + jobData.id + '_session');
-            debug('����� Cleared session storage after successful save');
+            debug('������ Cleared session storage after successful save');
           } catch (err) {
             console.warn('Failed to clear sessionStorage:', err);
           }
@@ -4457,11 +4457,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       headers.push('Stepdown (SF)');
     }
 
-    headers.push('Rec Site Value', 'Act Site Value', 'Raw Land', 'Allocation Target');
+    // Raw Land column comes after stepdown
+    headers.push('Raw Land');
 
-    // Dynamic cascade headers
+    headers.push('Rec Site Value', 'Act Site Value', 'Allocation Target');
+
+    // Dynamic cascade headers - respect the selected method
     if (valuationMode === 'ff') {
       headers.push('Standard Rate ($/FF)', 'Excess Rate ($/FF)');
+    } else if (valuationMode === 'sf') {
+      headers.push('Standard Rate ($/SF)', 'Excess Rate ($/SF)');
     } else {
       headers.push('Prime Rate ($/Acre)', 'Secondary Rate ($/Acre)', 'Excess Rate ($/Acre)');
       if (shouldShowResidualColumn) {
@@ -4606,8 +4611,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         row.push(''); // Empty for non-residential
       }
 
-      row.push(recSiteFmt, actSiteFmt);
-
       // Calculate Raw Land for export-only column
       let rawLandValue = 0;
       if (isResidential && typicalLot) {
@@ -4678,20 +4681,30 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
       }
 
-      // Calculate Allocation Target percentage (export-only formula)
-      // Allocation Target % = Act Site Value / (Act Site Value + Raw Land) * 100
-      const allocationTargetPct = (actSite && rawLandValue) ?
-        ((actSite / (actSite + rawLandValue)) * 100).toFixed(1) + '%' : '';
-
       // Format Raw Land for display
       const rawLandFmt = rawLandValue > 0 ? `$${Math.round(rawLandValue).toLocaleString()}` : '';
 
-      // Add Raw Land and Allocation Target to row
-      row.push(rawLandFmt, allocationTargetPct);
+      // Add Raw Land column (comes after stepdown)
+      row.push(rawLandFmt);
 
-      // Add cascade rates (formatted as currency where applicable)
+      // Add Rec Site and Act Site
+      row.push(recSiteFmt, actSiteFmt);
+
+      // Get Allocation Target from user-set value (not calculated)
+      const allocationTargetDisplay = targetAllocation != null ?
+        `${Number(targetAllocation).toFixed(1)}%` : '';
+
+      // Add Allocation Target to row
+      row.push(allocationTargetDisplay);
+
+      // Add cascade rates - match the selected method
       if (isResidential) {
         if (valuationMode === 'ff') {
+          row.push(
+            cascadeRates.standard?.rate != null ? `$${Math.round(cascadeRates.standard.rate).toLocaleString()}` : '',
+            cascadeRates.excess?.rate != null ? `$${Math.round(cascadeRates.excess.rate).toLocaleString()}` : ''
+          );
+        } else if (valuationMode === 'sf') {
           row.push(
             cascadeRates.standard?.rate != null ? `$${Math.round(cascadeRates.standard.rate).toLocaleString()}` : '',
             cascadeRates.excess?.rate != null ? `$${Math.round(cascadeRates.excess.rate).toLocaleString()}` : ''
@@ -4709,6 +4722,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       } else {
         // Empty cells for non-residential
         if (valuationMode === 'ff') {
+          row.push('', '');
+        } else if (valuationMode === 'sf') {
           row.push('', '');
         } else {
           row.push('', '', '');
