@@ -4457,7 +4457,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       headers.push('Stepdown (SF)');
     }
 
-    headers.push('Rec Site Value', 'Act Site Value');
+    headers.push('Rec Site Value', 'Act Site Value', 'Raw Land', 'Allocation Target');
 
     // Dynamic cascade headers
     if (valuationMode === 'ff') {
@@ -9127,7 +9127,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'block' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '↑' : '���') : ''}
+                      Block {modalSortField === 'block' ? (modalSortDirection === 'asc' ? '���' : '���') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('lot')}
