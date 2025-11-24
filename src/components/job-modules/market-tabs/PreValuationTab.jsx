@@ -904,6 +904,7 @@ useEffect(() => {
             property_composite_key,
             property_location,
             property_m4_class,
+            property_vcs,
             asset_lot_frontage,
             asset_lot_depth
           `)
@@ -946,7 +947,7 @@ useEffect(() => {
       while (hasMore) {
         const { data: batch, error: lotError } = await supabase
           .from('property_market_analysis')
-          .select('property_composite_key, market_manual_lot_acre, market_manual_lot_sf')
+          .select('property_composite_key, market_manual_lot_acre, market_manual_lot_sf, new_vcs')
           .eq('job_id', jobData.id)
           .range(offset, offset + BATCH_SIZE - 1);
 
@@ -969,7 +970,8 @@ useEffect(() => {
         lotSizeData.forEach(item => {
           lotSizeMap.set(item.property_composite_key, {
             acre: item.market_manual_lot_acre,
-            sf: item.market_manual_lot_sf
+            sf: item.market_manual_lot_sf,
+            new_vcs: item.new_vcs
           });
         });
       }
@@ -981,6 +983,7 @@ useEffect(() => {
         'Qualifier',
         'Card',
         'Property Class',
+        'VCS',
         'Location',
         'Total Front Foot',
         'Avg Depth',
@@ -992,12 +995,16 @@ useEffect(() => {
         const parsed = parseCompositeKey(prop.property_composite_key);
         const lotData = lotSizeMap.get(prop.property_composite_key) || {};
 
+        // Use new_vcs if available, otherwise fall back to property_vcs
+        const vcs = lotData.new_vcs || prop.property_vcs || '';
+
         return [
           parsed.block || '',
           parsed.lot || '',
           parsed.qualifier || '',
           parsed.card || '',
           prop.property_m4_class || '',
+          vcs,
           prop.property_location || '',
           prop.asset_lot_frontage || '',
           prop.asset_lot_depth || '',
