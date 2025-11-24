@@ -3329,7 +3329,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     setVcsZoningData(formattedZoning);
 
     // Calculate recommended site values for VCS Sheet
-    console.log('📊 Calling calculateVCSRecommendedSites with:', {
+    console.log('��� Calling calculateVCSRecommendedSites with:', {
       sampleVCS: Object.keys(calculatedAvgNormTime).slice(0, 5),
       vcs3658: calculatedAvgNormTime['3658'],
       vcs3658Counts: counts['3658']
@@ -7227,7 +7227,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales ����� Avg $${Math.round(data.avgPrice).toLocaleString()} ��������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales ����� Avg $${Math.round(data.avgPrice).toLocaleString()} ����������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{
@@ -10053,41 +10053,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Type</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Description</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Method</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
-                    {valuationMode === 'ff' ? 'Typ Lot FF' : valuationMode === 'sf' ? 'Typ Lot (SF)' : 'Typ Lot (Acres)'}
-                  </th>
-                  {valuationMode === 'ff' && (
-                    <>
-                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Typ Lot Depth</th>
-                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Depth Table</th>
-                    </>
-                  )}
-                  {(valuationMode === 'ff' || valuationMode === 'sf') && (
-                    <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
-                      {valuationMode === 'ff' ? 'Stepdown (FF)' : 'Stepdown (SF)'}
-                    </th>
-                  )}
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Typ Lot</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Typ Lot Depth</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Depth Table</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Stepdown</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Rec Site</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Act Site</th>
-                  {valuationMode === 'ff' ? (
-                    <>
-                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Std FF</th>
-                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Exc FF</th>
-                    </>
-                  ) : valuationMode === 'sf' ? (
-                    <>
-                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Standard</th>
-                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Excess</th>
-                    </>
-                  ) : (
-                    <>
-                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Prime</th>
-                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Sec</th>
-                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Exc</th>
-                      {shouldShowResidualColumn && (
-                        <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Res</th>
-                      )}
-                    </>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Prime/Std</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Sec/Exc</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Exc</th>
+                  {shouldShowResidualColumn && (
+                    <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Res</th>
                   )}
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Wet</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>LLocked</th>
