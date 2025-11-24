@@ -5807,7 +5807,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Calculate average rate for checked items by category
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
-    debug('🔄 Recalculating category analysis');
+    debug('�� Recalculating category analysis');
     debug('����� Total vacant sales:', vacantSales.length);
     debug('���� Checked sales count:', checkedSales.length);
     // 🔍 COMPREHENSIVE FILTERING DEBUG - Shows exactly which sales go where
@@ -10357,64 +10357,70 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           (typicalLot || '') :
                           ''}
                       </td>
-                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
-                        {vcsMethod === 'ff' && typicalDepth !== '' ? `${typicalDepth} ft` : ''}
-                      </td>
-                      <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
-                        {vcsMethod === 'ff' && (
-                          <select
-                            value={vcsDepthTableOverrides[vcs] || depthTableName || ''}
-                            onChange={(e) => {
-                              const newDepthTable = e.target.value;
-                              setVcsDepthTableOverrides(prev => ({
-                                ...prev,
-                                [vcs]: newDepthTable
-                              }));
-                              setTimeout(() => {
-                                saveAnalysis();
-                              }, 100);
-                            }}
-                            style={{
-                              width: '100%',
-                              padding: '2px 4px',
-                              border: '1px solid #D1D5DB',
-                              borderRadius: '4px',
-                              fontSize: '11px',
-                              backgroundColor: vcsDepthTableOverrides[vcs] ? '#FEF3C7' : 'white'
-                            }}
-                            title={vcsDepthTableOverrides[vcs] ? 'VCS Override Active' : 'Using zoning default'}
-                          >
-                            <option value="">Auto (from zoning)</option>
-                            {Object.keys(depthTables).map(table => (
-                              <option key={table} value={table}>
-                                {table}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </td>
-                      <td style={{
-                        padding: '8px',
-                        textAlign: 'center',
-                        border: '1px solid #E5E7EB',
-                        backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit')
-                      }}>
-                        {!isGrayedOut && (vcsMethod === 'ff' || vcsMethod === 'sf') && cascadeRates.standard?.max ? (
-                          <span title={`Rate Source: ${rateSource}`}>
-                            {vcsMethod === 'ff' ? `${cascadeRates.standard.max} ft` : `${cascadeRates.standard.max.toLocaleString()} SF`}
-                            {rateSource !== 'Normal' && (
-                              <span style={{
-                                position: 'absolute',
-                                top: '2px',
-                                right: '2px',
-                                fontSize: '8px',
-                                color: '#92400E',
-                                fontWeight: 'bold'
-                              }}>*</span>
+                      {hasFFMethod && (
+                        <>
+                          <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
+                            {vcsMethod === 'ff' && typicalDepth !== '' ? `${typicalDepth} ft` : ''}
+                          </td>
+                          <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
+                            {vcsMethod === 'ff' && (
+                              <select
+                                value={vcsDepthTableOverrides[vcs] || depthTableName || ''}
+                                onChange={(e) => {
+                                  const newDepthTable = e.target.value;
+                                  setVcsDepthTableOverrides(prev => ({
+                                    ...prev,
+                                    [vcs]: newDepthTable
+                                  }));
+                                  setTimeout(() => {
+                                    saveAnalysis();
+                                  }, 100);
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '2px 4px',
+                                  border: '1px solid #D1D5DB',
+                                  borderRadius: '4px',
+                                  fontSize: '11px',
+                                  backgroundColor: vcsDepthTableOverrides[vcs] ? '#FEF3C7' : 'white'
+                                }}
+                                title={vcsDepthTableOverrides[vcs] ? 'VCS Override Active' : 'Using zoning default'}
+                              >
+                                <option value="">Auto (from zoning)</option>
+                                {Object.keys(depthTables).map(table => (
+                                  <option key={table} value={table}>
+                                    {table}
+                                  </option>
+                                ))}
+                              </select>
                             )}
-                          </span>
-                        ) : ''}
-                      </td>
+                          </td>
+                        </>
+                      )}
+                      {(hasFFMethod || hasSFMethod) && (
+                        <td style={{
+                          padding: '8px',
+                          textAlign: 'center',
+                          border: '1px solid #E5E7EB',
+                          backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit')
+                        }}>
+                          {!isGrayedOut && (vcsMethod === 'ff' || vcsMethod === 'sf') && cascadeRates.standard?.max ? (
+                            <span title={`Rate Source: ${rateSource}`}>
+                              {vcsMethod === 'ff' ? `${cascadeRates.standard.max} ft` : `${cascadeRates.standard.max.toLocaleString()} SF`}
+                              {rateSource !== 'Normal' && (
+                                <span style={{
+                                  position: 'absolute',
+                                  top: '2px',
+                                  right: '2px',
+                                  fontSize: '8px',
+                                  color: '#92400E',
+                                  fontWeight: 'bold'
+                                }}>*</span>
+                              )}
+                            </span>
+                          ) : ''}
+                        </td>
+                      )}
                       <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #E5E7EB' }}>${Math.round(recSite).toLocaleString()}</td>
                       <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
                         <input
