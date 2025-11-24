@@ -756,7 +756,7 @@ useEffect(() => {
 
   // Only set if we found a valid value AND current state is null/empty to prevent overwrites
   if (loadedTargetAllocation !== null) {
-    console.log('���� LOADED TARGET ALLOCATION:', loadedTargetAllocation);
+    console.log('����� LOADED TARGET ALLOCATION:', loadedTargetAllocation);
     // Ensure it's a number to prevent caching issues
     const numericValue = typeof loadedTargetAllocation === 'string' ?
       parseFloat(loadedTargetAllocation) : loadedTargetAllocation;
@@ -2659,7 +2659,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         return false;
       }
       if (cat.includes('landlocked')) {
-        console.log(`⚠�� Excluding Landlocked sale ${s.property_block}/${s.property_lot}`);
+        console.log(`����� Excluding Landlocked sale ${s.property_block}/${s.property_lot}`);
         return false;
       }
       if (cat.includes('wetland')) {
@@ -3317,8 +3317,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     setVcsPropertyCounts(counts);
     setVcsZoningData(formattedZoning);
-    
+
     // Calculate recommended site values for VCS Sheet
+    console.log('📊 Calling calculateVCSRecommendedSites with:', {
+      sampleVCS: Object.keys(calculatedAvgNormTime).slice(0, 5),
+      vcs3658: calculatedAvgNormTime['3658'],
+      vcs3658Counts: counts['3658']
+    });
     calculateVCSRecommendedSites(calculatedAvgNormTime, counts);
     
     // Store in vcsSheetData for display
@@ -8960,7 +8965,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   color: '#6B7280'
                 }}
               >
-                ×
+                ��
               </button>
             </div>
 
