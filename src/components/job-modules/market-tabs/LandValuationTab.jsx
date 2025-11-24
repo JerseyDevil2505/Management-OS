@@ -4784,7 +4784,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       colWidths.push({ wch: 15 }); // Stepdown
     }
 
-    colWidths.push({ wch: 15 }, { wch: 15 }); // Rec Site, Act Site
+    colWidths.push({ wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 18 }); // Rec Site, Act Site, Raw Land, Allocation Target
 
     // Add cascade rate column widths
     if (valuationMode === 'ff') {
@@ -4814,19 +4814,62 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     worksheet['!cols'] = colWidths;
 
-    // Header styling for VCS Sheet
+    // Professional formatting with CME bracket colors and gridlines
     try {
-      const headerCols = headers.length;
-      for (let c = 0; c < headerCols; c++) {
-        const ref = XLSX.utils.encode_cell({ r: 0, c });
-        if (worksheet[ref]) {
-          worksheet[ref].s = worksheet[ref].s || {};
-          worksheet[ref].s.font = { ...(worksheet[ref].s.font || {}), bold: true };
-          worksheet[ref].s.alignment = { horizontal: 'center' };
+      const numRows = data.length;
+      const numCols = headers.length;
+
+      // Find CME Bracket column index
+      const cmeBracketColIndex = headers.indexOf('CME Bracket');
+
+      // Style all cells with gridlines and formatting
+      for (let r = 0; r < numRows; r++) {
+        for (let c = 0; c < numCols; c++) {
+          const cellRef = XLSX.utils.encode_cell({ r, c });
+          if (!worksheet[cellRef]) continue;
+
+          // Initialize style object
+          if (!worksheet[cellRef].s) worksheet[cellRef].s = {};
+
+          // Header row (row 0) - Bold, centered, with dark background
+          if (r === 0) {
+            worksheet[cellRef].s.font = { bold: true, sz: 11, name: 'Calibri' };
+            worksheet[cellRef].s.alignment = { horizontal: 'center', vertical: 'center', wrapText: true };
+            worksheet[cellRef].s.fill = { fgColor: { rgb: '4472C4' } }; // Professional blue
+            worksheet[cellRef].s.font.color = { rgb: 'FFFFFF' }; // White text
+          } else {
+            // Data rows - Regular font with CME bracket coloring
+            worksheet[cellRef].s.font = { sz: 10, name: 'Calibri' };
+            worksheet[cellRef].s.alignment = { vertical: 'center' };
+
+            // Get CME bracket for this row to apply color
+            if (cmeBracketColIndex >= 0 && data[r] && data[r][cmeBracketColIndex]) {
+              const cmeBracketLabel = data[r][cmeBracketColIndex];
+              const cmeBracket = CME_BRACKETS.find(b => b.label === cmeBracketLabel);
+
+              if (cmeBracket && cmeBracket.color) {
+                // Remove # from hex color for xlsx-js-style format
+                const bgColor = cmeBracket.color.replace('#', '');
+                worksheet[cellRef].s.fill = { fgColor: { rgb: bgColor } };
+
+                // Set text color to black for readability
+                worksheet[cellRef].s.font.color = { rgb: '000000' };
+              }
+            }
+          }
+
+          // Add gridlines (borders) to all cells
+          worksheet[cellRef].s.border = {
+            top: { style: 'thin', color: { rgb: '000000' } },
+            bottom: { style: 'thin', color: { rgb: '000000' } },
+            left: { style: 'thin', color: { rgb: '000000' } },
+            right: { style: 'thin', color: { rgb: '000000' } }
+          };
         }
       }
     } catch (e) {
-      debug('VCS header styling skipped', e);
+      console.error('VCS Sheet formatting error:', e);
+      debug('VCS Sheet formatting skipped', e);
     }
 
     // Add worksheet to workbook
