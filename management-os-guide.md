@@ -1168,58 +1168,72 @@ LEFT JOIN employees e ON ja.employee_id = e.id;
 
 ## 🔄 Latest Session Summary (January 2025)
 
-### ✅ Completed: Overall Analysis Tab - Excel Export Refinement
+### ✅ Completed: Land Valuation Excel Exports - Advanced Formatting & Formulas
 
-**Context:** Comprehensive export functionality built for all sections in Overall Analysis tab with advanced formula support, proper formatting, and performance optimizations.
+**Context:** Comprehensive Excel export functionality built for Land Valuation tab with advanced formula support, smart coloring, professional formatting, and sophisticated summary sections across multiple worksheets.
 
 **Key Accomplishments:**
 
-1. **Excel Export Enhancements**:
-   - ✅ Delta formulas with proper percentage formatting (`z: '0%'`)
-   - ✅ Special character removal (em-dashes, diamond question marks)
-   - ✅ Column restructuring (VCS in separate column for condo analyses)
-   - ✅ Correct baseline identification per VCS/section
-   - ✅ Formula-based calculations throughout (Adj Price, Delta columns)
+1. **Method 2 (Implied Acreage) Export Enhancements**:
+   - ✅ **SFLA-based adjustment formulas**: `((VCS_AVG_SFLA - CURRENT_SFLA) * ((CURRENT_PRICE / CURRENT_SFLA) * 0.5)) + CURRENT_PRICE`
+   - ✅ **Smart coloring**: Negative deltas = red background, positive deltas = green background (only for rows with calculations)
+   - ✅ **Per Acre formatting**: Changed from decimals to whole numbers (`$#,##0` instead of `$#,##0.00`)
+   - ✅ **Dynamic formulas**: `$ ADJUSTED`, `$ DELTA`, `$ PER ACRE`, `PER SQ FT` all calculate in Excel
+   - ✅ **Enhanced summary section**: Shows bracket ranges with Per Acre, Avg Lot Size (acres), and Per Sq Ft across all brackets
+   - ✅ **All Positive Deltas Average**: Aggregates across medium, large, and xlarge brackets with all three metrics
+   - ✅ **Column widths**: VCS column widened from 10 to 20 characters to prevent truncation
 
-2. **Performance Optimizations**:
-   - ✅ Resolved infinite loop issue with pre-computed baseline lookups
-   - ✅ Replaced O(n²) nested loops with O(1) hash map lookups
-   - ✅ Added safety guards (row/column limits, null checks)
-   - ✅ Extensive console logging for debugging
-   - ✅ Export completes in <5 seconds for large datasets
+2. **Economic Obsolescence Export Enhancements**:
+   - ✅ **Professional formatting**: Leelawadee font, size 10, centered alignment throughout
+   - ✅ **No header gridlines**: Clean header styling without borders
+   - ✅ **Average SFLA formulas**: Simplified to use average of E (With Living Area) and H (Without Living Area)
+   - ✅ **Adjusted Sale formulas**: `Sale Price + (((Avg SFLA - Current SFLA) * (Price/SFLA) * 0.5))`
+   - ✅ **Dollar Impact formula**: `Adjusted Sale With - Adjusted Sale Without`
+   - ✅ **Color-coded actions**: Applied+ column = green font, Applied- column = red font
+   - ✅ **Location Summary section**: Aggregates repeated locations across all VCS codes
+     - Shows: Location, Sum Adj With, Sum Adj Without, Dollar Impact, Percent Impact
+     - Appears underneath main data in Column B
+     - Only includes locations appearing in 2+ VCS codes
+   - ✅ **Column width optimization**: Column B widened to 40 characters for long location descriptions
 
-3. **Section-Specific Fixes**:
-   - **Condo Bedroom**: Filters "Unknown" types, baseline = lowest bed count per VCS
-   - **Condo End-Interior**: Separate VCS column structure
-   - **Condo Floor**: Baseline = "1ST FLOOR" per VCS
-   - **Condo Design**: Delta compares against Avg Sale Price (not baseline)
-   - **Type & Use**: Proper formula structure and baseline handling
+3. **Export All Integration**:
+   - ✅ **Verified complete integration**: "Export All" button combines all worksheets into single workbook
+   - ✅ **Includes all formatting**: All font styles, colors, formulas, and column widths preserved
+   - ✅ **Multiple sheets**: VCS Sheet, Land Rates (Vacant Sales + Method 2), Allocation Study, Economic Obsolescence
+
+4. **Technical Implementation Details**:
+   - Used `xlsx-js-style` library for advanced formatting
+   - Formula-based calculations avoid hardcoded values
+   - Worksheet range updated dynamically to include summary sections
+   - Color coding uses RGB values (`D4EDDA` for green, `F8D7DA` for red, `008000` for green font, `FF0000` for red font)
+   - All styling uses consistent Leelawadee font family at 10pt
 
 **Files Modified:**
-- `src/components/job-modules/market-tabs/OverallAnalysisTab.jsx` (~2,900 lines)
+- `src/components/job-modules/market-tabs/LandValuationTab.jsx` (~12,000 lines)
 
-**Status:** ✅ **COMPLETE** - All export functionality working correctly with formulas, formatting, and performance optimizations in place.
+**Status:** ✅ **COMPLETE** - All Land Valuation export functionality working with formulas, formatting, coloring, and summary sections. Export All respects all changes.
 
 ---
 
-### 📋 Next Session: Land & Cost Valuation Excel Exports
+### 📋 Next Session: Cost Valuation Excel Exports
 
-**Pending Work:**
-1. **LandValuationTab.jsx** (~10,000 lines) - Add Excel export functionality
-   - 7 major sections: VCS Sheet, Rate Tables, Allocation Study, Vacant Sales, etc.
-   - Multiple worksheets per export (one per section or combined)
-2. **CostValuationTab.jsx** (~800 lines) - Add Excel export functionality
-   - New construction analysis
-   - CCF (Comparative Construction Factor) tables
+**Remaining Work:**
+1. **CostValuationTab.jsx** (~800 lines) - Final export component to verify/enhance
+   - New construction analysis export
+   - CCF (Comparative Construction Factor) tables export
+   - Apply same formatting standards (Leelawadee, size 10, centered)
+   - Add formulas where applicable
+   - Ensure integration with "Export All" button
 
-**Approach:** Follow the pattern established in OverallAnalysisTab:
-- Use `xlsx-js-style` library
-- Create formatted worksheets with proper styling
-- Apply formulas where calculations can be represented
-- Include proper headers, column widths, and cell formatting
-- Pre-compute lookups to avoid performance issues
+**Approach:** Follow the established pattern:
+- Use `xlsx-js-style` library for consistent formatting
+- Leelawadee font, size 10, centered alignment
+- Remove header gridlines for clean look
+- Apply formulas for calculations
+- Smart column widths to prevent truncation
+- Color coding for visual clarity (if applicable)
 
-**Note:** LandValuationTab is THE BEAST (~10,000 lines). Consider breaking exports into separate worksheets within the same workbook for better organization.
+**Status:** Ready for PR after Cost Valuation export verification/enhancement.
 
 ---
 
@@ -1877,7 +1891,7 @@ Each component receives:
 │ Loading property records                     75% │
 │ ███████████���████████████░░��░░░░░  12,450/16,600 │
 │ records loaded (assigned only)                   │
-└─────────────────────────────────────────────────┘
+└─────────────────────────────────────��───────────┘
 ```
 
 **Assignment Filtering Logic:**
@@ -2587,7 +2601,7 @@ Formula: (((Group Avg Size - Sale Size) × ((Sale Price ÷ Sale Size) × 0.50)) 
 │ Flagged Outliers: 142                       │
 │ Pending Review: 42                          │
 │ Kept: 89 | Rejected: 11                     │
-└─────────────────────────────────────────────┘
+└───���─────────────────────────────────────────┘
 ```
 
 **Page by Page Worksheet Component:**
@@ -3548,7 +3562,7 @@ The component displays a detailed analysis table with the following columns:
 
 **Grid Display:**
 ```
-┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+┌─────────────────────────────────────────────���──────────────────────────────────────────────────┐
 │ ☑ │ Block │ Lot │ Qual │ Card │ Sale Date │ Price    │ Year │ Class │ SFLA  │ Land   │ CCF   │
 ├─────────────────────────────────────────────────────────────────────────────────────────���──────┤
 │ ☑ │ 123   │ 45  │      │ 1    │ 03/15/24  │ $285,000 │ 2020 │ C+3   │ 1,850 │ $45,000│ 1.15  │
@@ -3650,7 +3664,7 @@ The component displays a detailed analysis table with the following columns:
 │                                         │
 │ Properties in range: 45                 │
 │ Newer construction (≤20 yrs): 42        │
-└─────────────────────────────────────────┘
+└──────────────���──────────────────────────┘
 ```
 
 **Auto-Save:**
@@ -3802,7 +3816,7 @@ Recommended Factor: 1.12 (median)
 │ Recommended CCF (Median): 1.12                              │
 │ Custom CCF Applied:       1.15                              │
 │ State County CCF:         1.10                              │
-└─────────────────────────────────────────────────────────────┘
+└─────────────────────────��───────────────────────────────────┘
 ```
 
 **Statistics Explained:**
@@ -3947,7 +3961,7 @@ const isComplete =
 
 **Checklist Display:**
 ```
-☑ 24. Cost Conversion Factor Set ✓
+��� 24. Cost Conversion Factor Set ✓
      Completed: 2024-01-15 14:30
      By: Jim Smith
      Client Approved: Yes (2024-01-16)
@@ -4118,7 +4132,7 @@ Purpose:
 ```
 ┌─────────────────────────────���────────────────────────────────────────────────┐
 │ Condition │ Count │ Avg SFLA │ Avg Year │ Avg Value  │ Flat Adj  │ % Adj    │
-├─────────────────────────────��─────────────────────────────��──────────────────┤
+├���────────────────────────────��─────────────────────────────��──────────────────┤
 │ EXCELLENT │   89  │  1,920   │   1992   │ $325,000   │ +$34,075  │ +11.95%  │
 │ GOOD ⭐   │  234  │  1,850   │   1985   │ $285,000   │ BASELINE  │ BASELINE │
 │ AVERAGE   │  156  │  1,830   │   1978   │ $255,000   │ -$30,000  │ -10.53%  │
@@ -4181,7 +4195,7 @@ Run Analysis button triggers:
 ```
 ┌──────────────────��──────────────────────────────────────────────────┐
 │ Attribute: POOL = "Y"                                               │
-├─────────────────────────────────────────────────────────────────────┤
+├───��─────────────────────────────────────────────────────────────────┤
 │ WITH Pool (89 properties):                                          │
 │   ├── Average SFLA: 2,100 SF                                        │
 │   ├── Average Year Built: 1995                                      │
@@ -4196,7 +4210,7 @@ Run Analysis button triggers:
 │   ├��─ Flat Adjustment: +$35,250                                     │
 │   ├── Percentage: +12.37%                                           │
 │   └── (Size-adjusted using 50% method)                              │
-└─────────────────────────────────────────────────────────────────────┘
+└─��───────────────────────────────────────────────────────────────────┘
 ```
 
 **Supported Field Types:**
@@ -4850,7 +4864,7 @@ console.log('Calculation breakdown:', {
 
 **2. No Matching Data Found:**
 ```
-┌────────────────────────────��────────────────┐
+┌──────────��─────────────────��────────────────┐
 │   🔍 Custom Attribute Analysis              │
 │                                             │
 │   Field: POOL                               │

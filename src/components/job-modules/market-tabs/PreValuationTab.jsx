@@ -904,6 +904,7 @@ useEffect(() => {
             property_composite_key,
             property_location,
             property_m4_class,
+            property_vcs,
             asset_lot_frontage,
             asset_lot_depth
           `)
@@ -946,7 +947,7 @@ useEffect(() => {
       while (hasMore) {
         const { data: batch, error: lotError } = await supabase
           .from('property_market_analysis')
-          .select('property_composite_key, market_manual_lot_acre, market_manual_lot_sf')
+          .select('property_composite_key, market_manual_lot_acre, market_manual_lot_sf, new_vcs')
           .eq('job_id', jobData.id)
           .range(offset, offset + BATCH_SIZE - 1);
 
@@ -969,7 +970,8 @@ useEffect(() => {
         lotSizeData.forEach(item => {
           lotSizeMap.set(item.property_composite_key, {
             acre: item.market_manual_lot_acre,
-            sf: item.market_manual_lot_sf
+            sf: item.market_manual_lot_sf,
+            new_vcs: item.new_vcs
           });
         });
       }
@@ -981,6 +983,7 @@ useEffect(() => {
         'Qualifier',
         'Card',
         'Property Class',
+        'VCS',
         'Location',
         'Total Front Foot',
         'Avg Depth',
@@ -992,12 +995,16 @@ useEffect(() => {
         const parsed = parseCompositeKey(prop.property_composite_key);
         const lotData = lotSizeMap.get(prop.property_composite_key) || {};
 
+        // Use new_vcs if available, otherwise fall back to property_vcs
+        const vcs = lotData.new_vcs || prop.property_vcs || '';
+
         return [
           parsed.block || '',
           parsed.lot || '',
           parsed.qualifier || '',
           parsed.card || '',
           prop.property_m4_class || '',
+          vcs,
           prop.property_location || '',
           prop.asset_lot_frontage || '',
           prop.asset_lot_depth || '',
@@ -1036,20 +1043,20 @@ useEffect(() => {
             ws[cellAddress].s = { ...baseStyle };
 
             // Apply specific formatting based on column
-            // Column G (Total Front Foot) - no decimals
-            if (C === 6) {
+            // Column H (Total Front Foot) - no decimals
+            if (C === 7) {
               ws[cellAddress].s.numFmt = '#,##0';
             }
-            // Column H (Avg Depth) - no decimals
-            else if (C === 7) {
-              ws[cellAddress].s.numFmt = '#,##0';
-            }
-            // Column I (Lot Size Acre) - max 2 decimals
+            // Column I (Avg Depth) - no decimals
             else if (C === 8) {
+              ws[cellAddress].s.numFmt = '#,##0';
+            }
+            // Column J (Lot Size Acre) - max 2 decimals
+            else if (C === 9) {
               ws[cellAddress].s.numFmt = '0.00';
             }
-            // Column J (Lot Size SF) - no decimals with comma
-            else if (C === 9) {
+            // Column K (Lot Size SF) - no decimals with comma
+            else if (C === 10) {
               ws[cellAddress].s.numFmt = '#,##0';
             }
           }
@@ -1063,6 +1070,7 @@ useEffect(() => {
         { wch: 12 },  // Qualifier
         { wch: 8 },   // Card
         { wch: 12 },  // Property Class
+        { wch: 8 },   // VCS
         { wch: 30 },  // Location
         { wch: 15 },  // Total Front Foot
         { wch: 12 },  // Avg Depth
@@ -3648,7 +3656,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('package')}
                             >
-                              Package {normSortConfig.field === 'package' && (normSortConfig.direction === 'asc' ? '��' : '��')}
+                              Package {normSortConfig.field === 'package' && (normSortConfig.direction === 'asc' ? '��' : '���')}
                             </th>
                             <th 
                               className="px-4 py-3 text-right text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
