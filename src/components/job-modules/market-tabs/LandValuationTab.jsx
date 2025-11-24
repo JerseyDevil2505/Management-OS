@@ -4320,7 +4320,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     cascadeConfig, bracketAnalysis, method2Summary, method2ExcludedSales,
     targetAllocation, vcsSiteValues, actualAllocations, currentOverallAllocation,
     vcsPropertyCounts, vcsZoningData, vcsSheetData, vcsManualSiteValues,
-    vcsDescriptions, vcsTypes, vcsRecommendedSites, ecoObsFactors,
+    vcsDescriptions, vcsTypes, vcsRecommendedSites, vcsMethodOverrides, ecoObsFactors,
     mappedLocationCodes, trafficLevels, customLocationCodes, summaryInputs,
     actualAdjustments, computedAdjustments, calculateRates, calculateAllocationStats,
     onAnalysisUpdate, updateSessionState
@@ -5757,7 +5757,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   };
 
   const updateSpecialCategory = (category, rate) => {
-    debug(`������ Updating special category: ${category} = ${rate}`);
+    debug(`������� Updating special category: ${category} = ${rate}`);
     setCascadeConfig(prev => {
       const newConfig = {
         ...prev,
@@ -7304,7 +7304,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       </div>
                     </div>
                     <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
-                      ���
+                      ����
                     </span>
                   </div>
 
