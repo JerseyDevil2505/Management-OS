@@ -5922,7 +5922,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     debug('���� Included sales IDs:', Array.from(includedSales));
     debug('�� Sale categories state:', saleCategories);
-    debug('������ Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
+    debug('�������� Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
     debug('��� Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
 
     // Helper function to calculate average for a category
@@ -10498,24 +10498,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       {(hasFFMethod || hasSFMethod) && (
                         <td style={{
                           padding: '8px',
-                          textAlign: 'center',
                           border: '1px solid #E5E7EB',
-                          backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit')
+                          backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit'
                         }}>
-                          {!isGrayedOut && (vcsMethod === 'ff' || vcsMethod === 'sf') && cascadeRates.standard?.max ? (
-                            <span title={`Rate Source: ${rateSource}`}>
-                              {vcsMethod === 'ff' ? `${cascadeRates.standard.max} ft` : `${cascadeRates.standard.max.toLocaleString()} SF`}
-                              {rateSource !== 'Normal' && (
-                                <span style={{
-                                  position: 'absolute',
-                                  top: '2px',
-                                  right: '2px',
-                                  fontSize: '8px',
-                                  color: '#92400E',
-                                  fontWeight: 'bold'
-                                }}>*</span>
-                              )}
-                            </span>
+                          {!isGrayedOut && (vcsMethod === 'ff' || vcsMethod === 'sf') ? (
+                            <input
+                              type="number"
+                              value={vcsStepdownOverrides[vcs] ?? cascadeRates.standard?.max ?? ''}
+                              onChange={(e) => updateVCSStepdown(vcs, e.target.value)}
+                              style={{
+                                width: '70px',
+                                padding: '2px',
+                                border: '1px solid #D1D5DB',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                textAlign: 'right'
+                              }}
+                              placeholder={cascadeRates.standard?.max || ''}
+                            />
                           ) : ''}
                         </td>
                       )}
