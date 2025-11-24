@@ -1049,6 +1049,49 @@ const getPricePerUnit = useCallback((price, size) => {
     return standard;
   }, [properties]);
 
+  // ========== GET EFFECTIVE CASCADE RATES FOR VCS ==========
+  // Get effective cascade rates for a VCS (including user overrides)
+  const getVCSCascadeRates = useCallback((vcs, baseCascadeRates) => {
+    const rates = JSON.parse(JSON.stringify(baseCascadeRates)); // Deep clone
+
+    // Apply VCS-specific rate overrides
+    if (vcsRateOverrides[vcs]) {
+      const overrides = vcsRateOverrides[vcs];
+      if (overrides.standard !== undefined && overrides.standard !== null) {
+        if (!rates.standard) rates.standard = {};
+        rates.standard.rate = overrides.standard;
+      }
+      if (overrides.excess !== undefined && overrides.excess !== null) {
+        if (!rates.excess) rates.excess = {};
+        rates.excess.rate = overrides.excess;
+      }
+      if (overrides.prime !== undefined && overrides.prime !== null) {
+        if (!rates.prime) rates.prime = {};
+        rates.prime.rate = overrides.prime;
+      }
+      if (overrides.secondary !== undefined && overrides.secondary !== null) {
+        if (!rates.secondary) rates.secondary = {};
+        rates.secondary.rate = overrides.secondary;
+      }
+      if (overrides.residual !== undefined && overrides.residual !== null) {
+        if (!rates.residual) rates.residual = {};
+        rates.residual.rate = overrides.residual;
+      }
+    }
+
+    // Apply VCS-specific stepdown/max override
+    if (vcsStepdownOverrides[vcs] !== undefined && vcsStepdownOverrides[vcs] !== null) {
+      if (rates.standard) {
+        rates.standard.max = vcsStepdownOverrides[vcs];
+      }
+      if (rates.prime) {
+        rates.prime.max = vcsStepdownOverrides[vcs];
+      }
+    }
+
+    return rates;
+  }, [vcsRateOverrides, vcsStepdownOverrides]);
+
   // ========== GET VCS DESCRIPTION HELPER ==========
   const getVCSDescription = useCallback((vcsCode) => {
     // First check manual descriptions
