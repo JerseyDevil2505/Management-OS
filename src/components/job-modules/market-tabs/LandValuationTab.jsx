@@ -7,7 +7,7 @@ import {
   Home
 } from 'lucide-react';
 import { supabase, interpretCodes, checklistService, getDepthFactor, getDepthFactors } from '../../../lib/supabaseClient';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import './LandValuationTab.css';
 import './sharedTabNav.css';
 
@@ -3428,7 +3428,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     if (!targetAllocation || !cascadeConfig.normal.prime) {
-      console.warn('⚠️ Skipping Rec Site calculation - missing:', {
+      console.warn('���️ Skipping Rec Site calculation - missing:', {
         targetAllocation,
         hasCascadePrime: !!cascadeConfig.normal.prime
       });
