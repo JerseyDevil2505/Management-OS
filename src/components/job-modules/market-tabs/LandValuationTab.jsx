@@ -828,6 +828,14 @@ useEffect(() => {
       setVcsMethodOverrides(marketLandData.worksheet_data.method_overrides);
       debug('✅ Loaded VCS method overrides:', marketLandData.worksheet_data.method_overrides);
     }
+    if (marketLandData.worksheet_data.rate_overrides) {
+      setVcsRateOverrides(marketLandData.worksheet_data.rate_overrides);
+      debug('✅ Loaded VCS rate overrides:', marketLandData.worksheet_data.rate_overrides);
+    }
+    if (marketLandData.worksheet_data.stepdown_overrides) {
+      setVcsStepdownOverrides(marketLandData.worksheet_data.stepdown_overrides);
+      debug('✅ Loaded VCS stepdown overrides:', marketLandData.worksheet_data.stepdown_overrides);
+    }
   }
 
   // Load economic obsolescence data from new schema fields
@@ -2673,7 +2681,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // EXCLUDE: Raw Land, Landlocked, Wetlands
       if (cat.includes('raw') && cat.includes('land')) {
-        console.log(`⚠️ Excluding Raw Land sale ${s.property_block}/${s.property_lot}`);
+        console.log(`���️ Excluding Raw Land sale ${s.property_block}/${s.property_lot}`);
         return false;
       }
       if (cat.includes('landlocked')) {
