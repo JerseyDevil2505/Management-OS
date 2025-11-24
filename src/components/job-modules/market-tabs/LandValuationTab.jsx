@@ -5403,9 +5403,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // recreate ws1 to include summary formatting
     const ws1b = XLSX.utils.aoa_to_sheet(salesRows);
+    // Format Vacant Sales sheet: Leelawadee size 10, bold headers, centered
     for (let c = 0; c < salesCols; c++) {
       const ref = XLSX.utils.encode_cell({ r: 0, c });
-      if (ws1b[ref]) ws1b[ref].s = { font: { bold: true }, alignment: { horizontal: 'center' } };
+      if (ws1b[ref]) {
+        ws1b[ref].s = {
+          font: { bold: true, sz: 10, name: 'Leelawadee' },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      }
     }
     ws1b['!cols'] = ws1['!cols'];
     XLSX.utils.book_append_sheet(wb, ws1b, 'Vacant Sales');
@@ -5656,7 +5662,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       { wch: 12 }  // PER SQ FT
     ];
 
-    // Apply bold + centered styling to header-like cells (detect by label)
+    // Apply Leelawadee size 10, bold headers, centered formatting to Method 2 sheet
     const headerLabels = ['Bracket','Count','Avg Lot Size (acres)','Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','ADJUSTED','$ ADJUSTED','DELTA','$ DELTA','LOT DELTA','PER ACRE','$ PER ACRE','PER SQ FT','Method 2 Summary'];
     try {
       const range = XLSX.utils.decode_range(ws2['!ref']);
@@ -5664,19 +5670,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         for (let C = range.s.c; C <= range.e.c; ++C) {
           const ref = XLSX.utils.encode_cell({ r: R, c: C });
           const cell = ws2[ref];
-          if (!cell || typeof cell.v !== 'string') continue;
-          if (headerLabels.includes(cell.v) || headerLabels.some(lbl => cell.v.startsWith(lbl))) {
-            cell.s = cell.s || {};
-            cell.s.font = { ...(cell.s.font || {}), bold: true };
-            cell.s.alignment = { horizontal: 'center' };
+          if (!cell) continue;
+
+          // All cells get Leelawadee size 10 and centered
+          cell.s = cell.s || {};
+          cell.s.font = { sz: 10, name: 'Leelawadee' };
+          cell.s.alignment = { horizontal: 'center', vertical: 'center' };
+
+          // Headers get bold
+          if (typeof cell.v === 'string' && (headerLabels.includes(cell.v) || headerLabels.some(lbl => cell.v.startsWith(lbl)))) {
+            cell.s.font.bold = true;
           }
         }
       }
     } catch (e) {
-      debug('Method2 header styling skipped', e);
+      debug('Method2 formatting skipped', e);
     }
 
-    XLSX.utils.book_append_sheet(wb, ws2, 'Method 2');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Implied Acreage');
 
     return wb;
   };
