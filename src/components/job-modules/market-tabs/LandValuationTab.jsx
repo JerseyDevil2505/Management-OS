@@ -783,7 +783,7 @@ useEffect(() => {
         debug('✅ Target allocation set to:', numericValue, typeof numericValue);
         return numericValue;
       } else {
-        debug('🛡��� Preserving existing target allocation:', prev, 'instead of overwriting with:', numericValue);
+        debug('🛡���� Preserving existing target allocation:', prev, 'instead of overwriting with:', numericValue);
         return prev;
       }
     });
@@ -3521,7 +3521,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
     debug('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
-    debug('��������� Input validation:', {
+    debug('������� Input validation:', {
       hasTargetAllocation: !!targetAllocation,
       targetAllocationValue: targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
@@ -5455,6 +5455,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       let hasPreviousInVCS = false;
       let previousAdjusted = null;
+      let previousLotSize = null;
 
       bracketList.forEach((row, rowIndex) => {
         if (!row.bracket || row.bracket.count === 0) return;
@@ -5468,7 +5469,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         // Calculate delta for coloring (null if first row)
         const calculatedDelta = hasPreviousInVCS && previousAdjusted != null ? currentAdjusted - previousAdjusted : null;
 
-        const lotDelta = hasPreviousInVCS && row.bracket.avgAcres ? row.bracket.avgAcres : null;
+        // Calculate lot delta: current lot size - previous lot size
+        const lotDelta = hasPreviousInVCS && previousLotSize != null && row.bracket.avgAcres != null ?
+          row.bracket.avgAcres - previousLotSize : null;
 
         const currentRowIndex = method2Rows.length;
 
@@ -7803,7 +7806,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           {data.totalSales} sales
                         </span>
-                        {` ����� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} �� $${data.impliedRate || 0}`}
+                        {` ��� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} �� $${data.impliedRate || 0}`}
                       </span>
                       </div>
                     </div>
@@ -9628,7 +9631,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '����������') : ''}
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '���������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('yearBuilt')}
