@@ -3341,7 +3341,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   }, [properties, valuationMode]);
 
   const calculateVCSRecommendedSites = useCallback((avgNormTimes, counts) => {
-    if (!targetAllocation || !cascadeConfig.normal.prime) return;
+    console.log('🔍 calculateVCSRecommendedSites called:', {
+      targetAllocation,
+      hasCascadePrime: !!cascadeConfig.normal.prime,
+      avgNormTimesKeys: Object.keys(avgNormTimes || {}).slice(0, 5),
+      countsKeys: Object.keys(counts || {}).slice(0, 5)
+    });
+
+    if (!targetAllocation || !cascadeConfig.normal.prime) {
+      console.warn('⚠️ Skipping Rec Site calculation - missing:', {
+        targetAllocation,
+        hasCascadePrime: !!cascadeConfig.normal.prime
+      });
+      return;
+    }
 
     const recommendedSites = {};
 
@@ -3358,6 +3371,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       if (isCondoOnly) {
         // For condos: Rec Site = Target Allocation % × Avg Price (no land dimensions needed)
         const siteValue = avgNormTime * (parseFloat(targetAllocation) / 100);
+        console.log(`🏢 CONDO VCS ${vcs}:`, {
+          avgNormTime,
+          targetAllocation,
+          siteValue,
+          counts: counts[vcs]
+        });
         recommendedSites[vcs] = siteValue;
         return;
       }
