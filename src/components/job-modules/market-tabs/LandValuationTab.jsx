@@ -1736,7 +1736,7 @@ const getPricePerUnit = useCallback((price, size) => {
     setIncludedSales(prev => {
       // If initial load isn't complete yet, don't modify included sales
       if (!isInitialLoadComplete) {
-        debug('����� Skipping checkbox update - waiting for initial load');
+        debug('������ Skipping checkbox update - waiting for initial load');
         return prev;
       }
 
@@ -1987,6 +1987,7 @@ const getPricePerUnit = useCallback((price, size) => {
           avgPrice: Math.round(sales.reduce((sum, s) => sum + s.normalizedTime, 0) / sales.length),
           avgAcres: Math.round((sales.reduce((sum, s) => sum + s.acres, 0) / sales.length) * 100) / 100,
           avgAdjusted: Math.round(sales.reduce((sum, s) => sum + s.normalizedTime, 0) / sales.length),
+          avgSFLA: overallAvgSFLA ? Math.round(overallAvgSFLA) : null,
           brackets: bracketStats,
           impliedRate,
           region,
@@ -2106,6 +2107,7 @@ const getPricePerUnit = useCallback((price, size) => {
           avgPrice: Math.round(sales.reduce((sum, s) => sum + s.normalizedTime, 0) / sales.length), // Use time-normalized
           avgAcres: Math.round((sales.reduce((sum, s) => sum + s.acres, 0) / sales.length) * 100) / 100,
           avgAdjusted: Math.round(sales.reduce((sum, s) => sum + s.normalizedTime, 0) / sales.length),
+          avgSFLA: overallAvgSFLA ? Math.round(overallAvgSFLA) : null,
           brackets: bracketStats,
           impliedRate
         };
@@ -5443,7 +5445,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Store VCS-level averages (used in Jim's formula as GLS and GP)
       vcsAverages[vcs] = {
         avgLotSize: data.avgAcres || 0,  // GLS = General Lot Size
-        avgPrice: data.avgAdjusted || 0   // GP = General Price
+        avgPrice: data.avgAdjusted || 0,  // GP = General Price
+        avgSFLA: data.avgSFLA || 0        // Average SFLA for VCS
       };
 
       const bracketList = [
@@ -5699,16 +5702,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
         const hasPrevious = prevRowIdx >= 0;
 
-        // Jim's Formula for $ ADJUSTED: ((ZLS - GLS) * ((GP / GLS) * 0.50)) + GP
-        // ZLS = Bracket Lot Size (this row), GLS = VCS Avg Lot Size, GP = VCS Avg Price
-        if (adjustedColIndex >= 0 && vcsAvg && lotSizeColIndex >= 0) {
-          const lotSizeCol = XLSX.utils.encode_col(lotSizeColIndex);
-          const GLS = vcsAvg.avgLotSize;
-          const GP = vcsAvg.avgPrice;
+        // Jim's Formula for $ ADJUSTED: ((VCS_AVG_SFLA - CURRENT_SFLA) * ((CURRENT_PRICE / CURRENT_SFLA) * 0.50)) + CURRENT_PRICE
+        // VCS_AVG_SFLA = VCS Average SFLA, CURRENT_SFLA = Bracket Avg SFLA, CURRENT_PRICE = Bracket Avg Sale Price
+        if (adjustedColIndex >= 0 && vcsAvg && avgSFLAColIndex >= 0 && avgSalePriceColIndex >= 0 && vcsAvg.avgSFLA > 0) {
+          const sflaCol = XLSX.utils.encode_col(avgSFLAColIndex);
+          const priceCol = XLSX.utils.encode_col(avgSalePriceColIndex);
+          const VCS_AVG_SFLA = vcsAvg.avgSFLA;
           const adjustedCellRef = XLSX.utils.encode_cell({ r: rowIdx, c: adjustedColIndex });
 
-          // Formula: ((BracketLotSize - GLS) * ((GP / GLS) * 0.5)) + GP
-          const adjustedFormula = `((${lotSizeCol}${excelRow}-${GLS})*((${GP}/${GLS})*0.5))+${GP}`;
+          // Formula: ((VCS_AVG_SFLA - CurrentSFLA) * ((CurrentPrice / CurrentSFLA) * 0.5)) + CurrentPrice
+          const adjustedFormula = `IF(AND(${sflaCol}${excelRow}<>"",${sflaCol}${excelRow}>0),((${VCS_AVG_SFLA}-${sflaCol}${excelRow})*((${priceCol}${excelRow}/${sflaCol}${excelRow})*0.5))+${priceCol}${excelRow},"")`;
 
           if (ws2[adjustedCellRef]) {
             ws2[adjustedCellRef].f = adjustedFormula;
