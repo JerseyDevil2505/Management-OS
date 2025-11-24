@@ -4763,6 +4763,39 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Create worksheet
     const worksheet = XLSX.utils.aoa_to_sheet(data);
 
+    // Add Excel formulas for Raw Land and Allocation Target columns (rows 2 onwards are data)
+    // This allows users to see and verify the calculations in Excel
+    try {
+      const rawLandColIndex = headers.indexOf('Raw Land');
+      const allocationTargetColIndex = headers.indexOf('Allocation Target');
+      const recSiteColIndex = headers.indexOf('Rec Site Value');
+      const actSiteColIndex = headers.indexOf('Act Site Value');
+
+      // Process each data row (starting from row 1, since row 0 is headers)
+      for (let rowIndex = 1; rowIndex < data.length; rowIndex++) {
+        const excelRow = rowIndex + 1; // Excel rows are 1-indexed
+
+        // Add formula for Allocation Target: =ActSite/(ActSite+RawLand)*100
+        // Format as percentage with 1 decimal place
+        if (allocationTargetColIndex >= 0 && actSiteColIndex >= 0 && rawLandColIndex >= 0) {
+          const actSiteCol = XLSX.utils.encode_col(actSiteColIndex);
+          const rawLandCol = XLSX.utils.encode_col(rawLandColIndex);
+          const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: allocationTargetColIndex });
+
+          // Formula: If both Act Site and Raw Land exist, calculate percentage, otherwise blank
+          const formula = `IF(AND(${actSiteCol}${excelRow}>0,${rawLandCol}${excelRow}>0),${actSiteCol}${excelRow}/(${actSiteCol}${excelRow}+${rawLandCol}${excelRow})*100,"")`;
+
+          if (worksheet[cellRef]) {
+            worksheet[cellRef].f = formula;
+            worksheet[cellRef].z = '0.0"%"'; // Number format: percentage with 1 decimal
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error adding formulas to VCS export:', e);
+      debug('VCS formula generation skipped', e);
+    }
+
     // Set column widths
     const colWidths = [
       { wch: 8 },   // VCS
