@@ -4134,7 +4134,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return;
     }
 
-    debug('�� Saving target allocation:', `${targetValue}%`, 'for job:', jobData.id);
+    debug('���� Saving target allocation:', `${targetValue}%`, 'for job:', jobData.id);
 
     try {
       // Check if record exists first
@@ -5081,7 +5081,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // Allocation export -> Excel workbook (matches UI table structure)
   const exportAllocationExcel = () => {
     console.log('📊 Allocation Export - vacantTestSales count:', (vacantTestSales || []).length);
-    console.log('�� Allocation Export - valuationMode:', valuationMode);
+    console.log('📊 Allocation Export - valuationMode:', valuationMode);
 
     const rows = [];
 
@@ -6264,18 +6264,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Summary header
     summaryRows.push(['', '']); // Blank row
-    summaryRows.push(['', 'LOCATION SUMMARY - AGGREGATED ACROSS ALL VCS']);
+    summaryRows.push(['', 'LOCATION SUMMARY']);
     summaryRows.push(['', '']); // Blank row
     summaryRows.push(['', 'Location', 'Sum Adj With', 'Sum Adj Without', 'Dollar Impact', 'Percent Impact']);
 
-    // Count how many locations each VCS has
-    const vcsLocationCount = {};
-    Object.keys(filteredFactors).forEach(vcs => {
-      const locations = Object.keys(filteredFactors[vcs] || {}).filter(loc => loc !== 'None');
-      vcsLocationCount[vcs] = locations.length;
-    });
-
-    // Collect repeated locations (those appearing in 2+ VCS codes)
+    // Collect ALL locations that appear in 2+ VCS codes (regardless of compounding)
     const repeatedLocations = {};
     Object.keys(locationVCSMap).forEach(location => {
       const vcsList = locationVCSMap[location];
@@ -6284,42 +6277,36 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
     });
 
-    // Add repeated locations with aggregated values across all non-compounded VCS
+    // Add repeated locations with aggregated values across ALL VCS
     Object.keys(repeatedLocations).sort().forEach(location => {
       const vcsList = repeatedLocations[location];
 
-      // Filter out VCS codes that have multiple locations (compounding)
-      const nonCompoundedVCS = vcsList.filter(vcs => vcsLocationCount[vcs] === 1);
+      let sumAdjWith = 0;
+      let sumAdjWithout = 0;
+      let validCount = 0;
 
-      // Only add this location if there are non-compounded VCS entries
-      if (nonCompoundedVCS.length > 0) {
-        let sumAdjWith = 0;
-        let sumAdjWithout = 0;
-        let validCount = 0;
-
-        // Aggregate across all non-compounded VCS entries
-        nonCompoundedVCS.forEach(vcs => {
-          const impact = calculateEcoObsImpact(vcs, location, globalEcoObsTypeFilter) || {};
-          if (impact.adjustedSaleWith && impact.adjustedSaleWithout) {
-            sumAdjWith += impact.adjustedSaleWith;
-            sumAdjWithout += impact.adjustedSaleWithout;
-            validCount++;
-          }
-        });
-
-        if (validCount > 0) {
-          const totalDollarImpact = sumAdjWith - sumAdjWithout;
-          const percentImpact = sumAdjWithout > 0 ? ((totalDollarImpact / sumAdjWithout) * 100).toFixed(1) : 'N/A';
-
-          summaryRows.push([
-            '', // Column A - empty
-            location, // Column B - Location name
-            `$${Math.round(sumAdjWith).toLocaleString()}`, // Sum Adj With
-            `$${Math.round(sumAdjWithout).toLocaleString()}`, // Sum Adj Without
-            `$${Math.round(totalDollarImpact).toLocaleString()}`, // Dollar Impact
-            percentImpact !== 'N/A' ? `${percentImpact}%` : percentImpact // Percent Impact
-          ]);
+      // Aggregate across ALL VCS entries for this location
+      vcsList.forEach(vcs => {
+        const impact = calculateEcoObsImpact(vcs, location, globalEcoObsTypeFilter) || {};
+        if (impact.adjustedSaleWith && impact.adjustedSaleWithout) {
+          sumAdjWith += impact.adjustedSaleWith;
+          sumAdjWithout += impact.adjustedSaleWithout;
+          validCount++;
         }
+      });
+
+      if (validCount > 0) {
+        const totalDollarImpact = sumAdjWith - sumAdjWithout;
+        const percentImpact = sumAdjWithout > 0 ? ((totalDollarImpact / sumAdjWithout) * 100).toFixed(1) : 'N/A';
+
+        summaryRows.push([
+          '', // Column A - empty
+          location, // Column B - Location name
+          `$${Math.round(sumAdjWith).toLocaleString()}`, // Sum Adj With
+          `$${Math.round(sumAdjWithout).toLocaleString()}`, // Sum Adj Without
+          `$${Math.round(totalDollarImpact).toLocaleString()}`, // Dollar Impact
+          percentImpact !== 'N/A' ? `${percentImpact}%` : percentImpact // Percent Impact
+        ]);
       }
     });
 
@@ -9884,7 +9871,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '����������') : ''}
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '���������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('yearBuilt')}
