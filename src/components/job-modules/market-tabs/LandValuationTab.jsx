@@ -5867,7 +5867,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ).map(([region, sales]) => ({ region, count: sales.length, sales }))
     });
 
-    debug('����� Included sales IDs:', Array.from(includedSales));
+    debug('���� Included sales IDs:', Array.from(includedSales));
     debug('�� Sale categories state:', saleCategories);
     debug('������ Teardown sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'teardown').map(s => `${s.property_block}/${s.property_lot}`));
     debug('��� Building lot sales in checked:', checkedSales.filter(s => saleCategories[s.id] === 'building_lot').map(s => `${s.property_block}/${s.property_lot}`));
@@ -10407,152 +10407,127 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           }}
                         />
                       </td>
-                      {valuationMode === 'ff' || valuationMode === 'sf' ? (
-                        <>
-                          <td style={{
-                            padding: '8px',
-                            textAlign: 'right',
-                            backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
-                            position: 'relative',
-                            border: '1px solid #E5E7EB'
-                          }}>
-                            {!isGrayedOut ? (
-                              <span title={`Rate Source: ${rateSource}`}>
-                                {cascadeRates.standard?.rate ? `$${cascadeRates.standard.rate.toLocaleString()}` : ''}
-                                {rateSource !== 'Normal' && (
-                                  <span style={{
-                                    position: 'absolute',
-                                    top: '2px',
-                                    right: '2px',
-                                    fontSize: '8px',
-                                    color: '#92400E',
-                                    fontWeight: 'bold'
-                                  }}>*</span>
-                                )}
-                              </span>
-                            ) : ''}
-                          </td>
-                          <td style={{
-                            padding: '8px',
-                            textAlign: 'right',
-                            backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
-                            position: 'relative',
-                            border: '1px solid #E5E7EB'
-                          }}>
-                            {!isGrayedOut ? (
-                              <span title={`Rate Source: ${rateSource}`}>
-                                {cascadeRates.excess?.rate ? `$${cascadeRates.excess.rate.toLocaleString()}` : ''}
-                                {rateSource !== 'Normal' && (
-                                  <span style={{
-                                    position: 'absolute',
-                                    top: '2px',
-                                    right: '2px',
-                                    fontSize: '8px',
-                                    color: '#92400E',
-                                    fontWeight: 'bold'
-                                  }}>*</span>
-                                )}
-                              </span>
-                            ) : ''}
-                          </td>
-                        </>
-                      ) : (
-                        <>
-                          <td style={{
-                            padding: '8px',
-                            textAlign: 'right',
-                            backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
-                            position: 'relative',
-                            border: '1px solid #E5E7EB'
-                          }}>
-                            {!isGrayedOut ? (
-                              <span title={`Rate Source: ${rateSource}`}>
-                                {cascadeRates.prime?.rate ? `$${cascadeRates.prime.rate.toLocaleString()}` : ''}
-                                {rateSource !== 'Normal' && (
-                                  <span style={{
-                                    position: 'absolute',
-                                    top: '2px',
-                                    right: '2px',
-                                    fontSize: '8px',
-                                    color: '#92400E',
-                                    fontWeight: 'bold'
-                                  }}>*</span>
-                                )}
-                              </span>
-                            ) : ''}
-                          </td>
-                          <td style={{
-                            padding: '8px',
-                            textAlign: 'right',
-                            backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
-                            position: 'relative',
-                            border: '1px solid #E5E7EB'
-                          }}>
-                            {!isGrayedOut ? (
-                              <span title={`Rate Source: ${rateSource}`}>
-                                {cascadeRates.secondary?.rate ? `$${cascadeRates.secondary.rate.toLocaleString()}` : ''}
-                                {rateSource !== 'Normal' && (
-                                  <span style={{
-                                    position: 'absolute',
-                                    top: '2px',
-                                    right: '2px',
-                                    fontSize: '8px',
-                                    color: '#92400E',
-                                    fontWeight: 'bold'
-                                  }}>*</span>
-                                )}
-                              </span>
-                            ) : ''}
-                          </td>
-                          <td style={{
-                            padding: '8px',
-                            textAlign: 'right',
-                            backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
-                            position: 'relative',
-                            border: '1px solid #E5E7EB'
-                          }}>
-                            {!isGrayedOut ? (
-                              <span title={`Rate Source: ${rateSource}`}>
-                                {cascadeRates.excess?.rate ? `$${cascadeRates.excess.rate.toLocaleString()}` : ''}
-                                {rateSource !== 'Normal' && (
-                                  <span style={{
-                                    position: 'absolute',
-                                    top: '2px',
-                                    right: '2px',
-                                    fontSize: '8px',
-                                    color: '#92400E',
-                                    fontWeight: 'bold'
-                                  }}>*</span>
-                                )}
-                              </span>
-                            ) : ''}
-                          </td>
-                          {shouldShowResidualColumn && (
-                            <td style={{
-                              padding: '8px',
-                              textAlign: 'right',
-                              backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
-                              position: 'relative',
-                              border: '1px solid #E5E7EB'
-                            }}>
-                              {!isGrayedOut ? (
-                                <span title={`Rate Source: ${rateSource}`}>
-                                  {cascadeRates.residual?.rate ? `$${cascadeRates.residual.rate.toLocaleString()}` : ''}
-                                  {rateSource !== 'Normal' && (
-                                    <span style={{
-                                      position: 'absolute',
-                                      top: '2px',
-                                      right: '2px',
-                                      fontSize: '8px',
-                                      color: '#92400E',
-                                      fontWeight: 'bold'
-                                    }}>*</span>
-                                  )}
-                                </span>
-                              ) : ''}
-                            </td>
-                          )}
-                        </>
+                      <td style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
+                        position: 'relative',
+                        border: '1px solid #E5E7EB'
+                      }}>
+                        {!isGrayedOut && (vcsMethod === 'ff' || vcsMethod === 'sf') ? (
+                          <span title={`Rate Source: ${rateSource}`}>
+                            {cascadeRates.standard?.rate ? `$${cascadeRates.standard.rate.toLocaleString()}` : ''}
+                            {rateSource !== 'Normal' && (
+                              <span style={{
+                                position: 'absolute',
+                                top: '2px',
+                                right: '2px',
+                                fontSize: '8px',
+                                color: '#92400E',
+                                fontWeight: 'bold'
+                              }}>*</span>
+                            )}
+                          </span>
+                        ) : !isGrayedOut && vcsMethod === 'acre' ? (
+                          <span title={`Rate Source: ${rateSource}`}>
+                            {cascadeRates.prime?.rate ? `$${cascadeRates.prime.rate.toLocaleString()}` : ''}
+                            {rateSource !== 'Normal' && (
+                              <span style={{
+                                position: 'absolute',
+                                top: '2px',
+                                right: '2px',
+                                fontSize: '8px',
+                                color: '#92400E',
+                                fontWeight: 'bold'
+                              }}>*</span>
+                            )}
+                          </span>
+                        ) : ''}
+                      </td>
+                      <td style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
+                        position: 'relative',
+                        border: '1px solid #E5E7EB'
+                      }}>
+                        {!isGrayedOut && (vcsMethod === 'ff' || vcsMethod === 'sf') ? (
+                          <span title={`Rate Source: ${rateSource}`}>
+                            {cascadeRates.excess?.rate ? `$${cascadeRates.excess.rate.toLocaleString()}` : ''}
+                            {rateSource !== 'Normal' && (
+                              <span style={{
+                                position: 'absolute',
+                                top: '2px',
+                                right: '2px',
+                                fontSize: '8px',
+                                color: '#92400E',
+                                fontWeight: 'bold'
+                              }}>*</span>
+                            )}
+                          </span>
+                        ) : !isGrayedOut && vcsMethod === 'acre' ? (
+                          <span title={`Rate Source: ${rateSource}`}>
+                            {cascadeRates.secondary?.rate ? `$${cascadeRates.secondary.rate.toLocaleString()}` : ''}
+                            {rateSource !== 'Normal' && (
+                              <span style={{
+                                position: 'absolute',
+                                top: '2px',
+                                right: '2px',
+                                fontSize: '8px',
+                                color: '#92400E',
+                                fontWeight: 'bold'
+                              }}>*</span>
+                            )}
+                          </span>
+                        ) : ''}
+                      </td>
+                      <td style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
+                        position: 'relative',
+                        border: '1px solid #E5E7EB'
+                      }}>
+                        {!isGrayedOut && vcsMethod === 'acre' ? (
+                          <span title={`Rate Source: ${rateSource}`}>
+                            {cascadeRates.excess?.rate ? `$${cascadeRates.excess.rate.toLocaleString()}` : ''}
+                            {rateSource !== 'Normal' && (
+                              <span style={{
+                                position: 'absolute',
+                                top: '2px',
+                                right: '2px',
+                                fontSize: '8px',
+                                color: '#92400E',
+                                fontWeight: 'bold'
+                              }}>*</span>
+                            )}
+                          </span>
+                        ) : ''}
+                      </td>
+                      {shouldShowResidualColumn && (
+                        <td style={{
+                          padding: '8px',
+                          textAlign: 'right',
+                          backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
+                          position: 'relative',
+                          border: '1px solid #E5E7EB'
+                        }}>
+                          {!isGrayedOut && vcsMethod === 'acre' ? (
+                            <span title={`Rate Source: ${rateSource}`}>
+                              {cascadeRates.residual?.rate ? `$${cascadeRates.residual.rate.toLocaleString()}` : ''}
+                              {rateSource !== 'Normal' && (
+                                <span style={{
+                                  position: 'absolute',
+                                  top: '2px',
+                                  right: '2px',
+                                  fontSize: '8px',
+                                  color: '#92400E',
+                                  fontWeight: 'bold'
+                                }}>*</span>
+                              )}
+                            </span>
+                          ) : ''}
+                        </td>
                       )}
                       {/* Special Category Rates */}
                       <td style={{
