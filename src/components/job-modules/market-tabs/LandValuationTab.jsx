@@ -4922,8 +4922,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const numRows = data.length;
       const numCols = headers.length;
 
-      // Find CME Bracket column index
+      // Find CME Bracket and Allocation Target column indices
       const cmeBracketColIndex = headers.indexOf('CME Bracket');
+      const allocationTargetColIndex = headers.indexOf('Allocation Target');
 
       // Style all cells with gridlines and formatting
       for (let r = 0; r < numRows; r++) {
@@ -4957,6 +4958,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             } else {
               // All other cells get white background
               worksheet[cellRef].s.fill = { fgColor: { rgb: 'FFFFFF' } };
+            }
+
+            // Format Allocation Target as percentage
+            if (c === allocationTargetColIndex) {
+              worksheet[cellRef].z = '0.0"%"'; // Display as percentage with 1 decimal
             }
           }
 
