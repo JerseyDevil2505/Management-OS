@@ -677,7 +677,7 @@ useEffect(() => {
     const savedIncluded = new Set();
     const manuallyAddedIds = new Set();
 
-    debug('����� Loading saved Method 1 metadata (SKIPPING cached sales for fresh calculation):', {
+    debug('���� Loading saved Method 1 metadata (SKIPPING cached sales for fresh calculation):', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
@@ -2628,7 +2628,7 @@ Find specific information about this property and sale. Include:
 • Tax assessment and classification details
 • Documented environmental constraints (wetlands, floodplains)
 �� Municipality-specific land use characteristics
-��� Any circumstances of the sale (estate, distressed, etc.)
+���� Any circumstances of the sale (estate, distressed, etc.)
 
 Provide only verifiable facts with sources. Be specific and actionable for valuation purposes. 2-3 sentences.`;
 
@@ -2728,7 +2728,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // EXCLUDE: Raw Land, Landlocked, Wetlands
       if (cat.includes('raw') && cat.includes('land')) {
-        console.log(`����️ Excluding Raw Land sale ${s.property_block}/${s.property_lot}`);
+        console.log(`������️ Excluding Raw Land sale ${s.property_block}/${s.property_lot}`);
         return false;
       }
       if (cat.includes('landlocked')) {
@@ -4928,6 +4928,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const typicalLotColIndex = headers.indexOf('Typical Lot Size');
       const typicalFFColIndex = headers.indexOf('Typical FF');
       const typicalDepthColIndex = headers.indexOf('Typical Depth');
+      const stepdownFFColIndex = headers.indexOf('Stepdown (FF)');
+      const stepdownSFColIndex = headers.indexOf('Stepdown (SF)');
       const avgPriceTLotSizeColIndex = headers.indexOf('Avg Price (t) Lot Size');
       const avgPriceLotSizeColIndex = headers.indexOf('Avg Price Lot Size');
 
@@ -4936,6 +4938,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         typicalLotColIndex,
         typicalFFColIndex,
         typicalDepthColIndex,
+        stepdownFFColIndex,
+        stepdownSFColIndex,
         avgPriceTLotSizeColIndex,
         avgPriceLotSizeColIndex
       ].filter(i => i >= 0);
@@ -6122,7 +6126,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           [category]: rate ? parseFloat(rate) : null
         }
       };
-      debug('��������� New cascade config special categories:', newConfig.specialCategories);
+      debug('������� New cascade config special categories:', newConfig.specialCategories);
       return newConfig;
     });
   };
@@ -7581,7 +7585,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales ����� Avg $${Math.round(data.avgPrice).toLocaleString()} ���������������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales ����� Avg $${Math.round(data.avgPrice).toLocaleString()} ��������������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{
@@ -9360,7 +9364,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <strong>Exclude problematic sales:</strong> Uncheck sales that should not be used in Method 2 calculations
                 (teardowns, poor condition, pre-construction, etc.).
                 <span style={{ display: 'block', marginTop: '4px' }}>
-                  ������️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
+                  �����️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
                 </span>
               </p>
             </div>
