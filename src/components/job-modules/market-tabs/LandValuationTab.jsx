@@ -6206,20 +6206,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }
 
     // Add formulas for Adjusted Sale With, Adjusted Sale Without, and Dollar Impact
-    // Column indices: E=4 (With Living Area), F=5 (With Sale Price), H=7 (Without Living Area), I=8 (Without Sale Price)
+    // Simplified: Just use average of E (With Living Area) and H (Without Living Area)
     // J=9 (Adjusted Sale With), K=10 (Adjusted Sale Without), L=11 (Dollar Impact)
     for (let r = 2; r <= rows.length; r++) {
-      // Average SFLA = (With Living Area + Without Living Area) / 2
-      // Adjusted Sale With = With Sale Price + ((Avg SFLA - With Living Area) * (With Sale Price / With Living Area) * 0.5)
-      // Adjusted Sale Without = Without Sale Price + ((Avg SFLA - Without Living Area) * (Without Sale Price / Without Living Area) * 0.5)
       const withLivingCol = 'E';
       const withPriceCol = 'F';
       const withoutLivingCol = 'H';
       const withoutPriceCol = 'I';
 
-      // Adjusted Sale With (J column)
+      // Adjusted Sale With (J column) - simplified formula using average of E and H
       const adjustedWithRef = `J${r}`;
-      const adjustedWithFormula = `IF(AND(${withLivingCol}${r}>0,${withoutLivingCol}${r}>0),${withPriceCol}${r}+((((${withLivingCol}${r}+${withoutLivingCol}${r})/2)-${withLivingCol}${r})*(${withPriceCol}${r}/${withLivingCol}${r})*0.5),${withPriceCol}${r})`;
+      const adjustedWithFormula = `${withPriceCol}${r}+((((${withLivingCol}${r}+${withoutLivingCol}${r})/2)-${withLivingCol}${r})*(${withPriceCol}${r}/${withLivingCol}${r})*0.5)`;
       if (ws2[adjustedWithRef]) {
         ws2[adjustedWithRef].f = adjustedWithFormula;
         ws2[adjustedWithRef].z = '\"$\"#,##0';
@@ -6228,9 +6225,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         ws2[adjustedWithRef].s.alignment = { horizontal: 'center', vertical: 'center' };
       }
 
-      // Adjusted Sale Without (K column)
+      // Adjusted Sale Without (K column) - simplified formula using average of E and H
       const adjustedWithoutRef = `K${r}`;
-      const adjustedWithoutFormula = `IF(AND(${withLivingCol}${r}>0,${withoutLivingCol}${r}>0),${withoutPriceCol}${r}+((((${withLivingCol}${r}+${withoutLivingCol}${r})/2)-${withoutLivingCol}${r})*(${withoutPriceCol}${r}/${withoutLivingCol}${r})*0.5),${withoutPriceCol}${r})`;
+      const adjustedWithoutFormula = `${withoutPriceCol}${r}+((((${withLivingCol}${r}+${withoutLivingCol}${r})/2)-${withoutLivingCol}${r})*(${withoutPriceCol}${r}/${withoutLivingCol}${r})*0.5)`;
       if (ws2[adjustedWithoutRef]) {
         ws2[adjustedWithoutRef].f = adjustedWithoutFormula;
         ws2[adjustedWithoutRef].z = '\"$\"#,##0';
