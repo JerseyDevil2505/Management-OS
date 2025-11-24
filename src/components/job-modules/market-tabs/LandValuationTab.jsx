@@ -5807,7 +5807,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Calculate average rate for checked items by category
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
-    debug('�� Recalculating category analysis');
+    debug('🔄 Recalculating category analysis');
     debug('����� Total vacant sales:', vacantSales.length);
     debug('���� Checked sales count:', checkedSales.length);
     // 🔍 COMPREHENSIVE FILTERING DEBUG - Shows exactly which sales go where
@@ -8997,7 +8997,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   color: '#6B7280'
                 }}
               >
-                ��
+                ����
               </button>
             </div>
 
@@ -9154,7 +9154,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'typeUse' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '���������') : ''}
+                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '�����������') : ''}
                     </th>
                   </tr>
                 </thead>
@@ -10444,24 +10444,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         position: 'relative',
                         border: '1px solid #E5E7EB'
                       }}>
-                        {!isGrayedOut && (vcsMethod === 'ff' || vcsMethod === 'sf') ? (
+                        {!isGrayedOut ? (
                           <span title={`Rate Source: ${rateSource}`}>
-                            {cascadeRates.standard?.rate ? `$${cascadeRates.standard.rate.toLocaleString()}` : ''}
-                            {rateSource !== 'Normal' && (
-                              <span style={{
-                                position: 'absolute',
-                                top: '2px',
-                                right: '2px',
-                                fontSize: '8px',
-                                color: '#92400E',
-                                fontWeight: 'bold'
-                              }}>*</span>
-                            )}
-                          </span>
-                        ) : !isGrayedOut && vcsMethod === 'acre' ? (
-                          <span title={`Rate Source: ${rateSource}`}>
-                            {cascadeRates.prime?.rate ? `$${cascadeRates.prime.rate.toLocaleString()}` : ''}
-                            {rateSource !== 'Normal' && (
+                            {(vcsMethod === 'ff' || vcsMethod === 'sf') && cascadeRates.standard?.rate ?
+                              `$${cascadeRates.standard.rate.toLocaleString()}` :
+                              vcsMethod === 'acre' && cascadeRates.prime?.rate ?
+                              `$${cascadeRates.prime.rate.toLocaleString()}` : ''}
+                            {rateSource !== 'Normal' && (cascadeRates.standard?.rate || cascadeRates.prime?.rate) && (
                               <span style={{
                                 position: 'absolute',
                                 top: '2px',
@@ -10481,24 +10470,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         position: 'relative',
                         border: '1px solid #E5E7EB'
                       }}>
-                        {!isGrayedOut && (vcsMethod === 'ff' || vcsMethod === 'sf') ? (
+                        {!isGrayedOut ? (
                           <span title={`Rate Source: ${rateSource}`}>
-                            {cascadeRates.excess?.rate ? `$${cascadeRates.excess.rate.toLocaleString()}` : ''}
-                            {rateSource !== 'Normal' && (
-                              <span style={{
-                                position: 'absolute',
-                                top: '2px',
-                                right: '2px',
-                                fontSize: '8px',
-                                color: '#92400E',
-                                fontWeight: 'bold'
-                              }}>*</span>
-                            )}
-                          </span>
-                        ) : !isGrayedOut && vcsMethod === 'acre' ? (
-                          <span title={`Rate Source: ${rateSource}`}>
-                            {cascadeRates.secondary?.rate ? `$${cascadeRates.secondary.rate.toLocaleString()}` : ''}
-                            {rateSource !== 'Normal' && (
+                            {(vcsMethod === 'ff' || vcsMethod === 'sf') && cascadeRates.excess?.rate ?
+                              `$${cascadeRates.excess.rate.toLocaleString()}` :
+                              vcsMethod === 'acre' && cascadeRates.secondary?.rate ?
+                              `$${cascadeRates.secondary.rate.toLocaleString()}` : ''}
+                            {rateSource !== 'Normal' && (cascadeRates.excess?.rate || cascadeRates.secondary?.rate) && (
                               <span style={{
                                 position: 'absolute',
                                 top: '2px',
@@ -10511,30 +10489,32 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           </span>
                         ) : ''}
                       </td>
-                      <td style={{
-                        padding: '8px',
-                        textAlign: 'right',
-                        backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
-                        position: 'relative',
-                        border: '1px solid #E5E7EB'
-                      }}>
-                        {!isGrayedOut && vcsMethod === 'acre' ? (
-                          <span title={`Rate Source: ${rateSource}`}>
-                            {cascadeRates.excess?.rate ? `$${cascadeRates.excess.rate.toLocaleString()}` : ''}
-                            {rateSource !== 'Normal' && (
-                              <span style={{
-                                position: 'absolute',
-                                top: '2px',
-                                right: '2px',
-                                fontSize: '8px',
-                                color: '#92400E',
-                                fontWeight: 'bold'
-                              }}>*</span>
-                            )}
-                          </span>
-                        ) : ''}
-                      </td>
-                      {shouldShowResidualColumn && (
+                      {hasAcreMethod && (
+                        <td style={{
+                          padding: '8px',
+                          textAlign: 'right',
+                          backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
+                          position: 'relative',
+                          border: '1px solid #E5E7EB'
+                        }}>
+                          {!isGrayedOut && vcsMethod === 'acre' ? (
+                            <span title={`Rate Source: ${rateSource}`}>
+                              {cascadeRates.excess?.rate ? `$${cascadeRates.excess.rate.toLocaleString()}` : ''}
+                              {rateSource !== 'Normal' && (
+                                <span style={{
+                                  position: 'absolute',
+                                  top: '2px',
+                                  right: '2px',
+                                  fontSize: '8px',
+                                  color: '#92400E',
+                                  fontWeight: 'bold'
+                                }}>*</span>
+                              )}
+                            </span>
+                          ) : ''}
+                        </td>
+                      )}
+                      {shouldShowResidualColumn && hasAcreMethod && (
                         <td style={{
                           padding: '8px',
                           textAlign: 'right',
