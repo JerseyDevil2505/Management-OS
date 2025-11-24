@@ -10537,103 +10537,127 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       </td>
                       <td style={{
                         padding: '8px',
-                        textAlign: 'right',
-                        backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
-                        position: 'relative',
-                        border: '1px solid #E5E7EB'
+                        border: '1px solid #E5E7EB',
+                        backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit'
                       }}>
                         {!isGrayedOut ? (
-                          <span title={`Rate Source: ${rateSource}`}>
-                            {(vcsMethod === 'ff' || vcsMethod === 'sf') && cascadeRates.standard?.rate ?
-                              `$${cascadeRates.standard.rate.toLocaleString()}` :
-                              vcsMethod === 'acre' && cascadeRates.prime?.rate ?
-                              `$${cascadeRates.prime.rate.toLocaleString()}` : ''}
-                            {rateSource !== 'Normal' && (cascadeRates.standard?.rate || cascadeRates.prime?.rate) && (
-                              <span style={{
-                                position: 'absolute',
-                                top: '2px',
-                                right: '2px',
-                                fontSize: '8px',
-                                color: '#92400E',
-                                fontWeight: 'bold'
-                              }}>*</span>
-                            )}
-                          </span>
+                          vcsMethod === 'ff' || vcsMethod === 'sf' ? (
+                            <input
+                              type="number"
+                              value={vcsRateOverrides[vcs]?.standard ?? cascadeRates.standard?.rate ?? ''}
+                              onChange={(e) => updateVCSRate(vcs, 'standard', e.target.value)}
+                              style={{
+                                width: '70px',
+                                padding: '2px',
+                                border: '1px solid #D1D5DB',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                textAlign: 'right'
+                              }}
+                              placeholder={cascadeRates.standard?.rate || ''}
+                            />
+                          ) : vcsMethod === 'acre' ? (
+                            <input
+                              type="number"
+                              value={vcsRateOverrides[vcs]?.prime ?? cascadeRates.prime?.rate ?? ''}
+                              onChange={(e) => updateVCSRate(vcs, 'prime', e.target.value)}
+                              style={{
+                                width: '70px',
+                                padding: '2px',
+                                border: '1px solid #D1D5DB',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                textAlign: 'right'
+                              }}
+                              placeholder={cascadeRates.prime?.rate || ''}
+                            />
+                          ) : ''
                         ) : ''}
                       </td>
                       <td style={{
                         padding: '8px',
-                        textAlign: 'right',
-                        backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
-                        position: 'relative',
-                        border: '1px solid #E5E7EB'
+                        border: '1px solid #E5E7EB',
+                        backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit'
                       }}>
                         {!isGrayedOut ? (
-                          <span title={`Rate Source: ${rateSource}`}>
-                            {(vcsMethod === 'ff' || vcsMethod === 'sf') && cascadeRates.excess?.rate ?
-                              `$${cascadeRates.excess.rate.toLocaleString()}` :
-                              vcsMethod === 'acre' && cascadeRates.secondary?.rate ?
-                              `$${cascadeRates.secondary.rate.toLocaleString()}` : ''}
-                            {rateSource !== 'Normal' && (cascadeRates.excess?.rate || cascadeRates.secondary?.rate) && (
-                              <span style={{
-                                position: 'absolute',
-                                top: '2px',
-                                right: '2px',
-                                fontSize: '8px',
-                                color: '#92400E',
-                                fontWeight: 'bold'
-                              }}>*</span>
-                            )}
-                          </span>
+                          vcsMethod === 'ff' || vcsMethod === 'sf' ? (
+                            <input
+                              type="number"
+                              value={vcsRateOverrides[vcs]?.excess ?? cascadeRates.excess?.rate ?? ''}
+                              onChange={(e) => updateVCSRate(vcs, 'excess', e.target.value)}
+                              style={{
+                                width: '70px',
+                                padding: '2px',
+                                border: '1px solid #D1D5DB',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                textAlign: 'right'
+                              }}
+                              placeholder={cascadeRates.excess?.rate || ''}
+                            />
+                          ) : vcsMethod === 'acre' ? (
+                            <input
+                              type="number"
+                              value={vcsRateOverrides[vcs]?.secondary ?? cascadeRates.secondary?.rate ?? ''}
+                              onChange={(e) => updateVCSRate(vcs, 'secondary', e.target.value)}
+                              style={{
+                                width: '70px',
+                                padding: '2px',
+                                border: '1px solid #D1D5DB',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                textAlign: 'right'
+                              }}
+                              placeholder={cascadeRates.secondary?.rate || ''}
+                            />
+                          ) : ''
                         ) : ''}
                       </td>
                       {hasAcreMethod && (
                         <td style={{
                           padding: '8px',
-                          textAlign: 'right',
-                          backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
-                          position: 'relative',
-                          border: '1px solid #E5E7EB'
+                          border: '1px solid #E5E7EB',
+                          backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit'
                         }}>
                           {!isGrayedOut && vcsMethod === 'acre' ? (
-                            <span title={`Rate Source: ${rateSource}`}>
-                              {cascadeRates.excess?.rate ? `$${cascadeRates.excess.rate.toLocaleString()}` : ''}
-                              {rateSource !== 'Normal' && (
-                                <span style={{
-                                  position: 'absolute',
-                                  top: '2px',
-                                  right: '2px',
-                                  fontSize: '8px',
-                                  color: '#92400E',
-                                  fontWeight: 'bold'
-                                }}>*</span>
-                              )}
-                            </span>
+                            <input
+                              type="number"
+                              value={vcsRateOverrides[vcs]?.excess ?? cascadeRates.excess?.rate ?? ''}
+                              onChange={(e) => updateVCSRate(vcs, 'excess', e.target.value)}
+                              style={{
+                                width: '70px',
+                                padding: '2px',
+                                border: '1px solid #D1D5DB',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                textAlign: 'right'
+                              }}
+                              placeholder={cascadeRates.excess?.rate || ''}
+                            />
                           ) : ''}
                         </td>
                       )}
                       {shouldShowResidualColumn && hasAcreMethod && (
                         <td style={{
                           padding: '8px',
-                          textAlign: 'right',
-                          backgroundColor: isGrayedOut ? '#F3F4F6' : (rateSource !== 'Normal' ? '#FEF3C7' : 'inherit'),
-                          position: 'relative',
-                          border: '1px solid #E5E7EB'
+                          border: '1px solid #E5E7EB',
+                          backgroundColor: isGrayedOut ? '#F3F4F6' : 'inherit'
                         }}>
                           {!isGrayedOut && vcsMethod === 'acre' ? (
-                            <span title={`Rate Source: ${rateSource}`}>
-                              {cascadeRates.residual?.rate ? `$${cascadeRates.residual.rate.toLocaleString()}` : ''}
-                              {rateSource !== 'Normal' && (
-                                <span style={{
-                                  position: 'absolute',
-                                  top: '2px',
-                                  right: '2px',
-                                  fontSize: '8px',
-                                  color: '#92400E',
-                                  fontWeight: 'bold'
-                                }}>*</span>
-                              )}
-                            </span>
+                            <input
+                              type="number"
+                              value={vcsRateOverrides[vcs]?.residual ?? cascadeRates.residual?.rate ?? ''}
+                              onChange={(e) => updateVCSRate(vcs, 'residual', e.target.value)}
+                              style={{
+                                width: '70px',
+                                padding: '2px',
+                                border: '1px solid #D1D5DB',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                textAlign: 'right'
+                              }}
+                              placeholder={cascadeRates.residual?.rate || ''}
+                            />
                           ) : ''}
                         </td>
                       )}
