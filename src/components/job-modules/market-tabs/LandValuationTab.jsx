@@ -6056,7 +6056,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const headers = ['VCS','Locational Analysis','Code','With Year Built','With Living Area','With Sale Price','Without Year Built','Without Living Area','Without Sale Price','Adjusted Sale With','Adjusted Sale Without','Dollar Impact','Percent Impact','Applied+%','Applied-%'];
     rows.push(headers);
 
+    // Collect standalone locations (locations appearing in only one VCS)
+    const standaloneLocations = [];
+    const locationVCSMap = {}; // Track which VCSs have each location
+
     const filteredFactors = ecoObsFactors || {};
+    Object.keys(filteredFactors).sort().forEach(vcs => {
+      Object.keys(filteredFactors[vcs] || {}).forEach(locationAnalysis => {
+        if (locationAnalysis === 'None') return;
+        if (!locationVCSMap[locationAnalysis]) {
+          locationVCSMap[locationAnalysis] = [];
+        }
+        locationVCSMap[locationAnalysis].push(vcs);
+      });
+    });
+
     Object.keys(filteredFactors).sort().forEach(vcs => {
       Object.keys(filteredFactors[vcs] || {}).forEach(locationAnalysis => {
         if (locationAnalysis === 'None') return;
@@ -6072,14 +6086,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         const withoutLivingArea = impact.withoutLivingArea ? impact.withoutLivingArea : '';
         const withoutSalePrice = impact.withoutSalePrice ? impact.withoutSalePrice : '';
 
-        const adjustedSaleWith = impact.adjustedSaleWith ? impact.adjustedSaleWith : '';
-        const adjustedSaleWithout = impact.adjustedSaleWithout ? impact.adjustedSaleWithout : '';
+        // Leave adjusted values empty for formulas
+        const adjustedSaleWith = '';
+        const adjustedSaleWithout = '';
+        const dollarImpact = '';
 
-        const dollarImpact = impact.dollarImpact ? impact.dollarImpact : '';
         const percentImpact = impact.percentImpact ? impact.percentImpact : '';
 
         const appliedPos = actualAdjustments[`${key}_positive`] != null ? actualAdjustments[`${key}_positive`] : '';
         const appliedNeg = actualAdjustments[`${key}_negative`] != null ? actualAdjustments[`${key}_negative`] : '';
+
+        // Track standalone locations
+        if (locationVCSMap[locationAnalysis] && locationVCSMap[locationAnalysis].length === 1) {
+          standaloneLocations.push({ vcs, locationAnalysis, code, impact });
+        }
 
         rows.push([
           vcs,
@@ -6104,20 +6124,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(rows);
 
-    // Format header row as bold + center and apply thin borders where supported
+    // Format header row and all cells
     const cols = rows[0].length;
     const getCell = (r, c) => {
       const colLetter = XLSX.utils.encode_col(c);
       return `${colLetter}${r}`;
     };
 
+    // Header row styling
     for (let c = 0; c < cols; c++) {
       const cellRef = getCell(1, c);
       if (!ws[cellRef]) continue;
       try {
         ws[cellRef].s = ws[cellRef].s || {};
-        ws[cellRef].s.font = { ...(ws[cellRef].s.font || {}), bold: true };
-        ws[cellRef].s.alignment = { horizontal: 'center' };
+        ws[cellRef].s.font = { name: 'Leelawadee', sz: 10, bold: true };
+        ws[cellRef].s.alignment = { horizontal: 'center', vertical: 'center' };
         ws[cellRef].s.border = {
           top: { style: 'thin', color: { rgb: 'FF000000' } },
           bottom: { style: 'thin', color: { rgb: 'FF000000' } },
@@ -6125,44 +6146,187 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           right: { style: 'thin', color: { rgb: 'FF000000' } }
         };
       } catch (e) {
-        // styling may not be supported in some environments; ignore
         debug('Header styling not applied', e);
       }
     }
 
-    // For columns that are numeric/currency, ensure values include commas and $ where appropriate (as strings)
-    // Columns mapping (0-based): 4=With Living Area,5=With Sale Price,7=Without Living Area,8=Without Sale Price,9=Adjusted Sale With,10=Adjusted Sale Without,11=Dollar Impact,12=Percent Impact,13=Applied+,14=Applied-
+    // Data rows styling - Leelawadee font, size 10, centered
+    for (let r = 2; r <= rows.length; r++) {
+      for (let c = 0; c < cols; c++) {
+        const cellRef = getCell(r, c);
+        if (!ws[cellRef]) continue;
+        try {
+          ws[cellRef].s = ws[cellRef].s || {};
+          ws[cellRef].s.font = { name: 'Leelawadee', sz: 10 };
+          ws[cellRef].s.alignment = { horizontal: 'center', vertical: 'center' };
+        } catch (e) {
+          debug('Cell styling not applied', e);
+        }
+      }
+    }
+
+    // Format numeric/currency values
+    // Columns (0-based): 4=With Living Area, 5=With Sale Price, 7=Without Living Area, 8=Without Sale Price,
+    // 9=Adjusted Sale With, 10=Adjusted Sale Without, 11=Dollar Impact, 12=Percent Impact, 13=Applied+, 14=Applied-
     for (let r = 1; r < rows.length; r++) {
       const row = rows[r];
-      // format living area
+
+      // Format living area
       if (row[4] !== '' && !isNaN(Number(row[4]))) row[4] = Number(row[4]).toLocaleString();
       if (row[7] !== '' && !isNaN(Number(row[7]))) row[7] = Number(row[7]).toLocaleString();
 
-      // format currency fields
-      [5,8,9,10,11].forEach(ci => {
+      // Format currency fields (With Sale Price, Without Sale Price)
+      [5,8].forEach(ci => {
         if (row[ci] !== '' && !isNaN(Number(row[ci]))) {
           row[ci] = `$${Number(row[ci]).toLocaleString()}`;
         }
       });
 
-      // percent impact
+      // Percent impact
       if (row[12] !== '' && !String(row[12]).includes('%')) row[12] = `${row[12]}%`;
 
-      // applied percents
+      // Applied percents
       if (row[13] !== '' && !String(row[13]).includes('%')) row[13] = `${row[13]}%`;
       if (row[14] !== '' && !String(row[14]).includes('%')) row[14] = `${row[14]}%`;
     }
 
     // Recreate worksheet with formatted strings
     const ws2 = XLSX.utils.aoa_to_sheet(rows);
-    // Try to copy styles for header if possible
+
+    // Copy all styles from ws to ws2
     try {
-      for (let c = 0; c < cols; c++) {
-        const ref = getCell(1, c);
-        if (ws[ref] && ws2[ref]) ws2[ref].s = ws[ref].s;
+      for (let r = 1; r <= rows.length; r++) {
+        for (let c = 0; c < cols; c++) {
+          const ref = getCell(r, c);
+          if (ws[ref] && ws2[ref]) ws2[ref].s = ws[ref].s;
+        }
       }
     } catch (e) {
-      debug('Failed to copy header styles to new sheet', e);
+      debug('Failed to copy styles to new sheet', e);
+    }
+
+    // Add formulas for Adjusted Sale With, Adjusted Sale Without, and Dollar Impact
+    // Column indices: E=4 (With Living Area), F=5 (With Sale Price), H=7 (Without Living Area), I=8 (Without Sale Price)
+    // J=9 (Adjusted Sale With), K=10 (Adjusted Sale Without), L=11 (Dollar Impact)
+    for (let r = 2; r <= rows.length; r++) {
+      // Average SFLA = (With Living Area + Without Living Area) / 2
+      // Adjusted Sale With = With Sale Price + ((Avg SFLA - With Living Area) * (With Sale Price / With Living Area) * 0.5)
+      // Adjusted Sale Without = Without Sale Price + ((Avg SFLA - Without Living Area) * (Without Sale Price / Without Living Area) * 0.5)
+      const withLivingCol = 'E';
+      const withPriceCol = 'F';
+      const withoutLivingCol = 'H';
+      const withoutPriceCol = 'I';
+
+      // Adjusted Sale With (J column)
+      const adjustedWithRef = `J${r}`;
+      const adjustedWithFormula = `IF(AND(${withLivingCol}${r}>0,${withoutLivingCol}${r}>0),${withPriceCol}${r}+((((${withLivingCol}${r}+${withoutLivingCol}${r})/2)-${withLivingCol}${r})*(${withPriceCol}${r}/${withLivingCol}${r})*0.5),${withPriceCol}${r})`;
+      if (ws2[adjustedWithRef]) {
+        ws2[adjustedWithRef].f = adjustedWithFormula;
+        ws2[adjustedWithRef].z = '\"$\"#,##0';
+        ws2[adjustedWithRef].s = ws2[adjustedWithRef].s || {};
+        ws2[adjustedWithRef].s.font = { name: 'Leelawadee', sz: 10 };
+        ws2[adjustedWithRef].s.alignment = { horizontal: 'center', vertical: 'center' };
+      }
+
+      // Adjusted Sale Without (K column)
+      const adjustedWithoutRef = `K${r}`;
+      const adjustedWithoutFormula = `IF(AND(${withLivingCol}${r}>0,${withoutLivingCol}${r}>0),${withoutPriceCol}${r}+((((${withLivingCol}${r}+${withoutLivingCol}${r})/2)-${withoutLivingCol}${r})*(${withoutPriceCol}${r}/${withoutLivingCol}${r})*0.5),${withoutPriceCol}${r})`;
+      if (ws2[adjustedWithoutRef]) {
+        ws2[adjustedWithoutRef].f = adjustedWithoutFormula;
+        ws2[adjustedWithoutRef].z = '\"$\"#,##0';
+        ws2[adjustedWithoutRef].s = ws2[adjustedWithoutRef].s || {};
+        ws2[adjustedWithoutRef].s.font = { name: 'Leelawadee', sz: 10 };
+        ws2[adjustedWithoutRef].s.alignment = { horizontal: 'center', vertical: 'center' };
+      }
+
+      // Dollar Impact (L column) = Adjusted Sale With - Adjusted Sale Without
+      const dollarImpactRef = `L${r}`;
+      const dollarImpactFormula = `J${r}-K${r}`;
+      if (ws2[dollarImpactRef]) {
+        ws2[dollarImpactRef].f = dollarImpactFormula;
+        ws2[dollarImpactRef].z = '\"$\"#,##0';
+        ws2[dollarImpactRef].s = ws2[dollarImpactRef].s || {};
+        ws2[dollarImpactRef].s.font = { name: 'Leelawadee', sz: 10 };
+        ws2[dollarImpactRef].s.alignment = { horizontal: 'center', vertical: 'center' };
+      }
+
+      // Color code Applied+ (column N, index 13) as green
+      const appliedPosRef = `N${r}`;
+      if (ws2[appliedPosRef] && ws2[appliedPosRef].v !== '') {
+        ws2[appliedPosRef].s = ws2[appliedPosRef].s || {};
+        ws2[appliedPosRef].s.font = { name: 'Leelawadee', sz: 10, color: { rgb: '008000' } }; // Green
+        ws2[appliedPosRef].s.alignment = { horizontal: 'center', vertical: 'center' };
+      }
+
+      // Color code Applied- (column O, index 14) as red
+      const appliedNegRef = `O${r}`;
+      if (ws2[appliedNegRef] && ws2[appliedNegRef].v !== '') {
+        ws2[appliedNegRef].s = ws2[appliedNegRef].s || {};
+        ws2[appliedNegRef].s.font = { name: 'Leelawadee', sz: 10, color: { rgb: 'FF0000' } }; // Red
+        ws2[appliedNegRef].s.alignment = { horizontal: 'center', vertical: 'center' };
+      }
+    }
+
+    XLSX.utils.book_append_sheet(wb, ws2, 'Eco Obs Study');
+
+    // Add Standalone Locations sheet if there are any
+    if (standaloneLocations.length > 0) {
+      const standaloneRows = [];
+      const standaloneHeaders = ['VCS', 'Location', 'Code', 'With Count', 'Without Count', 'Impact', 'Note'];
+      standaloneRows.push(standaloneHeaders);
+
+      standaloneLocations.forEach(({ vcs, locationAnalysis, code, impact }) => {
+        standaloneRows.push([
+          vcs,
+          locationAnalysis,
+          code,
+          impact.withCount || 0,
+          impact.withoutCount || 0,
+          impact.percentImpact || 'N/A',
+          'Standalone - appears in only one VCS'
+        ]);
+      });
+
+      const wsStandalone = XLSX.utils.aoa_to_sheet(standaloneRows);
+
+      // Style standalone sheet header
+      const standaloneCols = standaloneHeaders.length;
+      for (let c = 0; c < standaloneCols; c++) {
+        const cellRef = getCell(1, c);
+        if (!wsStandalone[cellRef]) continue;
+        try {
+          wsStandalone[cellRef].s = {
+            font: { name: 'Leelawadee', sz: 10, bold: true },
+            alignment: { horizontal: 'center', vertical: 'center' },
+            border: {
+              top: { style: 'thin', color: { rgb: 'FF000000' } },
+              bottom: { style: 'thin', color: { rgb: 'FF000000' } },
+              left: { style: 'thin', color: { rgb: 'FF000000' } },
+              right: { style: 'thin', color: { rgb: 'FF000000' } }
+            }
+          };
+        } catch (e) {
+          debug('Standalone header styling failed', e);
+        }
+      }
+
+      // Style standalone data rows
+      for (let r = 2; r <= standaloneRows.length; r++) {
+        for (let c = 0; c < standaloneCols; c++) {
+          const cellRef = getCell(r, c);
+          if (!wsStandalone[cellRef]) continue;
+          try {
+            wsStandalone[cellRef].s = {
+              font: { name: 'Leelawadee', sz: 10 },
+              alignment: { horizontal: 'center', vertical: 'center' }
+            };
+          } catch (e) {
+            debug('Standalone cell styling failed', e);
+          }
+        }
+      }
+
+      XLSX.utils.book_append_sheet(wb, wsStandalone, 'Standalone Locations');
     }
 
     return wb;
@@ -10649,7 +10813,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     onClick={() => toggleFieldCollapse('zoning')}
                     title="Click to expand/collapse"
                   >
-                    Zoning {collapsedFields.zoning ? '������' : '��'}
+                    Zoning {collapsedFields.zoning ? '�������' : '��'}
                   </th>
                   {shouldShowKeyColumn && (
                     <th
