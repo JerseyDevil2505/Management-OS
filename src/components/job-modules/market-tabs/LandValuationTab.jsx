@@ -1141,7 +1141,7 @@ const getPricePerUnit = useCallback((price, size) => {
     }
 
     if (properties && properties.length > 0) {
-      console.log('���� Triggering fresh calculations with FIXED DELTA LOGIC (post-initialization)');
+      console.log('����� Triggering fresh calculations with FIXED DELTA LOGIC (post-initialization)');
       filterVacantSales();
       performBracketAnalysis();
       loadVCSPropertyCounts();
@@ -3611,7 +3611,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       if (isCondo) {
         // For condos: recommended site = target allocation % × average sale price
         siteValue = avgSalePrice * (parseFloat(targetAllocation) / 100);
-        debug(`�� VCS ${vcs} (CONDO):`, {
+        debug(`🏢 VCS ${vcs} (CONDO):`, {
           relevantSalesCount: relevantSales.length,
           avgSalePrice: Math.round(avgSalePrice),
           targetAllocation: targetAllocation + '%',
@@ -5788,15 +5788,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           if (R === 0) {
             cell.s.font.bold = true;
           } else {
-            // Apply row colors based on delta
+            // Apply row colors only if row has a previous (has delta calculation)
             const colorInfo = rowColorInfo.find(info => info.rowIndex === R);
-            if (colorInfo) {
-              if (colorInfo.isPositive) {
-                // Positive delta - light green
-                cell.s.fill = { fgColor: { rgb: 'D4EDDA' } }; // Light green
-              } else {
-                // Null or negative delta - light red
-                cell.s.fill = { fgColor: { rgb: 'F8D7DA' } }; // Light red
+            if (colorInfo && colorInfo.hasPrevious) {
+              // Check the delta value to determine color
+              const deltaColIdx = method2Headers.indexOf('$ DELTA');
+              if (deltaColIdx >= 0) {
+                const deltaCellRef = XLSX.utils.encode_cell({ r: R, c: deltaColIdx });
+                const deltaCell = ws2[deltaCellRef];
+
+                // Only color if delta will be calculated (has formula)
+                if (deltaCell && deltaCell.f) {
+                  // Light green for rows with calculations (positive deltas will show naturally)
+                  cell.s.fill = { fgColor: { rgb: 'D4EDDA' } }; // Light green
+                }
               }
             }
           }
