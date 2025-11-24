@@ -3166,7 +3166,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       remainingAcres = 0;
     }
 
-    debug(`������� Raw land calculation for ${acres} acres:`, breakdown.join(' + '), `= $${rawLandValue.toFixed(0)}`);
+    debug(`������ Raw land calculation for ${acres} acres:`, breakdown.join(' + '), `= $${rawLandValue.toFixed(0)}`);
 
     return rawLandValue;
   };
@@ -4834,7 +4834,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     worksheet['!cols'] = colWidths;
 
-    // Professional formatting with CME bracket colors and gridlines
+    // Professional formatting with gridlines - Leelawadee font, size 10, centered
     try {
       const numRows = data.length;
       const numCols = headers.length;
@@ -4851,19 +4851,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           // Initialize style object
           if (!worksheet[cellRef].s) worksheet[cellRef].s = {};
 
-          // Header row (row 0) - Bold, centered, with dark background
+          // Header row (row 0) - Clear background, black font, centered
           if (r === 0) {
-            worksheet[cellRef].s.font = { bold: true, sz: 11, name: 'Calibri' };
+            worksheet[cellRef].s.font = { bold: true, sz: 10, name: 'Leelawadee', color: { rgb: '000000' } };
             worksheet[cellRef].s.alignment = { horizontal: 'center', vertical: 'center', wrapText: true };
-            worksheet[cellRef].s.fill = { fgColor: { rgb: '4472C4' } }; // Professional blue
-            worksheet[cellRef].s.font.color = { rgb: 'FFFFFF' }; // White text
+            worksheet[cellRef].s.fill = { fgColor: { rgb: 'FFFFFF' } }; // Clear/white background
           } else {
-            // Data rows - Regular font with CME bracket coloring
-            worksheet[cellRef].s.font = { sz: 10, name: 'Calibri' };
-            worksheet[cellRef].s.alignment = { vertical: 'center' };
+            // Data rows - Leelawadee font, size 10, centered
+            worksheet[cellRef].s.font = { sz: 10, name: 'Leelawadee', color: { rgb: '000000' } };
+            worksheet[cellRef].s.alignment = { horizontal: 'center', vertical: 'center' };
 
-            // Get CME bracket for this row to apply color
-            if (cmeBracketColIndex >= 0 && data[r] && data[r][cmeBracketColIndex]) {
+            // Only color CME bracket cells (not entire rows)
+            if (c === cmeBracketColIndex && data[r] && data[r][cmeBracketColIndex]) {
               const cmeBracketLabel = data[r][cmeBracketColIndex];
               const cmeBracket = CME_BRACKETS.find(b => b.label === cmeBracketLabel);
 
@@ -4871,10 +4870,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 // Remove # from hex color for xlsx-js-style format
                 const bgColor = cmeBracket.color.replace('#', '');
                 worksheet[cellRef].s.fill = { fgColor: { rgb: bgColor } };
-
-                // Set text color to black for readability
-                worksheet[cellRef].s.font.color = { rgb: '000000' };
               }
+            } else {
+              // All other cells get white background
+              worksheet[cellRef].s.fill = { fgColor: { rgb: 'FFFFFF' } };
             }
           }
 
