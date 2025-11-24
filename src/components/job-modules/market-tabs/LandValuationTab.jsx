@@ -4592,7 +4592,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       row.push(recSiteFmt, actSiteFmt);
 
-      // Get cascade rates
+      // Get cascade rates BEFORE calculating Raw Land
       let cascadeRates = cascadeConfig.normal;
       const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
         config.vcsList?.includes(vcs)
