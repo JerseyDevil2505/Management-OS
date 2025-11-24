@@ -2659,7 +2659,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         return false;
       }
       if (cat.includes('landlocked')) {
-        console.log(`⚠️ Excluding Landlocked sale ${s.property_block}/${s.property_lot}`);
+        console.log(`⚠�� Excluding Landlocked sale ${s.property_block}/${s.property_lot}`);
         return false;
       }
       if (cat.includes('wetland')) {
@@ -9930,7 +9930,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const siteValue = targetValue - rawLandComponent;
 
     return siteValue;
-  }, [valuationMode, marketLandData, properties, depthTables, cascadeConfig, vacantSales, specialRegions, vcsDepthTableOverrides, vcsRecommendedSites, vcsSheetData, targetAllocation, vcsTypes]);
+  }, [valuationMode, marketLandData, properties, depthTables, cascadeConfig, vacantSales, specialRegions, vcsDepthTableOverrides, vcsRecommendedSites, vcsSheetData, targetAllocation, vcsTypes, vcsPropertyCounts]);
 
   // ========== RENDER VCS SHEET TAB ==========
   const renderVCSSheetTab = () => {
