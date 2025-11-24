@@ -3466,11 +3466,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         const isWithinThreeYears = new Date(prop.sales_date) >= octoberFirstThreeYearsPrior;
         if (!isWithinThreeYears) return false;
 
-        // Valid asset type use starting with '1' (residential)
-        if (!prop.asset_type_use) return false;
-        const typeUseStr = prop.asset_type_use.toString().trim();
-        const hasValidTypeUse = typeUseStr.startsWith('1') || typeUseStr.startsWith('01');
-        if (!hasValidTypeUse) return false;
+        // Valid asset type use starting with '1' (residential) - skip for condos
+        const isCondo = prop.property_m4_class === '4D';
+        if (!isCondo) {
+          if (!prop.asset_type_use) return false;
+          const typeUseStr = prop.asset_type_use.toString().trim();
+          const hasValidTypeUse = typeUseStr.startsWith('1') || typeUseStr.startsWith('01');
+          if (!hasValidTypeUse) return false;
+        }
 
         // Valid NU codes (blank, '7', '07', '00', or space) - MATCH SQL EXACTLY
         const nu = prop.sales_nu;
