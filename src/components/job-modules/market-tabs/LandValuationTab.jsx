@@ -2721,7 +2721,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           return true;
         }
 
-        console.log(`⚠������� Excluding uncategorized sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
+        console.log(`⚠��������� Excluding uncategorized sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
         return false;
       }
 
@@ -3665,7 +3665,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
         siteValue = totalLandValue - rawLandValue;
 
-        debug(`🏠 VCS ${vcs} DETAILED DEBUG (${valuationMode.toUpperCase()} mode):`, {
+        debug(`���� VCS ${vcs} DETAILED DEBUG (${valuationMode.toUpperCase()} mode):`, {
           relevantSalesCount: relevantSales.length,
           salesWithLotData: salesWithLotData?.length || 0,
           avgSalePrice: Math.round(avgSalePrice),
@@ -6392,6 +6392,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         ws2[actionNegRef].s.alignment = { horizontal: 'center', vertical: 'center' };
       }
     }
+
+    // Update worksheet range to include summary rows
+    const maxRow = Math.max(rows.length, currentRow - 1);
+    const maxCol = Math.max(cols - 1, 6); // 7 columns in summary (0-6)
+    ws2['!ref'] = `A1:${XLSX.utils.encode_col(maxCol)}${maxRow}`;
 
     // Set column widths - widen column B for long location descriptions
     ws2['!cols'] = [
@@ -10898,7 +10903,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     onClick={() => toggleFieldCollapse('zoning')}
                     title="Click to expand/collapse"
                   >
-                    Zoning {collapsedFields.zoning ? '�������' : '��'}
+                    Zoning {collapsedFields.zoning ? '���������' : '��'}
                   </th>
                   {shouldShowKeyColumn && (
                     <th
