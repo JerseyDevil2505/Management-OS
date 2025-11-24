@@ -2721,7 +2721,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           return true;
         }
 
-        console.log(`⚠��������� Excluding uncategorized sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
+        console.log(`⚠������� Excluding uncategorized sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
         return false;
       }
 
@@ -3665,7 +3665,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
         siteValue = totalLandValue - rawLandValue;
 
-        debug(`���� VCS ${vcs} DETAILED DEBUG (${valuationMode.toUpperCase()} mode):`, {
+        debug(`🏠 VCS ${vcs} DETAILED DEBUG (${valuationMode.toUpperCase()} mode):`, {
           relevantSalesCount: relevantSales.length,
           salesWithLotData: salesWithLotData?.length || 0,
           avgSalePrice: Math.round(avgSalePrice),
@@ -6292,6 +6292,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Add repeated locations with their individual VCS impacts
     // BUT exclude VCS entries where multiple locations are present (compounding)
+    let foundRepeatedNonCompounded = false;
     Object.keys(repeatedLocations).sort().forEach(location => {
       const vcsList = repeatedLocations[location];
 
@@ -6300,6 +6301,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Only add this location if there are non-compounded VCS entries
       if (nonCompoundedVCS.length > 0) {
+        foundRepeatedNonCompounded = true;
         // Add location group header
         summaryRows.push([`${location} (appears in ${nonCompoundedVCS.length} non-compounded VCS)`, '', '', '', '', '', '']);
 
@@ -6333,6 +6335,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         summaryRows.push(['', '', '', '', '', '', '']);
       }
     });
+
+    // If no repeated non-compounded locations found, add a note
+    if (!foundRepeatedNonCompounded) {
+      summaryRows.push(['No repeated non-compounded locations found.', '', '', '', '', '', '']);
+      summaryRows.push(['All locations either appear in a single VCS or are compounded with other locations.', '', '', '', '', '', '']);
+    }
 
     // Add summary rows to the worksheet
     let currentRow = summaryStartRow;
@@ -10903,7 +10911,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     onClick={() => toggleFieldCollapse('zoning')}
                     title="Click to expand/collapse"
                   >
-                    Zoning {collapsedFields.zoning ? '���������' : '��'}
+                    Zoning {collapsedFields.zoning ? '�������' : '��'}
                   </th>
                   {shouldShowKeyColumn && (
                     <th
