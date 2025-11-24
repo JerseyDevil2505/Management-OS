@@ -5651,28 +5651,84 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     const ws2 = XLSX.utils.aoa_to_sheet(method2Rows);
 
-    // Column widths for Method 2 to ensure content fits
+    // Add formulas for $ DELTA and $ PER ACRE columns
+    try {
+      const adjustedColIndex = method2Headers.indexOf('$ ADJUSTED');
+      const deltaColIndex = method2Headers.indexOf('$ DELTA');
+      const lotDeltaColIndex = method2Headers.indexOf('LOT DELTA');
+      const perAcreColIndex = method2Headers.indexOf('$ PER ACRE');
+
+      // For each data row (starting from row 1, row 0 is header)
+      for (let rowIdx = 1; rowIdx < method2Rows.length; rowIdx++) {
+        const excelRow = rowIdx + 1; // Excel is 1-indexed
+        const currentVCS = method2Rows[rowIdx][0];
+
+        // Find previous row with same VCS for delta calculation
+        let prevRowIdx = -1;
+        for (let i = rowIdx - 1; i >= 1; i--) {
+          if (method2Rows[i][0] === currentVCS) {
+            prevRowIdx = i;
+            break;
+          }
+        }
+
+        if (prevRowIdx >= 0 && deltaColIndex >= 0 && adjustedColIndex >= 0) {
+          const prevExcelRow = prevRowIdx + 1;
+          const adjustedCol = XLSX.utils.encode_col(adjustedColIndex);
+          const deltaCol = XLSX.utils.encode_col(deltaColIndex);
+          const deltaCellRef = XLSX.utils.encode_cell({ r: rowIdx, c: deltaColIndex });
+
+          // Formula: Current Adjusted - Previous Adjusted
+          const deltaFormula = `VALUE(SUBSTITUTE(SUBSTITUTE(${adjustedCol}${excelRow},"$",""),",",""))-VALUE(SUBSTITUTE(SUBSTITUTE(${adjustedCol}${prevExcelRow},"$",""),",",""))`;
+
+          if (ws2[deltaCellRef]) {
+            ws2[deltaCellRef].f = deltaFormula;
+            ws2[deltaCellRef].z = '"$"#,##0'; // Currency format
+          }
+        }
+
+        // Formula for $ PER ACRE: $ DELTA / LOT DELTA
+        if (perAcreColIndex >= 0 && deltaColIndex >= 0 && lotDeltaColIndex >= 0) {
+          const deltaCol = XLSX.utils.encode_col(deltaColIndex);
+          const lotDeltaCol = XLSX.utils.encode_col(lotDeltaColIndex);
+          const perAcreCol = XLSX.utils.encode_col(perAcreColIndex);
+          const perAcreCellRef = XLSX.utils.encode_cell({ r: rowIdx, c: perAcreColIndex });
+
+          // Formula: IF(LOT DELTA > 0, DELTA / LOT DELTA, "N/A")
+          const perAcreFormula = `IF(${lotDeltaCol}${excelRow}>0,VALUE(SUBSTITUTE(SUBSTITUTE(${deltaCol}${excelRow},"$",""),",",""))/${lotDeltaCol}${excelRow},"N/A")`;
+
+          if (ws2[perAcreCellRef] && ws2[perAcreCellRef].v !== 'N/A') {
+            ws2[perAcreCellRef].f = perAcreFormula;
+            ws2[perAcreCellRef].z = '"$"#,##0.00'; // Currency format with 2 decimals
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error adding Method 2 formulas:', e);
+      debug('Method2 formulas skipped', e);
+    }
+
+    // Column widths for Method 2 with VCS column
     ws2['!cols'] = [
+      { wch: 10 }, // VCS
       { wch: 12 }, // Bracket
       { wch: 8 },  // Count
       { wch: 18 }, // Avg Lot Size
-      { wch: 12 }, // Avg Sale Price (t)
+      { wch: 14 }, // Avg Sale Price (t)
       { wch: 14 }, // $ Avg Sale Price
       { wch: 12 }, // Avg SFLA
-      { wch: 12 }, // ADJUSTED
       { wch: 14 }, // $ ADJUSTED
-      { wch: 10 }, // DELTA
       { wch: 12 }, // $ DELTA
       { wch: 10 }, // LOT DELTA
-      { wch: 12 }, // PER ACRE
-      { wch: 12 }, // $ PER ACRE
+      { wch: 14 }, // $ PER ACRE
       { wch: 12 }  // PER SQ FT
     ];
 
-    // Apply Leelawadee size 10, bold headers, centered formatting to Method 2 sheet
-    const headerLabels = ['Bracket','Count','Avg Lot Size (acres)','Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','ADJUSTED','$ ADJUSTED','DELTA','$ DELTA','LOT DELTA','PER ACRE','$ PER ACRE','PER SQ FT','Method 2 Summary'];
+    // Apply Leelawadee size 10, bold headers, centered formatting and colors
+    const headerLabels = method2Headers;
     try {
       const range = XLSX.utils.decode_range(ws2['!ref']);
+
       for (let R = range.s.r; R <= range.e.r; ++R) {
         for (let C = range.s.c; C <= range.e.c; ++C) {
           const ref = XLSX.utils.encode_cell({ r: R, c: C });
@@ -5684,9 +5740,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           cell.s.font = { sz: 10, name: 'Leelawadee' };
           cell.s.alignment = { horizontal: 'center', vertical: 'center' };
 
-          // Headers get bold
-          if (typeof cell.v === 'string' && (headerLabels.includes(cell.v) || headerLabels.some(lbl => cell.v.startsWith(lbl)))) {
+          // Row 0 is header - bold
+          if (R === 0) {
             cell.s.font.bold = true;
+          } else {
+            // Apply row colors based on delta
+            const colorInfo = rowColorInfo.find(info => info.rowIndex === R);
+            if (colorInfo) {
+              if (colorInfo.isPositive) {
+                // Positive delta - light green
+                cell.s.fill = { fgColor: { rgb: 'D4EDDA' } }; // Light green
+              } else {
+                // Null or negative delta - light red
+                cell.s.fill = { fgColor: { rgb: 'F8D7DA' } }; // Light red
+              }
+            }
           }
         }
       }
