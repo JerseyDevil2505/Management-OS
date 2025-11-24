@@ -9775,9 +9775,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   // ========== METHOD FORMATTING HELPER ==========
   const getMethodDisplay = useCallback((type, description) => {
-    // Check if it's a residential description that includes "condo"
-    if (type && type.startsWith('Residential') &&
-        description && description.toLowerCase().includes('condo')) {
+    // Check if Type contains "condo" - if so, use SITE method
+    if (type && type.toLowerCase().includes('condo')) {
       return 'SITE';
     }
 
