@@ -1039,7 +1039,7 @@ const getPricePerUnit = useCallback((price, size) => {
       { code: '2', description: '2 — Duplex / Semi-Detached' },
       { code: '3', description: '3* �� Row / Townhouse (3E,3I,30,31)' },
       { code: '4', description: '4* — MultiFamily (42,43,44)' },
-      { code: '5', description: '5* ���� Conversions (51,52,53)' },
+      { code: '5', description: '5* ����� Conversions (51,52,53)' },
       { code: '6', description: '6 — Condominium' },
       { code: 'all_residential', description: 'All Residential' }
     ];
@@ -4922,9 +4922,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const numRows = data.length;
       const numCols = headers.length;
 
-      // Find CME Bracket and Allocation Target column indices
+      // Find column indices for formatting
       const cmeBracketColIndex = headers.indexOf('CME Bracket');
       const allocationTargetColIndex = headers.indexOf('Allocation Target');
+      const typicalLotColIndex = headers.indexOf('Typical Lot Size');
+      const avgPriceTLotSizeColIndex = headers.indexOf('Avg Price (t) Lot Size');
+      const avgPriceLotSizeColIndex = headers.indexOf('Avg Price Lot Size');
+
+      // Lot size columns that need number formatting
+      const lotSizeColumns = [typicalLotColIndex, avgPriceTLotSizeColIndex, avgPriceLotSizeColIndex].filter(i => i >= 0);
 
       // Style all cells with gridlines and formatting
       for (let r = 0; r < numRows; r++) {
@@ -4963,6 +4969,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             // Format Allocation Target as percentage
             if (c === allocationTargetColIndex) {
               worksheet[cellRef].z = '0.0"%"'; // Display as percentage with 1 decimal
+            }
+
+            // Format lot size columns - FF/SF: no decimals, Acre: 2 decimals
+            if (lotSizeColumns.includes(c)) {
+              if (valuationMode === 'ff' || valuationMode === 'sf') {
+                worksheet[cellRef].z = '#,##0'; // No decimals with comma separator
+              } else {
+                worksheet[cellRef].z = '#,##0.00'; // 2 decimals with comma separator
+              }
             }
           }
 
@@ -9457,7 +9472,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '�������') : ''}
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '���������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('yearBuilt')}
