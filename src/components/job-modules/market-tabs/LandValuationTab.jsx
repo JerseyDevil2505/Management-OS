@@ -5434,10 +5434,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const labelLarge = `${s.toFixed(2)}-${e.toFixed(2)}`;
     const labelXlarge = r ? `${e.toFixed(2)}-${r.toFixed(2)}` : `>${e.toFixed(2)}`;
 
-    // Track rows for coloring (store {vcs, bracket, rowIndex, delta})
+    // Track rows for coloring (store {vcs, bracket, rowIndex, hasPrevious})
     const rowColorInfo = [];
+    // Track VCS-level averages for Jim's formula
+    const vcsAverages = {};
 
     Object.entries(bracketAnalysis || {}).sort(([a],[b]) => a.localeCompare(b)).forEach(([vcs, data]) => {
+      // Store VCS-level averages (used in Jim's formula as GLS and GP)
+      vcsAverages[vcs] = {
+        avgLotSize: data.avgAcres || 0,  // GLS = General Lot Size
+        avgPrice: data.avgAdjusted || 0   // GP = General Price
+      };
+
       const bracketList = [
         { key: 'small', label: labelSmall, bracket: data.brackets.small },
         { key: 'medium', label: labelMedium, bracket: data.brackets.medium },
@@ -5445,22 +5453,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         { key: 'xlarge', label: labelXlarge, bracket: data.brackets.xlarge }
       ];
 
+      let hasPreviousInVCS = false;
+
       bracketList.forEach((row, rowIndex) => {
         if (!row.bracket || row.bracket.count === 0) return;
 
-        // Find last valid bracket with positive avgAdjusted (skip negative rows)
-        let prevBracket = null;
-        for (let i = rowIndex - 1; i >= 0; i--) {
-          const candidateBracket = bracketList[i].bracket;
-          if (candidateBracket && candidateBracket.avgAdjusted && candidateBracket.avgAdjusted > 0) {
-            prevBracket = candidateBracket;
-            break;
-          }
-        }
-
-        const adjustedDelta = prevBracket && prevBracket.avgAdjusted && row.bracket.avgAdjusted ? row.bracket.avgAdjusted - prevBracket.avgAdjusted : null;
-        const lotDelta = prevBracket && prevBracket.avgAcres && row.bracket.avgAcres ? row.bracket.avgAcres - prevBracket.avgAcres : null;
-        const perAcre = adjustedDelta && lotDelta && lotDelta > 0 && adjustedDelta > 0 ? adjustedDelta / lotDelta : null;
+        const adjustedDelta = null; // Will be calculated by formula
+        const lotDelta = hasPreviousInVCS && row.bracket.avgAcres ? row.bracket.avgAcres : null;
+        const perAcre = null; // Will be calculated by formula
         const perSqFt = perAcre ? perAcre / 43560 : null;
 
         const currentRowIndex = method2Rows.length;
@@ -5473,21 +5473,22 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           row.bracket.avgSalePrice != null ? row.bracket.avgSalePrice : '',
           row.bracket.avgSalePrice != null ? `$${Math.round(row.bracket.avgSalePrice).toLocaleString()}` : '',
           row.bracket.avgSFLA != null ? Math.round(row.bracket.avgSFLA).toLocaleString() : '',
-          row.bracket.avgAdjusted != null ? `$${Math.round(row.bracket.avgAdjusted).toLocaleString()}` : '',
-          adjustedDelta != null ? `$${Math.round(adjustedDelta).toLocaleString()}` : '',
+          '', // $ ADJUSTED - will use formula
+          '', // $ DELTA - will use formula
           lotDelta != null ? Number(lotDelta.toFixed(2)) : '',
-          perAcre != null ? `$${perAcre.toFixed(2)}` : (adjustedDelta !== null && adjustedDelta <= 0 ? 'N/A' : ''),
-          perSqFt != null ? `$${perSqFt.toFixed(2)}` : ''
+          '', // $ PER ACRE - will use formula
+          '' // PER SQ FT - will use formula
         ]);
 
-        // Track color info: positive delta or null/negative
+        // Track color info: only color if there's a previous row in this VCS
         rowColorInfo.push({
           rowIndex: currentRowIndex,
           vcs,
           bracket: row.label,
-          delta: adjustedDelta,
-          isPositive: adjustedDelta != null && adjustedDelta > 0
+          hasPrevious: hasPreviousInVCS
         });
+
+        hasPreviousInVCS = true; // Next row will have a previous
       });
     });
 
