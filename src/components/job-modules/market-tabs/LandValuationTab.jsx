@@ -5081,7 +5081,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // Allocation export -> Excel workbook (matches UI table structure)
   const exportAllocationExcel = () => {
     console.log('📊 Allocation Export - vacantTestSales count:', (vacantTestSales || []).length);
-    console.log('📊 Allocation Export - valuationMode:', valuationMode);
+    console.log('�� Allocation Export - valuationMode:', valuationMode);
 
     const rows = [];
 
@@ -6360,7 +6360,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Update worksheet range to include summary rows
     const maxRow = Math.max(rows.length, currentRow - 1);
-    const maxCol = Math.max(cols - 1, 6); // 7 columns in summary (0-6)
+    const maxCol = Math.max(cols - 1, 5); // 6 columns in summary (0-5), 15 in main data (0-14)
     ws2['!ref'] = `A1:${XLSX.utils.encode_col(maxCol)}${maxRow}`;
 
     // Set column widths - widen column B for long location descriptions
@@ -8064,7 +8064,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       </div>
                     </div>
                     <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
-                      ������
+                      ����
                     </span>
                   </div>
 
@@ -9884,7 +9884,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '���������') : ''}
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '����������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('yearBuilt')}
