@@ -783,7 +783,7 @@ useEffect(() => {
         debug('✅ Target allocation set to:', numericValue, typeof numericValue);
         return numericValue;
       } else {
-        debug('🛡���� Preserving existing target allocation:', prev, 'instead of overwriting with:', numericValue);
+        debug('🛡��� Preserving existing target allocation:', prev, 'instead of overwriting with:', numericValue);
         return prev;
       }
     });
@@ -5501,6 +5501,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
         hasPreviousInVCS = true;
         previousAdjusted = currentAdjusted;
+        previousLotSize = row.bracket.avgAcres || 0;
       });
     });
 
