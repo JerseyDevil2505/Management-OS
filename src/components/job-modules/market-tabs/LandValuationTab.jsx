@@ -1037,7 +1037,7 @@ const getPricePerUnit = useCallback((price, size) => {
     const standard = [
       { code: '1', description: '1 ��� Single Family' },
       { code: '2', description: '2 — Duplex / Semi-Detached' },
-      { code: '3', description: '3* ���� Row / Townhouse (3E,3I,30,31)' },
+      { code: '3', description: '3* �� Row / Townhouse (3E,3I,30,31)' },
       { code: '4', description: '4* — MultiFamily (42,43,44)' },
       { code: '5', description: '5* ���� Conversions (51,52,53)' },
       { code: '6', description: '6 — Condominium' },
@@ -4781,16 +4781,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     // Create worksheet
     const worksheet = XLSX.utils.aoa_to_sheet(data);
 
-    // Add Excel formulas for Raw Land and Rec Site to show calculations
+    // Add Excel formulas for Raw Land and Rec Site
     try {
       const rawLandColIndex = headers.indexOf('Raw Land');
       const recSiteColIndex = headers.indexOf('Rec Site Value');
       const methodColIndex = headers.indexOf('Method');
       const allocationTargetColIndex = headers.indexOf('Allocation Target');
       const avgPriceColIndex = headers.indexOf('Avg Price (Current)');
-      const avgPriceTColIndex = headers.indexOf('Avg Price (Time Norm)');
       const avgPriceLotSizeColIndex = headers.indexOf('Avg Price Lot Size');
-      const avgPriceTLotSizeColIndex = headers.indexOf('Avg Price (t) Lot Size');
       const stepdownColIndex = headers.indexOf('Stepdown (FF)') !== -1 ?
         headers.indexOf('Stepdown (FF)') : headers.indexOf('Stepdown (SF)');
 
@@ -4799,9 +4797,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const excessRateFFColIndex = headers.indexOf('Excess Rate ($/FF)');
       const standardRateSFColIndex = headers.indexOf('Standard Rate ($/SF)');
       const excessRateSFColIndex = headers.indexOf('Excess Rate ($/SF)');
-      const primeRateColIndex = headers.indexOf('Prime Rate ($/Acre)');
-      const secondaryRateColIndex = headers.indexOf('Secondary Rate ($/Acre)');
-      const excessRateColIndex = headers.indexOf('Excess Rate ($/Acre)');
 
       // Process each data row (rows 1+ are data, row 0 is header)
       for (let rowIndex = 1; rowIndex < data.length; rowIndex++) {
@@ -4809,42 +4804,27 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         const rowMethod = data[rowIndex][methodColIndex]; // Get the Method for this row
 
         // ===== RAW LAND FORMULA =====
-        // Use Avg Price Lot Size if Avg Price exists, otherwise use Avg Price (t) Lot Size
-        if (rawLandColIndex >= 0) {
+        // Simple: avg price lot size - step X standard + remaining X excess
+        if (rawLandColIndex >= 0 && avgPriceLotSizeColIndex >= 0) {
           const rawLandCellRef = XLSX.utils.encode_cell({ r: rowIndex, c: rawLandColIndex });
           let rawLandFormula = '';
 
           if (rowMethod === 'FF' && standardRateFFColIndex >= 0 && excessRateFFColIndex >= 0 && stepdownColIndex >= 0) {
-            // FF: Use Avg Price Lot Size (with fallback to Avg Price (t) Lot Size)
-            const avgPriceCol = XLSX.utils.encode_col(avgPriceColIndex);
-            const avgPriceLotCol = XLSX.utils.encode_col(avgPriceLotSizeColIndex);
-            const avgPriceTLotCol = XLSX.utils.encode_col(avgPriceTLotSizeColIndex);
+            const lotSizeCol = XLSX.utils.encode_col(avgPriceLotSizeColIndex);
             const stepdownCol = XLSX.utils.encode_col(stepdownColIndex);
             const standardRateCol = XLSX.utils.encode_col(standardRateFFColIndex);
             const excessRateCol = XLSX.utils.encode_col(excessRateFFColIndex);
 
-            rawLandFormula = `IF(${avgPriceCol}${excelRow}<>"",` +
-              `(MIN(${avgPriceLotCol}${excelRow},VALUE(LEFT(${stepdownCol}${excelRow},FIND(" ",${stepdownCol}${excelRow})-1)))*${standardRateCol}${excelRow})+` +
-              `(MAX(0,${avgPriceLotCol}${excelRow}-VALUE(LEFT(${stepdownCol}${excelRow},FIND(" ",${stepdownCol}${excelRow})-1)))*${excessRateCol}${excelRow}),` +
-              `(MIN(${avgPriceTLotCol}${excelRow},VALUE(LEFT(${stepdownCol}${excelRow},FIND(" ",${stepdownCol}${excelRow})-1)))*${standardRateCol}${excelRow})+` +
-              `(MAX(0,${avgPriceTLotCol}${excelRow}-VALUE(LEFT(${stepdownCol}${excelRow},FIND(" ",${stepdownCol}${excelRow})-1)))*${excessRateCol}${excelRow}))`;
+            // (MIN(lot size, stepdown) × standard) + (MAX(0, lot size - stepdown) × excess)
+            rawLandFormula = `(MIN(${lotSizeCol}${excelRow},${stepdownCol}${excelRow})*${standardRateCol}${excelRow})+(MAX(0,${lotSizeCol}${excelRow}-${stepdownCol}${excelRow})*${excessRateCol}${excelRow})`;
           } else if (rowMethod === 'SF' && standardRateSFColIndex >= 0 && excessRateSFColIndex >= 0 && stepdownColIndex >= 0) {
-            // SF: Use Avg Price Lot Size (with fallback to Avg Price (t) Lot Size)
-            const avgPriceCol = XLSX.utils.encode_col(avgPriceColIndex);
-            const avgPriceLotCol = XLSX.utils.encode_col(avgPriceLotSizeColIndex);
-            const avgPriceTLotCol = XLSX.utils.encode_col(avgPriceTLotSizeColIndex);
+            const lotSizeCol = XLSX.utils.encode_col(avgPriceLotSizeColIndex);
             const stepdownCol = XLSX.utils.encode_col(stepdownColIndex);
             const standardRateCol = XLSX.utils.encode_col(standardRateSFColIndex);
             const excessRateCol = XLSX.utils.encode_col(excessRateSFColIndex);
 
-            rawLandFormula = `IF(${avgPriceCol}${excelRow}<>"",` +
-              `(MIN(${avgPriceLotCol}${excelRow},VALUE(LEFT(${stepdownCol}${excelRow},FIND(" ",${stepdownCol}${excelRow})-1)))*${standardRateCol}${excelRow})+` +
-              `(MAX(0,${avgPriceLotCol}${excelRow}-VALUE(LEFT(${stepdownCol}${excelRow},FIND(" ",${stepdownCol}${excelRow})-1)))*${excessRateCol}${excelRow}),` +
-              `(MIN(${avgPriceTLotCol}${excelRow},VALUE(LEFT(${stepdownCol}${excelRow},FIND(" ",${stepdownCol}${excelRow})-1)))*${standardRateCol}${excelRow})+` +
-              `(MAX(0,${avgPriceTLotCol}${excelRow}-VALUE(LEFT(${stepdownCol}${excelRow},FIND(" ",${stepdownCol}${excelRow})-1)))*${excessRateCol}${excelRow}))`;
-          } else if (rowMethod === 'AC') {
-            // Acre: Keep calculated value for now (complex 3-4 tier cascade)
-            // Will be displayed as static value
+            // (MIN(lot size, stepdown) × standard) + (MAX(0, lot size - stepdown) × excess)
+            rawLandFormula = `(MIN(${lotSizeCol}${excelRow},${stepdownCol}${excelRow})*${standardRateCol}${excelRow})+(MAX(0,${lotSizeCol}${excelRow}-${stepdownCol}${excelRow})*${excessRateCol}${excelRow})`;
           }
 
           if (rawLandFormula && worksheet[rawLandCellRef]) {
@@ -4854,25 +4834,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
 
         // ===== REC SITE FORMULA =====
-        if (recSiteColIndex >= 0 && allocationTargetColIndex >= 0) {
+        if (recSiteColIndex >= 0 && allocationTargetColIndex >= 0 && avgPriceColIndex >= 0) {
           const recSiteCellRef = XLSX.utils.encode_cell({ r: rowIndex, c: recSiteColIndex });
           const avgPriceCol = XLSX.utils.encode_col(avgPriceColIndex);
-          const avgPriceTCol = XLSX.utils.encode_col(avgPriceTColIndex);
           const allocationTargetCol = XLSX.utils.encode_col(allocationTargetColIndex);
           const rawLandCol = XLSX.utils.encode_col(rawLandColIndex);
 
           let recSiteFormula = '';
 
           if (rowMethod === 'SITE') {
-            // SITE Method: Avg Price × Allocation Target (fallback to Avg Price (t))
-            recSiteFormula = `IF(${avgPriceCol}${excelRow}<>"",` +
-              `${avgPriceCol}${excelRow}*VALUE(LEFT(${allocationTargetCol}${excelRow},LEN(${allocationTargetCol}${excelRow})-1))/100,` +
-              `${avgPriceTCol}${excelRow}*VALUE(LEFT(${allocationTargetCol}${excelRow},LEN(${allocationTargetCol}${excelRow})-1))/100)`;
+            // SITE Method: Avg Price × Allocation Target
+            recSiteFormula = `${avgPriceCol}${excelRow}*${allocationTargetCol}${excelRow}`;
           } else if (rowMethod === 'FF' || rowMethod === 'SF' || rowMethod === 'AC') {
-            // Acre/FF/SF: (Avg Price × Allocation Target) - Raw Land (fallback to Avg Price (t))
-            recSiteFormula = `IF(${avgPriceCol}${excelRow}<>"",` +
-              `(${avgPriceCol}${excelRow}*VALUE(LEFT(${allocationTargetCol}${excelRow},LEN(${allocationTargetCol}${excelRow})-1))/100)-${rawLandCol}${excelRow},` +
-              `(${avgPriceTCol}${excelRow}*VALUE(LEFT(${allocationTargetCol}${excelRow},LEN(${allocationTargetCol}${excelRow})-1))/100)-${rawLandCol}${excelRow})`;
+            // Acre/FF/SF: (Avg Price × Allocation Target) - Raw Land
+            recSiteFormula = `(${avgPriceCol}${excelRow}*${allocationTargetCol}${excelRow})-${rawLandCol}${excelRow}`;
           }
 
           if (recSiteFormula && worksheet[recSiteCellRef]) {
