@@ -3535,7 +3535,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return;
     }
 
-    debug('���� Calculating VCS recommended site values with target allocation:', targetAllocation + '%');
+    debug('����� Calculating VCS recommended site values with target allocation:', targetAllocation + '%');
 
     const recommendedSites = {};
     const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
@@ -4815,16 +4815,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             const standardRateCol = XLSX.utils.encode_col(standardRateFFColIndex);
             const excessRateCol = XLSX.utils.encode_col(excessRateFFColIndex);
 
-            // (MIN(lot size, stepdown) × standard) + (MAX(0, lot size - stepdown) × excess)
-            rawLandFormula = `(MIN(${lotSizeCol}${excelRow},${stepdownCol}${excelRow})*${standardRateCol}${excelRow})+(MAX(0,${lotSizeCol}${excelRow}-${stepdownCol}${excelRow})*${excessRateCol}${excelRow})`;
+            // Simple: (MIN(lot size, stepdown) × standard) + (remaining × excess)
+            rawLandFormula = `MIN(${lotSizeCol}${excelRow},${stepdownCol}${excelRow})*${standardRateCol}${excelRow}+MAX(0,${lotSizeCol}${excelRow}-${stepdownCol}${excelRow})*${excessRateCol}${excelRow}`;
           } else if (rowMethod === 'SF' && standardRateSFColIndex >= 0 && excessRateSFColIndex >= 0 && stepdownColIndex >= 0) {
             const lotSizeCol = XLSX.utils.encode_col(avgPriceLotSizeColIndex);
             const stepdownCol = XLSX.utils.encode_col(stepdownColIndex);
             const standardRateCol = XLSX.utils.encode_col(standardRateSFColIndex);
             const excessRateCol = XLSX.utils.encode_col(excessRateSFColIndex);
 
-            // (MIN(lot size, stepdown) × standard) + (MAX(0, lot size - stepdown) × excess)
-            rawLandFormula = `(MIN(${lotSizeCol}${excelRow},${stepdownCol}${excelRow})*${standardRateCol}${excelRow})+(MAX(0,${lotSizeCol}${excelRow}-${stepdownCol}${excelRow})*${excessRateCol}${excelRow})`;
+            // Simple: (MIN(lot size, stepdown) × standard) + (remaining × excess)
+            rawLandFormula = `MIN(${lotSizeCol}${excelRow},${stepdownCol}${excelRow})*${standardRateCol}${excelRow}+MAX(0,${lotSizeCol}${excelRow}-${stepdownCol}${excelRow})*${excessRateCol}${excelRow}`;
           }
 
           if (rawLandFormula && worksheet[rawLandCellRef]) {
@@ -4843,11 +4843,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           let recSiteFormula = '';
 
           if (rowMethod === 'SITE') {
-            // SITE Method: Avg Price × Allocation Target
-            recSiteFormula = `${avgPriceCol}${excelRow}*VALUE(${allocationTargetCol}${excelRow})/100`;
+            // SITE Method: Avg Price × Allocation Target (÷100 for percentage)
+            recSiteFormula = `${avgPriceCol}${excelRow}*${allocationTargetCol}${excelRow}/100`;
           } else if (rowMethod === 'FF' || rowMethod === 'SF' || rowMethod === 'AC') {
-            // Acre/FF/SF: (Avg Price × Allocation Target) - Raw Land
-            recSiteFormula = `(${avgPriceCol}${excelRow}*VALUE(${allocationTargetCol}${excelRow})/100)-${rawLandCol}${excelRow}`;
+            // Acre/FF/SF: (Avg Price × Allocation Target) - Raw Land (÷100 for percentage)
+            recSiteFormula = `${avgPriceCol}${excelRow}*${allocationTargetCol}${excelRow}/100-${rawLandCol}${excelRow}`;
           }
 
           if (recSiteFormula && worksheet[recSiteCellRef]) {
@@ -6656,7 +6656,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           zIndex: 9999,
           animation: 'slideIn 0.3s ease'
         }}>
-          ��� Prompt copied! Paste into Claude AI
+          �� Prompt copied! Paste into Claude AI
         </div>
       )}
 
