@@ -584,6 +584,12 @@ useEffect(() => {
     if (currentSession.vcsMethodOverrides) {
       setVcsMethodOverrides(currentSession.vcsMethodOverrides);
     }
+    if (currentSession.vcsRateOverrides) {
+      setVcsRateOverrides(currentSession.vcsRateOverrides);
+    }
+    if (currentSession.vcsStepdownOverrides) {
+      setVcsStepdownOverrides(currentSession.vcsStepdownOverrides);
+    }
 
     if (currentSession.vcsRecommendedSites) {
       setVcsRecommendedSites(currentSession.vcsRecommendedSites);
@@ -2547,7 +2553,7 @@ const getPricePerUnit = useCallback((price, size) => {
     setSearchResults([]);
 
     // Note: Auto-save will trigger within 30 seconds to persist these changes
-    debug('�� Sales added - auto-save will persist these changes:', toAdd.map(p => `${p.property_block}/${p.property_lot}`));
+    debug('��� Sales added - auto-save will persist these changes:', toAdd.map(p => `${p.property_block}/${p.property_lot}`));
   };
 
   const handlePropertyResearch = async (property) => {
@@ -2576,7 +2582,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       
       setLandNotes(prev => ({
         ...prev, 
-        [property.id]: '�� Prompt copied! Opening Claude... (paste response here when ready)'
+        [property.id]: '���� Prompt copied! Opening Claude... (paste response here when ready)'
       }));
       
       window.open('https://claude.ai/new', '_blank');
@@ -9282,7 +9288,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       value={targetAllocation || ''}
                       onChange={(e) => {
                         const value = e.target.value;
-                        debug('��� Target allocation input changed:', value);
+                        debug('����� Target allocation input changed:', value);
                         // Fix: Parse as number to prevent caching issues
                         setTargetAllocation(value === '' ? null : parseFloat(value));
                       }}
