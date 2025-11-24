@@ -9797,20 +9797,31 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   }, [vcsSheetData]);
 
   // ========== METHOD FORMATTING HELPER ==========
-  const getMethodDisplay = useCallback((type, description) => {
-    // Check if Type contains "condo" - if so, use SITE method
-    if (type && type.toLowerCase().includes('condo')) {
-      return 'SITE';
+  // Get the effective method for a VCS (considering overrides)
+  const getVCSMethod = useCallback((vcs, type) => {
+    // If there's a method override for this VCS, use it
+    if (vcsMethodOverrides[vcs]) {
+      return vcsMethodOverrides[vcs];
     }
 
-    // Otherwise use the valuation mode mapping
-    switch (valuationMode) {
+    // Check if Type contains "condo" - if so, use SITE method
+    if (type && type.toLowerCase().includes('condo')) {
+      return 'site';
+    }
+
+    // Otherwise use the global valuation mode
+    return valuationMode;
+  }, [vcsMethodOverrides, valuationMode]);
+
+  const getMethodDisplay = useCallback((method) => {
+    switch (method) {
       case 'acre': return 'AC';
       case 'sf': return 'SF';
       case 'ff': return 'FF';
-      default: return valuationMode.toUpperCase();
+      case 'site': return 'SITE';
+      default: return method?.toUpperCase() || '';
     }
-  }, [valuationMode]);
+  }, []);
 
   // ========== SALES DATE FILTERING FOR CME ==========
   const getOctoberFirstThreeYearsPrior = () => {
