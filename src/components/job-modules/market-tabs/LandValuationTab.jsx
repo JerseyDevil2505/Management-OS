@@ -3521,7 +3521,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
     debug('🚀 calculateVCSRecommendedSitesWithTarget CALLED!');
-    debug('������� Input validation:', {
+    debug('��������� Input validation:', {
       hasTargetAllocation: !!targetAllocation,
       targetAllocationValue: targetAllocation,
       hasCascadeRates: !!cascadeConfig.normal.prime,
@@ -5800,19 +5800,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             // Apply row colors only if row has a previous (has delta calculation)
             const colorInfo = rowColorInfo.find(info => info.rowIndex === R);
             if (colorInfo && colorInfo.hasPrevious) {
-              // Check the delta value to determine color
-              const deltaColIdx = method2Headers.indexOf('$ DELTA');
-              if (deltaColIdx >= 0) {
-                const deltaCellRef = XLSX.utils.encode_cell({ r: R, c: deltaColIdx });
-                const deltaCell = ws2[deltaCellRef];
-
-                // Only color if delta will be calculated (has formula)
-                if (deltaCell && deltaCell.f) {
-                  // Light green for rows with calculations (positive deltas will show naturally)
-                  cell.s.fill = { fgColor: { rgb: 'D4EDDA' } }; // Light green
-                }
+              const delta = colorInfo.calculatedDelta;
+              if (delta != null && delta > 0) {
+                // Positive delta - light green
+                cell.s.fill = { fgColor: { rgb: 'D4EDDA' } }; // Light green
+              } else if (delta != null && delta <= 0) {
+                // Null or negative delta - light red
+                cell.s.fill = { fgColor: { rgb: 'F8D7DA' } }; // Light red
               }
+              // else: no color (shouldn't happen if hasPrevious is true, but safe fallback)
             }
+            // else: first row of VCS - no color
           }
         }
       }
@@ -7805,7 +7803,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         >
                           {data.totalSales} sales
                         </span>
-                        {` ��� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} �� $${data.impliedRate || 0}`}
+                        {` ����� Avg $${Math.round(data.avgPrice).toLocaleString()} �� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} �� $${data.impliedRate || 0}`}
                       </span>
                       </div>
                     </div>
@@ -9630,7 +9628,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'sfla' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '���������') : ''}
+                      SFLA {modalSortField === 'sfla' ? (modalSortDirection === 'asc' ? '↑' : '����������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('yearBuilt')}
