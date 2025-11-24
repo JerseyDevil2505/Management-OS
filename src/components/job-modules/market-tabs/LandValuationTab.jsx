@@ -1206,7 +1206,7 @@ const getPricePerUnit = useCallback((price, size) => {
   // Auto-save every 30 seconds - but only after initial load is complete
   useEffect(() => {
     if (!isInitialLoadComplete) {
-      debug('��������������� Auto-save waiting for initial load to complete');
+      debug('������������� Auto-save waiting for initial load to complete');
       return;
     }
 
@@ -4116,7 +4116,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // ========== SAVE TARGET ALLOCATION FUNCTION ==========
   const saveTargetAllocation = async () => {
     if (!jobData?.id) {
-      debug('������ Save target allocation cancelled: No job ID');
+      debug('���� Save target allocation cancelled: No job ID');
       alert('Error: No job ID found. Cannot save target allocation.');
       return;
     }
@@ -4151,7 +4151,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       let result;
       if (existing) {
-        debug('����� Updating existing record with target allocation...');
+        debug('���� Updating existing record with target allocation...');
         result = await supabase
           .from('market_land_valuation')
           .update({
@@ -6270,41 +6270,54 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Summary header
     summaryRows.push(['']);
-    summaryRows.push(['LOCATION RECOMMENDATIONS SUMMARY']);
+    summaryRows.push(['REPEATED LOCATIONS ACROSS VCS - COMPOUNDING ANALYSIS']);
     summaryRows.push(['']);
-    summaryRows.push(['Location', 'VCS Count', 'Action +', 'Action -', 'Note']);
+    summaryRows.push(['Location', 'VCS', 'Code', 'Dollar Impact', 'Percent Impact', 'Action +', 'Action -']);
 
-    // Collect uncompounded locations (those appearing in only one VCS)
-    const uncompoundedLocs = [];
+    // Collect repeated locations (those appearing in 2+ VCS codes)
+    const repeatedLocations = {};
     Object.keys(locationVCSMap).forEach(location => {
       const vcsList = locationVCSMap[location];
-      if (vcsList && vcsList.length === 1) {
-        const vcs = vcsList[0];
-        const key = `${vcs}_${location}`;
-        const code = mappedLocationCodes[key] || '';
-        const actionPos = actualAdjustments[`${key}_positive`] != null ? actualAdjustments[`${key}_positive`] : '';
-        const actionNeg = actualAdjustments[`${key}_negative`] != null ? actualAdjustments[`${key}_negative`] : '';
-        uncompoundedLocs.push({
-          location,
-          vcsCount: vcsList.length,
-          actionPos,
-          actionNeg,
-          note: 'Uncompounded - appears in only one VCS'
-        });
+      if (vcsList && vcsList.length >= 2) {
+        repeatedLocations[location] = vcsList;
       }
     });
 
-    // Add uncompounded locations to summary
-    uncompoundedLocs.forEach(loc => {
-      const actionPosDisplay = loc.actionPos !== '' ? `${loc.actionPos}%` : '';
-      const actionNegDisplay = loc.actionNeg !== '' ? `${loc.actionNeg}%` : '';
-      summaryRows.push([
-        loc.location,
-        loc.vcsCount,
-        actionPosDisplay,
-        actionNegDisplay,
-        loc.note
-      ]);
+    // Add repeated locations with their individual VCS impacts
+    Object.keys(repeatedLocations).sort().forEach(location => {
+      const vcsList = repeatedLocations[location];
+
+      // Add location group header
+      summaryRows.push([`${location} (appears in ${vcsList.length} VCS)`, '', '', '', '', '', '']);
+
+      // Add each VCS entry for this location
+      vcsList.forEach(vcs => {
+        const key = `${vcs}_${location}`;
+        const code = mappedLocationCodes[key] || '';
+        const impact = calculateEcoObsImpact(vcs, location, globalEcoObsTypeFilter) || {};
+        const dollarImpact = impact.dollarImpact || 0;
+        const percentImpact = impact.percentImpact || 'N/A';
+        const actionPos = actualAdjustments[`${key}_positive`] != null ? actualAdjustments[`${key}_positive`] : '';
+        const actionNeg = actualAdjustments[`${key}_negative`] != null ? actualAdjustments[`${key}_negative`] : '';
+
+        const actionPosDisplay = actionPos !== '' ? `${actionPos}%` : '';
+        const actionNegDisplay = actionNeg !== '' ? `${actionNeg}%` : '';
+        const dollarDisplay = dollarImpact !== 0 ? `$${dollarImpact.toLocaleString()}` : '';
+        const percentDisplay = percentImpact !== 'N/A' ? `${percentImpact}%` : percentImpact;
+
+        summaryRows.push([
+          '',  // Indent under location header
+          vcs,
+          code,
+          dollarDisplay,
+          percentDisplay,
+          actionPosDisplay,
+          actionNegDisplay
+        ]);
+      });
+
+      // Add blank row between location groups
+      summaryRows.push(['', '', '', '', '', '', '']);
     });
 
     // Add summary rows to the worksheet
