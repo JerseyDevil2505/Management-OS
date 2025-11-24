@@ -3420,6 +3420,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         return;
       }
 
+      // Get VCS-specific cascade rates (with any user overrides applied)
+      const vcsRates = getVCSCascadeRates(vcs, cascadeConfig.normal);
+
       // Get average lot size for this VCS using appropriate pre-calculated field based on mode
       let vcsProps, avgSize, rawLandValue;
 
@@ -3432,7 +3435,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         );
         if (vcsProps.length === 0) return;
         avgSize = vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / vcsProps.length;
-        rawLandValue = calculateRawLandValue(avgSize, cascadeConfig.normal);
+        rawLandValue = calculateRawLandValue(avgSize, vcsRates);
       } else if (valuationMode === 'ff') {
         // Front Foot mode: need frontage data
         vcsProps = properties.filter(p =>
@@ -3444,7 +3447,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         // For FF mode, we'll use an average representative property
         const avgFrontage = vcsProps.reduce((sum, p) => sum + parseFloat(p.asset_lot_frontage), 0) / vcsProps.length;
         const avgDepth = vcsProps.reduce((sum, p) => sum + parseFloat(p.asset_lot_depth || 100), 0) / vcsProps.length;
-        rawLandValue = calculateRawLandValue(null, cascadeConfig.normal, {
+        rawLandValue = calculateRawLandValue(null, vcsRates, {
           land_front_feet: avgFrontage,
           land_depth: avgDepth,
           land_zoning: vcsProps[0]?.asset_zoning
@@ -3458,7 +3461,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         );
         if (vcsProps.length === 0) return;
         avgSize = vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / vcsProps.length;
-        rawLandValue = calculateRawLandValue(avgSize, cascadeConfig.normal);
+        rawLandValue = calculateRawLandValue(avgSize, vcsRates);
       }
 
       // Calculate site value using target allocation
@@ -3470,7 +3473,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     setVcsRecommendedSites(recommendedSites);
-  }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue, vcsTypes]);
+  }, [targetAllocation, cascadeConfig, properties, calculateAcreage, calculateRawLandValue, vcsTypes, getVCSCascadeRates]);
 
 
   const calculateVCSRecommendedSitesWithTarget = useCallback(() => {
@@ -6180,7 +6183,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
     const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
 
-    debug('������ Building Lot Analysis Result:', {
+    debug('�������� Building Lot Analysis Result:', {
       avg: buildingLot.avg,
       count: buildingLot.count,
       method: buildingLot.method,
