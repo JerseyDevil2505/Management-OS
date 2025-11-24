@@ -2750,7 +2750,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
       // Apply cascade calculation to get raw land value
-      console.log(`🔍 Calculating raw land for ${sale.property_block}/${sale.property_lot}:`, {
+      console.log(`�� Calculating raw land for ${sale.property_block}/${sale.property_lot}:`, {
         valuationMode,
         acres,
         land_front_feet: sale.land_front_feet,
@@ -9123,7 +9123,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '������������') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '��������������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
@@ -9868,6 +9868,48 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const hasFFMethod = methodsInUse.has('ff');
   const hasSFMethod = methodsInUse.has('sf');
   const hasAcreMethod = methodsInUse.has('acre');
+
+  // Get effective cascade rates for a VCS (including user overrides)
+  const getVCSCascadeRates = useCallback((vcs, baseCascadeRates) => {
+    const rates = JSON.parse(JSON.stringify(baseCascadeRates)); // Deep clone
+
+    // Apply VCS-specific rate overrides
+    if (vcsRateOverrides[vcs]) {
+      const overrides = vcsRateOverrides[vcs];
+      if (overrides.standard !== undefined && overrides.standard !== null) {
+        if (!rates.standard) rates.standard = {};
+        rates.standard.rate = overrides.standard;
+      }
+      if (overrides.excess !== undefined && overrides.excess !== null) {
+        if (!rates.excess) rates.excess = {};
+        rates.excess.rate = overrides.excess;
+      }
+      if (overrides.prime !== undefined && overrides.prime !== null) {
+        if (!rates.prime) rates.prime = {};
+        rates.prime.rate = overrides.prime;
+      }
+      if (overrides.secondary !== undefined && overrides.secondary !== null) {
+        if (!rates.secondary) rates.secondary = {};
+        rates.secondary.rate = overrides.secondary;
+      }
+      if (overrides.residual !== undefined && overrides.residual !== null) {
+        if (!rates.residual) rates.residual = {};
+        rates.residual.rate = overrides.residual;
+      }
+    }
+
+    // Apply VCS-specific stepdown/max override
+    if (vcsStepdownOverrides[vcs] !== undefined && vcsStepdownOverrides[vcs] !== null) {
+      if (rates.standard) {
+        rates.standard.max = vcsStepdownOverrides[vcs];
+      }
+      if (rates.prime) {
+        rates.prime.max = vcsStepdownOverrides[vcs];
+      }
+    }
+
+    return rates;
+  }, [vcsRateOverrides, vcsStepdownOverrides]);
 
   // ========== METHOD FORMATTING HELPER ==========
   // Get the effective method for a VCS (considering overrides)
