@@ -1019,7 +1019,7 @@ const getPricePerUnit = useCallback((price, size) => {
       { code: '2', description: '2 — Duplex / Semi-Detached' },
       { code: '3', description: '3* �� Row / Townhouse (3E,3I,30,31)' },
       { code: '4', description: '4* — MultiFamily (42,43,44)' },
-      { code: '5', description: '5* �� Conversions (51,52,53)' },
+      { code: '5', description: '5* ���� Conversions (51,52,53)' },
       { code: '6', description: '6 — Condominium' },
       { code: 'all_residential', description: 'All Residential' }
     ];
@@ -1290,7 +1290,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (newSales.length > 0) {
-        debug('��������� Found new sales to add:', newSales.length);
+        debug('���������� Found new sales to add:', newSales.length);
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
           const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
@@ -9799,6 +9799,22 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const shouldShowMapColumn = useMemo(() => {
     return Object.values(vcsSheetData).some(data => data.mapPages && data.mapPages.trim() !== '');
   }, [vcsSheetData]);
+
+  // Check which methods are actually in use across all VCS
+  const methodsInUse = useMemo(() => {
+    const methods = new Set();
+    Object.keys(vcsSheetData).forEach(vcs => {
+      const type = vcsTypes[vcs] || 'Residential-Typical';
+      const method = vcsMethodOverrides[vcs] ||
+                     (type.toLowerCase().includes('condo') ? 'site' : valuationMode);
+      methods.add(method);
+    });
+    return methods;
+  }, [vcsSheetData, vcsTypes, vcsMethodOverrides, valuationMode]);
+
+  const hasFFMethod = methodsInUse.has('ff');
+  const hasSFMethod = methodsInUse.has('sf');
+  const hasAcreMethod = methodsInUse.has('acre');
 
   // ========== METHOD FORMATTING HELPER ==========
   // Get the effective method for a VCS (considering overrides)
