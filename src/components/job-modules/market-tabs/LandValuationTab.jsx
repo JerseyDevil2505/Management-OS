@@ -1150,7 +1150,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
-      debug('��������� Triggering allocation study recalculation...');
+      debug('����������� Triggering allocation study recalculation...');
       loadAllocationStudyData();
     }
   }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, specialRegions]);
@@ -4605,11 +4605,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
       }
 
-      // Add stepdown column for FF and SF modes
+      // Add stepdown column for FF and SF modes (numeric only for formula compatibility)
       if (valuationMode === 'ff' && isResidential) {
-        row.push(cascadeRates.standard?.max ? `${cascadeRates.standard.max} ft` : '');
+        row.push(cascadeRates.standard?.max || '');
       } else if (valuationMode === 'sf' && isResidential) {
-        row.push(cascadeRates.standard?.max ? `${cascadeRates.standard.max.toLocaleString()} SF` : '');
+        row.push(cascadeRates.standard?.max || '');
       } else if (valuationMode === 'ff' || valuationMode === 'sf') {
         row.push(''); // Empty for non-residential
       }
