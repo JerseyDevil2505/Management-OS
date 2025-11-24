@@ -386,6 +386,7 @@ const LandValuationTab = ({
   const [vcsZoningData, setVcsZoningData] = useState({});
   const [vcsDescriptions, setVcsDescriptions] = useState({});
   const [vcsRecommendedSites, setVcsRecommendedSites] = useState({});
+  const [vcsMethodOverrides, setVcsMethodOverrides] = useState({}); // Per-VCS method overrides (ac, sf, ff, site)
 
   // ========== DEPTH TABLES STATE ==========
   const [depthTables, setDepthTables] = useState({});
@@ -577,6 +578,9 @@ useEffect(() => {
 
     if (currentSession.vcsTypes) {
       setVcsTypes(currentSession.vcsTypes);
+    }
+    if (currentSession.vcsMethodOverrides) {
+      setVcsMethodOverrides(currentSession.vcsMethodOverrides);
     }
 
     if (currentSession.vcsRecommendedSites) {
@@ -811,6 +815,10 @@ useEffect(() => {
     if (marketLandData.worksheet_data.types) {
       setVcsTypes(marketLandData.worksheet_data.types);
       debug('✅ Loaded VCS types:', marketLandData.worksheet_data.types);
+    }
+    if (marketLandData.worksheet_data.method_overrides) {
+      setVcsMethodOverrides(marketLandData.worksheet_data.method_overrides);
+      debug('✅ Loaded VCS method overrides:', marketLandData.worksheet_data.method_overrides);
     }
   }
 
@@ -7200,7 +7208,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales ���� Avg $${Math.round(data.avgPrice).toLocaleString()} ��������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales ����� Avg $${Math.round(data.avgPrice).toLocaleString()} ��������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{
