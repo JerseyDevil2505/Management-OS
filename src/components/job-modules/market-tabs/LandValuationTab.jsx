@@ -4843,11 +4843,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           let recSiteFormula = '';
 
           if (rowMethod === 'SITE') {
-            // SITE Method: Avg Price × Allocation Target (convert % to decimal)
-            recSiteFormula = `${avgPriceCol}${excelRow}*(${allocationTargetCol}${excelRow}/100)`;
+            // SITE Method: Avg Price × Allocation Target
+            recSiteFormula = `${avgPriceCol}${excelRow}*VALUE(${allocationTargetCol}${excelRow})/100`;
           } else if (rowMethod === 'FF' || rowMethod === 'SF' || rowMethod === 'AC') {
-            // Acre/FF/SF: (Avg Price × Allocation Target) - Raw Land (convert % to decimal)
-            recSiteFormula = `(${avgPriceCol}${excelRow}*(${allocationTargetCol}${excelRow}/100))-${rawLandCol}${excelRow}`;
+            // Acre/FF/SF: (Avg Price × Allocation Target) - Raw Land
+            recSiteFormula = `(${avgPriceCol}${excelRow}*VALUE(${allocationTargetCol}${excelRow})/100)-${rawLandCol}${excelRow}`;
           }
 
           if (recSiteFormula && worksheet[recSiteCellRef]) {
@@ -6133,7 +6133,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
     debug('🔄 Recalculating category analysis');
-    debug('������ Total vacant sales:', vacantSales.length);
+    debug('����� Total vacant sales:', vacantSales.length);
     debug('���� Checked sales count:', checkedSales.length);
     // ���� COMPREHENSIVE FILTERING DEBUG - Shows exactly which sales go where
     console.log('🔍 PAIRED SALES ANALYSIS - Category Breakdown:', {
