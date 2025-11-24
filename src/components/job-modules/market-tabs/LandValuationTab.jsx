@@ -882,6 +882,7 @@ useEffect(() => {
     vcsDescriptions,
     vcsTypes,
     vcsRecommendedSites,
+    vcsMethodOverrides,
     collapsedFields
   });
 
@@ -902,6 +903,7 @@ useEffect(() => {
   vcsDescriptions,
   vcsTypes,
   vcsRecommendedSites,
+  vcsMethodOverrides,
   collapsedFields,
   isInitialLoadComplete
   // Note: updateSession intentionally excluded to prevent infinite loops
@@ -2612,7 +2614,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   const loadAllocationStudyData = useCallback(() => {
     if (!cascadeConfig.normal.prime) return;
 
-    debug('������ Loading allocation study data - individual sale approach');
+    debug('������� Loading allocation study data - individual sale approach');
 
     // Process each individual vacant sale (no grouping)
     const processedVacantSales = [];
