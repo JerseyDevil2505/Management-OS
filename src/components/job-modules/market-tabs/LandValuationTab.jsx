@@ -4346,7 +4346,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     cascadeConfig, bracketAnalysis, method2Summary, method2ExcludedSales,
     targetAllocation, vcsSiteValues, actualAllocations, currentOverallAllocation,
     vcsPropertyCounts, vcsZoningData, vcsSheetData, vcsManualSiteValues,
-    vcsDescriptions, vcsTypes, vcsRecommendedSites, vcsMethodOverrides, ecoObsFactors,
+    vcsDescriptions, vcsTypes, vcsRecommendedSites, vcsMethodOverrides, vcsRateOverrides, vcsStepdownOverrides, ecoObsFactors,
     mappedLocationCodes, trafficLevels, customLocationCodes, summaryInputs,
     actualAdjustments, computedAdjustments, calculateRates, calculateAllocationStats,
     onAnalysisUpdate, updateSessionState
