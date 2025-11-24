@@ -10145,6 +10145,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   const type = vcsTypes[vcs] || 'Residential-Typical';
                   const isGrayedOut = !type.startsWith('Residential');
                   const description = vcsDescriptions[vcs] || getVCSDescription(vcs);
+                  // Get effective method for this VCS (considering overrides)
+                  const vcsMethod = getVCSMethod(vcs, type);
                   // Calculate Rec Site using FF formula with depth table overrides
                   const recSite = calculateRecSite(vcs);
                   // Act Site is user-editable override, defaults to recSite if not set
@@ -10325,7 +10327,27 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                           className="vcs-description-input"
                         />
                       </td>
-                      <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>{getMethodDisplay(type, description)}</td>
+                      <td style={{ padding: '8px', border: '1px solid #E5E7EB' }}>
+                        <select
+                          value={vcsMethod}
+                          onChange={(e) => updateVCSMethod(vcs, e.target.value)}
+                          style={{
+                            padding: '2px',
+                            border: '1px solid #D1D5DB',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            width: '100%',
+                            textAlign: 'center',
+                            backgroundColor: vcsMethodOverrides[vcs] ? '#FEF3C7' : 'white'
+                          }}
+                          title={vcsMethodOverrides[vcs] ? 'VCS Method Override Active' : 'Using global method'}
+                        >
+                          <option value="acre">AC</option>
+                          <option value="sf">SF</option>
+                          <option value="ff">FF</option>
+                          <option value="site">SITE</option>
+                        </select>
+                      </td>
                       <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #E5E7EB' }}>
                         {valuationMode === 'ff' ?
                           (typicalFrontage !== '' ? `${typicalFrontage} ft` : 'N/A') :
