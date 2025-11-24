@@ -490,7 +490,7 @@ const LandValuationTab = ({
 
     // debug log once
     if (Object.keys(newMap).length > 0) {
-      debug('���� Applied default eco-obs mapping for empty codes:', Object.entries(newMap).slice(0,20));
+      debug('����� Applied default eco-obs mapping for empty codes:', Object.entries(newMap).slice(0,20));
     }
   }, [ecoObsFactors, mappedLocationCodes, mapTokenToCode]);
 // ========== INITIALIZE FROM PROPS ==========
@@ -3344,11 +3344,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const recommendedSites = {};
 
     Object.keys(avgNormTimes).forEach(vcs => {
-      // Only calculate for residential VCS
-      if (counts[vcs].residential === 0) return;
+      // Only calculate for residential OR condo VCS
+      if (counts[vcs].residential === 0 && counts[vcs].condo === 0) return;
 
       const avgNormTime = avgNormTimes[vcs];
       if (!avgNormTime) return;
+
+      // Check if this VCS is condo-only (no residential properties)
+      const isCondoOnly = counts[vcs].residential === 0 && counts[vcs].condo > 0;
+
+      if (isCondoOnly) {
+        // For condos: Rec Site = Target Allocation % × Avg Price (no land dimensions needed)
+        const siteValue = avgNormTime * (parseFloat(targetAllocation) / 100);
+        recommendedSites[vcs] = siteValue;
+        return;
+      }
 
       // Get average lot size for this VCS using appropriate pre-calculated field based on mode
       let vcsProps, avgSize, rawLandValue;
