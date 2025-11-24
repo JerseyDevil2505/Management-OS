@@ -6131,7 +6131,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return `${colLetter}${r}`;
     };
 
-    // Header row styling
+    // Header row styling - no borders/gridlines
     for (let c = 0; c < cols; c++) {
       const cellRef = getCell(1, c);
       if (!ws[cellRef]) continue;
@@ -6139,12 +6139,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         ws[cellRef].s = ws[cellRef].s || {};
         ws[cellRef].s.font = { name: 'Leelawadee', sz: 10, bold: true };
         ws[cellRef].s.alignment = { horizontal: 'center', vertical: 'center' };
-        ws[cellRef].s.border = {
-          top: { style: 'thin', color: { rgb: 'FF000000' } },
-          bottom: { style: 'thin', color: { rgb: 'FF000000' } },
-          left: { style: 'thin', color: { rgb: 'FF000000' } },
-          right: { style: 'thin', color: { rgb: 'FF000000' } }
-        };
       } catch (e) {
         debug('Header styling not applied', e);
       }
@@ -8028,7 +8022,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales ����� Avg $${Math.round(data.avgPrice).toLocaleString()} ����������������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales ����� Avg $${Math.round(data.avgPrice).toLocaleString()} ����������������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ������ $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{
