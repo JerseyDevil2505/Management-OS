@@ -5416,30 +5416,28 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     ws1b['!cols'] = ws1['!cols'];
     XLSX.utils.book_append_sheet(wb, ws1b, 'Vacant Sales');
 
-    // Sheet 2: Method 2 expanded (per VCS, expanded view)
+    // Sheet 2: Method 2 expanded (per VCS, expanded view) with VCS column
     const method2Rows = [];
 
+    // Single global header row
+    const method2Headers = ['VCS','Bracket','Count','Avg Lot Size (acres)','Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','$ ADJUSTED','$ DELTA','LOT DELTA','$ PER ACRE','PER SQ FT'];
+    method2Rows.push(method2Headers);
+
+    // Build bracket labels dynamically from cascadeConfig
+    const p = cascadeConfig.normal?.prime?.max ?? 1;
+    const s = cascadeConfig.normal?.secondary?.max ?? 5;
+    const e = cascadeConfig.normal?.excess?.max ?? 10;
+    const r = cascadeConfig.normal?.residual?.max ?? null;
+
+    const labelSmall = `<${p.toFixed(2)}`;
+    const labelMedium = `${p.toFixed(2)}-${s.toFixed(2)}`;
+    const labelLarge = `${s.toFixed(2)}-${e.toFixed(2)}`;
+    const labelXlarge = r ? `${e.toFixed(2)}-${r.toFixed(2)}` : `>${e.toFixed(2)}`;
+
+    // Track rows for coloring (store {vcs, bracket, rowIndex, delta})
+    const rowColorInfo = [];
+
     Object.entries(bracketAnalysis || {}).sort(([a],[b]) => a.localeCompare(b)).forEach(([vcs, data]) => {
-      // VCS header row
-      const vcsSummary = `${data.totalSales || 0} sales • Avg $${Math.round(data.avgPrice || 0).toLocaleString()} �� ${data.avgAcres != null ? Number(data.avgAcres.toFixed(2)) : ''} acres �� $${Math.round(data.avgAdjusted || 0).toLocaleString()}`;
-      method2Rows.push([`${vcs} - ${vcsSummary}`]);
-      method2Rows.push([]);
-
-      // Bracket headers
-      const bracketHeaders = ['Bracket','Count','Avg Lot Size (acres)','Avg Sale Price (t)','$ Avg Sale Price','Avg SFLA','ADJUSTED','$ ADJUSTED','DELTA','$ DELTA','LOT DELTA','PER ACRE','$ PER ACRE','PER SQ FT'];
-      method2Rows.push(bracketHeaders);
-
-      // Build bracket labels dynamically from cascadeConfig
-      const p = cascadeConfig.normal?.prime?.max ?? 1;
-      const s = cascadeConfig.normal?.secondary?.max ?? 5;
-      const e = cascadeConfig.normal?.excess?.max ?? 10;
-      const r = cascadeConfig.normal?.residual?.max ?? null;
-
-      const labelSmall = `<${p.toFixed(2)}`;
-      const labelMedium = `${p.toFixed(2)}-${s.toFixed(2)}`;
-      const labelLarge = `${s.toFixed(2)}-${e.toFixed(2)}`;
-      const labelXlarge = r ? `${e.toFixed(2)}-${r.toFixed(2)}` : `>${e.toFixed(2)}`;
-
       const bracketList = [
         { key: 'small', label: labelSmall, bracket: data.brackets.small },
         { key: 'medium', label: labelMedium, bracket: data.brackets.medium },
@@ -5449,6 +5447,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       bracketList.forEach((row, rowIndex) => {
         if (!row.bracket || row.bracket.count === 0) return;
+
         // Find last valid bracket with positive avgAdjusted (skip negative rows)
         let prevBracket = null;
         for (let i = rowIndex - 1; i >= 0; i--) {
@@ -5458,30 +5457,38 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             break;
           }
         }
+
         const adjustedDelta = prevBracket && prevBracket.avgAdjusted && row.bracket.avgAdjusted ? row.bracket.avgAdjusted - prevBracket.avgAdjusted : null;
         const lotDelta = prevBracket && prevBracket.avgAcres && row.bracket.avgAcres ? row.bracket.avgAcres - prevBracket.avgAcres : null;
         const perAcre = adjustedDelta && lotDelta && lotDelta > 0 && adjustedDelta > 0 ? adjustedDelta / lotDelta : null;
         const perSqFt = perAcre ? perAcre / 43560 : null;
 
+        const currentRowIndex = method2Rows.length;
+
         method2Rows.push([
+          vcs,
           row.label,
           row.bracket.count || 0,
           row.bracket.avgAcres != null ? Number(row.bracket.avgAcres.toFixed(2)) : '',
           row.bracket.avgSalePrice != null ? row.bracket.avgSalePrice : '',
           row.bracket.avgSalePrice != null ? `$${Math.round(row.bracket.avgSalePrice).toLocaleString()}` : '',
           row.bracket.avgSFLA != null ? Math.round(row.bracket.avgSFLA).toLocaleString() : '',
-          row.bracket.avgAdjusted != null ? row.bracket.avgAdjusted : '',
           row.bracket.avgAdjusted != null ? `$${Math.round(row.bracket.avgAdjusted).toLocaleString()}` : '',
-          adjustedDelta != null ? adjustedDelta : '',
           adjustedDelta != null ? `$${Math.round(adjustedDelta).toLocaleString()}` : '',
           lotDelta != null ? Number(lotDelta.toFixed(2)) : '',
-          perAcre != null ? `$${Math.round(perAcre).toLocaleString()}` : (adjustedDelta !== null && adjustedDelta <= 0 ? 'N/A' : ''),
           perAcre != null ? `$${perAcre.toFixed(2)}` : (adjustedDelta !== null && adjustedDelta <= 0 ? 'N/A' : ''),
           perSqFt != null ? `$${perSqFt.toFixed(2)}` : ''
         ]);
-      });
 
-      method2Rows.push([]);
+        // Track color info: positive delta or null/negative
+        rowColorInfo.push({
+          rowIndex: currentRowIndex,
+          vcs,
+          bracket: row.label,
+          delta: adjustedDelta,
+          isPositive: adjustedDelta != null && adjustedDelta > 0
+        });
+      });
     });
 
     // Method 2 Summary (similar to UI)
