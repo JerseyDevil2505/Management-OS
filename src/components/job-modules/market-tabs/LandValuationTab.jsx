@@ -2750,7 +2750,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
       // Apply cascade calculation to get raw land value
-      console.log(`�� Calculating raw land for ${sale.property_block}/${sale.property_lot}:`, {
+      console.log(`🔍 Calculating raw land for ${sale.property_block}/${sale.property_lot}:`, {
         valuationMode,
         acres,
         land_front_feet: sale.land_front_feet,
@@ -9123,7 +9123,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'saleDate' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '��������������') : ''}
+                      Sale Date {modalSortField === 'saleDate' ? (modalSortDirection === 'asc' ? '↑' : '������������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('salePrice')}
@@ -10248,7 +10248,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   const actSite = vcsManualSiteValues[vcs] ?? recSite;
 
                   // Determine which cascade rates to use (priority: VCS-specific > Special Region > Normal)
-                  let cascadeRates = cascadeConfig.normal;
+                  let baseCascadeRates = cascadeConfig.normal;
                   let rateSource = 'Normal';
 
                   // Check for VCS-specific configuration
@@ -10256,7 +10256,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     config.vcsList?.includes(vcs)
                   );
                   if (vcsSpecificConfig) {
-                    cascadeRates = vcsSpecificConfig.rates || cascadeConfig.normal;
+                    baseCascadeRates = vcsSpecificConfig.rates || cascadeConfig.normal;
                     rateSource = `VCS-Specific (${vcsSpecificConfig.method?.toUpperCase()})`;
                   } else {
                     // Check for special region configuration by VCS assignment
@@ -10268,10 +10268,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     });
 
                     if (assignedSpecialRegion) {
-                      cascadeRates = assignedSpecialRegion[1];
+                      baseCascadeRates = assignedSpecialRegion[1];
                       rateSource = assignedSpecialRegion[0]; // Region name
                     }
                   }
+
+                  // Apply VCS-specific rate and stepdown overrides
+                  const cascadeRates = getVCSCascadeRates(vcs, baseCascadeRates);
                   
                   // Get typical lot size for ALL properties in this VCS (for display purposes)
                   // Use pre-calculated values from property_market_analysis table (market_manual_lot_sf/acre)
