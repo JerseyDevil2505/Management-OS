@@ -6263,10 +6263,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const summaryRows = [];
 
     // Summary header
-    summaryRows.push(['']);
-    summaryRows.push(['REPEATED LOCATIONS ACROSS VCS - NON-COMPOUNDED ONLY']);
-    summaryRows.push(['']);
-    summaryRows.push(['Location', 'VCS', 'Code', 'Dollar Impact', 'Percent Impact', 'Action +', 'Action -']);
+    summaryRows.push(['', '']); // Blank row
+    summaryRows.push(['', 'LOCATION SUMMARY - AGGREGATED ACROSS ALL VCS']);
+    summaryRows.push(['', '']); // Blank row
+    summaryRows.push(['', 'Location', 'Sum Adj With', 'Sum Adj Without', 'Dollar Impact', 'Percent Impact']);
 
     // Count how many locations each VCS has
     const vcsLocationCount = {};
@@ -6284,9 +6284,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
     });
 
-    // Add repeated locations with their individual VCS impacts
-    // BUT exclude VCS entries where multiple locations are present (compounding)
-    let foundRepeatedNonCompounded = false;
+    // Add repeated locations with aggregated values across all non-compounded VCS
     Object.keys(repeatedLocations).sort().forEach(location => {
       const vcsList = repeatedLocations[location];
 
@@ -6295,46 +6293,35 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // Only add this location if there are non-compounded VCS entries
       if (nonCompoundedVCS.length > 0) {
-        foundRepeatedNonCompounded = true;
-        // Add location group header
-        summaryRows.push([`${location} (appears in ${nonCompoundedVCS.length} non-compounded VCS)`, '', '', '', '', '', '']);
+        let sumAdjWith = 0;
+        let sumAdjWithout = 0;
+        let validCount = 0;
 
-        // Add each non-compounded VCS entry for this location
+        // Aggregate across all non-compounded VCS entries
         nonCompoundedVCS.forEach(vcs => {
-          const key = `${vcs}_${location}`;
-          const code = mappedLocationCodes[key] || '';
           const impact = calculateEcoObsImpact(vcs, location, globalEcoObsTypeFilter) || {};
-          const dollarImpact = impact.dollarImpact || 0;
-          const percentImpact = impact.percentImpact || 'N/A';
-          const actionPos = actualAdjustments[`${key}_positive`] != null ? actualAdjustments[`${key}_positive`] : '';
-          const actionNeg = actualAdjustments[`${key}_negative`] != null ? actualAdjustments[`${key}_negative`] : '';
-
-          const actionPosDisplay = actionPos !== '' ? `${actionPos}%` : '';
-          const actionNegDisplay = actionNeg !== '' ? `${actionNeg}%` : '';
-          const dollarDisplay = dollarImpact !== 0 ? `$${dollarImpact.toLocaleString()}` : '';
-          const percentDisplay = percentImpact !== 'N/A' ? `${percentImpact}%` : percentImpact;
-
-          summaryRows.push([
-            '',  // Indent under location header
-            vcs,
-            code,
-            dollarDisplay,
-            percentDisplay,
-            actionPosDisplay,
-            actionNegDisplay
-          ]);
+          if (impact.adjustedSaleWith && impact.adjustedSaleWithout) {
+            sumAdjWith += impact.adjustedSaleWith;
+            sumAdjWithout += impact.adjustedSaleWithout;
+            validCount++;
+          }
         });
 
-        // Add blank row between location groups
-        summaryRows.push(['', '', '', '', '', '', '']);
+        if (validCount > 0) {
+          const totalDollarImpact = sumAdjWith - sumAdjWithout;
+          const percentImpact = sumAdjWithout > 0 ? ((totalDollarImpact / sumAdjWithout) * 100).toFixed(1) : 'N/A';
+
+          summaryRows.push([
+            '', // Column A - empty
+            location, // Column B - Location name
+            `$${Math.round(sumAdjWith).toLocaleString()}`, // Sum Adj With
+            `$${Math.round(sumAdjWithout).toLocaleString()}`, // Sum Adj Without
+            `$${Math.round(totalDollarImpact).toLocaleString()}`, // Dollar Impact
+            percentImpact !== 'N/A' ? `${percentImpact}%` : percentImpact // Percent Impact
+          ]);
+        }
       }
     });
-
-    // If no repeated non-compounded locations found, add a note
-    if (!foundRepeatedNonCompounded) {
-      summaryRows.push(['No repeated non-compounded locations found.', '', '', '', '', '', '']);
-      summaryRows.push(['All locations either appear in a single VCS or are compounded with other locations.', '', '', '', '', '', '']);
-    }
 
     // Add summary rows to the worksheet
     let currentRow = summaryStartRow;
@@ -8022,7 +8009,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales ����� Avg $${Math.round(data.avgPrice).toLocaleString()} ����������������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ������ $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales ����� Avg $${Math.round(data.avgPrice).toLocaleString()} ����������������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{
@@ -9949,7 +9936,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'typeUse' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '�������������') : ''}
+                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '��������������') : ''}
                     </th>
                   </tr>
                 </thead>
