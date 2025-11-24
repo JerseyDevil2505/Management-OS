@@ -1150,7 +1150,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
-      debug('��������� Triggering allocation study recalculation...');
+      debug('���������� Triggering allocation study recalculation...');
       loadAllocationStudyData();
     }
   }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, specialRegions]);
@@ -5463,11 +5463,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       bracketList.forEach((row, rowIndex) => {
         if (!row.bracket || row.bracket.count === 0) return;
 
-        // Calculate adjusted using Jim's formula for color determination
-        const ZLS = row.bracket.avgAcres || 0;
-        const GLS = vcsAverages[vcs].avgLotSize;
-        const GP = vcsAverages[vcs].avgPrice;
-        const currentAdjusted = ((ZLS - GLS) * ((GP / GLS) * 0.5)) + GP;
+        // Calculate adjusted using SFLA-based formula for color determination
+        const VCS_AVG_SFLA = vcsAverages[vcs].avgSFLA;
+        const CURRENT_SFLA = row.bracket.avgSFLA || 0;
+        const CURRENT_PRICE = row.bracket.avgSalePrice || 0;
+
+        let currentAdjusted = CURRENT_PRICE;
+        if (VCS_AVG_SFLA > 0 && CURRENT_SFLA > 0 && CURRENT_PRICE > 0) {
+          currentAdjusted = ((VCS_AVG_SFLA - CURRENT_SFLA) * ((CURRENT_PRICE / CURRENT_SFLA) * 0.5)) + CURRENT_PRICE;
+        }
 
         // Calculate delta for coloring (null if first row)
         const calculatedDelta = hasPreviousInVCS && previousAdjusted != null ? currentAdjusted - previousAdjusted : null;
@@ -5538,20 +5542,30 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         xl.avgAcres ? xl.avgAcres.toFixed(2) : 'N/A',
         xl.perSqFt && xl.perSqFt !== 'N/A' ? `$${xl.perSqFt}` : 'N/A'
       ]);
-      method2Rows.push(['All Positive Deltas Avg', (() => {
-        const allRatesAcre = [];
-        if (mid.perAcre && mid.perAcre !== 'N/A') allRatesAcre.push(mid.perAcre);
-        if (lg.perAcre && lg.perAcre !== 'N/A') allRatesAcre.push(lg.perAcre);
-        if (xl.perAcre && xl.perAcre !== 'N/A') allRatesAcre.push(xl.perAcre);
-        if (allRatesAcre.length === 0) return 'N/A';
-        if (valuationMode === 'sf') {
-          const allRatesSf = allRatesAcre.map(r => r / 43560);
-          const avgSf = allRatesSf.reduce((s, r) => s + r, 0) / allRatesSf.length;
-          return `$${avgSf.toFixed(2)}/SF`;
-        }
-        const avgRate = Math.round(allRatesAcre.reduce((s, r) => s + r, 0) / allRatesAcre.length);
-        return `$${avgRate.toLocaleString()}`;
-      })(), '', '']);
+      // All Positive Deltas Avg - calculate across all brackets
+      const allRatesAcre = [];
+      const allAcres = [];
+      if (mid.perAcre && mid.perAcre !== 'N/A') {
+        allRatesAcre.push(mid.perAcre);
+        if (mid.avgAcres) allAcres.push(mid.avgAcres);
+      }
+      if (lg.perAcre && lg.perAcre !== 'N/A') {
+        allRatesAcre.push(lg.perAcre);
+        if (lg.avgAcres) allAcres.push(lg.avgAcres);
+      }
+      if (xl.perAcre && xl.perAcre !== 'N/A') {
+        allRatesAcre.push(xl.perAcre);
+        if (xl.avgAcres) allAcres.push(xl.avgAcres);
+      }
+
+      if (allRatesAcre.length > 0) {
+        const avgPerAcre = Math.round(allRatesAcre.reduce((s, r) => s + r, 0) / allRatesAcre.length);
+        const avgLotSize = allAcres.length > 0 ? (allAcres.reduce((s, a) => s + a, 0) / allAcres.length).toFixed(2) : 'N/A';
+        const avgPerSqFt = (avgPerAcre / 43560).toFixed(2);
+        method2Rows.push(['All Positive Deltas Avg', `$${avgPerAcre.toLocaleString()}`, avgLotSize, `$${avgPerSqFt}`]);
+      } else {
+        method2Rows.push(['All Positive Deltas Avg', 'N/A', 'N/A', 'N/A']);
+      }
     }
 
     // Implied Front Foot Rates by Zoning (FF mode only)
