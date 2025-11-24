@@ -3688,6 +3688,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }, 500);
   };
 
+  const updateVCSMethod = (vcs, method) => {
+    setVcsMethodOverrides(prev => ({
+      ...prev,
+      [vcs]: method
+    }));
+
+    // Trigger autosave to persist the method change
+    debug('💾 Triggering autosave for VCS method change');
+    setTimeout(() => {
+      if (window.landValuationSave) {
+        window.landValuationSave({ source: 'autosave' });
+      }
+    }, 500);
+  };
+
   const toggleFieldCollapse = (fieldName) => {
     setCollapsedFields(prev => ({
       ...prev,
@@ -4046,7 +4061,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           })
           .eq('job_id', jobData.id);
       } else {
-        debug('�� Creating new record with target allocation...');
+        debug('��� Creating new record with target allocation...');
         result = await supabase
           .from('market_land_valuation')
           .insert({
@@ -6108,7 +6123,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const landlocked = getCategoryAverage(s => saleCategories[s.id] === 'landlocked', 'constrained');
     const conservation = getCategoryAverage(s => saleCategories[s.id] === 'conservation', 'constrained');
 
-    debug('���️ Building Lot Analysis Result:', {
+    debug('������ Building Lot Analysis Result:', {
       avg: buildingLot.avg,
       count: buildingLot.count,
       method: buildingLot.method,
