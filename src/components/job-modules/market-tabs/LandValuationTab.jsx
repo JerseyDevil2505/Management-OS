@@ -2689,7 +2689,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         return false;
       }
       if (cat.includes('landlocked')) {
-        console.log(`����� Excluding Landlocked sale ${s.property_block}/${s.property_lot}`);
+        console.log(`������ Excluding Landlocked sale ${s.property_block}/${s.property_lot}`);
         return false;
       }
       if (cat.includes('wetland')) {
@@ -4271,6 +4271,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             vcsTypes: {},
             vcsRecommendedSites: {},
             vcsMethodOverrides: {},
+            vcsRateOverrides: {},
+            vcsStepdownOverrides: {},
             collapsedFields: {},
             hasUnsavedChanges: false,
             lastModified: null
