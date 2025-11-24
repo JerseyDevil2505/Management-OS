@@ -1150,7 +1150,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
-      debug('����������� Triggering allocation study recalculation...');
+      debug('��������� Triggering allocation study recalculation...');
       loadAllocationStudyData();
     }
   }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, specialRegions]);
@@ -4693,12 +4693,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Add Rec Site and Act Site
       row.push(recSiteFmt, actSiteFmt);
 
-      // Get Allocation Target from user-set value (not calculated)
-      const allocationTargetDisplay = targetAllocation != null ?
-        `${Number(targetAllocation).toFixed(1)}%` : '';
+      // Get Allocation Target from user-set value (export as numeric percentage)
+      const allocationTargetValue = targetAllocation != null ?
+        Number(targetAllocation) : '';
 
       // Add Allocation Target to row
-      row.push(allocationTargetDisplay);
+      row.push(allocationTargetValue);
 
       // Add cascade rates - match the selected method
       if (isResidential) {
@@ -6656,7 +6656,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           zIndex: 9999,
           animation: 'slideIn 0.3s ease'
         }}>
-          �� Prompt copied! Paste into Claude AI
+          ��� Prompt copied! Paste into Claude AI
         </div>
       )}
 
