@@ -629,7 +629,7 @@ useEffect(() => {
   // Load cascade config from either location (prefer cascade_rates, fallback to raw_land_config)
   const savedConfig = marketLandData.cascade_rates || marketLandData.raw_land_config?.cascade_config;
   if (savedConfig && !restoredFromSession) {
-    debug('��� Loading cascade config:', {
+    debug('���� Loading cascade config:', {
       source: marketLandData.cascade_rates ? 'cascade_rates' : 'raw_land_config',
       specialCategories: savedConfig.specialCategories,
       mode: savedConfig.mode
@@ -4571,12 +4571,15 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const recSiteFmt = recSite !== null && recSite !== undefined && recSite !== '' ? `$${Math.round(recSite).toLocaleString()}` : '';
       const actSiteFmt = actSite !== null && actSite !== undefined ? `$${Math.round(actSite).toLocaleString()}` : '';
 
+      // Get the actual method for this VCS
+      const vcsMethod = getVCSMethod(vcs, type);
+
       const row = [
         vcs,
         vcsData.counts?.total || 0,
         type,
         cleanDescription,
-        getMethodDisplay(type, description)
+        getMethodDisplay(vcsMethod)
       ];
 
       // Add typical lot size columns (different for FF vs Acre mode)
