@@ -6270,9 +6270,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Summary header
     summaryRows.push(['']);
-    summaryRows.push(['REPEATED LOCATIONS ACROSS VCS - COMPOUNDING ANALYSIS']);
+    summaryRows.push(['REPEATED LOCATIONS ACROSS VCS - NON-COMPOUNDED ONLY']);
     summaryRows.push(['']);
     summaryRows.push(['Location', 'VCS', 'Code', 'Dollar Impact', 'Percent Impact', 'Action +', 'Action -']);
+
+    // Count how many locations each VCS has
+    const vcsLocationCount = {};
+    Object.keys(filteredFactors).forEach(vcs => {
+      const locations = Object.keys(filteredFactors[vcs] || {}).filter(loc => loc !== 'None');
+      vcsLocationCount[vcs] = locations.length;
+    });
 
     // Collect repeated locations (those appearing in 2+ VCS codes)
     const repeatedLocations = {};
@@ -6284,40 +6291,47 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     });
 
     // Add repeated locations with their individual VCS impacts
+    // BUT exclude VCS entries where multiple locations are present (compounding)
     Object.keys(repeatedLocations).sort().forEach(location => {
       const vcsList = repeatedLocations[location];
 
-      // Add location group header
-      summaryRows.push([`${location} (appears in ${vcsList.length} VCS)`, '', '', '', '', '', '']);
+      // Filter out VCS codes that have multiple locations (compounding)
+      const nonCompoundedVCS = vcsList.filter(vcs => vcsLocationCount[vcs] === 1);
 
-      // Add each VCS entry for this location
-      vcsList.forEach(vcs => {
-        const key = `${vcs}_${location}`;
-        const code = mappedLocationCodes[key] || '';
-        const impact = calculateEcoObsImpact(vcs, location, globalEcoObsTypeFilter) || {};
-        const dollarImpact = impact.dollarImpact || 0;
-        const percentImpact = impact.percentImpact || 'N/A';
-        const actionPos = actualAdjustments[`${key}_positive`] != null ? actualAdjustments[`${key}_positive`] : '';
-        const actionNeg = actualAdjustments[`${key}_negative`] != null ? actualAdjustments[`${key}_negative`] : '';
+      // Only add this location if there are non-compounded VCS entries
+      if (nonCompoundedVCS.length > 0) {
+        // Add location group header
+        summaryRows.push([`${location} (appears in ${nonCompoundedVCS.length} non-compounded VCS)`, '', '', '', '', '', '']);
 
-        const actionPosDisplay = actionPos !== '' ? `${actionPos}%` : '';
-        const actionNegDisplay = actionNeg !== '' ? `${actionNeg}%` : '';
-        const dollarDisplay = dollarImpact !== 0 ? `$${dollarImpact.toLocaleString()}` : '';
-        const percentDisplay = percentImpact !== 'N/A' ? `${percentImpact}%` : percentImpact;
+        // Add each non-compounded VCS entry for this location
+        nonCompoundedVCS.forEach(vcs => {
+          const key = `${vcs}_${location}`;
+          const code = mappedLocationCodes[key] || '';
+          const impact = calculateEcoObsImpact(vcs, location, globalEcoObsTypeFilter) || {};
+          const dollarImpact = impact.dollarImpact || 0;
+          const percentImpact = impact.percentImpact || 'N/A';
+          const actionPos = actualAdjustments[`${key}_positive`] != null ? actualAdjustments[`${key}_positive`] : '';
+          const actionNeg = actualAdjustments[`${key}_negative`] != null ? actualAdjustments[`${key}_negative`] : '';
 
-        summaryRows.push([
-          '',  // Indent under location header
-          vcs,
-          code,
-          dollarDisplay,
-          percentDisplay,
-          actionPosDisplay,
-          actionNegDisplay
-        ]);
-      });
+          const actionPosDisplay = actionPos !== '' ? `${actionPos}%` : '';
+          const actionNegDisplay = actionNeg !== '' ? `${actionNeg}%` : '';
+          const dollarDisplay = dollarImpact !== 0 ? `$${dollarImpact.toLocaleString()}` : '';
+          const percentDisplay = percentImpact !== 'N/A' ? `${percentImpact}%` : percentImpact;
 
-      // Add blank row between location groups
-      summaryRows.push(['', '', '', '', '', '', '']);
+          summaryRows.push([
+            '',  // Indent under location header
+            vcs,
+            code,
+            dollarDisplay,
+            percentDisplay,
+            actionPosDisplay,
+            actionNegDisplay
+          ]);
+        });
+
+        // Add blank row between location groups
+        summaryRows.push(['', '', '', '', '', '', '']);
+      }
     });
 
     // Add summary rows to the worksheet
