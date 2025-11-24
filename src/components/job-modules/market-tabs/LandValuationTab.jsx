@@ -1136,7 +1136,7 @@ const getPricePerUnit = useCallback((price, size) => {
     // CRITICAL FIX: Don't auto-detect/filter during initialization!
     // This prevents overwriting manually added sales that were saved to the database
     if (!isInitialLoadComplete) {
-      console.log('�����️ Skipping auto-detection - waiting for initial load to complete');
+      console.log('�������� Skipping auto-detection - waiting for initial load to complete');
       return;
     }
 
@@ -4815,16 +4815,16 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             const standardRateCol = XLSX.utils.encode_col(standardRateFFColIndex);
             const excessRateCol = XLSX.utils.encode_col(excessRateFFColIndex);
 
-            // Simple: (MIN(lot size, stepdown) × standard) + (remaining × excess)
-            rawLandFormula = `MIN(${lotSizeCol}${excelRow},${stepdownCol}${excelRow})*${standardRateCol}${excelRow}+MAX(0,${lotSizeCol}${excelRow}-${stepdownCol}${excelRow})*${excessRateCol}${excelRow}`;
+            // Raw Land = (lot size up to step × standard) + (remaining after step × excess)
+            rawLandFormula = `${stepdownCol}${excelRow}*${standardRateCol}${excelRow}+(${lotSizeCol}${excelRow}-${stepdownCol}${excelRow})*${excessRateCol}${excelRow}`;
           } else if (rowMethod === 'SF' && standardRateSFColIndex >= 0 && excessRateSFColIndex >= 0 && stepdownColIndex >= 0) {
             const lotSizeCol = XLSX.utils.encode_col(avgPriceLotSizeColIndex);
             const stepdownCol = XLSX.utils.encode_col(stepdownColIndex);
             const standardRateCol = XLSX.utils.encode_col(standardRateSFColIndex);
             const excessRateCol = XLSX.utils.encode_col(excessRateSFColIndex);
 
-            // Simple: (MIN(lot size, stepdown) × standard) + (remaining × excess)
-            rawLandFormula = `MIN(${lotSizeCol}${excelRow},${stepdownCol}${excelRow})*${standardRateCol}${excelRow}+MAX(0,${lotSizeCol}${excelRow}-${stepdownCol}${excelRow})*${excessRateCol}${excelRow}`;
+            // Raw Land = (lot size up to step × standard) + (remaining after step × excess)
+            rawLandFormula = `${stepdownCol}${excelRow}*${standardRateCol}${excelRow}+(${lotSizeCol}${excelRow}-${stepdownCol}${excelRow})*${excessRateCol}${excelRow}`;
           }
 
           if (rawLandFormula && worksheet[rawLandCellRef]) {
