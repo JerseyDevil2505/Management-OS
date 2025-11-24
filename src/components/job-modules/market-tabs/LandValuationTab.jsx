@@ -2672,7 +2672,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       return newSet;
     });
 
-    debug('🗑️ Sale removed and tracked as excluded:', saleId);
+    debug('����️ Sale removed and tracked as excluded:', saleId);
   };
 
   // ========== ALLOCATION STUDY FUNCTIONS - REBUILT ==========
@@ -6165,7 +6165,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       debug('Failed to copy header styles to new sheet', e);
     }
 
-    XLSX.utils.book_append_sheet(wb, ws2, 'Eco Obs Study');
     return wb;
   };
 
@@ -7403,7 +7402,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 )}
                 {categoryAnalysis.rawLand.method === 'paired' && categoryAnalysis.rawLand.pairedAnalysis && (
                   <div style={{ fontSize: '9px', color: '#059669', marginTop: '2px' }}>
-                    {categoryAnalysis.rawLand.count} properties • {categoryAnalysis.rawLand.pairedAnalysis.pairs} comparisons
+                    {categoryAnalysis.rawLand.count} properties �� {categoryAnalysis.rawLand.pairedAnalysis.pairs} comparisons
                   </div>
                 )}
               </div>
