@@ -1141,7 +1141,7 @@ const getPricePerUnit = useCallback((price, size) => {
     }
 
     if (properties && properties.length > 0) {
-      console.log('����� Triggering fresh calculations with FIXED DELTA LOGIC (post-initialization)');
+      console.log('���� Triggering fresh calculations with FIXED DELTA LOGIC (post-initialization)');
       filterVacantSales();
       performBracketAnalysis();
       loadVCSPropertyCounts();
@@ -5454,14 +5454,21 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       ];
 
       let hasPreviousInVCS = false;
+      let previousAdjusted = null;
 
       bracketList.forEach((row, rowIndex) => {
         if (!row.bracket || row.bracket.count === 0) return;
 
-        const adjustedDelta = null; // Will be calculated by formula
+        // Calculate adjusted using Jim's formula for color determination
+        const ZLS = row.bracket.avgAcres || 0;
+        const GLS = vcsAverages[vcs].avgLotSize;
+        const GP = vcsAverages[vcs].avgPrice;
+        const currentAdjusted = ((ZLS - GLS) * ((GP / GLS) * 0.5)) + GP;
+
+        // Calculate delta for coloring (null if first row)
+        const calculatedDelta = hasPreviousInVCS && previousAdjusted != null ? currentAdjusted - previousAdjusted : null;
+
         const lotDelta = hasPreviousInVCS && row.bracket.avgAcres ? row.bracket.avgAcres : null;
-        const perAcre = null; // Will be calculated by formula
-        const perSqFt = perAcre ? perAcre / 43560 : null;
 
         const currentRowIndex = method2Rows.length;
 
@@ -5480,15 +5487,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           '' // PER SQ FT - will use formula
         ]);
 
-        // Track color info: only color if there's a previous row in this VCS
+        // Track color info: store calculated delta for coloring
         rowColorInfo.push({
           rowIndex: currentRowIndex,
           vcs,
           bracket: row.label,
-          hasPrevious: hasPreviousInVCS
+          hasPrevious: hasPreviousInVCS,
+          calculatedDelta: calculatedDelta
         });
 
-        hasPreviousInVCS = true; // Next row will have a previous
+        hasPreviousInVCS = true;
+        previousAdjusted = currentAdjusted;
       });
     });
 
@@ -9649,7 +9658,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'typeUse' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '��������������') : ''}
+                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '�������������') : ''}
                     </th>
                   </tr>
                 </thead>
