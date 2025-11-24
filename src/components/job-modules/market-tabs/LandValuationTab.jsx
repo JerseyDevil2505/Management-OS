@@ -1019,7 +1019,7 @@ const getPricePerUnit = useCallback((price, size) => {
       { code: '2', description: '2 — Duplex / Semi-Detached' },
       { code: '3', description: '3* �� Row / Townhouse (3E,3I,30,31)' },
       { code: '4', description: '4* — MultiFamily (42,43,44)' },
-      { code: '5', description: '5* ���� Conversions (51,52,53)' },
+      { code: '5', description: '5* �� Conversions (51,52,53)' },
       { code: '6', description: '6 — Condominium' },
       { code: 'all_residential', description: 'All Residential' }
     ];
@@ -1290,7 +1290,7 @@ const getPricePerUnit = useCallback((price, size) => {
       });
 
       if (newSales.length > 0) {
-        debug('���������� Found new sales to add:', newSales.length);
+        debug('��������� Found new sales to add:', newSales.length);
         const enriched = newSales.map(prop => {
           const acres = calculateAcreage(prop);
           const sizeForUnit = valuationMode === 'ff' ? (parseFloat(prop.asset_lot_frontage) || 0) : acres;
@@ -10070,15 +10070,23 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Description</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Method</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Typ Lot</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Typ Lot Depth</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Depth Table</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Stepdown</th>
+                  {hasFFMethod && (
+                    <>
+                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Typ Lot Depth</th>
+                      <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Depth Table</th>
+                    </>
+                  )}
+                  {(hasFFMethod || hasSFMethod) && (
+                    <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Stepdown</th>
+                  )}
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Rec Site</th>
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Act Site</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Prime/Std</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Sec/Exc</th>
-                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Exc</th>
-                  {shouldShowResidualColumn && (
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{hasAcreMethod ? 'Prime' : 'Standard'}</th>
+                  <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>{hasAcreMethod ? 'Secondary' : 'Excess'}</th>
+                  {hasAcreMethod && (
+                    <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Excess</th>
+                  )}
+                  {shouldShowResidualColumn && hasAcreMethod && (
                     <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Res</th>
                   )}
                   <th style={{ padding: '8px', border: '1px solid #E5E7EB' }}>Wet</th>
