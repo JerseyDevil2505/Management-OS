@@ -10074,14 +10074,14 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Get standard and excess FF rates from cascade config or calculated values
     // Priority: VCS-Specific > Special Region (by VCS assignment) > Normal
-    let cascadeRates = cascadeConfig.normal;
+    let baseCascadeRates = cascadeConfig.normal;
 
     // Check for VCS-specific configuration
     const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
       config.vcsList?.includes(vcs)
     );
     if (vcsSpecificConfig) {
-      cascadeRates = vcsSpecificConfig.rates || cascadeConfig.normal;
+      baseCascadeRates = vcsSpecificConfig.rates || cascadeConfig.normal;
     } else {
       // Check for special region configuration by VCS assignment
       const assignedSpecialRegion = Object.entries(cascadeConfig.special || {}).find(([region, config]) => {
@@ -10092,9 +10092,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       });
 
       if (assignedSpecialRegion) {
-        cascadeRates = assignedSpecialRegion[1]; // Use the config object from the [region, config] tuple
+        baseCascadeRates = assignedSpecialRegion[1]; // Use the config object from the [region, config] tuple
       }
     }
+
+    // Apply VCS-specific rate and stepdown overrides
+    const cascadeRates = getVCSCascadeRates(vcs, baseCascadeRates);
 
     const standardFF = cascadeRates.standard?.rate || 0;
     const excessFF = cascadeRates.excess?.rate || Math.round(standardFF / 2);
