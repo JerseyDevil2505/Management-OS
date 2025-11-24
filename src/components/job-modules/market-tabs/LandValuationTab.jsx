@@ -6337,48 +6337,24 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       currentRow++;
     });
 
+    // Style summary title row (bold)
+    const summaryTitleRow = summaryStartRow + 1;
+    const titleCellRef = getCell(summaryTitleRow, 1);
+    if (ws2[titleCellRef]) {
+      ws2[titleCellRef].s = ws2[titleCellRef].s || {};
+      ws2[titleCellRef].s.font = { name: 'Leelawadee', sz: 10, bold: true };
+      ws2[titleCellRef].s.alignment = { horizontal: 'center', vertical: 'center' };
+    }
+
     // Style summary header row
     const summaryHeaderRow = summaryStartRow + 3;
-    for (let c = 0; c < 7; c++) {
+    for (let c = 1; c < 6; c++) { // Columns B-F (1-5)
       const cellRef = getCell(summaryHeaderRow, c);
       if (ws2[cellRef]) {
         ws2[cellRef].s = {
           font: { name: 'Leelawadee', sz: 10, bold: true },
-          alignment: { horizontal: 'center', vertical: 'center' },
-          border: {
-            top: { style: 'thin', color: { rgb: 'FF000000' } },
-            bottom: { style: 'thin', color: { rgb: 'FF000000' } },
-            left: { style: 'thin', color: { rgb: 'FF000000' } },
-            right: { style: 'thin', color: { rgb: 'FF000000' } }
-          }
+          alignment: { horizontal: 'center', vertical: 'center' }
         };
-      }
-    }
-
-    // Style location group headers (bold)
-    for (let r = summaryHeaderRow + 1; r < currentRow; r++) {
-      const firstColRef = getCell(r, 0);
-      if (ws2[firstColRef] && ws2[firstColRef].v && ws2[firstColRef].v.toString().includes('appears in')) {
-        ws2[firstColRef].s = ws2[firstColRef].s || {};
-        ws2[firstColRef].s.font = { name: 'Leelawadee', sz: 10, bold: true };
-        ws2[firstColRef].s.alignment = { horizontal: 'left', vertical: 'center' };
-      }
-    }
-
-    // Color code Action + as green and Action - as red in summary
-    for (let r = summaryHeaderRow + 1; r < currentRow; r++) {
-      const actionPosRef = getCell(r, 5); // Column F (Action +)
-      if (ws2[actionPosRef] && ws2[actionPosRef].v !== '') {
-        ws2[actionPosRef].s = ws2[actionPosRef].s || {};
-        ws2[actionPosRef].s.font = { name: 'Leelawadee', sz: 10, color: { rgb: '008000' } }; // Green
-        ws2[actionPosRef].s.alignment = { horizontal: 'center', vertical: 'center' };
-      }
-
-      const actionNegRef = getCell(r, 6); // Column G (Action -)
-      if (ws2[actionNegRef] && ws2[actionNegRef].v !== '') {
-        ws2[actionNegRef].s = ws2[actionNegRef].s || {};
-        ws2[actionNegRef].s.font = { name: 'Leelawadee', sz: 10, color: { rgb: 'FF0000' } }; // Red
-        ws2[actionNegRef].s.alignment = { horizontal: 'center', vertical: 'center' };
       }
     }
 
@@ -8088,7 +8064,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                       </div>
                     </div>
                     <span style={{ fontSize: '16px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
-                      ����
+                      ������
                     </span>
                   </div>
 
@@ -9936,7 +9912,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'typeUse' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '��������������') : ''}
+                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '�������������') : ''}
                     </th>
                   </tr>
                 </thead>
