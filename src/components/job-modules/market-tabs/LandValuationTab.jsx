@@ -2717,7 +2717,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                                   s.sales_date &&
                                   new Date(s.sales_date).getFullYear() < s.asset_year_built;
         if (isPreConstruction) {
-          console.log(`✅ Including uncategorized pre-construction sale ${s.property_block}/${s.property_lot}`);
+          console.log(`�� Including uncategorized pre-construction sale ${s.property_block}/${s.property_lot}`);
           return true;
         }
 
@@ -5518,9 +5518,26 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const s = cascadeConfig.normal?.secondary?.max ?? 5;
       const e = cascadeConfig.normal?.excess?.max ?? 10;
 
-      method2Rows.push([`${p.toFixed(2)}-${s.toFixed(2)} perAcre`, mid.perAcre && mid.perAcre !== 'N/A' ? `$${mid.perAcre.toLocaleString()}` : 'N/A']);
-      method2Rows.push([`${s.toFixed(2)}-${e.toFixed(2)} perAcre`, lg.perAcre && lg.perAcre !== 'N/A' ? `$${lg.perAcre.toLocaleString()}` : 'N/A']);
-      method2Rows.push([`${e.toFixed(2)}+ perAcre`, xl.perAcre && xl.perAcre !== 'N/A' ? `$${xl.perAcre.toLocaleString()}` : 'N/A']);
+      // Enhanced summary with per acre, lot size, and per sq ft
+      method2Rows.push(['Bracket Range', 'Per Acre', 'Avg Lot Size (acres)', 'Per Sq Ft']);
+      method2Rows.push([
+        `${p.toFixed(2)}-${s.toFixed(2)}`,
+        mid.perAcre && mid.perAcre !== 'N/A' ? `$${mid.perAcre.toLocaleString()}` : 'N/A',
+        mid.avgAcres ? mid.avgAcres.toFixed(2) : 'N/A',
+        mid.perSqFt && mid.perSqFt !== 'N/A' ? `$${mid.perSqFt}` : 'N/A'
+      ]);
+      method2Rows.push([
+        `${s.toFixed(2)}-${e.toFixed(2)}`,
+        lg.perAcre && lg.perAcre !== 'N/A' ? `$${lg.perAcre.toLocaleString()}` : 'N/A',
+        lg.avgAcres ? lg.avgAcres.toFixed(2) : 'N/A',
+        lg.perSqFt && lg.perSqFt !== 'N/A' ? `$${lg.perSqFt}` : 'N/A'
+      ]);
+      method2Rows.push([
+        `${e.toFixed(2)}+`,
+        xl.perAcre && xl.perAcre !== 'N/A' ? `$${xl.perAcre.toLocaleString()}` : 'N/A',
+        xl.avgAcres ? xl.avgAcres.toFixed(2) : 'N/A',
+        xl.perSqFt && xl.perSqFt !== 'N/A' ? `$${xl.perSqFt}` : 'N/A'
+      ]);
       method2Rows.push(['All Positive Deltas Avg', (() => {
         const allRatesAcre = [];
         if (mid.perAcre && mid.perAcre !== 'N/A') allRatesAcre.push(mid.perAcre);
@@ -5534,7 +5551,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
         const avgRate = Math.round(allRatesAcre.reduce((s, r) => s + r, 0) / allRatesAcre.length);
         return `$${avgRate.toLocaleString()}`;
-      })()]);
+      })(), '', '']);
     }
 
     // Implied Front Foot Rates by Zoning (FF mode only)
@@ -5745,7 +5762,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
           if (ws2[perAcreCellRef]) {
             ws2[perAcreCellRef].f = perAcreFormula;
-            ws2[perAcreCellRef].z = '"$"#,##0.00'; // Currency format with 2 decimals
+            ws2[perAcreCellRef].z = '"$"#,##0'; // Currency format without decimals
           }
         }
 
@@ -5770,7 +5787,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Column widths for Method 2 with VCS column
     ws2['!cols'] = [
-      { wch: 10 }, // VCS
+      { wch: 20 }, // VCS - widened to prevent truncation
       { wch: 12 }, // Bracket
       { wch: 8 },  // Count
       { wch: 18 }, // Avg Lot Size
@@ -5811,11 +5828,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               if (delta != null && delta > 0) {
                 // Positive delta - light green
                 cell.s.fill = { fgColor: { rgb: 'D4EDDA' } }; // Light green
-              } else if (delta != null && delta <= 0) {
-                // Null or negative delta - light red
+              } else if (delta != null && delta < 0) {
+                // Negative delta only - light red (not zero)
                 cell.s.fill = { fgColor: { rgb: 'F8D7DA' } }; // Light red
               }
-              // else: no color (shouldn't happen if hasPrevious is true, but safe fallback)
+              // else: no color for zero or null delta
             }
             // else: first row of VCS - no color
           }
