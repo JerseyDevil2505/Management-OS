@@ -6336,7 +6336,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Style summary header row
     const summaryHeaderRow = summaryStartRow + 3;
-    for (let c = 0; c < 5; c++) {
+    for (let c = 0; c < 7; c++) {
       const cellRef = getCell(summaryHeaderRow, c);
       if (ws2[cellRef]) {
         ws2[cellRef].s = {
@@ -6352,18 +6352,30 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
     }
 
+    // Style location group headers (bold)
+    for (let r = summaryHeaderRow + 1; r < currentRow; r++) {
+      const firstColRef = getCell(r, 0);
+      if (ws2[firstColRef] && ws2[firstColRef].v && ws2[firstColRef].v.toString().includes('appears in')) {
+        ws2[firstColRef].s = ws2[firstColRef].s || {};
+        ws2[firstColRef].s.font = { name: 'Leelawadee', sz: 10, bold: true };
+        ws2[firstColRef].s.alignment = { horizontal: 'left', vertical: 'center' };
+      }
+    }
+
     // Color code Action + as green and Action - as red in summary
     for (let r = summaryHeaderRow + 1; r < currentRow; r++) {
-      const actionPosRef = getCell(r, 2); // Column C (Action +)
+      const actionPosRef = getCell(r, 5); // Column F (Action +)
       if (ws2[actionPosRef] && ws2[actionPosRef].v !== '') {
         ws2[actionPosRef].s = ws2[actionPosRef].s || {};
         ws2[actionPosRef].s.font = { name: 'Leelawadee', sz: 10, color: { rgb: '008000' } }; // Green
+        ws2[actionPosRef].s.alignment = { horizontal: 'center', vertical: 'center' };
       }
 
-      const actionNegRef = getCell(r, 3); // Column D (Action -)
+      const actionNegRef = getCell(r, 6); // Column G (Action -)
       if (ws2[actionNegRef] && ws2[actionNegRef].v !== '') {
         ws2[actionNegRef].s = ws2[actionNegRef].s || {};
         ws2[actionNegRef].s.font = { name: 'Leelawadee', sz: 10, color: { rgb: 'FF0000' } }; // Red
+        ws2[actionNegRef].s.alignment = { horizontal: 'center', vertical: 'center' };
       }
     }
 
