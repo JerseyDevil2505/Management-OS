@@ -3324,7 +3324,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       vcs3658: calculatedAvgNormTime['3658'],
       vcs3658Counts: counts['3658']
     });
-    calculateVCSRecommendedSites(calculatedAvgNormTime, counts);
+    calculateVCSRecommendedSites(calculatedAvgPrice, calculatedAvgNormTime, counts);
     
     // Store in vcsSheetData for display
     const sheetData = {};
@@ -3345,10 +3345,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     setVcsSheetData(sheetData);
   }, [properties, valuationMode]);
 
-  const calculateVCSRecommendedSites = useCallback((avgNormTimes, counts) => {
+  const calculateVCSRecommendedSites = useCallback((avgPrices, avgNormTimes, counts) => {
     console.log('🔍 calculateVCSRecommendedSites called:', {
       targetAllocation,
       hasCascadePrime: !!cascadeConfig.normal.prime,
+      avgPricesKeys: Object.keys(avgPrices || {}).slice(0, 5),
       avgNormTimesKeys: Object.keys(avgNormTimes || {}).slice(0, 5),
       countsKeys: Object.keys(counts || {}).slice(0, 5)
     });
@@ -3367,8 +3368,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       // Only calculate for residential OR condo VCS
       if (counts[vcs].residential === 0 && counts[vcs].condo === 0) return;
 
-      const avgNormTime = avgNormTimes[vcs];
-      if (!avgNormTime) return;
+      // Prioritize Avg Price (recent sales) over Avg Price (t) (time-adjusted)
+      const avgPrice = avgPrices[vcs] || avgNormTimes[vcs];
+      if (!avgPrice) return;
 
       // Check if this VCS Type contains "condo"
       const vcsType = vcsTypes[vcs] || '';
@@ -3376,10 +3378,11 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       if (isCondo) {
         // For condos: Rec Site = Target Allocation % × Avg Price (no land dimensions needed)
-        const siteValue = avgNormTime * (parseFloat(targetAllocation) / 100);
+        const siteValue = avgPrice * (parseFloat(targetAllocation) / 100);
         console.log(`🏢 CONDO VCS ${vcs}:`, {
           vcsType,
-          avgNormTime,
+          avgPrice,
+          usedAvgPrice: !!avgPrices[vcs],
           targetAllocation,
           siteValue
         });
@@ -3429,7 +3432,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
 
       // Calculate site value using target allocation
-      const totalLandValue = avgNormTime * (parseFloat(targetAllocation) / 100);
+      // Use Avg Price if available, otherwise Avg Price (t)
+      const totalLandValue = avgPrice * (parseFloat(targetAllocation) / 100);
       const siteValue = totalLandValue - rawLandValue;
 
       recommendedSites[vcs] = siteValue; // No rounding - store exact value
@@ -5777,7 +5781,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const checkedSales = vacantSales.filter(s => includedSales.has(s.id));
 
     debug('🔄 Recalculating category analysis');
-    debug('���� Total vacant sales:', vacantSales.length);
+    debug('����� Total vacant sales:', vacantSales.length);
     debug('���� Checked sales count:', checkedSales.length);
     // 🔍 COMPREHENSIVE FILTERING DEBUG - Shows exactly which sales go where
     console.log('🔍 PAIRED SALES ANALYSIS - Category Breakdown:', {
