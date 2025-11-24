@@ -4581,18 +4581,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         row.push(typicalLot || '');
       }
 
-      // Add stepdown column for FF and SF modes
-      if (valuationMode === 'ff' && isResidential) {
-        row.push(cascadeRates.standard?.max ? `${cascadeRates.standard.max} ft` : '');
-      } else if (valuationMode === 'sf' && isResidential) {
-        row.push(cascadeRates.standard?.max ? `${cascadeRates.standard.max.toLocaleString()} SF` : '');
-      } else if (valuationMode === 'ff' || valuationMode === 'sf') {
-        row.push(''); // Empty for non-residential
-      }
-
-      row.push(recSiteFmt, actSiteFmt);
-
-      // Get cascade rates BEFORE calculating Raw Land
+      // Get cascade rates early (needed for stepdown column and Raw Land calculation)
       let cascadeRates = cascadeConfig.normal;
       const vcsSpecificConfig = Object.values(cascadeConfig.vcsSpecific || {}).find(config =>
         config.vcsList?.includes(vcs)
@@ -4607,6 +4596,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           cascadeRates = cascadeConfig.special[specialRegions[vcsInSpecialRegion.id]];
         }
       }
+
+      // Add stepdown column for FF and SF modes
+      if (valuationMode === 'ff' && isResidential) {
+        row.push(cascadeRates.standard?.max ? `${cascadeRates.standard.max} ft` : '');
+      } else if (valuationMode === 'sf' && isResidential) {
+        row.push(cascadeRates.standard?.max ? `${cascadeRates.standard.max.toLocaleString()} SF` : '');
+      } else if (valuationMode === 'ff' || valuationMode === 'sf') {
+        row.push(''); // Empty for non-residential
+      }
+
+      row.push(recSiteFmt, actSiteFmt);
 
       // Calculate Raw Land for export-only column
       let rawLandValue = 0;
