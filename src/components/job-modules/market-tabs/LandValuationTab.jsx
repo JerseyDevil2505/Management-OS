@@ -9819,11 +9819,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const avgPrice = data.avgPrice || data.avgNormTime;
     if (!avgPrice || !targetAllocation) return vcsRecommendedSites[vcs] || 0;
 
-    // Check if this VCS is a condo - condos use simple allocation formula
-    const vcsType = vcsTypes[vcs] || 'Residential-Typical';
-    const isCondo = vcsType.toLowerCase().includes('condo');
+    // Check if this VCS is condo-only (has condos but no residential properties)
+    // Use actual property counts from data, not the manually-set VCS Type
+    const counts = vcsPropertyCounts[vcs] || { residential: 0, condo: 0 };
+    const isCondoOnly = counts.residential === 0 && counts.condo > 0;
 
-    if (isCondo) {
+    if (isCondoOnly) {
       // For condos: Rec Site = Target % × Avg Price (no land dimensions)
       return Math.round(avgPrice * (targetAllocation / 100));
     }
