@@ -1195,7 +1195,7 @@ const getPricePerUnit = useCallback((price, size) => {
   const filterVacantSales = useCallback(() => {
     if (!properties) return;
 
-    console.log('🔄 FilterVacantSales called:', {
+    console.log('���� FilterVacantSales called:', {
       currentVacantSalesCount: vacantSales.length,
       hasMethod1Excluded: !!window._method1ExcludedSales,
       method1ExcludedSize: window._method1ExcludedSales?.size || 0,
@@ -2654,7 +2654,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           return true;
         }
 
-        console.log(`⚠��� Excluding uncategorized sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
+        console.log(`⚠����� Excluding uncategorized sale ${s.property_block}/${s.property_lot} (class ${s.property_m4_class})`);
         return false;
       }
 
@@ -4181,7 +4181,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           descriptions: vcsDescriptions,
           types: vcsTypes,
           sheet_data: vcsSheetData,
-          depth_table_overrides: vcsDepthTableOverrides
+          depth_table_overrides: vcsDepthTableOverrides,
+          method_overrides: vcsMethodOverrides
         },
         eco_obs_applied_adjustments: actualAdjustments,
         eco_obs_code_config: {
