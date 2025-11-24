@@ -1206,7 +1206,7 @@ const getPricePerUnit = useCallback((price, size) => {
   // Auto-save every 30 seconds - but only after initial load is complete
   useEffect(() => {
     if (!isInitialLoadComplete) {
-      debug('������������� Auto-save waiting for initial load to complete');
+      debug('��������������� Auto-save waiting for initial load to complete');
       return;
     }
 
@@ -4116,7 +4116,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // ========== SAVE TARGET ALLOCATION FUNCTION ==========
   const saveTargetAllocation = async () => {
     if (!jobData?.id) {
-      debug('���� Save target allocation cancelled: No job ID');
+      debug('������ Save target allocation cancelled: No job ID');
       alert('Error: No job ID found. Cannot save target allocation.');
       return;
     }
@@ -4151,7 +4151,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       let result;
       if (existing) {
-        debug('���� Updating existing record with target allocation...');
+        debug('����� Updating existing record with target allocation...');
         result = await supabase
           .from('market_land_valuation')
           .update({
@@ -6264,67 +6264,116 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
     }
 
-    XLSX.utils.book_append_sheet(wb, ws2, 'Eco Obs Study');
+    // Add summary section underneath the data
+    const summaryStartRow = rows.length + 2; // Leave one blank row
+    const summaryRows = [];
 
-    // Add Standalone Locations sheet if there are any
-    if (standaloneLocations.length > 0) {
-      const standaloneRows = [];
-      const standaloneHeaders = ['VCS', 'Location', 'Code', 'With Count', 'Without Count', 'Impact', 'Note'];
-      standaloneRows.push(standaloneHeaders);
+    // Summary header
+    summaryRows.push(['']);
+    summaryRows.push(['LOCATION RECOMMENDATIONS SUMMARY']);
+    summaryRows.push(['']);
+    summaryRows.push(['Location', 'VCS Count', 'Action +', 'Action -', 'Note']);
 
-      standaloneLocations.forEach(({ vcs, locationAnalysis, code, impact }) => {
-        standaloneRows.push([
-          vcs,
-          locationAnalysis,
-          code,
-          impact.withCount || 0,
-          impact.withoutCount || 0,
-          impact.percentImpact || 'N/A',
-          'Standalone - appears in only one VCS'
-        ]);
+    // Collect uncompounded locations (those appearing in only one VCS)
+    const uncompoundedLocs = [];
+    Object.keys(locationVCSMap).forEach(location => {
+      const vcsList = locationVCSMap[location];
+      if (vcsList && vcsList.length === 1) {
+        const vcs = vcsList[0];
+        const key = `${vcs}_${location}`;
+        const code = mappedLocationCodes[key] || '';
+        const actionPos = actualAdjustments[`${key}_positive`] != null ? actualAdjustments[`${key}_positive`] : '';
+        const actionNeg = actualAdjustments[`${key}_negative`] != null ? actualAdjustments[`${key}_negative`] : '';
+        uncompoundedLocs.push({
+          location,
+          vcsCount: vcsList.length,
+          actionPos,
+          actionNeg,
+          note: 'Uncompounded - appears in only one VCS'
+        });
+      }
+    });
+
+    // Add uncompounded locations to summary
+    uncompoundedLocs.forEach(loc => {
+      const actionPosDisplay = loc.actionPos !== '' ? `${loc.actionPos}%` : '';
+      const actionNegDisplay = loc.actionNeg !== '' ? `${loc.actionNeg}%` : '';
+      summaryRows.push([
+        loc.location,
+        loc.vcsCount,
+        actionPosDisplay,
+        actionNegDisplay,
+        loc.note
+      ]);
+    });
+
+    // Add summary rows to the worksheet
+    let currentRow = summaryStartRow;
+    summaryRows.forEach(summaryRow => {
+      summaryRow.forEach((val, colIdx) => {
+        const cellRef = getCell(currentRow, colIdx);
+        ws2[cellRef] = { v: val, t: 's' };
+        ws2[cellRef].s = {
+          font: { name: 'Leelawadee', sz: 10, bold: colIdx === 0 && currentRow === summaryStartRow + 1 },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
       });
+      currentRow++;
+    });
 
-      const wsStandalone = XLSX.utils.aoa_to_sheet(standaloneRows);
-
-      // Style standalone sheet header
-      const standaloneCols = standaloneHeaders.length;
-      for (let c = 0; c < standaloneCols; c++) {
-        const cellRef = getCell(1, c);
-        if (!wsStandalone[cellRef]) continue;
-        try {
-          wsStandalone[cellRef].s = {
-            font: { name: 'Leelawadee', sz: 10, bold: true },
-            alignment: { horizontal: 'center', vertical: 'center' },
-            border: {
-              top: { style: 'thin', color: { rgb: 'FF000000' } },
-              bottom: { style: 'thin', color: { rgb: 'FF000000' } },
-              left: { style: 'thin', color: { rgb: 'FF000000' } },
-              right: { style: 'thin', color: { rgb: 'FF000000' } }
-            }
-          };
-        } catch (e) {
-          debug('Standalone header styling failed', e);
-        }
-      }
-
-      // Style standalone data rows
-      for (let r = 2; r <= standaloneRows.length; r++) {
-        for (let c = 0; c < standaloneCols; c++) {
-          const cellRef = getCell(r, c);
-          if (!wsStandalone[cellRef]) continue;
-          try {
-            wsStandalone[cellRef].s = {
-              font: { name: 'Leelawadee', sz: 10 },
-              alignment: { horizontal: 'center', vertical: 'center' }
-            };
-          } catch (e) {
-            debug('Standalone cell styling failed', e);
+    // Style summary header row
+    const summaryHeaderRow = summaryStartRow + 3;
+    for (let c = 0; c < 5; c++) {
+      const cellRef = getCell(summaryHeaderRow, c);
+      if (ws2[cellRef]) {
+        ws2[cellRef].s = {
+          font: { name: 'Leelawadee', sz: 10, bold: true },
+          alignment: { horizontal: 'center', vertical: 'center' },
+          border: {
+            top: { style: 'thin', color: { rgb: 'FF000000' } },
+            bottom: { style: 'thin', color: { rgb: 'FF000000' } },
+            left: { style: 'thin', color: { rgb: 'FF000000' } },
+            right: { style: 'thin', color: { rgb: 'FF000000' } }
           }
-        }
+        };
+      }
+    }
+
+    // Color code Action + as green and Action - as red in summary
+    for (let r = summaryHeaderRow + 1; r < currentRow; r++) {
+      const actionPosRef = getCell(r, 2); // Column C (Action +)
+      if (ws2[actionPosRef] && ws2[actionPosRef].v !== '') {
+        ws2[actionPosRef].s = ws2[actionPosRef].s || {};
+        ws2[actionPosRef].s.font = { name: 'Leelawadee', sz: 10, color: { rgb: '008000' } }; // Green
       }
 
-      XLSX.utils.book_append_sheet(wb, wsStandalone, 'Standalone Locations');
+      const actionNegRef = getCell(r, 3); // Column D (Action -)
+      if (ws2[actionNegRef] && ws2[actionNegRef].v !== '') {
+        ws2[actionNegRef].s = ws2[actionNegRef].s || {};
+        ws2[actionNegRef].s.font = { name: 'Leelawadee', sz: 10, color: { rgb: 'FF0000' } }; // Red
+      }
     }
+
+    // Set column widths - widen column B for long location descriptions
+    ws2['!cols'] = [
+      { wch: 12 },  // VCS
+      { wch: 40 },  // Locational Analysis - widened significantly
+      { wch: 10 },  // Code
+      { wch: 14 },  // With Year Built
+      { wch: 16 },  // With Living Area
+      { wch: 16 },  // With Sale Price
+      { wch: 14 },  // Without Year Built
+      { wch: 16 },  // Without Living Area
+      { wch: 16 },  // Without Sale Price
+      { wch: 18 },  // Adjusted Sale With
+      { wch: 18 },  // Adjusted Sale Without
+      { wch: 14 },  // Dollar Impact
+      { wch: 14 },  // Percent Impact
+      { wch: 12 },  // Applied+%
+      { wch: 12 }   // Applied-%
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws2, 'Eco Obs Study');
 
     return wb;
   };
