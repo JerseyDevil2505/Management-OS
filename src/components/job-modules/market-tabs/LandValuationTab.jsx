@@ -3166,7 +3166,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       remainingAcres = 0;
     }
 
-    debug(`������ Raw land calculation for ${acres} acres:`, breakdown.join(' + '), `= $${rawLandValue.toFixed(0)}`);
+    debug(`������� Raw land calculation for ${acres} acres:`, breakdown.join(' + '), `= $${rawLandValue.toFixed(0)}`);
 
     return rawLandValue;
   };
@@ -4799,15 +4799,20 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       colWidths.push({ wch: 15 }); // Stepdown
     }
 
-    colWidths.push({ wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 18 }); // Rec Site, Act Site, Raw Land, Allocation Target
+    // Raw Land comes after stepdown
+    colWidths.push({ wch: 15 }); // Raw Land
 
-    // Add cascade rate column widths
+    colWidths.push({ wch: 15 }, { wch: 15 }, { wch: 18 }); // Rec Site, Act Site, Allocation Target
+
+    // Add cascade rate column widths - match selected method
     if (valuationMode === 'ff') {
-      colWidths.push({ wch: 15 }, { wch: 15 });
+      colWidths.push({ wch: 15 }, { wch: 15 }); // Standard, Excess
+    } else if (valuationMode === 'sf') {
+      colWidths.push({ wch: 15 }, { wch: 15 }); // Standard, Excess
     } else {
-      colWidths.push({ wch: 15 }, { wch: 15 }, { wch: 15 });
+      colWidths.push({ wch: 15 }, { wch: 15 }, { wch: 15 }); // Prime, Secondary, Excess
       if (shouldShowResidualColumn) {
-        colWidths.push({ wch: 15 });
+        colWidths.push({ wch: 15 }); // Residual
       }
     }
 
