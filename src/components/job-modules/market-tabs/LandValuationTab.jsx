@@ -768,7 +768,7 @@ useEffect(() => {
 
   // Only set if we found a valid value AND current state is null/empty to prevent overwrites
   if (loadedTargetAllocation !== null) {
-    console.log('����� LOADED TARGET ALLOCATION:', loadedTargetAllocation);
+    console.log('������ LOADED TARGET ALLOCATION:', loadedTargetAllocation);
     // Ensure it's a number to prevent caching issues
     const numericValue = typeof loadedTargetAllocation === 'string' ?
       parseFloat(loadedTargetAllocation) : loadedTargetAllocation;
@@ -4750,10 +4750,12 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         Number(vcsData.avgNormTimeLotSize.toFixed(2))
       ) : '';
 
-      const avgPriceLotFmt = vcsData.avgPriceLotSize != null ? (
-        valuationMode === 'ff' ? Math.round(vcsData.avgPriceLotSize) :
-        valuationMode === 'sf' ? Math.round(vcsData.avgPriceLotSize) :
-        Number(vcsData.avgPriceLotSize.toFixed(2))
+      // Use fallback logic to match UI: if avgPrice exists, use avgPriceLotSize, else use avgNormTimeLotSize
+      const effectiveLotSize = vcsData.avgPrice ? vcsData.avgPriceLotSize : vcsData.avgNormTimeLotSize;
+      const avgPriceLotFmt = effectiveLotSize != null ? (
+        valuationMode === 'ff' ? Math.round(effectiveLotSize) :
+        valuationMode === 'sf' ? Math.round(effectiveLotSize) :
+        Number(effectiveLotSize.toFixed(2))
       ) : '';
 
       // Price and lot size columns (formatted)
@@ -7585,7 +7587,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales ����� Avg $${Math.round(data.avgPrice).toLocaleString()} ��������������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales ����� Avg $${Math.round(data.avgPrice).toLocaleString()} ����������������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{
@@ -9364,7 +9366,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <strong>Exclude problematic sales:</strong> Uncheck sales that should not be used in Method 2 calculations
                 (teardowns, poor condition, pre-construction, etc.).
                 <span style={{ display: 'block', marginTop: '4px' }}>
-                  �����️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
+                  �������️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
                 </span>
               </p>
             </div>
