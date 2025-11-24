@@ -1150,7 +1150,7 @@ const getPricePerUnit = useCallback((price, size) => {
 
   useEffect(() => {
     if (activeSubTab === 'allocation' && cascadeConfig.normal.prime) {
-      debug('�������� Triggering allocation study recalculation...');
+      debug('��������� Triggering allocation study recalculation...');
       loadAllocationStudyData();
     }
   }, [activeSubTab, cascadeConfig, valuationMode, vacantSales, specialRegions]);
@@ -4777,6 +4777,70 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     // Create worksheet
     const worksheet = XLSX.utils.aoa_to_sheet(data);
+
+    // Add Excel formulas for Raw Land to show calculations
+    try {
+      const rawLandColIndex = headers.indexOf('Raw Land');
+      const typicalLotColIndex = headers.indexOf('Typical Lot Size');
+      const typicalFFColIndex = headers.indexOf('Typical FF');
+      const typicalDepthColIndex = headers.indexOf('Typical Depth');
+      const stepdownColIndex = headers.indexOf('Stepdown (FF)') !== -1 ?
+        headers.indexOf('Stepdown (FF)') : headers.indexOf('Stepdown (SF)');
+
+      // Get rate column indices based on mode
+      let standardRateColIndex, excessRateColIndex;
+      if (valuationMode === 'ff') {
+        standardRateColIndex = headers.indexOf('Standard Rate ($/FF)');
+        excessRateColIndex = headers.indexOf('Excess Rate ($/FF)');
+      } else if (valuationMode === 'sf') {
+        standardRateColIndex = headers.indexOf('Standard Rate ($/SF)');
+        excessRateColIndex = headers.indexOf('Excess Rate ($/SF)');
+      } else {
+        // For acre mode, formulas are more complex with 3-4 tiers
+        // We'll keep the calculated values for now
+      }
+
+      // Only add formulas for FF and SF modes (rows 1+ are data, row 0 is header)
+      if ((valuationMode === 'ff' || valuationMode === 'sf') &&
+          rawLandColIndex >= 0 &&
+          standardRateColIndex >= 0 &&
+          excessRateColIndex >= 0) {
+
+        for (let rowIndex = 1; rowIndex < data.length; rowIndex++) {
+          const excelRow = rowIndex + 1; // Excel is 1-indexed
+          const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: rawLandColIndex });
+
+          if (valuationMode === 'ff' && typicalFFColIndex >= 0 && stepdownColIndex >= 0) {
+            // FF Formula: (MIN(TypicalFF, Stepdown) * StandardRate) + (MAX(0, TypicalFF - Stepdown) * ExcessRate)
+            const ffCol = XLSX.utils.encode_col(typicalFFColIndex);
+            const stepdownCol = XLSX.utils.encode_col(stepdownColIndex);
+            const standardRateCol = XLSX.utils.encode_col(standardRateColIndex);
+            const excessRateCol = XLSX.utils.encode_col(excessRateColIndex);
+
+            const formula = `(MIN(${ffCol}${excelRow},VALUE(LEFT(${stepdownCol}${excelRow},FIND(" ",${stepdownCol}${excelRow})-1)))*${standardRateCol}${excelRow})+(MAX(0,${ffCol}${excelRow}-VALUE(LEFT(${stepdownCol}${excelRow},FIND(" ",${stepdownCol}${excelRow})-1)))*${excessRateCol}${excelRow})`;
+
+            if (worksheet[cellRef] && data[rowIndex][typicalFFColIndex]) {
+              worksheet[cellRef].f = formula;
+            }
+          } else if (valuationMode === 'sf' && typicalLotColIndex >= 0 && stepdownColIndex >= 0) {
+            // SF Formula: (MIN(TypicalLot, Stepdown) * StandardRate) + (MAX(0, TypicalLot - Stepdown) * ExcessRate)
+            const lotCol = XLSX.utils.encode_col(typicalLotColIndex);
+            const stepdownCol = XLSX.utils.encode_col(stepdownColIndex);
+            const standardRateCol = XLSX.utils.encode_col(standardRateColIndex);
+            const excessRateCol = XLSX.utils.encode_col(excessRateColIndex);
+
+            const formula = `(MIN(${lotCol}${excelRow},VALUE(LEFT(${stepdownCol}${excelRow},FIND(" ",${stepdownCol}${excelRow})-1)))*${standardRateCol}${excelRow})+(MAX(0,${lotCol}${excelRow}-VALUE(LEFT(${stepdownCol}${excelRow},FIND(" ",${stepdownCol}${excelRow})-1)))*${excessRateCol}${excelRow})`;
+
+            if (worksheet[cellRef] && data[rowIndex][typicalLotColIndex]) {
+              worksheet[cellRef].f = formula;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error adding Raw Land formulas:', e);
+      debug('Raw Land formula generation skipped', e);
+    }
 
     // Set column widths
     const colWidths = [
