@@ -1043,20 +1043,20 @@ useEffect(() => {
             ws[cellAddress].s = { ...baseStyle };
 
             // Apply specific formatting based on column
-            // Column G (Total Front Foot) - no decimals
-            if (C === 6) {
+            // Column H (Total Front Foot) - no decimals
+            if (C === 7) {
               ws[cellAddress].s.numFmt = '#,##0';
             }
-            // Column H (Avg Depth) - no decimals
-            else if (C === 7) {
-              ws[cellAddress].s.numFmt = '#,##0';
-            }
-            // Column I (Lot Size Acre) - max 2 decimals
+            // Column I (Avg Depth) - no decimals
             else if (C === 8) {
+              ws[cellAddress].s.numFmt = '#,##0';
+            }
+            // Column J (Lot Size Acre) - max 2 decimals
+            else if (C === 9) {
               ws[cellAddress].s.numFmt = '0.00';
             }
-            // Column J (Lot Size SF) - no decimals with comma
-            else if (C === 9) {
+            // Column K (Lot Size SF) - no decimals with comma
+            else if (C === 10) {
               ws[cellAddress].s.numFmt = '#,##0';
             }
           }
@@ -1070,6 +1070,7 @@ useEffect(() => {
         { wch: 12 },  // Qualifier
         { wch: 8 },   // Card
         { wch: 12 },  // Property Class
+        { wch: 8 },   // VCS
         { wch: 30 },  // Location
         { wch: 15 },  // Total Front Foot
         { wch: 12 },  // Avg Depth
@@ -3655,7 +3656,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('package')}
                             >
-                              Package {normSortConfig.field === 'package' && (normSortConfig.direction === 'asc' ? '��' : '��')}
+                              Package {normSortConfig.field === 'package' && (normSortConfig.direction === 'asc' ? '��' : '���')}
                             </th>
                             <th 
                               className="px-4 py-3 text-right text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
