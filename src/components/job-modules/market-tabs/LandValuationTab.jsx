@@ -2581,7 +2581,7 @@ Class: ${property.property_m4_class === '2' ? 'Residential (possible teardown)' 
 
 Find specific information about this property and sale. Include:
 
-��� Property ownership/seller details
+����� Property ownership/seller details
 • Tax assessment and classification details
 • Documented environmental constraints (wetlands, floodplains)
 �� Municipality-specific land use characteristics
@@ -2685,7 +2685,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
       // EXCLUDE: Raw Land, Landlocked, Wetlands
       if (cat.includes('raw') && cat.includes('land')) {
-        console.log(`���️ Excluding Raw Land sale ${s.property_block}/${s.property_lot}`);
+        console.log(`����️ Excluding Raw Land sale ${s.property_block}/${s.property_lot}`);
         return false;
       }
       if (cat.includes('landlocked')) {
@@ -4204,7 +4204,9 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           types: vcsTypes,
           sheet_data: vcsSheetData,
           depth_table_overrides: vcsDepthTableOverrides,
-          method_overrides: vcsMethodOverrides
+          method_overrides: vcsMethodOverrides,
+          rate_overrides: vcsRateOverrides,
+          stepdown_overrides: vcsStepdownOverrides
         },
         eco_obs_applied_adjustments: actualAdjustments,
         eco_obs_code_config: {
