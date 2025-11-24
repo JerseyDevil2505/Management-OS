@@ -677,7 +677,7 @@ useEffect(() => {
     const savedIncluded = new Set();
     const manuallyAddedIds = new Set();
 
-    debug('���� Loading saved Method 1 metadata (SKIPPING cached sales for fresh calculation):', {
+    debug('����� Loading saved Method 1 metadata (SKIPPING cached sales for fresh calculation):', {
       totalSales: marketLandData.vacant_sales_analysis.sales.length,
       salesWithCategories: marketLandData.vacant_sales_analysis.sales.filter(s => s.category).length,
       salesIncluded: marketLandData.vacant_sales_analysis.sales.filter(s => s.included).length,
@@ -4926,11 +4926,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const cmeBracketColIndex = headers.indexOf('CME Bracket');
       const allocationTargetColIndex = headers.indexOf('Allocation Target');
       const typicalLotColIndex = headers.indexOf('Typical Lot Size');
+      const typicalFFColIndex = headers.indexOf('Typical FF');
+      const typicalDepthColIndex = headers.indexOf('Typical Depth');
       const avgPriceTLotSizeColIndex = headers.indexOf('Avg Price (t) Lot Size');
       const avgPriceLotSizeColIndex = headers.indexOf('Avg Price Lot Size');
 
       // Lot size columns that need number formatting
-      const lotSizeColumns = [typicalLotColIndex, avgPriceTLotSizeColIndex, avgPriceLotSizeColIndex].filter(i => i >= 0);
+      const lotSizeColumns = [
+        typicalLotColIndex,
+        typicalFFColIndex,
+        typicalDepthColIndex,
+        avgPriceTLotSizeColIndex,
+        avgPriceLotSizeColIndex
+      ].filter(i => i >= 0);
 
       // Style all cells with gridlines and formatting
       for (let r = 0; r < numRows; r++) {
@@ -6114,7 +6122,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           [category]: rate ? parseFloat(rate) : null
         }
       };
-      debug('������� New cascade config special categories:', newConfig.specialCategories);
+      debug('��������� New cascade config special categories:', newConfig.specialCategories);
       return newConfig;
     });
   };
@@ -7573,7 +7581,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
               const vcsColors = generateVCSColor(vcs, index);
 
               // Format VCS summary line exactly like screenshot
-              const summaryLine = `${data.totalSales} sales ����� Avg $${Math.round(data.avgPrice).toLocaleString()} ��������������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
+              const summaryLine = `${data.totalSales} sales ����� Avg $${Math.round(data.avgPrice).toLocaleString()} ���������������� ${data.avgAcres.toFixed(2)} • $${Math.round(data.avgAdjusted).toLocaleString()}-$${data.impliedRate || 0} ���� $${data.impliedRate || 0}`;
 
               return (
                 <div key={vcs} style={{
@@ -9352,7 +9360,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                 <strong>Exclude problematic sales:</strong> Uncheck sales that should not be used in Method 2 calculations
                 (teardowns, poor condition, pre-construction, etc.).
                 <span style={{ display: 'block', marginTop: '4px' }}>
-                  �����️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
+                  ������️ <strong>Yellow highlighted rows</strong> are pre-construction sales (sold before year built).
                 </span>
               </p>
             </div>
