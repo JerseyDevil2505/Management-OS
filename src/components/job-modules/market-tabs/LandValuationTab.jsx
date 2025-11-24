@@ -3286,27 +3286,29 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const calculatedAvgPrice = {};
     const calculatedAvgNormTimeLotSize = {};
     const calculatedAvgPriceLotSize = {};
-    
-    Object.keys(zoning).forEach(vcs => {
-      formattedZoning[vcs] = Array.from(zoning[vcs]).sort().join(', ');
-      
+
+    // Loop through ALL VCS from counts (not just those with zoning)
+    Object.keys(counts).forEach(vcs => {
+      // Format zoning if available
+      formattedZoning[vcs] = zoning[vcs] ? Array.from(zoning[vcs]).sort().join(', ') : '';
+
       // Format map pages (e.g., "12-15, 18, 22-24")
-      const pages = Array.from(mapPages[vcs]).map(p => parseInt(p)).filter(p => !isNaN(p)).sort((a, b) => a - b);
+      const pages = mapPages[vcs] ? Array.from(mapPages[vcs]).map(p => parseInt(p)).filter(p => !isNaN(p)).sort((a, b) => a - b) : [];
       formattedMapPages[vcs] = formatPageRanges(pages);
-      
-      const keys = Array.from(keyPages[vcs]).map(p => parseInt(p)).filter(p => !isNaN(p)).sort((a, b) => a - b);
+
+      const keys = keyPages[vcs] ? Array.from(keyPages[vcs]).map(p => parseInt(p)).filter(p => !isNaN(p)).sort((a, b) => a - b) : [];
       formattedKeyPages[vcs] = formatPageRanges(keys);
-      
+
       // Calculate averages
-      calculatedAvgNormTime[vcs] = avgNormTime[vcs].length > 0 ?
+      calculatedAvgNormTime[vcs] = avgNormTime[vcs] && avgNormTime[vcs].length > 0 ?
         Math.round(avgNormTime[vcs].reduce((sum, v) => sum + v, 0) / avgNormTime[vcs].length) : null;
-      calculatedAvgNormSize[vcs] = avgNormSize[vcs].length > 0 ?
+      calculatedAvgNormSize[vcs] = avgNormSize[vcs] && avgNormSize[vcs].length > 0 ?
         Math.round(avgNormSize[vcs].reduce((sum, v) => sum + v, 0) / avgNormSize[vcs].length) : null;
-      calculatedAvgPrice[vcs] = avgActualPrice[vcs].length > 0 ?
+      calculatedAvgPrice[vcs] = avgActualPrice[vcs] && avgActualPrice[vcs].length > 0 ?
         Math.round(avgActualPrice[vcs].reduce((sum, v) => sum + v, 0) / avgActualPrice[vcs].length) : null;
-      calculatedAvgNormTimeLotSize[vcs] = avgNormTimeLotSize[vcs].length > 0 ?
+      calculatedAvgNormTimeLotSize[vcs] = avgNormTimeLotSize[vcs] && avgNormTimeLotSize[vcs].length > 0 ?
         (avgNormTimeLotSize[vcs].reduce((sum, v) => sum + v, 0) / avgNormTimeLotSize[vcs].length) : null;
-      calculatedAvgPriceLotSize[vcs] = avgActualPriceLotSize[vcs].length > 0 ?
+      calculatedAvgPriceLotSize[vcs] = avgActualPriceLotSize[vcs] && avgActualPriceLotSize[vcs].length > 0 ?
         (avgActualPriceLotSize[vcs].reduce((sum, v) => sum + v, 0) / avgActualPriceLotSize[vcs].length) : null;
 
       // Lot size collection complete for this VCS
