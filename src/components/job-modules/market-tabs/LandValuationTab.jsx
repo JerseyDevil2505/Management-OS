@@ -3455,8 +3455,8 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         // Must match this specific VCS
         if (prop.new_vcs !== vcs) return false;
 
-        // Residential properties only (Class 2 = Single Family, 3A = Two Family)
-        if (!['2', '3A'].includes(prop.property_m4_class)) return false;
+        // Residential properties only (Class 2 = Single Family, 3A = Two Family, 4D = Condo)
+        if (!['2', '3A', '4D'].includes(prop.property_m4_class)) return false;
 
         // Valid sales data
         const hasValidSale = prop.sales_date && prop.sales_price > 0;
