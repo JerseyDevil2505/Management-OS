@@ -1145,7 +1145,7 @@ const getPricePerUnit = useCallback((price, size) => {
         return;
       }
 
-      debug('⏰ Auto-save interval triggered');
+      debug('��� Auto-save interval triggered');
       // Use window reference to avoid hoisting issues
       if (window.landValuationSave) {
         window.landValuationSave({ source: 'autosave' });
@@ -3370,17 +3370,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       const avgNormTime = avgNormTimes[vcs];
       if (!avgNormTime) return;
 
-      // Check if this VCS is condo-only (no residential properties)
-      const isCondoOnly = counts[vcs].residential === 0 && counts[vcs].condo > 0;
+      // Check if this VCS Type contains "condo"
+      const vcsType = vcsTypes[vcs] || '';
+      const isCondo = vcsType.toLowerCase().includes('condo');
 
-      if (isCondoOnly) {
+      if (isCondo) {
         // For condos: Rec Site = Target Allocation % × Avg Price (no land dimensions needed)
         const siteValue = avgNormTime * (parseFloat(targetAllocation) / 100);
         console.log(`🏢 CONDO VCS ${vcs}:`, {
+          vcsType,
           avgNormTime,
           targetAllocation,
-          siteValue,
-          counts: counts[vcs]
+          siteValue
         });
         recommendedSites[vcs] = siteValue;
         return;
@@ -6185,7 +6186,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       }
     });
 
-    // 📊 FINAL RESULTS LOG - Shows what will be displayed to user
+    // �� FINAL RESULTS LOG - Shows what will be displayed to user
     console.log('📊 PAIRED SALES ANALYSIS - Final Results:', {
       valuationMode,
       unitLabel: valuationMode === 'acre' ? '$/acre' : valuationMode === 'sf' ? '$/SF' : '$/FF',
@@ -9832,11 +9833,6 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
   // ========== CALCULATE REC SITE WITH FRONT FOOT FORMULA ==========
   const calculateRecSite = useCallback((vcs) => {
-    // If not in FF mode, return the base recommended value
-    if (valuationMode !== 'ff') {
-      return vcsRecommendedSites[vcs] || 0;
-    }
-
     // Get VCS data for avg price
     const data = vcsSheetData[vcs];
     if (!data) return vcsRecommendedSites[vcs] || 0;
@@ -9845,14 +9841,19 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const avgPrice = data.avgPrice || data.avgNormTime;
     if (!avgPrice || !targetAllocation) return vcsRecommendedSites[vcs] || 0;
 
-    // Check if this VCS is condo-only (has condos but no residential properties)
-    // Use actual property counts from data, not the manually-set VCS Type
-    const counts = vcsPropertyCounts[vcs] || { residential: 0, condo: 0 };
-    const isCondoOnly = counts.residential === 0 && counts.condo > 0;
+    // Check if this VCS Type contains "condo" - if so, use strict site value calculation
+    const vcsType = vcsTypes[vcs] || '';
+    const isCondo = vcsType.toLowerCase().includes('condo');
 
-    if (isCondoOnly) {
-      // For condos: Rec Site = Target % × Avg Price (no land dimensions)
+    if (isCondo) {
+      // For condos: Rec Site = Target % × Avg Price, fallback to Avg Price (t)
+      // This is a strict site value only calculation (no land dimensions)
       return Math.round(avgPrice * (targetAllocation / 100));
+    }
+
+    // If not in FF mode, return the base recommended value for non-condos
+    if (valuationMode !== 'ff') {
+      return vcsRecommendedSites[vcs] || 0;
     }
 
     // Front Foot mode calculation for non-condo residential
@@ -9956,7 +9957,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const siteValue = targetValue - rawLandComponent;
 
     return siteValue;
-  }, [valuationMode, marketLandData, properties, depthTables, cascadeConfig, vacantSales, specialRegions, vcsDepthTableOverrides, vcsRecommendedSites, vcsSheetData, targetAllocation, vcsTypes, vcsPropertyCounts]);
+  }, [valuationMode, marketLandData, properties, depthTables, cascadeConfig, vacantSales, specialRegions, vcsDepthTableOverrides, vcsRecommendedSites, vcsSheetData, targetAllocation, vcsTypes]);
 
   // ========== RENDER VCS SHEET TAB ==========
   const renderVCSSheetTab = () => {
