@@ -3611,7 +3611,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       if (isCondo) {
         // For condos: recommended site = target allocation % × average sale price
         siteValue = avgSalePrice * (parseFloat(targetAllocation) / 100);
-        debug(`🏢 VCS ${vcs} (CONDO):`, {
+        debug(`�� VCS ${vcs} (CONDO):`, {
           relevantSalesCount: relevantSales.length,
           avgSalePrice: Math.round(avgSalePrice),
           targetAllocation: targetAllocation + '%',
@@ -5652,17 +5652,29 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
 
     const ws2 = XLSX.utils.aoa_to_sheet(method2Rows);
 
-    // Add formulas for $ DELTA and $ PER ACRE columns
+    // Add formulas for $ ADJUSTED, $ DELTA, and $ PER ACRE columns
     try {
+      const vcsColIndex = method2Headers.indexOf('VCS');
+      const lotSizeColIndex = method2Headers.indexOf('Avg Lot Size (acres)');
+      const avgSalePriceColIndex = method2Headers.indexOf('Avg Sale Price (t)');
+      const avgSFLAColIndex = method2Headers.indexOf('Avg SFLA');
       const adjustedColIndex = method2Headers.indexOf('$ ADJUSTED');
       const deltaColIndex = method2Headers.indexOf('$ DELTA');
       const lotDeltaColIndex = method2Headers.indexOf('LOT DELTA');
       const perAcreColIndex = method2Headers.indexOf('$ PER ACRE');
+      const perSqFtColIndex = method2Headers.indexOf('PER SQ FT');
+
+      // Build a map of VCS to their averages for formula references
+      const vcsAvgMap = new Map();
+      Object.entries(vcsAverages).forEach(([vcs, avg]) => {
+        vcsAvgMap.set(vcs, avg);
+      });
 
       // For each data row (starting from row 1, row 0 is header)
       for (let rowIdx = 1; rowIdx < method2Rows.length; rowIdx++) {
         const excelRow = rowIdx + 1; // Excel is 1-indexed
         const currentVCS = method2Rows[rowIdx][0];
+        const vcsAvg = vcsAvgMap.get(currentVCS);
 
         // Find previous row with same VCS for delta calculation
         let prevRowIdx = -1;
@@ -5672,15 +5684,33 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
             break;
           }
         }
+        const hasPrevious = prevRowIdx >= 0;
 
-        if (prevRowIdx >= 0 && deltaColIndex >= 0 && adjustedColIndex >= 0) {
+        // Jim's Formula for $ ADJUSTED: ((ZLS - GLS) * ((GP / GLS) * 0.50)) + GP
+        // ZLS = Bracket Lot Size (this row), GLS = VCS Avg Lot Size, GP = VCS Avg Price
+        if (adjustedColIndex >= 0 && vcsAvg && lotSizeColIndex >= 0) {
+          const lotSizeCol = XLSX.utils.encode_col(lotSizeColIndex);
+          const GLS = vcsAvg.avgLotSize;
+          const GP = vcsAvg.avgPrice;
+          const adjustedCellRef = XLSX.utils.encode_cell({ r: rowIdx, c: adjustedColIndex });
+
+          // Formula: ((BracketLotSize - GLS) * ((GP / GLS) * 0.5)) + GP
+          const adjustedFormula = `((${lotSizeCol}${excelRow}-${GLS})*((${GP}/${GLS})*0.5))+${GP}`;
+
+          if (ws2[adjustedCellRef]) {
+            ws2[adjustedCellRef].f = adjustedFormula;
+            ws2[adjustedCellRef].z = '"$"#,##0'; // Currency format
+          }
+        }
+
+        // Formula for $ DELTA: Current Adjusted - Previous Adjusted (only if has previous)
+        if (hasPrevious && deltaColIndex >= 0 && adjustedColIndex >= 0) {
           const prevExcelRow = prevRowIdx + 1;
           const adjustedCol = XLSX.utils.encode_col(adjustedColIndex);
-          const deltaCol = XLSX.utils.encode_col(deltaColIndex);
           const deltaCellRef = XLSX.utils.encode_cell({ r: rowIdx, c: deltaColIndex });
 
-          // Formula: Current Adjusted - Previous Adjusted
-          const deltaFormula = `VALUE(SUBSTITUTE(SUBSTITUTE(${adjustedCol}${excelRow},"$",""),",",""))-VALUE(SUBSTITUTE(SUBSTITUTE(${adjustedCol}${prevExcelRow},"$",""),",",""))`;
+          // Simple formula: Current - Previous
+          const deltaFormula = `${adjustedCol}${excelRow}-${adjustedCol}${prevExcelRow}`;
 
           if (ws2[deltaCellRef]) {
             ws2[deltaCellRef].f = deltaFormula;
@@ -5688,19 +5718,32 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           }
         }
 
-        // Formula for $ PER ACRE: $ DELTA / LOT DELTA
-        if (perAcreColIndex >= 0 && deltaColIndex >= 0 && lotDeltaColIndex >= 0) {
+        // Formula for $ PER ACRE: $ DELTA / LOT DELTA (only if has previous and valid)
+        if (hasPrevious && perAcreColIndex >= 0 && deltaColIndex >= 0 && lotDeltaColIndex >= 0) {
           const deltaCol = XLSX.utils.encode_col(deltaColIndex);
           const lotDeltaCol = XLSX.utils.encode_col(lotDeltaColIndex);
-          const perAcreCol = XLSX.utils.encode_col(perAcreColIndex);
           const perAcreCellRef = XLSX.utils.encode_cell({ r: rowIdx, c: perAcreColIndex });
 
-          // Formula: IF(LOT DELTA > 0, DELTA / LOT DELTA, "N/A")
-          const perAcreFormula = `IF(${lotDeltaCol}${excelRow}>0,VALUE(SUBSTITUTE(SUBSTITUTE(${deltaCol}${excelRow},"$",""),",",""))/${lotDeltaCol}${excelRow},"N/A")`;
+          // Formula: IF(AND(DELTA exists, LOT DELTA > 0), DELTA / LOT DELTA, "")
+          const perAcreFormula = `IF(AND(${deltaCol}${excelRow}<>"",${lotDeltaCol}${excelRow}>0),${deltaCol}${excelRow}/${lotDeltaCol}${excelRow},"")`;
 
-          if (ws2[perAcreCellRef] && ws2[perAcreCellRef].v !== 'N/A') {
+          if (ws2[perAcreCellRef]) {
             ws2[perAcreCellRef].f = perAcreFormula;
             ws2[perAcreCellRef].z = '"$"#,##0.00'; // Currency format with 2 decimals
+          }
+        }
+
+        // Formula for PER SQ FT: $ PER ACRE / 43560 (only if PER ACRE has value)
+        if (hasPrevious && perSqFtColIndex >= 0 && perAcreColIndex >= 0) {
+          const perAcreCol = XLSX.utils.encode_col(perAcreColIndex);
+          const perSqFtCellRef = XLSX.utils.encode_cell({ r: rowIdx, c: perSqFtColIndex });
+
+          // Formula: IF(PER ACRE exists, PER ACRE / 43560, "")
+          const perSqFtFormula = `IF(${perAcreCol}${excelRow}<>"",${perAcreCol}${excelRow}/43560,"")`;
+
+          if (ws2[perSqFtCellRef]) {
+            ws2[perSqFtCellRef].f = perSqFtFormula;
+            ws2[perSqFtCellRef].z = '"$"#,##0.00'; // Currency format with 2 decimals
           }
         }
       }
@@ -9601,7 +9644,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'typeUse' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '�������������') : ''}
+                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '��������������') : ''}
                     </th>
                   </tr>
                 </thead>
