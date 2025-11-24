@@ -1039,7 +1039,7 @@ const getPricePerUnit = useCallback((price, size) => {
       { code: '2', description: '2 — Duplex / Semi-Detached' },
       { code: '3', description: '3* �� Row / Townhouse (3E,3I,30,31)' },
       { code: '4', description: '4* — MultiFamily (42,43,44)' },
-      { code: '5', description: '5* �� Conversions (51,52,53)' },
+      { code: '5', description: '5* ���� Conversions (51,52,53)' },
       { code: '6', description: '6 — Condominium' },
       { code: 'all_residential', description: 'All Residential' }
     ];
@@ -3653,7 +3653,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           // Acre mode: use market_manual_lot_acre
           salesWithLotData = relevantSales.filter(p => p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0);
           if (salesWithLotData.length === 0) {
-            console.warn(`⚠️ VCS ${vcs}: No sales with market_manual_lot_acre data (${relevantSales.length} total sales)`);
+            console.warn(`⚠��� VCS ${vcs}: No sales with market_manual_lot_acre data (${relevantSales.length} total sales)`);
             return;
           }
           avgSize = salesWithLotData.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / salesWithLotData.length;
@@ -4607,6 +4607,87 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           cascadeRates = cascadeConfig.special[specialRegions[vcsInSpecialRegion.id]];
         }
       }
+
+      // Calculate Raw Land for export-only column
+      let rawLandValue = 0;
+      if (isResidential && typicalLot) {
+        if (valuationMode === 'ff' && typicalFF && typicalDepth) {
+          // Front Foot mode - use FF calculation
+          const standardRate = cascadeRates.standard?.rate || 0;
+          const standardMax = cascadeRates.standard?.max || 50;
+          const excessRate = cascadeRates.excess?.rate || 0;
+
+          const standardFF = Math.min(typicalFF, standardMax);
+          const excessFF = Math.max(0, typicalFF - standardMax);
+
+          rawLandValue = (standardFF * standardRate) + (excessFF * excessRate);
+
+          // Apply depth factor if available
+          if (depthTableName && depthTables[depthTableName]) {
+            const depthTable = depthTables[depthTableName];
+            if (depthTable.factors) {
+              const depths = Object.keys(depthTable.factors).map(Number).sort((a, b) => a - b);
+              let closestDepth = depths[0];
+              for (const d of depths) {
+                if (d <= typicalDepth) closestDepth = d;
+                else break;
+              }
+              const depthFactor = depthTable.factors[closestDepth] || 1.0;
+              rawLandValue *= depthFactor;
+            }
+          }
+        } else if (valuationMode === 'sf') {
+          // Square Foot mode
+          const standardRate = cascadeRates.standard?.rate || 0;
+          const standardMax = cascadeRates.standard?.max || 5000;
+          const excessRate = cascadeRates.excess?.rate || 0;
+
+          const standardSF = Math.min(typicalLot, standardMax);
+          const excessSF = Math.max(0, typicalLot - standardMax);
+
+          rawLandValue = (standardSF * standardRate) + (excessSF * excessRate);
+        } else {
+          // Acre mode - cascade calculation
+          let remainingAcres = typicalLot;
+
+          if (cascadeRates.prime && remainingAcres > 0) {
+            const tier1Acres = Math.min(remainingAcres, cascadeRates.prime.max || 1);
+            rawLandValue += tier1Acres * (cascadeRates.prime.rate || 0);
+            remainingAcres -= tier1Acres;
+          }
+
+          if (cascadeRates.secondary && remainingAcres > 0) {
+            const tier2Max = (cascadeRates.secondary.max || 5) - (cascadeRates.prime?.max || 1);
+            const tier2Acres = Math.min(remainingAcres, tier2Max);
+            rawLandValue += tier2Acres * (cascadeRates.secondary.rate || 0);
+            remainingAcres -= tier2Acres;
+          }
+
+          if (cascadeRates.excess && remainingAcres > 0) {
+            const tier3Max = cascadeRates.excess.max ?
+              (cascadeRates.excess.max - (cascadeRates.secondary?.max || 5)) :
+              remainingAcres;
+            const tier3Acres = Math.min(remainingAcres, tier3Max);
+            rawLandValue += tier3Acres * (cascadeRates.excess.rate || 0);
+            remainingAcres -= tier3Acres;
+          }
+
+          if (cascadeRates.residual && remainingAcres > 0) {
+            rawLandValue += remainingAcres * (cascadeRates.residual.rate || 0);
+          }
+        }
+      }
+
+      // Calculate Allocation Target percentage (export-only formula)
+      // Allocation Target % = Act Site Value / (Act Site Value + Raw Land) * 100
+      const allocationTargetPct = (actSite && rawLandValue) ?
+        ((actSite / (actSite + rawLandValue)) * 100).toFixed(1) + '%' : '';
+
+      // Format Raw Land for display
+      const rawLandFmt = rawLandValue > 0 ? `$${Math.round(rawLandValue).toLocaleString()}` : '';
+
+      // Add Raw Land and Allocation Target to row
+      row.push(rawLandFmt, allocationTargetPct);
 
       // Add cascade rates (formatted as currency where applicable)
       if (isResidential) {
