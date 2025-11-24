@@ -4743,17 +4743,17 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         vcsSpecialCategories.conservation && cascadeConfig.specialCategories.conservation != null ? `$${Math.round(cascadeConfig.specialCategories.conservation).toLocaleString()}` : ''
       );
 
-      // Lot size columns (formatted based on mode)
+      // Lot size columns (numeric only for formulas - no units)
       const avgNormTimeLotFmt = vcsData.avgNormTimeLotSize != null ? (
-        valuationMode === 'ff' ? `${Math.round(vcsData.avgNormTimeLotSize)} ft` :
-        valuationMode === 'sf' ? `${Math.round(vcsData.avgNormTimeLotSize).toLocaleString()} SF` :
-        vcsData.avgNormTimeLotSize.toFixed(2)
+        valuationMode === 'ff' ? Math.round(vcsData.avgNormTimeLotSize) :
+        valuationMode === 'sf' ? Math.round(vcsData.avgNormTimeLotSize) :
+        Number(vcsData.avgNormTimeLotSize.toFixed(2))
       ) : '';
 
       const avgPriceLotFmt = vcsData.avgPriceLotSize != null ? (
-        valuationMode === 'ff' ? `${Math.round(vcsData.avgPriceLotSize)} ft` :
-        valuationMode === 'sf' ? `${Math.round(vcsData.avgPriceLotSize).toLocaleString()} SF` :
-        vcsData.avgPriceLotSize.toFixed(2)
+        valuationMode === 'ff' ? Math.round(vcsData.avgPriceLotSize) :
+        valuationMode === 'sf' ? Math.round(vcsData.avgPriceLotSize) :
+        Number(vcsData.avgPriceLotSize.toFixed(2))
       ) : '';
 
       // Price and lot size columns (formatted)
@@ -10441,7 +10441,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                     onClick={() => toggleFieldCollapse('zoning')}
                     title="Click to expand/collapse"
                   >
-                    Zoning {collapsedFields.zoning ? '�����' : '��'}
+                    Zoning {collapsedFields.zoning ? '������' : '��'}
                   </th>
                   {shouldShowKeyColumn && (
                     <th
