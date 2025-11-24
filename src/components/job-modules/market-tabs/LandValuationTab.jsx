@@ -3725,6 +3725,35 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }, 500);
   };
 
+  const updateVCSRate = (vcs, tier, value) => {
+    setVcsRateOverrides(prev => ({
+      ...prev,
+      [vcs]: {
+        ...(prev[vcs] || {}),
+        [tier]: value ? parseFloat(value) : null
+      }
+    }));
+
+    setTimeout(() => {
+      if (window.landValuationSave) {
+        window.landValuationSave({ source: 'autosave' });
+      }
+    }, 500);
+  };
+
+  const updateVCSStepdown = (vcs, value) => {
+    setVcsStepdownOverrides(prev => ({
+      ...prev,
+      [vcs]: value ? parseFloat(value) : null
+    }));
+
+    setTimeout(() => {
+      if (window.landValuationSave) {
+        window.landValuationSave({ source: 'autosave' });
+      }
+    }, 500);
+  };
+
   const toggleFieldCollapse = (fieldName) => {
     setCollapsedFields(prev => ({
       ...prev,
@@ -5834,7 +5863,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     debug('🔄 Recalculating category analysis');
     debug('����� Total vacant sales:', vacantSales.length);
     debug('���� Checked sales count:', checkedSales.length);
-    // 🔍 COMPREHENSIVE FILTERING DEBUG - Shows exactly which sales go where
+    // ���� COMPREHENSIVE FILTERING DEBUG - Shows exactly which sales go where
     console.log('🔍 PAIRED SALES ANALYSIS - Category Breakdown:', {
       totalCheckedSales: checkedSales.length,
 
@@ -6028,7 +6057,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           const minPriceDiff = Math.min(...priceDiffs);
           const maxPriceDiff = Math.max(...priceDiffs);
 
-          console.log(`📊 Paired analysis results for ${categoryType}:`, {
+          console.log(`�� Paired analysis results for ${categoryType}:`, {
             totalPairs: pairedRates.length,
             avgPriceDiff: Math.round(avgPriceDiff),
             minPriceDiff: Math.round(minPriceDiff),
@@ -9080,7 +9109,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'address' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '������') : ''}
+                      Address {modalSortField === 'address' ? (modalSortDirection === 'asc' ? '↑' : '��������') : ''}
                     </th>
                     <th
                       onClick={() => handleModalSort('saleDate')}
