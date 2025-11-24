@@ -899,6 +899,8 @@ useEffect(() => {
     vcsTypes,
     vcsRecommendedSites,
     vcsMethodOverrides,
+    vcsRateOverrides,
+    vcsStepdownOverrides,
     collapsedFields
   });
 
@@ -920,6 +922,8 @@ useEffect(() => {
   vcsTypes,
   vcsRecommendedSites,
   vcsMethodOverrides,
+  vcsRateOverrides,
+  vcsStepdownOverrides,
   collapsedFields,
   isInitialLoadComplete
   // Note: updateSession intentionally excluded to prevent infinite loops
@@ -4035,7 +4039,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
   // ========== SAVE TARGET ALLOCATION FUNCTION ==========
   const saveTargetAllocation = async () => {
     if (!jobData?.id) {
-      debug('��� Save target allocation cancelled: No job ID');
+      debug('���� Save target allocation cancelled: No job ID');
       alert('Error: No job ID found. Cannot save target allocation.');
       return;
     }
@@ -9170,7 +9174,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
                         backgroundColor: modalSortField === 'typeUse' ? '#EBF8FF' : 'transparent'
                       }}
                     >
-                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '�����������') : ''}
+                      Type/Use {modalSortField === 'typeUse' ? (modalSortDirection === 'asc' ? '↑' : '�������������') : ''}
                     </th>
                   </tr>
                 </thead>
