@@ -1197,7 +1197,7 @@ const getPricePerUnit = useCallback((price, size) => {
   const filterVacantSales = useCallback(() => {
     if (!properties) return;
 
-    console.log('���� FilterVacantSales called:', {
+    console.log('����� FilterVacantSales called:', {
       currentVacantSalesCount: vacantSales.length,
       hasMethod1Excluded: !!window._method1ExcludedSales,
       method1ExcludedSize: window._method1ExcludedSales?.size || 0,
@@ -9882,18 +9882,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const avgPrice = data.avgPrice || data.avgNormTime;
     if (!avgPrice || !targetAllocation) return vcsRecommendedSites[vcs] || 0;
 
-    // Check if this VCS Type contains "condo" - if so, use strict site value calculation
+    // Get effective method for this VCS (considering overrides)
     const vcsType = vcsTypes[vcs] || '';
-    const isCondo = vcsType.toLowerCase().includes('condo');
+    const vcsMethod = getVCSMethod(vcs, vcsType);
 
-    if (isCondo) {
-      // For condos: Rec Site = Target % × Avg Price, fallback to Avg Price (t)
-      // This is a strict site value only calculation (no land dimensions)
+    // For SITE method (condos): use strict site value calculation
+    if (vcsMethod === 'site') {
+      // For condos/site: Rec Site = Target % × Avg Price
       return Math.round(avgPrice * (targetAllocation / 100));
     }
 
-    // If not in FF mode, return the base recommended value for non-condos
-    if (valuationMode !== 'ff') {
+    // If not in FF mode, return the base recommended value
+    if (vcsMethod !== 'ff') {
       return vcsRecommendedSites[vcs] || 0;
     }
 
