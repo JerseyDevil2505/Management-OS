@@ -3437,13 +3437,18 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     const allVCS = new Set(properties.map(p => p.new_vcs).filter(vcs => vcs));
 
     allVCS.forEach(vcs => {
-      // Only calculate for VCS with residential properties
+      // Only calculate for VCS with residential OR condo properties
       const residentialProps = properties.filter(p =>
         p.new_vcs === vcs &&
         (p.property_m4_class === '2' || p.property_m4_class === '3A')
       );
 
-      if (residentialProps.length === 0) return;
+      const condoProps = properties.filter(p =>
+        p.new_vcs === vcs &&
+        p.property_m4_class === '4D'
+      );
+
+      if (residentialProps.length === 0 && condoProps.length === 0) return;
 
       // Get 3 years of relevant sales for this VCS - MATCH SQL QUERY EXACTLY
       const relevantSales = properties.filter(prop => {
