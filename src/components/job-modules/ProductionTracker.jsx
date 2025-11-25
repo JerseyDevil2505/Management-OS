@@ -296,19 +296,34 @@ const ProductionTracker = ({
         
         debugLog('CODES', 'BRT sections available:', Object.keys(sections));
 
-        // FIXED: Look for InfoBy codes in the correct nested location without filtering
+        // FIXED: Search for InfoBy section by KEY "53" or VALUE "INFO. BY" instead of hardcoded parent key position
+        // This handles BRT files with different structures (e.g., Barnegat Light has extra sections 06, 07, 08)
         const residentialSection = sections['Residential'];
-        if (residentialSection && residentialSection['30'] && residentialSection['30'].MAP) {
-          const infoByMap = residentialSection['30'].MAP;
-          Object.keys(infoByMap).forEach(key => {
-            const item = infoByMap[key];
-            if (item?.DATA?.VALUE) {
-              codes.push({
-                code: item.KEY || item.DATA.KEY,
-                description: item.DATA.VALUE
-              });
+        if (residentialSection) {
+          let infoBySection = null;
+
+          // Search all parent keys to find the one with KEY="53" or VALUE containing "INFO"
+          Object.keys(residentialSection).forEach(parentKey => {
+            const section = residentialSection[parentKey];
+            if (section?.KEY === '53' || section?.DATA?.VALUE?.includes('INFO')) {
+              infoBySection = section;
+              debugLog('CODES', `Found InfoBy section at parent key "${parentKey}" with KEY="${section.KEY}" VALUE="${section.DATA?.VALUE}"`);
             }
           });
+
+          if (infoBySection && infoBySection.MAP) {
+            Object.keys(infoBySection.MAP).forEach(key => {
+              const item = infoBySection.MAP[key];
+              if (item?.DATA?.VALUE) {
+                codes.push({
+                  code: item.KEY || item.DATA.KEY,
+                  description: item.DATA.VALUE
+                });
+              }
+            });
+          } else {
+            debugLog('CODES', '⚠️ WARNING: Could not find InfoBy section (KEY=53) in BRT Residential codes');
+          }
         }
 
       } else if (vendor === 'Microsystems') {
