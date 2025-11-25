@@ -60,8 +60,12 @@ export class BRTUpdater {
           cleaned[key] = null;
           continue;
         }
-        if (value !== undefined && value !== '') {
-          cleaned[key] = value;
+        // Skip undefined, empty strings, and whitespace-only strings
+        if (value !== undefined && value !== null) {
+          const strValue = String(value);
+          if (strValue.trim() !== '') {
+            cleaned[key] = value;
+          }
         }
       }
       return cleaned;
