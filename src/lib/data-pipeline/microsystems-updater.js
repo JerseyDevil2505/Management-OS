@@ -41,11 +41,15 @@ export class MicrosystemsUpdater {
    */
   optimizeBatchForDatabase(batch) {
     return batch.map(record => {
-      // Remove null/undefined values to reduce payload size
+      // Remove null/undefined/empty/whitespace-only values to reduce payload size
       const cleaned = {};
       for (const [key, value] of Object.entries(record)) {
-        if (value !== null && value !== undefined && value !== '') {
-          cleaned[key] = value;
+        // Skip null, undefined, empty strings, and whitespace-only strings
+        if (value !== null && value !== undefined) {
+          const strValue = String(value);
+          if (strValue.trim() !== '') {
+            cleaned[key] = value;
+          }
         }
       }
       return cleaned;
