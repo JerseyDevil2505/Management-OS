@@ -124,7 +124,7 @@ export class BRTUpdater {
         return { error };
         
       } catch (networkError) {
-        console.log(`🌐 Network error for UPSERT batch ${batchNumber}, attempt ${attempt}:`, networkError.message);
+        console.log(`�� Network error for UPSERT batch ${batchNumber}, attempt ${attempt}:`, networkError.message);
         if (attempt < retries) {
           await new Promise(resolve => setTimeout(resolve, 2000));
           continue;
@@ -953,6 +953,19 @@ export class BRTUpdater {
     // Handle null, undefined, empty string, or whitespace-only strings
     if (!value || String(value).trim() === '') return null;
     const num = parseInt(String(value), 10);
+    return isNaN(num) ? null : num;
+  }
+
+  parseStoryHeight(value) {
+    // Handle null, undefined, empty string, or whitespace-only strings
+    if (!value || String(value).trim() === '') return null;
+
+    // Extract numeric portion from values like "2A", "1.5", "3S", etc.
+    // Match: optional digits, optional decimal point, optional digits
+    const match = String(value).match(/^(\d+\.?\d*)/);
+    if (!match) return null;
+
+    const num = parseFloat(match[1]);
     return isNaN(num) ? null : num;
   }
 
