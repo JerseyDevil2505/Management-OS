@@ -937,7 +937,8 @@ export class BRTUpdater {
   }
 
   parseNumeric(value, decimals = null) {
-    if (!value || value === '') return null;
+    // Handle null, undefined, empty string, or whitespace-only strings
+    if (!value || String(value).trim() === '') return null;
     const num = parseFloat(String(value).replace(/[,$]/g, ''));
     if (isNaN(num)) return null;
     return decimals !== null ? parseFloat(num.toFixed(decimals)) : num;
