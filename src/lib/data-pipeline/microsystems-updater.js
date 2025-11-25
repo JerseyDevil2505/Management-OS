@@ -446,7 +446,7 @@ export class MicrosystemsUpdater {
       asset_lot_sf: this.parseInteger(rawRecord['Lot Size In Sf']),
       asset_neighborhood: rawRecord['Neighborhood'],
       asset_sfla: this.parseNumeric(rawRecord['Livable Area']),
-      asset_story_height: rawRecord['Story Height'] || null,  // Keep as text for floor analysis
+      asset_story_height: this.parseStoryHeight(rawRecord['Story Height']),  // Extract numeric portion from alphanumeric values like "2A"
       asset_type_use: rawRecord['Type Use Code'],
       asset_view: null, // Not available in Microsystems
       asset_year_built: this.parseInteger(rawRecord['Year Built']),
