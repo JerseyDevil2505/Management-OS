@@ -854,7 +854,8 @@ export class MicrosystemsUpdater {
 
   // Utility functions
   parseDate(dateString) {
-    if (!dateString || dateString.trim() === '') return null;
+    // Handle null, undefined, empty string, or whitespace-only strings
+    if (!dateString || String(dateString).trim() === '') return null;
     const date = new Date(dateString);
     return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
   }
