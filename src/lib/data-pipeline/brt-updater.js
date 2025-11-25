@@ -945,7 +945,8 @@ export class BRTUpdater {
   }
 
   parseInteger(value) {
-    if (!value || value === '') return null;
+    // Handle null, undefined, empty string, or whitespace-only strings
+    if (!value || String(value).trim() === '') return null;
     const num = parseInt(String(value), 10);
     return isNaN(num) ? null : num;
   }
