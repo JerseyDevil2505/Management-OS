@@ -290,7 +290,7 @@ export class BRTUpdater {
         throw error;
       }
       
-      console.log('�� Complete code file stored successfully in jobs table (UPDATER)');
+      console.log('���� Complete code file stored successfully in jobs table (UPDATER)');
     } catch (error) {
       console.error('❌ Failed to store code file:', error);
       // Don't throw - continue with processing even if code storage fails
@@ -571,7 +571,7 @@ export class BRTUpdater {
       asset_lot_sf: this.calculateLotSquareFeet(rawRecord),
       asset_neighborhood: rawRecord.NBHD,
       asset_sfla: this.parseNumeric(rawRecord.SFLA_TOTAL),
-      asset_story_height: rawRecord.STORYHGT || null,  // Keep as text for floor analysis
+      asset_story_height: this.parseStoryHeight(rawRecord.STORYHGT),  // Extract numeric portion from alphanumeric values like "2A"
       asset_type_use: rawRecord.TYPEUSE,
       asset_view: rawRecord.VIEW,
       asset_year_built: this.parseInteger(rawRecord.YEARBUILT),
