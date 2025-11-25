@@ -60,8 +60,12 @@ export class BRTUpdater {
           cleaned[key] = null;
           continue;
         }
-        if (value !== undefined && value !== '') {
-          cleaned[key] = value;
+        // Skip undefined, empty strings, and whitespace-only strings
+        if (value !== undefined && value !== null) {
+          const strValue = String(value);
+          if (strValue.trim() !== '') {
+            cleaned[key] = value;
+          }
         }
       }
       return cleaned;
@@ -120,7 +124,7 @@ export class BRTUpdater {
         return { error };
         
       } catch (networkError) {
-        console.log(`🌐 Network error for UPSERT batch ${batchNumber}, attempt ${attempt}:`, networkError.message);
+        console.log(`�� Network error for UPSERT batch ${batchNumber}, attempt ${attempt}:`, networkError.message);
         if (attempt < retries) {
           await new Promise(resolve => setTimeout(resolve, 2000));
           continue;
@@ -286,7 +290,7 @@ export class BRTUpdater {
         throw error;
       }
       
-      console.log('�� Complete code file stored successfully in jobs table (UPDATER)');
+      console.log('���� Complete code file stored successfully in jobs table (UPDATER)');
     } catch (error) {
       console.error('❌ Failed to store code file:', error);
       // Don't throw - continue with processing even if code storage fails
@@ -567,7 +571,7 @@ export class BRTUpdater {
       asset_lot_sf: this.calculateLotSquareFeet(rawRecord),
       asset_neighborhood: rawRecord.NBHD,
       asset_sfla: this.parseNumeric(rawRecord.SFLA_TOTAL),
-      asset_story_height: rawRecord.STORYHGT || null,  // Keep as text for floor analysis
+      asset_story_height: this.parseStoryHeight(rawRecord.STORYHGT),  // Extract numeric portion from alphanumeric values like "2A"
       asset_type_use: rawRecord.TYPEUSE,
       asset_view: rawRecord.VIEW,
       asset_year_built: this.parseInteger(rawRecord.YEARBUILT),
@@ -931,21 +935,37 @@ export class BRTUpdater {
     }
 
   parseDate(dateString) {
-    if (!dateString || dateString.trim() === '') return null;
+    // Handle null, undefined, empty string, or whitespace-only strings
+    if (!dateString || String(dateString).trim() === '') return null;
     const date = new Date(dateString);
     return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
   }
 
   parseNumeric(value, decimals = null) {
-    if (!value || value === '') return null;
+    // Handle null, undefined, empty string, or whitespace-only strings
+    if (!value || String(value).trim() === '') return null;
     const num = parseFloat(String(value).replace(/[,$]/g, ''));
     if (isNaN(num)) return null;
     return decimals !== null ? parseFloat(num.toFixed(decimals)) : num;
   }
 
   parseInteger(value) {
-    if (!value || value === '') return null;
+    // Handle null, undefined, empty string, or whitespace-only strings
+    if (!value || String(value).trim() === '') return null;
     const num = parseInt(String(value), 10);
+    return isNaN(num) ? null : num;
+  }
+
+  parseStoryHeight(value) {
+    // Handle null, undefined, empty string, or whitespace-only strings
+    if (!value || String(value).trim() === '') return null;
+
+    // Extract numeric portion from values like "2A", "1.5", "3S", etc.
+    // Match: optional digits, optional decimal point, optional digits
+    const match = String(value).match(/^(\d+\.?\d*)/);
+    if (!match) return null;
+
+    const num = parseFloat(match[1]);
     return isNaN(num) ? null : num;
   }
 

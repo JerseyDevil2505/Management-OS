@@ -41,11 +41,15 @@ export class MicrosystemsUpdater {
    */
   optimizeBatchForDatabase(batch) {
     return batch.map(record => {
-      // Remove null/undefined values to reduce payload size
+      // Remove null/undefined/empty/whitespace-only values to reduce payload size
       const cleaned = {};
       for (const [key, value] of Object.entries(record)) {
-        if (value !== null && value !== undefined && value !== '') {
-          cleaned[key] = value;
+        // Skip null, undefined, empty strings, and whitespace-only strings
+        if (value !== null && value !== undefined) {
+          const strValue = String(value);
+          if (strValue.trim() !== '') {
+            cleaned[key] = value;
+          }
         }
       }
       return cleaned;
@@ -442,7 +446,7 @@ export class MicrosystemsUpdater {
       asset_lot_sf: this.parseInteger(rawRecord['Lot Size In Sf']),
       asset_neighborhood: rawRecord['Neighborhood'],
       asset_sfla: this.parseNumeric(rawRecord['Livable Area']),
-      asset_story_height: rawRecord['Story Height'] || null,  // Keep as text for floor analysis
+      asset_story_height: this.parseStoryHeight(rawRecord['Story Height']),  // Extract numeric portion from alphanumeric values like "2A"
       asset_type_use: rawRecord['Type Use Code'],
       asset_view: null, // Not available in Microsystems
       asset_year_built: this.parseInteger(rawRecord['Year Built']),
@@ -854,21 +858,37 @@ export class MicrosystemsUpdater {
 
   // Utility functions
   parseDate(dateString) {
-    if (!dateString || dateString.trim() === '') return null;
+    // Handle null, undefined, empty string, or whitespace-only strings
+    if (!dateString || String(dateString).trim() === '') return null;
     const date = new Date(dateString);
     return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
   }
 
   parseNumeric(value, decimals = null) {
-    if (!value || value === '') return null;
+    // Handle null, undefined, empty string, or whitespace-only strings
+    if (!value || String(value).trim() === '') return null;
     const num = parseFloat(String(value).replace(/[,$]/g, ''));
     if (isNaN(num)) return null;
     return decimals !== null ? parseFloat(num.toFixed(decimals)) : num;
   }
 
   parseInteger(value) {
-    if (!value || value === '') return null;
+    // Handle null, undefined, empty string, or whitespace-only strings
+    if (!value || String(value).trim() === '') return null;
     const num = parseInt(String(value), 10);
+    return isNaN(num) ? null : num;
+  }
+
+  parseStoryHeight(value) {
+    // Handle null, undefined, empty string, or whitespace-only strings
+    if (!value || String(value).trim() === '') return null;
+
+    // Extract numeric portion from values like "2A", "1.5", "3S", etc.
+    // Match: optional digits, optional decimal point, optional digits
+    const match = String(value).match(/^(\d+\.?\d*)/);
+    if (!match) return null;
+
+    const num = parseFloat(match[1]);
     return isNaN(num) ? null : num;
   }
 
