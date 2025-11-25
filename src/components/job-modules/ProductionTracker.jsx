@@ -296,10 +296,10 @@ const ProductionTracker = ({
         
         debugLog('CODES', 'BRT sections available:', Object.keys(sections));
 
-        // FIXED: Look for InfoBy codes in section 53 (INFO. BY section)
+        // FIXED: Look for InfoBy codes in the correct nested location without filtering
         const residentialSection = sections['Residential'];
-        if (residentialSection && residentialSection['53'] && residentialSection['53'].MAP) {
-          const infoByMap = residentialSection['53'].MAP;
+        if (residentialSection && residentialSection['30'] && residentialSection['30'].MAP) {
+          const infoByMap = residentialSection['30'].MAP;
           Object.keys(infoByMap).forEach(key => {
             const item = infoByMap[key];
             if (item?.DATA?.VALUE) {
@@ -381,7 +381,7 @@ const ProductionTracker = ({
       }
 
       setAvailableInfoByCodes(codes);
-      debugLog('CODES', `✅ FINAL: Loaded ${codes.length} clean InfoBy codes from ${vendor}`, 
+      debugLog('CODES', `�� FINAL: Loaded ${codes.length} clean InfoBy codes from ${vendor}`, 
         codes.map(c => `${c.code}=${c.description}`));
 
       // Load existing category configuration
