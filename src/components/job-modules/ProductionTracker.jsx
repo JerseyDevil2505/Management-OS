@@ -295,11 +295,11 @@ const ProductionTracker = ({
         const sections = job.parsed_code_definitions.sections || job.parsed_code_definitions;
         
         debugLog('CODES', 'BRT sections available:', Object.keys(sections));
-        
-        // FIXED: Look for InfoBy codes in the correct nested location without filtering
+
+        // FIXED: Look for InfoBy codes in section 53 (INFO. BY section)
         const residentialSection = sections['Residential'];
-        if (residentialSection && residentialSection['30'] && residentialSection['30'].MAP) {
-          const infoByMap = residentialSection['30'].MAP;
+        if (residentialSection && residentialSection['53'] && residentialSection['53'].MAP) {
+          const infoByMap = residentialSection['53'].MAP;
           Object.keys(infoByMap).forEach(key => {
             const item = infoByMap[key];
             if (item?.DATA?.VALUE) {
