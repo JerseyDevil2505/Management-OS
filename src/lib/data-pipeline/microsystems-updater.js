@@ -879,6 +879,19 @@ export class MicrosystemsUpdater {
     return isNaN(num) ? null : num;
   }
 
+  parseStoryHeight(value) {
+    // Handle null, undefined, empty string, or whitespace-only strings
+    if (!value || String(value).trim() === '') return null;
+
+    // Extract numeric portion from values like "2A", "1.5", "3S", etc.
+    // Match: optional digits, optional decimal point, optional digits
+    const match = String(value).match(/^(\d+\.?\d*)/);
+    if (!match) return null;
+
+    const num = parseFloat(match[1]);
+    return isNaN(num) ? null : num;
+  }
+
   /**
    * ENHANCED: Get code description with support for suffix lookup
    * Now handles both full codes (120PV) and suffix codes (PV) from CSV
