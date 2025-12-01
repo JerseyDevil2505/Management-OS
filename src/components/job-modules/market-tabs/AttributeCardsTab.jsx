@@ -758,42 +758,59 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   // ============ CALCULATE NON-BASELINE SUMMARY ============
   const calculateNonBaselineSummary = (data, type) => {
     const conditionAdjustments = {}; // Track adjustments by condition code
-    const baselineNormalized = []; // Track baseline normalized values
 
     // Determine which baseline and condition classifications are being used
     const manualBaseline = type === 'Exterior' ? manualExteriorBaseline : manualInteriorBaseline;
     const betterConditions = type === 'Exterior' ? exteriorBetterConditions : interiorBetterConditions;
     const worseConditions = type === 'Exterior' ? exteriorWorseConditions : interiorWorseConditions;
 
-    // First pass: calculate overall average SFLA
-    let totalSFLA = 0;
-    let totalConditions = 0;
-    Object.values(data).forEach(vcsConditions => {
-      Object.entries(vcsConditions).forEach(([code, cond]) => {
-        totalSFLA += cond.avgSize || 0;
-        totalConditions++;
+    // Process each VCS separately
+    Object.entries(data).forEach(([vcsCode, vcsConditions]) => {
+      // Step 1: Calculate average SFLA for THIS VCS
+      let vcsTotalSFLA = 0;
+      let vcsConditionCount = 0;
+      Object.values(vcsConditions).forEach(cond => {
+        vcsTotalSFLA += cond.avgSize || 0;
+        vcsConditionCount++;
       });
-    });
-    const overallAvgSFLA = totalConditions > 0 ? totalSFLA / totalConditions : 0;
+      const vcsAvgSFLA = vcsConditionCount > 0 ? vcsTotalSFLA / vcsConditionCount : 0;
 
-    // Second pass: normalize all values and track baseline
-    Object.values(data).forEach(vcsConditions => {
+      // Step 2: Normalize all conditions in this VCS to the VCS average SFLA
+      const normalizedConditions = {};
       Object.entries(vcsConditions).forEach(([code, cond]) => {
         const avgSFLA = cond.avgSize || 0;
-        const avgValue = cond.avgValue || 0; // This is the market price
+        const avgValue = cond.avgValue || 0;
 
-        // Normalize to overall average SFLA: ((overallAvg - thisSFLA) * (value / thisSFLA)) + value
+        // Normalize to VCS average SFLA: ((vcsAvg - thisSFLA) * (value / thisSFLA)) + value
         const normalized = avgSFLA > 0 ?
-          ((overallAvgSFLA - avgSFLA) * (avgValue / avgSFLA)) + avgValue : avgValue;
+          ((vcsAvgSFLA - avgSFLA) * (avgValue / avgSFLA)) + avgValue : avgValue;
 
-        // Check if this is baseline
+        normalizedConditions[code] = {
+          ...cond,
+          normalized
+        };
+      });
+
+      // Step 3: Find baseline for this VCS
+      let vcsBaselineNormalized = null;
+      Object.entries(normalizedConditions).forEach(([code, cond]) => {
+        const isBaseline = manualBaseline ? (cond.description === manualBaseline) :
+                          (cond.adjustmentPct === 0 ||
+                           cond.description.toUpperCase().includes('AVERAGE') ||
+                           cond.description.toUpperCase().includes('NORMAL'));
+        if (isBaseline) {
+          vcsBaselineNormalized = cond.normalized;
+        }
+      });
+
+      // Step 4: Calculate percentage for each non-baseline condition in this VCS
+      Object.entries(normalizedConditions).forEach(([code, cond]) => {
         const isBaseline = manualBaseline ? (cond.description === manualBaseline) :
                           (cond.adjustmentPct === 0 ||
                            cond.description.toUpperCase().includes('AVERAGE') ||
                            cond.description.toUpperCase().includes('NORMAL'));
 
-        if (isBaseline) {
-          baselineNormalized.push(normalized);
+        if (isBaseline || vcsBaselineNormalized === null || vcsBaselineNormalized === 0) {
           return;
         }
 
@@ -804,48 +821,46 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
           conditionAdjustments[code] = {
             description: cond.description,
-            normalizedValues: [],
+            vcsPercentages: [],
             totalProperties: 0,
             isBetterCondition,
             isWorseCondition
           };
         }
 
-        // Store normalized value with VCS context for later filtering
-        conditionAdjustments[code].normalizedValues.push(normalized);
-        conditionAdjustments[code].totalProperties += cond.count;
-      });
-    });
+        // Calculate percentage vs baseline for this VCS
+        const adjustmentPct = ((cond.normalized - vcsBaselineNormalized) / vcsBaselineNormalized) * 100;
 
-    // Calculate baseline average
-    const baselineAvg = baselineNormalized.length > 0 ?
-      baselineNormalized.reduce((sum, val) => sum + val, 0) / baselineNormalized.length : 0;
-
-    // Third pass: calculate percentage for each VCS, then average those percentages
-    const summary = [];
-    Object.entries(conditionAdjustments).forEach(([code, data]) => {
-      const vcsPercentages = [];
-
-      // Calculate percentage for each VCS individually
-      data.normalizedValues.forEach(normalized => {
-        const adjustmentPct = baselineAvg > 0 ? ((normalized - baselineAvg) / baselineAvg) * 100 : 0;
-
+        // Check if this percentage should be included based on condition type
         let includeInCalc = false;
-        if (data.isBetterCondition && adjustmentPct > 0) {
+        if (conditionAdjustments[code].isBetterCondition && adjustmentPct > 0) {
           includeInCalc = true; // Better: only include positive adjustments
-        } else if (data.isWorseCondition && adjustmentPct < 0) {
+        } else if (conditionAdjustments[code].isWorseCondition && adjustmentPct < 0) {
           includeInCalc = true; // Worse: only include negative adjustments
         }
 
         if (includeInCalc) {
-          vcsPercentages.push(adjustmentPct);
+          conditionAdjustments[code].vcsPercentages.push(adjustmentPct);
         }
+        conditionAdjustments[code].totalProperties += cond.count;
       });
+    });
 
+    // Step 5: Calculate simple average of VCS percentages for each condition
+    const summary = [];
+    Object.entries(conditionAdjustments).forEach(([code, data]) => {
       // Calculate simple average of VCS percentages (not dollar-weighted)
-      const avgAdjustment = vcsPercentages.length > 0 ?
-        vcsPercentages.reduce((sum, pct) => sum + pct, 0) / vcsPercentages.length : null;
-      const validVCSCount = vcsPercentages.length;
+      const avgAdjustment = data.vcsPercentages.length > 0 ?
+        data.vcsPercentages.reduce((sum, pct) => sum + pct, 0) / data.vcsPercentages.length : null;
+      const validVCSCount = data.vcsPercentages.length;
+
+      // Log for debugging
+      if (type === 'Interior' && (code === '2' || code === '5')) {
+        console.log(`[UI ${type} ${data.description}] Per-VCS method:`, {
+          avgAdjustment,
+          vcsPercentages: data.vcsPercentages
+        });
+      }
 
       // Categorize condition quality for sorting using user configuration
       let category = 0; // 0 = average/unknown, 1 = better, -1 = worse
