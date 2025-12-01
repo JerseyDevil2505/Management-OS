@@ -798,29 +798,269 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     });
   };
 
-  // ============ CSV EXPORT FUNCTIONS ============
-  const exportConditionDataToCSV = (data, type) => {
-    const headers = ['VCS', 'Code', 'Description', 'Count', 'Avg_Value', 'Avg_SFLA', 'Avg_Year', 'Adjusted_Value', 'Adjustment_Pct'];
+  // ============ EXCEL EXPORT FUNCTIONS ============
+  const exportConditionDataToExcel = (data, type) => {
     const rows = [];
 
+    // Global header section
+    const municipality = jobData?.municipality || 'Municipality';
+    const timestamp = new Date().toLocaleDateString();
+    const typeLabel = type === 'exterior' ? 'EXTERIOR' : 'INTERIOR';
+
+    rows.push([`${typeLabel} CONDITION ANALYSIS`]);
+    rows.push([`Municipality: ${municipality}`]);
+    rows.push([`Date: ${timestamp}`]);
+    rows.push([`Property Type Filter: ${getTypeUseOptions().find(opt => opt.code === typeUseFilter)?.description || 'All Properties'}`]);
+    rows.push([]); // Blank row
+
+    // Column headers
+    const headers = ['VCS', 'Condition', 'Count', 'Avg SFLA', 'Avg Year Built', 'Avg Norm Value', 'Adjusted Value', 'Flat Adj', '% Adj', 'Baseline'];
+    rows.push(headers);
+
+    const headerRowNum = rows.length; // Track header position (1-based will be headerRowNum)
+
+    // COL indexes (0-based)
+    const COL = {
+      VCS: 0, CONDITION: 1, COUNT: 2, AVG_SFLA: 3, AVG_YEAR: 4,
+      AVG_NORM_VALUE: 5, ADJ_VALUE: 6, FLAT_ADJ: 7, PCT_ADJ: 8, BASELINE: 9
+    };
+
+    // Collect all data by VCS with baseline info
+    const vcsSections = [];
     Object.entries(data).forEach(([vcs, conditions]) => {
+      // Find the baseline (AVERAGE or first condition)
+      const baselineCode = Object.keys(conditions).find(code => {
+        const desc = conditions[code].description?.toUpperCase() || '';
+        return desc === 'AVERAGE' || desc === 'AVG' || desc === 'AVERAGE CONDITION';
+      }) || Object.keys(conditions)[0];
+
+      const baselineCond = conditions[baselineCode];
+      const baselineAvgSFLA = baselineCond?.avgSize || 0;
+      const baselineAvgValue = baselineCond?.avgValue || 0;
+
+      const conditionRows = [];
+
       Object.entries(conditions).forEach(([code, cond]) => {
-        rows.push([
+        const isBaseline = code === baselineCode;
+        const avgSFLA = cond.avgSize || 0;
+        const avgYear = cond.avgYear || '';
+        const avgNormValue = cond.avgValue || 0;
+
+        conditionRows.push({
           vcs,
           code,
-          cond.description,
-          cond.count,
-          cond.avgValue,
-          cond.avgSize || '',
-          cond.avgYear || '',
-          cond.adjustedValue,
-          cond.adjustmentPct.toFixed(1)
-        ]);
+          description: cond.description,
+          count: cond.count,
+          avgSFLA,
+          avgYear,
+          avgNormValue,
+          isBaseline,
+          baselineAvgSFLA,
+          baselineAvgValue
+        });
+      });
+
+      vcsSections.push({ vcs, conditionRows, baselineAvgSFLA, baselineAvgValue });
+    });
+
+    // Add data rows with formulas
+    vcsSections.forEach(section => {
+      section.conditionRows.forEach((cond, idx) => {
+        const rowNum = rows.length + 1; // Excel row number (1-based)
+
+        const row = [];
+        row[COL.VCS] = cond.vcs;
+        row[COL.CONDITION] = cond.description;
+        row[COL.COUNT] = cond.count;
+        row[COL.AVG_SFLA] = cond.avgSFLA;
+        row[COL.AVG_YEAR] = cond.avgYear;
+        row[COL.AVG_NORM_VALUE] = cond.avgNormValue;
+
+        // Adjusted Value - FORMULA using Jim's formula:
+        // =F{row} + (((D{row} - D{baselineRow}) * (F{row} / D{row}) * 0.5))
+        // But we need baseline per VCS, so we'll calculate it differently
+        // For baseline: use avgNormValue directly
+        // For others: F{row} + (((baseline_sfla - D{row}) * (F{row} / D{row}) * 0.5))
+
+        if (cond.isBaseline) {
+          row[COL.ADJ_VALUE] = cond.avgNormValue; // Baseline uses its own value
+          row[COL.FLAT_ADJ] = 0;
+          row[COL.PCT_ADJ] = 0;
+        } else {
+          // Jim's formula: price + ((targetSize - currentSize) * (price / currentSize) * 0.5)
+          // Here: avgNormValue + ((baselineSFLA - avgSFLA) * (avgNormValue / avgSFLA) * 0.5)
+          row[COL.ADJ_VALUE] = {
+            f: `F${rowNum}+((${cond.baselineAvgSFLA}-D${rowNum})*(F${rowNum}/D${rowNum})*0.5)`,
+            t: 'n'
+          };
+          // Flat Adj = Adjusted Value - Baseline Value
+          row[COL.FLAT_ADJ] = {
+            f: `G${rowNum}-${cond.baselineAvgValue}`,
+            t: 'n'
+          };
+          // % Adj = Flat Adj / Baseline Value
+          row[COL.PCT_ADJ] = {
+            f: `IF(${cond.baselineAvgValue}=0,0,H${rowNum}/${cond.baselineAvgValue})`,
+            t: 'n'
+          };
+        }
+
+        row[COL.BASELINE] = cond.isBaseline ? 'YES' : '';
+
+        rows.push(row);
       });
     });
 
-    const filename = `${jobData.job_name || 'job'}_${type}_condition_analysis.csv`;
-    downloadCsv(filename, headers, rows);
+    // Summary section - aggregate across all VCS
+    rows.push([]); // Blank row
+    rows.push([]); // Blank row
+    rows.push(['OVERALL SUMMARY - All VCS Combined']);
+    rows.push([]); // Blank row
+
+    const summaryHeaders = ['Condition', 'Total Count', 'Avg SFLA', 'Avg Norm Value', 'Adjusted Value', 'Flat Adj', '% Adj'];
+    rows.push(summaryHeaders);
+
+    // Aggregate data by condition description across all VCS
+    const summaryByCondition = {};
+    Object.entries(data).forEach(([vcs, conditions]) => {
+      Object.entries(conditions).forEach(([code, cond]) => {
+        const desc = cond.description;
+        if (!summaryByCondition[desc]) {
+          summaryByCondition[desc] = {
+            totalCount: 0,
+            totalSFLA: 0,
+            totalNormValue: 0,
+            entries: []
+          };
+        }
+        summaryByCondition[desc].totalCount += cond.count;
+        summaryByCondition[desc].totalSFLA += (cond.avgSize || 0) * cond.count;
+        summaryByCondition[desc].totalNormValue += (cond.avgValue || 0) * cond.count;
+        summaryByCondition[desc].entries.push(cond);
+      });
+    });
+
+    // Find baseline in summary (AVERAGE condition)
+    const baselineDesc = Object.keys(summaryByCondition).find(desc => {
+      const upper = desc.toUpperCase();
+      return upper === 'AVERAGE' || upper === 'AVG' || upper === 'AVERAGE CONDITION';
+    }) || Object.keys(summaryByCondition)[0];
+
+    const baselineSummary = summaryByCondition[baselineDesc];
+    const baselineSummaryAvgSFLA = baselineSummary ? baselineSummary.totalSFLA / baselineSummary.totalCount : 0;
+    const baselineSummaryAvgValue = baselineSummary ? baselineSummary.totalNormValue / baselineSummary.totalCount : 0;
+
+    Object.entries(summaryByCondition).forEach(([desc, summary]) => {
+      const rowNum = rows.length + 1;
+      const avgSFLA = summary.totalSFLA / summary.totalCount;
+      const avgNormValue = summary.totalNormValue / summary.totalCount;
+      const isBaseline = desc === baselineDesc;
+
+      const summaryRow = [];
+      summaryRow[0] = desc;
+      summaryRow[1] = summary.totalCount;
+      summaryRow[2] = avgSFLA;
+      summaryRow[3] = avgNormValue;
+
+      if (isBaseline) {
+        summaryRow[4] = avgNormValue;
+        summaryRow[5] = 0;
+        summaryRow[6] = 0;
+      } else {
+        // Adjusted Value formula
+        summaryRow[4] = {
+          f: `D${rowNum}+((${baselineSummaryAvgSFLA}-C${rowNum})*(D${rowNum}/C${rowNum})*0.5)`,
+          t: 'n'
+        };
+        // Flat Adj
+        summaryRow[5] = {
+          f: `E${rowNum}-${baselineSummaryAvgValue}`,
+          t: 'n'
+        };
+        // % Adj
+        summaryRow[6] = {
+          f: `IF(${baselineSummaryAvgValue}=0,0,F${rowNum}/${baselineSummaryAvgValue})`,
+          t: 'n'
+        };
+      }
+
+      rows.push(summaryRow);
+    });
+
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Base styles
+    const baseStyle = {
+      font: { name: 'Leelawadee', sz: 10 },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    const headerStyle = {
+      font: { name: 'Leelawadee', sz: 10, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    const titleStyle = {
+      font: { name: 'Leelawadee', sz: 12, bold: true },
+      alignment: { horizontal: 'left', vertical: 'center' }
+    };
+
+    // Apply styles
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws[cellAddress]) continue;
+
+        // Title rows (0-4)
+        if (R < 4) {
+          ws[cellAddress].s = titleStyle;
+        }
+        // Header rows (row 5 for main data, summary header row)
+        else if (R === 5 || ws[cellAddress].v === 'Condition' || ws[cellAddress].v === 'VCS') {
+          ws[cellAddress].s = headerStyle;
+        }
+        // Data rows
+        else {
+          const style = { ...baseStyle };
+
+          // Number formats
+          if (C === COL.AVG_NORM_VALUE || C === COL.ADJ_VALUE || C === COL.FLAT_ADJ || C === 3 || C === 4 || C === 5) {
+            style.numFmt = '$#,##0';
+          } else if (C === COL.PCT_ADJ || C === 6) {
+            style.numFmt = '0%';
+          } else if (C === COL.AVG_SFLA || C === 2) {
+            style.numFmt = '#,##0';
+          }
+
+          ws[cellAddress].s = style;
+        }
+      }
+    }
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 15 },  // VCS / Condition
+      { wch: 20 },  // Condition / Total Count
+      { wch: 10 },  // Count / Avg SFLA
+      { wch: 12 },  // Avg SFLA
+      { wch: 12 },  // Avg Year
+      { wch: 14 },  // Avg Norm Value
+      { wch: 14 },  // Adjusted Value
+      { wch: 12 },  // Flat Adj
+      { wch: 10 },  // % Adj
+      { wch: 10 }   // Baseline
+    ];
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(wb, ws, `${typeLabel} Condition`);
+
+    // Generate filename and download
+    const filename = `${jobData.job_name || 'job'}_${type}_condition_analysis_${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(wb, filename);
   };
   // ============ RENDER CONDITION ANALYSIS TAB ============
   const renderConditionAnalysis = () => {
