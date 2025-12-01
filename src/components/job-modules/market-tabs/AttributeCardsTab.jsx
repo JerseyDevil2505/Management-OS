@@ -979,27 +979,26 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       if (isBaseline) {
         summaryRow[2] = ''; // % Adj - blank for baseline
       } else {
-        // Calculate flat adjustment sum for the formula
-        let flatAdjFormula;
+        // Calculate AVERAGE of percentages (matches UI summary calculation)
+        let pctAdjFormula;
 
         if (isBetter) {
-          // Only include positive adjustments
-          const flatAdjRefs = conditionRowNums.map(r => `MAX(0,H${r})`).join('+');
-          flatAdjFormula = flatAdjRefs;
+          // Only include positive percentages - use MAX to filter
+          const pctRefs = conditionRowNums.map(r => `MAX(0,I${r})`).join('+');
+          pctAdjFormula = `(${pctRefs})/${conditionRowNums.length}`;
         } else if (isWorse) {
-          // Only include negative adjustments
-          const flatAdjRefs = conditionRowNums.map(r => `MIN(0,H${r})`).join('+');
-          flatAdjFormula = flatAdjRefs;
+          // Only include negative percentages - use MIN to filter
+          const pctRefs = conditionRowNums.map(r => `MIN(0,I${r})`).join('+');
+          pctAdjFormula = `(${pctRefs})/${conditionRowNums.length}`;
         } else {
-          // Unknown condition type - sum all values
-          const flatAdjRefs = conditionRowNums.map(r => `H${r}`).join('+');
-          flatAdjFormula = flatAdjRefs;
+          // Unknown condition type - average all percentages
+          const pctRefs = conditionRowNums.map(r => `I${r}`).join('+');
+          pctAdjFormula = `(${pctRefs})/${conditionRowNums.length}`;
         }
 
-        // % Adj = SUM of Flat Adj / SUM of baseline adjusted values
-        const baselineAdjRefs = baselineRowNums.map(r => `G${r}`).join('+');
+        // % Adj = Average of all percentage adjustments for this condition
         summaryRow[2] = {
-          f: `IF((${baselineAdjRefs})=0,0,(${flatAdjFormula})/(${baselineAdjRefs}))`,
+          f: pctAdjFormula,
           t: 'n'
         };
       }
