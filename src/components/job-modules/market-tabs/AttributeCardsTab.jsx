@@ -733,29 +733,33 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
         // Initialize condition tracking if not exists
         if (!conditionAdjustments[code]) {
+          const desc = cond.description.toUpperCase();
+          const isGoodCondition = desc.includes('EXCELLENT') || desc.includes('GOOD') || desc.includes('SUPERIOR') ||
+                                 desc.includes('VERY GOOD') || desc.includes('MODERN') || code === 'G';
+          const isPoorCondition = desc.includes('POOR') || desc.includes('FAIR') || desc.includes('UNSOUND') ||
+                                 desc.includes('VERY POOR') || desc.includes('DETERIORATED') ||
+                                 desc.includes('BELOW AVERAGE') || desc.includes('DILAPIDATED') || code === 'P' || code === 'F';
+
           conditionAdjustments[code] = {
             description: cond.description,
             sumAvgValue: 0,
             sumAdjustedValue: 0,
             totalProperties: 0,
-            validVCSCount: 0
+            validVCSCount: 0,
+            isGoodCondition,
+            isPoorCondition
           };
         }
 
-        // Apply NULL policy for illogical adjustments (both exterior and interior)
-        const desc = cond.description.toUpperCase();
-        const isGoodCondition = desc.includes('EXCELLENT') || desc.includes('GOOD') || desc.includes('SUPERIOR') ||
-                               desc.includes('VERY GOOD') || desc.includes('MODERN') || code === 'G';
-        const isPoorCondition = desc.includes('POOR') || desc.includes('FAIR') || desc.includes('UNSOUND') ||
-                               desc.includes('VERY POOR') || desc.includes('DETERIORATED') ||
-                               desc.includes('BELOW AVERAGE') || desc.includes('DILAPIDATED') || code === 'P' || code === 'F';
+        const adjustment = cond.adjustmentPct || 0;
+        const { isGoodCondition, isPoorCondition } = conditionAdjustments[code];
 
-        // Filter illogical adjustments - apply NULL policy
-        let includeInCalc = true;
-        if (isGoodCondition && cond.adjustmentPct < 0) {
-          includeInCalc = false; // Good condition with negative adjustment = illogical
-        } else if (isPoorCondition && cond.adjustmentPct > 0) {
-          includeInCalc = false; // Poor condition with positive adjustment = illogical
+        // Only include VCS rows with the correct adjustment direction
+        let includeInCalc = false;
+        if (isGoodCondition && adjustment > 0) {
+          includeInCalc = true; // Good condition: only include positive adjustments
+        } else if (isPoorCondition && adjustment <= 0) {
+          includeInCalc = true; // Poor/Fair condition: only include negative or zero adjustments
         }
 
         if (includeInCalc) {
