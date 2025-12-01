@@ -759,12 +759,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         const adjustment = cond.adjustmentPct || 0;
         const { isBetterCondition, isWorseCondition } = conditionAdjustments[code];
 
-        // Only include VCS rows with the correct adjustment direction
+        // Only include VCS rows with actual adjustments (exclude 0%)
         let includeInCalc = false;
-        if (isBetterCondition && adjustment >= 0) {
-          includeInCalc = true; // Better condition: include positive and zero adjustments (exclude negative)
-        } else if (isWorseCondition && adjustment <= 0) {
-          includeInCalc = true; // Worse condition: include negative and zero adjustments (exclude positive)
+        if (isBetterCondition && adjustment > 0) {
+          includeInCalc = true; // Better condition: only include positive adjustments (>0)
+        } else if (isWorseCondition && adjustment < 0) {
+          includeInCalc = true; // Worse condition: only include negative adjustments (<0)
         }
 
         // Debug logging for EXT GOOD specifically
@@ -1010,18 +1010,18 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         summaryRow[2] = ''; // % Adj - blank for baseline
       } else {
         // Calculate true average with conditional filtering
-        // For better conditions: include rows with positive or zero % Adj (I >= 0)
-        // For worse conditions: include rows with negative or zero % Adj (I <= 0)
+        // For better conditions: only include rows with positive % Adj (I > 0)
+        // For worse conditions: only include rows with negative % Adj (I < 0)
         let sumAdjusted, sumNorm;
 
         if (isBetter) {
-          // Only sum rows where % Adj >= 0 (include zero and positive, exclude negative)
-          sumAdjusted = conditionRowNums.map(r => `IF(I${r}>=0,G${r},0)`).join('+');
-          sumNorm = conditionRowNums.map(r => `IF(I${r}>=0,F${r},0)`).join('+');
+          // Only sum rows where % Adj > 0 (exclude zero and negative)
+          sumAdjusted = conditionRowNums.map(r => `IF(I${r}>0,G${r},0)`).join('+');
+          sumNorm = conditionRowNums.map(r => `IF(I${r}>0,F${r},0)`).join('+');
         } else if (isWorse) {
-          // Only sum rows where % Adj <= 0 (include zero and negative, exclude positive)
-          sumAdjusted = conditionRowNums.map(r => `IF(I${r}<=0,G${r},0)`).join('+');
-          sumNorm = conditionRowNums.map(r => `IF(I${r}<=0,F${r},0)`).join('+');
+          // Only sum rows where % Adj < 0 (exclude zero and positive)
+          sumAdjusted = conditionRowNums.map(r => `IF(I${r}<0,G${r},0)`).join('+');
+          sumNorm = conditionRowNums.map(r => `IF(I${r}<0,F${r},0)`).join('+');
         } else {
           // Unknown condition type - sum all
           sumAdjusted = conditionRowNums.map(r => `G${r}`).join('+');
