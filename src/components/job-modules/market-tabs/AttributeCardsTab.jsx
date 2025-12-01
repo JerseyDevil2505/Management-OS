@@ -718,8 +718,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const calculateNonBaselineSummary = (data, type) => {
     const conditionAdjustments = {}; // Track adjustments by condition code
 
-    // Determine which baseline is being used
+    // Determine which baseline and condition classifications are being used
     const manualBaseline = type === 'Exterior' ? manualExteriorBaseline : manualInteriorBaseline;
+    const betterConditions = type === 'Exterior' ? exteriorBetterConditions : interiorBetterConditions;
+    const worseConditions = type === 'Exterior' ? exteriorWorseConditions : interiorWorseConditions;
 
     Object.values(data).forEach(vcsConditions => {
       Object.entries(vcsConditions).forEach(([code, cond]) => {
@@ -733,12 +735,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
         // Initialize condition tracking if not exists
         if (!conditionAdjustments[code]) {
-          const desc = cond.description.toUpperCase();
-          const isGoodCondition = desc.includes('EXCELLENT') || desc.includes('GOOD') || desc.includes('SUPERIOR') ||
-                                 desc.includes('VERY GOOD') || desc.includes('MODERN') || code === 'G';
-          const isPoorCondition = desc.includes('POOR') || desc.includes('FAIR') || desc.includes('UNSOUND') ||
-                                 desc.includes('VERY POOR') || desc.includes('DETERIORATED') ||
-                                 desc.includes('BELOW AVERAGE') || desc.includes('DILAPIDATED') || code === 'P' || code === 'F';
+          // Use user configuration to determine condition type
+          const isBetterCondition = betterConditions.includes(cond.description);
+          const isWorseCondition = worseConditions.includes(cond.description);
 
           conditionAdjustments[code] = {
             description: cond.description,
@@ -746,20 +745,20 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             sumAdjustedValue: 0,
             totalProperties: 0,
             validVCSCount: 0,
-            isGoodCondition,
-            isPoorCondition
+            isBetterCondition,
+            isWorseCondition
           };
         }
 
         const adjustment = cond.adjustmentPct || 0;
-        const { isGoodCondition, isPoorCondition } = conditionAdjustments[code];
+        const { isBetterCondition, isWorseCondition } = conditionAdjustments[code];
 
         // Only include VCS rows with the correct adjustment direction
         let includeInCalc = false;
-        if (isGoodCondition && adjustment > 0) {
-          includeInCalc = true; // Good condition: only include positive adjustments
-        } else if (isPoorCondition && adjustment <= 0) {
-          includeInCalc = true; // Poor/Fair condition: only include negative or zero adjustments
+        if (isBetterCondition && adjustment > 0) {
+          includeInCalc = true; // Better condition: only include positive adjustments
+        } else if (isWorseCondition && adjustment <= 0) {
+          includeInCalc = true; // Worse condition: only include negative or zero adjustments
         }
 
         if (includeInCalc) {
