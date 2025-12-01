@@ -544,13 +544,30 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             setExpandedVCS(newExpanded);
           };
           
-          // Find the baseline condition for this VCS
+          // Calculate VCS-specific average SFLA
+          let vcsTotalSFLA = 0;
+          let vcsConditionCount = 0;
+          Object.values(conditions).forEach(condData => {
+            vcsTotalSFLA += condData.avgSize || 0;
+            vcsConditionCount++;
+          });
+          const vcsAvgSFLA = vcsConditionCount > 0 ? vcsTotalSFLA / vcsConditionCount : 0;
+
+          // Find the baseline condition for this VCS and calculate its normalized value
           let baselineCode = null;
+          let vcsBaselineNormalized = null;
           Object.entries(conditions).forEach(([code, condData]) => {
-            if (condData.adjustmentPct === 0 || 
-                condData.description.toUpperCase().includes('AVERAGE') ||
-                condData.description.toUpperCase().includes('NORMAL')) {
+            const isBaselineCondition = manualBaseline ? (condData.description === manualBaseline) :
+                          (condData.adjustmentPct === 0 ||
+                           condData.description.toUpperCase().includes('AVERAGE') ||
+                           condData.description.toUpperCase().includes('NORMAL'));
+
+            if (isBaselineCondition) {
               baselineCode = code;
+              const avgSFLA = condData.avgSize || 0;
+              const avgValue = condData.avgValue || 0;
+              vcsBaselineNormalized = avgSFLA > 0 ?
+                ((vcsAvgSFLA - avgSFLA) * (avgValue / avgSFLA)) + avgValue : avgValue;
             }
           });
 
@@ -619,13 +636,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                         const cond = conditions[code];
                         const isBaseline = code === baselineCode;
 
-                        // Calculate normalized percentage for display
+                        // Calculate normalized value using VCS-specific average SFLA
                         const avgSFLA = cond.avgSize || 0;
                         const avgValue = cond.avgValue || 0;
                         const normalized = avgSFLA > 0 ?
-                          ((overallAvgSFLA - avgSFLA) * (avgValue / avgSFLA)) + avgValue : avgValue;
-                        const normalizedPct = baselineAvg > 0 ?
-                          ((normalized - baselineAvg) / baselineAvg) * 100 : 0;
+                          ((vcsAvgSFLA - avgSFLA) * (avgValue / avgSFLA)) + avgValue : avgValue;
+                        const normalizedPct = vcsBaselineNormalized > 0 ?
+                          ((normalized - vcsBaselineNormalized) / vcsBaselineNormalized) * 100 : 0;
 
                         return (
                           <tr
