@@ -767,6 +767,19 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           includeInCalc = true; // Worse condition: only include negative or zero adjustments
         }
 
+        // Debug logging for EXT GOOD specifically
+        if (cond.description === 'EXT GOOD') {
+          console.log(`[EXT GOOD VCS Debug]`, {
+            description: cond.description,
+            isBetterCondition,
+            isWorseCondition,
+            adjustment,
+            avgValue: cond.avgValue,
+            adjustedValue: cond.adjustedValue,
+            includeInCalc
+          });
+        }
+
         if (includeInCalc) {
           conditionAdjustments[code].sumAvgValue += cond.avgValue || 0;
           conditionAdjustments[code].sumAdjustedValue += cond.adjustedValue || 0;
