@@ -388,9 +388,9 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       row[COL.LIVING_AREA] = livingArea !== null ? livingArea : '';
 
       // Current Land, Det Item, Base Cost
-      row[COL.CURRENT_LAND] = cama || '';
-      row[COL.DET_ITEM] = detItems || '';
-      row[COL.BASE_COST] = baseCost || '';
+      row[COL.CURRENT_LAND] = cama || 0;
+      row[COL.DET_ITEM] = detItems || 0;  // Always 0 instead of empty to prevent #VALUE errors
+      row[COL.BASE_COST] = baseCost || 0;
 
       // Repl w/Depr - FORMULA: =(Q{rowNum} + R{rowNum}) * M{rowNum}
       if (yearBuilt) {
@@ -429,6 +429,35 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
       wsData.push(row);
     });
+
+    // Add summary row
+    const summaryRowNum = filtered.length + 2; // +1 for header, +1 for next row
+    const lastDataRow = filtered.length + 1; // Last row with data
+    const summaryRow = [];
+
+    // Empty cells before summary columns
+    for (let i = 0; i < COL.SALE_PRICE; i++) {
+      summaryRow[i] = '';
+    }
+
+    // Summary formulas
+    summaryRow[COL.SALE_PRICE] = { f: `SUM(I2:I${lastDataRow})`, t: 'n' };
+    summaryRow[COL.SALE_NU] = '';
+    summaryRow[COL.PRICE_TIME] = '';
+    summaryRow[COL.YEAR_BUILT] = '';
+    summaryRow[COL.DEPR] = '';
+    summaryRow[COL.BLDG_CLASS] = '';
+    summaryRow[COL.LIVING_AREA] = '';
+    summaryRow[COL.CURRENT_LAND] = '';
+    summaryRow[COL.DET_ITEM] = '';
+    summaryRow[COL.BASE_COST] = '';
+    summaryRow[COL.REPL_DEPR] = { f: `SUM(S2:S${lastDataRow})`, t: 'n' };
+    summaryRow[COL.IMPROV] = { f: `SUM(T2:T${lastDataRow})`, t: 'n' };
+    summaryRow[COL.CCF] = { f: `IF(S${summaryRowNum}=0,"",T${summaryRowNum}/S${summaryRowNum})`, t: 'n' }; // Overall CCF
+    summaryRow[COL.ADJ_VALUE] = { f: `SUM(V2:V${lastDataRow})`, t: 'n' };
+    summaryRow[COL.ADJ_RATIO] = { f: `IF(I${summaryRowNum}=0,"",V${summaryRowNum}/I${summaryRowNum})`, t: 'n' }; // Overall Adjusted Ratio
+
+    wsData.push(summaryRow);
 
     // Create workbook and worksheet
     const wb = XLSX.utils.book_new();
