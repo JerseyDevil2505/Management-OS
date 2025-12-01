@@ -1108,17 +1108,22 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
         if (isBetter) {
           // Average of percentages where % Adj > 0
-          const validPcts = conditionRowNums.map(r => `IF(I${r}>0,I${r},"")`).join(',');
-          const countValid = conditionRowNums.map(r => `IF(I${r}>0,1,0)`).join('+');
-          avgFormula = `AVERAGE(${validPcts})`;
+          const range = conditionRowNums.length === 1 ?
+            `I${conditionRowNums[0]}` :
+            `I${conditionRowNums[0]}:I${conditionRowNums[conditionRowNums.length - 1]}`;
+          avgFormula = `AVERAGEIF(${range},">0")`;
         } else if (isWorse) {
           // Average of percentages where % Adj < 0
-          const validPcts = conditionRowNums.map(r => `IF(I${r}<0,I${r},"")`).join(',');
-          const countValid = conditionRowNums.map(r => `IF(I${r}<0,1,0)`).join('+');
-          avgFormula = `AVERAGE(${validPcts})`;
+          const range = conditionRowNums.length === 1 ?
+            `I${conditionRowNums[0]}` :
+            `I${conditionRowNums[0]}:I${conditionRowNums[conditionRowNums.length - 1]}`;
+          avgFormula = `AVERAGEIF(${range},"<0")`;
         } else {
           // Unknown condition type - average all percentages
-          avgFormula = `AVERAGE(${conditionRowNums.map(r => `I${r}`).join(',')})`;
+          const range = conditionRowNums.length === 1 ?
+            `I${conditionRowNums[0]}` :
+            `I${conditionRowNums[0]}:I${conditionRowNums[conditionRowNums.length - 1]}`;
+          avgFormula = `AVERAGE(${range})`;
         }
 
         // % Adj = Simple average of VCS percentages (filtered by direction)
