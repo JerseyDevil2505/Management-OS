@@ -799,21 +799,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   };
 
   // ============ EXCEL EXPORT FUNCTIONS ============
-  const exportConditionDataToExcel = (data, type) => {
+  const buildConditionSheet = (data, type) => {
     const rows = [];
 
-    // Global header section
-    const municipality = jobData?.municipality || 'Municipality';
-    const timestamp = new Date().toLocaleDateString();
-    const typeLabel = type === 'exterior' ? 'EXTERIOR' : 'INTERIOR';
-
-    rows.push([`${typeLabel} CONDITION ANALYSIS`]);
-    rows.push([`Municipality: ${municipality}`]);
-    rows.push([`Date: ${timestamp}`]);
-    rows.push([`Property Type Filter: ${getTypeUseOptions().find(opt => opt.code === typeUseFilter)?.description || 'All Properties'}`]);
-    rows.push([]); // Blank row
-
-    // Column headers
+    // Column headers - start at row 0
     const headers = ['VCS', 'Condition', 'Count', 'Avg SFLA', 'Avg Year Built', 'Avg Norm Value', 'Adjusted Value', 'Flat Adj', '% Adj', 'Baseline'];
     rows.push(headers);
 
