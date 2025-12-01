@@ -847,15 +847,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         vcsPercentages.reduce((sum, pct) => sum + pct, 0) / vcsPercentages.length : null;
       const validVCSCount = vcsPercentages.length;
 
-      // Debug: verify new method
-      if (data.description === 'GOOD' && type === 'Interior') {
-        console.log('[UI Interior GOOD] Simple average method:', {
-          vcsPercentages,
-          avgAdjustment,
-          validVCSCount
-        });
-      }
-
       // Categorize condition quality for sorting using user configuration
       let category = 0; // 0 = average/unknown, 1 = better, -1 = worse
       if (data.isBetterCondition) {
