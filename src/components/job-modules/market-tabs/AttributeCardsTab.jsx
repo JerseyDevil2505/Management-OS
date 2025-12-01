@@ -174,22 +174,45 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         // BRT stores condition codes in the 'Residential' section under specific parent/section structure
         const residential = parsedCodeDefinitions?.sections?.Residential || {};
 
-        // Exterior condition codes are typically in section 60
-        // Navigate through the nested structure to find them
-        Object.entries(residential).forEach(([key, value]) => {
-          if (value.MAP && value.MAP['60']) {
-            // Found the condition section
-            const conditionSection = value.MAP['60'].MAP || {};
-            Object.entries(conditionSection).forEach(([code, codeData]) => {
-              if (code !== '00' && codeData.DATA && codeData.DATA.VALUE) {
-                const description = codeData.DATA.VALUE;
-                exterior[code] = description;
-                // BRT exterior and interior often use same codes
-                interior[code] = description;
+        console.log('🔍 BRT Residential structure keys:', Object.keys(residential));
+
+        // Helper function to recursively search for condition codes in nested MAP structures
+        const searchForConditionCodes = (obj, path = '') => {
+          if (!obj || typeof obj !== 'object') return;
+
+          // Check if this is a condition code entry (has DATA.VALUE)
+          if (obj.DATA && obj.DATA.VALUE && typeof obj.DATA.VALUE === 'string') {
+            // This looks like a code definition
+            const value = obj.DATA.VALUE;
+            // Check if this looks like a condition description
+            if (value.includes('EXCELLENT') || value.includes('GOOD') || value.includes('AVERAGE') ||
+                value.includes('FAIR') || value.includes('POOR') || value.includes('DILAP') ||
+                value.includes('EXT ') || value.includes('INT ')) {
+              // Extract code from path or use parent key
+              const pathParts = path.split('.');
+              const code = pathParts[pathParts.length - 1];
+              if (code && code !== '00') {
+                exterior[code] = value;
+                interior[code] = value;
+                console.log(`Found condition code: ${code} = ${value}`);
               }
+            }
+          }
+
+          // Recursively search MAP structures
+          if (obj.MAP && typeof obj.MAP === 'object') {
+            Object.entries(obj.MAP).forEach(([key, value]) => {
+              searchForConditionCodes(value, `${path}.${key}`);
             });
           }
+        };
+
+        // Search through all top-level keys in Residential section
+        Object.entries(residential).forEach(([key, value]) => {
+          searchForConditionCodes(value, key);
         });
+
+        console.log(`🎯 Found ${Object.keys(exterior).length} BRT condition codes`);
       } else if (vendorType === 'Microsystems') {
         // Microsystems stores codes in field_codes with prefixes
         const fieldCodes = parsedCodeDefinitions?.field_codes || {};
