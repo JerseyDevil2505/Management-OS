@@ -1045,11 +1045,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
     // Set column widths
     ws['!cols'] = [
-      { wch: 15 },  // VCS / Condition
-      { wch: 20 },  // Condition / Total Count
-      { wch: 10 },  // Count
-      { wch: 12 },  // Avg SFLA / Flat Adj
-      { wch: 12 },  // Avg Year / % Adj
+      { wch: 15 },  // VCS / Condition (main) / Condition (summary)
+      { wch: 20 },  // Condition (main) / Total Count (summary)
+      { wch: 10 },  // Count (main) / % Adj (summary)
+      { wch: 12 },  // Avg SFLA
+      { wch: 12 },  // Avg Year
       { wch: 14 },  // Avg Norm Value
       { wch: 14 },  // Adjusted Value
       { wch: 12 },  // Flat Adj
