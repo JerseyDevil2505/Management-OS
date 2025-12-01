@@ -709,9 +709,9 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
           </button>
           <button
             className="px-3 py-2 bg-indigo-600 text-white rounded text-sm"
-            onClick={() => exportCsv()}
+            onClick={() => exportToExcel()}
           >
-            Export CSV
+            Export Excel
           </button>
         </div>
       </div>
