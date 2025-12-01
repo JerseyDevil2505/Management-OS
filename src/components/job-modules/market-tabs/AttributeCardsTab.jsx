@@ -882,6 +882,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
     // Add data rows with formulas
     vcsSections.forEach(section => {
+      // Find baseline row index within this VCS section
+      const baselineIdx = section.conditionRows.findIndex(c => c.isBaseline);
+      const startingRowNum = rows.length + 1;
+      const baselineExcelRow = baselineIdx >= 0 ? startingRowNum + baselineIdx : null;
+
       section.conditionRows.forEach((cond, idx) => {
         const rowNum = rows.length + 1; // Excel row number (1-based)
 
@@ -910,12 +915,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         if (cond.isBaseline) {
           row[COL.FLAT_ADJ] = 0;
           row[COL.PCT_ADJ] = 0;
-        } else {
+        } else if (baselineExcelRow) {
           // Flat Adj = This normalized value - Baseline normalized value (same VCS)
-          // We need to find the baseline row for this VCS
-          const baselineRowNum = section.conditionRows.findIndex(c => c.isBaseline);
-          const baselineExcelRow = rows.length + 1 - (section.conditionRows.length - baselineRowNum);
-
           row[COL.FLAT_ADJ] = {
             f: `G${rowNum}-G${baselineExcelRow}`,
             t: 'n'
@@ -925,6 +926,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             t: 'n',
             z: '0.0%'
           };
+        } else {
+          // No baseline found in this VCS
+          row[COL.FLAT_ADJ] = 0;
+          row[COL.PCT_ADJ] = 0;
         }
 
         row[COL.BASELINE] = cond.isBaseline ? 'YES' : '';
