@@ -996,28 +996,41 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       if (isBaseline) {
         summaryRow[2] = ''; // % Adj - blank for baseline
       } else {
-        // Calculate true average with conditional filtering
+        // Normalize each row to overall average SFLA, then sum with filtering
+        // Formula for each row: IF(D=0, F, ((overallAvgSFLA - D) * (F / D)) + F)
         // For better conditions: only include rows with positive % Adj (I > 0)
         // For worse conditions: only include rows with negative % Adj (I < 0)
-        let sumAdjusted, sumNorm;
+        let sumNormalized, sumBaselineNormalized;
 
         if (isBetter) {
-          // Only sum rows where % Adj > 0 (exclude zero and negative)
-          sumAdjusted = conditionRowNums.map(r => `IF(I${r}>0,G${r},0)`).join('+');
-          sumNorm = conditionRowNums.map(r => `IF(I${r}>0,F${r},0)`).join('+');
+          // Only include rows where % Adj > 0
+          sumNormalized = conditionRowNums.map(r =>
+            `IF(I${r}>0,IF(D${r}=0,F${r},((${overallAvgSFLA}-D${r})*(F${r}/D${r}))+F${r}),0)`
+          ).join('+');
+          sumBaselineNormalized = baselineRowNums.map(r =>
+            `IF(D${r}=0,F${r},((${overallAvgSFLA}-D${r})*(F${r}/D${r}))+F${r})`
+          ).join('+');
         } else if (isWorse) {
-          // Only sum rows where % Adj < 0 (exclude zero and positive)
-          sumAdjusted = conditionRowNums.map(r => `IF(I${r}<0,G${r},0)`).join('+');
-          sumNorm = conditionRowNums.map(r => `IF(I${r}<0,F${r},0)`).join('+');
+          // Only include rows where % Adj < 0
+          sumNormalized = conditionRowNums.map(r =>
+            `IF(I${r}<0,IF(D${r}=0,F${r},((${overallAvgSFLA}-D${r})*(F${r}/D${r}))+F${r}),0)`
+          ).join('+');
+          sumBaselineNormalized = baselineRowNums.map(r =>
+            `IF(D${r}=0,F${r},((${overallAvgSFLA}-D${r})*(F${r}/D${r}))+F${r})`
+          ).join('+');
         } else {
           // Unknown condition type - sum all
-          sumAdjusted = conditionRowNums.map(r => `G${r}`).join('+');
-          sumNorm = conditionRowNums.map(r => `F${r}`).join('+');
+          sumNormalized = conditionRowNums.map(r =>
+            `IF(D${r}=0,F${r},((${overallAvgSFLA}-D${r})*(F${r}/D${r}))+F${r})`
+          ).join('+');
+          sumBaselineNormalized = baselineRowNums.map(r =>
+            `IF(D${r}=0,F${r},((${overallAvgSFLA}-D${r})*(F${r}/D${r}))+F${r})`
+          ).join('+');
         }
 
-        const pctAdjFormula = `((${sumAdjusted})/(${sumNorm}))-1`;
+        const pctAdjFormula = `((${sumNormalized})/(${sumBaselineNormalized}))-1`;
 
-        // % Adj = (Sum of filtered adjusted values / Sum of filtered normalized values) - 1
+        // % Adj = (Sum of normalized condition values / Sum of normalized baseline values) - 1
         summaryRow[2] = {
           f: pctAdjFormula,
           t: 'n',
