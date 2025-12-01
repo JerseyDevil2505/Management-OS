@@ -1114,18 +1114,18 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
-                onClick={() => exportConditionDataToCSV(conditionData.exterior, 'exterior')}
+                onClick={() => exportConditionDataToExcel(conditionData.exterior, 'exterior')}
                 className={CSV_BUTTON_CLASS}
                 disabled={conditionData.loading || Object.keys(conditionData.exterior).length === 0}
               >
-                <FileText size={14} /> Export Exterior CSV
+                <FileText size={14} /> Export Exterior Excel
               </button>
               <button
-                onClick={() => exportConditionDataToCSV(conditionData.interior, 'interior')}
+                onClick={() => exportConditionDataToExcel(conditionData.interior, 'interior')}
                 className={CSV_BUTTON_CLASS}
                 disabled={conditionData.loading || Object.keys(conditionData.interior).length === 0}
               >
-                <FileText size={14} /> Export Interior CSV
+                <FileText size={14} /> Export Interior Excel
               </button>
             </div>
           </div>
