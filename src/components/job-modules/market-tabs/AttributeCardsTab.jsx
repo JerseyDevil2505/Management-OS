@@ -821,7 +821,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       // Find the baseline (AVERAGE or first condition)
       const baselineCode = Object.keys(conditions).find(code => {
         const desc = conditions[code].description?.toUpperCase() || '';
-        return desc === 'AVERAGE' || desc === 'AVG' || desc === 'AVERAGE CONDITION';
+        return desc.includes('AVERAGE') || desc.includes('AVG');
       }) || Object.keys(conditions)[0];
 
       const baselineCond = conditions[baselineCode];
