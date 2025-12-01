@@ -761,10 +761,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
         // Only include VCS rows with the correct adjustment direction
         let includeInCalc = false;
-        if (isBetterCondition && adjustment > 0) {
-          includeInCalc = true; // Better condition: only include positive adjustments
+        if (isBetterCondition && adjustment >= 0) {
+          includeInCalc = true; // Better condition: include positive and zero adjustments (exclude negative)
         } else if (isWorseCondition && adjustment <= 0) {
-          includeInCalc = true; // Worse condition: only include negative or zero adjustments
+          includeInCalc = true; // Worse condition: include negative and zero adjustments (exclude positive)
         }
 
         // Debug logging for EXT GOOD specifically
