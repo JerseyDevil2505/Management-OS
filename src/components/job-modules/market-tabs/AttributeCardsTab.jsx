@@ -946,8 +946,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             t: 'n'
           };
           row[COL.PCT_ADJ] = {
-            f: `IF(${cond.baselineAvgValue}=0,0,(H${rowNum}/${cond.baselineAvgValue})*100)`,
-            t: 'n'
+            f: `IF(${cond.baselineAvgValue}=0,0,H${rowNum}/${cond.baselineAvgValue})`,
+            t: 'n',
+            z: '0.0%'
           };
         }
 
@@ -1028,12 +1029,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           sumNorm = conditionRowNums.map(r => `F${r}`).join('+');
         }
 
-        const pctAdjFormula = `(((${sumAdjusted})/(${sumNorm}))-1)*100`;
+        const pctAdjFormula = `((${sumAdjusted})/(${sumNorm}))-1`;
 
-        // % Adj = ((Sum of filtered adjusted values / Sum of filtered normalized values) - 1) * 100
+        // % Adj = (Sum of filtered adjusted values / Sum of filtered normalized values) - 1
         summaryRow[2] = {
           f: pctAdjFormula,
-          t: 'n'
+          t: 'n',
+          z: '0.0%'
         };
       }
 
