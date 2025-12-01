@@ -618,11 +618,19 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                       {conditionCodes.map((code, idx) => {
                         const cond = conditions[code];
                         const isBaseline = code === baselineCode;
-                        
+
+                        // Calculate normalized percentage for display
+                        const avgSFLA = cond.avgSize || 0;
+                        const avgValue = cond.avgValue || 0;
+                        const normalized = avgSFLA > 0 ?
+                          ((overallAvgSFLA - avgSFLA) * (avgValue / avgSFLA)) + avgValue : avgValue;
+                        const normalizedPct = baselineAvg > 0 ?
+                          ((normalized - baselineAvg) / baselineAvg) * 100 : 0;
+
                         return (
-                          <tr 
+                          <tr
                             key={code}
-                            style={{ 
+                            style={{
                               backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB',
                               fontWeight: isBaseline ? '600' : 'normal'
                             }}
@@ -630,9 +638,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                             <td style={{ padding: '8px 12px', fontSize: '13px' }}>
                               <span style={{ fontWeight: '500' }}>{code}</span> - {cond.description}
                               {isBaseline && (
-                                <span style={{ 
-                                  marginLeft: '8px', 
-                                  fontSize: '11px', 
+                                <span style={{
+                                  marginLeft: '8px',
+                                  fontSize: '11px',
                                   color: '#10B981',
                                   fontWeight: 'normal'
                                 }}>
@@ -655,14 +663,14 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                             <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
                               {formatCurrency(cond.adjustedValue)}
                             </td>
-                            <td style={{ 
-                              padding: '8px 12px', 
-                              textAlign: 'right', 
+                            <td style={{
+                              padding: '8px 12px',
+                              textAlign: 'right',
                               fontSize: '13px',
-                              color: cond.adjustmentPct > 0 ? '#059669' : 
-                                     cond.adjustmentPct < 0 ? '#DC2626' : '#6B7280'
+                              color: normalizedPct > 0 ? '#059669' :
+                                     normalizedPct < 0 ? '#DC2626' : '#6B7280'
                             }}>
-                              {formatPercent(cond.adjustmentPct)}
+                              {formatPercent(isBaseline ? 0 : normalizedPct)}
                             </td>
                           </tr>
                         );
