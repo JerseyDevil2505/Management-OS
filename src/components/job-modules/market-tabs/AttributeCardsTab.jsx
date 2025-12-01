@@ -723,6 +723,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     const betterConditions = type === 'Exterior' ? exteriorBetterConditions : interiorBetterConditions;
     const worseConditions = type === 'Exterior' ? exteriorWorseConditions : interiorWorseConditions;
 
+    console.log(`[${type} Summary Debug]`, {
+      manualBaseline,
+      betterConditions,
+      worseConditions
+    });
+
     Object.values(data).forEach(vcsConditions => {
       Object.entries(vcsConditions).forEach(([code, cond]) => {
         // Skip baseline condition - compare descriptions, not codes
