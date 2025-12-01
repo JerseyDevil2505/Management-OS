@@ -2798,6 +2798,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       return;
     }
 
+    console.log('[Additional Cards Export] Starting export with data:', {
+      vcsCount: Object.keys(additionalResults.byVCS).length,
+      sampleVCS: Object.entries(additionalResults.byVCS).slice(0, 2)
+    });
+
     const rows = [];
 
     // Column headers
