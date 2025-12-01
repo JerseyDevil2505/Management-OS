@@ -723,8 +723,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
     Object.values(data).forEach(vcsConditions => {
       Object.entries(vcsConditions).forEach(([code, cond]) => {
-        // Skip baseline condition
-        const isBaseline = manualBaseline ? (code === manualBaseline) :
+        // Skip baseline condition - compare descriptions, not codes
+        const isBaseline = manualBaseline ? (cond.description === manualBaseline) :
                           (cond.adjustmentPct === 0 ||
                            cond.description.toUpperCase().includes('AVERAGE') ||
                            cond.description.toUpperCase().includes('NORMAL'));
