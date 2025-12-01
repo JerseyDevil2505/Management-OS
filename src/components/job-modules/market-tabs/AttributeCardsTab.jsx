@@ -1045,43 +1045,29 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       if (isBaseline) {
         summaryRow[2] = ''; // % Adj - blank for baseline
       } else {
-        // Normalize each row to overall average SFLA, then sum with filtering
-        // Formula for each row: IF(D=0, F, ((overallAvgSFLA - D) * (F / D)) + F)
-        // For better conditions: only include rows with positive % Adj (I > 0)
-        // For worse conditions: only include rows with negative % Adj (I < 0)
-        let sumNormalized, sumBaselineNormalized;
+        // Calculate simple average of VCS percentages (not dollar-weighted)
+        // For better conditions: only average rows with positive % Adj (I > 0)
+        // For worse conditions: only average rows with negative % Adj (I < 0)
+        let avgFormula;
 
         if (isBetter) {
-          // Only include rows where % Adj > 0
-          sumNormalized = conditionRowNums.map(r =>
-            `IF(I${r}>0,IF(D${r}=0,F${r},((${overallAvgSFLA}-D${r})*(F${r}/D${r}))+F${r}),0)`
-          ).join('+');
-          sumBaselineNormalized = baselineRowNums.map(r =>
-            `IF(D${r}=0,F${r},((${overallAvgSFLA}-D${r})*(F${r}/D${r}))+F${r})`
-          ).join('+');
+          // Average of percentages where % Adj > 0
+          const validPcts = conditionRowNums.map(r => `IF(I${r}>0,I${r},"")`).join(',');
+          const countValid = conditionRowNums.map(r => `IF(I${r}>0,1,0)`).join('+');
+          avgFormula = `AVERAGE(${validPcts})`;
         } else if (isWorse) {
-          // Only include rows where % Adj < 0
-          sumNormalized = conditionRowNums.map(r =>
-            `IF(I${r}<0,IF(D${r}=0,F${r},((${overallAvgSFLA}-D${r})*(F${r}/D${r}))+F${r}),0)`
-          ).join('+');
-          sumBaselineNormalized = baselineRowNums.map(r =>
-            `IF(D${r}=0,F${r},((${overallAvgSFLA}-D${r})*(F${r}/D${r}))+F${r})`
-          ).join('+');
+          // Average of percentages where % Adj < 0
+          const validPcts = conditionRowNums.map(r => `IF(I${r}<0,I${r},"")`).join(',');
+          const countValid = conditionRowNums.map(r => `IF(I${r}<0,1,0)`).join('+');
+          avgFormula = `AVERAGE(${validPcts})`;
         } else {
-          // Unknown condition type - sum all
-          sumNormalized = conditionRowNums.map(r =>
-            `IF(D${r}=0,F${r},((${overallAvgSFLA}-D${r})*(F${r}/D${r}))+F${r})`
-          ).join('+');
-          sumBaselineNormalized = baselineRowNums.map(r =>
-            `IF(D${r}=0,F${r},((${overallAvgSFLA}-D${r})*(F${r}/D${r}))+F${r})`
-          ).join('+');
+          // Unknown condition type - average all percentages
+          avgFormula = `AVERAGE(${conditionRowNums.map(r => `I${r}`).join(',')})`;
         }
 
-        const pctAdjFormula = `((${sumNormalized})/(${sumBaselineNormalized}))-1`;
-
-        // % Adj = (Sum of normalized condition values / Sum of normalized baseline values) - 1
+        // % Adj = Simple average of VCS percentages (filtered by direction)
         summaryRow[2] = {
-          f: pctAdjFormula,
+          f: avgFormula,
           t: 'n',
           z: '0.0%'
         };
