@@ -794,16 +794,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       });
     });
 
-    // Sort with above average conditions first (descending), then below average (ascending by adjustment)
+    // Sort with better conditions first (descending), then worse (ascending by adjustment)
     return summary.sort((a, b) => {
-      // First sort by category (above average first)
+      // First sort by category (better first)
       if (a.category !== b.category) {
         return b.category - a.category;
       }
 
       // Within same category, sort by adjustment value
       if (a.category === 1) {
-        // Above average: highest positive adjustments first
+        // Better conditions: highest positive adjustments first
         const adjA = a.avgAdjustment || 0;
         const adjB = b.avgAdjustment || 0;
         return adjB - adjA;
