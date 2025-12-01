@@ -869,23 +869,30 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     const dataRowRanges = {}; // Track row ranges for each condition for summation
 
     Object.entries(data).forEach(([vcs, conditions]) => {
-      // Find the baseline - use manual selection if set, otherwise try to auto-detect
-      const baselineCode = Object.keys(conditions).find(code => {
-        const desc = conditions[code].description || '';
-        if (manualBaseline) return desc === manualBaseline;
-        const upper = desc.toUpperCase();
-        return upper.includes('AVERAGE') || upper.includes('AVG') || upper.includes('NORMAL');
-      }) || Object.keys(conditions)[0];
-
-      const baselineCond = conditions[baselineCode];
-
       // Calculate VCS average SFLA across all conditions
       const vcsAvgSFLA = Object.values(conditions).reduce((sum, c) => sum + (c.avgSize || 0), 0) / Object.keys(conditions).length;
+
+      // Find baseline using ONLY user configuration
+      let baselineCond = null;
+      if (manualBaseline) {
+        // Use user's configured baseline
+        baselineCond = Object.values(conditions).find(c => c.description === manualBaseline);
+      }
+
+      // Fallback only if no manual baseline is set
+      if (!baselineCond) {
+        const baselineCode = Object.keys(conditions).find(code => {
+          const upper = (conditions[code].description || '').toUpperCase();
+          return upper.includes('AVERAGE') || upper.includes('AVG') || upper.includes('NORMAL');
+        }) || Object.keys(conditions)[0];
+        baselineCond = conditions[baselineCode];
+      }
 
       const conditionRows = [];
 
       Object.entries(conditions).forEach(([code, cond]) => {
-        const isBaseline = cond.description === manualBaseline || (!manualBaseline && code === baselineCode);
+        // Always compare to user's configured baseline description
+        const isBaseline = manualBaseline ? (cond.description === manualBaseline) : (cond === baselineCond);
         const avgSFLA = cond.avgSize || 0;
         const avgYear = cond.avgYear || '';
         const avgNormValue = cond.avgValue || 0;
