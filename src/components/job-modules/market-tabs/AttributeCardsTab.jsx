@@ -2791,34 +2791,229 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     }
   };
 
-  // Export function for the CSV
-  const exportAdditionalCardsCSV = () => {
-    if (!additionalResults || !additionalResults.additionalCardsList) {
+  // Export function for Excel
+  const exportAdditionalCardsExcel = () => {
+    if (!additionalResults || !additionalResults.byVCS) {
       alert('No additional cards data to export');
       return;
     }
 
-    let csv = 'Address,Card,VCS,Class,Type/Use,Sales Price,SFLA,Year Built,Norm Time\\n';
+    const rows = [];
 
-    additionalResults.additionalCardsList.forEach(prop => {
-      csv += `"${prop.property_location || ''}",`;
-      csv += `"${prop.property_addl_card || prop.additional_card || ''}",`;
-      csv += `"${prop.new_vcs || prop.property_vcs || ''}",`;
-      csv += `"${prop.property_m4_class || prop.property_cama_class || ''}",`;
-      csv += `"${prop.asset_type_use || ''}",`;
-      csv += `"${prop.sales_price || ''}",`;
-      csv += `"${prop.asset_sfla || ''}",`;
-      csv += `"${prop.asset_year_built || ''}",`;
-      csv += `"${prop.values_norm_time || ''}"}\\n`;
+    // Column headers
+    const headers = [
+      'VCS',
+      'With Cards Count',
+      'With Cards Avg SFLA',
+      'With Cards Avg Year',
+      'With Cards Avg Price',
+      'Without Cards Count',
+      'Without Cards Avg SFLA',
+      'Without Cards Avg Year',
+      'Without Cards Avg Price',
+      'Adjusted Price',
+      'Flat Adj',
+      '% Adj'
+    ];
+    rows.push(headers);
+
+    // COL indexes (0-based)
+    const COL = {
+      VCS: 0,
+      WITH_COUNT: 1,
+      WITH_SFLA: 2,
+      WITH_YEAR: 3,
+      WITH_PRICE: 4,
+      WITHOUT_COUNT: 5,
+      WITHOUT_SFLA: 6,
+      WITHOUT_YEAR: 7,
+      WITHOUT_PRICE: 8,
+      ADJUSTED: 9,
+      FLAT_ADJ: 10,
+      PCT_ADJ: 11
+    };
+
+    // Add data rows with formulas
+    const vcsKeys = Object.keys(additionalResults.byVCS).sort();
+
+    vcsKeys.forEach(vcs => {
+      const data = additionalResults.byVCS[vcs];
+      const rowNum = rows.length + 1; // Excel row number (1-based)
+
+      const row = [];
+      row[COL.VCS] = vcs;
+      row[COL.WITH_COUNT] = data.with.n || 0;
+      row[COL.WITH_SFLA] = data.with.avg_sfla || '';
+      row[COL.WITH_YEAR] = data.with.avg_year_built || '';
+      row[COL.WITH_PRICE] = data.with.avg_norm_time || '';
+      row[COL.WITHOUT_COUNT] = data.without.n || 0;
+      row[COL.WITHOUT_SFLA] = data.without.avg_sfla || '';
+      row[COL.WITHOUT_YEAR] = data.without.avg_year_built || '';
+      row[COL.WITHOUT_PRICE] = data.without.avg_norm_time || '';
+
+      // Jim formula: Adjust "With Cards" price to "Without Cards" SFLA
+      // Formula: ((targetSFLA - saleSFLA) * ((salePrice / saleSFLA) * 0.50)) + salePrice
+      // With Cards = sale, Without Cards = target (baseline)
+      row[COL.ADJUSTED] = {
+        f: `IF(OR(C${rowNum}=0,E${rowNum}=0,G${rowNum}=0),E${rowNum},((G${rowNum}-C${rowNum})*((E${rowNum}/C${rowNum})*0.50))+E${rowNum})`,
+        t: 'n'
+      };
+
+      // Flat Adj = Adjusted - Without Cards Price
+      row[COL.FLAT_ADJ] = {
+        f: `J${rowNum}-I${rowNum}`,
+        t: 'n'
+      };
+
+      // % Adj = (Adjusted - Without Cards Price) / Without Cards Price
+      row[COL.PCT_ADJ] = {
+        f: `IF(I${rowNum}=0,0,(J${rowNum}-I${rowNum})/I${rowNum})`,
+        t: 'n',
+        z: '0.0%'
+      };
+
+      rows.push(row);
     });
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Additional_Cards_${jobData?.job_name || 'Analysis'}_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    // Summary section
+    rows.push([]); // Blank row
+    rows.push([]); // Blank row
+
+    const summaryHeaderRow = [];
+    summaryHeaderRow[0] = '';
+    summaryHeaderRow[1] = 'Overall Summary';
+    rows.push(summaryHeaderRow);
+    rows.push([]); // Blank row
+
+    const summaryHeaders = ['Metric', 'Value'];
+    rows.push(summaryHeaders);
+
+    // Calculate summary stats
+    const firstDataRow = 2; // Row 2 in Excel (after header row 1)
+    const lastDataRow = vcsKeys.length + 1; // Last VCS row
+
+    // Total properties with cards
+    const totalWithRow = [];
+    totalWithRow[0] = 'Total Properties With Cards';
+    totalWithRow[1] = {
+      f: `SUM(B${firstDataRow}:B${lastDataRow})`,
+      t: 'n'
+    };
+    rows.push(totalWithRow);
+
+    // Total properties without cards
+    const totalWithoutRow = [];
+    totalWithoutRow[0] = 'Total Properties Without Cards';
+    totalWithoutRow[1] = {
+      f: `SUM(F${firstDataRow}:F${lastDataRow})`,
+      t: 'n'
+    };
+    rows.push(totalWithoutRow);
+
+    // Average % Adjustment across all VCS
+    const avgPctRow = [];
+    avgPctRow[0] = 'Average % Impact';
+    avgPctRow[1] = {
+      f: `AVERAGE(L${firstDataRow}:L${lastDataRow})`,
+      t: 'n',
+      z: '0.0%'
+    };
+    rows.push(avgPctRow);
+
+    // Create worksheet
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Base styles
+    const baseStyle = {
+      font: { name: 'Leelawadee', sz: 10 },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    const headerStyle = {
+      font: { name: 'Leelawadee', sz: 10, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    // Apply styles
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    // Find summary section start
+    let summaryStartRow = -1;
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      const cellB = XLSX.utils.encode_cell({ r: R, c: 1 });
+      if (ws[cellB] && ws[cellB].v === 'Overall Summary') {
+        summaryStartRow = R;
+        break;
+      }
+    }
+
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws[cellAddress]) continue;
+
+        const isSummarySection = summaryStartRow !== -1 && R >= summaryStartRow;
+
+        // Header row
+        if (R === 0 || ws[cellAddress].v === 'VCS' || ws[cellAddress].v === 'Overall Summary' || ws[cellAddress].v === 'Metric') {
+          ws[cellAddress].s = headerStyle;
+        }
+        // Data rows
+        else {
+          const style = { ...baseStyle };
+
+          if (isSummarySection) {
+            // Summary section formatting
+            if (C === 1 && ws[cellAddress].z === '0.0%') {
+              style.numFmt = '0.0%';
+            } else if (C === 1) {
+              style.numFmt = '#,##0';
+            }
+          } else {
+            // Main data columns
+            if (C === COL.WITH_COUNT || C === COL.WITHOUT_COUNT) {
+              style.numFmt = '#,##0'; // Count columns
+            } else if (C === COL.WITH_SFLA || C === COL.WITHOUT_SFLA) {
+              style.numFmt = '#,##0'; // SFLA columns
+            } else if (C === COL.WITH_YEAR || C === COL.WITHOUT_YEAR) {
+              style.numFmt = '0'; // Year columns
+            } else if (C === COL.WITH_PRICE || C === COL.WITHOUT_PRICE || C === COL.ADJUSTED || C === COL.FLAT_ADJ) {
+              style.numFmt = '$#,##0'; // Currency columns
+            } else if (C === COL.PCT_ADJ) {
+              style.numFmt = '0.0%'; // Percentage column
+            }
+          }
+
+          ws[cellAddress].s = style;
+        }
+      }
+    }
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 10 },  // VCS
+      { wch: 15 },  // With Cards Count
+      { wch: 18 },  // With Cards Avg SFLA
+      { wch: 18 },  // With Cards Avg Year
+      { wch: 20 },  // With Cards Avg Price
+      { wch: 18 },  // Without Cards Count
+      { wch: 20 },  // Without Cards Avg SFLA
+      { wch: 20 },  // Without Cards Avg Year
+      { wch: 22 },  // Without Cards Avg Price
+      { wch: 15 },  // Adjusted Price
+      { wch: 12 },  // Flat Adj
+      { wch: 10 }   // % Adj
+    ];
+
+    // Create workbook and add worksheet
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Additional Cards Analysis');
+
+    // Export
+    const fileName = `Additional_Cards_${jobData?.job_name || 'Analysis'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+
+    console.log('✅ Additional Cards Excel export completed');
   };
 
   // ============ ADDITIONAL CARDS SORTING ============
