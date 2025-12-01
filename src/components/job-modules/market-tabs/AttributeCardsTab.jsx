@@ -158,69 +158,113 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       return false;
     });
   };
-  // ============ DETECT ACTUAL CONDITION CODES FROM DATA ============
+  // ============ DETECT ALL AVAILABLE CONDITION CODES FROM CODE DEFINITIONS ============
   const detectActualConditionCodes = useCallback(async () => {
     try {
-      // Get all unique condition codes from the actual property records
-      const uniqueExterior = new Set();
-      const uniqueInterior = new Set();
-      
-      // Scan through properties to find all unique codes
-      properties.forEach(prop => {
-        const extCond = prop.asset_ext_cond;
-        const intCond = prop.asset_int_cond;
-        
-        // BRT uses '00' as null/empty, skip it along with other empty values
-        if (extCond && extCond !== '00' && extCond !== '0' && extCond.trim() !== '') {
-          uniqueExterior.add(extCond.trim());
-        }
-        if (intCond && intCond !== '00' && intCond !== '0' && intCond.trim() !== '') {
-          uniqueInterior.add(intCond.trim());
-        }
-      });
-
-      // Now get descriptions for these codes FROM THE PARSED DEFINITIONS
       const exterior = {};
       const interior = {};
 
-      // For each unique exterior code, get its description
-      for (const code of uniqueExterior) {
-        // Skip BRT null code
-        if (code === '00') continue;
-
-        // Use interpretCodes function for vendor-agnostic lookup
-        const description = interpretCodes.getExteriorConditionName(
-          { asset_ext_cond: code },
-          parsedCodeDefinitions,
-          vendorType
-        ) || `Condition ${code}`;
-
-        exterior[code] = description;
+      if (!parsedCodeDefinitions) {
+        console.warn('No parsed code definitions available');
+        return { exterior, interior };
       }
 
-      // For each unique interior code, get its description
-      for (const code of uniqueInterior) {
-        // Skip BRT null code
-        if (code === '00') continue;
+      // Extract ALL condition codes from code definitions based on vendor type
+      if (vendorType === 'BRT') {
+        // BRT stores condition codes in the 'Residential' section under specific parent/section structure
+        const residential = parsedCodeDefinitions?.sections?.Residential || {};
 
-        // Use interpretCodes function for vendor-agnostic lookup
-        const description = interpretCodes.getInteriorConditionName(
-          { asset_int_cond: code },
-          parsedCodeDefinitions,
-          vendorType
-        ) || `Condition ${code}`;
+        // Exterior condition codes are typically in section 60
+        // Navigate through the nested structure to find them
+        Object.entries(residential).forEach(([key, value]) => {
+          if (value.MAP && value.MAP['60']) {
+            // Found the condition section
+            const conditionSection = value.MAP['60'].MAP || {};
+            Object.entries(conditionSection).forEach(([code, codeData]) => {
+              if (code !== '00' && codeData.DATA && codeData.DATA.VALUE) {
+                const description = codeData.DATA.VALUE;
+                exterior[code] = description;
+                // BRT exterior and interior often use same codes
+                interior[code] = description;
+              }
+            });
+          }
+        });
+      } else if (vendorType === 'Microsystems') {
+        // Microsystems stores codes in field_codes with prefixes
+        const fieldCodes = parsedCodeDefinitions?.field_codes || {};
 
-        interior[code] = description;
+        // Exterior condition codes have prefix '490'
+        const exteriorCodes = fieldCodes['490'] || {};
+        Object.entries(exteriorCodes).forEach(([code, codeData]) => {
+          if (codeData.description) {
+            exterior[code] = codeData.description;
+          }
+        });
+
+        // Interior condition codes have prefix '491'
+        const interiorCodes = fieldCodes['491'] || {};
+        Object.entries(interiorCodes).forEach(([code, codeData]) => {
+          if (codeData.description) {
+            interior[code] = codeData.description;
+          }
+        });
       }
 
-      console.log('Detected condition codes:', { exterior, interior });
+      // If no codes found in definitions, fall back to scanning property data
+      if (Object.keys(exterior).length === 0 && Object.keys(interior).length === 0) {
+        console.warn('No condition codes found in parsed definitions, falling back to property data scan');
+
+        const uniqueExterior = new Set();
+        const uniqueInterior = new Set();
+
+        properties.forEach(prop => {
+          const extCond = prop.asset_ext_cond;
+          const intCond = prop.asset_int_cond;
+
+          if (extCond && extCond !== '00' && extCond !== '0' && extCond.trim() !== '') {
+            uniqueExterior.add(extCond.trim());
+          }
+          if (intCond && intCond !== '00' && intCond !== '0' && intCond.trim() !== '') {
+            uniqueInterior.add(intCond.trim());
+          }
+        });
+
+        for (const code of uniqueExterior) {
+          if (code === '00') continue;
+          const description = interpretCodes.getExteriorConditionName(
+            { asset_ext_cond: code },
+            parsedCodeDefinitions,
+            vendorType
+          ) || `Condition ${code}`;
+          exterior[code] = description;
+        }
+
+        for (const code of uniqueInterior) {
+          if (code === '00') continue;
+          const description = interpretCodes.getInteriorConditionName(
+            { asset_int_cond: code },
+            parsedCodeDefinitions,
+            vendorType
+          ) || `Condition ${code}`;
+          interior[code] = description;
+        }
+      }
+
+      console.log('Available condition codes from definitions:', {
+        exterior: Object.keys(exterior).length,
+        interior: Object.keys(interior).length,
+        exteriorCodes: exterior,
+        interiorCodes: interior
+      });
+
       return { exterior, interior };
     } catch (error) {
-      console.error('Error detecting actual condition codes:', error);
+      console.error('Error detecting condition codes:', error);
       return { exterior: {}, interior: {} };
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [properties.length, vendorType]);
+  }, [parsedCodeDefinitions, vendorType, properties.length]);
 
   // ============ PROCESS CONDITION STATISTICS ============
   const processConditionStatistics = (dataByVCS) => {
