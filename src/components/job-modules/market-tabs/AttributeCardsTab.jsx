@@ -165,41 +165,35 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       const interior = {};
 
       if (!parsedCodeDefinitions) {
-        console.warn('No parsed code definitions available');
         return { exterior, interior };
       }
 
-      // Extract ALL condition codes from code definitions based on vendor type
       if (vendorType === 'BRT') {
-        // BRT stores condition codes in the 'Residential' section
-        // Specifically: parent '34', section '60' for both exterior and interior condition
-        const residential = parsedCodeDefinitions?.sections?.Residential || {};
+        // Try common BRT condition code values (01-20 covers most systems)
+        // Use interpretCodes helper which knows how to navigate the structure
+        for (let i = 1; i <= 20; i++) {
+          const code = String(i).padStart(2, '0');
 
-        console.log('🔍 Searching for BRT condition codes in parent 34, section 60');
+          const extDesc = interpretCodes.getExteriorConditionName(
+            { asset_ext_cond: code },
+            parsedCodeDefinitions,
+            vendorType
+          );
 
-        // Navigate to the specific condition section
-        // Structure: Residential[topLevelKey].MAP['34'].MAP['60'].MAP[code]
-        Object.entries(residential).forEach(([topKey, topValue]) => {
-          if (topValue.MAP && topValue.MAP['34']) {
-            const parent34 = topValue.MAP['34'];
-            if (parent34.MAP && parent34.MAP['60']) {
-              const section60 = parent34.MAP['60'];
-              if (section60.MAP) {
-                // Now we're in the condition codes section
-                Object.entries(section60.MAP).forEach(([code, codeData]) => {
-                  if (code !== '00' && codeData.DATA && codeData.DATA.VALUE) {
-                    const description = codeData.DATA.VALUE;
-                    exterior[code] = description;
-                    interior[code] = description;
-                    console.log(`✅ Found condition code: ${code} = ${description}`);
-                  }
-                });
-              }
-            }
+          const intDesc = interpretCodes.getInteriorConditionName(
+            { asset_int_cond: code },
+            parsedCodeDefinitions,
+            vendorType
+          );
+
+          if (extDesc && extDesc !== code) {
+            exterior[code] = extDesc;
           }
-        });
 
-        console.log(`🎯 Found ${Object.keys(exterior).length} BRT condition codes total`);
+          if (intDesc && intDesc !== code) {
+            interior[code] = intDesc;
+          }
+        }
       } else if (vendorType === 'Microsystems') {
         // Microsystems stores codes in field_codes with prefixes
         const fieldCodes = parsedCodeDefinitions?.field_codes || {};
@@ -221,26 +215,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         });
       }
 
-      // Warn if no codes found in definitions
-      if (Object.keys(exterior).length === 0 && Object.keys(interior).length === 0) {
-        console.warn('⚠️ No condition codes found in parsed code definitions');
-        console.log('Parsed code definitions structure:', parsedCodeDefinitions);
-      }
-
-      console.log('Available condition codes from definitions:', {
-        exterior: Object.keys(exterior).length,
-        interior: Object.keys(interior).length,
-        exteriorCodes: exterior,
-        interiorCodes: interior
-      });
-
       return { exterior, interior };
     } catch (error) {
       console.error('Error detecting condition codes:', error);
       return { exterior: {}, interior: {} };
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [parsedCodeDefinitions, vendorType, properties.length]);
+  }, [parsedCodeDefinitions, vendorType]);
 
   // ============ PROCESS CONDITION STATISTICS ============
   const processConditionStatistics = (dataByVCS) => {
