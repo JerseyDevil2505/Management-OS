@@ -1019,12 +1019,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           const style = { ...baseStyle };
 
           if (isSummarySection) {
-            // Summary columns: Condition, Total Count, Flat Adj, % Adj
+            // Summary columns: Condition, Total Count, % Adj
             if (C === 1) {
               style.numFmt = '#,##0'; // Total Count
             } else if (C === 2) {
-              style.numFmt = '$#,##0'; // Flat Adj
-            } else if (C === 3) {
               style.numFmt = '0%'; // % Adj
             }
           } else {
