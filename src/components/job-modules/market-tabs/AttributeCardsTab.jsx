@@ -537,7 +537,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               const avgSFLA = condData.avgSize || 0;
               const avgValue = condData.avgValue || 0;
               vcsBaselineNormalized = avgSFLA > 0 ?
-                ((vcsAvgSFLA - avgSFLA) * (avgValue / avgSFLA)) + avgValue : avgValue;
+                ((vcsAvgSFLA - avgSFLA) * ((avgValue / avgSFLA) * 0.50)) + avgValue : avgValue;
             }
           });
 
@@ -606,11 +606,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                         const cond = conditions[code];
                         const isBaseline = code === baselineCode;
 
-                        // Calculate normalized value using VCS-specific average SFLA
+                        // Calculate normalized value using VCS-specific average SFLA and Jim formula
                         const avgSFLA = cond.avgSize || 0;
                         const avgValue = cond.avgValue || 0;
                         const normalized = avgSFLA > 0 ?
-                          ((vcsAvgSFLA - avgSFLA) * (avgValue / avgSFLA)) + avgValue : avgValue;
+                          ((vcsAvgSFLA - avgSFLA) * ((avgValue / avgSFLA) * 0.50)) + avgValue : avgValue;
                         const normalizedPct = vcsBaselineNormalized > 0 ?
                           ((normalized - vcsBaselineNormalized) / vcsBaselineNormalized) * 100 : 0;
 
@@ -768,9 +768,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         const avgSFLA = cond.avgSize || 0;
         const avgValue = cond.avgValue || 0;
 
-        // Normalize to VCS average SFLA: ((vcsAvg - thisSFLA) * (value / thisSFLA)) + value
+        // Jim formula: ((vcsAvg - thisSFLA) * ((value / thisSFLA) * 0.50)) + value
         const normalized = avgSFLA > 0 ?
-          ((vcsAvgSFLA - avgSFLA) * (avgValue / avgSFLA)) + avgValue : avgValue;
+          ((vcsAvgSFLA - avgSFLA) * ((avgValue / avgSFLA) * 0.50)) + avgValue : avgValue;
 
         normalizedConditions[code] = {
           ...cond,
