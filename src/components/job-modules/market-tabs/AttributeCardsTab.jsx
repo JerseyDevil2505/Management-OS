@@ -70,6 +70,28 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [manualInteriorBaseline, setManualInteriorBaseline] = useState(() => {
     return localStorage.getItem(`attr-cards-interior-baseline-${jobData?.id}`) || '';
   });
+
+  // Condition classifications for export
+  const [exteriorBetterConditions, setExteriorBetterConditions] = useState(() => {
+    const stored = localStorage.getItem(`attr-cards-exterior-better-${jobData?.id}`);
+    return stored ? JSON.parse(stored) : [];
+  });
+  const [exteriorWorseConditions, setExteriorWorseConditions] = useState(() => {
+    const stored = localStorage.getItem(`attr-cards-exterior-worse-${jobData?.id}`);
+    return stored ? JSON.parse(stored) : [];
+  });
+  const [interiorBetterConditions, setInteriorBetterConditions] = useState(() => {
+    const stored = localStorage.getItem(`attr-cards-interior-better-${jobData?.id}`);
+    return stored ? JSON.parse(stored) : [];
+  });
+  const [interiorWorseConditions, setInteriorWorseConditions] = useState(() => {
+    const stored = localStorage.getItem(`attr-cards-interior-worse-${jobData?.id}`);
+    return stored ? JSON.parse(stored) : [];
+  });
+
+  // UI state for condition configuration modal
+  const [showConditionConfig, setShowConditionConfig] = useState(false);
+  const [configType, setConfigType] = useState('exterior'); // 'exterior' or 'interior'
   const [conditionData, setConditionData] = useState({
     exterior: {},
     interior: {},
