@@ -234,44 +234,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         });
       }
 
-      // If no codes found in definitions, fall back to scanning property data
+      // Warn if no codes found in definitions
       if (Object.keys(exterior).length === 0 && Object.keys(interior).length === 0) {
-        console.warn('No condition codes found in parsed definitions, falling back to property data scan');
-
-        const uniqueExterior = new Set();
-        const uniqueInterior = new Set();
-
-        properties.forEach(prop => {
-          const extCond = prop.asset_ext_cond;
-          const intCond = prop.asset_int_cond;
-
-          if (extCond && extCond !== '00' && extCond !== '0' && extCond.trim() !== '') {
-            uniqueExterior.add(extCond.trim());
-          }
-          if (intCond && intCond !== '00' && intCond !== '0' && intCond.trim() !== '') {
-            uniqueInterior.add(intCond.trim());
-          }
-        });
-
-        for (const code of uniqueExterior) {
-          if (code === '00') continue;
-          const description = interpretCodes.getExteriorConditionName(
-            { asset_ext_cond: code },
-            parsedCodeDefinitions,
-            vendorType
-          ) || `Condition ${code}`;
-          exterior[code] = description;
-        }
-
-        for (const code of uniqueInterior) {
-          if (code === '00') continue;
-          const description = interpretCodes.getInteriorConditionName(
-            { asset_int_cond: code },
-            parsedCodeDefinitions,
-            vendorType
-          ) || `Condition ${code}`;
-          interior[code] = description;
-        }
+        console.warn('⚠️ No condition codes found in parsed code definitions');
+        console.log('Parsed code definitions structure:', parsedCodeDefinitions);
       }
 
       console.log('Available condition codes from definitions:', {
