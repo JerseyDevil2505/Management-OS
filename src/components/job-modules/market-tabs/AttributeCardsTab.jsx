@@ -981,12 +981,20 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           const style = { ...baseStyle };
 
           // Number formats
-          if (C === COL.AVG_NORM_VALUE || C === COL.ADJ_VALUE || C === COL.FLAT_ADJ || C === 2) {
+          if (C === COL.AVG_NORM_VALUE || C === COL.ADJ_VALUE || C === COL.FLAT_ADJ) {
             style.numFmt = '$#,##0';
           } else if (C === COL.PCT_ADJ || C === 3) {
             style.numFmt = '0%';
-          } else if (C === COL.AVG_SFLA) {
-            style.numFmt = '#,##0';
+          } else if (C === COL.COUNT || C === COL.AVG_SFLA || C === 1 || C === 2) {
+            // COUNT (main data), Total Count (summary), Flat Adj (summary column 2)
+            // Note: In summary, column 2 is Flat Adj which should be currency, but column 1 is Total Count
+            if (C === 2 && R > rows.length - 10) {
+              // Summary section Flat Adj column
+              style.numFmt = '$#,##0';
+            } else {
+              // COUNT columns and SFLA
+              style.numFmt = '#,##0';
+            }
           }
 
           ws[cellAddress].s = style;
