@@ -1038,12 +1038,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     const summaryHeaders = ['Condition', 'Total Count', '% Adj'];
     rows.push(summaryHeaders);
 
-    // Calculate overall average SFLA across all VCS for summary normalization
-    const allSFLAs = vcsSections.flatMap(section =>
-      section.conditionRows.map(c => c.avgSFLA)
-    );
-    const overallAvgSFLA = allSFLAs.reduce((sum, sfla) => sum + sfla, 0) / allSFLAs.length;
-
     // Get user-defined condition classifications
     const betterConditions = type === 'exterior' ? exteriorBetterConditions : interiorBetterConditions;
     const worseConditions = type === 'exterior' ? exteriorWorseConditions : interiorWorseConditions;
