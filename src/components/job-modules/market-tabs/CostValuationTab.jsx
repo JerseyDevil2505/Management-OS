@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Calculator } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
+import * as XLSX from 'xlsx-js-style';
 
 const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpdateJobCache }) => {
   const currentYear = new Date().getFullYear();
