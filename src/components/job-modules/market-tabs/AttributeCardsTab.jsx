@@ -790,11 +790,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       });
     });
 
-    // Calculate true average for each condition: (sum market / sum normalized) - 1
+    // Calculate true average for each condition: ((sum market / sum normalized) - 1) * 100
     const summary = [];
     Object.entries(conditionAdjustments).forEach(([code, data]) => {
       const avgAdjustment = data.sumAvgValue > 0 ?
-        (data.sumAdjustedValue / data.sumAvgValue) - 1 : null;
+        ((data.sumAdjustedValue / data.sumAvgValue) - 1) * 100 : null;
 
       // Categorize condition quality for sorting using user configuration
       let category = 0; // 0 = average/unknown, 1 = better, -1 = worse
