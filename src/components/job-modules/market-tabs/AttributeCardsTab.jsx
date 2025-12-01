@@ -835,15 +835,20 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       AVG_NORM_VALUE: 5, ADJ_VALUE: 6, FLAT_ADJ: 7, PCT_ADJ: 8, BASELINE: 9
     };
 
+    // Get user-defined baseline
+    const manualBaseline = type === 'exterior' ? manualExteriorBaseline : manualInteriorBaseline;
+
     // Collect all data by VCS with baseline info
     const vcsSections = [];
     const dataRowRanges = {}; // Track row ranges for each condition for summation
 
     Object.entries(data).forEach(([vcs, conditions]) => {
-      // Find the baseline (AVERAGE or first condition)
+      // Find the baseline - use manual selection if set, otherwise try to auto-detect
       const baselineCode = Object.keys(conditions).find(code => {
-        const desc = conditions[code].description?.toUpperCase() || '';
-        return desc.includes('AVERAGE') || desc.includes('AVG');
+        const desc = conditions[code].description || '';
+        if (manualBaseline) return desc === manualBaseline;
+        const upper = desc.toUpperCase();
+        return upper.includes('AVERAGE') || upper.includes('AVG') || upper.includes('NORMAL');
       }) || Object.keys(conditions)[0];
 
       const baselineCond = conditions[baselineCode];
