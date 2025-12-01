@@ -824,6 +824,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       });
     });
 
+    console.log(`[${type} Summary Final]`, summary);
+
     // Sort with better conditions first (descending), then worse (ascending by adjustment)
     return summary.sort((a, b) => {
       // First sort by category (better first)
