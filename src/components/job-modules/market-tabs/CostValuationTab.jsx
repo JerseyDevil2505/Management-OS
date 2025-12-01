@@ -435,10 +435,15 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     const lastDataRow = filtered.length + 1; // Last row with data
     const summaryRow = [];
 
-    // Empty cells before summary columns
-    for (let i = 0; i < COL.SALE_PRICE; i++) {
-      summaryRow[i] = '';
-    }
+    // Add TOTALS label in VCS column
+    summaryRow[COL.INCL] = '';
+    summaryRow[COL.BLOCK] = '';
+    summaryRow[COL.LOT] = '';
+    summaryRow[COL.QUAL] = '';
+    summaryRow[COL.CARD] = '';
+    summaryRow[COL.LOCATION] = '';
+    summaryRow[COL.VCS] = 'TOTALS';
+    summaryRow[COL.SALE_DATE] = '';
 
     // Summary formulas
     summaryRow[COL.SALE_PRICE] = { f: `SUM(I2:I${lastDataRow})`, t: 'n' };
