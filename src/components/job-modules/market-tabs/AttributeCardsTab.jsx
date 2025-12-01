@@ -1108,22 +1108,19 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
         if (isBetter) {
           // Average of percentages where % Adj > 0
-          const range = conditionRowNums.length === 1 ?
-            `I${conditionRowNums[0]}` :
-            `I${conditionRowNums[0]}:I${conditionRowNums[conditionRowNums.length - 1]}`;
-          avgFormula = `AVERAGEIF(${range},">0")`;
+          // Sum only positive values, divide by count of positive values
+          const sumFormula = conditionRowNums.map(r => `IF(I${r}>0,I${r},0)`).join('+');
+          const countFormula = conditionRowNums.map(r => `IF(I${r}>0,1,0)`).join('+');
+          avgFormula = `(${sumFormula})/(${countFormula})`;
         } else if (isWorse) {
           // Average of percentages where % Adj < 0
-          const range = conditionRowNums.length === 1 ?
-            `I${conditionRowNums[0]}` :
-            `I${conditionRowNums[0]}:I${conditionRowNums[conditionRowNums.length - 1]}`;
-          avgFormula = `AVERAGEIF(${range},"<0")`;
+          // Sum only negative values, divide by count of negative values
+          const sumFormula = conditionRowNums.map(r => `IF(I${r}<0,I${r},0)`).join('+');
+          const countFormula = conditionRowNums.map(r => `IF(I${r}<0,1,0)`).join('+');
+          avgFormula = `(${sumFormula})/(${countFormula})`;
         } else {
           // Unknown condition type - average all percentages
-          const range = conditionRowNums.length === 1 ?
-            `I${conditionRowNums[0]}` :
-            `I${conditionRowNums[0]}:I${conditionRowNums[conditionRowNums.length - 1]}`;
-          avgFormula = `AVERAGE(${range})`;
+          avgFormula = `AVERAGE(${conditionRowNums.map(r => `I${r}`).join(',')})`;
         }
 
         // % Adj = Simple average of VCS percentages (filtered by direction)
