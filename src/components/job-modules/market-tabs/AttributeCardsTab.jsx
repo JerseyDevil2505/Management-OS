@@ -1180,6 +1180,195 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           </div>
         </div>
 
+        {/* Condition Configuration Panel */}
+        {showConditionConfig && (
+          <div style={{
+            marginTop: '20px',
+            padding: '20px',
+            backgroundColor: '#F9FAFB',
+            borderRadius: '8px',
+            border: '2px solid #E5E7EB'
+          }}>
+            <h3 style={{ margin: '0 0 15px 0', fontSize: '16px', fontWeight: '600' }}>
+              Condition Code Configuration for Export
+            </h3>
+
+            {/* Type Tabs */}
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '2px solid #E5E7EB' }}>
+              <button
+                onClick={() => setConfigType('exterior')}
+                style={{
+                  padding: '10px 20px',
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  borderBottom: configType === 'exterior' ? '3px solid #3B82F6' : 'none',
+                  fontWeight: configType === 'exterior' ? '600' : '400',
+                  cursor: 'pointer',
+                  color: configType === 'exterior' ? '#3B82F6' : '#6B7280'
+                }}
+              >
+                Exterior Condition
+              </button>
+              <button
+                onClick={() => setConfigType('interior')}
+                style={{
+                  padding: '10px 20px',
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  borderBottom: configType === 'interior' ? '3px solid #3B82F6' : 'none',
+                  fontWeight: configType === 'interior' ? '600' : '400',
+                  cursor: 'pointer',
+                  color: configType === 'interior' ? '#3B82F6' : '#6B7280'
+                }}
+              >
+                Interior Condition
+              </button>
+            </div>
+
+            {(() => {
+              const isExterior = configType === 'exterior';
+              const currentData = isExterior ? conditionData.exterior : conditionData.interior;
+              const allConditions = [...new Set(Object.values(currentData).flatMap(vcs =>
+                Object.values(vcs).map(c => c.description)
+              ))].sort();
+
+              const currentBaseline = isExterior ? manualExteriorBaseline : manualInteriorBaseline;
+              const currentBetter = isExterior ? exteriorBetterConditions : interiorBetterConditions;
+              const currentWorse = isExterior ? exteriorWorseConditions : interiorWorseConditions;
+
+              const setBaseline = (value) => {
+                if (isExterior) {
+                  setManualExteriorBaseline(value);
+                  localStorage.setItem(`attr-cards-exterior-baseline-${jobData?.id}`, value);
+                } else {
+                  setManualInteriorBaseline(value);
+                  localStorage.setItem(`attr-cards-interior-baseline-${jobData?.id}`, value);
+                }
+              };
+
+              const toggleBetter = (condition) => {
+                const updated = currentBetter.includes(condition)
+                  ? currentBetter.filter(c => c !== condition)
+                  : [...currentBetter, condition];
+
+                if (isExterior) {
+                  setExteriorBetterConditions(updated);
+                  localStorage.setItem(`attr-cards-exterior-better-${jobData?.id}`, JSON.stringify(updated));
+                } else {
+                  setInteriorBetterConditions(updated);
+                  localStorage.setItem(`attr-cards-interior-better-${jobData?.id}`, JSON.stringify(updated));
+                }
+              };
+
+              const toggleWorse = (condition) => {
+                const updated = currentWorse.includes(condition)
+                  ? currentWorse.filter(c => c !== condition)
+                  : [...currentWorse, condition];
+
+                if (isExterior) {
+                  setExteriorWorseConditions(updated);
+                  localStorage.setItem(`attr-cards-exterior-worse-${jobData?.id}`, JSON.stringify(updated));
+                } else {
+                  setInteriorWorseConditions(updated);
+                  localStorage.setItem(`attr-cards-interior-worse-${jobData?.id}`, JSON.stringify(updated));
+                }
+              };
+
+              return (
+                <div>
+                  {allConditions.length === 0 ? (
+                    <div style={{ padding: '20px', textAlign: 'center', color: '#6B7280' }}>
+                      No condition data available. Run the analysis first.
+                    </div>
+                  ) : (
+                    <>
+                      {/* Baseline Selection */}
+                      <div style={{ marginBottom: '20px' }}>
+                        <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>
+                          Baseline Condition (0% adjustment):
+                        </label>
+                        <select
+                          value={currentBaseline}
+                          onChange={(e) => setBaseline(e.target.value)}
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            border: '1px solid #D1D5DB',
+                            fontSize: '14px',
+                            width: '300px'
+                          }}
+                        >
+                          <option value="">-- Auto-detect (AVERAGE/AVG) --</option>
+                          {allConditions.map(cond => (
+                            <option key={cond} value={cond}>{cond}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Better Conditions */}
+                      <div style={{ marginBottom: '20px' }}>
+                        <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>
+                          Better than Baseline (positive adjustments):
+                        </label>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                          {allConditions.filter(c => c !== currentBaseline).map(cond => (
+                            <label key={cond} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={currentBetter.includes(cond)}
+                                onChange={() => toggleBetter(cond)}
+                                disabled={currentWorse.includes(cond)}
+                              />
+                              <span style={{ fontSize: '14px', color: currentWorse.includes(cond) ? '#9CA3AF' : '#374151' }}>
+                                {cond}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Worse Conditions */}
+                      <div>
+                        <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>
+                          Worse than Baseline (negative adjustments):
+                        </label>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                          {allConditions.filter(c => c !== currentBaseline).map(cond => (
+                            <label key={cond} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={currentWorse.includes(cond)}
+                                onChange={() => toggleWorse(cond)}
+                                disabled={currentBetter.includes(cond)}
+                              />
+                              <span style={{ fontSize: '14px', color: currentBetter.includes(cond) ? '#9CA3AF' : '#374151' }}>
+                                {cond}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Instructions */}
+                      <div style={{
+                        marginTop: '20px',
+                        padding: '12px',
+                        backgroundColor: '#EFF6FF',
+                        borderRadius: '6px',
+                        fontSize: '13px',
+                        color: '#1E40AF'
+                      }}>
+                        <strong>How it works:</strong> The export summary will only sum positive adjustments for "better" conditions
+                        and only sum negative adjustments for "worse" conditions. The baseline shows blank (no adjustment).
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
         {/* Loading State */}
         {conditionData.loading && (
           <div style={{ padding: '40px', textAlign: 'center' }}>
