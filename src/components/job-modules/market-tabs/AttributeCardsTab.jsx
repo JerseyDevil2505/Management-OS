@@ -943,7 +943,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     // Get user-defined condition classifications
     const betterConditions = type === 'exterior' ? exteriorBetterConditions : interiorBetterConditions;
     const worseConditions = type === 'exterior' ? exteriorWorseConditions : interiorWorseConditions;
-    const manualBaseline = type === 'exterior' ? manualExteriorBaseline : manualInteriorBaseline;
+    // manualBaseline already declared at top of function
 
     // Find baseline description - use manual selection if set, otherwise try to auto-detect
     const baselineDesc = manualBaseline || Object.keys(dataRowRanges).find(desc => {
