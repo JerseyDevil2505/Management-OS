@@ -947,10 +947,15 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           t: 'n'
         };
 
+        // Check if this is the baseline condition
+        const isThisBaseline = manualBaseline ?
+          cond.description === manualBaseline : cond.isBaseline;
+
         // Store baseline row number for this VCS to reference later
-        if (cond.isBaseline) {
+        if (isThisBaseline) {
           row[COL.FLAT_ADJ] = 0;
           row[COL.PCT_ADJ] = 0;
+          row[COL.BASELINE] = 'YES'; // Mark baseline
         } else if (baselineExcelRow) {
           // Flat Adj = This normalized value - Baseline normalized value (same VCS)
           row[COL.FLAT_ADJ] = {
