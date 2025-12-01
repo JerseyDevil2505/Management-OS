@@ -1160,7 +1160,15 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <button
+                onClick={() => setShowConditionConfig(!showConditionConfig)}
+                className={CSV_BUTTON_CLASS}
+                disabled={conditionData.loading}
+                style={{ backgroundColor: showConditionConfig ? '#6366F1' : undefined }}
+              >
+                ⚙️ Configure Baseline & Classifications
+              </button>
               <button
                 onClick={() => exportConditionDataToExcel()}
                 className={CSV_BUTTON_CLASS}
