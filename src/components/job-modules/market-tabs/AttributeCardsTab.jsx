@@ -1410,32 +1410,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 </h3>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                  {/* Baseline Selection */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <label style={{ fontSize: '13px', color: '#1E40AF', fontWeight: '500' }}>
-                      Set Baseline:
-                    </label>
-                    <select
-                      value={manualExteriorBaseline}
-                      onChange={(e) => setManualExteriorBaseline(e.target.value)}
-                      style={{
-                        padding: '4px 8px',
-                        border: '1px solid #3B82F6',
-                        borderRadius: '4px',
-                        fontSize: '12px',
-                        backgroundColor: 'white',
-                        minWidth: '120px'
-                      }}
-                    >
-                      <option value="">Auto-detect</option>
-                      {Object.entries(availableConditionCodes.exterior).map(([code, description]) => (
-                        <option key={code} value={code}>
-                          {code} - {description}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
                   {/* Expand/Collapse Buttons - Match Land Valuation Style */}
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                     <button
@@ -1495,32 +1469,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 </h3>
                 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                  {/* Baseline Selection */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <label style={{ fontSize: '13px', color: '#1E40AF', fontWeight: '500' }}>
-                      Set Baseline:
-                    </label>
-                    <select
-                      value={manualInteriorBaseline}
-                      onChange={(e) => setManualInteriorBaseline(e.target.value)}
-                      style={{
-                        padding: '4px 8px',
-                        border: '1px solid #3B82F6',
-                        borderRadius: '4px',
-                        fontSize: '12px',
-                        backgroundColor: 'white',
-                        minWidth: '120px'
-                      }}
-                    >
-                      <option value="">Auto-detect</option>
-                      {Object.entries(availableConditionCodes.interior).map(([code, description]) => (
-                        <option key={code} value={code}>
-                          {code} - {description}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
                   {/* Interior Inspections Toggle */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <input
