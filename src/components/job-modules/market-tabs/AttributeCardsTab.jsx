@@ -704,7 +704,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                   borderTop: '1px solid #E5E7EB',
                   backgroundColor: '#F9FAFB'
                 }}>
-                  *NULL = Illogical adjustment filtered out (positive adjustment for good conditions or negative adjustment for poor conditions)
+                  *NULL = Illogical adjustments filtered out (negative adjustments for better conditions or positive adjustments for worse conditions)
                 </div>
               )}
             </div>
