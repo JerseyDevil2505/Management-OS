@@ -780,13 +780,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     const baselineAvg = baselineNormalized.length > 0 ?
       baselineNormalized.reduce((sum, val) => sum + val, 0) / baselineNormalized.length : 0;
 
-    // Third pass: filter and sum based on normalized adjustment direction
+    // Third pass: calculate percentage for each VCS, then average those percentages
     const summary = [];
     Object.entries(conditionAdjustments).forEach(([code, data]) => {
-      let sumNormalized = 0;
-      let validVCSCount = 0;
+      const vcsPercentages = [];
 
-      // Filter based on adjustment direction AFTER normalization
+      // Calculate percentage for each VCS individually
       data.normalizedValues.forEach(normalized => {
         const adjustmentPct = baselineAvg > 0 ? ((normalized - baselineAvg) / baselineAvg) * 100 : 0;
 
@@ -798,15 +797,14 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         }
 
         if (includeInCalc) {
-          sumNormalized += normalized;
-          validVCSCount++;
+          vcsPercentages.push(adjustmentPct);
         }
       });
 
-      // Calculate average of included values vs baseline
-      const avgNormalized = validVCSCount > 0 ? sumNormalized / validVCSCount : 0;
-      const avgAdjustment = baselineAvg > 0 && avgNormalized > 0 ?
-        ((avgNormalized - baselineAvg) / baselineAvg) * 100 : null;
+      // Calculate simple average of VCS percentages (not dollar-weighted)
+      const avgAdjustment = vcsPercentages.length > 0 ?
+        vcsPercentages.reduce((sum, pct) => sum + pct, 0) / vcsPercentages.length : null;
+      const validVCSCount = vcsPercentages.length;
 
       // Categorize condition quality for sorting using user configuration
       let category = 0; // 0 = average/unknown, 1 = better, -1 = worse
