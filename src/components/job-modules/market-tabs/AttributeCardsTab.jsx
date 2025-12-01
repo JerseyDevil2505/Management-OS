@@ -1342,12 +1342,14 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                             borderRadius: '6px',
                             border: '1px solid #D1D5DB',
                             fontSize: '14px',
-                            width: '300px'
+                            width: '400px'
                           }}
                         >
-                          <option value="">-- Auto-detect (AVERAGE/AVG) --</option>
-                          {allConditions.map(cond => (
-                            <option key={cond} value={cond}>{cond}</option>
+                          <option value="">-- Auto-detect (AVERAGE/AVG/NORMAL) --</option>
+                          {allConditions.map(item => (
+                            <option key={item.code} value={item.description}>
+                              {item.code} {item.description}
+                            </option>
                           ))}
                         </select>
                       </div>
@@ -1358,16 +1360,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                           Better than Baseline (positive adjustments):
                         </label>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                          {allConditions.filter(c => c !== currentBaseline).map(cond => (
-                            <label key={cond} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                          {allConditions.filter(item => item.description !== currentBaseline).map(item => (
+                            <label key={item.code} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                               <input
                                 type="checkbox"
-                                checked={currentBetter.includes(cond)}
-                                onChange={() => toggleBetter(cond)}
-                                disabled={currentWorse.includes(cond)}
+                                checked={currentBetter.includes(item.description)}
+                                onChange={() => toggleBetter(item.description)}
+                                disabled={currentWorse.includes(item.description)}
                               />
-                              <span style={{ fontSize: '14px', color: currentWorse.includes(cond) ? '#9CA3AF' : '#374151' }}>
-                                {cond}
+                              <span style={{ fontSize: '14px', color: currentWorse.includes(item.description) ? '#9CA3AF' : '#374151' }}>
+                                {item.code} {item.description}
                               </span>
                             </label>
                           ))}
@@ -1380,16 +1382,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                           Worse than Baseline (negative adjustments):
                         </label>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                          {allConditions.filter(c => c !== currentBaseline).map(cond => (
-                            <label key={cond} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                          {allConditions.filter(item => item.description !== currentBaseline).map(item => (
+                            <label key={item.code} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                               <input
                                 type="checkbox"
-                                checked={currentWorse.includes(cond)}
-                                onChange={() => toggleWorse(cond)}
-                                disabled={currentBetter.includes(cond)}
+                                checked={currentWorse.includes(item.description)}
+                                onChange={() => toggleWorse(item.description)}
+                                disabled={currentBetter.includes(item.description)}
                               />
-                              <span style={{ fontSize: '14px', color: currentBetter.includes(cond) ? '#9CA3AF' : '#374151' }}>
-                                {cond}
+                              <span style={{ fontSize: '14px', color: currentBetter.includes(item.description) ? '#9CA3AF' : '#374151' }}>
+                                {item.code} {item.description}
                               </span>
                             </label>
                           ))}
