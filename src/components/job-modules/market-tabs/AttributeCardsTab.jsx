@@ -1325,7 +1325,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 <div>
                   {allConditions.length === 0 ? (
                     <div style={{ padding: '20px', textAlign: 'center', color: '#6B7280' }}>
-                      No condition data available. Run the analysis first.
+                      <p style={{ marginBottom: '10px' }}>No condition codes found in code file definitions.</p>
+                      <p style={{ fontSize: '13px' }}>Make sure the code file has been uploaded and processed for this job.</p>
                     </div>
                   ) : (
                     <>
