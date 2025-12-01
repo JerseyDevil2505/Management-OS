@@ -493,6 +493,7 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
 
     // Apply styles to all cells
     const range = XLSX.utils.decode_range(ws['!ref']);
+    const summaryRowIndex = filtered.length + 1; // 0-based index of summary row
 
     for (let R = range.s.r; R <= range.e.r; R++) {
       for (let C = range.s.c; C <= range.e.c; C++) {
@@ -503,6 +504,27 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
         if (R === 0) {
           // Header row
           ws[cellAddress].s = headerStyle;
+        } else if (R === summaryRowIndex) {
+          // Summary row - bold
+          const style = {
+            font: { name: 'Leelawadee', sz: 10, bold: true },
+            alignment: { horizontal: 'center', vertical: 'center' }
+          };
+
+          // Apply number formats based on column
+          if (C === COL.SALE_PRICE || C === COL.PRICE_TIME || C === COL.CURRENT_LAND ||
+              C === COL.DET_ITEM || C === COL.BASE_COST || C === COL.REPL_DEPR ||
+              C === COL.IMPROV || C === COL.ADJ_VALUE) {
+            style.numFmt = currencyFormat;
+          } else if (C === COL.DEPR) {
+            style.numFmt = decimalFormat;
+          } else if (C === COL.CCF) {
+            style.numFmt = decimalFormat;
+          } else if (C === COL.ADJ_RATIO) {
+            style.numFmt = percentFormat;
+          }
+
+          ws[cellAddress].s = style;
         } else {
           // Data rows
           const style = { ...baseStyle };
