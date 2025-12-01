@@ -781,15 +781,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         }
 
         if (includeInCalc) {
-          conditionAdjustments[code].sumAvgValue += cond.avgValue || 0;
-          conditionAdjustments[code].sumAdjustedValue += cond.adjustedValue || 0;
+          // Note: Field names are misleading - avgValue is market price, adjustedValue is normalized
+          conditionAdjustments[code].sumAvgValue += cond.adjustedValue || 0;
+          conditionAdjustments[code].sumAdjustedValue += cond.avgValue || 0;
           conditionAdjustments[code].validVCSCount++;
         }
         conditionAdjustments[code].totalProperties += cond.count;
       });
     });
 
-    // Calculate true average for each condition: (sum adjusted / sum avgValue) - 1
+    // Calculate true average for each condition: (sum market / sum normalized) - 1
     const summary = [];
     Object.entries(conditionAdjustments).forEach(([code, data]) => {
       const avgAdjustment = data.sumAvgValue > 0 ?
