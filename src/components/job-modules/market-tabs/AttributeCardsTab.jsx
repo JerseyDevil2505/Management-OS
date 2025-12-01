@@ -916,7 +916,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     // Find baseline description
     const baselineDesc = Object.keys(dataRowRanges).find(desc => {
       const upper = desc.toUpperCase();
-      return upper === 'AVERAGE' || upper === 'AVG' || upper === 'AVERAGE CONDITION';
+      return upper.includes('AVERAGE') || upper.includes('AVG');
     }) || Object.keys(dataRowRanges)[0];
 
     // Get baseline row numbers for summation
