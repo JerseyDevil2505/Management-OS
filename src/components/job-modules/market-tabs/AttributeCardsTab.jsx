@@ -921,11 +921,24 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     // Get baseline row numbers for summation
     const baselineRowNums = dataRowRanges[baselineDesc]?.rows || [];
 
+    // Helper to determine if condition is better or worse than average
+    const isBetterCondition = (description) => {
+      const upper = description.toUpperCase();
+      return upper.includes('GOOD') || upper.includes('EXCELLENT') || upper.includes('VERY GOOD') || upper.includes('VG');
+    };
+
+    const isWorseCondition = (description) => {
+      const upper = description.toUpperCase();
+      return upper.includes('FAIR') || upper.includes('POOR') || upper.includes('DILAP');
+    };
+
     // Create summary rows
     Object.entries(dataRowRanges).forEach(([desc, info]) => {
       const rowNum = rows.length + 1;
       const isBaseline = desc === baselineDesc;
       const conditionRowNums = info.rows;
+      const isBetter = isBetterCondition(desc);
+      const isWorse = isWorseCondition(desc);
 
       const summaryRow = [];
       summaryRow[0] = desc; // Condition
@@ -936,8 +949,25 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         summaryRow[3] = 0; // % Adj
       } else {
         // Flat Adj = SUM of all Flat Adj values for this condition
-        const flatAdjRefs = conditionRowNums.map(r => `H${r}`).join('+');
-        summaryRow[2] = { f: flatAdjRefs, t: 'n' };
+        // For better conditions: only sum positive values (MAX(0, value))
+        // For worse conditions: only sum negative values (MIN(0, value))
+        let flatAdjFormula;
+
+        if (isBetter) {
+          // Only include positive adjustments
+          const flatAdjRefs = conditionRowNums.map(r => `MAX(0,H${r})`).join('+');
+          flatAdjFormula = flatAdjRefs;
+        } else if (isWorse) {
+          // Only include negative adjustments
+          const flatAdjRefs = conditionRowNums.map(r => `MIN(0,H${r})`).join('+');
+          flatAdjFormula = flatAdjRefs;
+        } else {
+          // Unknown condition type - sum all values
+          const flatAdjRefs = conditionRowNums.map(r => `H${r}`).join('+');
+          flatAdjFormula = flatAdjRefs;
+        }
+
+        summaryRow[2] = { f: flatAdjFormula, t: 'n' };
 
         // % Adj = Flat Adj / SUM of baseline adjusted values
         const baselineAdjRefs = baselineRowNums.map(r => `G${r}`).join('+');
