@@ -985,12 +985,28 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       if (isBaseline) {
         summaryRow[2] = ''; // % Adj - blank for baseline
       } else {
-        // Calculate true average: (Sum of Adjusted Values / Sum of Norm Values) - 1
-        const sumAdjusted = conditionRowNums.map(r => `G${r}`).join('+');
-        const sumNorm = conditionRowNums.map(r => `F${r}`).join('+');
+        // Calculate true average with conditional filtering
+        // For better conditions: only include rows with positive % Adj (I > 0)
+        // For worse conditions: only include rows with negative % Adj (I <= 0)
+        let sumAdjusted, sumNorm;
+
+        if (isBetter) {
+          // Only sum rows where % Adj > 0
+          sumAdjusted = conditionRowNums.map(r => `IF(I${r}>0,G${r},0)`).join('+');
+          sumNorm = conditionRowNums.map(r => `IF(I${r}>0,F${r},0)`).join('+');
+        } else if (isWorse) {
+          // Only sum rows where % Adj <= 0
+          sumAdjusted = conditionRowNums.map(r => `IF(I${r}<=0,G${r},0)`).join('+');
+          sumNorm = conditionRowNums.map(r => `IF(I${r}<=0,F${r},0)`).join('+');
+        } else {
+          // Unknown condition type - sum all
+          sumAdjusted = conditionRowNums.map(r => `G${r}`).join('+');
+          sumNorm = conditionRowNums.map(r => `F${r}`).join('+');
+        }
+
         const pctAdjFormula = `((${sumAdjusted})/(${sumNorm}))-1`;
 
-        // % Adj = (Sum of all adjusted values / Sum of all normalized values) - 1
+        // % Adj = (Sum of filtered adjusted values / Sum of filtered normalized values) - 1
         summaryRow[2] = {
           f: pctAdjFormula,
           t: 'n'
