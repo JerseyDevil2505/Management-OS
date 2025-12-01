@@ -59,7 +59,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     return localStorage.getItem(`attr-cards-type-filter-${jobData?.id}`) || '1';
   });
   const [useInteriorInspections, setUseInteriorInspections] = useState(() => {
-    return localStorage.getItem(`attr-cards-interior-inspections-${jobData?.id}`) === 'true';
+    const stored = localStorage.getItem(`attr-cards-interior-inspections-${jobData?.id}`);
+    return stored === null ? true : stored === 'true'; // Default to true (checked) on first load
   });
   const [expandedExteriorVCS, setExpandedExteriorVCS] = useState(new Set()); // Track which exterior VCS sections are expanded
   const [expandedInteriorVCS, setExpandedInteriorVCS] = useState(new Set()); // Track which interior VCS sections are expanded
