@@ -803,6 +803,17 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         category = -1;
       }
 
+      // Debug final calculation for EXT GOOD
+      if (data.description === 'EXT GOOD') {
+        console.log(`[EXT GOOD Final Calc]`, {
+          sumAvgValue: data.sumAvgValue,
+          sumAdjustedValue: data.sumAdjustedValue,
+          validVCSCount: data.validVCSCount,
+          avgAdjustment,
+          formula: `(${data.sumAdjustedValue} / ${data.sumAvgValue}) - 1 = ${avgAdjustment}`
+        });
+      }
+
       summary.push({
         code,
         description: data.description,
