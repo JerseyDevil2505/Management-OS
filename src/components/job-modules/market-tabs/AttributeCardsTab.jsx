@@ -717,7 +717,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   // ============ CALCULATE NON-BASELINE SUMMARY ============
   const calculateNonBaselineSummary = (data, type) => {
     const conditionAdjustments = {}; // Track adjustments by condition code
-    const baselineData = {}; // Track baseline values for normalization
+    const baselineNormalized = []; // Track baseline normalized values
 
     // Determine which baseline and condition classifications are being used
     const manualBaseline = type === 'Exterior' ? manualExteriorBaseline : manualInteriorBaseline;
@@ -735,15 +735,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     });
     const overallAvgSFLA = totalConditions > 0 ? totalSFLA / totalConditions : 0;
 
-    // Second pass: normalize and accumulate
+    // Second pass: normalize all values and track baseline
     Object.values(data).forEach(vcsConditions => {
       Object.entries(vcsConditions).forEach(([code, cond]) => {
-        // Skip baseline condition - compare descriptions
-        const isBaseline = manualBaseline ? (cond.description === manualBaseline) :
-                          (cond.adjustmentPct === 0 ||
-                           cond.description.toUpperCase().includes('AVERAGE') ||
-                           cond.description.toUpperCase().includes('NORMAL'));
-
         const avgSFLA = cond.avgSize || 0;
         const avgValue = cond.avgValue || 0; // This is the market price
 
@@ -751,58 +745,68 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         const normalized = avgSFLA > 0 ?
           ((overallAvgSFLA - avgSFLA) * (avgValue / avgSFLA)) + avgValue : avgValue;
 
+        // Check if this is baseline
+        const isBaseline = manualBaseline ? (cond.description === manualBaseline) :
+                          (cond.adjustmentPct === 0 ||
+                           cond.description.toUpperCase().includes('AVERAGE') ||
+                           cond.description.toUpperCase().includes('NORMAL'));
+
         if (isBaseline) {
-          // Track baseline normalized values
-          if (!baselineData[cond.description]) {
-            baselineData[cond.description] = 0;
-          }
-          baselineData[cond.description] += normalized;
+          baselineNormalized.push(normalized);
           return;
         }
 
         // Initialize condition tracking if not exists
         if (!conditionAdjustments[code]) {
-          // Use user configuration to determine condition type
           const isBetterCondition = betterConditions.includes(cond.description);
           const isWorseCondition = worseConditions.includes(cond.description);
 
           conditionAdjustments[code] = {
             description: cond.description,
-            sumNormalized: 0,
+            normalizedValues: [],
             totalProperties: 0,
-            validVCSCount: 0,
             isBetterCondition,
             isWorseCondition
           };
         }
 
-        const adjustment = cond.adjustmentPct || 0;
-        const { isBetterCondition, isWorseCondition } = conditionAdjustments[code];
-
-        // Only include VCS rows with actual adjustments (exclude 0%)
-        let includeInCalc = false;
-        if (isBetterCondition && adjustment > 0) {
-          includeInCalc = true; // Better condition: only include positive adjustments (>0)
-        } else if (isWorseCondition && adjustment < 0) {
-          includeInCalc = true; // Worse condition: only include negative adjustments (<0)
-        }
-
-        if (includeInCalc) {
-          conditionAdjustments[code].sumNormalized += normalized;
-          conditionAdjustments[code].validVCSCount++;
-        }
+        // Store normalized value with VCS context for later filtering
+        conditionAdjustments[code].normalizedValues.push(normalized);
         conditionAdjustments[code].totalProperties += cond.count;
       });
     });
 
-    // Get baseline sum
-    const baselineSumNormalized = Object.values(baselineData).reduce((sum, val) => sum + val, 0);
+    // Calculate baseline average
+    const baselineAvg = baselineNormalized.length > 0 ?
+      baselineNormalized.reduce((sum, val) => sum + val, 0) / baselineNormalized.length : 0;
 
-    // Calculate percentage for each condition: ((sum normalized condition / sum normalized baseline) - 1) * 100
+    // Third pass: filter and sum based on normalized adjustment direction
     const summary = [];
     Object.entries(conditionAdjustments).forEach(([code, data]) => {
-      const avgAdjustment = baselineSumNormalized > 0 && data.sumNormalized > 0 ?
-        ((data.sumNormalized / baselineSumNormalized) - 1) * 100 : null;
+      let sumNormalized = 0;
+      let validVCSCount = 0;
+
+      // Filter based on adjustment direction AFTER normalization
+      data.normalizedValues.forEach(normalized => {
+        const adjustmentPct = baselineAvg > 0 ? ((normalized - baselineAvg) / baselineAvg) * 100 : 0;
+
+        let includeInCalc = false;
+        if (data.isBetterCondition && adjustmentPct > 0) {
+          includeInCalc = true; // Better: only include positive adjustments
+        } else if (data.isWorseCondition && adjustmentPct < 0) {
+          includeInCalc = true; // Worse: only include negative adjustments
+        }
+
+        if (includeInCalc) {
+          sumNormalized += normalized;
+          validVCSCount++;
+        }
+      });
+
+      // Calculate average of included values vs baseline
+      const avgNormalized = validVCSCount > 0 ? sumNormalized / validVCSCount : 0;
+      const avgAdjustment = baselineAvg > 0 && avgNormalized > 0 ?
+        ((avgNormalized - baselineAvg) / baselineAvg) * 100 : null;
 
       // Categorize condition quality for sorting using user configuration
       let category = 0; // 0 = average/unknown, 1 = better, -1 = worse
