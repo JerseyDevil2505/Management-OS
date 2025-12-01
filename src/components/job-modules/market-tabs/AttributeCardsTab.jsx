@@ -776,19 +776,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       const avgAdjustment = data.sumAvgValue > 0 ?
         (data.sumAdjustedValue / data.sumAvgValue) - 1 : null;
 
-      // Categorize condition quality for sorting
-      const desc = data.description.toUpperCase();
-      let category = 0; // 0 = average/unknown, 1 = above average, -1 = below average
-
-      // Above average conditions (should show positive adjustments)
-      if (desc.includes('EXCELLENT') || desc.includes('VERY GOOD') || desc.includes('GOOD') ||
-          desc.includes('SUPERIOR') || desc.includes('MODERN') || code === 'G') {
+      // Categorize condition quality for sorting using user configuration
+      let category = 0; // 0 = average/unknown, 1 = better, -1 = worse
+      if (data.isBetterCondition) {
         category = 1;
-      }
-      // Below average conditions (should show negative adjustments)
-      else if (desc.includes('FAIR') || desc.includes('POOR') || desc.includes('BELOW AVERAGE') ||
-               desc.includes('DILAPIDATED') || desc.includes('DETERIORATED') || desc.includes('UNSOUND') ||
-               desc.includes('VERY POOR') || code === 'P' || code === 'F') {
+      } else if (data.isWorseCondition) {
         category = -1;
       }
 
