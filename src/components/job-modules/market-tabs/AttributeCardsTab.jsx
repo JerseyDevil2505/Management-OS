@@ -979,24 +979,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       if (isBaseline) {
         summaryRow[2] = ''; // % Adj - blank for baseline
       } else {
-        // Calculate AVERAGE of percentages (matches UI summary calculation)
-        let pctAdjFormula;
+        // Calculate true average: (Sum of Adjusted Values / Sum of Norm Values) - 1
+        const sumAdjusted = conditionRowNums.map(r => `G${r}`).join('+');
+        const sumNorm = conditionRowNums.map(r => `F${r}`).join('+');
+        const pctAdjFormula = `((${sumAdjusted})/(${sumNorm}))-1`;
 
-        if (isBetter) {
-          // Only include positive percentages - use MAX to filter
-          const pctRefs = conditionRowNums.map(r => `MAX(0,I${r})`).join('+');
-          pctAdjFormula = `(${pctRefs})/${conditionRowNums.length}`;
-        } else if (isWorse) {
-          // Only include negative percentages - use MIN to filter
-          const pctRefs = conditionRowNums.map(r => `MIN(0,I${r})`).join('+');
-          pctAdjFormula = `(${pctRefs})/${conditionRowNums.length}`;
-        } else {
-          // Unknown condition type - average all percentages
-          const pctRefs = conditionRowNums.map(r => `I${r}`).join('+');
-          pctAdjFormula = `(${pctRefs})/${conditionRowNums.length}`;
-        }
-
-        // % Adj = Average of all percentage adjustments for this condition
+        // % Adj = (Sum of all adjusted values / Sum of all normalized values) - 1
         summaryRow[2] = {
           f: pctAdjFormula,
           t: 'n'
