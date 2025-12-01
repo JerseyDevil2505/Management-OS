@@ -811,7 +811,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           sumAdjustedValue: data.sumAdjustedValue,
           validVCSCount: data.validVCSCount,
           avgAdjustment,
-          formula: `(${data.sumAdjustedValue} / ${data.sumAvgValue}) - 1 = ${avgAdjustment}`
+          formula: `((${data.sumAdjustedValue} / ${data.sumAvgValue}) - 1) * 100 = ${avgAdjustment}%`
         });
       }
 
