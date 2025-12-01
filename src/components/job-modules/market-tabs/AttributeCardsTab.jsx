@@ -735,8 +735,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         if (!conditionAdjustments[code]) {
           conditionAdjustments[code] = {
             description: cond.description,
-            adjustments: [],
-            totalProperties: 0
+            sumNormValue: 0,
+            sumAdjustedValue: 0,
+            totalProperties: 0,
+            validVCSCount: 0
           };
         }
 
@@ -748,28 +750,28 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                                desc.includes('VERY POOR') || desc.includes('DETERIORATED') ||
                                desc.includes('BELOW AVERAGE') || desc.includes('DILAPIDATED') || code === 'P' || code === 'F';
 
-        let adjustmentToUse = cond.adjustmentPct;
-
         // Filter illogical adjustments - apply NULL policy
+        let includeInCalc = true;
         if (isGoodCondition && cond.adjustmentPct < 0) {
-          adjustmentToUse = null; // Good condition with negative adjustment = illogical
+          includeInCalc = false; // Good condition with negative adjustment = illogical
         } else if (isPoorCondition && cond.adjustmentPct > 0) {
-          adjustmentToUse = null; // Poor condition with positive adjustment = illogical
+          includeInCalc = false; // Poor condition with positive adjustment = illogical
         }
 
-        if (adjustmentToUse !== null) {
-          conditionAdjustments[code].adjustments.push(adjustmentToUse);
+        if (includeInCalc) {
+          conditionAdjustments[code].sumNormValue += cond.avgNormValue || 0;
+          conditionAdjustments[code].sumAdjustedValue += cond.adjustedValue || 0;
+          conditionAdjustments[code].validVCSCount++;
         }
         conditionAdjustments[code].totalProperties += cond.count;
       });
     });
 
-    // Calculate averages for each condition
+    // Calculate true average for each condition: (sum adjusted / sum norm) - 1
     const summary = [];
     Object.entries(conditionAdjustments).forEach(([code, data]) => {
-      const validAdjustments = data.adjustments;
-      const avgAdjustment = validAdjustments.length > 0 ?
-        validAdjustments.reduce((sum, adj) => sum + adj, 0) / validAdjustments.length : null;
+      const avgAdjustment = data.sumNormValue > 0 ?
+        (data.sumAdjustedValue / data.sumNormValue) - 1 : null;
 
       // Categorize condition quality for sorting
       const desc = data.description.toUpperCase();
