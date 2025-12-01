@@ -935,24 +935,27 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     const summaryHeaders = ['Condition', 'Total Count', '% Adj'];
     rows.push(summaryHeaders);
 
-    // Find baseline description
-    const baselineDesc = Object.keys(dataRowRanges).find(desc => {
+    // Get user-defined condition classifications
+    const betterConditions = type === 'exterior' ? exteriorBetterConditions : interiorBetterConditions;
+    const worseConditions = type === 'exterior' ? exteriorWorseConditions : interiorWorseConditions;
+    const manualBaseline = type === 'exterior' ? manualExteriorBaseline : manualInteriorBaseline;
+
+    // Find baseline description - use manual selection if set, otherwise try to auto-detect
+    const baselineDesc = manualBaseline || Object.keys(dataRowRanges).find(desc => {
       const upper = desc.toUpperCase();
-      return upper.includes('AVERAGE') || upper.includes('AVG');
+      return upper.includes('AVERAGE') || upper.includes('AVG') || upper.includes('NORMAL');
     }) || Object.keys(dataRowRanges)[0];
 
     // Get baseline row numbers for summation
     const baselineRowNums = dataRowRanges[baselineDesc]?.rows || [];
 
-    // Helper to determine if condition is better or worse than average
+    // Helper to determine if condition is better or worse than baseline
     const isBetterCondition = (description) => {
-      const upper = description.toUpperCase();
-      return upper.includes('GOOD') || upper.includes('EXCELLENT') || upper.includes('VERY GOOD') || upper.includes('VG');
+      return betterConditions.includes(description);
     };
 
     const isWorseCondition = (description) => {
-      const upper = description.toUpperCase();
-      return upper.includes('FAIR') || upper.includes('POOR') || upper.includes('DILAP');
+      return worseConditions.includes(description);
     };
 
     // Create summary rows
