@@ -821,7 +821,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         description: data.description,
         avgAdjustment,
         totalProperties: data.totalProperties,
-        validVCSCount: data.validVCSCount,
+        validVCSCount,
         category
       });
     });
