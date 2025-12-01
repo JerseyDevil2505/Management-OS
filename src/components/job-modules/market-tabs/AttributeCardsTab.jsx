@@ -966,12 +966,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       const startingRowNum = rows.length + 1;
       const baselineExcelRow = baselineIdx >= 0 ? startingRowNum + baselineIdx : null;
 
-      // Warn if configured baseline not found
-      if (manualBaseline && baselineIdx < 0) {
-        console.warn(`[Export] VCS ${section.vcs}: Configured baseline "${manualBaseline}" not found. Available conditions:`,
-          section.conditionRows.map(c => c.description).join(', '));
-      }
-
       section.conditionRows.forEach((cond, idx) => {
         const rowNum = rows.length + 1; // Excel row number (1-based)
 
