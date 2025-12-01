@@ -1271,10 +1271,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
             {(() => {
               const isExterior = configType === 'exterior';
-              const currentData = isExterior ? conditionData.exterior : conditionData.interior;
-              const allConditions = [...new Set(Object.values(currentData).flatMap(vcs =>
-                Object.values(vcs).map(c => c.description)
-              ))].sort();
+              // Use ALL codes from code definitions, not just from analysis data
+              const availableCodes = isExterior ? availableConditionCodes.exterior : availableConditionCodes.interior;
+
+              // Build array of {code, description} for sorting and display
+              const allConditions = Object.entries(availableCodes)
+                .map(([code, desc]) => ({ code, description: desc }))
+                .sort((a, b) => a.code.localeCompare(b.code));
 
               const currentBaseline = isExterior ? manualExteriorBaseline : manualInteriorBaseline;
               const currentBetter = isExterior ? exteriorBetterConditions : interiorBetterConditions;
