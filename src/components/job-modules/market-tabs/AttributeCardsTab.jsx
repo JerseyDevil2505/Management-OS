@@ -1083,6 +1083,17 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       const isBetter = isBetterCondition(desc);
       const isWorse = isWorseCondition(desc);
 
+      // Log for debugging (GOOD and FAIR conditions)
+      if (type === 'interior' && (desc.includes('GOOD') || desc.includes('FAIR'))) {
+        console.log(`[Export ${type} ${desc}] Summary formula:`, {
+          vcsCount: conditionRowNums.length,
+          vcsRows: conditionRowNums,
+          isBetter,
+          isWorse,
+          filterCondition: isBetter ? '% Adj > 0' : isWorse ? '% Adj < 0' : 'all'
+        });
+      }
+
       const summaryRow = [];
       summaryRow[0] = desc; // Condition
       summaryRow[1] = info.count; // Total Count
