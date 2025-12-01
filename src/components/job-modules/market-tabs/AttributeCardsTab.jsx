@@ -851,13 +851,14 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       }) || Object.keys(conditions)[0];
 
       const baselineCond = conditions[baselineCode];
-      const baselineAvgSFLA = baselineCond?.avgSize || 0;
-      const baselineAvgValue = baselineCond?.avgValue || 0;
+
+      // Calculate VCS average SFLA across all conditions
+      const vcsAvgSFLA = Object.values(conditions).reduce((sum, c) => sum + (c.avgSize || 0), 0) / Object.keys(conditions).length;
 
       const conditionRows = [];
 
       Object.entries(conditions).forEach(([code, cond]) => {
-        const isBaseline = code === baselineCode;
+        const isBaseline = cond.description === manualBaseline || (!manualBaseline && code === baselineCode);
         const avgSFLA = cond.avgSize || 0;
         const avgYear = cond.avgYear || '';
         const avgNormValue = cond.avgValue || 0;
@@ -871,12 +872,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           avgYear,
           avgNormValue,
           isBaseline,
-          baselineAvgSFLA,
-          baselineAvgValue
+          vcsAvgSFLA,
+          baselineDescription: baselineCond?.description
         });
       });
 
-      vcsSections.push({ vcs, conditionRows, baselineAvgSFLA, baselineAvgValue });
+      vcsSections.push({ vcs, conditionRows, vcsAvgSFLA });
     });
 
     // Add data rows with formulas
@@ -899,22 +900,28 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         row[COL.AVG_YEAR] = cond.avgYear;
         row[COL.AVG_NORM_VALUE] = cond.avgNormValue;
 
+        // Normalize to VCS average SFLA: ((VCS_AVG_SFLA - This_SFLA) × (This_Value / This_SFLA)) + This_Value
+        row[COL.ADJ_VALUE] = {
+          f: `IF(D${rowNum}=0,F${rowNum},((${cond.vcsAvgSFLA}-D${rowNum})*(F${rowNum}/D${rowNum}))+F${rowNum})`,
+          t: 'n'
+        };
+
+        // Store baseline row number for this VCS to reference later
         if (cond.isBaseline) {
-          row[COL.ADJ_VALUE] = cond.avgNormValue;
           row[COL.FLAT_ADJ] = 0;
           row[COL.PCT_ADJ] = 0;
         } else {
-          // Jim's formula: avgNormValue + ((baselineSFLA - avgSFLA) * (avgNormValue / avgSFLA) * 0.5)
-          row[COL.ADJ_VALUE] = {
-            f: `F${rowNum}+((${cond.baselineAvgSFLA}-D${rowNum})*(F${rowNum}/D${rowNum})*0.5)`,
-            t: 'n'
-          };
+          // Flat Adj = This normalized value - Baseline normalized value (same VCS)
+          // We need to find the baseline row for this VCS
+          const baselineRowNum = section.conditionRows.findIndex(c => c.isBaseline);
+          const baselineExcelRow = rows.length + 1 - (section.conditionRows.length - baselineRowNum);
+
           row[COL.FLAT_ADJ] = {
-            f: `G${rowNum}-${cond.baselineAvgValue}`,
+            f: `G${rowNum}-G${baselineExcelRow}`,
             t: 'n'
           };
           row[COL.PCT_ADJ] = {
-            f: `IF(${cond.baselineAvgValue}=0,0,H${rowNum}/${cond.baselineAvgValue})`,
+            f: `IF(G${baselineExcelRow}=0,0,(G${rowNum}-G${baselineExcelRow})/G${baselineExcelRow})`,
             t: 'n',
             z: '0.0%'
           };
