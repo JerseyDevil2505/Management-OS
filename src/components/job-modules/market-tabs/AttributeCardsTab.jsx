@@ -3461,7 +3461,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             </h3>
             {additionalResults && (
               <button
-                onClick={exportAdditionalCardsCSV}
+                onClick={exportAdditionalCardsExcel}
                 style={{
                   padding: '6px 12px',
                   backgroundColor: '#10B981',
@@ -3473,7 +3473,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                   cursor: 'pointer'
                 }}
               >
-                Export CSV
+                Export Excel
               </button>
             )}
           </div>
