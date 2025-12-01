@@ -916,8 +916,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
     // Add data rows with formulas
     vcsSections.forEach(section => {
-      // Find baseline row index within this VCS section
-      const baselineIdx = section.conditionRows.findIndex(c => c.isBaseline);
+      // Find baseline row index within this VCS section using the configured baseline description
+      const baselineIdx = section.conditionRows.findIndex(c =>
+        manualBaseline ? c.description === manualBaseline : c.isBaseline
+      );
       const startingRowNum = rows.length + 1;
       const baselineExcelRow = baselineIdx >= 0 ? startingRowNum + baselineIdx : null;
 
