@@ -950,8 +950,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       rows.push(summaryRow);
     });
 
-    // Create workbook
-    const wb = XLSX.utils.book_new();
+    // Create worksheet
     const ws = XLSX.utils.aoa_to_sheet(rows);
 
     // Base styles
@@ -965,11 +964,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       alignment: { horizontal: 'center', vertical: 'center' }
     };
 
-    const titleStyle = {
-      font: { name: 'Leelawadee', sz: 12, bold: true },
-      alignment: { horizontal: 'left', vertical: 'center' }
-    };
-
     // Apply styles
     const range = XLSX.utils.decode_range(ws['!ref']);
 
@@ -978,12 +972,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
         if (!ws[cellAddress]) continue;
 
-        // Title rows (0-4)
-        if (R < 4) {
-          ws[cellAddress].s = titleStyle;
-        }
-        // Header rows (row 5 for main data, summary header row)
-        else if (R === 5 || ws[cellAddress].v === 'Condition' || ws[cellAddress].v === 'VCS') {
+        // Header row (row 0 for main data) and summary headers
+        if (R === 0 || ws[cellAddress].v === 'Condition' || ws[cellAddress].v === 'VCS' || ws[cellAddress].v === 'All VCS Combined') {
           ws[cellAddress].s = headerStyle;
         }
         // Data rows
@@ -991,11 +981,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           const style = { ...baseStyle };
 
           // Number formats
-          if (C === COL.AVG_NORM_VALUE || C === COL.ADJ_VALUE || C === COL.FLAT_ADJ || C === 3 || C === 4 || C === 5) {
+          if (C === COL.AVG_NORM_VALUE || C === COL.ADJ_VALUE || C === COL.FLAT_ADJ || C === 2) {
             style.numFmt = '$#,##0';
-          } else if (C === COL.PCT_ADJ || C === 6) {
+          } else if (C === COL.PCT_ADJ || C === 3) {
             style.numFmt = '0%';
-          } else if (C === COL.AVG_SFLA || C === 2) {
+          } else if (C === COL.AVG_SFLA) {
             style.numFmt = '#,##0';
           }
 
@@ -1008,9 +998,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     ws['!cols'] = [
       { wch: 15 },  // VCS / Condition
       { wch: 20 },  // Condition / Total Count
-      { wch: 10 },  // Count / Avg SFLA
-      { wch: 12 },  // Avg SFLA
-      { wch: 12 },  // Avg Year
+      { wch: 10 },  // Count
+      { wch: 12 },  // Avg SFLA / Flat Adj
+      { wch: 12 },  // Avg Year / % Adj
       { wch: 14 },  // Avg Norm Value
       { wch: 14 },  // Adjusted Value
       { wch: 12 },  // Flat Adj
@@ -1018,11 +1008,27 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       { wch: 10 }   // Baseline
     ];
 
-    // Add worksheet to workbook
-    XLSX.utils.book_append_sheet(wb, ws, `${typeLabel} Condition`);
+    return ws;
+  };
+
+  // Combined export function for both Exterior and Interior tabs
+  const exportConditionDataToExcel = () => {
+    const wb = XLSX.utils.book_new();
+
+    // Add Exterior sheet
+    if (conditionData.exterior && Object.keys(conditionData.exterior).length > 0) {
+      const exteriorSheet = buildConditionSheet(conditionData.exterior, 'exterior');
+      XLSX.utils.book_append_sheet(wb, exteriorSheet, 'Exterior');
+    }
+
+    // Add Interior sheet
+    if (conditionData.interior && Object.keys(conditionData.interior).length > 0) {
+      const interiorSheet = buildConditionSheet(conditionData.interior, 'interior');
+      XLSX.utils.book_append_sheet(wb, interiorSheet, 'Interior');
+    }
 
     // Generate filename and download
-    const filename = `${jobData.job_name || 'job'}_${type}_condition_analysis_${new Date().toISOString().slice(0,10)}.xlsx`;
+    const filename = `${jobData.job_name || 'job'}_condition_analysis_${new Date().toISOString().slice(0,10)}.xlsx`;
     XLSX.writeFile(wb, filename);
   };
   // ============ RENDER CONDITION ANALYSIS TAB ============
