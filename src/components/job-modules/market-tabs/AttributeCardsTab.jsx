@@ -717,21 +717,48 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   // ============ CALCULATE NON-BASELINE SUMMARY ============
   const calculateNonBaselineSummary = (data, type) => {
     const conditionAdjustments = {}; // Track adjustments by condition code
+    const baselineData = {}; // Track baseline values for normalization
 
     // Determine which baseline and condition classifications are being used
     const manualBaseline = type === 'Exterior' ? manualExteriorBaseline : manualInteriorBaseline;
     const betterConditions = type === 'Exterior' ? exteriorBetterConditions : interiorBetterConditions;
     const worseConditions = type === 'Exterior' ? exteriorWorseConditions : interiorWorseConditions;
 
+    // First pass: calculate overall average SFLA
+    let totalSFLA = 0;
+    let totalConditions = 0;
     Object.values(data).forEach(vcsConditions => {
       Object.entries(vcsConditions).forEach(([code, cond]) => {
-        // Skip baseline condition - compare descriptions, not codes
+        totalSFLA += cond.avgSize || 0;
+        totalConditions++;
+      });
+    });
+    const overallAvgSFLA = totalConditions > 0 ? totalSFLA / totalConditions : 0;
+
+    // Second pass: normalize and accumulate
+    Object.values(data).forEach(vcsConditions => {
+      Object.entries(vcsConditions).forEach(([code, cond]) => {
+        // Skip baseline condition - compare descriptions
         const isBaseline = manualBaseline ? (cond.description === manualBaseline) :
                           (cond.adjustmentPct === 0 ||
                            cond.description.toUpperCase().includes('AVERAGE') ||
                            cond.description.toUpperCase().includes('NORMAL'));
 
-        if (isBaseline) return;
+        const avgSFLA = cond.avgSize || 0;
+        const avgValue = cond.avgValue || 0; // This is the market price
+
+        // Normalize to overall average SFLA: ((overallAvg - thisSFLA) * (value / thisSFLA)) + value
+        const normalized = avgSFLA > 0 ?
+          ((overallAvgSFLA - avgSFLA) * (avgValue / avgSFLA)) + avgValue : avgValue;
+
+        if (isBaseline) {
+          // Track baseline normalized values
+          if (!baselineData[cond.description]) {
+            baselineData[cond.description] = 0;
+          }
+          baselineData[cond.description] += normalized;
+          return;
+        }
 
         // Initialize condition tracking if not exists
         if (!conditionAdjustments[code]) {
@@ -741,8 +768,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
           conditionAdjustments[code] = {
             description: cond.description,
-            sumAvgValue: 0,
-            sumAdjustedValue: 0,
+            sumNormalized: 0,
             totalProperties: 0,
             validVCSCount: 0,
             isBetterCondition,
@@ -762,20 +788,21 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         }
 
         if (includeInCalc) {
-          // Note: Field names are misleading - avgValue is market price, adjustedValue is normalized
-          conditionAdjustments[code].sumAvgValue += cond.adjustedValue || 0;
-          conditionAdjustments[code].sumAdjustedValue += cond.avgValue || 0;
+          conditionAdjustments[code].sumNormalized += normalized;
           conditionAdjustments[code].validVCSCount++;
         }
         conditionAdjustments[code].totalProperties += cond.count;
       });
     });
 
-    // Calculate true average for each condition: ((sum market / sum normalized) - 1) * 100
+    // Get baseline sum
+    const baselineSumNormalized = Object.values(baselineData).reduce((sum, val) => sum + val, 0);
+
+    // Calculate percentage for each condition: ((sum normalized condition / sum normalized baseline) - 1) * 100
     const summary = [];
     Object.entries(conditionAdjustments).forEach(([code, data]) => {
-      const avgAdjustment = data.sumAvgValue > 0 ?
-        ((data.sumAdjustedValue / data.sumAvgValue) - 1) * 100 : null;
+      const avgAdjustment = baselineSumNormalized > 0 && data.sumNormalized > 0 ?
+        ((data.sumNormalized / baselineSumNormalized) - 1) * 100 : null;
 
       // Categorize condition quality for sorting using user configuration
       let category = 0; // 0 = average/unknown, 1 = better, -1 = worse
