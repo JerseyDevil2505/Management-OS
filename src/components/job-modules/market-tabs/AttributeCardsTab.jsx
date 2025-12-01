@@ -986,9 +986,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         row[COL.AVG_YEAR] = cond.avgYear;
         row[COL.AVG_NORM_VALUE] = cond.avgNormValue;
 
-        // Normalize to VCS average SFLA: ((VCS_AVG_SFLA - This_SFLA) × (This_Value / This_SFLA)) + This_Value
+        // Jim formula: ((VCS_AVG_SFLA - This_SFLA) × ((This_Value / This_SFLA) × 0.50)) + This_Value
         row[COL.ADJ_VALUE] = {
-          f: `IF(D${rowNum}=0,F${rowNum},((${cond.vcsAvgSFLA}-D${rowNum})*(F${rowNum}/D${rowNum}))+F${rowNum})`,
+          f: `IF(D${rowNum}=0,F${rowNum},((${cond.vcsAvgSFLA}-D${rowNum})*((F${rowNum}/D${rowNum})*0.50))+F${rowNum})`,
           t: 'n'
         };
 
