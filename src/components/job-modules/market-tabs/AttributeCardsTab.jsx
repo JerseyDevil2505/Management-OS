@@ -3010,9 +3010,86 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       { wch: 10 }   // % Adj
     ];
 
-    // Create workbook and add worksheet
+    // Create workbook and add summary worksheet
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Additional Cards Analysis');
+    XLSX.utils.book_append_sheet(wb, ws, 'Summary by VCS');
+
+    // Create detail sheet with all properties
+    if (additionalResults.additionalCardsList && additionalResults.additionalCardsList.length > 0) {
+      const detailRows = [];
+
+      // Detail headers
+      const detailHeaders = [
+        'Address',
+        'Card',
+        'VCS',
+        'Class',
+        'Type/Use',
+        'Sales Price',
+        'SFLA',
+        'Year Built',
+        'Norm Time'
+      ];
+      detailRows.push(detailHeaders);
+
+      // Detail data
+      additionalResults.additionalCardsList.forEach(prop => {
+        const detailRow = [];
+        detailRow[0] = prop.property_location || '';
+        detailRow[1] = prop.property_addl_card || prop.additional_card || '';
+        detailRow[2] = prop.new_vcs || prop.property_vcs || '';
+        detailRow[3] = prop.property_m4_class || prop.property_cama_class || '';
+        detailRow[4] = prop.asset_type_use || '';
+        detailRow[5] = prop.sales_price || '';
+        detailRow[6] = prop.asset_sfla || '';
+        detailRow[7] = prop.asset_year_built || '';
+        detailRow[8] = prop.values_norm_time || '';
+        detailRows.push(detailRow);
+      });
+
+      // Create detail worksheet
+      const detailWs = XLSX.utils.aoa_to_sheet(detailRows);
+
+      // Apply styles to detail sheet
+      const detailRange = XLSX.utils.decode_range(detailWs['!ref']);
+      for (let R = detailRange.s.r; R <= detailRange.e.r; R++) {
+        for (let C = detailRange.s.c; C <= detailRange.e.c; C++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!detailWs[cellAddress]) continue;
+
+          if (R === 0) {
+            // Header row
+            detailWs[cellAddress].s = headerStyle;
+          } else {
+            // Data rows
+            const style = { ...baseStyle };
+            if (C === 5 || C === 8) {
+              style.numFmt = '$#,##0'; // Sales Price and Norm Time
+            } else if (C === 6) {
+              style.numFmt = '#,##0'; // SFLA
+            } else if (C === 7) {
+              style.numFmt = '0'; // Year Built
+            }
+            detailWs[cellAddress].s = style;
+          }
+        }
+      }
+
+      // Set column widths for detail sheet
+      detailWs['!cols'] = [
+        { wch: 40 },  // Address
+        { wch: 10 },  // Card
+        { wch: 10 },  // VCS
+        { wch: 12 },  // Class
+        { wch: 15 },  // Type/Use
+        { wch: 14 },  // Sales Price
+        { wch: 10 },  // SFLA
+        { wch: 12 },  // Year Built
+        { wch: 14 }   // Norm Time
+      ];
+
+      XLSX.utils.book_append_sheet(wb, detailWs, 'Property Detail');
+    }
 
     // Export
     const fileName = `Additional_Cards_${jobData?.job_name || 'Analysis'}_${new Date().toISOString().split('T')[0]}.xlsx`;
