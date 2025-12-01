@@ -171,48 +171,35 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       // Extract ALL condition codes from code definitions based on vendor type
       if (vendorType === 'BRT') {
-        // BRT stores condition codes in the 'Residential' section under specific parent/section structure
+        // BRT stores condition codes in the 'Residential' section
+        // Specifically: parent '34', section '60' for both exterior and interior condition
         const residential = parsedCodeDefinitions?.sections?.Residential || {};
 
-        console.log('🔍 BRT Residential structure keys:', Object.keys(residential));
+        console.log('🔍 Searching for BRT condition codes in parent 34, section 60');
 
-        // Helper function to recursively search for condition codes in nested MAP structures
-        const searchForConditionCodes = (obj, path = '') => {
-          if (!obj || typeof obj !== 'object') return;
-
-          // Check if this is a condition code entry (has DATA.VALUE)
-          if (obj.DATA && obj.DATA.VALUE && typeof obj.DATA.VALUE === 'string') {
-            // This looks like a code definition
-            const value = obj.DATA.VALUE;
-            // Check if this looks like a condition description
-            if (value.includes('EXCELLENT') || value.includes('GOOD') || value.includes('AVERAGE') ||
-                value.includes('FAIR') || value.includes('POOR') || value.includes('DILAP') ||
-                value.includes('EXT ') || value.includes('INT ')) {
-              // Extract code from path or use parent key
-              const pathParts = path.split('.');
-              const code = pathParts[pathParts.length - 1];
-              if (code && code !== '00') {
-                exterior[code] = value;
-                interior[code] = value;
-                console.log(`Found condition code: ${code} = ${value}`);
+        // Navigate to the specific condition section
+        // Structure: Residential[topLevelKey].MAP['34'].MAP['60'].MAP[code]
+        Object.entries(residential).forEach(([topKey, topValue]) => {
+          if (topValue.MAP && topValue.MAP['34']) {
+            const parent34 = topValue.MAP['34'];
+            if (parent34.MAP && parent34.MAP['60']) {
+              const section60 = parent34.MAP['60'];
+              if (section60.MAP) {
+                // Now we're in the condition codes section
+                Object.entries(section60.MAP).forEach(([code, codeData]) => {
+                  if (code !== '00' && codeData.DATA && codeData.DATA.VALUE) {
+                    const description = codeData.DATA.VALUE;
+                    exterior[code] = description;
+                    interior[code] = description;
+                    console.log(`✅ Found condition code: ${code} = ${description}`);
+                  }
+                });
               }
             }
           }
-
-          // Recursively search MAP structures
-          if (obj.MAP && typeof obj.MAP === 'object') {
-            Object.entries(obj.MAP).forEach(([key, value]) => {
-              searchForConditionCodes(value, `${path}.${key}`);
-            });
-          }
-        };
-
-        // Search through all top-level keys in Residential section
-        Object.entries(residential).forEach(([key, value]) => {
-          searchForConditionCodes(value, key);
         });
 
-        console.log(`🎯 Found ${Object.keys(exterior).length} BRT condition codes`);
+        console.log(`🎯 Found ${Object.keys(exterior).length} BRT condition codes total`);
       } else if (vendorType === 'Microsystems') {
         // Microsystems stores codes in field_codes with prefixes
         const fieldCodes = parsedCodeDefinitions?.field_codes || {};
