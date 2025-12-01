@@ -481,7 +481,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   // ============ BUILD CONDITION CASCADE TABLE ============
   const renderConditionTable = (data, type, expandedVCS, setExpandedVCS) => {
     const vcsKeys = Object.keys(data).sort();
-    
+
     if (vcsKeys.length === 0) {
       return (
         <div style={{ padding: '20px', textAlign: 'center', color: '#6B7280' }}>
@@ -489,6 +489,39 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         </div>
       );
     }
+
+    // Calculate overall average SFLA for normalization
+    const manualBaseline = type === 'Exterior' ? manualExteriorBaseline : manualInteriorBaseline;
+    let totalSFLA = 0;
+    let totalConditions = 0;
+    const baselineNormalized = [];
+
+    Object.values(data).forEach(vcsConditions => {
+      Object.entries(vcsConditions).forEach(([code, cond]) => {
+        totalSFLA += cond.avgSize || 0;
+        totalConditions++;
+      });
+    });
+    const overallAvgSFLA = totalConditions > 0 ? totalSFLA / totalConditions : 0;
+
+    // Calculate baseline normalized values
+    Object.values(data).forEach(vcsConditions => {
+      Object.entries(vcsConditions).forEach(([code, cond]) => {
+        const isBaseline = manualBaseline ? (cond.description === manualBaseline) :
+                          (cond.adjustmentPct === 0 ||
+                           cond.description.toUpperCase().includes('AVERAGE') ||
+                           cond.description.toUpperCase().includes('NORMAL'));
+        if (isBaseline) {
+          const avgSFLA = cond.avgSize || 0;
+          const avgValue = cond.avgValue || 0;
+          const normalized = avgSFLA > 0 ?
+            ((overallAvgSFLA - avgSFLA) * (avgValue / avgSFLA)) + avgValue : avgValue;
+          baselineNormalized.push(normalized);
+        }
+      });
+    });
+    const baselineAvg = baselineNormalized.length > 0 ?
+      baselineNormalized.reduce((sum, val) => sum + val, 0) / baselineNormalized.length : 0;
 
     // Calculate non-baseline summary across all VCS
     const nonBaselineSummary = calculateNonBaselineSummary(data, type);
