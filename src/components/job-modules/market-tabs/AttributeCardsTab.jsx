@@ -910,7 +910,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     rows.push(summaryHeaderRow);
     rows.push([]); // Blank row
 
-    const summaryHeaders = ['Condition', 'Total Count', 'Flat Adj', '% Adj'];
+    const summaryHeaders = ['Condition', 'Total Count', '% Adj'];
     rows.push(summaryHeaders);
 
     // Find baseline description
@@ -946,12 +946,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       summaryRow[1] = info.count; // Total Count
 
       if (isBaseline) {
-        summaryRow[2] = 0; // Flat Adj
-        summaryRow[3] = 0; // % Adj
+        summaryRow[2] = ''; // % Adj - blank for baseline
       } else {
-        // Flat Adj = SUM of all Flat Adj values for this condition
-        // For better conditions: only sum positive values (MAX(0, value))
-        // For worse conditions: only sum negative values (MIN(0, value))
+        // Calculate flat adjustment sum for the formula
         let flatAdjFormula;
 
         if (isBetter) {
@@ -968,12 +965,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           flatAdjFormula = flatAdjRefs;
         }
 
-        summaryRow[2] = { f: flatAdjFormula, t: 'n' };
-
-        // % Adj = Flat Adj / SUM of baseline adjusted values
+        // % Adj = SUM of Flat Adj / SUM of baseline adjusted values
         const baselineAdjRefs = baselineRowNums.map(r => `G${r}`).join('+');
-        summaryRow[3] = {
-          f: `IF((${baselineAdjRefs})=0,0,C${rowNum}/(${baselineAdjRefs}))`,
+        summaryRow[2] = {
+          f: `IF((${baselineAdjRefs})=0,0,(${flatAdjFormula})/(${baselineAdjRefs}))`,
           t: 'n'
         };
       }
