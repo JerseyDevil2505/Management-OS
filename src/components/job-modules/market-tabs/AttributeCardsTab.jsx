@@ -1024,6 +1024,20 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       });
     });
 
+    // Log sample VCS data for debugging
+    if (vcsSections.length > 0) {
+      const sampleVCS = vcsSections[0];
+      console.log(`[Export ${type}] Sample VCS "${sampleVCS.vcs}":`, {
+        vcsAvgSFLA: sampleVCS.vcsAvgSFLA,
+        conditions: sampleVCS.conditionRows.map(c => ({
+          description: c.description,
+          avgSFLA: c.avgSFLA,
+          avgValue: c.avgNormValue,
+          isBaseline: c.isBaseline
+        }))
+      });
+    }
+
     // Summary section - using summation approach
     rows.push([]); // Blank row
     rows.push([]); // Blank row
