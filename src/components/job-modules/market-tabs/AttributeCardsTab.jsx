@@ -723,12 +723,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     const betterConditions = type === 'Exterior' ? exteriorBetterConditions : interiorBetterConditions;
     const worseConditions = type === 'Exterior' ? exteriorWorseConditions : interiorWorseConditions;
 
-    console.log(`[${type} Summary Debug]`, {
-      manualBaseline,
-      betterConditions,
-      worseConditions
-    });
-
     Object.values(data).forEach(vcsConditions => {
       Object.entries(vcsConditions).forEach(([code, cond]) => {
         // Skip baseline condition - compare descriptions, not codes
@@ -767,19 +761,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           includeInCalc = true; // Worse condition: only include negative adjustments (<0)
         }
 
-        // Debug logging for EXT GOOD specifically
-        if (cond.description === 'EXT GOOD') {
-          console.log(`[EXT GOOD VCS Debug]`, {
-            description: cond.description,
-            isBetterCondition,
-            isWorseCondition,
-            adjustment,
-            avgValue: cond.avgValue,
-            adjustedValue: cond.adjustedValue,
-            includeInCalc
-          });
-        }
-
         if (includeInCalc) {
           // Note: Field names are misleading - avgValue is market price, adjustedValue is normalized
           conditionAdjustments[code].sumAvgValue += cond.adjustedValue || 0;
@@ -804,17 +785,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         category = -1;
       }
 
-      // Debug final calculation for EXT GOOD
-      if (data.description === 'EXT GOOD') {
-        console.log(`[EXT GOOD Final Calc]`, {
-          sumAvgValue: data.sumAvgValue,
-          sumAdjustedValue: data.sumAdjustedValue,
-          validVCSCount: data.validVCSCount,
-          avgAdjustment,
-          formula: `((${data.sumAdjustedValue} / ${data.sumAvgValue}) - 1) * 100 = ${avgAdjustment}%`
-        });
-      }
-
       summary.push({
         code,
         description: data.description,
@@ -824,8 +794,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         category
       });
     });
-
-    console.log(`[${type} Summary Final]`, summary);
 
     // Sort with better conditions first (descending), then worse (ascending by adjustment)
     return summary.sort((a, b) => {
