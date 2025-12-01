@@ -1009,16 +1009,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         summaryRow[2] = ''; // % Adj - blank for baseline
       } else {
         // Calculate true average with conditional filtering
-        // For better conditions: only include rows with positive % Adj (I > 0)
-        // For worse conditions: only include rows with negative % Adj (I <= 0)
+        // For better conditions: include rows with positive or zero % Adj (I >= 0)
+        // For worse conditions: include rows with negative or zero % Adj (I <= 0)
         let sumAdjusted, sumNorm;
 
         if (isBetter) {
-          // Only sum rows where % Adj > 0
-          sumAdjusted = conditionRowNums.map(r => `IF(I${r}>0,G${r},0)`).join('+');
-          sumNorm = conditionRowNums.map(r => `IF(I${r}>0,F${r},0)`).join('+');
+          // Only sum rows where % Adj >= 0 (include zero and positive, exclude negative)
+          sumAdjusted = conditionRowNums.map(r => `IF(I${r}>=0,G${r},0)`).join('+');
+          sumNorm = conditionRowNums.map(r => `IF(I${r}>=0,F${r},0)`).join('+');
         } else if (isWorse) {
-          // Only sum rows where % Adj <= 0
+          // Only sum rows where % Adj <= 0 (include zero and negative, exclude positive)
           sumAdjusted = conditionRowNums.map(r => `IF(I${r}<=0,G${r},0)`).join('+');
           sumNorm = conditionRowNums.map(r => `IF(I${r}<=0,F${r},0)`).join('+');
         } else {
