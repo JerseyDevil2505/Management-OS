@@ -735,7 +735,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         if (!conditionAdjustments[code]) {
           conditionAdjustments[code] = {
             description: cond.description,
-            sumNormValue: 0,
+            sumAvgValue: 0,
             sumAdjustedValue: 0,
             totalProperties: 0,
             validVCSCount: 0
@@ -759,7 +759,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         }
 
         if (includeInCalc) {
-          conditionAdjustments[code].sumNormValue += cond.avgNormValue || 0;
+          conditionAdjustments[code].sumAvgValue += cond.avgValue || 0;
           conditionAdjustments[code].sumAdjustedValue += cond.adjustedValue || 0;
           conditionAdjustments[code].validVCSCount++;
         }
