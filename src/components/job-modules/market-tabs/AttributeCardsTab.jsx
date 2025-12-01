@@ -967,10 +967,22 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     // Apply styles
     const range = XLSX.utils.decode_range(ws['!ref']);
 
+    // Find summary section start (look for "All VCS Combined" row)
+    let summaryStartRow = -1;
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      const cellA = XLSX.utils.encode_cell({ r: R, c: 1 });
+      if (ws[cellA] && ws[cellA].v === 'All VCS Combined') {
+        summaryStartRow = R;
+        break;
+      }
+    }
+
     for (let R = range.s.r; R <= range.e.r; R++) {
       for (let C = range.s.c; C <= range.e.c; C++) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
         if (!ws[cellAddress]) continue;
+
+        const isSummarySection = summaryStartRow !== -1 && R >= summaryStartRow;
 
         // Header row (row 0 for main data) and summary headers
         if (R === 0 || ws[cellAddress].v === 'Condition' || ws[cellAddress].v === 'VCS' || ws[cellAddress].v === 'All VCS Combined') {
@@ -980,20 +992,25 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         else {
           const style = { ...baseStyle };
 
-          // Number formats
-          if (C === COL.AVG_NORM_VALUE || C === COL.ADJ_VALUE || C === COL.FLAT_ADJ) {
-            style.numFmt = '$#,##0';
-          } else if (C === COL.PCT_ADJ || C === 3) {
-            style.numFmt = '0%';
-          } else if (C === COL.COUNT || C === COL.AVG_SFLA || C === 1 || C === 2) {
-            // COUNT (main data), Total Count (summary), Flat Adj (summary column 2)
-            // Note: In summary, column 2 is Flat Adj which should be currency, but column 1 is Total Count
-            if (C === 2 && R > rows.length - 10) {
-              // Summary section Flat Adj column
-              style.numFmt = '$#,##0';
-            } else {
-              // COUNT columns and SFLA
-              style.numFmt = '#,##0';
+          if (isSummarySection) {
+            // Summary columns: Condition, Total Count, Flat Adj, % Adj
+            if (C === 1) {
+              style.numFmt = '#,##0'; // Total Count
+            } else if (C === 2) {
+              style.numFmt = '$#,##0'; // Flat Adj
+            } else if (C === 3) {
+              style.numFmt = '0%'; // % Adj
+            }
+          } else {
+            // Main data columns
+            if (C === COL.COUNT) {
+              style.numFmt = '#,##0'; // Count
+            } else if (C === COL.AVG_SFLA) {
+              style.numFmt = '#,##0'; // Avg SFLA
+            } else if (C === COL.AVG_NORM_VALUE || C === COL.ADJ_VALUE || C === COL.FLAT_ADJ) {
+              style.numFmt = '$#,##0'; // Currency columns
+            } else if (C === COL.PCT_ADJ) {
+              style.numFmt = '0%'; // % Adj
             }
           }
 
