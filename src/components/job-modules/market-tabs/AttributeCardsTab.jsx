@@ -648,7 +648,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                               {cond.avgYear || '-'}
                             </td>
                             <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
-                              {formatCurrency(cond.adjustedValue)}
+                              {formatCurrency(normalized)}
                             </td>
                             <td style={{
                               padding: '8px 12px',
