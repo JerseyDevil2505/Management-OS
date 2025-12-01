@@ -806,8 +806,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     const headers = ['VCS', 'Condition', 'Count', 'Avg SFLA', 'Avg Year Built', 'Avg Norm Value', 'Adjusted Value', 'Flat Adj', '% Adj', 'Baseline'];
     rows.push(headers);
 
-    const headerRowNum = rows.length; // Track header position (1-based will be headerRowNum)
-
     // COL indexes (0-based)
     const COL = {
       VCS: 0, CONDITION: 1, COUNT: 2, AVG_SFLA: 3, AVG_YEAR: 4,
@@ -816,6 +814,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
     // Collect all data by VCS with baseline info
     const vcsSections = [];
+    const dataRowRanges = {}; // Track row ranges for each condition for summation
+
     Object.entries(data).forEach(([vcs, conditions]) => {
       // Find the baseline (AVERAGE or first condition)
       const baselineCode = Object.keys(conditions).find(code => {
@@ -857,6 +857,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       section.conditionRows.forEach((cond, idx) => {
         const rowNum = rows.length + 1; // Excel row number (1-based)
 
+        // Track rows for summary summation
+        if (!dataRowRanges[cond.description]) {
+          dataRowRanges[cond.description] = { rows: [], count: 0 };
+        }
+        dataRowRanges[cond.description].rows.push(rowNum);
+        dataRowRanges[cond.description].count += cond.count;
+
         const row = [];
         row[COL.VCS] = cond.vcs;
         row[COL.CONDITION] = cond.description;
@@ -865,29 +872,20 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         row[COL.AVG_YEAR] = cond.avgYear;
         row[COL.AVG_NORM_VALUE] = cond.avgNormValue;
 
-        // Adjusted Value - FORMULA using Jim's formula:
-        // =F{row} + (((D{row} - D{baselineRow}) * (F{row} / D{row}) * 0.5))
-        // But we need baseline per VCS, so we'll calculate it differently
-        // For baseline: use avgNormValue directly
-        // For others: F{row} + (((baseline_sfla - D{row}) * (F{row} / D{row}) * 0.5))
-
         if (cond.isBaseline) {
-          row[COL.ADJ_VALUE] = cond.avgNormValue; // Baseline uses its own value
+          row[COL.ADJ_VALUE] = cond.avgNormValue;
           row[COL.FLAT_ADJ] = 0;
           row[COL.PCT_ADJ] = 0;
         } else {
-          // Jim's formula: price + ((targetSize - currentSize) * (price / currentSize) * 0.5)
-          // Here: avgNormValue + ((baselineSFLA - avgSFLA) * (avgNormValue / avgSFLA) * 0.5)
+          // Jim's formula: avgNormValue + ((baselineSFLA - avgSFLA) * (avgNormValue / avgSFLA) * 0.5)
           row[COL.ADJ_VALUE] = {
             f: `F${rowNum}+((${cond.baselineAvgSFLA}-D${rowNum})*(F${rowNum}/D${rowNum})*0.5)`,
             t: 'n'
           };
-          // Flat Adj = Adjusted Value - Baseline Value
           row[COL.FLAT_ADJ] = {
             f: `G${rowNum}-${cond.baselineAvgValue}`,
             t: 'n'
           };
-          // % Adj = Flat Adj / Baseline Value
           row[COL.PCT_ADJ] = {
             f: `IF(${cond.baselineAvgValue}=0,0,H${rowNum}/${cond.baselineAvgValue})`,
             t: 'n'
@@ -900,75 +898,51 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       });
     });
 
-    // Summary section - aggregate across all VCS
+    // Summary section - using summation approach
     rows.push([]); // Blank row
-    rows.push([]); // Blank row
-    rows.push(['OVERALL SUMMARY - All VCS Combined']);
     rows.push([]); // Blank row
 
-    const summaryHeaders = ['Condition', 'Total Count', 'Avg SFLA', 'Avg Norm Value', 'Adjusted Value', 'Flat Adj', '% Adj'];
+    // Summary header aligned over "Total Count" column (column B, index 1)
+    const summaryHeaderRow = [];
+    summaryHeaderRow[0] = ''; // Empty column A
+    summaryHeaderRow[1] = 'All VCS Combined'; // Column B (over Total Count)
+    rows.push(summaryHeaderRow);
+    rows.push([]); // Blank row
+
+    const summaryHeaders = ['Condition', 'Total Count', 'Flat Adj', '% Adj'];
     rows.push(summaryHeaders);
 
-    // Aggregate data by condition description across all VCS
-    const summaryByCondition = {};
-    Object.entries(data).forEach(([vcs, conditions]) => {
-      Object.entries(conditions).forEach(([code, cond]) => {
-        const desc = cond.description;
-        if (!summaryByCondition[desc]) {
-          summaryByCondition[desc] = {
-            totalCount: 0,
-            totalSFLA: 0,
-            totalNormValue: 0,
-            entries: []
-          };
-        }
-        summaryByCondition[desc].totalCount += cond.count;
-        summaryByCondition[desc].totalSFLA += (cond.avgSize || 0) * cond.count;
-        summaryByCondition[desc].totalNormValue += (cond.avgValue || 0) * cond.count;
-        summaryByCondition[desc].entries.push(cond);
-      });
-    });
-
-    // Find baseline in summary (AVERAGE condition)
-    const baselineDesc = Object.keys(summaryByCondition).find(desc => {
+    // Find baseline description
+    const baselineDesc = Object.keys(dataRowRanges).find(desc => {
       const upper = desc.toUpperCase();
       return upper === 'AVERAGE' || upper === 'AVG' || upper === 'AVERAGE CONDITION';
-    }) || Object.keys(summaryByCondition)[0];
+    }) || Object.keys(dataRowRanges)[0];
 
-    const baselineSummary = summaryByCondition[baselineDesc];
-    const baselineSummaryAvgSFLA = baselineSummary ? baselineSummary.totalSFLA / baselineSummary.totalCount : 0;
-    const baselineSummaryAvgValue = baselineSummary ? baselineSummary.totalNormValue / baselineSummary.totalCount : 0;
+    // Get baseline row numbers for summation
+    const baselineRowNums = dataRowRanges[baselineDesc]?.rows || [];
 
-    Object.entries(summaryByCondition).forEach(([desc, summary]) => {
+    // Create summary rows
+    Object.entries(dataRowRanges).forEach(([desc, info]) => {
       const rowNum = rows.length + 1;
-      const avgSFLA = summary.totalSFLA / summary.totalCount;
-      const avgNormValue = summary.totalNormValue / summary.totalCount;
       const isBaseline = desc === baselineDesc;
+      const conditionRowNums = info.rows;
 
       const summaryRow = [];
-      summaryRow[0] = desc;
-      summaryRow[1] = summary.totalCount;
-      summaryRow[2] = avgSFLA;
-      summaryRow[3] = avgNormValue;
+      summaryRow[0] = desc; // Condition
+      summaryRow[1] = info.count; // Total Count
 
       if (isBaseline) {
-        summaryRow[4] = avgNormValue;
-        summaryRow[5] = 0;
-        summaryRow[6] = 0;
+        summaryRow[2] = 0; // Flat Adj
+        summaryRow[3] = 0; // % Adj
       } else {
-        // Adjusted Value formula
-        summaryRow[4] = {
-          f: `D${rowNum}+((${baselineSummaryAvgSFLA}-C${rowNum})*(D${rowNum}/C${rowNum})*0.5)`,
-          t: 'n'
-        };
-        // Flat Adj
-        summaryRow[5] = {
-          f: `E${rowNum}-${baselineSummaryAvgValue}`,
-          t: 'n'
-        };
-        // % Adj
-        summaryRow[6] = {
-          f: `IF(${baselineSummaryAvgValue}=0,0,F${rowNum}/${baselineSummaryAvgValue})`,
+        // Flat Adj = SUM of all Flat Adj values for this condition
+        const flatAdjRefs = conditionRowNums.map(r => `H${r}`).join('+');
+        summaryRow[2] = { f: flatAdjRefs, t: 'n' };
+
+        // % Adj = Flat Adj / SUM of baseline adjusted values
+        const baselineAdjRefs = baselineRowNums.map(r => `G${r}`).join('+');
+        summaryRow[3] = {
+          f: `IF((${baselineAdjRefs})=0,0,C${rowNum}/(${baselineAdjRefs}))`,
           t: 'n'
         };
       }
