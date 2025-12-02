@@ -2811,8 +2811,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     rows.push(summaryHeaders);
 
     // Calculate summary stats
-    const firstDataRow = 2; // Row 2 in Excel (after header row 1)
-    const lastDataRow = vcsKeys.length + 1; // Last VCS row
+    const firstDataRow = 5; // Row 5 in Excel (after title, description, blank, header rows)
+    const lastDataRow = vcsKeys.length + 4; // Last VCS row
 
     // VCS Count
     const vcsCountRow = [];
