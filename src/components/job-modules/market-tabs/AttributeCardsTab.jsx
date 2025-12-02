@@ -2885,6 +2885,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       }
     }
 
+    const titleStyle = {
+      font: { name: 'Leelawadee', sz: 12, bold: true },
+      alignment: { horizontal: 'left', vertical: 'center' }
+    };
+
+    const descStyle = {
+      font: { name: 'Leelawadee', sz: 10, italic: true },
+      alignment: { horizontal: 'left', vertical: 'center' }
+    };
+
     for (let R = range.s.r; R <= range.e.r; R++) {
       for (let C = range.s.c; C <= range.e.c; C++) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
@@ -2892,8 +2902,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
         const isSummarySection = summaryStartRow !== -1 && R >= summaryStartRow;
 
-        // Header row
-        if (R === 0 || ws[cellAddress].v === 'VCS' || ws[cellAddress].v === 'Overall Summary' || ws[cellAddress].v === 'Metric') {
+        // Title row (row 0)
+        if (R === 0) {
+          ws[cellAddress].s = titleStyle;
+        }
+        // Description row (row 1)
+        else if (R === 1) {
+          ws[cellAddress].s = descStyle;
+        }
+        // Header rows
+        else if (R === 3 || ws[cellAddress].v === 'VCS' || ws[cellAddress].v === 'Overall Summary' || ws[cellAddress].v === 'Metric') {
           ws[cellAddress].s = headerStyle;
         }
         // Data rows
@@ -2904,10 +2922,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             // Summary section formatting
             if (C === 1 && ws[cellAddress].z === '0.0%') {
               style.numFmt = '0.0%';
+            } else if (C === 1 && ws[cellAddress].z === '$#,##0') {
+              style.numFmt = '$#,##0';
             } else if (C === 1) {
               style.numFmt = '#,##0';
             }
-          } else {
+          } else if (R >= 4) { // Data rows start at row 4 (0-indexed: row 4 = Excel row 5)
             // Main data columns
             if (C === COL.WITH_COUNT || C === COL.WITHOUT_COUNT) {
               style.numFmt = '#,##0'; // Count columns
