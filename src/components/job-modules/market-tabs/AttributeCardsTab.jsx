@@ -2801,9 +2801,15 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     const firstDataRow = 2; // Row 2 in Excel (after header row 1)
     const lastDataRow = vcsKeys.length + 1; // Last VCS row
 
+    // VCS Count
+    const vcsCountRow = [];
+    vcsCountRow[0] = 'VCS Analyzed';
+    vcsCountRow[1] = vcsKeys.length;
+    rows.push(vcsCountRow);
+
     // Total properties with cards
     const totalWithRow = [];
-    totalWithRow[0] = 'Total Properties With Cards';
+    totalWithRow[0] = 'Total Sales With Additional Cards';
     totalWithRow[1] = {
       f: `SUM(B${firstDataRow}:B${lastDataRow})`,
       t: 'n'
@@ -2812,12 +2818,22 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
     // Total properties without cards
     const totalWithoutRow = [];
-    totalWithoutRow[0] = 'Total Properties Without Cards';
+    totalWithoutRow[0] = 'Total Sales Without Additional Cards';
     totalWithoutRow[1] = {
       f: `SUM(F${firstDataRow}:F${lastDataRow})`,
       t: 'n'
     };
     rows.push(totalWithoutRow);
+
+    // Average Dollar Impact
+    const avgDollarRow = [];
+    avgDollarRow[0] = 'Average Dollar Impact';
+    avgDollarRow[1] = {
+      f: `AVERAGE(K${firstDataRow}:K${lastDataRow})`,
+      t: 'n',
+      z: '$#,##0'
+    };
+    rows.push(avgDollarRow);
 
     // Average % Adjustment across all VCS
     const avgPctRow = [];
