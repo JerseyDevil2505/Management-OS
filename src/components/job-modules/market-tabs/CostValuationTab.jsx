@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Calculator } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
+import * as XLSX from 'xlsx-js-style';
 
 const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpdateJobCache }) => {
   const currentYear = new Date().getFullYear();
@@ -299,15 +300,51 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
     return rows.length % 2 !== 0 ? rows[mid] : (rows[mid - 1] + rows[mid]) / 2;
   }, [filtered, includedMap, editedLandMap]);
 
-  // Export CSV of current filtered results
-  const exportCsv = () => {
+  // Export to Excel with formulas and formatting
+  const exportToExcel = () => {
     if (!filtered || filtered.length === 0) return alert('No data to export');
+
     const headers = [
-      'Incl','Block','Lot','Qualifier','Card','Location','VCS','Sales Date','Sale Price','Sale NU','Price Time','Year Built','Depr','Building Class','Living Area','Current Land','Det Item','Base Cost','Repl w/Depr','Improv','CCF','Adjusted Ratio','Adjusted Value'
+      'Incl','Block','Lot','Qualifier','Card','Location','VCS','Sales Date','Sale Price','Sale NU','Price Time','Year Built','Depr','Building Class','Living Area','Current Land','Det Item','Base Cost','Repl w/Depr','Improv','CCF','Adjusted Value','Adjusted Ratio'
     ];
-    const rows = filtered.map(p => {
+
+    // Column indexes for reference (0-based)
+    const COL = {
+      INCL: 0, BLOCK: 1, LOT: 2, QUAL: 3, CARD: 4, LOCATION: 5, VCS: 6,
+      SALE_DATE: 7, SALE_PRICE: 8, SALE_NU: 9, PRICE_TIME: 10, YEAR_BUILT: 11,
+      DEPR: 12, BLDG_CLASS: 13, LIVING_AREA: 14, CURRENT_LAND: 15, DET_ITEM: 16,
+      BASE_COST: 17, REPL_DEPR: 18, IMPROV: 19, CCF: 20, ADJ_VALUE: 21, ADJ_RATIO: 22
+    };
+
+    // Base cell style - Leelawadee, size 10, centered
+    const baseStyle = {
+      font: { name: 'Leelawadee', sz: 10 },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    // Header style - bold, no borders
+    const headerStyle = {
+      font: { name: 'Leelawadee', sz: 10, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    // Number formats
+    const currencyFormat = '$#,##0';
+    const percentFormat = '0%';
+    const decimalFormat = '0.00';
+
+    // Create worksheet data
+    const wsData = [];
+
+    // Add headers
+    wsData.push(headers);
+
+    // Add data rows with formulas
+    filtered.forEach((p, idx) => {
+      const rowNum = idx + 2; // Excel row number (1-based, +1 for header)
       const key = p.property_composite_key || `${p.property_block}-${p.property_lot}-${p.property_card}`;
       const included = includedMap[key] !== false;
+
       const saleDate = p.sales_date ? new Date(p.sales_date).toISOString().slice(0,10) : '';
       const salePrice = (priceBasis === 'price_time' && p.values_norm_time && p.values_norm_time > 0) ? Number(p.values_norm_time) : (p.sales_price !== undefined && p.sales_price !== null ? Number(p.sales_price) : 0);
       const timeNorm = (p.values_norm_time !== undefined && p.values_norm_time !== null) ? Number(p.values_norm_time) : '';
@@ -315,31 +352,212 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
       const baseCost = (p.values_base_cost !== undefined && p.values_base_cost !== null) ? Number(p.values_base_cost) : 0;
       const cama = (editedLandMap && editedLandMap[key] !== undefined && editedLandMap[key] !== '') ? Number(editedLandMap[key]) : (p.values_cama_land !== undefined && p.values_cama_land !== null ? Number(p.values_cama_land) : 0);
       const yearBuilt = p.asset_year_built || '';
-      const depr = yearBuilt ? (1 - ((currentYear - parseInt(yearBuilt, 10)) / 100)) : '';
-      const replWithDepr = (depr !== '' ? Math.round((detItems + baseCost) * depr) : '');
-      const improv = (salePrice !== '' ? Math.round(salePrice - cama - detItems) : '');
-      const ccf = (replWithDepr && replWithDepr !== '' && replWithDepr !== 0) ? (improv / replWithDepr) : '';
-      // adjusted value = Current Land + ((Base Cost * Depr) * CCF) + Det Item
-      const adjustedValue = (cama !== '' ? (Number(cama) + ((Number(baseCost) * (depr !== '' ? Number(depr) : 0)) * (ccf !== '' ? Number(ccf) : 0)) + Number(detItems)) : '');
-      const adjustedRatio = (salePrice && adjustedValue !== '' && salePrice !== 0) ? (Number(adjustedValue) / Number(salePrice)) : '';
       const vcs = p.new_vcs || p.property_vcs || '';
+      const livingArea = getLivingAreaValue(p);
 
-      return [included ? '1' : '0', p.property_block || '', p.property_lot || '', p.asset_qualifier || p.qualifier || '', p.property_card || '', p.property_location || '', vcs, saleDate, salePrice, p.sales_nu || '', timeNorm, yearBuilt, depr !== '' ? Number(depr).toFixed(3) : '', p.asset_building_class || '', (getLivingAreaValue(p) !== null ? getLivingAreaValue(p) : ''), cama, p.values_det_items || '', baseCost || '', replWithDepr !== '' ? Number(replWithDepr).toFixed(0) : '', improv !== '' ? Number(improv).toFixed(0) : '', ccf ? Number(ccf).toFixed(2) : '', adjustedRatio ? Number(adjustedRatio).toFixed(2) : '', adjustedValue !== '' ? Number(adjustedValue).toFixed(0) : ''];
+      const row = [];
+
+      // Incl
+      row[COL.INCL] = included ? '1' : '0';
+      // Block, Lot, Qualifier, Card, Location, VCS
+      row[COL.BLOCK] = p.property_block || '';
+      row[COL.LOT] = p.property_lot || '';
+      row[COL.QUAL] = p.asset_qualifier || p.qualifier || '';
+      row[COL.CARD] = p.property_card || '';
+      row[COL.LOCATION] = p.property_location || '';
+      row[COL.VCS] = vcs;
+
+      // Sales Date, Sale Price, Sale NU, Price Time
+      row[COL.SALE_DATE] = saleDate;
+      row[COL.SALE_PRICE] = salePrice || '';
+      row[COL.SALE_NU] = p.sales_nu || '';
+      row[COL.PRICE_TIME] = timeNorm || '';
+
+      // Year Built
+      row[COL.YEAR_BUILT] = yearBuilt;
+
+      // Depr - FORMULA: =1-((CURRENT_YEAR - L{rowNum})/100)
+      if (yearBuilt) {
+        row[COL.DEPR] = { f: `1-((${currentYear}-L${rowNum})/100)`, t: 'n' };
+      } else {
+        row[COL.DEPR] = '';
+      }
+
+      // Building Class, Living Area
+      row[COL.BLDG_CLASS] = p.asset_building_class || '';
+      row[COL.LIVING_AREA] = livingArea !== null ? livingArea : '';
+
+      // Current Land, Det Item, Base Cost
+      row[COL.CURRENT_LAND] = cama || 0;
+      row[COL.DET_ITEM] = detItems || 0;  // Always 0 instead of empty to prevent #VALUE errors
+      row[COL.BASE_COST] = baseCost || 0;
+
+      // Repl w/Depr - FORMULA: =(Q{rowNum} + R{rowNum}) * M{rowNum}
+      if (yearBuilt) {
+        row[COL.REPL_DEPR] = { f: `(Q${rowNum}+R${rowNum})*M${rowNum}`, t: 'n' };
+      } else {
+        row[COL.REPL_DEPR] = '';
+      }
+
+      // Improv - FORMULA: =I{rowNum} - P{rowNum} - Q{rowNum}
+      if (salePrice) {
+        row[COL.IMPROV] = { f: `I${rowNum}-P${rowNum}-Q${rowNum}`, t: 'n' };
+      } else {
+        row[COL.IMPROV] = '';
+      }
+
+      // CCF - FORMULA: =T{rowNum} / S{rowNum}
+      if (yearBuilt && salePrice) {
+        row[COL.CCF] = { f: `IF(S${rowNum}=0,"",T${rowNum}/S${rowNum})`, t: 'n' };
+      } else {
+        row[COL.CCF] = '';
+      }
+
+      // Adjusted Value - FORMULA: =P{rowNum} + ((R{rowNum} * M{rowNum}) * U{rowNum}) + Q{rowNum}
+      if (yearBuilt && salePrice) {
+        row[COL.ADJ_VALUE] = { f: `P${rowNum}+((R${rowNum}*M${rowNum})*U${rowNum})+Q${rowNum}`, t: 'n' };
+      } else {
+        row[COL.ADJ_VALUE] = '';
+      }
+
+      // Adjusted Ratio - FORMULA: =V{rowNum} / I{rowNum}
+      if (yearBuilt && salePrice) {
+        row[COL.ADJ_RATIO] = { f: `IF(I${rowNum}=0,"",V${rowNum}/I${rowNum})`, t: 'n' };
+      } else {
+        row[COL.ADJ_RATIO] = '';
+      }
+
+      wsData.push(row);
     });
 
-    const csvContent = [headers, ...rows].map(r => r.map(cell => {
-      if (cell === null || cell === undefined) return '';
-      const str = String(cell).replace(/"/g, '""');
-      return `"${str}"`;
-    }).join(',')).join('\n');
+    // Add summary row
+    const summaryRowNum = filtered.length + 2; // +1 for header, +1 for next row
+    const lastDataRow = filtered.length + 1; // Last row with data
+    const summaryRow = [];
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `cost_valuation_export_${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    // Add TOTALS label in VCS column
+    summaryRow[COL.INCL] = '';
+    summaryRow[COL.BLOCK] = '';
+    summaryRow[COL.LOT] = '';
+    summaryRow[COL.QUAL] = '';
+    summaryRow[COL.CARD] = '';
+    summaryRow[COL.LOCATION] = '';
+    summaryRow[COL.VCS] = 'TOTALS';
+    summaryRow[COL.SALE_DATE] = '';
+
+    // Summary formulas
+    summaryRow[COL.SALE_PRICE] = { f: `SUM(I2:I${lastDataRow})`, t: 'n' };
+    summaryRow[COL.SALE_NU] = '';
+    summaryRow[COL.PRICE_TIME] = '';
+    summaryRow[COL.YEAR_BUILT] = '';
+    summaryRow[COL.DEPR] = '';
+    summaryRow[COL.BLDG_CLASS] = '';
+    summaryRow[COL.LIVING_AREA] = '';
+    summaryRow[COL.CURRENT_LAND] = '';
+    summaryRow[COL.DET_ITEM] = '';
+    summaryRow[COL.BASE_COST] = '';
+    summaryRow[COL.REPL_DEPR] = { f: `SUM(S2:S${lastDataRow})`, t: 'n' };
+    summaryRow[COL.IMPROV] = { f: `SUM(T2:T${lastDataRow})`, t: 'n' };
+    summaryRow[COL.CCF] = { f: `IF(S${summaryRowNum}=0,"",T${summaryRowNum}/S${summaryRowNum})`, t: 'n' }; // Overall CCF
+    summaryRow[COL.ADJ_VALUE] = { f: `SUM(V2:V${lastDataRow})`, t: 'n' };
+    summaryRow[COL.ADJ_RATIO] = { f: `IF(I${summaryRowNum}=0,"",V${summaryRowNum}/I${summaryRowNum})`, t: 'n' }; // Overall Adjusted Ratio
+
+    wsData.push(summaryRow);
+
+    // Create workbook and worksheet
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Set column widths
+    const colWidths = [
+      { wch: 5 },  // Incl
+      { wch: 8 },  // Block
+      { wch: 8 },  // Lot
+      { wch: 10 }, // Qualifier
+      { wch: 6 },  // Card
+      { wch: 25 }, // Location
+      { wch: 15 }, // VCS
+      { wch: 12 }, // Sales Date
+      { wch: 12 }, // Sale Price
+      { wch: 8 },  // Sale NU
+      { wch: 12 }, // Price Time
+      { wch: 10 }, // Year Built
+      { wch: 8 },  // Depr
+      { wch: 12 }, // Building Class
+      { wch: 12 }, // Living Area
+      { wch: 12 }, // Current Land
+      { wch: 12 }, // Det Item
+      { wch: 12 }, // Base Cost
+      { wch: 12 }, // Repl w/Depr
+      { wch: 12 }, // Improv
+      { wch: 8 },  // CCF
+      { wch: 14 }, // Adjusted Value
+      { wch: 12 }  // Adjusted Ratio
+    ];
+    ws['!cols'] = colWidths;
+
+    // Apply styles to all cells
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    const summaryRowIndex = filtered.length + 1; // 0-based index of summary row
+
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws[cellAddress]) continue;
+
+        // Apply base style
+        if (R === 0) {
+          // Header row
+          ws[cellAddress].s = headerStyle;
+        } else if (R === summaryRowIndex) {
+          // Summary row - bold
+          const style = {
+            font: { name: 'Leelawadee', sz: 10, bold: true },
+            alignment: { horizontal: 'center', vertical: 'center' }
+          };
+
+          // Apply number formats based on column
+          if (C === COL.SALE_PRICE || C === COL.PRICE_TIME || C === COL.CURRENT_LAND ||
+              C === COL.DET_ITEM || C === COL.BASE_COST || C === COL.REPL_DEPR ||
+              C === COL.IMPROV || C === COL.ADJ_VALUE) {
+            style.numFmt = currencyFormat;
+          } else if (C === COL.DEPR) {
+            style.numFmt = decimalFormat;
+          } else if (C === COL.CCF) {
+            style.numFmt = decimalFormat;
+          } else if (C === COL.ADJ_RATIO) {
+            style.numFmt = percentFormat;
+          }
+
+          ws[cellAddress].s = style;
+        } else {
+          // Data rows
+          const style = { ...baseStyle };
+
+          // Apply number formats based on column
+          if (C === COL.SALE_PRICE || C === COL.PRICE_TIME || C === COL.CURRENT_LAND ||
+              C === COL.DET_ITEM || C === COL.BASE_COST || C === COL.REPL_DEPR ||
+              C === COL.IMPROV || C === COL.ADJ_VALUE) {
+            style.numFmt = currencyFormat;
+          } else if (C === COL.DEPR) {
+            style.numFmt = decimalFormat;
+          } else if (C === COL.CCF) {
+            style.numFmt = decimalFormat;
+          } else if (C === COL.ADJ_RATIO) {
+            style.numFmt = percentFormat;
+          }
+
+          ws[cellAddress].s = style;
+        }
+      }
+    }
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(wb, ws, 'Cost Valuation Analysis');
+
+    // Generate Excel file
+    const fileName = `cost_valuation_analysis_${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(wb, fileName);
   };
 
 
@@ -547,9 +765,9 @@ const CostValuationTab = ({ jobData, properties = [], marketLandData = {}, onUpd
           </button>
           <button
             className="px-3 py-2 bg-indigo-600 text-white rounded text-sm"
-            onClick={() => exportCsv()}
+            onClick={() => exportToExcel()}
           >
-            Export CSV
+            Export Excel
           </button>
         </div>
       </div>
