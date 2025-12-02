@@ -3299,6 +3299,21 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           const flatAdj = adjustedPrice && withoutAvgPrice > 0 ? adjustedPrice - withoutAvgPrice : null;
           const pctAdj = adjustedPrice && withoutAvgPrice > 0 ? ((adjustedPrice - withoutAvgPrice) / withoutAvgPrice) * 100 : null;
 
+          // Log for debugging first few VCS
+          if (Object.keys(vcsData).indexOf(vcs) < 3) {
+            console.log(`[Additional Cards UI] VCS ${vcs}:`, {
+              withCount: data.with.n,
+              withSFLA,
+              withPrice: withAvgPrice,
+              withoutCount: data.without.n,
+              withoutSFLA,
+              withoutPrice: withoutAvgPrice,
+              adjusted: adjustedPrice,
+              flatAdj,
+              pctAdj
+            });
+          }
+
           return (
             <div key={vcs} style={{ marginBottom: '15px', border: '1px solid #E5E7EB', borderRadius: '6px' }}>
               {/* VCS Header Row */}
