@@ -3744,9 +3744,26 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0' }}>
                   All Additional Cards Detail
                 </h4>
-                <span style={{ fontSize: '12px', color: '#6B7280', fontWeight: '500' }}>
-                  ({(additionalResults.additionalCardsList || []).length} cards)
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '12px', color: '#6B7280', fontWeight: '500' }}>
+                    ({(additionalResults.additionalCardsList || []).length} cards)
+                  </span>
+                  <button
+                    onClick={exportAllAdditionalCardsDetail}
+                    style={{
+                      padding: '6px 12px',
+                      backgroundColor: '#10B981',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      fontWeight: '500',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Export Detail
+                  </button>
+                </div>
               </div>
 
               <div style={{ overflowX: 'auto' }}>
