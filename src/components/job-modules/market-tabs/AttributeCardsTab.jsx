@@ -3348,80 +3348,66 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
                         <tr style={{ backgroundColor: '#F3F4F6' }}>
-                          <th style={{ padding: '4px 6px', textAlign: 'left', fontSize: '10px', fontWeight: '600' }}>Type</th>
-                          <th style={{ padding: '4px 6px', textAlign: 'center', fontSize: '10px', fontWeight: '600' }}>Count(all)</th>
-                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Avg SFLA(all)</th>
-                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Avg YearBuilt(all)</th>
-                          <th style={{ padding: '4px 6px', textAlign: 'center', fontSize: '10px', fontWeight: '600' }}>Count(sales)</th>
-                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Avg SFLA(sales)</th>
-                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Avg Year Built(sales)</th>
-                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Adjusted</th>
-                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Impact $</th>
-                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Impact %</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: '600' }}>Type</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: '11px', fontWeight: '600' }}>Count</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg SFLA</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Year</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Price</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Adjusted Price</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Impact $</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Impact %</th>
                         </tr>
                       </thead>
                       <tbody>
                         <tr style={{ backgroundColor: '#F8FAFC' }}>
-                          <td style={{ padding: '4px 6px', fontSize: '11px', fontWeight: '500', color: '#1E293B' }}>With Cards</td>
-                          <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>{data.with.n}</td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
-                            {data.with.avg_sfla ? data.with.avg_sfla.toLocaleString() : '-'}
+                          <td style={{ padding: '8px 10px', fontSize: '12px', fontWeight: '500', color: '#1E293B' }}>With Cards</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'center', fontSize: '12px' }}>{data.with.n}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+                            {withAvgSFLA ? Math.round(withAvgSFLA).toLocaleString() : '-'}
                           </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
                             {data.with.avg_year_built || '-'}
                           </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>
-                            {withSalesCount}
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+                            {withAvgPrice ? formatCurrency(withAvgPrice) : '-'}
                           </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
-                            {withSalesAvgSFLA ? Math.round(withSalesAvgSFLA).toLocaleString() : '-'}
-                          </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
-                            {withSalesAvgYear ? Math.round(withSalesAvgYear) : '-'}
-                          </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px', fontWeight: '500' }}>
-                            {data.adjusted ? formatCurrency(data.adjusted) : '-'}
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px', fontWeight: '500' }}>
+                            {adjustedPrice ? formatCurrency(adjustedPrice) : '-'}
                           </td>
                           <td style={{
-                            padding: '4px 6px',
+                            padding: '8px 10px',
                             textAlign: 'right',
-                            fontSize: '11px',
+                            fontSize: '12px',
                             fontWeight: '500',
-                            color: data.flat_adj > 0 ? '#059669' : data.flat_adj < 0 ? '#B45309' : '#6B7280'
+                            color: flatAdj !== null && flatAdj > 0 ? '#059669' : flatAdj !== null && flatAdj < 0 ? '#DC2626' : '#6B7280'
                           }}>
-                            {data.flat_adj ? formatCurrency(data.flat_adj) : '-'}
+                            {flatAdj !== null ? formatCurrency(flatAdj) : '-'}
                           </td>
                           <td style={{
-                            padding: '4px 6px',
+                            padding: '8px 10px',
                             textAlign: 'right',
-                            fontSize: '11px',
+                            fontSize: '12px',
                             fontWeight: '500',
-                            color: data.pct_adj > 0 ? '#059669' : data.pct_adj < 0 ? '#B45309' : '#6B7280'
+                            color: pctAdj !== null && pctAdj > 0 ? '#059669' : pctAdj !== null && pctAdj < 0 ? '#DC2626' : '#6B7280'
                           }}>
-                            {data.pct_adj ? `${data.pct_adj.toFixed(1)}%` : '-'}
+                            {pctAdj !== null ? `${pctAdj.toFixed(1)}%` : '-'}
                           </td>
                         </tr>
                         <tr style={{ backgroundColor: '#F0F9FF' }}>
-                          <td style={{ padding: '4px 6px', fontSize: '11px', fontWeight: '500', color: '#1E40AF' }}>Without Cards (Baseline)</td>
-                          <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>{data.without.n}</td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
-                            {data.without.avg_sfla ? data.without.avg_sfla.toLocaleString() : '-'}
+                          <td style={{ padding: '8px 10px', fontSize: '12px', fontWeight: '500', color: '#1E40AF' }}>Without Cards (Baseline)</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'center', fontSize: '12px' }}>{data.without.n}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+                            {withoutAvgSFLA ? Math.round(withoutAvgSFLA).toLocaleString() : '-'}
                           </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
                             {data.without.avg_year_built || '-'}
                           </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>
-                            {withoutSalesCount}
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+                            {withoutAvgPrice ? formatCurrency(withoutAvgPrice) : '-'}
                           </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
-                            {withoutSalesAvgSFLA ? Math.round(withoutSalesAvgSFLA).toLocaleString() : '-'}
-                          </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
-                            {withoutSalesAvgYear ? Math.round(withoutSalesAvgYear) : '-'}
-                          </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>Baseline</td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>-</td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>-</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>Baseline</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>-</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>-</td>
                         </tr>
                       </tbody>
                     </table>
