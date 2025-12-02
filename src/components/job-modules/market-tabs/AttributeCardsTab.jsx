@@ -3698,10 +3698,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                           <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
                             {prop.asset_building_class || '-'}
                           </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px', color: !prop.asset_sfla ? '#DC2626' : 'inherit', fontWeight: !prop.asset_sfla ? '500' : 'normal' }}>
                             {prop.asset_sfla ? parseInt(prop.asset_sfla).toLocaleString() : '-'}
                           </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.asset_year_built || '-'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px', color: !prop.asset_year_built ? '#DC2626' : 'inherit', fontWeight: !prop.asset_year_built ? '500' : 'normal' }}>{prop.asset_year_built || '-'}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
                             {prop.sales_price ? formatCurrency(prop.sales_price) : '-'}
                           </td>
