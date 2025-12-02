@@ -2848,13 +2848,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       const row = [];
       row[COL.VCS] = vcs;
       row[COL.WITH_COUNT] = data.with.n || 0;
-      row[COL.WITH_SFLA] = data.with.avg_sfla || '';
+      row[COL.WITH_SFLA] = data.with.avg_sfla || 0;
       row[COL.WITH_YEAR] = data.with.avg_year_built || '';
-      row[COL.WITH_PRICE] = data.with.avg_norm_time || '';
+      row[COL.WITH_PRICE] = data.with.avg_norm_time || 0;
       row[COL.WITHOUT_COUNT] = data.without.n || 0;
-      row[COL.WITHOUT_SFLA] = data.without.avg_sfla || '';
+      row[COL.WITHOUT_SFLA] = data.without.avg_sfla || 0;
       row[COL.WITHOUT_YEAR] = data.without.avg_year_built || '';
-      row[COL.WITHOUT_PRICE] = data.without.avg_norm_time || '';
+      row[COL.WITHOUT_PRICE] = data.without.avg_norm_time || 0;
 
       // Jim formula: Adjust "With Cards" price to "Without Cards" SFLA
       // Formula: ((targetSFLA - saleSFLA) * ((salePrice / saleSFLA) * 0.50)) + salePrice
