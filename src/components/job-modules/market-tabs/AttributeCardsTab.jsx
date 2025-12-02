@@ -2736,8 +2736,14 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       PCT_ADJ: 11
     };
 
-    // Add data rows with formulas
-    const vcsKeys = Object.keys(additionalResults.byVCS).sort();
+    // Add data rows with formulas (only VCS with data)
+    const vcsKeys = Object.keys(additionalResults.byVCS)
+      .filter(vcs => {
+        const data = additionalResults.byVCS[vcs];
+        // Only include VCS that have either with or without cards
+        return (data.with.n > 0 || data.without.n > 0);
+      })
+      .sort();
 
     vcsKeys.forEach(vcs => {
       const data = additionalResults.byVCS[vcs];
