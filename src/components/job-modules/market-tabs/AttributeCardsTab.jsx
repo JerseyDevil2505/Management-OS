@@ -3046,6 +3046,160 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     console.log('✅ Additional Cards Excel export completed');
   };
 
+  // Export function for All Additional Cards Detail
+  const exportAllAdditionalCardsDetail = () => {
+    if (!additionalResults || !additionalResults.additionalCardsList || additionalResults.additionalCardsList.length === 0) {
+      alert('No additional cards detail to export');
+      return;
+    }
+
+    const rows = [];
+
+    // Title row
+    const titleRow = [];
+    titleRow[0] = `All Additional Cards Detail - ${jobData?.job_name || 'Job'}`;
+    rows.push(titleRow);
+
+    // Blank row
+    rows.push([]);
+
+    // Column headers
+    const headers = [
+      'Block',
+      'Lot',
+      'Qualifier',
+      'Card',
+      'Address',
+      'VCS',
+      'Class',
+      'Type/Use',
+      'Building Class',
+      'SFLA',
+      'Year Built',
+      'Sales Price',
+      'Price Time'
+    ];
+    rows.push(headers);
+
+    // Add sorted data rows
+    const sortedCards = getSortedAdditionalCards();
+    sortedCards.forEach(prop => {
+      const row = [];
+      row[0] = prop.property_block || '';
+      row[1] = prop.property_lot || '';
+      row[2] = prop.property_qualifier || '';
+      row[3] = prop.property_addl_card || prop.additional_card || '';
+      row[4] = prop.property_location || '';
+      row[5] = prop.new_vcs || prop.property_vcs || '';
+      row[6] = prop.property_m4_class || prop.property_cama_class || '';
+      row[7] = prop.asset_type_use || '';
+      row[8] = prop.asset_building_class || '';
+      row[9] = prop.asset_sfla || '';
+      row[10] = prop.asset_year_built || '';
+      row[11] = prop.sales_price || '';
+      row[12] = prop.values_norm_time || '';
+      rows.push(row);
+    });
+
+    // Create worksheet
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Base styles
+    const baseStyle = {
+      font: { name: 'Leelawadee', sz: 10 },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    const headerStyle = {
+      font: { name: 'Leelawadee', sz: 10, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    const titleStyle = {
+      font: { name: 'Leelawadee', sz: 12, bold: true },
+      alignment: { horizontal: 'left', vertical: 'center' }
+    };
+
+    const redFlagStyle = {
+      font: { name: 'Leelawadee', sz: 10, color: { rgb: 'DC2626' }, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    // Apply styles
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws[cellAddress]) continue;
+
+        // Title row (row 0)
+        if (R === 0) {
+          ws[cellAddress].s = titleStyle;
+        }
+        // Header row (row 2)
+        else if (R === 2) {
+          ws[cellAddress].s = headerStyle;
+        }
+        // Data rows
+        else if (R >= 3) {
+          const dataRowIndex = R - 3; // Index into sortedCards
+          const prop = sortedCards[dataRowIndex];
+          const style = { ...baseStyle };
+
+          // Check for missing SFLA (column 9) or Year Built (column 10)
+          const isMissingSFLA = C === 9 && (!prop.asset_sfla);
+          const isMissingYear = C === 10 && (!prop.asset_year_built);
+
+          if (isMissingSFLA || isMissingYear) {
+            // Apply red flag style for missing data
+            ws[cellAddress].s = redFlagStyle;
+          } else {
+            // Apply formatting based on column type
+            if (C === 9) {
+              style.numFmt = '#,##0'; // SFLA
+              style.alignment = { horizontal: 'right', vertical: 'center' };
+            } else if (C === 10) {
+              style.numFmt = '0'; // Year Built
+            } else if (C === 11 || C === 12) {
+              style.numFmt = '$#,##0'; // Sales Price and Price Time
+              style.alignment = { horizontal: 'right', vertical: 'center' };
+            } else if (C === 4) {
+              style.alignment = { horizontal: 'left', vertical: 'center' }; // Address
+            }
+            ws[cellAddress].s = style;
+          }
+        }
+      }
+    }
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 10 },  // Block
+      { wch: 10 },  // Lot
+      { wch: 10 },  // Qualifier
+      { wch: 8 },   // Card
+      { wch: 40 },  // Address
+      { wch: 10 },  // VCS
+      { wch: 10 },  // Class
+      { wch: 15 },  // Type/Use
+      { wch: 15 },  // Building Class
+      { wch: 12 },  // SFLA
+      { wch: 12 },  // Year Built
+      { wch: 14 },  // Sales Price
+      { wch: 14 }   // Price Time
+    ];
+
+    // Create workbook and export
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'All Additional Cards Detail');
+
+    const fileName = `All_Additional_Cards_Detail_${jobData?.job_name || 'Analysis'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+
+    console.log('✅ All Additional Cards Detail export completed');
+  };
+
   // ============ ADDITIONAL CARDS SORTING ============
   const handleSort = (field) => {
     if (sortField === field) {
