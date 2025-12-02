@@ -3165,8 +3165,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       { wch: 15 },  // Building Class
       { wch: 12 },  // SFLA
       { wch: 12 },  // Year Built
-      { wch: 14 },  // Sales Price
-      { wch: 14 }   // Price Time
+      { wch: 14 }   // Sales Price
     ];
 
     // Create workbook and export
