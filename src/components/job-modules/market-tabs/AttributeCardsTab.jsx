@@ -2768,6 +2768,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       console.log('✅ Setting additional card analysis results:', results);
       setAdditionalResults(results);
+      // Auto-expand all VCS by default
+      if (results.byVCS) {
+        setExpandedAdditionalVCS(new Set(Object.keys(results.byVCS)));
+      }
 
 
       console.log('����� Additional card analysis completed successfully');
