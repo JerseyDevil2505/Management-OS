@@ -3105,11 +3105,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       alignment: { horizontal: 'center', vertical: 'center' }
     };
 
-    const titleStyle = {
-      font: { name: 'Leelawadee', sz: 12, bold: true },
-      alignment: { horizontal: 'left', vertical: 'center' }
-    };
-
     const redFlagStyle = {
       font: { name: 'Leelawadee', sz: 10, color: { rgb: 'DC2626' }, bold: true },
       alignment: { horizontal: 'center', vertical: 'center' }
@@ -3123,17 +3118,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
         if (!ws[cellAddress]) continue;
 
-        // Title row (row 0)
+        // Header row (row 0)
         if (R === 0) {
-          ws[cellAddress].s = titleStyle;
-        }
-        // Header row (row 2)
-        else if (R === 2) {
           ws[cellAddress].s = headerStyle;
         }
         // Data rows
-        else if (R >= 3) {
-          const dataRowIndex = R - 3; // Index into sortedCards
+        else if (R >= 1) {
+          const dataRowIndex = R - 1; // Index into sortedCards
           const prop = sortedCards[dataRowIndex];
           const style = { ...baseStyle };
 
@@ -3147,13 +3138,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           } else {
             // Apply formatting based on column type
             if (C === 9) {
-              style.numFmt = '#,##0'; // SFLA
-              style.alignment = { horizontal: 'right', vertical: 'center' };
+              style.numFmt = '#,##0'; // SFLA - centered
             } else if (C === 10) {
-              style.numFmt = '0'; // Year Built
-            } else if (C === 11 || C === 12) {
-              style.numFmt = '$#,##0'; // Sales Price and Price Time
-              style.alignment = { horizontal: 'right', vertical: 'center' };
+              style.numFmt = '0'; // Year Built - centered
+            } else if (C === 11) {
+              style.numFmt = '$#,##0'; // Sales Price - centered
             } else if (C === 4) {
               style.alignment = { horizontal: 'left', vertical: 'center' }; // Address
             }
