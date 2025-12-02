@@ -2375,64 +2375,22 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       });
 
       // Process properties WITHOUT additional cards
-      groupsWithoutCards.forEach(group => {
-        const vcs = group[0].new_vcs || group[0].property_vcs;
+      withoutCards.forEach(prop => {
+        const vcs = prop.new_vcs || prop.property_vcs;
         if (!vcs) return;
 
         if (!byVCS[vcs]) {
           byVCS[vcs] = {
             with_cards: [],
-            without_cards: [],
-            with_cards_properties: [],
-            without_cards_properties: []
+            without_cards: []
           };
         }
 
-        // Calculate metrics for properties without additional cards
-        const normTime = group[0].values_norm_time;
-        if (normTime && normTime > 0) {
-          const sfla = parseInt(group[0].asset_sfla) || 0;
-          const year = parseInt(group[0].asset_year_built);
-          const yearBuilt = year && year > 1800 && year <= new Date().getFullYear() ? year : null;
-
-          byVCS[vcs].without_cards.push({
-            norm_time: normTime,
-            sfla: sfla,
-            year_built: yearBuilt
-          });
-
-          // Store detailed property info for expandable view
-          byVCS[vcs].without_cards_properties.push({
-            property: group[0],
-            norm_time: normTime,
-            sfla: sfla,
-            year_built: yearBuilt,
-            address: group[0].property_location,
-            block: group[0].property_block,
-            lot: group[0].property_lot,
-            qualifier: group[0].property_qualifier
-          });
-        }
-      });
-
-      // Count ALL properties by VCS (for display counts, not impact calculations)
-      const allVCSCounts = {};
-      allGroupsWithCards.forEach(group => {
-        const vcs = group[0].new_vcs || group[0].property_vcs;
-        if (!vcs) return;
-        if (!allVCSCounts[vcs]) {
-          allVCSCounts[vcs] = { with_cards: 0, without_cards: 0 };
-        }
-        allVCSCounts[vcs].with_cards += 1;
-      });
-
-      allGroupsWithoutCards.forEach(group => {
-        const vcs = group[0].new_vcs || group[0].property_vcs;
-        if (!vcs) return;
-        if (!allVCSCounts[vcs]) {
-          allVCSCounts[vcs] = { with_cards: 0, without_cards: 0 };
-        }
-        allVCSCounts[vcs].without_cards += 1;
+        byVCS[vcs].without_cards.push({
+          norm_time: prop.values_norm_time,
+          sfla: prop.asset_sfla,
+          year_built: prop.asset_year_built
+        });
       });
 
       // Identify package pairs using package sale identification logic
