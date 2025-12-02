@@ -3055,15 +3055,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
     const rows = [];
 
-    // Title row
-    const titleRow = [];
-    titleRow[0] = `All Additional Cards Detail - ${jobData?.job_name || 'Job'}`;
-    rows.push(titleRow);
-
-    // Blank row
-    rows.push([]);
-
-    // Column headers
+    // Column headers (first row)
     const headers = [
       'Block',
       'Lot',
@@ -3076,8 +3068,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       'Building Class',
       'SFLA',
       'Year Built',
-      'Sales Price',
-      'Price Time'
+      'Sales Price'
     ];
     rows.push(headers);
 
@@ -3097,7 +3088,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       row[9] = prop.asset_sfla || '';
       row[10] = prop.asset_year_built || '';
       row[11] = prop.sales_price || '';
-      row[12] = prop.values_norm_time || '';
       rows.push(row);
     });
 
