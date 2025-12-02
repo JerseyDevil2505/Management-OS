@@ -2271,7 +2271,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   };
   // ============ ADDITIONAL CARDS ANALYSIS ============
   const runAdditionalCardsAnalysis = () => {
-    console.log('🔄 Running Additional Cards Analysis...');
+    console.log('🔄 Running Additional Cards Analysis (using PreVal logic)...');
     console.log('Vendor Type:', vendorType);
     console.log('Total Properties:', properties?.length);
 
@@ -2282,152 +2282,99 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     }
 
     try {
-      // Filter for properties with additional cards based on vendor type
-      const additionalCardProperties = properties.filter(prop => {
-        const card = prop.property_addl_card || prop.additional_card || '';
-
-        if (vendorType === 'BRT' || vendorType === 'brt') {
-          // BRT: Cards 2, 3, 4, etc. (numeric > 1, excluding 'M' and '1')
-          const cardNum = parseInt(card);
-          return !isNaN(cardNum) && cardNum > 1;
-        } else if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
-          // Microsystems: Cards A-Z (excluding 'M' which is Main)
-          const cardUpper = card.toString().trim().toUpperCase();
-          return cardUpper && cardUpper !== 'M' && cardUpper !== 'MAIN' && /^[A-Z]$/.test(cardUpper);
-        }
-        return false;
-      });
-
-      console.log(`✅ Found ${additionalCardProperties.length} properties with additional cards`);
-
-      // Debug: check for sales data
-      const allSalesProps = properties.filter(p => p.values_norm_time && p.values_norm_time > 0);
-      console.log(`🔍 DEBUG: Found ${allSalesProps.length} total properties with sales data (should be 105)`);
-
-      // Group ALL properties by base location (for counting purposes)
-      const allPropertyGroups = new Map();
-      properties.forEach(prop => {
-        const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
-        if (!allPropertyGroups.has(baseKey)) {
-          allPropertyGroups.set(baseKey, []);
-        }
-        allPropertyGroups.get(baseKey).push(prop);
-      });
-
-      // Get properties with valid sales data for impact analysis
-      const validPropsForAnalysis = properties.filter(p =>
-        p.values_norm_time &&
-        p.values_norm_time > 0 &&
-        (p.new_vcs || p.property_vcs)
-      );
-
-      // Group properties with valid sales data by base location (for impact calculations)
-      const validPropertyGroups = new Map();
-      validPropsForAnalysis.forEach(prop => {
-        const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
-        if (!validPropertyGroups.has(baseKey)) {
-          validPropertyGroups.set(baseKey, []);
-        }
-        validPropertyGroups.get(baseKey).push(prop);
-      });
-
-      // Function to check if a property has additional cards
-      const hasAdditionalCards = (prop) => {
-        const card = prop.property_addl_card || prop.additional_card || '';
-        if (vendorType === 'BRT' || vendorType === 'brt') {
-          const cardNum = parseInt(card);
-          return !isNaN(cardNum) && cardNum > 1;
-        } else if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
-          const cardUpper = card.toString().trim().toUpperCase();
-          return cardUpper && cardUpper !== 'M' && cardUpper !== 'MAIN' && /^[A-Z]$/.test(cardUpper);
-        }
-        return false;
+      // Parse composite key helper (same as PreValuation)
+      const parseCompositeKey = (compositeKey) => {
+        if (!compositeKey) return { block: '', lot: '', qualifier: '', card: '' };
+        const parts = compositeKey.split('_');
+        const blockLot = parts[0] || '';
+        const [block, lot] = blockLot.split('-');
+        if (parts.length < 3) return { block: '', lot: '', qualifier: '', card: '' };
+        return {
+          block: block || '',
+          lot: lot || '',
+          qualifier: parts[1] || '',
+          card: parts[2] || ''
+        };
       };
 
-      // Count ALL properties with and without additional cards (for summary stats)
-      const allGroupsWithCards = [];
-      const allGroupsWithoutCards = [];
+      // Filter to MAIN CARDS ONLY with sales data (same logic as PreValuation)
+      // These are card 1 (BRT) or card M (Microsystems) with values_norm_time already calculated
+      const mainCardSales = properties.filter(p => {
+        const parsed = parseCompositeKey(p.property_composite_key);
+        const card = parsed.card?.toUpperCase();
 
-      allPropertyGroups.forEach((props, baseKey) => {
-        const hasAdditional = props.some(hasAdditionalCards);
-        if (hasAdditional) {
-          allGroupsWithCards.push(props);
-        } else {
-          allGroupsWithoutCards.push(props);
+        // Card filter based on vendor (MAIN CARDS ONLY)
+        if (vendorType === 'Microsystems') {
+          if (card !== 'M') return false;
+        } else { // BRT
+          if (card !== '1') return false;
         }
+
+        // Must have sales data (already normalized with combined SFLA by PreValuation)
+        if (!p.values_norm_time || p.values_norm_time <= 0) return false;
+
+        // Must have VCS
+        if (!p.new_vcs && !p.property_vcs) return false;
+
+        return true;
       });
 
-      // Separate VALID properties into groups (for impact analysis)
-      const groupsWithCards = [];
-      const groupsWithoutCards = [];
+      console.log(`✅ Found ${mainCardSales.length} main card sales to analyze`);
 
-      validPropertyGroups.forEach((props, baseKey) => {
-        const hasAdditional = props.some(hasAdditionalCards);
-        if (hasAdditional) {
-          groupsWithCards.push(props);
-        } else {
-          groupsWithoutCards.push(props);
-        }
+      // For each main card, detect if it has additional cards (same logic as PreValuation)
+      const enhancedSales = mainCardSales.map(prop => {
+        const parsed = parseCompositeKey(prop.property_composite_key);
+
+        // Find additional cards for this property
+        const additionalCards = properties.filter(p => {
+          const pParsed = parseCompositeKey(p.property_composite_key);
+          return pParsed.block === parsed.block &&
+                 pParsed.lot === parsed.lot &&
+                 pParsed.qualifier === parsed.qualifier &&
+                 pParsed.card !== parsed.card &&
+                 p.asset_sfla && p.asset_sfla > 0; // Only cards with living area
+        });
+
+        return {
+          ...prop,
+          has_additional_cards: additionalCards.length > 0,
+          additional_card_count: additionalCards.length
+          // values_norm_time already includes combined SFLA from PreValuation normalization
+          // asset_sfla already includes combined SFLA from PreValuation normalization
+        };
       });
 
-      // Analyze by VCS with detailed property tracking for granular comparison
+      const withCards = enhancedSales.filter(p => p.has_additional_cards);
+      const withoutCards = enhancedSales.filter(p => !p.has_additional_cards);
+
+      console.log(`📊 Sales breakdown:`, {
+        with_additional_cards: withCards.length,
+        without_additional_cards: withoutCards.length
+      });
+
+      // Analyze by VCS
       const byVCS = {};
 
-      // Process groups with additional cards
-      groupsWithCards.forEach(group => {
-        const vcs = group[0].new_vcs || group[0].property_vcs;
+      // Process properties WITH additional cards
+      withCards.forEach(prop => {
+        const vcs = prop.new_vcs || prop.property_vcs;
         if (!vcs) return;
 
         if (!byVCS[vcs]) {
           byVCS[vcs] = {
             with_cards: [],
-            without_cards: [],
-            with_cards_properties: [], // Store detailed property info for expandable view
-            without_cards_properties: [] // Store detailed property info for expandable view
+            without_cards: []
           };
         }
 
-        // Calculate group metrics
-        const validProps = group.filter(p => p.values_norm_time && p.values_norm_time > 0);
-        if (validProps.length > 0) {
-          const maxNormTime = Math.max(...validProps.map(p => p.values_norm_time));
-
-          // Sum SFLA across all cards in the group (main + additional)
-          const totalSFLA = group.reduce((sum, p) => {
-            const sfla = parseInt(p.asset_sfla) || 0;
-            return sum + sfla;
-          }, 0);
-
-          // Calculate average year built across all cards in the group
-          const validYears = group.filter(p => {
-            const year = parseInt(p.asset_year_built);
-            return year && year > 1800 && year <= new Date().getFullYear();
-          });
-          const avgYearBuilt = validYears.length > 0 ?
-            Math.round(validYears.reduce((sum, p) => sum + parseInt(p.asset_year_built), 0) / validYears.length) : null;
-
-          byVCS[vcs].with_cards.push({
-            norm_time: maxNormTime,
-            total_sfla: totalSFLA,
-            avg_year_built: avgYearBuilt,
-            property_count: group.length
-          });
-
-          // Store detailed property info for expandable view
-          byVCS[vcs].with_cards_properties.push({
-            properties: group,
-            norm_time: maxNormTime,
-            total_sfla: totalSFLA,
-            avg_year_built: avgYearBuilt,
-            address: group[0].property_location,
-            block: group[0].property_block,
-            lot: group[0].property_lot,
-            qualifier: group[0].property_qualifier
-          });
-        }
+        byVCS[vcs].with_cards.push({
+          norm_time: prop.values_norm_time,
+          sfla: prop.asset_sfla, // Already includes additional cards
+          year_built: prop.asset_year_built
+        });
       });
 
-      // Process groups without additional cards
+      // Process properties WITHOUT additional cards
       groupsWithoutCards.forEach(group => {
         const vcs = group[0].new_vcs || group[0].property_vcs;
         if (!vcs) return;
