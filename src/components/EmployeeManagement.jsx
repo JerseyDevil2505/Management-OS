@@ -42,7 +42,7 @@ const EmployeeManagement = ({
     if (propEmployees.length > 0) {
       loadEmployees();
     }
-  }, [propEmployees]);
+  }, [propEmployees]); // eslint-disable-line react-hooks/exhaustive-deps
 
 const loadEmployees = () => {
     setIsLoading(true);
@@ -660,7 +660,7 @@ const loadEmployees = () => {
     if (employees.length > 0) {
       loadGlobalAnalytics();
     }
-  }, [employees.length]);  // Removed analyticsFilter - we'll handle it separately
+  }, [employees.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When filters change, reprocess cached data without reloading
   useEffect(() => {
@@ -672,7 +672,7 @@ const loadEmployees = () => {
       );
       setGlobalAnalytics(reprocessed);
     }
-  }, [analyticsFilter]);
+  }, [analyticsFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFilterChange = (filterType, value) => {
     setAnalyticsFilter(prev => ({
@@ -2351,7 +2351,7 @@ const loadEmployees = () => {
               </div>
 
               <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded">
-                <strong>💾 Data Persistence:</strong> All employee data is now permanently stored in your database. 
+                <strong>��� Data Persistence:</strong> All employee data is now permanently stored in your database. 
                 Import updates will automatically detect new hires, departures, and data changes without creating duplicates.
               </div>
             </div>
@@ -2444,7 +2444,7 @@ const loadEmployees = () => {
                   onClick={handleEmailAll}
                   className="p-4 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors text-left"
                 >
-                  <div className="text-blue-700 font-semibold mb-2">📧 Email All Staff</div>
+                  <div className="text-blue-700 font-semibold mb-2">�� Email All Staff</div>
                   <div className="text-sm text-blue-600">Get email list for all active employees</div>
                 </button>
               </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase, interpretCodes, worksheetService, checklistService, runUnitRateLotCalculation, runUnitRateLotCalculation_v2, computeLotAcreForProperty, persistComputedLotAcre, normalizeSelectedCodes, saveUnitRateMappings, generateLotSizesForJob } from '../../../lib/supabaseClient';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import './sharedTabNav.css';
 import { 
   TrendingUp, 
@@ -184,6 +184,7 @@ const PreValuationTab = ({
   const [selectedUnitRateCodes, setSelectedUnitRateCodes] = useState(new Set());
   const [isCalculatingUnitSizes, setIsCalculatingUnitSizes] = useState(false);
   const [isSavingUnitConfig, setIsSavingUnitConfig] = useState(false);
+  const [isExportingLotSizes, setIsExportingLotSizes] = useState(false);
   const [sortConfig, setSortConfig] = useState({ field: null, direction: 'asc' });
 
   // Unit rate mappings editor state
@@ -236,7 +237,8 @@ const PreValuationTab = ({
     setIsGeneratingLotSizes(true);
     try {
       const res = await generateLotSizesForJob(jobData.id);
-      alert(`Generated lot sizes for ${res.updated} properties`);
+      const updated = res?.updated ?? 0;
+      console.log(`✅ Generated lot sizes for ${updated} properties`);
       if (onUpdateJobCache) callRefresh(null);
     } catch (e) {
       console.error('Generate failed', e);
@@ -346,7 +348,7 @@ const PreValuationTab = ({
   const [isAnalyzingImport, setIsAnalyzingImport] = useState(false);
   const [importOptions, setImportOptions] = useState({
     updateExisting: true,
-    useAddressFuzzyMatch: true,
+    useAddressFuzzyMatch: false,
     fuzzyMatchThreshold: 0.8,
     markImportedAsReady: true
   });
@@ -369,44 +371,44 @@ const PreValuationTab = ({
   const [showBlockDetailModal, setShowBlockDetailModal] = useState(false);
   const [isProcessingBlocks, setIsProcessingBlocks] = useState(false);
 
-  // Bluebeam Revu 32-color palette
+  // Market Analysis Color Scale - Consistent Red → Purple progression
+  // Two variations per color range: pastel (lower half) and bright (upper half)
+  // Default: $100k increments with $50k steps = 2 steps per $100k
   const bluebeamPalette = [
-    // Row 1 - Light colors
-    { hex: "#FFFFFF", name: "White", row: 1, col: 1 },
-    { hex: "#FFCCCC", name: "Light Pink", row: 1, col: 2 },
-    { hex: "#FFE6CC", name: "Light Orange", row: 1, col: 3 },
-    { hex: "#FFFFCC", name: "Light Yellow", row: 1, col: 4 },
-    { hex: "#E6FFCC", name: "Light Green", row: 1, col: 5 },
-    { hex: "#CCFFFF", name: "Light Cyan", row: 1, col: 6 },
-    { hex: "#CCE6FF", name: "Light Blue", row: 1, col: 7 },
-    { hex: "#E6CCFF", name: "Light Purple", row: 1, col: 8 },
-    // Row 2 - Medium colors
-    { hex: "#CCCCCC", name: "Light Gray", row: 2, col: 1 },
-    { hex: "#FF9999", name: "Pink", row: 2, col: 2 },
-    { hex: "#FFCC99", name: "Peach", row: 2, col: 3 },
-    { hex: "#FFFF99", name: "Yellow", row: 2, col: 4 },
-    { hex: "#CCFF99", name: "Light Green", row: 2, col: 5 },
-    { hex: "#99FFFF", name: "Cyan", row: 2, col: 6 },
-    { hex: "#99CCFF", name: "Sky Blue", row: 2, col: 7 },
-    { hex: "#CC99FF", name: "Purple", row: 2, col: 8 },
-    // Row 3 - Darker colors
-    { hex: "#999999", name: "Gray", row: 3, col: 1 },
-    { hex: "#FF6666", name: "Red", row: 3, col: 2 },
-    { hex: "#FF9966", name: "Orange", row: 3, col: 3 },
-    { hex: "#FFFF66", name: "Bright Yellow", row: 3, col: 4 },
-    { hex: "#99FF66", name: "Green", row: 3, col: 5 },
-    { hex: "#66FFFF", name: "Bright Cyan", row: 3, col: 6 },
-    { hex: "#6699FF", name: "Bright Blue", row: 3, col: 7 },
-    { hex: "#9966FF", name: "Bright Purple", row: 3, col: 8 },
-    // Row 4 - Saturated colors
-    { hex: "#666666", name: "Dark Gray", row: 4, col: 1 },
-    { hex: "#FF3333", name: "Bright Red", row: 4, col: 2 },
-    { hex: "#FF6633", name: "Bright Orange", row: 4, col: 3 },
-    { hex: "#FFFF33", name: "Neon Yellow", row: 4, col: 4 },
-    { hex: "#66FF33", name: "Neon Green", row: 4, col: 5 },
-    { hex: "#33FFFF", name: "Electric Cyan", row: 4, col: 6 },
-    { hex: "#3366FF", name: "Electric Blue", row: 4, col: 7 },
-    { hex: "#6633FF", name: "Electric Purple", row: 4, col: 8 }
+    // Gray for no data only
+    { hex: "#CCCCCC", name: "No Data", row: 0, col: 0 },
+
+    // Red range ($0-99k)
+    { hex: "#FFCCCC", name: "Light Red", row: 1, col: 1 },      // $0-49k
+    { hex: "#FF6666", name: "Bright Red", row: 1, col: 2 },     // $50k-99k
+
+    // Pink range ($100k-199k)
+    { hex: "#FFB3D9", name: "Light Pink", row: 2, col: 1 },     // $100k-149k
+    { hex: "#FF66B2", name: "Bright Pink", row: 2, col: 2 },    // $150k-199k
+
+    // Orange range ($200k-299k)
+    { hex: "#FFD9B3", name: "Light Orange", row: 3, col: 1 },   // $200k-249k
+    { hex: "#FF9966", name: "Bright Orange", row: 3, col: 2 },  // $250k-299k
+
+    // Yellow range ($300k-399k)
+    { hex: "#FFFF99", name: "Light Yellow", row: 4, col: 1 },   // $300k-349k
+    { hex: "#FFFF33", name: "Bright Yellow", row: 4, col: 2 },  // $350k-399k
+
+    // Green range ($400k-499k)
+    { hex: "#CCFFCC", name: "Light Green", row: 5, col: 1 },    // $400k-449k
+    { hex: "#66FF66", name: "Bright Green", row: 5, col: 2 },   // $450k-499k
+
+    // Teal range ($500k-599k)
+    { hex: "#B3F0F0", name: "Light Teal", row: 6, col: 1 },     // $500k-549k
+    { hex: "#33CCCC", name: "Bright Teal", row: 6, col: 2 },    // $550k-599k
+
+    // Blue range ($600k-699k)
+    { hex: "#99CCFF", name: "Light Blue", row: 7, col: 1 },     // $600k-649k
+    { hex: "#3399FF", name: "Bright Blue", row: 7, col: 2 },    // $650k-699k
+
+    // Purple range ($700k+)
+    { hex: "#CCAAFF", name: "Light Purple", row: 8, col: 1 },   // $700k-749k
+    { hex: "#9966FF", name: "Bright Purple", row: 8, col: 2 }   // $750k+
   ];
   const [isResultsCollapsed, setIsResultsCollapsed] = useState(false);
   const [preValChecklist, setPreValChecklist] = useState({
@@ -721,7 +723,7 @@ useEffect(() => {
     const outThreshold = config.outlierThreshold || '';
 
     if (false) console.log(`�� Setting equalizationRatio: "${eqRatio}" (was: "${equalizationRatio}")`);
-    if (false) console.log(`🔧 Setting outlierThreshold: "${outThreshold}" (was: "${outlierThreshold}")`);
+    if (false) console.log(`���� Setting outlierThreshold: "${outThreshold}" (was: "${outlierThreshold}")`);
 
     setEqualizationRatio(eqRatio);
     setOutlierThreshold(outThreshold);
@@ -873,7 +875,7 @@ useEffect(() => {
       // Use generateLotSizesForJob which applies staged mappings (jobs.staged_unit_rate_config) directly
       const res = await generateLotSizesForJob(jobData.id);
       const updated = res?.updated ?? 0;
-      alert(`Generated lot sizes for ${updated} properties`);
+      console.log(`✅ Generated lot sizes for ${updated} properties`);
 
       // Do NOT auto-refresh job to avoid supabase 500 spikes
       // Keep local UI state as-is; user can refresh manually if needed
@@ -882,6 +884,218 @@ useEffect(() => {
       alert(`Calculation failed: ${formatError(e)}`);
     } finally {
       setIsCalculatingUnitSizes(false);
+    }
+  };
+
+  const exportLotSizeReport = async () => {
+    if (!jobData?.id) return;
+    setIsExportingLotSizes(true);
+    try {
+      // Fetch all properties in batches to bypass 5000 record limit
+      const BATCH_SIZE = 1000;
+      let allProps = [];
+      let offset = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data: batch, error: queryError } = await supabase
+          .from('property_records')
+          .select(`
+            property_composite_key,
+            property_location,
+            property_m4_class,
+            property_vcs,
+            asset_lot_frontage,
+            asset_lot_depth
+          `)
+          .eq('job_id', jobData.id)
+          .order('property_composite_key')
+          .range(offset, offset + BATCH_SIZE - 1);
+
+        if (queryError) throw queryError;
+
+        if (batch && batch.length > 0) {
+          allProps = allProps.concat(batch);
+          offset += BATCH_SIZE;
+          hasMore = batch.length === BATCH_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      // Filter: only include main cards (card 1 for BRT, card M for Microsystems)
+      const isMainCard = (card) => {
+        const cardUpper = String(card || '').toUpperCase();
+        if (vendorType === 'Microsystems') {
+          return cardUpper === 'M' || cardUpper === '';
+        } else {
+          // BRT or default
+          return cardUpper === '1' || cardUpper === '';
+        }
+      };
+
+      const propsWithLotData = allProps.filter(prop => {
+        const parsed = parseCompositeKey(prop.property_composite_key);
+        return isMainCard(parsed.card);
+      });
+
+      // Fetch lot size data in batches
+      let allLotSizeData = [];
+      offset = 0;
+      hasMore = true;
+
+      while (hasMore) {
+        const { data: batch, error: lotError } = await supabase
+          .from('property_market_analysis')
+          .select('property_composite_key, market_manual_lot_acre, market_manual_lot_sf, new_vcs')
+          .eq('job_id', jobData.id)
+          .range(offset, offset + BATCH_SIZE - 1);
+
+        if (lotError) throw lotError;
+
+        if (batch && batch.length > 0) {
+          allLotSizeData = allLotSizeData.concat(batch);
+          offset += BATCH_SIZE;
+          hasMore = batch.length === BATCH_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      const lotSizeData = allLotSizeData;
+
+      // Create a map for quick lookup
+      const lotSizeMap = new Map();
+      if (lotSizeData) {
+        lotSizeData.forEach(item => {
+          lotSizeMap.set(item.property_composite_key, {
+            acre: item.market_manual_lot_acre,
+            sf: item.market_manual_lot_sf,
+            new_vcs: item.new_vcs
+          });
+        });
+      }
+
+      // Prepare export data
+      const headers = [
+        'Block',
+        'Lot',
+        'Qualifier',
+        'Card',
+        'Property Class',
+        'VCS',
+        'Location',
+        'Total Front Foot',
+        'Avg Depth',
+        'Lot Size Acre',
+        'Lot Size SF'
+      ];
+
+      const data = propsWithLotData.map(prop => {
+        const parsed = parseCompositeKey(prop.property_composite_key);
+        const lotData = lotSizeMap.get(prop.property_composite_key) || {};
+
+        // Use new_vcs if available, otherwise fall back to property_vcs
+        const vcs = lotData.new_vcs || prop.property_vcs || '';
+
+        return [
+          parsed.block || '',
+          parsed.lot || '',
+          parsed.qualifier || '',
+          parsed.card || '',
+          prop.property_m4_class || '',
+          vcs,
+          prop.property_location || '',
+          prop.asset_lot_frontage || '',
+          prop.asset_lot_depth || '',
+          lotData.acre || '',
+          lotData.sf || ''
+        ];
+      });
+
+      // Create worksheet from array of arrays
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+
+      // Base style for all cells
+      const baseStyle = {
+        font: { name: 'Leelawadee', sz: 10 },
+        alignment: { horizontal: 'center', vertical: 'center' }
+      };
+
+      // Header style (bold, no fill)
+      const headerStyle = {
+        font: { name: 'Leelawadee', sz: 10, bold: true },
+        alignment: { horizontal: 'center', vertical: 'center' }
+      };
+
+      // Apply formatting to all cells
+      const range = XLSX.utils.decode_range(ws['!ref']);
+
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!ws[cellAddress]) continue;
+
+          // Apply header style to first row
+          if (R === 0) {
+            ws[cellAddress].s = headerStyle;
+          } else {
+            ws[cellAddress].s = { ...baseStyle };
+
+            // Apply specific formatting based on column
+            // Column H (Total Front Foot) - no decimals
+            if (C === 7) {
+              ws[cellAddress].s.numFmt = '#,##0';
+            }
+            // Column I (Avg Depth) - no decimals
+            else if (C === 8) {
+              ws[cellAddress].s.numFmt = '#,##0';
+            }
+            // Column J (Lot Size Acre) - max 2 decimals
+            else if (C === 9) {
+              ws[cellAddress].s.numFmt = '0.00';
+            }
+            // Column K (Lot Size SF) - no decimals with comma
+            else if (C === 10) {
+              ws[cellAddress].s.numFmt = '#,##0';
+            }
+          }
+        }
+      }
+
+      // Set column widths
+      ws['!cols'] = [
+        { wch: 10 },  // Block
+        { wch: 10 },  // Lot
+        { wch: 12 },  // Qualifier
+        { wch: 8 },   // Card
+        { wch: 12 },  // Property Class
+        { wch: 8 },   // VCS
+        { wch: 30 },  // Location
+        { wch: 15 },  // Total Front Foot
+        { wch: 12 },  // Avg Depth
+        { wch: 15 },  // Lot Size Acre
+        { wch: 15 }   // Lot Size SF
+      ];
+
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(wb, ws, 'Lot Size Report');
+
+      // Generate filename
+      const fileName = `LotSizeReport_${jobData?.job_name || 'export'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+      // Write file
+      XLSX.writeFile(wb, fileName);
+
+      alert(`Exported ${data.length} properties to ${fileName}`);
+    } catch (e) {
+      console.error('Error exporting lot size report:', e);
+      alert(`Export failed: ${formatError(e)}`);
+    } finally {
+      setIsExportingLotSizes(false);
     }
   };
 
@@ -1014,11 +1228,16 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         }
       }
 
-      // Create a map of existing keep/reject decisions
+      // Create a map of existing keep/reject decisions with sale data
       const existingDecisions = {};
       timeNormalizedSales.forEach(sale => {
-        if (sale.keep_reject && sale.keep_reject !== 'pending') {
-          existingDecisions[sale.id] = sale.keep_reject;
+        if (sale.keep_reject) {
+          existingDecisions[sale.id] = {
+            decision: sale.keep_reject,
+            sales_price: sale.sales_price,
+            sales_date: sale.sales_date,
+            sales_nu: sale.sales_nu
+          };
         }
       });
       
@@ -1179,18 +1398,50 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         const outThreshold = parseFloat(outlierThreshold);
         const isOutlier = eqRatio && outThreshold ?
           Math.abs((salesRatio * 100) - eqRatio) > outThreshold : false;
-        
+
         // Check if we have an existing decision for this property
-        const existingDecision = existingDecisions[prop.id];
-        
+        const existingDecisionData = existingDecisions[prop.id];
+        let finalDecision = 'pending';
+        let saleDataChanged = false;
+
+        if (existingDecisionData) {
+          // Check if sale data changed since the decision was made
+          const priceChanged = existingDecisionData.sales_price !== prop.sales_price;
+          const dateChanged = existingDecisionData.sales_date !== prop.sales_date;
+          const nuChanged = existingDecisionData.sales_nu !== prop.sales_nu;
+
+          saleDataChanged = priceChanged || dateChanged || nuChanged;
+
+          if (saleDataChanged) {
+            // Sale data changed - reset to pending and log the change
+            finalDecision = 'pending';
+            console.log(`⚠️ Sale data changed for ${prop.property_composite_key} - resetting decision to pending`, {
+              old: {
+                price: existingDecisionData.sales_price,
+                date: existingDecisionData.sales_date,
+                nu: existingDecisionData.sales_nu
+              },
+              new: {
+                price: prop.sales_price,
+                date: prop.sales_date,
+                nu: prop.sales_nu
+              },
+              previousDecision: existingDecisionData.decision
+            });
+          } else {
+            // Sale data unchanged - preserve existing decision
+            finalDecision = existingDecisionData.decision;
+          }
+        }
+
         return {
           ...prop,
           time_normalized_price: timeNormalizedPrice,
           hpi_multiplier: hpiMultiplier,
           sales_ratio: salesRatio,
           is_outlier: isOutlier,
-          // Preserve existing decision if it exists, otherwise set to pending
-          keep_reject: existingDecision || 'pending'
+          keep_reject: finalDecision,
+          sale_data_changed: saleDataChanged // Track if data changed for UI indication
         };
       });
 
@@ -1268,6 +1519,13 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       }
 
       setLastTimeNormalizationRun(new Date().toISOString());
+
+      // Count and notify about sale data changes
+      const salesDataChangedCount = normalized.filter(s => s.sale_data_changed).length;
+      if (salesDataChangedCount > 0) {
+        console.warn(`⚠️ ${salesDataChangedCount} properties had sale data changes - decisions reset to pending review`);
+        alert(`⚠️ IMPORTANT: ${salesDataChangedCount} properties have updated sale data.\n\nTheir Keep/Reject decisions have been automatically reset to "Pending Review".\n\nPlease review these properties in the normalization table below.`);
+      }
 
       if (false) console.log(`✅ Time normalization complete - preserved ${Object.keys(existingDecisions).length} keep/reject decisions`);
       if (false) console.log('✅ Normalized sales saved to database for persistence');
@@ -1352,10 +1610,262 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     }
   };
 
+  const exportNormalizedSalesToExcel = useCallback(() => {
+    if (!properties || properties.length === 0) {
+      alert('No property data available to export.');
+      return;
+    }
+
+    // Create a map of normalized sales for quick lookup
+    const normalizedSalesMap = new Map();
+    if (timeNormalizedSales && timeNormalizedSales.length > 0) {
+      timeNormalizedSales.forEach(sale => {
+        normalizedSalesMap.set(sale.id, sale);
+      });
+    }
+
+    // Calculate average SFLA per type/use group (for kept sales only)
+    const keptSales = timeNormalizedSales.filter(s => s.keep_reject === 'keep');
+    const typeUseGroups = {
+      '1': [], '2': [], '3': [], '4': [], '5': [], '6': []
+    };
+
+    keptSales.forEach(sale => {
+      const typeUse = sale.asset_type_use?.toString().trim();
+      if (typeUse && typeUse.length > 0) {
+        const prefix = typeUse[0];
+        if (typeUseGroups[prefix]) {
+          typeUseGroups[prefix].push(sale);
+        }
+      }
+    });
+
+    // Calculate average SFLA for each group
+    const avgSFLAByGroup = {};
+    Object.entries(typeUseGroups).forEach(([prefix, sales]) => {
+      if (sales.length > 0) {
+        const totalSFLA = sales.reduce((sum, s) => sum + (s.asset_sfla || 0), 0);
+        avgSFLAByGroup[prefix] = totalSFLA / sales.length;
+      }
+    });
+
+    // Prepare data for export - ALL properties, keeping track of raw values for formulas
+    const rawDataForFormulas = [];
+    const exportData = properties.map(prop => {
+      const parsed = parseCompositeKey(prop.property_composite_key);
+      const normalizedData = normalizedSalesMap.get(prop.id);
+      const packageData = interpretCodes.getPackageSaleData(properties, prop);
+
+      let packageInfo = '';
+      if (packageData) {
+        if (packageData.is_farm_package) {
+          packageInfo = `Farm (${packageData.package_count})`;
+        } else if (packageData.is_additional_card) {
+          packageInfo = `Addl Card (${packageData.package_count})`;
+        } else {
+          const deedRef = prop.sales_book && prop.sales_page ?
+            `${prop.sales_book}/${prop.sales_page}` : 'Package';
+          packageInfo = `Pkg ${deedRef} (${packageData.package_count})`;
+        }
+      }
+
+      // Get average SFLA for this property's type/use group (only if time normalized)
+      const typeUse = prop.asset_type_use?.toString().trim();
+      const avgSFLA = (normalizedData && typeUse && typeUse.length > 0) ? avgSFLAByGroup[typeUse[0]] || '' : '';
+
+      // Store raw values for formula logic
+      rawDataForFormulas.push({
+        sfla: prop.asset_sfla,
+        avgSFLA: avgSFLA,
+        timeNormPrice: normalizedData?.time_normalized_price,
+        salePrice: prop.sales_price
+      });
+
+      return {
+        'Block': parsed.block || '',
+        'Lot': parsed.lot || '',
+        'Qualifier': parsed.qualifier || '',
+        'Card': parsed.card || '',
+        'Location': prop.property_location || '',
+        'Class': prop.property_m4_class || prop.property_class || prop.asset_building_class || '',
+        'Type': getTypeUseDisplay(prop) || '',
+        'Design': getDesignDisplay(prop) || '',
+        'SFLA': prop.asset_sfla || '',
+        'Year Built': prop.asset_year_built || '',
+        'Package': packageInfo,
+        'Assessed Value': prop.values_mod_total || prop.assessed_value || prop.total_assessed || '',
+        'Sale Date': prop.sales_date ? new Date(prop.sales_date).toLocaleDateString() : '',
+        'Sale Price': prop.sales_price || '',
+        'Sale NU': prop.sales_nu || prop.sales_instrument || prop.nu || prop.sale_nu || '',
+        'HPI Multiplier': normalizedData?.hpi_multiplier || '',
+        'Time Normalized Price': normalizedData?.time_normalized_price || '',
+        'Avg SFLA (Type Group)': avgSFLA ? Math.round(avgSFLA) : '',
+        'Size Normalized Price': '',
+        'Sales Ratio': '',
+        'Status': normalizedData ? (normalizedData.is_outlier ? 'Outlier' : 'Valid') : '',
+        'Decision': normalizedData ? (normalizedData.keep_reject === 'keep' ? 'Keep' : normalizedData.keep_reject === 'reject' ? 'Reject' : 'Pending') : ''
+      };
+    });
+
+    // Create workbook and worksheet
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(exportData);
+
+    // Get worksheet range
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    // Column indices (0-based)
+    const colSFLA = 8; // Column I (SFLA)
+    const colAssessedValue = 11; // Column L (Assessed Value)
+    const colSalePrice = 13; // Column N (Sale Price)
+    const colHPIMultiplier = 15; // Column P (HPI Multiplier)
+    const colTimeNormalized = 16; // Column Q (Time Normalized Price)
+    const colAvgSFLA = 17; // Column R (Avg SFLA Type Group)
+    const colSizeNormalized = 18; // Column S (Size Normalized Price)
+    const colSalesRatio = 19; // Column T (Sales Ratio)
+
+    // Ensure range extends to include all columns (Sales Ratio is the last)
+    if (range.e.c < colSalesRatio) {
+      range.e.c = colSalesRatio;
+      ws['!ref'] = XLSX.utils.encode_range(range);
+    }
+
+    // Apply styling and formatting to all cells
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+
+        // Base style for all cells
+        const baseStyle = {
+          font: { name: 'Leelawadee', sz: 10, bold: R === 0 },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+
+        // Initialize cell if it doesn't exist
+        if (!ws[cellAddress]) {
+          ws[cellAddress] = { t: 's', v: '', s: { ...baseStyle } };
+        } else {
+          // Apply base style to existing cells
+          ws[cellAddress].s = { ...baseStyle };
+        }
+
+        // Header row (row 0) - just bold, already applied above
+        if (R === 0) continue;
+
+        // Format SFLA column (I) and Avg SFLA (R) - number with comma, no decimals
+        if ((C === colSFLA || C === colAvgSFLA) && ws[cellAddress].v) {
+          ws[cellAddress].s.numFmt = '#,##0';
+        }
+
+        // Format Assessed Value (L), Sale Price (N) - currency with $, no decimals
+        if ((C === colAssessedValue || C === colSalePrice) && ws[cellAddress].v) {
+          ws[cellAddress].s.numFmt = '$#,##0';
+        }
+
+        // Time Normalized Price (Q) - formula and currency format
+        if (C === colTimeNormalized) {
+          const salePriceCell = XLSX.utils.encode_cell({ r: R, c: colSalePrice });
+          const hpiMultiplierCell = XLSX.utils.encode_cell({ r: R, c: colHPIMultiplier });
+
+          const salePriceValue = ws[salePriceCell]?.v;
+          const hpiMultiplierValue = ws[hpiMultiplierCell]?.v;
+
+          if (salePriceValue && hpiMultiplierValue) {
+            ws[cellAddress] = {
+              f: `${salePriceCell}*${hpiMultiplierCell}`,
+              t: 'n',
+              s: { ...baseStyle, numFmt: '$#,##0' }
+            };
+          } else if (ws[cellAddress].v) {
+            ws[cellAddress].s.numFmt = '$#,##0';
+          }
+        }
+
+        // Size Normalized Price (S) - Jim's complete 50% formula and currency format
+        // Formula: ((AvgSFLA - CurrentSFLA) * ((TimeNormPrice / CurrentSFLA) * 0.5)) + TimeNormPrice
+        if (C === colSizeNormalized) {
+          const dataIndex = R - 1; // R=0 is header, data starts at R=1
+          if (dataIndex >= 0 && dataIndex < rawDataForFormulas.length) {
+            const rawData = rawDataForFormulas[dataIndex];
+
+            // Only apply formula if property has been time normalized
+            if (rawData.avgSFLA && rawData.sfla && rawData.timeNormPrice && rawData.sfla > 0) {
+              const avgSFLACell = XLSX.utils.encode_cell({ r: R, c: colAvgSFLA });
+              const sflaCell = XLSX.utils.encode_cell({ r: R, c: colSFLA });
+              const timeNormCell = XLSX.utils.encode_cell({ r: R, c: colTimeNormalized });
+
+              ws[cellAddress] = {
+                f: `((${avgSFLACell}-${sflaCell})*((${timeNormCell}/${sflaCell})*0.5))+${timeNormCell}`,
+                t: 'n',
+                s: { ...baseStyle, numFmt: '$#,##0' }
+              };
+            }
+          }
+        }
+
+        // Sales Ratio (T) - TimeNormalized / SalePrice as percentage, no decimals
+        if (C === colSalesRatio) {
+          const dataIndex = R - 1; // R=0 is header, data starts at R=1
+          if (dataIndex >= 0 && dataIndex < rawDataForFormulas.length) {
+            const rawData = rawDataForFormulas[dataIndex];
+
+            // Only apply formula if property has been time normalized
+            if (rawData.timeNormPrice && rawData.salePrice && rawData.salePrice > 0) {
+              const timeNormCell = XLSX.utils.encode_cell({ r: R, c: colTimeNormalized });
+              const salePriceCell = XLSX.utils.encode_cell({ r: R, c: colSalePrice });
+
+              ws[cellAddress] = {
+                f: `${timeNormCell}/${salePriceCell}`,
+                t: 'n',
+                s: { ...baseStyle, numFmt: '0%' }
+              };
+            }
+          }
+        }
+      }
+    }
+
+    // Set column widths for better readability
+    const colWidths = [
+      { wch: 8 },  // Block
+      { wch: 8 },  // Lot
+      { wch: 10 }, // Qualifier
+      { wch: 6 },  // Card
+      { wch: 25 }, // Location
+      { wch: 8 },  // Class
+      { wch: 15 }, // Type
+      { wch: 15 }, // Design
+      { wch: 10 }, // SFLA
+      { wch: 10 }, // Year Built
+      { wch: 20 }, // Package
+      { wch: 15 }, // Assessed Value
+      { wch: 12 }, // Sale Date
+      { wch: 15 }, // Sale Price
+      { wch: 10 }, // Sale NU
+      { wch: 15 }, // HPI Multiplier
+      { wch: 20 }, // Time Normalized Price
+      { wch: 15 }, // Avg SFLA (Type Group)
+      { wch: 25 }, // Size Normalized Price
+      { wch: 12 }, // Sales Ratio
+      { wch: 10 }, // Status
+      { wch: 10 }  // Decision
+    ];
+    ws['!cols'] = colWidths;
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(wb, ws, 'All Properties');
+
+    // Generate filename with job name and date
+    const fileName = `PropertyMasterExport_${jobData?.job_name || 'export'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+    // Write file
+    XLSX.writeFile(wb, fileName);
+  }, [timeNormalizedSales, parseCompositeKey, properties, getTypeUseDisplay, getDesignDisplay, jobData]);
+
   const runSizeNormalization = useCallback(async () => {
     setIsProcessingSize(true);
     setSizeNormProgress({ current: 0, total: 0, message: 'Preparing size normalization...' });
-    
+
     try {
       // Create a map of existing size-normalized values
       const existingSizeNorm = {};
@@ -1580,7 +2090,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
             propertyCount: allProps.length,  // Total properties in block
             salesCount: allProps.filter(p => p.values_norm_size && p.values_norm_size > 0).length,  // Size normalized sales
             avgNormalizedValue: 0,
-            color: { hex: "#E5E7EB", name: "No Data", row: 0, col: 0 },
+            color: bluebeamPalette[0],  // Gray "No Data" color
             ageConsistency: 'N/A',
             sizeConsistency: 'N/A',
             designConsistency: 'N/A',
@@ -1628,11 +2138,12 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         else if (uniqueDesigns <= 4 && dominantPercent >= 25) designConsistency = 'Low';
         
         // Assign color based on value
+        // Index 0 is reserved for "No Data" gray, so actual colors start at index 1
         const colorIndex = Math.min(
-          Math.floor((avgValue - colorScaleStart) / colorScaleIncrement),
+          Math.floor((avgValue - colorScaleStart) / colorScaleIncrement) + 1,
           bluebeamPalette.length - 1
         );
-        const assignedColor = bluebeamPalette[Math.max(0, colorIndex)];
+        const assignedColor = bluebeamPalette[Math.max(1, colorIndex)];
         
         return {
           block,
@@ -1837,7 +2348,7 @@ const handleSalesDecision = (saleId, decision) => {
           const batch = rejects.slice(i, i + 500);
           const rejectCompositeKeys = batch.map(s => s.property_composite_key);
 
-          if (false) console.log(`���️ Reject batch ${Math.floor(i/500) + 1}: Clearing ${batch.length} properties...`);
+          if (false) console.log(`�����️ Reject batch ${Math.floor(i/500) + 1}: Clearing ${batch.length} properties...`);
 
           // CRITICAL: Clear BOTH time and size normalized values for rejected sales
           await supabase
@@ -2178,30 +2689,110 @@ const processSelectedProperties = async () => {
   // ==================== IMPORT/EXPORT FUNCTIONS ====================
   
   const exportWorksheetToExcel = () => {
-    // Export using the canonical property_location (address) and explicit Location Analysis field.
-    let csv = 'Block,Lot,Qualifier,Card,Address,Class,Current VCS,Building,Type/Use,Design,New VCS,Location Analysis,Zoning,Map Page,Key Page,Notes,Ready\n';
+    // Export to Excel with formatting
+    const headers = [
+      'Block',
+      'Lot',
+      'Qualifier',
+      'Card',
+      'Property Location',
+      'Class',
+      'Current VCS',
+      'Building',
+      'Type/Use',
+      'Design',
+      'New VCS',
+      'Location Analysis',
+      'Zoning',
+      'Map Page',
+      'Key Page',
+      'Notes',
+      'Ready'
+    ];
 
-    // Debug sample: log first 10 property_location values to help detect truncation
-    try {
-      (filteredWorksheetProps || []).slice(0,10).forEach(p => console.log('EXPORT SAMPLE:', p.property_composite_key, '->', p.property_location));
-    } catch (e) {}
+    const data = filteredWorksheetProps.map(prop => [
+      prop.block || '',
+      prop.lot || '',  // Will be formatted as text to preserve trailing zeros
+      prop.qualifier || '',
+      prop.card || '',
+      prop.property_location || '',
+      prop.property_class || '',
+      prop.property_vcs || '',
+      prop.building_class_display || '',
+      prop.type_use_display || '',
+      prop.design_display || '',
+      prop.new_vcs || '',
+      prop.location_analysis || '',
+      prop.asset_zoning || '',
+      prop.asset_map_page || '',
+      prop.asset_key_page || '',
+      prop.worksheet_notes || '',
+      readyProperties.has(prop.property_composite_key) ? 'Yes' : 'No'
+    ]);
 
-    filteredWorksheetProps.forEach(prop => {
-      csv += `"${prop.block}","${prop.lot}","${prop.qualifier || ''}","${prop.card || ''}","${prop.property_location || ''}",`;
-      csv += `"${prop.property_class}","${prop.property_vcs}",`;
-      csv += `"${prop.building_class_display}","${prop.type_use_display}","${prop.design_display}",`;
-      csv += `"${prop.new_vcs}","${prop.location_analysis}","${prop.asset_zoning}",`;
-      csv += `"${prop.asset_map_page}","${prop.asset_key_page}","${prop.worksheet_notes}",`;
-      csv += `"${readyProperties.has(prop.property_composite_key) ? 'Yes' : 'No'}"\n`;
-    });
-    
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `PropertyWorksheet_${jobData.job_number}_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    // Create worksheet from array of arrays
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+
+    // Base style for all cells
+    const baseStyle = {
+      font: { name: 'Leelawadee', sz: 10 },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    // Header style (bold, no fill)
+    const headerStyle = {
+      font: { name: 'Leelawadee', sz: 10, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    // Apply formatting to all cells
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws[cellAddress]) continue;
+
+        // Apply header style to first row
+        if (R === 0) {
+          ws[cellAddress].s = headerStyle;
+        } else {
+          ws[cellAddress].s = { ...baseStyle };
+
+          // Column B (Lot) - format as text to preserve trailing zeros like .10
+          if (C === 1) {
+            ws[cellAddress].t = 's';  // Force text type
+            ws[cellAddress].z = '@';   // Text format
+          }
+        }
+      }
+    }
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 10 },  // Block
+      { wch: 10 },  // Lot
+      { wch: 12 },  // Qualifier
+      { wch: 8 },   // Card
+      { wch: 30 },  // Property Location
+      { wch: 10 },  // Class
+      { wch: 12 },  // Current VCS
+      { wch: 15 },  // Building
+      { wch: 15 },  // Type/Use
+      { wch: 15 },  // Design
+      { wch: 12 },  // New VCS
+      { wch: 25 },  // Location Analysis
+      { wch: 10 },  // Zoning
+      { wch: 10 },  // Map Page
+      { wch: 10 },  // Key Page
+      { wch: 30 },  // Notes
+      { wch: 8 }    // Ready
+    ];
+
+    // Create workbook and export
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Property Worksheet');
+    XLSX.writeFile(wb, `PropertyWorksheet_${jobData?.job_name || 'export'}_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
 const analyzeImportFile = async (file) => {
@@ -2263,13 +2854,13 @@ const analyzeImportFile = async (file) => {
         let location;
         if (vendorType === 'Microsystems') {
           // Prefer explicit Property Location if present (this is the address field). Fallback to Location if not.
-          location = row.PROPERTY_LOCATION?.toString() || row['Property Location']?.toString() || row.Location?.toString() || '';
+          location = row['Property Location']?.toString() || row.PROPERTY_LOCATION?.toString() || row.Address?.toString() || row.Location?.toString() || '';
           // If location seems empty or is the analysis field, try other patterns
           if (!location || location.toLowerCase().includes('analysis')) {
             location = row['Property Location']?.toString() || row.Address?.toString() || 'NONE';
           }
         } else { // BRT
-          location = row.PROPERTY_LOCATION?.toString() || row['Property Location']?.toString() || row.Location?.toString() || 'NONE';
+          location = row['Property Location']?.toString() || row.PROPERTY_LOCATION?.toString() || row.Address?.toString() || row.Location?.toString() || 'NONE';
         }
 
         // If address components were split across columns (e.g. number in Location and street in Location Analysis),
@@ -2760,6 +3351,31 @@ const analyzeImportFile = async (file) => {
           {/* Time Normalization Statistics */}
           {timeNormalizedSales.length > 0 && (
             <>
+              {/* Sale Data Changes Warning */}
+              {(() => {
+                const salesDataChangedCount = timeNormalizedSales.filter(s => s.sale_data_changed).length;
+                if (salesDataChangedCount > 0) {
+                  return (
+                    <div className="mb-4 p-4 bg-amber-50 border-l-4 border-amber-500 rounded-lg flex items-start gap-3">
+                      <AlertCircle className="text-amber-600 mt-0.5 flex-shrink-0" size={24} />
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-amber-900 mb-1">
+                          ⚠️ Sale Data Updates Detected
+                        </p>
+                        <p className="text-sm text-amber-800">
+                          <strong>{salesDataChangedCount}</strong> {salesDataChangedCount === 1 ? 'property has' : 'properties have'} updated sale data from the latest file upload.
+                          {salesDataChangedCount === 1 ? ' Its' : ' Their'} Keep/Reject decision{salesDataChangedCount === 1 ? ' has' : 's have'} been automatically reset to <strong>"Pending Review"</strong>.
+                        </p>
+                        <p className="text-xs text-amber-700 mt-2">
+                          💡 Please review {salesDataChangedCount === 1 ? 'this property' : 'these properties'} in the table below and update {salesDataChangedCount === 1 ? 'its' : 'their'} decision{salesDataChangedCount === 1 ? '' : 's'} as needed.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
               <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-lg font-semibold mb-4">Time Normalization Statistics (County HPI Based)</h3>
                 <div className="grid grid-cols-6 gap-4">
@@ -2851,7 +3467,7 @@ const analyzeImportFile = async (file) => {
                 {!isResultsCollapsed && (
                   <>
                     <div className="flex justify-between items-center mb-4">
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap">
                         <select
                           value={salesReviewFilter}
                           onChange={(e) => setSalesReviewFilter(e.target.value)}
@@ -2976,6 +3592,17 @@ const analyzeImportFile = async (file) => {
                           Reject All Outlier
                         </button>
 
+                        {/* Export to Excel button */}
+                        <button
+                          type="button"
+                          onClick={exportNormalizedSalesToExcel}
+                          className="px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 flex items-center gap-2"
+                          title="Export all properties with normalization data to Excel (includes properties without sales)"
+                        >
+                          <Download size={16} />
+                          Export Master File
+                        </button>
+
                       </div>
                     </div>
 
@@ -3029,7 +3656,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-16 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('package')}
                             >
-                              Package {normSortConfig.field === 'package' && (normSortConfig.direction === 'asc' ? '��' : '↓')}
+                              Package {normSortConfig.field === 'package' && (normSortConfig.direction === 'asc' ? '��' : '���')}
                             </th>
                             <th 
                               className="px-4 py-3 text-right text-sm font-medium text-gray-700 w-24 cursor-pointer hover:bg-gray-100"
@@ -3071,7 +3698,7 @@ const analyzeImportFile = async (file) => {
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-20 cursor-pointer hover:bg-gray-100"
                               onClick={() => handleNormalizationSort('is_outlier')}
                             >
-                              Status {normSortConfig.field === 'is_outlier' && (normSortConfig.direction === 'asc' ? '↑' : '↓')}
+                              Status {normSortConfig.field === 'is_outlier' && (normSortConfig.direction === 'asc' ? '↑' : '���')}
                             </th>
                             <th 
                               className="px-4 py-3 text-center text-sm font-medium text-gray-700 w-28 cursor-pointer hover:bg-gray-100"
@@ -3199,7 +3826,7 @@ const analyzeImportFile = async (file) => {
                                       // DEBUG: Check all possible sales NU fields
                                       const salesNU = sale.sales_nu || sale.sales_instrument || sale.nu || sale.sale_nu || '';
                                       if (sale.id && sale.id.toString().endsWith('0')) { // Log every 10th for debugging
-                                        if (false) console.log(`������ Table render sales_nu for sale ${sale.id}:`, {
+                                        if (false) console.log(`�������� Table render sales_nu for sale ${sale.id}:`, {
                                           sales_nu: sale.sales_nu,
                                           sales_instrument: sale.sales_instrument,
                                           nu: sale.nu,
@@ -3459,6 +4086,15 @@ const analyzeImportFile = async (file) => {
                 >
                   {isCalculatingUnitSizes ? 'Calculating...' : 'Calculate Lot Size'}
                 </button>
+                <button
+                  onClick={exportLotSizeReport}
+                  disabled={isExportingLotSizes}
+                  className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
+                  title="Export lot size data for all properties"
+                >
+                  <Download size={16} />
+                  {isExportingLotSizes ? 'Exporting...' : 'Export Report'}
+                </button>
               </div>
             </div>
 
@@ -3656,26 +4292,125 @@ const analyzeImportFile = async (file) => {
                 ) : null}
                 <button
                   onClick={() => {
-                    // Export to CSV
-                    let csv = 'Block,Total Properties,# of Sales,Avg Normalized Value,Avg Age,Avg Size,Most Repeated Design,Age Consistency,Size Consistency,Design Consistency,Color,Bluebeam Position\n';
-                    marketAnalysisData.forEach(block => {
-                      csv += `"${block.block}","${block.propertyCount}","${block.salesCount || 0}","$${block.avgNormalizedValue.toLocaleString()}",`;
-                      csv += `"${block.ageDetails.avgYear}","${block.sizeDetails.avgSize}","${block.designDetails.dominantDesign}",`;
-                      csv += `"${block.ageConsistency}","${block.sizeConsistency}","${block.designConsistency}",`;
-                      csv += `"${block.color.name}","Row ${block.color.row} Col ${block.color.col}"\n`;
-                    });
-                    
-                    const blob = new Blob([csv], { type: 'text/csv' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `BlockAnalysis_${jobData.job_number}_${new Date().toISOString().split('T')[0]}.csv`;
-                    a.click();
-                    URL.revokeObjectURL(url);
+                    // Export to Excel with formatting and colors
+                    if (!marketAnalysisData || marketAnalysisData.length === 0) {
+                      alert('No market analysis data available to export. Please run the analysis first.');
+                      return;
+                    }
+
+                    // Prepare data with headers
+                    const headers = [
+                      'Block',
+                      'Total Properties',
+                      '# of Sales',
+                      'Avg Normalized Value',
+                      'Avg Age',
+                      'Avg Size',
+                      'Most Common Design',
+                      'Age Consistency',
+                      'Size Consistency',
+                      'Design Consistency',
+                      'Color',
+                      'Bluebeam Position'
+                    ];
+
+                    const data = marketAnalysisData.map(block => [
+                      block.block || '',
+                      block.propertyCount || 0,
+                      block.salesCount || 0,
+                      block.avgNormalizedValue || 0,
+                      block.ageDetails?.avgYear || '',
+                      block.sizeDetails?.avgSize || '',
+                      block.designDetails?.dominantDesign || '',
+                      block.ageConsistency || '',
+                      block.sizeConsistency || '',
+                      block.designConsistency || '',
+                      block.color?.name || '',
+                      `Row ${block.color?.row || ''} Col ${block.color?.col || ''}`
+                    ]);
+
+                    // Create worksheet from array of arrays
+                    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+
+                    // Base style for all cells
+                    const baseStyle = {
+                      font: { name: 'Leelawadee', sz: 10 },
+                      alignment: { horizontal: 'center', vertical: 'center' }
+                    };
+
+                    // Header style (bold, no fill)
+                    const headerStyle = {
+                      font: { name: 'Leelawadee', sz: 10, bold: true },
+                      alignment: { horizontal: 'center', vertical: 'center' }
+                    };
+
+                    // Apply formatting to all cells
+                    const range = XLSX.utils.decode_range(ws['!ref']);
+
+                    for (let R = range.s.r; R <= range.e.r; ++R) {
+                      for (let C = range.s.c; C <= range.e.c; ++C) {
+                        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+                        if (!ws[cellAddress]) continue;
+
+                        // Apply header style to first row
+                        if (R === 0) {
+                          ws[cellAddress].s = headerStyle;
+                        } else {
+                          ws[cellAddress].s = { ...baseStyle };
+
+                          // Apply specific formatting based on column
+                          // Column B (Total Properties) and C (# of Sales) - number format
+                          if (C === 1 || C === 2) {
+                            ws[cellAddress].s.numFmt = '#,##0';
+                          }
+                          // Column D (Avg Normalized Value) - currency format
+                          else if (C === 3) {
+                            ws[cellAddress].s.numFmt = '$#,##0';
+                          }
+                          // Column F (Avg Size) - number format
+                          else if (C === 5) {
+                            ws[cellAddress].s.numFmt = '#,##0';
+                          }
+                          // Column K (Color) - apply the actual color as background
+                          else if (C === 10) {
+                            const colorName = marketAnalysisData[R - 1]?.color?.hex;
+                            if (colorName) {
+                              ws[cellAddress].s.fill = { fgColor: { rgb: colorName.replace('#', '') } };
+                              // If color is dark, use white text
+                              const isDark = parseInt(colorName.replace('#', '').substring(0, 2), 16) < 128;
+                              if (isDark) {
+                                ws[cellAddress].s.font = { ...ws[cellAddress].s.font, color: { rgb: 'FFFFFF' } };
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+
+                    // Set column widths
+                    ws['!cols'] = [
+                      { wch: 12 },  // Block
+                      { wch: 15 },  // Total Properties
+                      { wch: 12 },  // # of Sales
+                      { wch: 20 },  // Avg Normalized Value
+                      { wch: 10 },  // Avg Age
+                      { wch: 12 },  // Avg Size
+                      { wch: 25 },  // Most Common Design
+                      { wch: 15 },  // Age Consistency
+                      { wch: 15 },  // Size Consistency
+                      { wch: 17 },  // Design Consistency
+                      { wch: 20 },  // Color
+                      { wch: 18 }   // Bluebeam Position
+                    ];
+
+                    // Create workbook and export
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'Block Analysis');
+                    XLSX.writeFile(wb, `BlockAnalysis_${jobData?.job_name || 'export'}_${new Date().toISOString().split('T')[0]}.xlsx`);
                   }}
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
-                  Export to CSV
+                  Export to Excel
                 </button>
 
                 {/* Mark Complete for Market Analysis (next to Export) */}
@@ -3754,11 +4489,11 @@ const analyzeImportFile = async (file) => {
             </div>
             
             <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
-              <strong>Color Scale:</strong> 
-              <br/>• First color: $0 - ${(colorScaleIncrement - 1).toLocaleString()}
-              <br/>• Second color: ${colorScaleIncrement.toLocaleString()} - ${((colorScaleIncrement * 2) - 1).toLocaleString()}
-              <br/>��� Third color: ${(colorScaleIncrement * 2).toLocaleString()} - ${((colorScaleIncrement * 3) - 1).toLocaleString()}
-              <br/>• And so on... Total of {marketAnalysisData.length} blocks analyzed.
+              <strong>Color Scale:</strong> Red → Pink → Orange → Yellow → Green → Teal → Blue → Purple
+              <br/>• Each color has 2 steps (pastel & bright) at ${colorScaleIncrement.toLocaleString()} intervals
+              <br/>• Red: $0-${(colorScaleIncrement * 2 - 1).toLocaleString()} • Pink: ${(colorScaleIncrement * 2).toLocaleString()}-${(colorScaleIncrement * 4 - 1).toLocaleString()} • Orange: ${(colorScaleIncrement * 4).toLocaleString()}-${(colorScaleIncrement * 6 - 1).toLocaleString()} • Yellow: ${(colorScaleIncrement * 6).toLocaleString()}-${(colorScaleIncrement * 8 - 1).toLocaleString()}
+              <br/>• Green: ${(colorScaleIncrement * 8).toLocaleString()}-${(colorScaleIncrement * 10 - 1).toLocaleString()} • Teal: ${(colorScaleIncrement * 10).toLocaleString()}-${(colorScaleIncrement * 12 - 1).toLocaleString()} • Blue: ${(colorScaleIncrement * 12).toLocaleString()}-${(colorScaleIncrement * 14 - 1).toLocaleString()} • Purple: ${(colorScaleIncrement * 14).toLocaleString()}+
+              <br/>• Total: {marketAnalysisData.length} blocks analyzed • Gray = No Data
             </div>
           </div>
           
@@ -4250,7 +4985,7 @@ const analyzeImportFile = async (file) => {
                                 
                                 if (parentCard && parentCard.new_vcs) {
                                   handleWorksheetChange(prop.property_composite_key, 'new_vcs', parentCard.new_vcs);
-                                  if (false) console.log(`✅ Copied VCS "${parentCard.new_vcs}" from parent card to ${prop.card}`);
+                                  if (false) console.log(`�� Copied VCS "${parentCard.new_vcs}" from parent card to ${prop.card}`);
                                 } else if (parentCard) {
                                   alert('Parent card does not have a New VCS value to copy');
                                 } else {

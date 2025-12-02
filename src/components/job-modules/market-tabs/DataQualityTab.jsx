@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  AlertCircle, 
+import {
+  AlertCircle,
   RefreshCw,
   Download,
   Check,
@@ -8,7 +8,7 @@ import {
   ChevronRight,
   ChevronLeft
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import './sharedTabNav.css';
 import { supabase, interpretCodes, propertyService, checklistService } from '../../../lib/supabaseClient';
 
@@ -264,7 +264,26 @@ const DataQualityTab = ({
       { wch: 18 },
       { wch: 18 }
     ];
-    
+
+    // Apply styling to summary sheet
+    const summaryRange = XLSX.utils.decode_range(summarySheet['!ref']);
+    const headerRows = [0, 2, 9, 18]; // Title, Job Info, Overall Metrics, Issues by Category
+    const tableHeaderRow = summaryData.findIndex(row => row[0] === 'Category');
+
+    for (let R = summaryRange.s.r; R <= summaryRange.e.r; ++R) {
+      for (let C = summaryRange.s.c; C <= summaryRange.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!summarySheet[cellAddress]) continue;
+
+        const isHeader = headerRows.includes(R) || R === tableHeaderRow;
+
+        summarySheet[cellAddress].s = {
+          font: { name: 'Leelawadee', sz: 10, bold: isHeader },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      }
+    }
+
     XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
     
     // DETAILS SHEET
@@ -282,7 +301,7 @@ const DataQualityTab = ({
               property.property_block || '',
               property.property_lot || '',
               property.property_qualifier || '',
-              property.property_card || '',
+              property.property_addl_card || '1',
               property.property_location || '',
               property.property_m4_class || '',
               getCheckTitle(issue.check),
@@ -303,7 +322,7 @@ const DataQualityTab = ({
               block,
               lot || '',
               qualifier || '',
-              card,
+              card || '1',
               location,
               '',
               getCheckTitle(issue.check),
@@ -327,15 +346,21 @@ const DataQualityTab = ({
       { wch: 12 },
       { wch: 60 }
     ];
-    
+
+    // Apply styling to details sheet
     const range = XLSX.utils.decode_range(detailsSheet['!ref']);
-    for (let C = range.s.c; C <= range.e.c; ++C) {
-      const address = XLSX.utils.encode_col(C) + "1";
-      if (!detailsSheet[address]) continue;
-      detailsSheet[address].s = {
-        font: { bold: true },
-        fill: { fgColor: { rgb: "EEEEEE" } }
-      };
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!detailsSheet[cellAddress]) continue;
+
+        const isHeader = R === 0;
+
+        detailsSheet[cellAddress].s = {
+          font: { name: 'Leelawadee', sz: 10, bold: isHeader },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      }
     }
     
     XLSX.utils.book_append_sheet(wb, detailsSheet, 'Details');
@@ -382,6 +407,33 @@ const DataQualityTab = ({
     });
 
     const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+
+    // Apply styling to summary sheet
+    const summaryRange = XLSX.utils.decode_range(summarySheet['!ref']);
+    const tableHeaderRow = summaryData.findIndex(row => row[0] === 'Category');
+
+    for (let R = summaryRange.s.r; R <= summaryRange.e.r; ++R) {
+      for (let C = summaryRange.s.c; C <= summaryRange.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!summarySheet[cellAddress]) continue;
+
+        const isHeader = R === 0 || R === tableHeaderRow;
+
+        summarySheet[cellAddress].s = {
+          font: { name: 'Leelawadee', sz: 10, bold: isHeader },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      }
+    }
+
+    summarySheet['!cols'] = [
+      { wch: 35 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 18 }
+    ];
+
     XLSX.utils.book_append_sheet(wb, summarySheet, 'Ignored Summary');
 
     // DETAILS SHEET
@@ -397,7 +449,7 @@ const DataQualityTab = ({
             property.property_block || '',
             property.property_lot || '',
             property.property_qualifier || '',
-            property.property_card || '',
+            property.property_addl_card || '1',
             property.property_location || '',
             property.property_m4_class || '',
             getCheckTitle(issue.check),
@@ -409,6 +461,35 @@ const DataQualityTab = ({
     });
 
     const detailsSheet = XLSX.utils.aoa_to_sheet(detailsData);
+
+    // Apply styling to details sheet
+    const detailsRange = XLSX.utils.decode_range(detailsSheet['!ref']);
+    for (let R = detailsRange.s.r; R <= detailsRange.e.r; ++R) {
+      for (let C = detailsRange.s.c; C <= detailsRange.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!detailsSheet[cellAddress]) continue;
+
+        const isHeader = R === 0;
+
+        detailsSheet[cellAddress].s = {
+          font: { name: 'Leelawadee', sz: 10, bold: isHeader },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      }
+    }
+
+    detailsSheet['!cols'] = [
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 12 },
+      { wch: 10 },
+      { wch: 20 },
+      { wch: 10 },
+      { wch: 45 },
+      { wch: 12 },
+      { wch: 60 }
+    ];
+
     XLSX.utils.book_append_sheet(wb, detailsSheet, 'Ignored Details');
 
     XLSX.writeFile(wb, `DQ_Ignored_${jobInfo}_${timestamp}.xlsx`);
@@ -672,6 +753,23 @@ const generateQCFormPDF = () => {
     setIsRunningChecks(true);
     setAnalysisProgress({ current: 0, total: properties.length, phase: 'Initializing...' });
 
+    // VERIFY: Check when raw file was last updated to ensure we're using the latest data
+    try {
+      const { data: jobMeta } = await supabase
+        .from('jobs')
+        .select('raw_file_parsed_at, source_file_uploaded_at, updated_at')
+        .eq('id', jobData.id)
+        .single();
+
+      if (jobMeta) {
+        console.log('📅 Raw file last parsed:', jobMeta.raw_file_parsed_at);
+        console.log('📅 Source file uploaded:', jobMeta.source_file_uploaded_at);
+        console.log('📅 Job last updated:', jobMeta.updated_at);
+      }
+    } catch (err) {
+      console.warn('Could not verify file timestamps:', err);
+    }
+
     const results = {
       mod_iv: [],
       cama: [],
@@ -785,7 +883,7 @@ const generateQCFormPDF = () => {
         // Use client-side fallback directly - much faster than RPC calls!
         rawData = (await propertyService.getRawDataForPropertyClientSide(property.job_id, property.property_composite_key)) || {};
       } catch (error) {
-        console.warn(`Failed to get raw data for ${property.property_composite_key}:`, error);
+        // Reduced console noise - only log errors, not warnings for every property
         rawData = {};
       }
       rawDataCache.set(property.property_composite_key, rawData);
@@ -869,8 +967,9 @@ const generateQCFormPDF = () => {
     // TYPE USE / BUILDING CLASS VALIDATION
     const typeUseStr = typeUse?.toString().trim();
     const buildingClassStr = buildingClass?.toString().trim();
-    
-    if (typeUseStr && buildingClassStr && parseInt(buildingClassStr) > 10) {
+
+    // Only validate if both fields have real values (not null, empty, whitespace, or "00")
+    if (typeUseStr && typeUseStr !== '00' && buildingClassStr && parseInt(buildingClassStr) > 10) {
       let validBuildingClasses = [];
       const firstChar = typeUseStr.charAt(0);
       
@@ -908,30 +1007,32 @@ const generateQCFormPDF = () => {
       }
     }
     
-    if (m4Class && m4Class !== '2' && m4Class !== '3A') {
-      if (buildingClass && parseInt(buildingClass) !== 10) {
+    // Only flag building class issues for specific property classes when they have BOTH design style AND type/use
+    // Classes to check: 2, 3A, 15A, 15B, 15C, 15D, 15E, 15F
+    const classesToCheck = ['2', '3A', '15A', '15B', '15C', '15D', '15E', '15F'];
+    // Treat null, empty, whitespace, and "00" as empty values (BRT uses "00" for empty fields)
+    const hasValidDesign = designStyle && designStyle.trim() !== '' && designStyle.trim() !== '00';
+    const hasValidTypeUse = typeUse && typeUse.trim() !== '' && typeUse.trim() !== '00';
+
+    // Removed incorrect facility building class check - all checks now handled below
+    
+    // For residential classes, only flag building class 10 if they have BOTH design style AND type/use
+    // If either is missing, the property might be exempt (disabled veteran) or detached structure (pool, garage)
+    const residentialClassesCheck = ['2', '3A', '15A', '15B', '15C', '15D', '15E', '15F'];
+    if (residentialClassesCheck.includes(m4Class) && parseInt(buildingClass) === 10) {
+      if (hasValidDesign && hasValidTypeUse) {
         results.characteristics.push({
-          check: 'non_residential_wrong_building_class',
+          check: 'residential_building_class_10',
           severity: 'warning',
           property_key: property.property_composite_key,
-          message: `Class ${m4Class} should have building class 10 (has ${buildingClass})`,
+          message: `Class ${m4Class} shouldn't have building class 10 (needs >10)`,
           details: property
         });
       }
     }
     
-    if ((m4Class === '2' || m4Class === '3A') && parseInt(buildingClass) === 10) {
-      results.characteristics.push({
-        check: 'residential_building_class_10',
-        severity: 'warning',
-        property_key: property.property_composite_key,
-        message: `Class ${m4Class} shouldn't have building class 10 (needs >10)`,
-        details: property
-      });
-    }
-    
     if (buildingClass > 10) {
-      if (!designStyle) {
+      if (!designStyle || designStyle.trim() === '' || designStyle.trim() === '00') {
         results.characteristics.push({
           check: 'missing_design_style',
           severity: 'warning',
@@ -940,7 +1041,7 @@ const generateQCFormPDF = () => {
           details: property
         });
       }
-      if (!typeUse) {
+      if (!typeUse || typeUse.trim() === '' || typeUse.trim() === '00') {
         results.characteristics.push({
           check: 'missing_type_use',
           severity: 'warning',
@@ -951,7 +1052,7 @@ const generateQCFormPDF = () => {
       }
     }
     
-    if ((m4Class === '2' || m4Class === '3A') && designStyle && designStyle.trim() !== '') {
+    if ((m4Class === '2' || m4Class === '3A') && designStyle && designStyle.trim() !== '' && designStyle.trim() !== '00') {
       if (!buildingClass || buildingClass <= 10) {
         results.characteristics.push({
           check: 'design_without_proper_building_class',
@@ -961,7 +1062,7 @@ const generateQCFormPDF = () => {
           details: property
         });
       }
-      if (!typeUse || typeUse.trim() === '') {
+      if (!typeUse || typeUse.trim() === '' || typeUse.trim() === '00') {
         results.characteristics.push({
           check: 'design_without_type_use',
           severity: 'warning',
@@ -973,7 +1074,7 @@ const generateQCFormPDF = () => {
     }
     
     if (modImprovement === 0) {
-      if (designStyle && designStyle.trim() !== '') {
+      if (designStyle && designStyle.trim() !== '' && designStyle.trim() !== '00') {
         results.characteristics.push({
           check: 'zero_improvement_with_design',
           severity: 'warning',
@@ -983,7 +1084,7 @@ const generateQCFormPDF = () => {
         });
       }
       
-      if (typeUse && typeUse.trim() !== '') {
+      if (typeUse && typeUse.trim() !== '' && typeUse.trim() !== '00') {
         results.characteristics.push({
           check: 'zero_improvement_with_type',
           severity: 'warning',
@@ -995,7 +1096,7 @@ const generateQCFormPDF = () => {
     }
     
     if (m4Class === '4A' || m4Class === '4B' || m4Class === '4C') {
-      if (designStyle && designStyle.trim() !== '') {
+      if (designStyle && designStyle.trim() !== '' && designStyle.trim() !== '00') {
         results.characteristics.push({
           check: 'commercial_with_design',
           severity: 'warning',
@@ -1005,7 +1106,7 @@ const generateQCFormPDF = () => {
         });
       }
       
-      if (typeUse && typeUse.trim() !== '') {
+      if (typeUse && typeUse.trim() !== '' && typeUse.trim() !== '00') {
         results.characteristics.push({
           check: 'commercial_with_type',
           severity: 'warning',
@@ -1015,43 +1116,59 @@ const generateQCFormPDF = () => {
         });
       }
     }
-    
-  // LOT SIZE CHECKS - Use the enhanced getTotalLotSize function
-    const totalLotSize = await interpretCodes.getTotalLotSize(property, vendor, codeDefinitions);
-    const lotFrontage = property.asset_lot_frontage || 0;
 
-    // Determine a usable lot acreage from multiple sources before flagging zero lot size
+  // LOT SIZE CHECKS - Use the enhanced getTotalLotSize function
+  // Skip lot size checks for additional cards (only check primary cards: 1 for BRT, M for Microsystems)
+  const cardValue = property.property_addl_card || '1';
+  const isPrimaryCard = (vendor === 'BRT' && cardValue === '1') ||
+                        (vendor === 'Microsystems' && (cardValue === 'M' || cardValue === 'm'));
+
+  if (isPrimaryCard) {
+    // Determine lot acreage based on vendor type:
+    // BRT: Use ONLY the calculated lot sizes from unit rate configuration (market_manual_lot_acre/sf)
+    // Microsystems: Use direct read from asset fields
     let computedLotAcres = null;
 
-    // Primary: interpretCodes.getTotalLotSize (returns acres or null)
-    if (totalLotSize !== null && totalLotSize !== undefined && totalLotSize !== '') {
-      const parsed = parseFloat(totalLotSize);
-      if (!isNaN(parsed) && parsed !== 0) computedLotAcres = parsed;
-    }
+    if (vendor === 'BRT') {
+      // For BRT, prefer the calculated lot sizes from PreValuation unit rate configuration
+      // These are stored in property_market_analysis by generateLotSizesForJob function
+      const manualAcre = property.market_manual_lot_acre;
+      const manualSf = property.market_manual_lot_sf;
+      const lotFrontage = property.asset_lot_frontage || 0;
+      const lotDepth = property.asset_lot_depth || 0;
 
-    // Fallback: explicit acreage fields (market_manual_lot_acre then asset_lot_acre)
-    const manualAcre = property.market_manual_lot_acre || property.asset_lot_acre;
-    if (!computedLotAcres && manualAcre && parseFloat(manualAcre) !== 0) {
-      computedLotAcres = parseFloat(manualAcre);
-    }
+      if (manualAcre && parseFloat(manualAcre) !== 0) {
+        computedLotAcres = parseFloat(manualAcre);
+      } else if (manualSf && parseFloat(manualSf) !== 0) {
+        computedLotAcres = parseFloat(manualSf) / 43560;
+      } else if (lotFrontage && lotDepth && parseFloat(lotFrontage) !== 0 && parseFloat(lotDepth) !== 0) {
+        // Fallback to frontage �� depth if calculated values not available yet
+        const sf = parseFloat(lotFrontage) * parseFloat(lotDepth);
+        if (!isNaN(sf) && sf !== 0) {
+          computedLotAcres = sf / 43560;
+        }
+      }
+    } else {
+      // For Microsystems, use direct asset fields
+      const assetAcre = property.asset_lot_acre;
+      const assetSf = property.asset_lot_sf;
+      const lotFrontage = property.asset_lot_frontage || 0;
+      const lotDepth = property.asset_lot_depth || 0;
 
-    // Fallback: explicit square feet fields -> convert to acres
-    const manualSf = property.market_manual_lot_sf || property.asset_lot_sf;
-    if (!computedLotAcres && manualSf && parseFloat(manualSf) !== 0) {
-      computedLotAcres = parseFloat(manualSf) / 43560;
-    }
-
-    // Fallback: compute from frontage * depth if both present
-    const lotDepth = property.asset_lot_depth || 0;
-    if (!computedLotAcres && lotFrontage && lotDepth && parseFloat(lotFrontage) !== 0 && parseFloat(lotDepth) !== 0) {
-      const sf = parseFloat(lotFrontage) * parseFloat(lotDepth);
-      if (!isNaN(sf) && sf !== 0) {
-        computedLotAcres = sf / 43560;
+      if (assetAcre && parseFloat(assetAcre) !== 0) {
+        computedLotAcres = parseFloat(assetAcre);
+      } else if (assetSf && parseFloat(assetSf) !== 0) {
+        computedLotAcres = parseFloat(assetSf) / 43560;
+      } else if (lotFrontage && lotDepth && parseFloat(lotFrontage) !== 0 && parseFloat(lotDepth) !== 0) {
+        const sf = parseFloat(lotFrontage) * parseFloat(lotDepth);
+        if (!isNaN(sf) && sf !== 0) {
+          computedLotAcres = sf / 43560;
+        }
       }
     }
 
-    // Check if we truly have zero lot size (computedLotAcres is acres or null)
-    if ((!computedLotAcres || parseFloat(computedLotAcres) === 0) && lotFrontage === 0) {
+    // Check if we truly have zero lot size
+    if (!computedLotAcres || parseFloat(computedLotAcres) === 0) {
       // Skip condos with only site value
       let skipError = false;
 
@@ -1081,28 +1198,38 @@ const generateQCFormPDF = () => {
         });
       }
     }
+  }
     // LIVING AREA & YEAR BUILT
     const sfla = property.asset_sfla || 0;
     const yearBuilt = property.asset_year_built;
-    
-    if ((m4Class === '2' || m4Class === '3A') && sfla === 0) {
-      results.characteristics.push({
-        check: 'missing_sfla',
-        severity: 'warning',
-        property_key: property.property_composite_key,
-        message: `Class ${m4Class} property missing living area`,
-        details: property
-      });
+
+    // Only flag missing living area for residential classes when they have valid type, use, design, and building class
+    // This excludes exempt properties (disabled veterans, etc.) and detached structures (pools, garages)
+    const residentialClasses = ['2', '3A', '15A', '15B', '15C', '15D', '15E', '15F'];
+    if (residentialClasses.includes(m4Class) && sfla === 0) {
+      // Only flag if property has all required fields indicating it's a real building
+      if (hasValidTypeUse && hasValidDesign && buildingClass && parseInt(buildingClass) > 10) {
+        results.characteristics.push({
+          check: 'missing_sfla',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: `Class ${m4Class} property missing living area`,
+          details: property
+        });
+      }
     }
-    
+
     if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10 && !yearBuilt) {
-      results.characteristics.push({
-        check: 'missing_year_built',
-        severity: 'warning',
-        property_key: property.property_composite_key,
-        message: 'Improved property missing year built',
-        details: property
-      });
+      // Only flag missing year built if property has valid type, use, and design
+      if (hasValidTypeUse && hasValidDesign) {
+        results.characteristics.push({
+          check: 'missing_year_built',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Improved property missing year built',
+          details: property
+        });
+      }
     }
     
     // VCS CHECK
@@ -1117,24 +1244,27 @@ const generateQCFormPDF = () => {
     }
     
     // CONDITION CHECKS
+    // Only check conditions for residential classes when they have valid type, use, and design
     if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
-      if (!property.asset_ext_cond) {
-        results.characteristics.push({
-          check: 'missing_ext_condition',
-          severity: 'warning',
-          property_key: property.property_composite_key,
-          message: 'Improved property missing exterior condition',
-          details: property
-        });
-      }
-      if (!property.asset_int_cond) {
-        results.characteristics.push({
-          check: 'missing_int_condition',
-          severity: 'warning',
-          property_key: property.property_composite_key,
-          message: 'Improved property missing interior condition',
-          details: property
-        });
+      if (hasValidTypeUse && hasValidDesign) {
+        if (!property.asset_ext_cond) {
+          results.characteristics.push({
+            check: 'missing_ext_condition',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: 'Improved property missing exterior condition',
+            details: property
+          });
+        }
+        if (!property.asset_int_cond) {
+          results.characteristics.push({
+            check: 'missing_int_condition',
+            severity: 'warning',
+            property_key: property.property_composite_key,
+            message: 'Improved property missing interior condition',
+            details: property
+          });
+        }
       }
     }
     
@@ -1313,44 +1443,49 @@ const generateQCFormPDF = () => {
           break;
         }
       }
-      
-      if (hasLandAdjustments) {
+
+      // Only flag land adjustments if location_analysis is NOT populated
+      // If location_analysis exists, the adjustments are intentional from page-by-page analysis
+      // Use the flattened field that was already processed by JobContainer
+      const hasLocationAnalysisBRT = property.location_analysis && property.location_analysis.trim() !== '';
+
+      if (hasLandAdjustments && !hasLocationAnalysisBRT) {
         results.special.push({
           check: 'land_adjustments_exist',
           severity: 'info',
           property_key: property.property_composite_key,
-          message: 'Property has land adjustments applied',
+          message: 'Property has land adjustments applied without location analysis',
           details: property
         });
       }
-      
+
     } else if (vendor === 'Microsystems') {
       let hasLandAdjustments = false;
-      
+
       for (let i = 1; i <= 3; i++) {
         const netAdj = rawData[`Net Adjustment${i}`];
         const adjCode = rawData[`Adj Reason Code${i}`];
         const netAdjValue = parseFloat(netAdj) || 0;
-        
+
         if (netAdjValue !== 0 || !interpretCodes.isFieldEmpty(adjCode)) {
           hasLandAdjustments = true;
           break;
         }
       }
-      
+
       if (!hasLandAdjustments) {
         for (let i = 1; i <= 4; i++) {
           const overallPercent = rawData[`Overall Adj Percent${i}`];
           const overallReason = rawData[`Overall Adj Reason${i}`];
           const percentValue = parseFloat(overallPercent) || 0;
-          
+
           if ((percentValue !== 0 && percentValue !== 100) || !interpretCodes.isFieldEmpty(overallReason)) {
             hasLandAdjustments = true;
             break;
           }
         }
       }
-      
+
       if (!hasLandAdjustments) {
         const unitAdj1 = rawData['Unit Adjustment1'];
         const unitAdj2 = rawData['Unit Adjustment2'];
@@ -1358,12 +1493,12 @@ const generateQCFormPDF = () => {
         const unitCode1 = rawData['Unit Adj Code1'];
         const unitCode2 = rawData['Unit Adj Code2'];
         const unitCode = rawData['Unit Adj Code'];
-        
+
         const unitAdj1Value = parseFloat(unitAdj1) || 0;
         const unitAdj2Value = parseFloat(unitAdj2) || 0;
         const unitAdjValue = parseFloat(unitAdj) || 0;
-        
-        if (unitAdj1Value !== 0 || 
+
+        if (unitAdj1Value !== 0 ||
             unitAdj2Value !== 0 ||
             unitAdjValue !== 0 ||
             !interpretCodes.isFieldEmpty(unitCode1) ||
@@ -1372,13 +1507,18 @@ const generateQCFormPDF = () => {
           hasLandAdjustments = true;
         }
       }
-      
-      if (hasLandAdjustments) {
+
+      // Only flag land adjustments if location_analysis is NOT populated
+      // If location_analysis exists, the adjustments are intentional from page-by-page analysis
+      // Use the flattened field that was already processed by JobContainer
+      const hasLocationAnalysisMS = property.location_analysis && property.location_analysis.trim() !== '';
+
+      if (hasLandAdjustments && !hasLocationAnalysisMS) {
         results.special.push({
           check: 'land_adjustments_exist',
           severity: 'info',
           property_key: property.property_composite_key,
-          message: 'Property has land adjustments applied',
+          message: 'Property has land adjustments applied without location analysis',
           details: property
         });
       }
@@ -1387,12 +1527,18 @@ const generateQCFormPDF = () => {
     // MARKET ADJUSTMENTS
     if (vendor === 'BRT') {
       const issues = [];
-      
+
       if (rawData.MKTADJ && parseFloat(rawData.MKTADJ) !== 1) {
+        console.log(`❌ MKTADJ issue: ${property.property_composite_key} = ${rawData.MKTADJ}`);
         issues.push(`MKTADJ = ${rawData.MKTADJ} (should be 1)`);
+        console.log(`❌ MKTADJ issue found: ${property.property_composite_key}`, {
+          MKTADJ: rawData.MKTADJ,
+          NCOVR: rawData.NCOVR
+        });
       }
-      
+
       if (rawData.NCOVR && parseFloat(rawData.NCOVR) !== 0) {
+        console.log(`❌ NCOVR issue: ${property.property_composite_key} = ${rawData.NCOVR}`);
         issues.push(`NCOVR = ${rawData.NCOVR} (should be 0)`);
       }
       

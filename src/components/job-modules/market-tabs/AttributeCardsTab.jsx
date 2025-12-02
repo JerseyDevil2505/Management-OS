@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Layers, FileText, ChevronDown, ChevronRight, Info } from 'lucide-react';
 import './sharedTabNav.css';
 import { supabase, propertyService, interpretCodes } from '../../../lib/supabaseClient';
+import * as XLSX from 'xlsx-js-style';
 
 const CSV_BUTTON_CLASS = 'inline-flex items-center gap-2 px-3 py-1.5 border rounded bg-white text-sm text-gray-700 hover:bg-gray-50';
 
@@ -58,7 +59,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     return localStorage.getItem(`attr-cards-type-filter-${jobData?.id}`) || '1';
   });
   const [useInteriorInspections, setUseInteriorInspections] = useState(() => {
-    return localStorage.getItem(`attr-cards-interior-inspections-${jobData?.id}`) === 'true';
+    const stored = localStorage.getItem(`attr-cards-interior-inspections-${jobData?.id}`);
+    return stored === null ? true : stored === 'true'; // Default to true (checked) on first load
   });
   const [expandedExteriorVCS, setExpandedExteriorVCS] = useState(new Set()); // Track which exterior VCS sections are expanded
   const [expandedInteriorVCS, setExpandedInteriorVCS] = useState(new Set()); // Track which interior VCS sections are expanded
@@ -68,6 +70,28 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [manualInteriorBaseline, setManualInteriorBaseline] = useState(() => {
     return localStorage.getItem(`attr-cards-interior-baseline-${jobData?.id}`) || '';
   });
+
+  // Condition classifications for export
+  const [exteriorBetterConditions, setExteriorBetterConditions] = useState(() => {
+    const stored = localStorage.getItem(`attr-cards-exterior-better-${jobData?.id}`);
+    return stored ? JSON.parse(stored) : [];
+  });
+  const [exteriorWorseConditions, setExteriorWorseConditions] = useState(() => {
+    const stored = localStorage.getItem(`attr-cards-exterior-worse-${jobData?.id}`);
+    return stored ? JSON.parse(stored) : [];
+  });
+  const [interiorBetterConditions, setInteriorBetterConditions] = useState(() => {
+    const stored = localStorage.getItem(`attr-cards-interior-better-${jobData?.id}`);
+    return stored ? JSON.parse(stored) : [];
+  });
+  const [interiorWorseConditions, setInteriorWorseConditions] = useState(() => {
+    const stored = localStorage.getItem(`attr-cards-interior-worse-${jobData?.id}`);
+    return stored ? JSON.parse(stored) : [];
+  });
+
+  // UI state for condition configuration modal
+  const [showConditionConfig, setShowConditionConfig] = useState(false);
+  const [configType, setConfigType] = useState('exterior'); // 'exterior' or 'interior'
   const [conditionData, setConditionData] = useState({
     exterior: {},
     interior: {},
@@ -90,7 +114,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [additionalResults, setAdditionalResults] = useState(marketLandData.additional_cards_rollup || null);
   const [sortField, setSortField] = useState('new_vcs'); // Default sort by VCS
   const [sortDirection, setSortDirection] = useState('asc');
-  const [expandedAdditionalVCS, setExpandedAdditionalVCS] = useState(new Set()); // Track which additional cards VCS sections are expanded
+  const [expandedAdditionalVCS, setExpandedAdditionalVCS] = useState(new Set()); // Track which additional cards VCS sections are expanded (collapsed by default)
 
   // ============ PROPERTY MARKET DATA STATE ============
   const [propertyMarketData, setPropertyMarketData] = useState([]);
@@ -134,69 +158,70 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       return false;
     });
   };
-  // ============ DETECT ACTUAL CONDITION CODES FROM DATA ============
+  // ============ DETECT ALL AVAILABLE CONDITION CODES FROM CODE DEFINITIONS ============
   const detectActualConditionCodes = useCallback(async () => {
     try {
-      // Get all unique condition codes from the actual property records
-      const uniqueExterior = new Set();
-      const uniqueInterior = new Set();
-      
-      // Scan through properties to find all unique codes
-      properties.forEach(prop => {
-        const extCond = prop.asset_ext_cond;
-        const intCond = prop.asset_int_cond;
-        
-        // BRT uses '00' as null/empty, skip it along with other empty values
-        if (extCond && extCond !== '00' && extCond !== '0' && extCond.trim() !== '') {
-          uniqueExterior.add(extCond.trim());
-        }
-        if (intCond && intCond !== '00' && intCond !== '0' && intCond.trim() !== '') {
-          uniqueInterior.add(intCond.trim());
-        }
-      });
-
-      // Now get descriptions for these codes FROM THE PARSED DEFINITIONS
       const exterior = {};
       const interior = {};
 
-      // For each unique exterior code, get its description
-      for (const code of uniqueExterior) {
-        // Skip BRT null code
-        if (code === '00') continue;
-
-        // Use interpretCodes function for vendor-agnostic lookup
-        const description = interpretCodes.getExteriorConditionName(
-          { asset_ext_cond: code },
-          parsedCodeDefinitions,
-          vendorType
-        ) || `Condition ${code}`;
-
-        exterior[code] = description;
+      if (!parsedCodeDefinitions) {
+        return { exterior, interior };
       }
 
-      // For each unique interior code, get its description
-      for (const code of uniqueInterior) {
-        // Skip BRT null code
-        if (code === '00') continue;
+      if (vendorType === 'BRT') {
+        // Try common BRT condition code values (01-20 covers most systems)
+        // Use interpretCodes helper which knows how to navigate the structure
+        for (let i = 1; i <= 20; i++) {
+          const code = String(i).padStart(2, '0');
 
-        // Use interpretCodes function for vendor-agnostic lookup
-        const description = interpretCodes.getInteriorConditionName(
-          { asset_int_cond: code },
-          parsedCodeDefinitions,
-          vendorType
-        ) || `Condition ${code}`;
+          const extDesc = interpretCodes.getExteriorConditionName(
+            { asset_ext_cond: code },
+            parsedCodeDefinitions,
+            vendorType
+          );
 
-        interior[code] = description;
+          const intDesc = interpretCodes.getInteriorConditionName(
+            { asset_int_cond: code },
+            parsedCodeDefinitions,
+            vendorType
+          );
+
+          if (extDesc && extDesc !== code) {
+            exterior[code] = extDesc;
+          }
+
+          if (intDesc && intDesc !== code) {
+            interior[code] = intDesc;
+          }
+        }
+      } else if (vendorType === 'Microsystems') {
+        // Microsystems stores codes in field_codes with prefixes
+        const fieldCodes = parsedCodeDefinitions?.field_codes || {};
+
+        // Exterior condition codes have prefix '490'
+        const exteriorCodes = fieldCodes['490'] || {};
+        Object.entries(exteriorCodes).forEach(([code, codeData]) => {
+          if (codeData.description) {
+            exterior[code] = codeData.description;
+          }
+        });
+
+        // Interior condition codes have prefix '491'
+        const interiorCodes = fieldCodes['491'] || {};
+        Object.entries(interiorCodes).forEach(([code, codeData]) => {
+          if (codeData.description) {
+            interior[code] = codeData.description;
+          }
+        });
       }
 
-      console.log('Detected condition codes:', { exterior, interior });
       return { exterior, interior };
     } catch (error) {
-      console.error('Error detecting actual condition codes:', error);
+      console.error('Error detecting condition codes:', error);
       return { exterior: {}, interior: {} };
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [properties.length, vendorType]);
+  }, [parsedCodeDefinitions, vendorType]);
 
   // ============ PROCESS CONDITION STATISTICS ============
   const processConditionStatistics = (dataByVCS) => {
@@ -456,7 +481,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   // ============ BUILD CONDITION CASCADE TABLE ============
   const renderConditionTable = (data, type, expandedVCS, setExpandedVCS) => {
     const vcsKeys = Object.keys(data).sort();
-    
+
     if (vcsKeys.length === 0) {
       return (
         <div style={{ padding: '20px', textAlign: 'center', color: '#6B7280' }}>
@@ -464,6 +489,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         </div>
       );
     }
+
+    // Get manual baseline configuration
+    const manualBaseline = type === 'Exterior' ? manualExteriorBaseline : manualInteriorBaseline;
 
     // Calculate non-baseline summary across all VCS
     const nonBaselineSummary = calculateNonBaselineSummary(data, type);
@@ -486,13 +514,30 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             setExpandedVCS(newExpanded);
           };
           
-          // Find the baseline condition for this VCS
+          // Calculate VCS-specific average SFLA
+          let vcsTotalSFLA = 0;
+          let vcsConditionCount = 0;
+          Object.values(conditions).forEach(condData => {
+            vcsTotalSFLA += condData.avgSize || 0;
+            vcsConditionCount++;
+          });
+          const vcsAvgSFLA = vcsConditionCount > 0 ? vcsTotalSFLA / vcsConditionCount : 0;
+
+          // Find the baseline condition for this VCS and calculate its normalized value
           let baselineCode = null;
+          let vcsBaselineNormalized = null;
           Object.entries(conditions).forEach(([code, condData]) => {
-            if (condData.adjustmentPct === 0 || 
-                condData.description.toUpperCase().includes('AVERAGE') ||
-                condData.description.toUpperCase().includes('NORMAL')) {
+            const isBaselineCondition = manualBaseline ? (condData.description === manualBaseline) :
+                          (condData.adjustmentPct === 0 ||
+                           condData.description.toUpperCase().includes('AVERAGE') ||
+                           condData.description.toUpperCase().includes('NORMAL'));
+
+            if (isBaselineCondition) {
               baselineCode = code;
+              const avgSFLA = condData.avgSize || 0;
+              const avgValue = condData.avgValue || 0;
+              vcsBaselineNormalized = avgSFLA > 0 ?
+                ((vcsAvgSFLA - avgSFLA) * ((avgValue / avgSFLA) * 0.50)) + avgValue : avgValue;
             }
           });
 
@@ -560,11 +605,19 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                       {conditionCodes.map((code, idx) => {
                         const cond = conditions[code];
                         const isBaseline = code === baselineCode;
-                        
+
+                        // Calculate normalized value using VCS-specific average SFLA and Jim formula
+                        const avgSFLA = cond.avgSize || 0;
+                        const avgValue = cond.avgValue || 0;
+                        const normalized = avgSFLA > 0 ?
+                          ((vcsAvgSFLA - avgSFLA) * ((avgValue / avgSFLA) * 0.50)) + avgValue : avgValue;
+                        const normalizedPct = vcsBaselineNormalized > 0 ?
+                          ((normalized - vcsBaselineNormalized) / vcsBaselineNormalized) * 100 : 0;
+
                         return (
-                          <tr 
+                          <tr
                             key={code}
-                            style={{ 
+                            style={{
                               backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB',
                               fontWeight: isBaseline ? '600' : 'normal'
                             }}
@@ -572,9 +625,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                             <td style={{ padding: '8px 12px', fontSize: '13px' }}>
                               <span style={{ fontWeight: '500' }}>{code}</span> - {cond.description}
                               {isBaseline && (
-                                <span style={{ 
-                                  marginLeft: '8px', 
-                                  fontSize: '11px', 
+                                <span style={{
+                                  marginLeft: '8px',
+                                  fontSize: '11px',
                                   color: '#10B981',
                                   fontWeight: 'normal'
                                 }}>
@@ -595,16 +648,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                               {cond.avgYear || '-'}
                             </td>
                             <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
-                              {formatCurrency(cond.adjustedValue)}
+                              {formatCurrency(normalized)}
                             </td>
-                            <td style={{ 
-                              padding: '8px 12px', 
-                              textAlign: 'right', 
+                            <td style={{
+                              padding: '8px 12px',
+                              textAlign: 'right',
                               fontSize: '13px',
-                              color: cond.adjustmentPct > 0 ? '#059669' : 
-                                     cond.adjustmentPct < 0 ? '#DC2626' : '#6B7280'
+                              color: normalizedPct > 0 ? '#059669' :
+                                     normalizedPct < 0 ? '#DC2626' : '#6B7280'
                             }}>
-                              {formatPercent(cond.adjustmentPct)}
+                              {formatPercent(isBaseline ? 0 : normalizedPct)}
                             </td>
                           </tr>
                         );
@@ -679,7 +732,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                   borderTop: '1px solid #E5E7EB',
                   backgroundColor: '#F9FAFB'
                 }}>
-                  *NULL = Illogical adjustment filtered out (positive adjustment for good conditions or negative adjustment for poor conditions)
+                  *NULL = Illogical adjustments filtered out (negative adjustments for better conditions or positive adjustments for worse conditions)
                 </div>
               )}
             </div>
@@ -693,72 +746,114 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const calculateNonBaselineSummary = (data, type) => {
     const conditionAdjustments = {}; // Track adjustments by condition code
 
-    // Determine which baseline is being used
+    // Determine which baseline and condition classifications are being used
     const manualBaseline = type === 'Exterior' ? manualExteriorBaseline : manualInteriorBaseline;
+    const betterConditions = type === 'Exterior' ? exteriorBetterConditions : interiorBetterConditions;
+    const worseConditions = type === 'Exterior' ? exteriorWorseConditions : interiorWorseConditions;
 
-    Object.values(data).forEach(vcsConditions => {
+    // Process each VCS separately
+    Object.entries(data).forEach(([vcsCode, vcsConditions]) => {
+      // Step 1: Calculate average SFLA for THIS VCS
+      let vcsTotalSFLA = 0;
+      let vcsConditionCount = 0;
+      Object.values(vcsConditions).forEach(cond => {
+        vcsTotalSFLA += cond.avgSize || 0;
+        vcsConditionCount++;
+      });
+      const vcsAvgSFLA = vcsConditionCount > 0 ? vcsTotalSFLA / vcsConditionCount : 0;
+
+      // Step 2: Normalize all conditions in this VCS to the VCS average SFLA
+      const normalizedConditions = {};
       Object.entries(vcsConditions).forEach(([code, cond]) => {
-        // Skip baseline condition
-        const isBaseline = manualBaseline ? (code === manualBaseline) :
+        const avgSFLA = cond.avgSize || 0;
+        const avgValue = cond.avgValue || 0;
+
+        // Jim formula: ((vcsAvg - thisSFLA) * ((value / thisSFLA) * 0.50)) + value
+        const normalized = avgSFLA > 0 ?
+          ((vcsAvgSFLA - avgSFLA) * ((avgValue / avgSFLA) * 0.50)) + avgValue : avgValue;
+
+        normalizedConditions[code] = {
+          ...cond,
+          normalized
+        };
+      });
+
+      // Step 3: Find baseline for this VCS
+      let vcsBaselineNormalized = null;
+      Object.entries(normalizedConditions).forEach(([code, cond]) => {
+        const isBaseline = manualBaseline ? (cond.description === manualBaseline) :
+                          (cond.adjustmentPct === 0 ||
+                           cond.description.toUpperCase().includes('AVERAGE') ||
+                           cond.description.toUpperCase().includes('NORMAL'));
+        if (isBaseline) {
+          vcsBaselineNormalized = cond.normalized;
+        }
+      });
+
+      // Step 4: Calculate percentage for each non-baseline condition in this VCS
+      Object.entries(normalizedConditions).forEach(([code, cond]) => {
+        const isBaseline = manualBaseline ? (cond.description === manualBaseline) :
                           (cond.adjustmentPct === 0 ||
                            cond.description.toUpperCase().includes('AVERAGE') ||
                            cond.description.toUpperCase().includes('NORMAL'));
 
-        if (isBaseline) return;
+        if (isBaseline || vcsBaselineNormalized === null || vcsBaselineNormalized === 0) {
+          return;
+        }
 
         // Initialize condition tracking if not exists
         if (!conditionAdjustments[code]) {
+          const isBetterCondition = betterConditions.includes(cond.description);
+          const isWorseCondition = worseConditions.includes(cond.description);
+
           conditionAdjustments[code] = {
             description: cond.description,
-            adjustments: [],
-            totalProperties: 0
+            vcsPercentages: [],
+            totalProperties: 0,
+            isBetterCondition,
+            isWorseCondition
           };
         }
 
-        // Apply NULL policy for illogical adjustments (both exterior and interior)
-        const desc = cond.description.toUpperCase();
-        const isGoodCondition = desc.includes('EXCELLENT') || desc.includes('GOOD') || desc.includes('SUPERIOR') ||
-                               desc.includes('VERY GOOD') || desc.includes('MODERN') || code === 'G';
-        const isPoorCondition = desc.includes('POOR') || desc.includes('FAIR') || desc.includes('UNSOUND') ||
-                               desc.includes('VERY POOR') || desc.includes('DETERIORATED') ||
-                               desc.includes('BELOW AVERAGE') || desc.includes('DILAPIDATED') || code === 'P' || code === 'F';
+        // Calculate percentage vs baseline for this VCS
+        const adjustmentPct = ((cond.normalized - vcsBaselineNormalized) / vcsBaselineNormalized) * 100;
 
-        let adjustmentToUse = cond.adjustmentPct;
-
-        // Filter illogical adjustments - apply NULL policy
-        if (isGoodCondition && cond.adjustmentPct < 0) {
-          adjustmentToUse = null; // Good condition with negative adjustment = illogical
-        } else if (isPoorCondition && cond.adjustmentPct > 0) {
-          adjustmentToUse = null; // Poor condition with positive adjustment = illogical
+        // Check if this percentage should be included based on condition type
+        let includeInCalc = false;
+        if (conditionAdjustments[code].isBetterCondition && adjustmentPct > 0) {
+          includeInCalc = true; // Better: only include positive adjustments
+        } else if (conditionAdjustments[code].isWorseCondition && adjustmentPct < 0) {
+          includeInCalc = true; // Worse: only include negative adjustments
         }
 
-        if (adjustmentToUse !== null) {
-          conditionAdjustments[code].adjustments.push(adjustmentToUse);
+        if (includeInCalc) {
+          conditionAdjustments[code].vcsPercentages.push(adjustmentPct);
         }
         conditionAdjustments[code].totalProperties += cond.count;
       });
     });
 
-    // Calculate averages for each condition
+    // Step 5: Calculate simple average of VCS percentages for each condition
     const summary = [];
     Object.entries(conditionAdjustments).forEach(([code, data]) => {
-      const validAdjustments = data.adjustments;
-      const avgAdjustment = validAdjustments.length > 0 ?
-        validAdjustments.reduce((sum, adj) => sum + adj, 0) / validAdjustments.length : null;
+      // Calculate simple average of VCS percentages (not dollar-weighted)
+      const avgAdjustment = data.vcsPercentages.length > 0 ?
+        data.vcsPercentages.reduce((sum, pct) => sum + pct, 0) / data.vcsPercentages.length : null;
+      const validVCSCount = data.vcsPercentages.length;
 
-      // Categorize condition quality for sorting
-      const desc = data.description.toUpperCase();
-      let category = 0; // 0 = average/unknown, 1 = above average, -1 = below average
-
-      // Above average conditions (should show positive adjustments)
-      if (desc.includes('EXCELLENT') || desc.includes('VERY GOOD') || desc.includes('GOOD') ||
-          desc.includes('SUPERIOR') || desc.includes('MODERN') || code === 'G') {
-        category = 1;
+      // Log for debugging
+      if (type === 'Interior' && (code === '2' || code === '5')) {
+        console.log(`[UI ${type} ${data.description}] Per-VCS method:`, {
+          avgAdjustment,
+          vcsPercentages: data.vcsPercentages
+        });
       }
-      // Below average conditions (should show negative adjustments)
-      else if (desc.includes('FAIR') || desc.includes('POOR') || desc.includes('BELOW AVERAGE') ||
-               desc.includes('DILAPIDATED') || desc.includes('DETERIORATED') || desc.includes('UNSOUND') ||
-               desc.includes('VERY POOR') || code === 'P' || code === 'F') {
+
+      // Categorize condition quality for sorting using user configuration
+      let category = 0; // 0 = average/unknown, 1 = better, -1 = worse
+      if (data.isBetterCondition) {
+        category = 1;
+      } else if (data.isWorseCondition) {
         category = -1;
       }
 
@@ -767,21 +862,21 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         description: data.description,
         avgAdjustment,
         totalProperties: data.totalProperties,
-        validVCSCount: validAdjustments.length,
+        validVCSCount,
         category
       });
     });
 
-    // Sort with above average conditions first (descending), then below average (ascending by adjustment)
+    // Sort with better conditions first (descending), then worse (ascending by adjustment)
     return summary.sort((a, b) => {
-      // First sort by category (above average first)
+      // First sort by category (better first)
       if (a.category !== b.category) {
         return b.category - a.category;
       }
 
       // Within same category, sort by adjustment value
       if (a.category === 1) {
-        // Above average: highest positive adjustments first
+        // Better conditions: highest positive adjustments first
         const adjA = a.avgAdjustment || 0;
         const adjB = b.avgAdjustment || 0;
         return adjB - adjA;
@@ -797,29 +892,351 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     });
   };
 
-  // ============ CSV EXPORT FUNCTIONS ============
-  const exportConditionDataToCSV = (data, type) => {
-    const headers = ['VCS', 'Code', 'Description', 'Count', 'Avg_Value', 'Avg_SFLA', 'Avg_Year', 'Adjusted_Value', 'Adjustment_Pct'];
+  // ============ EXCEL EXPORT FUNCTIONS ============
+  const buildConditionSheet = (data, type) => {
     const rows = [];
 
+    // Column headers - start at row 0
+    const headers = ['VCS', 'Condition', 'Count', 'Avg SFLA', 'Avg Year Built', 'Avg Norm Value', 'Adjusted Value', 'Flat Adj', '% Adj', 'Baseline'];
+    rows.push(headers);
+
+    // COL indexes (0-based)
+    const COL = {
+      VCS: 0, CONDITION: 1, COUNT: 2, AVG_SFLA: 3, AVG_YEAR: 4,
+      AVG_NORM_VALUE: 5, ADJ_VALUE: 6, FLAT_ADJ: 7, PCT_ADJ: 8, BASELINE: 9
+    };
+
+    // Get user-defined baseline
+    const manualBaseline = type === 'exterior' ? manualExteriorBaseline : manualInteriorBaseline;
+
+    // Collect all data by VCS with baseline info
+    const vcsSections = [];
+    const dataRowRanges = {}; // Track row ranges for each condition for summation
+
     Object.entries(data).forEach(([vcs, conditions]) => {
+      // Calculate VCS average SFLA across all conditions
+      const vcsAvgSFLA = Object.values(conditions).reduce((sum, c) => sum + (c.avgSize || 0), 0) / Object.keys(conditions).length;
+
+      // Find baseline using ONLY user configuration
+      let baselineCond = null;
+      if (manualBaseline) {
+        // Use user's configured baseline
+        baselineCond = Object.values(conditions).find(c => c.description === manualBaseline);
+      }
+
+      // Fallback only if no manual baseline is set
+      if (!baselineCond) {
+        const baselineCode = Object.keys(conditions).find(code => {
+          const upper = (conditions[code].description || '').toUpperCase();
+          return upper.includes('AVERAGE') || upper.includes('AVG') || upper.includes('NORMAL');
+        }) || Object.keys(conditions)[0];
+        baselineCond = conditions[baselineCode];
+      }
+
+      const conditionRows = [];
+
       Object.entries(conditions).forEach(([code, cond]) => {
-        rows.push([
+        // Always compare to user's configured baseline description
+        const isBaseline = manualBaseline ? (cond.description === manualBaseline) : (cond === baselineCond);
+        const avgSFLA = cond.avgSize || 0;
+        const avgYear = cond.avgYear || '';
+        const avgNormValue = cond.avgValue || 0;
+
+        conditionRows.push({
           vcs,
           code,
-          cond.description,
-          cond.count,
-          cond.avgValue,
-          cond.avgSize || '',
-          cond.avgYear || '',
-          cond.adjustedValue,
-          cond.adjustmentPct.toFixed(1)
-        ]);
+          description: cond.description,
+          count: cond.count,
+          avgSFLA,
+          avgYear,
+          avgNormValue,
+          isBaseline,
+          vcsAvgSFLA,
+          baselineDescription: baselineCond?.description
+        });
+      });
+
+      vcsSections.push({ vcs, conditionRows, vcsAvgSFLA });
+    });
+
+    // Add data rows with formulas
+    vcsSections.forEach(section => {
+      // Find baseline row index within this VCS section using the configured baseline description
+      const baselineIdx = section.conditionRows.findIndex(c =>
+        manualBaseline ? c.description === manualBaseline : c.isBaseline
+      );
+      const startingRowNum = rows.length + 1;
+      const baselineExcelRow = baselineIdx >= 0 ? startingRowNum + baselineIdx : null;
+
+      section.conditionRows.forEach((cond, idx) => {
+        const rowNum = rows.length + 1; // Excel row number (1-based)
+
+        // Track rows for summary summation
+        if (!dataRowRanges[cond.description]) {
+          dataRowRanges[cond.description] = { rows: [], count: 0 };
+        }
+        dataRowRanges[cond.description].rows.push(rowNum);
+        dataRowRanges[cond.description].count += cond.count;
+
+        const row = [];
+        row[COL.VCS] = cond.vcs;
+        row[COL.CONDITION] = cond.description;
+        row[COL.COUNT] = cond.count;
+        row[COL.AVG_SFLA] = cond.avgSFLA;
+        row[COL.AVG_YEAR] = cond.avgYear;
+        row[COL.AVG_NORM_VALUE] = cond.avgNormValue;
+
+        // Jim formula: ((VCS_AVG_SFLA - This_SFLA) × ((This_Value / This_SFLA) × 0.50)) + This_Value
+        row[COL.ADJ_VALUE] = {
+          f: `IF(D${rowNum}=0,F${rowNum},((${cond.vcsAvgSFLA}-D${rowNum})*((F${rowNum}/D${rowNum})*0.50))+F${rowNum})`,
+          t: 'n'
+        };
+
+        // Check if this is the baseline condition
+        const isThisBaseline = manualBaseline ?
+          cond.description === manualBaseline : cond.isBaseline;
+
+        // Store baseline row number for this VCS to reference later
+        if (isThisBaseline) {
+          row[COL.FLAT_ADJ] = 0;
+          row[COL.PCT_ADJ] = 0;
+          row[COL.BASELINE] = 'YES'; // Mark baseline
+        } else if (baselineExcelRow) {
+          // Flat Adj = This normalized value - Baseline normalized value (same VCS)
+          row[COL.FLAT_ADJ] = {
+            f: `G${rowNum}-G${baselineExcelRow}`,
+            t: 'n'
+          };
+          row[COL.PCT_ADJ] = {
+            f: `IF(G${baselineExcelRow}=0,0,(G${rowNum}-G${baselineExcelRow})/G${baselineExcelRow})`,
+            t: 'n',
+            z: '0.0%'
+          };
+        } else {
+          // No baseline found in this VCS
+          row[COL.FLAT_ADJ] = 0;
+          row[COL.PCT_ADJ] = 0;
+        }
+
+        row[COL.BASELINE] = cond.isBaseline ? 'YES' : '';
+
+        rows.push(row);
       });
     });
 
-    const filename = `${jobData.job_name || 'job'}_${type}_condition_analysis.csv`;
-    downloadCsv(filename, headers, rows);
+    // Log sample VCS data for debugging
+    if (vcsSections.length > 0) {
+      const sampleVCS = vcsSections[0];
+      console.log(`[Export ${type}] Sample VCS "${sampleVCS.vcs}":`, {
+        vcsAvgSFLA: sampleVCS.vcsAvgSFLA,
+        conditions: sampleVCS.conditionRows.map(c => ({
+          description: c.description,
+          avgSFLA: c.avgSFLA,
+          avgValue: c.avgNormValue,
+          isBaseline: c.isBaseline
+        }))
+      });
+    }
+
+    // Summary section - using summation approach
+    rows.push([]); // Blank row
+    rows.push([]); // Blank row
+
+    // Summary header aligned over "Total Count" column (column B, index 1)
+    const summaryHeaderRow = [];
+    summaryHeaderRow[0] = ''; // Empty column A
+    summaryHeaderRow[1] = 'All VCS Combined'; // Column B (over Total Count)
+    rows.push(summaryHeaderRow);
+    rows.push([]); // Blank row
+
+    const summaryHeaders = ['Condition', 'Total Count', '% Adj'];
+    rows.push(summaryHeaders);
+
+    // Get user-defined condition classifications
+    const betterConditions = type === 'exterior' ? exteriorBetterConditions : interiorBetterConditions;
+    const worseConditions = type === 'exterior' ? exteriorWorseConditions : interiorWorseConditions;
+    // manualBaseline already declared at top of function
+
+    // Find baseline description - use manual selection if set, otherwise try to auto-detect
+    const baselineDesc = manualBaseline || Object.keys(dataRowRanges).find(desc => {
+      const upper = desc.toUpperCase();
+      return upper.includes('AVERAGE') || upper.includes('AVG') || upper.includes('NORMAL');
+    }) || Object.keys(dataRowRanges)[0];
+
+    // Get baseline row numbers for summation
+    const baselineRowNums = dataRowRanges[baselineDesc]?.rows || [];
+
+    // Helper to determine if condition is better or worse than baseline
+    const isBetterCondition = (description) => {
+      return betterConditions.includes(description);
+    };
+
+    const isWorseCondition = (description) => {
+      return worseConditions.includes(description);
+    };
+
+    // Create summary rows
+    Object.entries(dataRowRanges).forEach(([desc, info]) => {
+      const rowNum = rows.length + 1;
+      const isBaseline = desc === baselineDesc;
+      const conditionRowNums = info.rows;
+      const isBetter = isBetterCondition(desc);
+      const isWorse = isWorseCondition(desc);
+
+      // Log for debugging (GOOD and FAIR conditions)
+      if (type === 'interior' && (desc.includes('GOOD') || desc.includes('FAIR'))) {
+        console.log(`[Export ${type} ${desc}] Summary formula:`, {
+          vcsCount: conditionRowNums.length,
+          vcsRows: conditionRowNums,
+          isBetter,
+          isWorse,
+          filterCondition: isBetter ? '% Adj > 0' : isWorse ? '% Adj < 0' : 'all'
+        });
+      }
+
+      const summaryRow = [];
+      summaryRow[0] = desc; // Condition
+      summaryRow[1] = info.count; // Total Count
+
+      if (isBaseline) {
+        summaryRow[2] = ''; // % Adj - blank for baseline
+      } else {
+        // Calculate simple average of VCS percentages (not dollar-weighted)
+        // For better conditions: only average rows with positive % Adj (I > 0)
+        // For worse conditions: only average rows with negative % Adj (I < 0)
+        let avgFormula;
+
+        if (isBetter) {
+          // Average of percentages where % Adj > 0
+          // Sum only positive values, divide by count of positive values
+          const sumFormula = conditionRowNums.map(r => `IF(I${r}>0,I${r},0)`).join('+');
+          const countFormula = conditionRowNums.map(r => `IF(I${r}>0,1,0)`).join('+');
+          avgFormula = `(${sumFormula})/(${countFormula})`;
+        } else if (isWorse) {
+          // Average of percentages where % Adj < 0
+          // Sum only negative values, divide by count of negative values
+          const sumFormula = conditionRowNums.map(r => `IF(I${r}<0,I${r},0)`).join('+');
+          const countFormula = conditionRowNums.map(r => `IF(I${r}<0,1,0)`).join('+');
+          avgFormula = `(${sumFormula})/(${countFormula})`;
+        } else {
+          // Unknown condition type - average all percentages
+          avgFormula = `AVERAGE(${conditionRowNums.map(r => `I${r}`).join(',')})`;
+        }
+
+        // % Adj = Simple average of VCS percentages (filtered by direction)
+        summaryRow[2] = {
+          f: avgFormula,
+          t: 'n',
+          z: '0.0%'
+        };
+      }
+
+      rows.push(summaryRow);
+    });
+
+    // Create worksheet
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Base styles
+    const baseStyle = {
+      font: { name: 'Leelawadee', sz: 10 },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    const headerStyle = {
+      font: { name: 'Leelawadee', sz: 10, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    // Apply styles
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    // Find summary section start (look for "All VCS Combined" row)
+    let summaryStartRow = -1;
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      const cellA = XLSX.utils.encode_cell({ r: R, c: 1 });
+      if (ws[cellA] && ws[cellA].v === 'All VCS Combined') {
+        summaryStartRow = R;
+        break;
+      }
+    }
+
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws[cellAddress]) continue;
+
+        const isSummarySection = summaryStartRow !== -1 && R >= summaryStartRow;
+
+        // Header row (row 0 for main data) and summary headers
+        if (R === 0 || ws[cellAddress].v === 'Condition' || ws[cellAddress].v === 'VCS' || ws[cellAddress].v === 'All VCS Combined') {
+          ws[cellAddress].s = headerStyle;
+        }
+        // Data rows
+        else {
+          const style = { ...baseStyle };
+
+          if (isSummarySection) {
+            // Summary columns: Condition, Total Count, % Adj
+            if (C === 1) {
+              style.numFmt = '#,##0'; // Total Count
+            } else if (C === 2) {
+              style.numFmt = '0%'; // % Adj
+            }
+          } else {
+            // Main data columns
+            if (C === COL.COUNT) {
+              style.numFmt = '#,##0'; // Count
+            } else if (C === COL.AVG_SFLA) {
+              style.numFmt = '#,##0'; // Avg SFLA
+            } else if (C === COL.AVG_NORM_VALUE || C === COL.ADJ_VALUE || C === COL.FLAT_ADJ) {
+              style.numFmt = '$#,##0'; // Currency columns
+            } else if (C === COL.PCT_ADJ) {
+              style.numFmt = '0%'; // % Adj
+            }
+          }
+
+          ws[cellAddress].s = style;
+        }
+      }
+    }
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 15 },  // VCS / Condition (main) / Condition (summary)
+      { wch: 20 },  // Condition (main) / Total Count (summary)
+      { wch: 10 },  // Count (main) / % Adj (summary)
+      { wch: 12 },  // Avg SFLA
+      { wch: 12 },  // Avg Year
+      { wch: 14 },  // Avg Norm Value
+      { wch: 14 },  // Adjusted Value
+      { wch: 12 },  // Flat Adj
+      { wch: 10 },  // % Adj
+      { wch: 10 }   // Baseline
+    ];
+
+    return ws;
+  };
+
+  // Combined export function for both Exterior and Interior tabs
+  const exportConditionDataToExcel = () => {
+    const wb = XLSX.utils.book_new();
+
+    // Add Exterior sheet
+    if (conditionData.exterior && Object.keys(conditionData.exterior).length > 0) {
+      const exteriorSheet = buildConditionSheet(conditionData.exterior, 'exterior');
+      XLSX.utils.book_append_sheet(wb, exteriorSheet, 'Exterior');
+    }
+
+    // Add Interior sheet
+    if (conditionData.interior && Object.keys(conditionData.interior).length > 0) {
+      const interiorSheet = buildConditionSheet(conditionData.interior, 'interior');
+      XLSX.utils.book_append_sheet(wb, interiorSheet, 'Interior');
+    }
+
+    // Generate filename and download
+    const filename = `${jobData.job_name || 'job'}_condition_analysis_${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(wb, filename);
   };
   // ============ RENDER CONDITION ANALYSIS TAB ============
   const renderConditionAnalysis = () => {
@@ -871,24 +1288,220 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
               <button
-                onClick={() => exportConditionDataToCSV(conditionData.exterior, 'exterior')}
+                onClick={() => setShowConditionConfig(!showConditionConfig)}
                 className={CSV_BUTTON_CLASS}
-                disabled={conditionData.loading || Object.keys(conditionData.exterior).length === 0}
+                disabled={conditionData.loading}
+                style={{ backgroundColor: showConditionConfig ? '#6366F1' : undefined }}
               >
-                <FileText size={14} /> Export Exterior CSV
+                ⚙️ Configure Baseline & Classifications
               </button>
               <button
-                onClick={() => exportConditionDataToCSV(conditionData.interior, 'interior')}
+                onClick={() => exportConditionDataToExcel()}
                 className={CSV_BUTTON_CLASS}
-                disabled={conditionData.loading || Object.keys(conditionData.interior).length === 0}
+                disabled={conditionData.loading || (Object.keys(conditionData.exterior).length === 0 && Object.keys(conditionData.interior).length === 0)}
               >
-                <FileText size={14} /> Export Interior CSV
+                <FileText size={14} /> Export Condition Analysis
               </button>
             </div>
           </div>
         </div>
+
+        {/* Condition Configuration Panel */}
+        {showConditionConfig && (
+          <div style={{
+            marginTop: '20px',
+            padding: '20px',
+            backgroundColor: '#F9FAFB',
+            borderRadius: '8px',
+            border: '2px solid #E5E7EB'
+          }}>
+            <h3 style={{ margin: '0 0 15px 0', fontSize: '16px', fontWeight: '600' }}>
+              Condition Code Configuration for Export
+            </h3>
+
+            {/* Type Tabs */}
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '2px solid #E5E7EB' }}>
+              <button
+                onClick={() => setConfigType('exterior')}
+                style={{
+                  padding: '10px 20px',
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  borderBottom: configType === 'exterior' ? '3px solid #3B82F6' : 'none',
+                  fontWeight: configType === 'exterior' ? '600' : '400',
+                  cursor: 'pointer',
+                  color: configType === 'exterior' ? '#3B82F6' : '#6B7280'
+                }}
+              >
+                Exterior Condition
+              </button>
+              <button
+                onClick={() => setConfigType('interior')}
+                style={{
+                  padding: '10px 20px',
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  borderBottom: configType === 'interior' ? '3px solid #3B82F6' : 'none',
+                  fontWeight: configType === 'interior' ? '600' : '400',
+                  cursor: 'pointer',
+                  color: configType === 'interior' ? '#3B82F6' : '#6B7280'
+                }}
+              >
+                Interior Condition
+              </button>
+            </div>
+
+            {(() => {
+              const isExterior = configType === 'exterior';
+              // Use ALL codes from code definitions, not just from analysis data
+              const availableCodes = isExterior ? availableConditionCodes.exterior : availableConditionCodes.interior;
+
+              // Build array of {code, description} for sorting and display
+              const allConditions = Object.entries(availableCodes)
+                .map(([code, desc]) => ({ code, description: desc }))
+                .sort((a, b) => a.code.localeCompare(b.code));
+
+              const currentBaseline = isExterior ? manualExteriorBaseline : manualInteriorBaseline;
+              const currentBetter = isExterior ? exteriorBetterConditions : interiorBetterConditions;
+              const currentWorse = isExterior ? exteriorWorseConditions : interiorWorseConditions;
+
+              const setBaseline = (value) => {
+                if (isExterior) {
+                  setManualExteriorBaseline(value);
+                  localStorage.setItem(`attr-cards-exterior-baseline-${jobData?.id}`, value);
+                } else {
+                  setManualInteriorBaseline(value);
+                  localStorage.setItem(`attr-cards-interior-baseline-${jobData?.id}`, value);
+                }
+              };
+
+              const toggleBetter = (condition) => {
+                const updated = currentBetter.includes(condition)
+                  ? currentBetter.filter(c => c !== condition)
+                  : [...currentBetter, condition];
+
+                if (isExterior) {
+                  setExteriorBetterConditions(updated);
+                  localStorage.setItem(`attr-cards-exterior-better-${jobData?.id}`, JSON.stringify(updated));
+                } else {
+                  setInteriorBetterConditions(updated);
+                  localStorage.setItem(`attr-cards-interior-better-${jobData?.id}`, JSON.stringify(updated));
+                }
+              };
+
+              const toggleWorse = (condition) => {
+                const updated = currentWorse.includes(condition)
+                  ? currentWorse.filter(c => c !== condition)
+                  : [...currentWorse, condition];
+
+                if (isExterior) {
+                  setExteriorWorseConditions(updated);
+                  localStorage.setItem(`attr-cards-exterior-worse-${jobData?.id}`, JSON.stringify(updated));
+                } else {
+                  setInteriorWorseConditions(updated);
+                  localStorage.setItem(`attr-cards-interior-worse-${jobData?.id}`, JSON.stringify(updated));
+                }
+              };
+
+              return (
+                <div>
+                  {allConditions.length === 0 ? (
+                    <div style={{ padding: '20px', textAlign: 'center', color: '#6B7280' }}>
+                      <p style={{ marginBottom: '10px' }}>No condition codes found in code file definitions.</p>
+                      <p style={{ fontSize: '13px' }}>Make sure the code file has been uploaded and processed for this job.</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Baseline Selection */}
+                      <div style={{ marginBottom: '20px' }}>
+                        <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>
+                          Baseline Condition (0% adjustment):
+                        </label>
+                        <select
+                          value={currentBaseline}
+                          onChange={(e) => setBaseline(e.target.value)}
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            border: '1px solid #D1D5DB',
+                            fontSize: '14px',
+                            width: '400px'
+                          }}
+                        >
+                          <option value="">-- Auto-detect (AVERAGE/AVG/NORMAL) --</option>
+                          {allConditions.map(item => (
+                            <option key={item.code} value={item.description}>
+                              {item.code} {item.description}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Better Conditions */}
+                      <div style={{ marginBottom: '20px' }}>
+                        <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>
+                          Better than Baseline (positive adjustments):
+                        </label>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                          {allConditions.filter(item => item.description !== currentBaseline).map(item => (
+                            <label key={item.code} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={currentBetter.includes(item.description)}
+                                onChange={() => toggleBetter(item.description)}
+                                disabled={currentWorse.includes(item.description)}
+                              />
+                              <span style={{ fontSize: '14px', color: currentWorse.includes(item.description) ? '#9CA3AF' : '#374151' }}>
+                                {item.code} {item.description}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Worse Conditions */}
+                      <div>
+                        <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>
+                          Worse than Baseline (negative adjustments):
+                        </label>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                          {allConditions.filter(item => item.description !== currentBaseline).map(item => (
+                            <label key={item.code} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={currentWorse.includes(item.description)}
+                                onChange={() => toggleWorse(item.description)}
+                                disabled={currentBetter.includes(item.description)}
+                              />
+                              <span style={{ fontSize: '14px', color: currentBetter.includes(item.description) ? '#9CA3AF' : '#374151' }}>
+                                {item.code} {item.description}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Instructions */}
+                      <div style={{
+                        marginTop: '20px',
+                        padding: '12px',
+                        backgroundColor: '#EFF6FF',
+                        borderRadius: '6px',
+                        fontSize: '13px',
+                        color: '#1E40AF'
+                      }}>
+                        <strong>How it works:</strong> The export summary will only sum positive adjustments for "better" conditions
+                        and only sum negative adjustments for "worse" conditions. The baseline shows blank (no adjustment).
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
 
         {/* Loading State */}
         {conditionData.loading && (
@@ -935,32 +1548,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 </h3>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                  {/* Baseline Selection */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <label style={{ fontSize: '13px', color: '#1E40AF', fontWeight: '500' }}>
-                      Set Baseline:
-                    </label>
-                    <select
-                      value={manualExteriorBaseline}
-                      onChange={(e) => setManualExteriorBaseline(e.target.value)}
-                      style={{
-                        padding: '4px 8px',
-                        border: '1px solid #3B82F6',
-                        borderRadius: '4px',
-                        fontSize: '12px',
-                        backgroundColor: 'white',
-                        minWidth: '120px'
-                      }}
-                    >
-                      <option value="">Auto-detect</option>
-                      {Object.entries(availableConditionCodes.exterior).map(([code, description]) => (
-                        <option key={code} value={code}>
-                          {code} - {description}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
                   {/* Expand/Collapse Buttons - Match Land Valuation Style */}
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                     <button
@@ -1020,32 +1607,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 </h3>
                 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                  {/* Baseline Selection */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <label style={{ fontSize: '13px', color: '#1E40AF', fontWeight: '500' }}>
-                      Set Baseline:
-                    </label>
-                    <select
-                      value={manualInteriorBaseline}
-                      onChange={(e) => setManualInteriorBaseline(e.target.value)}
-                      style={{
-                        padding: '4px 8px',
-                        border: '1px solid #3B82F6',
-                        borderRadius: '4px',
-                        fontSize: '12px',
-                        backgroundColor: 'white',
-                        minWidth: '120px'
-                      }}
-                    >
-                      <option value="">Auto-detect</option>
-                      {Object.entries(availableConditionCodes.interior).map(([code, description]) => (
-                        <option key={code} value={code}>
-                          {code} - {description}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
                   {/* Interior Inspections Toggle */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <input
@@ -1704,7 +2265,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   };
   // ============ ADDITIONAL CARDS ANALYSIS ============
   const runAdditionalCardsAnalysis = () => {
-    console.log('🔄 Running Additional Cards Analysis...');
+    console.log('🔄 Running Additional Cards Analysis (using PreVal logic)...');
     console.log('Vendor Type:', vendorType);
     console.log('Total Properties:', properties?.length);
 
@@ -1715,210 +2276,124 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     }
 
     try {
-      // Filter for properties with additional cards based on vendor type
-      const additionalCardProperties = properties.filter(prop => {
-        const card = prop.property_addl_card || prop.additional_card || '';
+      // Filter to MAIN CARDS ONLY with sales data
+      // Use property_addl_card directly (more reliable than parsing composite key)
+      const mainCardSales = properties.filter(p => {
+        const card = (p.property_addl_card || p.additional_card || '').toString().trim();
 
-        if (vendorType === 'BRT' || vendorType === 'brt') {
-          // BRT: Cards 2, 3, 4, etc. (numeric > 1, excluding 'M' and '1')
+        // Card filter based on vendor (MAIN CARDS ONLY)
+        if (vendorType === 'Microsystems') {
+          const cardUpper = card.toUpperCase();
+          if (cardUpper !== 'M' && cardUpper !== 'MAIN' && cardUpper !== '') return false;
+        } else { // BRT
+          const cardNum = parseInt(card);
+          // Main card is card 1, or blank/empty (which defaults to card 1)
+          if (!(cardNum === 1 || card === '' || isNaN(cardNum))) return false;
+        }
+
+        // Must have sales data (already normalized with combined SFLA by PreValuation)
+        if (!p.values_norm_time || p.values_norm_time <= 0) return false;
+
+        // Must have VCS
+        if (!p.new_vcs && !p.property_vcs) return false;
+
+        return true;
+      });
+
+      console.log(`✅ Found ${mainCardSales.length} main card sales to analyze`);
+
+      // For each main card, detect if it has additional cards
+      const enhancedSales = mainCardSales.map(prop => {
+        // Find additional cards for this property (same block-lot-qualifier)
+        const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
+
+        const additionalCards = properties.filter(p => {
+          const pBaseKey = `${p.property_block || ''}-${p.property_lot || ''}-${p.property_qualifier || ''}`;
+          if (pBaseKey !== baseKey) return false;
+
+          // Check if this is an additional card (not main card)
+          const pCard = (p.property_addl_card || p.additional_card || '').toString().trim();
+
+          if (vendorType === 'Microsystems') {
+            const cardUpper = pCard.toUpperCase();
+            return cardUpper && cardUpper !== 'M' && cardUpper !== 'MAIN' && /^[A-Z]$/.test(cardUpper);
+          } else { // BRT
+            const cardNum = parseInt(pCard);
+            return !isNaN(cardNum) && cardNum > 1;
+          }
+        });
+
+        return {
+          ...prop,
+          has_additional_cards: additionalCards.length > 0,
+          additional_card_count: additionalCards.length
+          // values_norm_time already includes combined SFLA from PreValuation normalization
+          // asset_sfla already includes combined SFLA from PreValuation normalization
+        };
+      });
+
+      const withCards = enhancedSales.filter(p => p.has_additional_cards);
+      const withoutCards = enhancedSales.filter(p => !p.has_additional_cards);
+
+      console.log(`📊 Sales breakdown:`, {
+        with_additional_cards: withCards.length,
+        without_additional_cards: withoutCards.length
+      });
+
+      // Create list of ALL properties with additional cards (for detail table at bottom)
+      const additionalCardsList = properties.filter(prop => {
+        const card = (prop.property_addl_card || prop.additional_card || '').toString().trim();
+
+        if (vendorType === 'Microsystems') {
+          const cardUpper = card.toUpperCase();
+          return cardUpper && cardUpper !== 'M' && cardUpper !== 'MAIN' && /^[A-Z]$/.test(cardUpper);
+        } else { // BRT
           const cardNum = parseInt(card);
           return !isNaN(cardNum) && cardNum > 1;
-        } else if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
-          // Microsystems: Cards A-Z (excluding 'M' which is Main)
-          const cardUpper = card.toString().trim().toUpperCase();
-          return cardUpper && cardUpper !== 'M' && cardUpper !== 'MAIN' && /^[A-Z]$/.test(cardUpper);
-        }
-        return false;
-      });
-
-      console.log(`✅ Found ${additionalCardProperties.length} properties with additional cards`);
-
-      // Debug: check for sales data
-      const allSalesProps = properties.filter(p => p.values_norm_time && p.values_norm_time > 0);
-      console.log(`🔍 DEBUG: Found ${allSalesProps.length} total properties with sales data (should be 105)`);
-
-      // Group ALL properties by base location (for counting purposes)
-      const allPropertyGroups = new Map();
-      properties.forEach(prop => {
-        const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
-        if (!allPropertyGroups.has(baseKey)) {
-          allPropertyGroups.set(baseKey, []);
-        }
-        allPropertyGroups.get(baseKey).push(prop);
-      });
-
-      // Get properties with valid sales data for impact analysis
-      const validPropsForAnalysis = properties.filter(p =>
-        p.values_norm_time &&
-        p.values_norm_time > 0 &&
-        (p.new_vcs || p.property_vcs)
-      );
-
-      // Group properties with valid sales data by base location (for impact calculations)
-      const validPropertyGroups = new Map();
-      validPropsForAnalysis.forEach(prop => {
-        const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
-        if (!validPropertyGroups.has(baseKey)) {
-          validPropertyGroups.set(baseKey, []);
-        }
-        validPropertyGroups.get(baseKey).push(prop);
-      });
-
-      // Function to check if a property has additional cards
-      const hasAdditionalCards = (prop) => {
-        const card = prop.property_addl_card || prop.additional_card || '';
-        if (vendorType === 'BRT' || vendorType === 'brt') {
-          const cardNum = parseInt(card);
-          return !isNaN(cardNum) && cardNum > 1;
-        } else if (vendorType === 'Microsystems' || vendorType === 'microsystems') {
-          const cardUpper = card.toString().trim().toUpperCase();
-          return cardUpper && cardUpper !== 'M' && cardUpper !== 'MAIN' && /^[A-Z]$/.test(cardUpper);
-        }
-        return false;
-      };
-
-      // Count ALL properties with and without additional cards (for summary stats)
-      const allGroupsWithCards = [];
-      const allGroupsWithoutCards = [];
-
-      allPropertyGroups.forEach((props, baseKey) => {
-        const hasAdditional = props.some(hasAdditionalCards);
-        if (hasAdditional) {
-          allGroupsWithCards.push(props);
-        } else {
-          allGroupsWithoutCards.push(props);
         }
       });
 
-      // Separate VALID properties into groups (for impact analysis)
-      const groupsWithCards = [];
-      const groupsWithoutCards = [];
+      console.log(`📋 Total additional card records: ${additionalCardsList.length}`);
 
-      validPropertyGroups.forEach((props, baseKey) => {
-        const hasAdditional = props.some(hasAdditionalCards);
-        if (hasAdditional) {
-          groupsWithCards.push(props);
-        } else {
-          groupsWithoutCards.push(props);
-        }
-      });
-
-      // Analyze by VCS with detailed property tracking for granular comparison
+      // Analyze by VCS
       const byVCS = {};
 
-      // Process groups with additional cards
-      groupsWithCards.forEach(group => {
-        const vcs = group[0].new_vcs || group[0].property_vcs;
+      // Process properties WITH additional cards
+      withCards.forEach(prop => {
+        const vcs = prop.new_vcs || prop.property_vcs;
         if (!vcs) return;
 
         if (!byVCS[vcs]) {
           byVCS[vcs] = {
             with_cards: [],
-            without_cards: [],
-            with_cards_properties: [], // Store detailed property info for expandable view
-            without_cards_properties: [] // Store detailed property info for expandable view
+            without_cards: []
           };
         }
 
-        // Calculate group metrics
-        const validProps = group.filter(p => p.values_norm_time && p.values_norm_time > 0);
-        if (validProps.length > 0) {
-          const maxNormTime = Math.max(...validProps.map(p => p.values_norm_time));
-
-          // Sum SFLA across all cards in the group (main + additional)
-          const totalSFLA = group.reduce((sum, p) => {
-            const sfla = parseInt(p.asset_sfla) || 0;
-            return sum + sfla;
-          }, 0);
-
-          // Calculate average year built across all cards in the group
-          const validYears = group.filter(p => {
-            const year = parseInt(p.asset_year_built);
-            return year && year > 1800 && year <= new Date().getFullYear();
-          });
-          const avgYearBuilt = validYears.length > 0 ?
-            Math.round(validYears.reduce((sum, p) => sum + parseInt(p.asset_year_built), 0) / validYears.length) : null;
-
-          byVCS[vcs].with_cards.push({
-            norm_time: maxNormTime,
-            total_sfla: totalSFLA,
-            avg_year_built: avgYearBuilt,
-            property_count: group.length
-          });
-
-          // Store detailed property info for expandable view
-          byVCS[vcs].with_cards_properties.push({
-            properties: group,
-            norm_time: maxNormTime,
-            total_sfla: totalSFLA,
-            avg_year_built: avgYearBuilt,
-            address: group[0].property_location,
-            block: group[0].property_block,
-            lot: group[0].property_lot,
-            qualifier: group[0].property_qualifier
-          });
-        }
+        byVCS[vcs].with_cards.push({
+          norm_time: prop.values_norm_time,
+          sfla: prop.asset_sfla, // Already includes additional cards
+          year_built: prop.asset_year_built
+        });
       });
 
-      // Process groups without additional cards
-      groupsWithoutCards.forEach(group => {
-        const vcs = group[0].new_vcs || group[0].property_vcs;
+      // Process properties WITHOUT additional cards
+      withoutCards.forEach(prop => {
+        const vcs = prop.new_vcs || prop.property_vcs;
         if (!vcs) return;
 
         if (!byVCS[vcs]) {
           byVCS[vcs] = {
             with_cards: [],
-            without_cards: [],
-            with_cards_properties: [],
-            without_cards_properties: []
+            without_cards: []
           };
         }
 
-        // Calculate metrics for properties without additional cards
-        const normTime = group[0].values_norm_time;
-        if (normTime && normTime > 0) {
-          const sfla = parseInt(group[0].asset_sfla) || 0;
-          const year = parseInt(group[0].asset_year_built);
-          const yearBuilt = year && year > 1800 && year <= new Date().getFullYear() ? year : null;
-
-          byVCS[vcs].without_cards.push({
-            norm_time: normTime,
-            sfla: sfla,
-            year_built: yearBuilt
-          });
-
-          // Store detailed property info for expandable view
-          byVCS[vcs].without_cards_properties.push({
-            property: group[0],
-            norm_time: normTime,
-            sfla: sfla,
-            year_built: yearBuilt,
-            address: group[0].property_location,
-            block: group[0].property_block,
-            lot: group[0].property_lot,
-            qualifier: group[0].property_qualifier
-          });
-        }
-      });
-
-      // Count ALL properties by VCS (for display counts, not impact calculations)
-      const allVCSCounts = {};
-      allGroupsWithCards.forEach(group => {
-        const vcs = group[0].new_vcs || group[0].property_vcs;
-        if (!vcs) return;
-        if (!allVCSCounts[vcs]) {
-          allVCSCounts[vcs] = { with_cards: 0, without_cards: 0 };
-        }
-        allVCSCounts[vcs].with_cards += 1;
-      });
-
-      allGroupsWithoutCards.forEach(group => {
-        const vcs = group[0].new_vcs || group[0].property_vcs;
-        if (!vcs) return;
-        if (!allVCSCounts[vcs]) {
-          allVCSCounts[vcs] = { with_cards: 0, without_cards: 0 };
-        }
-        allVCSCounts[vcs].without_cards += 1;
+        byVCS[vcs].without_cards.push({
+          norm_time: prop.values_norm_time,
+          sfla: prop.asset_sfla,
+          year_built: prop.asset_year_built
+        });
       });
 
       // Identify package pairs using package sale identification logic
@@ -2026,12 +2501,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         packagePairs: packagePairs,
         summary: {
           vendorType,
-          totalPropertiesAnalyzed: allPropertyGroups.size,
-          propertiesWithCards: allGroupsWithCards.length,
-          propertiesWithoutCards: allGroupsWithoutCards.length,
+          totalPropertiesAnalyzed: properties.length,
+          propertiesWithCards: withCards.length,
+          propertiesWithoutCards: withoutCards.length,
           packagePairsFound: packagePairs.length
         },
-        additionalCardsList: additionalCardProperties.sort((a, b) => {
+        additionalCardsList: additionalCardsList.sort((a, b) => {
           // Sort by VCS, then by address
           const aVcs = a.new_vcs || a.property_vcs || '';
           const bVcs = b.new_vcs || b.property_vcs || '';
@@ -2044,55 +2519,42 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       };
 
       // Calculate averages and impacts for each VCS (combine both impact data and all counts)
-      const allVCSKeys = new Set([...Object.keys(byVCS), ...Object.keys(allVCSCounts)]);
+      const allVCSKeys = Object.keys(byVCS);
 
       allVCSKeys.forEach(vcs => {
         const data = byVCS[vcs] || { with_cards: [], without_cards: [] };
+
+        // Debug log for first few VCS
+        if (Object.keys(byVCS).indexOf(vcs) < 3) {
+          console.log(`[Analysis] VCS ${vcs}:`, {
+            with_cards_count: data.with_cards.length,
+            with_cards_samples: data.with_cards.slice(0, 3),
+            without_cards_count: data.without_cards.length,
+            without_cards_samples: data.without_cards.slice(0, 3)
+          });
+        }
+
         // Calculate WITH cards metrics
         const withNormTimes = data.with_cards.map(d => d.norm_time);
         const withAvgNormTime = withNormTimes.length > 0
           ? withNormTimes.reduce((sum, val) => sum + val, 0) / withNormTimes.length
           : null;
 
-        // Calculate AVERAGE SFLA for properties with cards (not sum)
-        const withAvgSFLA = data.with_cards.length > 0
-          ? data.with_cards.reduce((sum, d) => sum + d.total_sfla, 0) / data.with_cards.length
+        // Calculate AVERAGE SFLA for properties with cards (SFLA already includes additional cards)
+        const withSFLAs = data.with_cards.filter(d => d.sfla > 0).map(d => d.sfla);
+        const withAvgSFLA = withSFLAs.length > 0
+          ? withSFLAs.reduce((sum, val) => sum + val, 0) / withSFLAs.length
           : null;
 
-        const withValidYears = data.with_cards.filter(d => d.avg_year_built);
+        const withValidYears = data.with_cards.filter(d => d.year_built);
         const withAvgYearBuilt = withValidYears.length > 0
-          ? withValidYears.reduce((sum, d) => sum + d.avg_year_built, 0) / withValidYears.length
+          ? Math.round(withValidYears.reduce((sum, d) => sum + d.year_built, 0) / withValidYears.length)
           : null;
 
         // Calculate Year Built and AVERAGE SFLA for ALL properties with additional cards (not just those with sales)
-        const allWithCardsGroups = allGroupsWithCards.filter(group => {
-          const groupVcs = group[0].new_vcs || group[0].property_vcs;
-          return groupVcs === vcs;
-        });
-
-        let allWithTotalSFLA = 0;
-        let allWithYearBuiltSum = 0;
-        let allWithYearBuiltCount = 0;
-
-        allWithCardsGroups.forEach(group => {
-          // Calculate AVERAGE SFLA per property group (not sum)
-          const groupSFLA = group.reduce((sum, p) => sum + (parseInt(p.asset_sfla) || 0), 0);
-          allWithTotalSFLA += groupSFLA; // This will be divided by group count later
-
-          // Average year built for this group
-          const validYears = group.filter(p => {
-            const year = parseInt(p.asset_year_built);
-            return year && year > 1800 && year <= new Date().getFullYear();
-          });
-          if (validYears.length > 0) {
-            const groupAvgYear = validYears.reduce((sum, p) => sum + parseInt(p.asset_year_built), 0) / validYears.length;
-            allWithYearBuiltSum += groupAvgYear;
-            allWithYearBuiltCount++;
-          }
-        });
-
-        const allWithAvgSFLA = allWithCardsGroups.length > 0 ? allWithTotalSFLA / allWithCardsGroups.length : null;
-        const allWithAvgYearBuilt = allWithYearBuiltCount > 0 ? allWithYearBuiltSum / allWithYearBuiltCount : null;
+        // Use the same averages from sales data (SFLA already includes combined cards from PreVal)
+        const allWithAvgSFLA = withAvgSFLA;
+        const allWithAvgYearBuilt = withAvgYearBuilt;
 
         // Calculate WITHOUT cards metrics
         const withoutNormTimes = data.without_cards.map(d => d.norm_time);
@@ -2107,33 +2569,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
         const withoutValidYears = data.without_cards.filter(d => d.year_built);
         const withoutAvgYearBuilt = withoutValidYears.length > 0
-          ? withoutValidYears.reduce((sum, d) => sum + d.year_built, 0) / withoutValidYears.length
+          ? Math.round(withoutValidYears.reduce((sum, d) => sum + d.year_built, 0) / withoutValidYears.length)
           : null;
 
-        // Calculate Year Built and SFLA for ALL properties without additional cards
-        const allWithoutCardsGroups = allGroupsWithoutCards.filter(group => {
-          const groupVcs = group[0].new_vcs || group[0].property_vcs;
-          return groupVcs === vcs;
-        });
-
-        let allWithoutTotalSFLA = 0;
-        let allWithoutYearBuiltSum = 0;
-        let allWithoutYearBuiltCount = 0;
-
-        allWithoutCardsGroups.forEach(group => {
-          const prop = group[0]; // Single card properties
-          const sfla = parseInt(prop.asset_sfla) || 0;
-          allWithoutTotalSFLA += sfla;
-
-          const year = parseInt(prop.asset_year_built);
-          if (year && year > 1800 && year <= new Date().getFullYear()) {
-            allWithoutYearBuiltSum += year;
-            allWithoutYearBuiltCount++;
-          }
-        });
-
-        const allWithoutAvgSFLA = allWithoutCardsGroups.length > 0 ? allWithoutTotalSFLA / allWithoutCardsGroups.length : null;
-        const allWithoutAvgYearBuilt = allWithoutYearBuiltCount > 0 ? allWithoutYearBuiltSum / allWithoutYearBuiltCount : null;
+        // Use the same averages from sales data
+        const allWithoutAvgSFLA = withoutAvgSFLA;
+        const allWithoutAvgYearBuilt = withoutAvgYearBuilt;
 
         // Calculate adjustments - Using "Without Cards" as baseline
         let flatAdj = null;
@@ -2154,13 +2595,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
         results.byVCS[vcs] = {
           with: {
-            n: allVCSCounts[vcs]?.with_cards || 0,
+            n: data.with_cards.length,
             avg_sfla: allWithAvgSFLA ? Math.round(allWithAvgSFLA) : null, // Changed from total_sfla to avg_sfla
             avg_year_built: allWithAvgYearBuilt ? Math.round(allWithAvgYearBuilt) : null,
             avg_norm_time: withAvgNormTime ? Math.round(withAvgNormTime) : null
           },
           without: {
-            n: allVCSCounts[vcs]?.without_cards || 0,
+            n: data.without_cards.length,
             avg_sfla: allWithoutAvgSFLA ? Math.round(allWithoutAvgSFLA) : null,
             avg_year_built: allWithoutAvgYearBuilt ? Math.round(allWithoutAvgYearBuilt) : null,
             avg_norm_time: withoutAvgNormTime ? Math.round(withoutAvgNormTime) : null
@@ -2173,7 +2614,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       });
 
       console.log('📊 Analysis Results:', {
-        totalAdditionalCards: additionalCardProperties.length,
+        totalAdditionalCards: additionalCardsList.length,
         vcsCount: Object.keys(results.byVCS).length,
         propertiesWithCards: results.summary.propertiesWithCards,
         propertiesWithoutCards: results.summary.propertiesWithoutCards,
@@ -2201,6 +2642,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       console.log('✅ Setting additional card analysis results:', results);
       setAdditionalResults(results);
+      // VCS sections start collapsed by default
+      setExpandedAdditionalVCS(new Set());
 
 
       console.log('����� Additional card analysis completed successfully');
@@ -2230,34 +2673,500 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     }
   };
 
-  // Export function for the CSV
-  const exportAdditionalCardsCSV = () => {
-    if (!additionalResults || !additionalResults.additionalCardsList) {
+  // Export function for Excel
+  const exportAdditionalCardsExcel = () => {
+    if (!additionalResults || !additionalResults.byVCS) {
       alert('No additional cards data to export');
       return;
     }
 
-    let csv = 'Address,Card,VCS,Class,Type/Use,Sales Price,SFLA,Year Built,Norm Time\\n';
-
-    additionalResults.additionalCardsList.forEach(prop => {
-      csv += `"${prop.property_location || ''}",`;
-      csv += `"${prop.property_addl_card || prop.additional_card || ''}",`;
-      csv += `"${prop.new_vcs || prop.property_vcs || ''}",`;
-      csv += `"${prop.property_m4_class || prop.property_cama_class || ''}",`;
-      csv += `"${prop.asset_type_use || ''}",`;
-      csv += `"${prop.sales_price || ''}",`;
-      csv += `"${prop.asset_sfla || ''}",`;
-      csv += `"${prop.asset_year_built || ''}",`;
-      csv += `"${prop.values_norm_time || ''}"}\\n`;
+    console.log('[Additional Cards Export] Starting export with data:', {
+      vcsCount: Object.keys(additionalResults.byVCS).length,
+      sampleVCS: Object.entries(additionalResults.byVCS).slice(0, 2).map(([vcs, data]) => ({
+        vcs,
+        withCount: data.with.n,
+        withSFLA: data.with.avg_sfla,
+        withPrice: data.with.avg_norm_time,
+        withoutCount: data.without.n,
+        withoutSFLA: data.without.avg_sfla,
+        withoutPrice: data.without.avg_norm_time
+      }))
     });
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Additional_Cards_${jobData?.job_name || 'Analysis'}_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const rows = [];
+
+    // Title row
+    const titleRow = [];
+    titleRow[0] = `Additional Cards Analysis - ${jobData?.job_name || 'Job'}`;
+    rows.push(titleRow);
+
+    // Blank row
+    rows.push([]);
+
+    // Column headers
+    const headers = [
+      'VCS',
+      'With Cards Count',
+      'With Cards Avg SFLA',
+      'With Cards Avg Year',
+      'With Cards Avg Price',
+      'Without Cards Count',
+      'Without Cards Avg SFLA',
+      'Without Cards Avg Year',
+      'Without Cards Avg Price',
+      'Adjusted Price',
+      'Flat Adj',
+      '% Adj'
+    ];
+    rows.push(headers);
+
+    // COL indexes (0-based)
+    const COL = {
+      VCS: 0,
+      WITH_COUNT: 1,
+      WITH_SFLA: 2,
+      WITH_YEAR: 3,
+      WITH_PRICE: 4,
+      WITHOUT_COUNT: 5,
+      WITHOUT_SFLA: 6,
+      WITHOUT_YEAR: 7,
+      WITHOUT_PRICE: 8,
+      ADJUSTED: 9,
+      FLAT_ADJ: 10,
+      PCT_ADJ: 11
+    };
+
+    // Add data rows with formulas (only VCS with complete data on both sides)
+    const vcsKeys = Object.keys(additionalResults.byVCS)
+      .filter(vcs => {
+        const data = additionalResults.byVCS[vcs];
+        // Only include VCS that have valid data on BOTH sides (matching UI logic)
+        const withSFLA = data.with.avg_sfla || 0;
+        const withPrice = data.with.avg_norm_time || 0;
+        const withoutSFLA = data.without.avg_sfla || 0;
+        const withoutPrice = data.without.avg_norm_time || 0;
+        return (withSFLA > 0 && withPrice > 0 && withoutSFLA > 0 && withoutPrice > 0);
+      })
+      .sort();
+
+    vcsKeys.forEach(vcs => {
+      const data = additionalResults.byVCS[vcs];
+      const rowNum = rows.length + 1; // Excel row number (1-based)
+
+      const row = [];
+      row[COL.VCS] = vcs;
+      row[COL.WITH_COUNT] = data.with.n || 0;
+      row[COL.WITH_SFLA] = data.with.avg_sfla || 0;
+      row[COL.WITH_YEAR] = data.with.avg_year_built || '';
+      row[COL.WITH_PRICE] = data.with.avg_norm_time || 0;
+      row[COL.WITHOUT_COUNT] = data.without.n || 0;
+      row[COL.WITHOUT_SFLA] = data.without.avg_sfla || 0;
+      row[COL.WITHOUT_YEAR] = data.without.avg_year_built || '';
+      row[COL.WITHOUT_PRICE] = data.without.avg_norm_time || 0;
+
+      // Jim formula: Adjust "With Cards" price to "Without Cards" SFLA
+      // Formula: ((targetSFLA - saleSFLA) * ((salePrice / saleSFLA) * 0.50)) + salePrice
+      // With Cards = sale, Without Cards = target (baseline)
+      row[COL.ADJUSTED] = {
+        f: `IF(OR(C${rowNum}=0,E${rowNum}=0,G${rowNum}=0),E${rowNum},((G${rowNum}-C${rowNum})*((E${rowNum}/C${rowNum})*0.50))+E${rowNum})`,
+        t: 'n'
+      };
+
+      // Flat Adj = Adjusted - Without Cards Price
+      row[COL.FLAT_ADJ] = {
+        f: `J${rowNum}-I${rowNum}`,
+        t: 'n'
+      };
+
+      // % Adj = (Adjusted - Without Cards Price) / Without Cards Price
+      row[COL.PCT_ADJ] = {
+        f: `IF(I${rowNum}=0,0,(J${rowNum}-I${rowNum})/I${rowNum})`,
+        t: 'n',
+        z: '0.0%'
+      };
+
+      rows.push(row);
+    });
+
+    // Summary section
+    rows.push([]); // Blank row
+    rows.push([]); // Blank row
+
+    const summaryHeaderRow = [];
+    summaryHeaderRow[0] = '';
+    summaryHeaderRow[1] = 'Overall Summary';
+    rows.push(summaryHeaderRow);
+    rows.push([]); // Blank row
+
+    const summaryHeaders = ['Metric', 'Value'];
+    rows.push(summaryHeaders);
+
+    // Calculate summary stats
+    const firstDataRow = 4; // Row 4 in Excel (after title, blank, header rows)
+    const lastDataRow = vcsKeys.length + 3; // Last VCS row
+
+    // VCS Count
+    const vcsCountRow = [];
+    vcsCountRow[0] = 'VCS Analyzed';
+    vcsCountRow[1] = vcsKeys.length;
+    rows.push(vcsCountRow);
+
+    // Total properties with cards
+    const totalWithRow = [];
+    totalWithRow[0] = 'Total Sales With Additional Cards';
+    totalWithRow[1] = {
+      f: `SUM(B${firstDataRow}:B${lastDataRow})`,
+      t: 'n'
+    };
+    rows.push(totalWithRow);
+
+    // Total properties without cards
+    const totalWithoutRow = [];
+    totalWithoutRow[0] = 'Total Sales Without Additional Cards';
+    totalWithoutRow[1] = {
+      f: `SUM(F${firstDataRow}:F${lastDataRow})`,
+      t: 'n'
+    };
+    rows.push(totalWithoutRow);
+
+    // Average Dollar Impact
+    const avgDollarRow = [];
+    avgDollarRow[0] = 'Average Dollar Impact';
+    avgDollarRow[1] = {
+      f: `AVERAGE(K${firstDataRow}:K${lastDataRow})`,
+      t: 'n',
+      z: '$#,##0'
+    };
+    rows.push(avgDollarRow);
+
+    // Average % Adjustment across all VCS
+    const avgPctRow = [];
+    avgPctRow[0] = 'Average % Impact';
+    avgPctRow[1] = {
+      f: `AVERAGE(L${firstDataRow}:L${lastDataRow})`,
+      t: 'n',
+      z: '0.0%'
+    };
+    rows.push(avgPctRow);
+
+    // Create worksheet
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Base styles
+    const baseStyle = {
+      font: { name: 'Leelawadee', sz: 10 },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    const headerStyle = {
+      font: { name: 'Leelawadee', sz: 10, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    // Apply styles
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    // Find summary section start
+    let summaryStartRow = -1;
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      const cellB = XLSX.utils.encode_cell({ r: R, c: 1 });
+      if (ws[cellB] && ws[cellB].v === 'Overall Summary') {
+        summaryStartRow = R;
+        break;
+      }
+    }
+
+    const titleStyle = {
+      font: { name: 'Leelawadee', sz: 12, bold: true },
+      alignment: { horizontal: 'left', vertical: 'center' }
+    };
+
+    const descStyle = {
+      font: { name: 'Leelawadee', sz: 10, italic: true },
+      alignment: { horizontal: 'left', vertical: 'center' }
+    };
+
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws[cellAddress]) continue;
+
+        const isSummarySection = summaryStartRow !== -1 && R >= summaryStartRow;
+
+        // Title row (row 0)
+        if (R === 0) {
+          ws[cellAddress].s = titleStyle;
+        }
+        // Header rows
+        else if (R === 2 || ws[cellAddress].v === 'VCS' || ws[cellAddress].v === 'Overall Summary' || ws[cellAddress].v === 'Metric') {
+          ws[cellAddress].s = headerStyle;
+        }
+        // Data rows
+        else {
+          const style = { ...baseStyle };
+
+          if (isSummarySection) {
+            // Summary section formatting
+            if (C === 1 && ws[cellAddress].z === '0.0%') {
+              style.numFmt = '0.0%';
+            } else if (C === 1 && ws[cellAddress].z === '$#,##0') {
+              style.numFmt = '$#,##0';
+            } else if (C === 1) {
+              style.numFmt = '#,##0';
+            }
+          } else if (R >= 3) { // Data rows start at row 3 (0-indexed: row 3 = Excel row 4)
+            // Main data columns
+            if (C === COL.WITH_COUNT || C === COL.WITHOUT_COUNT) {
+              style.numFmt = '#,##0'; // Count columns
+            } else if (C === COL.WITH_SFLA || C === COL.WITHOUT_SFLA) {
+              style.numFmt = '#,##0'; // SFLA columns
+            } else if (C === COL.WITH_YEAR || C === COL.WITHOUT_YEAR) {
+              style.numFmt = '0'; // Year columns
+            } else if (C === COL.WITH_PRICE || C === COL.WITHOUT_PRICE || C === COL.ADJUSTED || C === COL.FLAT_ADJ) {
+              style.numFmt = '$#,##0'; // Currency columns
+            } else if (C === COL.PCT_ADJ) {
+              style.numFmt = '0.0%'; // Percentage column
+            }
+          }
+
+          ws[cellAddress].s = style;
+        }
+      }
+    }
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 10 },  // VCS
+      { wch: 15 },  // With Cards Count
+      { wch: 18 },  // With Cards Avg SFLA
+      { wch: 18 },  // With Cards Avg Year
+      { wch: 20 },  // With Cards Avg Price
+      { wch: 18 },  // Without Cards Count
+      { wch: 20 },  // Without Cards Avg SFLA
+      { wch: 20 },  // Without Cards Avg Year
+      { wch: 22 },  // Without Cards Avg Price
+      { wch: 15 },  // Adjusted Price
+      { wch: 12 },  // Flat Adj
+      { wch: 10 }   // % Adj
+    ];
+
+    // Create workbook and add summary worksheet
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Summary by VCS');
+
+    // Create detail sheet with all properties
+    if (additionalResults.additionalCardsList && additionalResults.additionalCardsList.length > 0) {
+      const detailRows = [];
+
+      // Detail headers
+      const detailHeaders = [
+        'Address',
+        'Card',
+        'VCS',
+        'Class',
+        'Type/Use',
+        'Sales Price',
+        'SFLA',
+        'Year Built',
+        'Norm Time'
+      ];
+      detailRows.push(detailHeaders);
+
+      // Detail data
+      additionalResults.additionalCardsList.forEach(prop => {
+        const detailRow = [];
+        detailRow[0] = prop.property_location || '';
+        detailRow[1] = prop.property_addl_card || prop.additional_card || '';
+        detailRow[2] = prop.new_vcs || prop.property_vcs || '';
+        detailRow[3] = prop.property_m4_class || prop.property_cama_class || '';
+        detailRow[4] = prop.asset_type_use || '';
+        detailRow[5] = prop.sales_price || '';
+        detailRow[6] = prop.asset_sfla || '';
+        detailRow[7] = prop.asset_year_built || '';
+        detailRow[8] = prop.values_norm_time || '';
+        detailRows.push(detailRow);
+      });
+
+      // Create detail worksheet
+      const detailWs = XLSX.utils.aoa_to_sheet(detailRows);
+
+      // Apply styles to detail sheet
+      const detailRange = XLSX.utils.decode_range(detailWs['!ref']);
+      for (let R = detailRange.s.r; R <= detailRange.e.r; R++) {
+        for (let C = detailRange.s.c; C <= detailRange.e.c; C++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!detailWs[cellAddress]) continue;
+
+          if (R === 0) {
+            // Header row
+            detailWs[cellAddress].s = headerStyle;
+          } else {
+            // Data rows
+            const style = { ...baseStyle };
+            if (C === 5 || C === 8) {
+              style.numFmt = '$#,##0'; // Sales Price and Norm Time
+            } else if (C === 6) {
+              style.numFmt = '#,##0'; // SFLA
+            } else if (C === 7) {
+              style.numFmt = '0'; // Year Built
+            }
+            detailWs[cellAddress].s = style;
+          }
+        }
+      }
+
+      // Set column widths for detail sheet
+      detailWs['!cols'] = [
+        { wch: 40 },  // Address
+        { wch: 10 },  // Card
+        { wch: 10 },  // VCS
+        { wch: 12 },  // Class
+        { wch: 15 },  // Type/Use
+        { wch: 14 },  // Sales Price
+        { wch: 10 },  // SFLA
+        { wch: 12 },  // Year Built
+        { wch: 14 }   // Norm Time
+      ];
+
+      XLSX.utils.book_append_sheet(wb, detailWs, 'Property Detail');
+    }
+
+    // Export
+    const fileName = `Additional_Cards_${jobData?.job_name || 'Analysis'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+
+    console.log('✅ Additional Cards Excel export completed');
+  };
+
+  // Export function for All Additional Cards Detail
+  const exportAllAdditionalCardsDetail = () => {
+    if (!additionalResults || !additionalResults.additionalCardsList || additionalResults.additionalCardsList.length === 0) {
+      alert('No additional cards detail to export');
+      return;
+    }
+
+    const rows = [];
+
+    // Column headers (first row)
+    const headers = [
+      'Block',
+      'Lot',
+      'Qualifier',
+      'Card',
+      'Address',
+      'VCS',
+      'Class',
+      'Type/Use',
+      'Building Class',
+      'SFLA',
+      'Year Built',
+      'Sales Price'
+    ];
+    rows.push(headers);
+
+    // Add sorted data rows
+    const sortedCards = getSortedAdditionalCards();
+    sortedCards.forEach(prop => {
+      const row = [];
+      row[0] = prop.property_block || '';
+      row[1] = prop.property_lot || '';
+      row[2] = prop.property_qualifier || '';
+      row[3] = prop.property_addl_card || prop.additional_card || '';
+      row[4] = prop.property_location || '';
+      row[5] = prop.new_vcs || prop.property_vcs || '';
+      row[6] = prop.property_m4_class || prop.property_cama_class || '';
+      row[7] = prop.asset_type_use || '';
+      row[8] = prop.asset_building_class || '';
+      row[9] = prop.asset_sfla || '';
+      row[10] = prop.asset_year_built || '';
+      row[11] = prop.sales_price || '';
+      rows.push(row);
+    });
+
+    // Create worksheet
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Base styles
+    const baseStyle = {
+      font: { name: 'Leelawadee', sz: 10 },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    const headerStyle = {
+      font: { name: 'Leelawadee', sz: 10, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    const redFlagStyle = {
+      font: { name: 'Leelawadee', sz: 10, color: { rgb: 'DC2626' }, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    // Apply styles
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws[cellAddress]) continue;
+
+        // Header row (row 0)
+        if (R === 0) {
+          ws[cellAddress].s = headerStyle;
+        }
+        // Data rows
+        else if (R >= 1) {
+          const dataRowIndex = R - 1; // Index into sortedCards
+          const prop = sortedCards[dataRowIndex];
+          const style = { ...baseStyle };
+
+          // Check for missing SFLA (column 9) or Year Built (column 10)
+          const isMissingSFLA = C === 9 && (!prop.asset_sfla);
+          const isMissingYear = C === 10 && (!prop.asset_year_built);
+
+          if (isMissingSFLA || isMissingYear) {
+            // Apply red flag style for missing data
+            ws[cellAddress].s = redFlagStyle;
+          } else {
+            // Apply formatting based on column type
+            if (C === 9) {
+              style.numFmt = '#,##0'; // SFLA - centered
+            } else if (C === 10) {
+              style.numFmt = '0'; // Year Built - centered
+            } else if (C === 11) {
+              style.numFmt = '$#,##0'; // Sales Price - centered
+            }
+            // Address (column 4) uses default center alignment
+            ws[cellAddress].s = style;
+          }
+        }
+      }
+    }
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 10 },  // Block
+      { wch: 10 },  // Lot
+      { wch: 10 },  // Qualifier
+      { wch: 8 },   // Card
+      { wch: 40 },  // Address
+      { wch: 10 },  // VCS
+      { wch: 10 },  // Class
+      { wch: 15 },  // Type/Use
+      { wch: 15 },  // Building Class
+      { wch: 12 },  // SFLA
+      { wch: 12 },  // Year Built
+      { wch: 14 }   // Sales Price
+    ];
+
+    // Create workbook and export
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'All Additional Cards Detail');
+
+    const fileName = `All_Additional_Cards_Detail_${jobData?.job_name || 'Analysis'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+
+    console.log('✅ All Additional Cards Detail export completed');
   };
 
   // ============ ADDITIONAL CARDS SORTING ============
@@ -2440,28 +3349,33 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             setExpandedAdditionalVCS(newExpanded);
           };
 
-          // Get individual property pairs for comparison
-          const withCardsProperties = data.with_cards_properties || [];
-          const withoutCardsProperties = data.without_cards_properties || [];
+          // Calculate adjusted price and impact using Jim formula
+          const withAvgSFLA = data.with.avg_sfla || 0;
+          const withAvgPrice = data.with.avg_norm_time || 0;
+          const withoutAvgSFLA = data.without.avg_sfla || 0;
+          const withoutAvgPrice = data.without.avg_norm_time || 0;
 
-          // Calculate sales-only statistics from actual sales arrays
-          // WITH cards sales data (each record is a property group that sold)
-          const withCardsSales = data.with_cards || [];
-          const withSalesCount = withCardsSales.length;
-          const withSalesAvgSFLA = withSalesCount > 0 ?
-            withCardsSales.reduce((sum, record) => sum + record.total_sfla, 0) / withSalesCount : null;
-          const withSalesAvgYear = withSalesCount > 0 ?
-            withCardsSales.filter(record => record.avg_year_built).reduce((sum, record) => sum + record.avg_year_built, 0) /
-            withCardsSales.filter(record => record.avg_year_built).length : null;
+          // Jim formula: normalize "with cards" price to "without cards" SFLA
+          const adjustedPrice = withAvgSFLA > 0 && withAvgPrice > 0 && withoutAvgSFLA > 0 ?
+            sizeNormalize(withAvgPrice, withAvgSFLA, withoutAvgSFLA) : null;
 
-          // WITHOUT cards sales data (each record is a single property that sold)
-          const withoutCardsSales = data.without_cards || [];
-          const withoutSalesCount = withoutCardsSales.length;
-          const withoutSalesAvgSFLA = withoutSalesCount > 0 ?
-            withoutCardsSales.reduce((sum, record) => sum + record.sfla, 0) / withoutSalesCount : null;
-          const withoutSalesAvgYear = withoutSalesCount > 0 ?
-            withoutCardsSales.filter(record => record.year_built).reduce((sum, record) => sum + record.year_built, 0) /
-            withoutCardsSales.filter(record => record.year_built).length : null;
+          const flatAdj = adjustedPrice && withoutAvgPrice > 0 ? adjustedPrice - withoutAvgPrice : null;
+          const pctAdj = adjustedPrice && withoutAvgPrice > 0 ? ((adjustedPrice - withoutAvgPrice) / withoutAvgPrice) * 100 : null;
+
+          // Log for debugging first few VCS
+          if (Object.keys(vcsData).indexOf(vcs) < 3) {
+            console.log(`[Additional Cards UI] VCS ${vcs}:`, {
+              withCount: data.with.n,
+              withSFLA: withAvgSFLA,
+              withPrice: withAvgPrice,
+              withoutCount: data.without.n,
+              withoutSFLA: withoutAvgSFLA,
+              withoutPrice: withoutAvgPrice,
+              adjusted: adjustedPrice,
+              flatAdj,
+              pctAdj
+            });
+          }
 
           return (
             <div key={vcs} style={{ marginBottom: '15px', border: '1px solid #E5E7EB', borderRadius: '6px' }}>
@@ -2486,8 +3400,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                  <span style={{ fontSize: '12px', color: '#6B7280' }}>
-                    Impact: {data.flat_adj ? formatCurrency(data.flat_adj) : 'No comparison'}
+                  <span style={{ fontSize: '12px', color: flatAdj !== null && flatAdj > 0 ? '#059669' : flatAdj !== null && flatAdj < 0 ? '#DC2626' : '#6B7280' }}>
+                    Impact: {flatAdj !== null ? formatCurrency(flatAdj) : 'No comparison'}
+                    {pctAdj !== null && ` (${pctAdj.toFixed(1)}%)`}
                   </span>
                   {!isExpanded && (
                     <span style={{ fontSize: '12px', color: '#6B7280' }}>
@@ -2519,171 +3434,69 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
                         <tr style={{ backgroundColor: '#F3F4F6' }}>
-                          <th style={{ padding: '4px 6px', textAlign: 'left', fontSize: '10px', fontWeight: '600' }}>Type</th>
-                          <th style={{ padding: '4px 6px', textAlign: 'center', fontSize: '10px', fontWeight: '600' }}>Count(all)</th>
-                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Avg SFLA(all)</th>
-                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Avg YearBuilt(all)</th>
-                          <th style={{ padding: '4px 6px', textAlign: 'center', fontSize: '10px', fontWeight: '600' }}>Count(sales)</th>
-                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Avg SFLA(sales)</th>
-                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Avg Year Built(sales)</th>
-                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Adjusted</th>
-                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Impact $</th>
-                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '10px', fontWeight: '600' }}>Impact %</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: '600' }}>Type</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: '11px', fontWeight: '600' }}>Count</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg SFLA</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Year</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Price</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Adjusted Price</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Impact $</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Impact %</th>
                         </tr>
                       </thead>
                       <tbody>
                         <tr style={{ backgroundColor: '#F8FAFC' }}>
-                          <td style={{ padding: '4px 6px', fontSize: '11px', fontWeight: '500', color: '#1E293B' }}>With Cards</td>
-                          <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>{data.with.n}</td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
-                            {data.with.avg_sfla ? data.with.avg_sfla.toLocaleString() : '-'}
+                          <td style={{ padding: '8px 10px', fontSize: '12px', fontWeight: '500', color: '#1E293B' }}>With Cards</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'center', fontSize: '12px' }}>{data.with.n}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+                            {withAvgSFLA ? Math.round(withAvgSFLA).toLocaleString() : '-'}
                           </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
                             {data.with.avg_year_built || '-'}
                           </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>
-                            {withSalesCount}
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+                            {withAvgPrice ? formatCurrency(withAvgPrice) : '-'}
                           </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
-                            {withSalesAvgSFLA ? Math.round(withSalesAvgSFLA).toLocaleString() : '-'}
-                          </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
-                            {withSalesAvgYear ? Math.round(withSalesAvgYear) : '-'}
-                          </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px', fontWeight: '500' }}>
-                            {data.adjusted ? formatCurrency(data.adjusted) : '-'}
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px', fontWeight: '500' }}>
+                            {adjustedPrice ? formatCurrency(adjustedPrice) : '-'}
                           </td>
                           <td style={{
-                            padding: '4px 6px',
+                            padding: '8px 10px',
                             textAlign: 'right',
-                            fontSize: '11px',
+                            fontSize: '12px',
                             fontWeight: '500',
-                            color: data.flat_adj > 0 ? '#059669' : data.flat_adj < 0 ? '#B45309' : '#6B7280'
+                            color: flatAdj !== null && flatAdj > 0 ? '#059669' : flatAdj !== null && flatAdj < 0 ? '#DC2626' : '#6B7280'
                           }}>
-                            {data.flat_adj ? formatCurrency(data.flat_adj) : '-'}
+                            {flatAdj !== null ? formatCurrency(flatAdj) : '-'}
                           </td>
                           <td style={{
-                            padding: '4px 6px',
+                            padding: '8px 10px',
                             textAlign: 'right',
-                            fontSize: '11px',
+                            fontSize: '12px',
                             fontWeight: '500',
-                            color: data.pct_adj > 0 ? '#059669' : data.pct_adj < 0 ? '#B45309' : '#6B7280'
+                            color: pctAdj !== null && pctAdj > 0 ? '#059669' : pctAdj !== null && pctAdj < 0 ? '#DC2626' : '#6B7280'
                           }}>
-                            {data.pct_adj ? `${data.pct_adj.toFixed(1)}%` : '-'}
+                            {pctAdj !== null ? `${pctAdj.toFixed(1)}%` : '-'}
                           </td>
                         </tr>
                         <tr style={{ backgroundColor: '#F0F9FF' }}>
-                          <td style={{ padding: '4px 6px', fontSize: '11px', fontWeight: '500', color: '#1E40AF' }}>Without Cards (Baseline)</td>
-                          <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>{data.without.n}</td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
-                            {data.without.avg_sfla ? data.without.avg_sfla.toLocaleString() : '-'}
+                          <td style={{ padding: '8px 10px', fontSize: '12px', fontWeight: '500', color: '#1E40AF' }}>Without Cards (Baseline)</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'center', fontSize: '12px' }}>{data.without.n}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+                            {withoutAvgSFLA ? Math.round(withoutAvgSFLA).toLocaleString() : '-'}
                           </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
                             {data.without.avg_year_built || '-'}
                           </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: '11px' }}>
-                            {withoutSalesCount}
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>
+                            {withoutAvgPrice ? formatCurrency(withoutAvgPrice) : '-'}
                           </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
-                            {withoutSalesAvgSFLA ? Math.round(withoutSalesAvgSFLA).toLocaleString() : '-'}
-                          </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>
-                            {withoutSalesAvgYear ? Math.round(withoutSalesAvgYear) : '-'}
-                          </td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>Baseline</td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>-</td>
-                          <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: '11px' }}>-</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>Baseline</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>-</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: '12px' }}>-</td>
                         </tr>
                       </tbody>
                     </table>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                    {/* Properties WITH Additional Cards */}
-                    <div>
-                      <h5 style={{ fontSize: '13px', fontWeight: '600', marginBottom: '10px', color: '#1E293B' }}>
-                        Properties WITH Additional Cards ({withCardsProperties.length})
-                      </h5>
-                      {withCardsProperties.length > 0 ? (
-                        <div style={{ border: '1px solid #E5E7EB', borderRadius: '4px', overflow: 'hidden' }}>
-                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                              <tr style={{ backgroundColor: '#F3F4F6' }}>
-                                <th style={{ padding: '6px 8px', textAlign: 'left', fontSize: '11px', fontWeight: '600' }}>Block-Lot-Qual</th>
-                                <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Total SFLA</th>
-                                <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Year</th>
-                                <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Value</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {withCardsProperties.map((prop, idx) => (
-                                <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                                  <td style={{ padding: '6px 8px', fontSize: '11px' }}>
-                                    {prop.block}-{prop.lot}{prop.qualifier ? `-${prop.qualifier}` : ''}
-                                  </td>
-                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px' }}>
-                                    {prop.total_sfla ? prop.total_sfla.toLocaleString() : '-'}
-                                  </td>
-                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px' }}>
-                                    {prop.avg_year_built || '-'}
-                                  </td>
-                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px' }}>
-                                    {formatCurrency(prop.norm_time)}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : (
-                        <div style={{ padding: '15px', textAlign: 'center', color: '#6B7280', fontSize: '12px', fontStyle: 'italic' }}>
-                          No properties with additional cards sold in this VCS
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Properties WITHOUT Additional Cards */}
-                    <div>
-                      <h5 style={{ fontSize: '13px', fontWeight: '600', marginBottom: '10px', color: '#1E293B' }}>
-                        Properties WITHOUT Additional Cards ({withoutCardsProperties.length})
-                      </h5>
-                      {withoutCardsProperties.length > 0 ? (
-                        <div style={{ border: '1px solid #E5E7EB', borderRadius: '4px', overflow: 'hidden' }}>
-                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                              <tr style={{ backgroundColor: '#F3F4F6' }}>
-                                <th style={{ padding: '6px 8px', textAlign: 'left', fontSize: '11px', fontWeight: '600' }}>Block-Lot-Qual</th>
-                                <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>SFLA</th>
-                                <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Year</th>
-                                <th style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Value</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {withoutCardsProperties.map((prop, idx) => (
-                                <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                                  <td style={{ padding: '6px 8px', fontSize: '11px' }}>
-                                    {prop.block}-{prop.lot}{prop.qualifier ? `-${prop.qualifier}` : ''}
-                                  </td>
-                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px' }}>
-                                    {prop.sfla ? prop.sfla.toLocaleString() : '-'}
-                                  </td>
-                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px' }}>
-                                    {prop.year_built || '-'}
-                                  </td>
-                                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: '11px' }}>
-                                    {formatCurrency(prop.norm_time)}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : (
-                        <div style={{ padding: '15px', textAlign: 'center', color: '#6B7280', fontSize: '12px', fontStyle: 'italic' }}>
-                          No properties without additional cards sold in this VCS
-                        </div>
-                      )}
-                    </div>
                   </div>
                 </div>
               )}
@@ -2704,21 +3517,56 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               Additional Cards Analysis
             </h3>
             {additionalResults && (
-              <button
-                onClick={exportAdditionalCardsCSV}
-                style={{
-                  padding: '6px 12px',
-                  backgroundColor: '#10B981',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  cursor: 'pointer'
-                }}
-              >
-                Export CSV
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => {
+                    const allVCS = new Set(Object.keys(additionalResults.byVCS || {}));
+                    setExpandedAdditionalVCS(allVCS);
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    backgroundColor: '#3B82F6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Expand All
+                </button>
+                <button
+                  onClick={() => setExpandedAdditionalVCS(new Set())}
+                  style={{
+                    padding: '6px 12px',
+                    backgroundColor: '#64748B',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Collapse All
+                </button>
+                <button
+                  onClick={exportAdditionalCardsExcel}
+                  style={{
+                    padding: '6px 12px',
+                    backgroundColor: '#10B981',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Export Excel
+                </button>
+              </div>
             )}
           </div>
 
@@ -2794,13 +3642,26 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               </h4>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', fontSize: '13px' }}>
                 <div>
-                  <span style={{ color: '#64748B', fontWeight: '500' }}>Total Dollar Impact: </span>
+                  <span style={{ color: '#64748B', fontWeight: '500' }}>Average Dollar Impact: </span>
                   <span style={{ fontWeight: '600', color: '#059669' }}>
                     {(() => {
-                      const totalImpact = Object.values(additionalResults.byVCS || {}).reduce((sum, data) => {
-                        return sum + (data.flat_adj || 0);
-                      }, 0);
-                      return totalImpact !== 0 ? formatCurrency(totalImpact) : 'No valid comparisons';
+                      const impacts = [];
+                      Object.values(additionalResults.byVCS || {}).forEach(data => {
+                        const withSFLA = data.with.avg_sfla || 0;
+                        const withPrice = data.with.avg_norm_time || 0;
+                        const withoutSFLA = data.without.avg_sfla || 0;
+                        const withoutPrice = data.without.avg_norm_time || 0;
+
+                        if (withSFLA > 0 && withPrice > 0 && withoutSFLA > 0 && withoutPrice > 0) {
+                          const adjusted = sizeNormalize(withPrice, withSFLA, withoutSFLA);
+                          const flatAdj = adjusted - withoutPrice;
+                          impacts.push(flatAdj);
+                        }
+                      });
+
+                      if (impacts.length === 0) return 'No valid comparisons';
+                      const avgImpact = impacts.reduce((sum, val) => sum + val, 0) / impacts.length;
+                      return formatCurrency(avgImpact);
                     })()}
                   </span>
                 </div>
@@ -2808,9 +3669,22 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                   <span style={{ color: '#64748B', fontWeight: '500' }}>Average % Impact: </span>
                   <span style={{ fontWeight: '600', color: '#059669' }}>
                     {(() => {
-                      const impacts = Object.values(additionalResults.byVCS || {}).filter(data => data.pct_adj !== null && data.pct_adj !== undefined);
+                      const impacts = [];
+                      Object.values(additionalResults.byVCS || {}).forEach(data => {
+                        const withSFLA = data.with.avg_sfla || 0;
+                        const withPrice = data.with.avg_norm_time || 0;
+                        const withoutSFLA = data.without.avg_sfla || 0;
+                        const withoutPrice = data.without.avg_norm_time || 0;
+
+                        if (withSFLA > 0 && withPrice > 0 && withoutSFLA > 0 && withoutPrice > 0) {
+                          const adjusted = sizeNormalize(withPrice, withSFLA, withoutSFLA);
+                          const pctAdj = ((adjusted - withoutPrice) / withoutPrice) * 100;
+                          impacts.push(pctAdj);
+                        }
+                      });
+
                       if (impacts.length === 0) return 'No valid comparisons';
-                      const avgPct = impacts.reduce((sum, data) => sum + data.pct_adj, 0) / impacts.length;
+                      const avgPct = impacts.reduce((sum, val) => sum + val, 0) / impacts.length;
                       return `${avgPct.toFixed(1)}%`;
                     })()}
                   </span>
@@ -2819,48 +3693,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             </div>
 
 
-            {/* Package Pair Analysis Table */}
-            <div style={{
-              border: '1px solid #E5E7EB',
-              borderRadius: '6px',
-              overflow: 'auto',
-              marginBottom: '30px'
-            }}>
-              <div style={{
-                padding: '12px 15px',
-                backgroundColor: '#F9FAFB',
-                borderBottom: '1px solid #E5E7EB'
-              }}>
-                <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0' }}>
-                  Additional Cards Package Analysis
-                </h4>
-                <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>
-                  Each row shows a package with additional cards vs baseline properties without cards in the same VCS
-                </div>
-              </div>
-
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#F3F4F6' }}>
-                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: '600' }}>Package Location</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: '600' }}>VCS</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Sum SFLA (w)</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Year (w)</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Price (w)</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg SFLA (w/o)</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Year (w/o)</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Price (w/o)</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Adjusted</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Impact ($)</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Impact (%)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {/* Render individual package pairs */}
-                  {renderPackagePairs(additionalResults)}
-                </tbody>
-              </table>
-            </div>
+            {/* VCS Analysis Table - Grouped by VCS */}
+            {renderVCSAnalysisTable(additionalResults.byVCS)}
 
             {/* Additional Cards Detail Table */}
             <div style={{
@@ -2879,9 +3713,26 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                 <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0' }}>
                   All Additional Cards Detail
                 </h4>
-                <span style={{ fontSize: '12px', color: '#6B7280', fontWeight: '500' }}>
-                  ({(additionalResults.additionalCardsList || []).length} cards)
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '12px', color: '#6B7280', fontWeight: '500' }}>
+                    ({(additionalResults.additionalCardsList || []).length} cards)
+                  </span>
+                  <button
+                    onClick={exportAllAdditionalCardsDetail}
+                    style={{
+                      padding: '6px 12px',
+                      backgroundColor: '#10B981',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      fontWeight: '500',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Export Detail
+                  </button>
+                </div>
               </div>
 
               <div style={{ overflowX: 'auto' }}>
@@ -2987,10 +3838,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                           <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>
                             {prop.asset_building_class || '-'}
                           </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px', color: !prop.asset_sfla ? '#DC2626' : 'inherit', fontWeight: !prop.asset_sfla ? '500' : 'normal' }}>
                             {prop.asset_sfla ? parseInt(prop.asset_sfla).toLocaleString() : '-'}
                           </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px' }}>{prop.asset_year_built || '-'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '13px', color: !prop.asset_year_built ? '#DC2626' : 'inherit', fontWeight: !prop.asset_year_built ? '500' : 'normal' }}>{prop.asset_year_built || '-'}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: '13px' }}>
                             {prop.sales_price ? formatCurrency(prop.sales_price) : '-'}
                           </td>

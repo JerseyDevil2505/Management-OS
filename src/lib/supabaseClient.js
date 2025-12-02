@@ -133,11 +133,11 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
  * Get parsed raw data for a job (with caching)
  */
 async function getRawDataForJob(jobId) {
-  // Check cache first
+  // Check cache first - trust it since it's cleared on file updates
   const cacheKey = `job_raw_data_${jobId}`;
   const cached = dataCache.get(cacheKey);
   if (cached) {
-    console.log(`📦 Returning cached raw data for job ${jobId}`);
+    // Silent return - no console spam
     return cached;
   }
 
@@ -182,15 +182,13 @@ async function getRawDataForJob(jobId) {
       parsed_code_definitions: job.parsed_code_definitions
     };
 
-    // Cache with longer TTL since code definitions rarely change
+    // Cache - it will be cleared when files are updated via updateCSVData
     dataCache.set(cacheKey, result, CACHE_CONFIG.CODE_DEFINITIONS);
-    console.log(`💾 Cached raw data for job ${jobId}`);
 
     return result;
 
   } catch (error) {
     console.error('Error getting source file data for job:', getErrorMessage(error));
-    console.error('Error details:', error);
     return null;
   }
 }
@@ -947,6 +945,7 @@ export const interpretCodes = {
     'asset_int_cond': '491',
     'asset_type_use': '500',
     'asset_stories': '510',
+    'asset_story_height': '510',
     'asset_design_style': '520',
     // Raw data fields
     'topo': '115',
@@ -982,6 +981,7 @@ brtParsedStructureMap: {
   'asset_building_class': { parent: '6', section: '20' },
   'asset_type_use': { parent: '7', section: '21' },
   'asset_stories': { parent: '8', section: '22' },
+  'asset_story_height': { parent: '8', section: '22' },
   'asset_ext_cond': { parent: '34', section: '60' },
   'asset_int_cond': { parent: '34', section: '60' },
   'inspection_info_by': { parent: '30', section: '53' },
@@ -1092,6 +1092,7 @@ getBRTValue: function(property, codeDefinitions, fieldName) {
     'asset_building_class': '20',
     'asset_type_use': '21',
     'asset_stories': '22',
+    'asset_story_height': '22',
     'asset_ext_cond': '60',
     'asset_int_cond': '60',
     'inspection_info_by': '53'
@@ -1162,9 +1163,11 @@ getBRTValue: function(property, codeDefinitions, fieldName) {
     return typeCode;
   },
 
-  // Check if a field is empty (handles spaces, null, undefined)
+  // Check if a field is empty (handles spaces, null, undefined, and BRT's "00")
   isFieldEmpty: function(value) {
-    return !value || value.toString().trim() === '';
+    if (!value) return true;
+    const strValue = value.toString().trim();
+    return strValue === '' || strValue === '00';
   }, 
  
 // Fix getExteriorConditionName:
@@ -2486,7 +2489,7 @@ export async function generateLotSizesForJob(jobId) {
   // Get job data with parsed code definitions
   const { data: jobRow, error: jobErr } = await supabase
     .from('jobs')
-    .select('unit_rate_config, parsed_code_definitions')
+    .select('unit_rate_config, parsed_code_definitions, vendor_type')
     .eq('id', jobId)
     .single();
 
@@ -2494,8 +2497,30 @@ export async function generateLotSizesForJob(jobId) {
 
   const mappings = jobRow.unit_rate_config;
   const codeDefinitions = jobRow.parsed_code_definitions;
+  const vendorType = jobRow.vendor_type;
 
   if (!mappings) throw new Error('No unit rate mappings found');
+
+  // Helper function to parse composite key and extract card
+  const parseCompositeKey = (compositeKey) => {
+    if (!compositeKey) return { card: '' };
+    // Format: YEAR+CCDD-BLOCK-LOT_QUALIFIER-CARD-LOCATION
+    const parts = compositeKey.split('-');
+    return {
+      card: parts[3] === 'NONE' ? '' : parts[3] || ''
+    };
+  };
+
+  // Determine valid main cards based on vendor type
+  const isMainCard = (card) => {
+    const cardUpper = String(card || '').toUpperCase();
+    if (vendorType === 'Microsystems') {
+      return cardUpper === 'M' || cardUpper === '';
+    } else {
+      // BRT or default
+      return cardUpper === '1' || cardUpper === '';
+    }
+  };
 
   // Build VCS name-to-key lookup
   const vcsNameToKey = new Map();
@@ -2509,18 +2534,77 @@ export async function generateLotSizesForJob(jobId) {
     });
   }
 
-  // Get properties with LANDUR fields
-  const { data: props, error: propsErr } = await supabase
-    .from('property_records')
-    .select('property_composite_key, property_vcs, landur_1, landurunits_1, landur_2, landurunits_2, landur_3, landurunits_3, landur_4, landurunits_4, landur_5, landurunits_5, landur_6, landurunits_6')
-    .eq('job_id', jobId);
+  // Get properties with LANDUR fields and VCS - use batch loading to handle >5000 records
+  const BATCH_SIZE = 1000;
+  let allProps = [];
+  let offset = 0;
+  let hasMore = true;
 
-  if (propsErr) throw propsErr;
+  while (hasMore) {
+    const { data: batch, error: propsErr } = await supabase
+      .from('property_records')
+      .select(`
+        property_composite_key,
+        property_vcs,
+        landur_1, landurunits_1,
+        landur_2, landurunits_2,
+        landur_3, landurunits_3,
+        landur_4, landurunits_4,
+        landur_5, landurunits_5,
+        landur_6, landurunits_6,
+        property_market_analysis(new_vcs)
+      `)
+      .eq('job_id', jobId)
+      .order('property_composite_key')
+      .range(offset, offset + BATCH_SIZE - 1);
+
+    if (propsErr) throw propsErr;
+
+    if (batch && batch.length > 0) {
+      allProps = allProps.concat(batch);
+      offset += BATCH_SIZE;
+      hasMore = batch.length === BATCH_SIZE;
+    } else {
+      hasMore = false;
+    }
+  }
+
+  const props = allProps;
+
+  // Properties loaded successfully
 
   const updates = [];
+  const diagnostics = {
+    totalProperties: props.length,
+    processed: 0,
+    skipped: 0,
+    noVcsMapping: 0,
+    noLandurData: 0,
+    allCodesExcluded: 0,
+    unmappedCodes: new Set(),
+    vcsSummary: {}
+  };
+
+  // Ready to process properties
 
   for (const p of props) {
-    let vcs = p.property_vcs ? String(p.property_vcs).trim().replace(/^0+/, '') : null;
+    // Filter: only process main cards (card 1 for BRT, card M for Microsystems)
+    const parsed = parseCompositeKey(p.property_composite_key);
+    if (!isMainCard(parsed.card)) {
+      diagnostics.skipped++;
+      continue;
+    }
+    // Prefer new_vcs from property_market_analysis over property_vcs
+    // Handle both object and array returns from Supabase JOIN
+    let newVcs = null;
+    if (Array.isArray(p.property_market_analysis)) {
+      newVcs = p.property_market_analysis[0]?.new_vcs;
+    } else {
+      newVcs = p.property_market_analysis?.new_vcs;
+    }
+
+    const rawVcs = newVcs || p.property_vcs;
+    let vcs = rawVcs ? String(rawVcs).trim().replace(/^0+/, '') : null;
 
     // Try to resolve VCS name to numeric key
     let mapForVcs = null;
@@ -2537,10 +2621,16 @@ export async function generateLotSizesForJob(jobId) {
       }
     }
 
-    if (!mapForVcs) continue; // Skip if no mapping found
+    if (!mapForVcs) {
+      diagnostics.skipped++;
+      diagnostics.noVcsMapping++;
+      continue; // Skip if no mapping found
+    }
 
     let totalAcres = 0;
     let totalSf = 0;
+    let hasAnyLandurData = false;
+    let processedAnyCodes = false;
 
     // Process LANDUR codes 1-6
     for (let i = 1; i <= 6; i++) {
@@ -2549,6 +2639,7 @@ export async function generateLotSizesForJob(jobId) {
 
       if (!code || units === null || units === undefined) continue;
 
+      hasAnyLandurData = true;
       const codeStr = String(code).padStart(2, '0');
 
       // Check mapping
@@ -2558,26 +2649,75 @@ export async function generateLotSizesForJob(jobId) {
 
       if (Array.isArray(mapForVcs.acre) && mapForVcs.acre.includes(codeStr)) {
         totalAcres += Number(units) || 0;
+        processedAnyCodes = true;
         continue;
       }
 
       if (Array.isArray(mapForVcs.sf) && mapForVcs.sf.includes(codeStr)) {
         totalSf += Number(units) || 0;
+        processedAnyCodes = true;
         continue;
       }
+
+      // Code not in any bucket - track as unmapped
+      diagnostics.unmappedCodes.add(`${vcs}::${codeStr}`);
     }
 
-    const finalAcres = parseFloat((totalAcres + (totalSf / 43560)).toFixed(2));
-    const finalSf = finalAcres > 0 ? Math.round(finalAcres * 43560) : null;
+    // Track diagnostics
+    if (!hasAnyLandurData) {
+      diagnostics.skipped++;
+      diagnostics.noLandurData++;
+      continue;
+    }
+
+    if (!processedAnyCodes) {
+      diagnostics.skipped++;
+      diagnostics.allCodesExcluded++;
+      continue;
+    }
+
+    // Calculate final values - PRESERVE ORIGINAL SF WHEN POSSIBLE
+    let finalAcres;
+    let finalSf;
+
+    if (totalAcres > 0 && totalSf > 0) {
+      // Mixed: have both acres and SF - must convert
+      finalAcres = parseFloat((totalAcres + (totalSf / 43560)).toFixed(2));
+      finalSf = Math.round(finalAcres * 43560);
+    } else if (totalAcres > 0) {
+      // Only acres - convert to SF
+      finalAcres = parseFloat(totalAcres.toFixed(2));
+      finalSf = Math.round(totalAcres * 43560);
+    } else if (totalSf > 0) {
+      // Only SF - PRESERVE ORIGINAL SF, calculate acres from it
+      finalSf = totalSf;
+      finalAcres = parseFloat((totalSf / 43560).toFixed(2));
+    } else {
+      // No data
+      finalAcres = null;
+      finalSf = null;
+    }
 
     updates.push({
       job_id: jobId,
       property_composite_key: p.property_composite_key,
-      market_manual_lot_acre: finalAcres > 0 ? finalAcres : null,
+      market_manual_lot_acre: finalAcres,
       market_manual_lot_sf: finalSf,
       updated_at: new Date().toISOString()
     });
+
+    diagnostics.processed++;
+
+    // Track VCS summary
+    if (!diagnostics.vcsSummary[vcs]) {
+      diagnostics.vcsSummary[vcs] = { processed: 0, totalSf: 0, totalAcres: 0 };
+    }
+    diagnostics.vcsSummary[vcs].processed++;
+    if (finalSf) diagnostics.vcsSummary[vcs].totalSf += finalSf;
+    if (finalAcres) diagnostics.vcsSummary[vcs].totalAcres += finalAcres;
   }
+
+  // Summary only in diagnostics return object, not logged
 
   // Batch upsert
   const batchSize = 500;
@@ -2589,7 +2729,20 @@ export async function generateLotSizesForJob(jobId) {
     if (error) throw error;
   }
 
-  return { job_id: jobId, updated: updates.length };
+  return {
+    job_id: jobId,
+    updated: updates.length,
+    diagnostics: {
+      totalProperties: diagnostics.totalProperties,
+      processed: diagnostics.processed,
+      skipped: diagnostics.skipped,
+      noVcsMapping: diagnostics.noVcsMapping,
+      noLandurData: diagnostics.noLandurData,
+      allCodesExcluded: diagnostics.allCodesExcluded,
+      unmappedCodes: Array.from(diagnostics.unmappedCodes),
+      vcsSummary: diagnostics.vcsSummary
+    }
+  };
 }
 
 // Save unit rate mappings (merge into existing mappings)
@@ -3192,7 +3345,7 @@ export const checklistService = {
       
       if (error) throw error;
       
-      console.log(`✅ Loaded ${data?.length || 0} checklist items`);
+      console.log(`�� Loaded ${data?.length || 0} checklist items`);
       return data || [];
     } catch (error) {
       console.error('Checklist items fetch error:', error);
@@ -3972,6 +4125,13 @@ export const propertyService = {
     if (propertyRawData) return propertyRawData;
 
     return null;
+  },
+
+  // Clear raw data cache for a specific job (called before quality checks to ensure fresh data)
+  clearRawDataCache(jobId) {
+    const cacheKey = `job_raw_data_${jobId}`;
+    dataCache.clear(cacheKey);
+    console.log(`🗑️ Cleared raw data cache for job ${jobId}`);
   },
 
   // NEW: Check if job needs reprocessing due to source file changes

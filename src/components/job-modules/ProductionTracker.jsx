@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 
 const ProductionTracker = ({ 
   jobData, 
@@ -295,20 +295,35 @@ const ProductionTracker = ({
         const sections = job.parsed_code_definitions.sections || job.parsed_code_definitions;
         
         debugLog('CODES', 'BRT sections available:', Object.keys(sections));
-        
-        // FIXED: Look for InfoBy codes in the correct nested location without filtering
+
+        // FIXED: Search for InfoBy section by KEY "53" or VALUE "INFO. BY" instead of hardcoded parent key position
+        // This handles BRT files with different structures (e.g., Barnegat Light has extra sections 06, 07, 08)
         const residentialSection = sections['Residential'];
-        if (residentialSection && residentialSection['30'] && residentialSection['30'].MAP) {
-          const infoByMap = residentialSection['30'].MAP;
-          Object.keys(infoByMap).forEach(key => {
-            const item = infoByMap[key];
-            if (item?.DATA?.VALUE) {
-              codes.push({
-                code: item.KEY || item.DATA.KEY,
-                description: item.DATA.VALUE
-              });
+        if (residentialSection) {
+          let infoBySection = null;
+
+          // Search all parent keys to find the one with KEY="53" or VALUE containing "INFO"
+          Object.keys(residentialSection).forEach(parentKey => {
+            const section = residentialSection[parentKey];
+            if (section?.KEY === '53' || section?.DATA?.VALUE?.includes('INFO')) {
+              infoBySection = section;
+              debugLog('CODES', `Found InfoBy section at parent key "${parentKey}" with KEY="${section.KEY}" VALUE="${section.DATA?.VALUE}"`);
             }
           });
+
+          if (infoBySection && infoBySection.MAP) {
+            Object.keys(infoBySection.MAP).forEach(key => {
+              const item = infoBySection.MAP[key];
+              if (item?.DATA?.VALUE) {
+                codes.push({
+                  code: item.KEY || item.DATA.KEY,
+                  description: item.DATA.VALUE
+                });
+              }
+            });
+          } else {
+            debugLog('CODES', '⚠️ WARNING: Could not find InfoBy section (KEY=53) in BRT Residential codes');
+          }
         }
 
       } else if (vendor === 'Microsystems') {
@@ -381,7 +396,7 @@ const ProductionTracker = ({
       }
 
       setAvailableInfoByCodes(codes);
-      debugLog('CODES', `✅ FINAL: Loaded ${codes.length} clean InfoBy codes from ${vendor}`, 
+      debugLog('CODES', `�� FINAL: Loaded ${codes.length} clean InfoBy codes from ${vendor}`, 
         codes.map(c => `${c.code}=${c.description}`));
 
       // Load existing category configuration
@@ -907,7 +922,7 @@ const ProductionTracker = ({
     // If overrides were applied, suggest reprocessing to update reports
     const overrideCount = Object.values(processedValidationDecisions).filter(d => d.action === 'override').length;
     if (overrideCount > 0) {
-      addNotification(`📊 ${overrideCount} overrides applied. Run processing again to update validation reports.`, 'info');
+      addNotification(`��� ${overrideCount} overrides applied. Run processing again to update validation reports.`, 'info');
     }
   };
 
@@ -955,14 +970,14 @@ const ProductionTracker = ({
       
       initializeData();
     }
-  }, [jobData?.id, properties, inspectionData, employees, latestFileVersion]); // Added employees and latestFileVersion to deps
+  }, [jobData?.id, properties, inspectionData, employees, latestFileVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update employee data when external inspectors list changes
   useEffect(() => {
     if (employees && employees.length > 0) {
       processEmployeeData();
     }
-  }, [externalInspectorsList, employees]);
+  }, [externalInspectorsList, employees]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Track unsaved changes
   useEffect(() => {
@@ -980,9 +995,21 @@ const ProductionTracker = ({
     try {
       // Get actual vendor from property_records
       const actualVendor = await loadVendorSource();
-      
 
-      debugLog('ANALYTICS', 'Starting manager-focused analytics processing', { 
+      // Helper function to check if this is a primary card for billing
+      const isPrimaryCard = (cardValue, vendor) => {
+        if (!cardValue) return true; // If no card value, treat as primary (default '1')
+        const card = String(cardValue).trim().toUpperCase();
+        if (vendor === 'BRT') {
+          return card === '1' || card === '';
+        } else if (vendor === 'Microsystems') {
+          return card === 'M' || card === '';
+        }
+        // Default: if vendor is unknown, count card 1 or M as primary
+        return card === '1' || card === 'M' || card === '';
+      };
+
+      debugLog('ANALYTICS', 'Starting manager-focused analytics processing', {
         jobId: jobData.id,
         fileVersion: latestFileVersion,
         startDate: projectStartDate,
@@ -1135,7 +1162,11 @@ const ProductionTracker = ({
           if (classBreakdown[propertyClass]) {
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
-            billingByClass[propertyClass].billable++;
+            // Only count primary cards (1 for BRT, M for Microsystems) for billing
+            const cardValue = record.property_addl_card || '1';
+            if (isPrimaryCard(cardValue, actualVendor)) {
+              billingByClass[propertyClass].billable++;
+            }
           }
 
           // Initialize inspector stats for overridden properties
@@ -1503,7 +1534,11 @@ const ProductionTracker = ({
           if (classBreakdown[propertyClass]) {
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
-            billingByClass[propertyClass].billable++;
+            // Only count primary cards (1 for BRT, M for Microsystems) for billing
+            const cardValue = record.property_addl_card || '1';
+            if (isPrimaryCard(cardValue, actualVendor)) {
+              billingByClass[propertyClass].billable++;
+            }
           }
 
           // Inspector analytics - count valid inspections only
@@ -1718,7 +1753,11 @@ const ProductionTracker = ({
           if (classBreakdown[propertyClass]) {
             classBreakdown[propertyClass].inspected++;
             billingByClass[propertyClass].inspected++;
-            billingByClass[propertyClass].billable++;
+            // Only count primary cards (1 for BRT, M for Microsystems) for billing
+            const cardValue = fullRecord.property_addl_card || '1';
+            if (isPrimaryCard(cardValue, actualVendor)) {
+              billingByClass[propertyClass].billable++;
+            }
           }
           
           debugLog('PROCESSING_MODAL', `Added override for ${override.composite_key} with reason: ${override.override_reason}`);
@@ -2220,20 +2259,47 @@ const exportValidationReport = () => {
     summaryData.push(['Manager Overrides Applied', validationOverrides.length]);
 
     const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+
+    // Apply styling to summary sheet
+    const summaryRange = XLSX.utils.decode_range(summarySheet['!ref']);
+
+    // Find the row index for "STATISTICS" dynamically
+    const statisticsRowIndex = summaryData.findIndex(row => row[0] === 'STATISTICS');
+
+    for (let R = summaryRange.s.r; R <= summaryRange.e.r; ++R) {
+      for (let C = summaryRange.s.c; C <= summaryRange.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!summarySheet[cellAddress]) continue;
+
+        // Bold only: title row (0), column headers row (5), and STATISTICS row
+        const isHeader = R === 0 || R === 5 || R === statisticsRowIndex;
+
+        summarySheet[cellAddress].s = {
+          font: { name: 'Leelawadee', sz: 10, bold: isHeader },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      }
+    }
+
+    // Set column widths for summary sheet
+    summarySheet['!cols'] = [
+      { wch: 30 }, // Column A: Labels and inspector codes
+      { wch: 25 }, // Column B: Inspector names
+      { wch: 15 }  // Column C: Total issues
+    ];
+
     XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
 
-    // Create a sheet for each inspector
+    // Create a sheet for each inspector (only if they have issues)
     Object.keys(validationReport.detailed_issues)
+      .filter(inspector => validationReport.detailed_issues[inspector].length > 0)
       .sort((a, b) => validationReport.detailed_issues[b].length - validationReport.detailed_issues[a].length)
       .forEach(inspector => {
         const issues = validationReport.detailed_issues[inspector];
         const inspectorInfo = validationReport.summary.inspector_breakdown.find(i => i.inspector_code === inspector);
-        
+
+        // Reorganized: Headers first, data rows, then summary at bottom
         const inspectorData = [
-          [`Inspector: ${inspector}`],
-          [`Name: ${inspectorInfo?.inspector_name || 'Unknown'}`],
-          [`Total Issues: ${issues.length}`],
-          [],
           ['Block', 'Lot', 'Qualifier', 'Card', 'Property Location', 'Issues', 'Override Status']
         ];
 
@@ -2241,7 +2307,7 @@ const exportValidationReport = () => {
           const propertyKey = issue.composite_key || `${issue.block}-${issue.lot}-${issue.qualifier || ''}`;
           const isOverridden = overrideMap && overrideMap[propertyKey]?.override_applied;
           const overrideStatus = isOverridden ? `Overridden: ${overrideMap[propertyKey]?.override_reason}` : 'Not Overridden';
-          
+
           inspectorData.push([
             issue.block,
             issue.lot,
@@ -2253,7 +2319,45 @@ const exportValidationReport = () => {
           ]);
         });
 
+        // Add inspector summary at the bottom
+        inspectorData.push([]);
+        inspectorData.push([`Inspector: ${inspector}`]);
+        inspectorData.push([`Name: ${inspectorInfo?.inspector_name || 'Unknown'}`]);
+        inspectorData.push([`Total Issues: ${issues.length}`]);
+
         const inspectorSheet = XLSX.utils.aoa_to_sheet(inspectorData);
+
+        // Apply styling to inspector sheet
+        const inspectorRange = XLSX.utils.decode_range(inspectorSheet['!ref']);
+        const lastDataRow = inspectorData.length - 4; // Last data row before summary section
+
+        for (let R = inspectorRange.s.r; R <= inspectorRange.e.r; ++R) {
+          for (let C = inspectorRange.s.c; C <= inspectorRange.e.c; ++C) {
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            if (!inspectorSheet[cellAddress]) continue;
+
+            // Header is row 0, summary is last 3 rows
+            const isHeader = R === 0;
+            const isSummary = R > lastDataRow;
+
+            inspectorSheet[cellAddress].s = {
+              font: { name: 'Leelawadee', sz: 10, bold: isHeader },
+              alignment: { horizontal: isSummary ? 'left' : 'center', vertical: 'center' }
+            };
+          }
+        }
+
+        // Set column widths for inspector sheet
+        inspectorSheet['!cols'] = [
+          { wch: 10 }, // Block
+          { wch: 10 }, // Lot
+          { wch: 12 }, // Qualifier
+          { wch: 8 },  // Card
+          { wch: 40 }, // Property Location
+          { wch: 50 }, // Issues
+          { wch: 30 }  // Override Status
+        ];
+
         // Truncate sheet name if too long (Excel limit is 31 characters)
         const sheetName = inspector.length > 31 ? inspector.substring(0, 31) : inspector;
         XLSX.utils.book_append_sheet(wb, inspectorSheet, sheetName);
@@ -2286,12 +2390,36 @@ const exportMissingPropertiesReport = () => {
     ];
 
     const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+
+    // Apply styling to summary sheet
+    const summaryRange = XLSX.utils.decode_range(summarySheet['!ref']);
+    const overviewRowIndex = summaryData.findIndex(row => row[0] === 'OVERVIEW');
+
+    for (let R = summaryRange.s.r; R <= summaryRange.e.r; ++R) {
+      for (let C = summaryRange.s.c; C <= summaryRange.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!summarySheet[cellAddress]) continue;
+
+        // Bold: title row (0) and OVERVIEW row
+        const isHeader = R === 0 || R === overviewRowIndex;
+
+        summarySheet[cellAddress].s = {
+          font: { name: 'Leelawadee', sz: 10, bold: isHeader },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      }
+    }
+
+    // Set column widths for summary sheet
+    summarySheet['!cols'] = [
+      { wch: 40 }, // Labels
+      { wch: 15 }  // Values
+    ];
+
     XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
 
-    // Sheet 2: By Reason
+    // Sheet 2: By Reason (remove redundant header)
     const reasonData = [
-      ['BREAKDOWN BY REASON'],
-      [],
       ['Reason', 'Count']
     ];
 
@@ -2302,12 +2430,33 @@ const exportMissingPropertiesReport = () => {
       });
 
     const reasonSheet = XLSX.utils.aoa_to_sheet(reasonData);
+
+    // Apply styling to By Reason sheet
+    const reasonRange = XLSX.utils.decode_range(reasonSheet['!ref']);
+    for (let R = reasonRange.s.r; R <= reasonRange.e.r; ++R) {
+      for (let C = reasonRange.s.c; C <= reasonRange.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!reasonSheet[cellAddress]) continue;
+
+        const isHeader = R === 0;
+
+        reasonSheet[cellAddress].s = {
+          font: { name: 'Leelawadee', sz: 10, bold: isHeader },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      }
+    }
+
+    // Set column widths for By Reason sheet
+    reasonSheet['!cols'] = [
+      { wch: 50 }, // Reason
+      { wch: 15 }  // Count
+    ];
+
     XLSX.utils.book_append_sheet(wb, reasonSheet, 'By Reason');
 
-    // Sheet 3: By Inspector
+    // Sheet 3: By Inspector (remove redundant header)
     const inspectorData = [
-      ['BREAKDOWN BY INSPECTOR'],
-      [],
       ['Inspector', 'Count']
     ];
 
@@ -2318,13 +2467,33 @@ const exportMissingPropertiesReport = () => {
       });
 
     const inspectorSheet = XLSX.utils.aoa_to_sheet(inspectorData);
+
+    // Apply styling to By Inspector sheet
+    const inspectorRange = XLSX.utils.decode_range(inspectorSheet['!ref']);
+    for (let R = inspectorRange.s.r; R <= inspectorRange.e.r; ++R) {
+      for (let C = inspectorRange.s.c; C <= inspectorRange.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!inspectorSheet[cellAddress]) continue;
+
+        const isHeader = R === 0;
+
+        inspectorSheet[cellAddress].s = {
+          font: { name: 'Leelawadee', sz: 10, bold: isHeader },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      }
+    }
+
+    // Set column widths for By Inspector sheet
+    inspectorSheet['!cols'] = [
+      { wch: 25 }, // Inspector
+      { wch: 15 }  // Count
+    ];
+
     XLSX.utils.book_append_sheet(wb, inspectorSheet, 'By Inspector');
 
-    // Sheet 4: Detailed Missing Properties (Most important for managers)
+    // Sheet 4: Detailed Missing Properties (remove redundant headers)
     const detailedData = [
-      ['DETAILED MISSING PROPERTIES'],
-      ['*** This list is for distribution to field inspectors ***'],
-      [],
       ['Block', 'Lot', 'Qualifier', 'Card', 'Property Location', 'Class', 'Inspector', 'InfoBy Code', 'Measure Date', 'Reason']
     ];
 
@@ -2352,6 +2521,37 @@ const exportMissingPropertiesReport = () => {
       });
 
     const detailedSheet = XLSX.utils.aoa_to_sheet(detailedData);
+
+    // Apply styling to Detailed Missing sheet
+    const detailedRange = XLSX.utils.decode_range(detailedSheet['!ref']);
+    for (let R = detailedRange.s.r; R <= detailedRange.e.r; ++R) {
+      for (let C = detailedRange.s.c; C <= detailedRange.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!detailedSheet[cellAddress]) continue;
+
+        const isHeader = R === 0;
+
+        detailedSheet[cellAddress].s = {
+          font: { name: 'Leelawadee', sz: 10, bold: isHeader },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      }
+    }
+
+    // Set column widths for Detailed Missing sheet
+    detailedSheet['!cols'] = [
+      { wch: 10 },  // Block
+      { wch: 10 },  // Lot
+      { wch: 12 },  // Qualifier
+      { wch: 8 },   // Card
+      { wch: 40 },  // Property Location
+      { wch: 12 },  // Class
+      { wch: 25 },  // Inspector
+      { wch: 15 },  // InfoBy Code
+      { wch: 15 },  // Measure Date
+      { wch: 50 }   // Reason
+    ];
+
     XLSX.utils.book_append_sheet(wb, detailedSheet, 'Detailed Missing');
 
     // Write the file

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 
 const PayrollManagement = ({ 
   employees = [], 
@@ -247,14 +247,14 @@ const PayrollManagement = ({
     if (activeTab === 'recency') {
       fetchDataRecency();
     }
-  }, [activeTab]);
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (payrollPeriod.endDate) {
       const hours = getStandardExpectedHours(payrollPeriod.endDate);
       setPayrollPeriod(prev => ({ ...prev, expectedHours: hours }));
     }
-  }, [payrollPeriod.endDate]);
+  }, [payrollPeriod.endDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
 const loadInitialData = async () => {
     try {
@@ -543,64 +543,149 @@ const loadInitialData = async () => {
 
   const exportToADP = () => {
     const mergedData = mergePayrollWithBonuses();
-    const exportData = [];
-    let totalHours = 0;
-    let totalApptOT = 0;
-    let totalFieldBonus = 0;
-    let totalOT = 0;
-    
+    const rows = [];
+
+    // Column headers
+    const headers = ['Employee Name', 'Hours', 'Appt OT', 'Field Bonus', 'TOTAL OT'];
+    rows.push(headers);
+
+    // Add employee data rows
     mergedData.forEach(emp => {
       const hours = emp.hours === 'same' || emp.hours === 'Salary' ? 'same' : emp.hours;
       const apptOT = emp.apptOT || 0;
       const fieldBonus = emp.calculatedFieldOT || 0;
       const total = apptOT + fieldBonus;
-      
-      if (typeof emp.hours === 'number') {
-        totalHours += emp.hours;
-      }
-      totalApptOT += apptOT;
-      totalFieldBonus += fieldBonus;
-      totalOT += total;
-      
-      exportData.push({
-        name: emp.worksheetName,
-        hours: hours,
-        apptOT: apptOT,
-        fieldBonus: fieldBonus,
-        total: total
-      });
+
+      rows.push([
+        emp.worksheetName,
+        hours,
+        apptOT,
+        fieldBonus,
+        total
+      ]);
     });
-    
-    const headers = ['Employee Name', 'Hours', 'Appt OT', 'Field Bonus', 'TOTAL OT'];
-    const rows = exportData.map(row => [
-      `"${row.name}"`,
-      row.hours,
-      row.apptOT.toFixed(2),
-      row.fieldBonus.toFixed(2),
-      row.total.toFixed(2)
-    ]);
-    
-    rows.push(['', '', '', '', '']);
-    rows.push([
-      '"TOTALS"',
-      totalHours || '',
-      totalApptOT.toFixed(2),
-      totalFieldBonus.toFixed(2),
-      totalOT.toFixed(2)
-    ]);
-    
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `payroll_${payrollPeriod.endDate}_ADP.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
+
+    // Blank row
+    rows.push([]);
+
+    // Totals row with formulas
+    const firstDataRow = 2; // Row 2 in Excel (after header row)
+    const lastDataRow = mergedData.length + 1; // Last employee row
+    const totalsRow = [];
+    totalsRow[0] = 'TOTALS';
+
+    // Hours total (sum only numeric values, skip 'same' and 'Salary')
+    totalsRow[1] = {
+      f: `SUMIF(B${firstDataRow}:B${lastDataRow},">0")`,
+      t: 'n'
+    };
+
+    // Appt OT total
+    totalsRow[2] = {
+      f: `SUM(C${firstDataRow}:C${lastDataRow})`,
+      t: 'n',
+      z: '0.00'
+    };
+
+    // Field Bonus total
+    totalsRow[3] = {
+      f: `SUM(D${firstDataRow}:D${lastDataRow})`,
+      t: 'n',
+      z: '0.00'
+    };
+
+    // TOTAL OT
+    totalsRow[4] = {
+      f: `SUM(E${firstDataRow}:E${lastDataRow})`,
+      t: 'n',
+      z: '0.00'
+    };
+
+    rows.push(totalsRow);
+
+    // Create worksheet
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Base styles
+    const baseStyle = {
+      font: { name: 'Leelawadee', sz: 10 },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    const headerStyle = {
+      font: { name: 'Leelawadee', sz: 10, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    const totalsStyle = {
+      font: { name: 'Leelawadee', sz: 10, bold: true },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    // Apply styles
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    const totalsRowIndex = mergedData.length + 2; // +1 for header, +1 for blank row
+
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws[cellAddress]) continue;
+
+        // Header row (row 0)
+        if (R === 0) {
+          ws[cellAddress].s = headerStyle;
+        }
+        // Totals row
+        else if (R === totalsRowIndex) {
+          const style = { ...totalsStyle };
+          // Format numeric columns
+          if (C === 1) {
+            style.numFmt = '0'; // Hours
+          } else if (C >= 2) {
+            style.numFmt = '0.00'; // Currency columns
+          }
+          ws[cellAddress].s = style;
+        }
+        // Data rows
+        else {
+          const style = { ...baseStyle };
+          // Employee name - left aligned
+          if (C === 0) {
+            style.alignment = { horizontal: 'left', vertical: 'center' };
+          }
+          // Hours column
+          else if (C === 1) {
+            // Handle 'same' and 'Salary' text values
+            if (typeof ws[cellAddress].v === 'string') {
+              style.alignment = { horizontal: 'center', vertical: 'center' };
+            } else {
+              style.numFmt = '0';
+            }
+          }
+          // Numeric columns (Appt OT, Field Bonus, TOTAL OT)
+          else if (C >= 2) {
+            style.numFmt = '0.00';
+          }
+          ws[cellAddress].s = style;
+        }
+      }
+    }
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 25 },  // Employee Name
+      { wch: 10 },  // Hours
+      { wch: 12 },  // Appt OT
+      { wch: 12 },  // Field Bonus
+      { wch: 12 }   // TOTAL OT
+    ];
+
+    // Create workbook and export
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Payroll');
+
+    const fileName = `payroll_${payrollPeriod.endDate}_ADP.xlsx`;
+    XLSX.writeFile(wb, fileName);
   };
 
   const markInspectionsProcessed = async () => {

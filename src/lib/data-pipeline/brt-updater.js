@@ -60,8 +60,12 @@ export class BRTUpdater {
           cleaned[key] = null;
           continue;
         }
-        if (value !== undefined && value !== '') {
-          cleaned[key] = value;
+        // Skip undefined, empty strings, and whitespace-only strings
+        if (value !== undefined && value !== null) {
+          const strValue = String(value);
+          if (strValue.trim() !== '') {
+            cleaned[key] = value;
+          }
         }
       }
       return cleaned;
@@ -120,7 +124,7 @@ export class BRTUpdater {
         return { error };
         
       } catch (networkError) {
-        console.log(`🌐 Network error for UPSERT batch ${batchNumber}, attempt ${attempt}:`, networkError.message);
+        console.log(`�� Network error for UPSERT batch ${batchNumber}, attempt ${attempt}:`, networkError.message);
         if (attempt < retries) {
           await new Promise(resolve => setTimeout(resolve, 2000));
           continue;
@@ -286,7 +290,7 @@ export class BRTUpdater {
         throw error;
       }
       
-      console.log('�� Complete code file stored successfully in jobs table (UPDATER)');
+      console.log('���� Complete code file stored successfully in jobs table (UPDATER)');
     } catch (error) {
       console.error('❌ Failed to store code file:', error);
       // Don't throw - continue with processing even if code storage fails
@@ -567,7 +571,7 @@ export class BRTUpdater {
       asset_lot_sf: this.calculateLotSquareFeet(rawRecord),
       asset_neighborhood: rawRecord.NBHD,
       asset_sfla: this.parseNumeric(rawRecord.SFLA_TOTAL),
-      asset_story_height: this.parseNumeric(rawRecord.STORYHGT),
+      asset_story_height: this.parseStoryHeight(rawRecord.STORYHGT),  // Extract numeric portion from alphanumeric values like "2A"
       asset_type_use: rawRecord.TYPEUSE,
       asset_view: rawRecord.VIEW,
       asset_year_built: this.parseInteger(rawRecord.YEARBUILT),
@@ -931,21 +935,37 @@ export class BRTUpdater {
     }
 
   parseDate(dateString) {
-    if (!dateString || dateString.trim() === '') return null;
+    // Handle null, undefined, empty string, or whitespace-only strings
+    if (!dateString || String(dateString).trim() === '') return null;
     const date = new Date(dateString);
     return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
   }
 
   parseNumeric(value, decimals = null) {
-    if (!value || value === '') return null;
+    // Handle null, undefined, empty string, or whitespace-only strings
+    if (!value || String(value).trim() === '') return null;
     const num = parseFloat(String(value).replace(/[,$]/g, ''));
     if (isNaN(num)) return null;
     return decimals !== null ? parseFloat(num.toFixed(decimals)) : num;
   }
 
   parseInteger(value) {
-    if (!value || value === '') return null;
+    // Handle null, undefined, empty string, or whitespace-only strings
+    if (!value || String(value).trim() === '') return null;
     const num = parseInt(String(value), 10);
+    return isNaN(num) ? null : num;
+  }
+
+  parseStoryHeight(value) {
+    // Handle null, undefined, empty string, or whitespace-only strings
+    if (!value || String(value).trim() === '') return null;
+
+    // Extract numeric portion from values like "2A", "1.5", "3S", etc.
+    // Match: optional digits, optional decimal point, optional digits
+    const match = String(value).match(/^(\d+\.?\d*)/);
+    if (!match) return null;
+
+    const num = parseFloat(match[1]);
     return isNaN(num) ? null : num;
   }
 
@@ -1012,6 +1032,7 @@ export class BRTUpdater {
 
       let propertiesAdded = [];
       let propertiesRemoved = [];
+      let propertiesWithSalesChanges = [];
 
       if (previousVersion) {
         const previousKeys = new Set(previousVersion.property_composite_keys);
@@ -1022,6 +1043,63 @@ export class BRTUpdater {
         propertiesRemoved = [...previousKeys].filter(key => !currentKeys.has(key));
 
         console.log(`📊 Version ${fileVersion} changes: +${propertiesAdded.length} added, -${propertiesRemoved.length} removed`);
+
+        // Detect sale data changes for existing properties
+        console.log(`🔍 Checking for sale data changes in existing properties...`);
+
+        // Get previous version property data to compare sales fields
+        const { data: previousProperties, error: prevError } = await supabase
+          .from('property_records')
+          .select('property_composite_key, sales_price, sales_date, sales_nu')
+          .eq('job_id', jobId)
+          .eq('file_version', fileVersion - 1);
+
+        if (!prevError && previousProperties) {
+          const prevSalesMap = new Map();
+          previousProperties.forEach(p => {
+            prevSalesMap.set(p.property_composite_key, {
+              sales_price: p.sales_price,
+              sales_date: p.sales_date,
+              sales_nu: p.sales_nu
+            });
+          });
+
+          // Get current version property data
+          const { data: currentProperties, error: currError } = await supabase
+            .from('property_records')
+            .select('property_composite_key, sales_price, sales_date, sales_nu')
+            .eq('job_id', jobId)
+            .eq('file_version', fileVersion);
+
+          if (!currError && currentProperties) {
+            currentProperties.forEach(curr => {
+              const prev = prevSalesMap.get(curr.property_composite_key);
+              if (prev) {
+                // Check if any sale field changed
+                const priceChanged = prev.sales_price !== curr.sales_price;
+                const dateChanged = prev.sales_date !== curr.sales_date;
+                const nuChanged = prev.sales_nu !== curr.sales_nu;
+
+                if (priceChanged || dateChanged || nuChanged) {
+                  propertiesWithSalesChanges.push({
+                    property_composite_key: curr.property_composite_key,
+                    old_sales_price: prev.sales_price,
+                    new_sales_price: curr.sales_price,
+                    old_sales_date: prev.sales_date,
+                    new_sales_date: curr.sales_date,
+                    old_sales_nu: prev.sales_nu,
+                    new_sales_nu: curr.sales_nu
+                  });
+                }
+              }
+            });
+
+            console.log(`📊 Sale data changes detected: ${propertiesWithSalesChanges.length} properties`);
+            if (propertiesWithSalesChanges.length > 0 && propertiesWithSalesChanges.length <= 10) {
+              console.log(`   Sample changes:`, propertiesWithSalesChanges.slice(0, 5));
+            }
+          }
+        }
       } else {
         console.log(`📊 Version ${fileVersion} is the first version with ${propertyKeys.length} properties`);
       }
@@ -1040,7 +1118,9 @@ export class BRTUpdater {
           property_composite_keys: propertyKeys,
           properties_added: propertiesAdded,
           properties_removed: propertiesRemoved,
-          properties_modified: [], // TODO: Implement field-level change detection
+          properties_modified: [], // General field changes (legacy)
+          properties_with_sales_changes: propertiesWithSalesChanges.map(p => p.property_composite_key), // Track sale changes
+          sales_changes_detail: propertiesWithSalesChanges, // Detailed change info for reference
           uploaded_by: null, // TODO: Get actual user ID
           processing_status: 'stored'
         }])

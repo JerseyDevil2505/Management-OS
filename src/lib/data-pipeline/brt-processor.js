@@ -353,30 +353,38 @@ export class BRTProcessor {
 
   /**
    * ENHANCED: Search for InfoBy codes in nested MAP structures
-   * Uses the exact logic from the successful artifact tester
+   * FIXED: Search by section KEY "53" or VALUE "INFO" instead of hardcoded parent key "30"
+   * This handles BRT files with different structures (e.g., files with extra sections like 06, 07, 08)
    */
   searchForInfoByCodes(data, sectionName) {
     console.log(`🔍 Searching for InfoBy codes in ${sectionName} section...`);
-    
-    // Look for key "30" which contains InfoBy codes (from artifact results)
-    if (data['30']) {
-      console.log(`🎯 Found key "30" in Residential section!`);
-      const infoBySection = data['30'];
-      
-      if (infoBySection.MAP) {
-        Object.keys(infoBySection.MAP).forEach(mapKey => {
-          const mapItem = infoBySection.MAP[mapKey];
-          if (mapItem.DATA && mapItem.DATA.VALUE) {
-            const infoByCode = mapItem.KEY || mapItem.DATA.KEY;
-            const description = mapItem.DATA.VALUE;
-            this.codeLookups.set(`InfoBy_${infoByCode}`, description);
-            console.log(`🎯 Found InfoBy code: ${infoByCode} = "${description}"`);
-          }
-        });
+
+    let infoBySection = null;
+
+    // Search all parent keys to find the one with KEY="53" or VALUE containing "INFO"
+    Object.keys(data).forEach(parentKey => {
+      const section = data[parentKey];
+      if (section?.KEY === '53' || section?.DATA?.VALUE?.includes('INFO')) {
+        infoBySection = section;
+        console.log(`🎯 Found InfoBy section at parent key "${parentKey}" with KEY="${section.KEY}" VALUE="${section.DATA?.VALUE}"`);
       }
+    });
+
+    if (infoBySection && infoBySection.MAP) {
+      Object.keys(infoBySection.MAP).forEach(mapKey => {
+        const mapItem = infoBySection.MAP[mapKey];
+        if (mapItem.DATA && mapItem.DATA.VALUE) {
+          const infoByCode = mapItem.KEY || mapItem.DATA.KEY;
+          const description = mapItem.DATA.VALUE;
+          this.codeLookups.set(`InfoBy_${infoByCode}`, description);
+          console.log(`🎯 Found InfoBy code: ${infoByCode} = "${description}"`);
+        }
+      });
+    } else {
+      console.log(`⚠️ WARNING: Could not find InfoBy section (KEY=53) in ${sectionName} section`);
     }
-    
-    // Also search recursively through all nested structures (from artifact logic)
+
+    // Also search recursively through all nested structures as fallback
     this.searchNestedForInfoBy(data, '', sectionName);
   }
 
@@ -563,7 +571,7 @@ export class BRTProcessor {
       asset_lot_sf: this.calculateLotSquareFeet(rawRecord),
       asset_neighborhood: rawRecord.NBHD,
       asset_sfla: this.parseNumeric(rawRecord.SFLA_TOTAL),
-      asset_story_height: this.parseNumeric(rawRecord.STORYHGT),
+      asset_story_height: rawRecord.STORYHGT || null,  // Keep as text for floor analysis
       asset_type_use: rawRecord.TYPEUSE,
       asset_view: rawRecord.VIEW,
       asset_year_built: this.parseInteger(rawRecord.YEARBUILT),
