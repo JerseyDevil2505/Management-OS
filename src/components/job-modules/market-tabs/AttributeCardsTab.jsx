@@ -2498,12 +2498,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         packagePairs: packagePairs,
         summary: {
           vendorType,
-          totalPropertiesAnalyzed: allPropertyGroups.size,
-          propertiesWithCards: allGroupsWithCards.length,
-          propertiesWithoutCards: allGroupsWithoutCards.length,
+          totalPropertiesAnalyzed: properties.length,
+          propertiesWithCards: withCards.length,
+          propertiesWithoutCards: withoutCards.length,
           packagePairsFound: packagePairs.length
         },
-        additionalCardsList: additionalCardProperties.sort((a, b) => {
+        additionalCardsList: additionalCardsList.sort((a, b) => {
           // Sort by VCS, then by address
           const aVcs = a.new_vcs || a.property_vcs || '';
           const bVcs = b.new_vcs || b.property_vcs || '';
