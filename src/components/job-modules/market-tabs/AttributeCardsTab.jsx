@@ -2615,6 +2615,17 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       allVCSKeys.forEach(vcs => {
         const data = byVCS[vcs] || { with_cards: [], without_cards: [] };
+
+        // Debug log for first few VCS
+        if (Object.keys(byVCS).indexOf(vcs) < 3) {
+          console.log(`[Analysis] VCS ${vcs}:`, {
+            with_cards_count: data.with_cards.length,
+            with_cards_samples: data.with_cards.slice(0, 3),
+            without_cards_count: data.without_cards.length,
+            without_cards_samples: data.without_cards.slice(0, 3)
+          });
+        }
+
         // Calculate WITH cards metrics
         const withNormTimes = data.with_cards.map(d => d.norm_time);
         const withAvgNormTime = withNormTimes.length > 0
