@@ -2299,6 +2299,17 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       // Filter to MAIN CARDS ONLY with sales data (same logic as PreValuation)
       // These are card 1 (BRT) or card M (Microsystems) with values_norm_time already calculated
+
+      // First, check how many properties have values_norm_time
+      const propsWithSales = properties.filter(p => {
+        // Check property_market_analysis data
+        const hasSales = p.values_norm_time && p.values_norm_time > 0;
+        return hasSales;
+      });
+
+      console.log(`🔍 Debug: Total properties with values_norm_time: ${propsWithSales.length}`);
+      console.log(`🔍 Sample property with sales:`, propsWithSales[0]);
+
       const mainCardSales = properties.filter(p => {
         const parsed = parseCompositeKey(p.property_composite_key);
         const card = parsed.card?.toUpperCase();
@@ -2320,6 +2331,17 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       });
 
       console.log(`✅ Found ${mainCardSales.length} main card sales to analyze`);
+      if (mainCardSales.length === 0) {
+        console.warn('⚠️ NO MAIN CARD SALES FOUND! Checking why...');
+        const mainCards = properties.filter(p => {
+          const parsed = parseCompositeKey(p.property_composite_key);
+          const card = parsed.card?.toUpperCase();
+          return vendorType === 'BRT' ? card === '1' : card === 'M';
+        });
+        console.log(`  - Total main cards (card 1): ${mainCards.length}`);
+        console.log(`  - Main cards with sales: ${mainCards.filter(p => p.values_norm_time > 0).length}`);
+        console.log(`  - Sample main card:`, mainCards[0]);
+      }
 
       // For each main card, detect if it has additional cards (same logic as PreValuation)
       const enhancedSales = mainCardSales.map(prop => {
