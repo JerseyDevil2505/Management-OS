@@ -114,7 +114,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [additionalResults, setAdditionalResults] = useState(marketLandData.additional_cards_rollup || null);
   const [sortField, setSortField] = useState('new_vcs'); // Default sort by VCS
   const [sortDirection, setSortDirection] = useState('asc');
-  const [expandedAdditionalVCS, setExpandedAdditionalVCS] = useState(new Set()); // Track which additional cards VCS sections are expanded
+  const [expandedAdditionalVCS, setExpandedAdditionalVCS] = useState(() => {
+    // Initialize with all VCS expanded if additionalResults exist
+    if (marketLandData.additional_cards_rollup?.byVCS) {
+      return new Set(Object.keys(marketLandData.additional_cards_rollup.byVCS));
+    }
+    return new Set();
+  }); // Track which additional cards VCS sections are expanded
 
   // ============ PROPERTY MARKET DATA STATE ============
   const [propertyMarketData, setPropertyMarketData] = useState([]);
@@ -3454,21 +3460,56 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               Additional Cards Analysis
             </h3>
             {additionalResults && (
-              <button
-                onClick={exportAdditionalCardsExcel}
-                style={{
-                  padding: '6px 12px',
-                  backgroundColor: '#10B981',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  cursor: 'pointer'
-                }}
-              >
-                Export Excel
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => {
+                    const allVCS = new Set(Object.keys(additionalResults.byVCS || {}));
+                    setExpandedAdditionalVCS(allVCS);
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    backgroundColor: '#3B82F6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Expand All
+                </button>
+                <button
+                  onClick={() => setExpandedAdditionalVCS(new Set())}
+                  style={{
+                    padding: '6px 12px',
+                    backgroundColor: '#64748B',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Collapse All
+                </button>
+                <button
+                  onClick={exportAdditionalCardsExcel}
+                  style={{
+                    padding: '6px 12px',
+                    backgroundColor: '#10B981',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Export Excel
+                </button>
+              </div>
             )}
           </div>
 
