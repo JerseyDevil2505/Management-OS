@@ -3657,48 +3657,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             </div>
 
 
-            {/* Package Pair Analysis Table */}
-            <div style={{
-              border: '1px solid #E5E7EB',
-              borderRadius: '6px',
-              overflow: 'auto',
-              marginBottom: '30px'
-            }}>
-              <div style={{
-                padding: '12px 15px',
-                backgroundColor: '#F9FAFB',
-                borderBottom: '1px solid #E5E7EB'
-              }}>
-                <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0' }}>
-                  Additional Cards Package Analysis
-                </h4>
-                <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>
-                  Each row shows a package with additional cards vs baseline properties without cards in the same VCS
-                </div>
-              </div>
-
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#F3F4F6' }}>
-                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: '600' }}>Package Location</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: '600' }}>VCS</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Sum SFLA (w)</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Year (w)</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Price (w)</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg SFLA (w/o)</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Year (w/o)</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Avg Price (w/o)</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Adjusted</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Impact ($)</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '11px', fontWeight: '600' }}>Impact (%)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {/* Render individual package pairs */}
-                  {renderPackagePairs(additionalResults)}
-                </tbody>
-              </table>
-            </div>
+            {/* VCS Analysis Table - Grouped by VCS */}
+            {renderVCSAnalysisTable(additionalResults.byVCS)}
 
             {/* Additional Cards Detail Table */}
             <div style={{
