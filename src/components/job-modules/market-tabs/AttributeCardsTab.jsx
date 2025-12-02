@@ -2905,12 +2905,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         if (R === 0) {
           ws[cellAddress].s = titleStyle;
         }
-        // Description row (row 1)
-        else if (R === 1) {
-          ws[cellAddress].s = descStyle;
-        }
         // Header rows
-        else if (R === 3 || ws[cellAddress].v === 'VCS' || ws[cellAddress].v === 'Overall Summary' || ws[cellAddress].v === 'Metric') {
+        else if (R === 2 || ws[cellAddress].v === 'VCS' || ws[cellAddress].v === 'Overall Summary' || ws[cellAddress].v === 'Metric') {
           ws[cellAddress].s = headerStyle;
         }
         // Data rows
@@ -2926,7 +2922,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             } else if (C === 1) {
               style.numFmt = '#,##0';
             }
-          } else if (R >= 4) { // Data rows start at row 4 (0-indexed: row 4 = Excel row 5)
+          } else if (R >= 3) { // Data rows start at row 3 (0-indexed: row 3 = Excel row 4)
             // Main data columns
             if (C === COL.WITH_COUNT || C === COL.WITHOUT_COUNT) {
               style.numFmt = '#,##0'; // Count columns
