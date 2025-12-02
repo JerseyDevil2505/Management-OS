@@ -3521,13 +3521,26 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               </h4>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', fontSize: '13px' }}>
                 <div>
-                  <span style={{ color: '#64748B', fontWeight: '500' }}>Total Dollar Impact: </span>
+                  <span style={{ color: '#64748B', fontWeight: '500' }}>Average Dollar Impact: </span>
                   <span style={{ fontWeight: '600', color: '#059669' }}>
                     {(() => {
-                      const totalImpact = Object.values(additionalResults.byVCS || {}).reduce((sum, data) => {
-                        return sum + (data.flat_adj || 0);
-                      }, 0);
-                      return totalImpact !== 0 ? formatCurrency(totalImpact) : 'No valid comparisons';
+                      const impacts = [];
+                      Object.values(additionalResults.byVCS || {}).forEach(data => {
+                        const withSFLA = data.with.avg_sfla || 0;
+                        const withPrice = data.with.avg_norm_time || 0;
+                        const withoutSFLA = data.without.avg_sfla || 0;
+                        const withoutPrice = data.without.avg_norm_time || 0;
+
+                        if (withSFLA > 0 && withPrice > 0 && withoutSFLA > 0 && withoutPrice > 0) {
+                          const adjusted = sizeNormalize(withPrice, withSFLA, withoutSFLA);
+                          const flatAdj = adjusted - withoutPrice;
+                          impacts.push(flatAdj);
+                        }
+                      });
+
+                      if (impacts.length === 0) return 'No valid comparisons';
+                      const avgImpact = impacts.reduce((sum, val) => sum + val, 0) / impacts.length;
+                      return formatCurrency(avgImpact);
                     })()}
                   </span>
                 </div>
@@ -3535,9 +3548,22 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                   <span style={{ color: '#64748B', fontWeight: '500' }}>Average % Impact: </span>
                   <span style={{ fontWeight: '600', color: '#059669' }}>
                     {(() => {
-                      const impacts = Object.values(additionalResults.byVCS || {}).filter(data => data.pct_adj !== null && data.pct_adj !== undefined);
+                      const impacts = [];
+                      Object.values(additionalResults.byVCS || {}).forEach(data => {
+                        const withSFLA = data.with.avg_sfla || 0;
+                        const withPrice = data.with.avg_norm_time || 0;
+                        const withoutSFLA = data.without.avg_sfla || 0;
+                        const withoutPrice = data.without.avg_norm_time || 0;
+
+                        if (withSFLA > 0 && withPrice > 0 && withoutSFLA > 0 && withoutPrice > 0) {
+                          const adjusted = sizeNormalize(withPrice, withSFLA, withoutSFLA);
+                          const pctAdj = ((adjusted - withoutPrice) / withoutPrice) * 100;
+                          impacts.push(pctAdj);
+                        }
+                      });
+
                       if (impacts.length === 0) return 'No valid comparisons';
-                      const avgPct = impacts.reduce((sum, data) => sum + data.pct_adj, 0) / impacts.length;
+                      const avgPct = impacts.reduce((sum, val) => sum + val, 0) / impacts.length;
                       return `${avgPct.toFixed(1)}%`;
                     })()}
                   </span>
