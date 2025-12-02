@@ -2282,21 +2282,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     }
 
     try {
-      // Parse composite key helper (same as PreValuation)
-      const parseCompositeKey = (compositeKey) => {
-        if (!compositeKey) return { block: '', lot: '', qualifier: '', card: '' };
-        const parts = compositeKey.split('_');
-        const blockLot = parts[0] || '';
-        const [block, lot] = blockLot.split('-');
-        if (parts.length < 3) return { block: '', lot: '', qualifier: '', card: '' };
-        return {
-          block: block || '',
-          lot: lot || '',
-          qualifier: parts[1] || '',
-          card: parts[2] || ''
-        };
-      };
-
       // Filter to MAIN CARDS ONLY with sales data
       // Use property_addl_card directly (more reliable than parsing composite key)
       const mainCardSales = properties.filter(p => {
