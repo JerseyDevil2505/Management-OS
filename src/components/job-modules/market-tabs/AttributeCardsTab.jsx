@@ -2626,7 +2626,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       });
 
       console.log('📊 Analysis Results:', {
-        totalAdditionalCards: additionalCardProperties.length,
+        totalAdditionalCards: additionalCardsList.length,
         vcsCount: Object.keys(results.byVCS).length,
         propertiesWithCards: results.summary.propertiesWithCards,
         propertiesWithoutCards: results.summary.propertiesWithoutCards,
