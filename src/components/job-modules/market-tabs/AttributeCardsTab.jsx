@@ -114,13 +114,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [additionalResults, setAdditionalResults] = useState(marketLandData.additional_cards_rollup || null);
   const [sortField, setSortField] = useState('new_vcs'); // Default sort by VCS
   const [sortDirection, setSortDirection] = useState('asc');
-  const [expandedAdditionalVCS, setExpandedAdditionalVCS] = useState(() => {
-    // Initialize with all VCS expanded if additionalResults exist
-    if (marketLandData.additional_cards_rollup?.byVCS) {
-      return new Set(Object.keys(marketLandData.additional_cards_rollup.byVCS));
-    }
-    return new Set();
-  }); // Track which additional cards VCS sections are expanded
+  const [expandedAdditionalVCS, setExpandedAdditionalVCS] = useState(new Set()); // Track which additional cards VCS sections are expanded (collapsed by default)
 
   // ============ PROPERTY MARKET DATA STATE ============
   const [propertyMarketData, setPropertyMarketData] = useState([]);
@@ -2648,10 +2642,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       console.log('✅ Setting additional card analysis results:', results);
       setAdditionalResults(results);
-      // Auto-expand all VCS by default
-      if (results.byVCS) {
-        setExpandedAdditionalVCS(new Set(Object.keys(results.byVCS)));
-      }
+      // VCS sections start collapsed by default
+      setExpandedAdditionalVCS(new Set());
 
 
       console.log('����� Additional card analysis completed successfully');
@@ -3143,9 +3135,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               style.numFmt = '0'; // Year Built - centered
             } else if (C === 11) {
               style.numFmt = '$#,##0'; // Sales Price - centered
-            } else if (C === 4) {
-              style.alignment = { horizontal: 'left', vertical: 'center' }; // Address
             }
+            // Address (column 4) uses default center alignment
             ws[cellAddress].s = style;
           }
         }
