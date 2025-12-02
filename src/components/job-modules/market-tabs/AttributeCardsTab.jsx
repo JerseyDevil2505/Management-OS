@@ -2516,7 +2516,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       };
 
       // Calculate averages and impacts for each VCS (combine both impact data and all counts)
-      const allVCSKeys = new Set([...Object.keys(byVCS), ...Object.keys(allVCSCounts)]);
+      const allVCSKeys = Object.keys(byVCS);
 
       allVCSKeys.forEach(vcs => {
         const data = byVCS[vcs] || { with_cards: [], without_cards: [] };
@@ -2537,45 +2537,21 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           ? withNormTimes.reduce((sum, val) => sum + val, 0) / withNormTimes.length
           : null;
 
-        // Calculate AVERAGE SFLA for properties with cards (not sum)
-        const withAvgSFLA = data.with_cards.length > 0
-          ? data.with_cards.reduce((sum, d) => sum + d.total_sfla, 0) / data.with_cards.length
+        // Calculate AVERAGE SFLA for properties with cards (SFLA already includes additional cards)
+        const withSFLAs = data.with_cards.filter(d => d.sfla > 0).map(d => d.sfla);
+        const withAvgSFLA = withSFLAs.length > 0
+          ? withSFLAs.reduce((sum, val) => sum + val, 0) / withSFLAs.length
           : null;
 
-        const withValidYears = data.with_cards.filter(d => d.avg_year_built);
+        const withValidYears = data.with_cards.filter(d => d.year_built);
         const withAvgYearBuilt = withValidYears.length > 0
-          ? withValidYears.reduce((sum, d) => sum + d.avg_year_built, 0) / withValidYears.length
+          ? Math.round(withValidYears.reduce((sum, d) => sum + d.year_built, 0) / withValidYears.length)
           : null;
 
         // Calculate Year Built and AVERAGE SFLA for ALL properties with additional cards (not just those with sales)
-        const allWithCardsGroups = allGroupsWithCards.filter(group => {
-          const groupVcs = group[0].new_vcs || group[0].property_vcs;
-          return groupVcs === vcs;
-        });
-
-        let allWithTotalSFLA = 0;
-        let allWithYearBuiltSum = 0;
-        let allWithYearBuiltCount = 0;
-
-        allWithCardsGroups.forEach(group => {
-          // Calculate AVERAGE SFLA per property group (not sum)
-          const groupSFLA = group.reduce((sum, p) => sum + (parseInt(p.asset_sfla) || 0), 0);
-          allWithTotalSFLA += groupSFLA; // This will be divided by group count later
-
-          // Average year built for this group
-          const validYears = group.filter(p => {
-            const year = parseInt(p.asset_year_built);
-            return year && year > 1800 && year <= new Date().getFullYear();
-          });
-          if (validYears.length > 0) {
-            const groupAvgYear = validYears.reduce((sum, p) => sum + parseInt(p.asset_year_built), 0) / validYears.length;
-            allWithYearBuiltSum += groupAvgYear;
-            allWithYearBuiltCount++;
-          }
-        });
-
-        const allWithAvgSFLA = allWithCardsGroups.length > 0 ? allWithTotalSFLA / allWithCardsGroups.length : null;
-        const allWithAvgYearBuilt = allWithYearBuiltCount > 0 ? allWithYearBuiltSum / allWithYearBuiltCount : null;
+        // Use the same averages from sales data (SFLA already includes combined cards from PreVal)
+        const allWithAvgSFLA = withAvgSFLA;
+        const allWithAvgYearBuilt = withAvgYearBuilt;
 
         // Calculate WITHOUT cards metrics
         const withoutNormTimes = data.without_cards.map(d => d.norm_time);
@@ -2590,33 +2566,12 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
         const withoutValidYears = data.without_cards.filter(d => d.year_built);
         const withoutAvgYearBuilt = withoutValidYears.length > 0
-          ? withoutValidYears.reduce((sum, d) => sum + d.year_built, 0) / withoutValidYears.length
+          ? Math.round(withoutValidYears.reduce((sum, d) => sum + d.year_built, 0) / withoutValidYears.length)
           : null;
 
-        // Calculate Year Built and SFLA for ALL properties without additional cards
-        const allWithoutCardsGroups = allGroupsWithoutCards.filter(group => {
-          const groupVcs = group[0].new_vcs || group[0].property_vcs;
-          return groupVcs === vcs;
-        });
-
-        let allWithoutTotalSFLA = 0;
-        let allWithoutYearBuiltSum = 0;
-        let allWithoutYearBuiltCount = 0;
-
-        allWithoutCardsGroups.forEach(group => {
-          const prop = group[0]; // Single card properties
-          const sfla = parseInt(prop.asset_sfla) || 0;
-          allWithoutTotalSFLA += sfla;
-
-          const year = parseInt(prop.asset_year_built);
-          if (year && year > 1800 && year <= new Date().getFullYear()) {
-            allWithoutYearBuiltSum += year;
-            allWithoutYearBuiltCount++;
-          }
-        });
-
-        const allWithoutAvgSFLA = allWithoutCardsGroups.length > 0 ? allWithoutTotalSFLA / allWithoutCardsGroups.length : null;
-        const allWithoutAvgYearBuilt = allWithoutYearBuiltCount > 0 ? allWithoutYearBuiltSum / allWithoutYearBuiltCount : null;
+        // Use the same averages from sales data
+        const allWithoutAvgSFLA = withoutAvgSFLA;
+        const allWithoutAvgYearBuilt = withoutAvgYearBuilt;
 
         // Calculate adjustments - Using "Without Cards" as baseline
         let flatAdj = null;
@@ -2637,13 +2592,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
         results.byVCS[vcs] = {
           with: {
-            n: allVCSCounts[vcs]?.with_cards || 0,
+            n: data.with_cards.length,
             avg_sfla: allWithAvgSFLA ? Math.round(allWithAvgSFLA) : null, // Changed from total_sfla to avg_sfla
             avg_year_built: allWithAvgYearBuilt ? Math.round(allWithAvgYearBuilt) : null,
             avg_norm_time: withAvgNormTime ? Math.round(withAvgNormTime) : null
           },
           without: {
-            n: allVCSCounts[vcs]?.without_cards || 0,
+            n: data.without_cards.length,
             avg_sfla: allWithoutAvgSFLA ? Math.round(allWithoutAvgSFLA) : null,
             avg_year_built: allWithoutAvgYearBuilt ? Math.round(allWithoutAvgYearBuilt) : null,
             avg_norm_time: withoutAvgNormTime ? Math.round(withoutAvgNormTime) : null
