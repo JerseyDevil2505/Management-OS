@@ -2352,6 +2352,21 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
         without_additional_cards: withoutCards.length
       });
 
+      // Create list of ALL properties with additional cards (for detail table at bottom)
+      const additionalCardsList = properties.filter(prop => {
+        const parsed = parseCompositeKey(prop.property_composite_key);
+        const card = parsed.card?.toUpperCase();
+
+        if (vendorType === 'Microsystems') {
+          return card && card !== 'M' && card !== 'MAIN' && /^[A-Z]$/.test(card);
+        } else { // BRT
+          const cardNum = parseInt(card);
+          return !isNaN(cardNum) && cardNum > 1;
+        }
+      });
+
+      console.log(`📋 Total additional card records: ${additionalCardsList.length}`);
+
       // Analyze by VCS
       const byVCS = {};
 
