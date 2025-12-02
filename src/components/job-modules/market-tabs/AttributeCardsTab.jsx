@@ -2800,7 +2800,15 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
     console.log('[Additional Cards Export] Starting export with data:', {
       vcsCount: Object.keys(additionalResults.byVCS).length,
-      sampleVCS: Object.entries(additionalResults.byVCS).slice(0, 2)
+      sampleVCS: Object.entries(additionalResults.byVCS).slice(0, 2).map(([vcs, data]) => ({
+        vcs,
+        withCount: data.with.n,
+        withSFLA: data.with.avg_sfla,
+        withPrice: data.with.avg_norm_time,
+        withoutCount: data.without.n,
+        withoutSFLA: data.without.avg_sfla,
+        withoutPrice: data.without.avg_norm_time
+      }))
     });
 
     const rows = [];
