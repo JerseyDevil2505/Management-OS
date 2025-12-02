@@ -2703,6 +2703,19 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
     const rows = [];
 
+    // Title row
+    const titleRow = [];
+    titleRow[0] = `Additional Cards Analysis - ${jobData?.job_name || 'Job'}`;
+    rows.push(titleRow);
+
+    // Description row
+    const descRow = [];
+    descRow[0] = `Comparing properties WITH additional cards vs properties WITHOUT additional cards (${vendorType})`;
+    rows.push(descRow);
+
+    // Blank row
+    rows.push([]);
+
     // Column headers
     const headers = [
       'VCS',
