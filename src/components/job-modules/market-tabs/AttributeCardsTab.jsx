@@ -2323,18 +2323,25 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       console.log(`✅ Found ${mainCardSales.length} main card sales to analyze`);
 
-      // For each main card, detect if it has additional cards (same logic as PreValuation)
+      // For each main card, detect if it has additional cards
       const enhancedSales = mainCardSales.map(prop => {
-        const parsed = parseCompositeKey(prop.property_composite_key);
+        // Find additional cards for this property (same block-lot-qualifier)
+        const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
 
-        // Find additional cards for this property
         const additionalCards = properties.filter(p => {
-          const pParsed = parseCompositeKey(p.property_composite_key);
-          return pParsed.block === parsed.block &&
-                 pParsed.lot === parsed.lot &&
-                 pParsed.qualifier === parsed.qualifier &&
-                 pParsed.card !== parsed.card &&
-                 p.asset_sfla && p.asset_sfla > 0; // Only cards with living area
+          const pBaseKey = `${p.property_block || ''}-${p.property_lot || ''}-${p.property_qualifier || ''}`;
+          if (pBaseKey !== baseKey) return false;
+
+          // Check if this is an additional card (not main card)
+          const pCard = (p.property_addl_card || p.additional_card || '').toString().trim();
+
+          if (vendorType === 'Microsystems') {
+            const cardUpper = pCard.toUpperCase();
+            return cardUpper && cardUpper !== 'M' && cardUpper !== 'MAIN' && /^[A-Z]$/.test(cardUpper);
+          } else { // BRT
+            const cardNum = parseInt(pCard);
+            return !isNaN(cardNum) && cardNum > 1;
+          }
         });
 
         return {
