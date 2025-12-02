@@ -3314,8 +3314,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                  <span style={{ fontSize: '12px', color: '#6B7280' }}>
-                    Impact: {data.flat_adj ? formatCurrency(data.flat_adj) : 'No comparison'}
+                  <span style={{ fontSize: '12px', color: flatAdj !== null && flatAdj > 0 ? '#059669' : flatAdj !== null && flatAdj < 0 ? '#DC2626' : '#6B7280' }}>
+                    Impact: {flatAdj !== null ? formatCurrency(flatAdj) : 'No comparison'}
+                    {pctAdj !== null && ` (${pctAdj.toFixed(1)}%)`}
                   </span>
                   {!isExpanded && (
                     <span style={{ fontSize: '12px', color: '#6B7280' }}>
