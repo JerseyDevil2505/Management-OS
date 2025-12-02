@@ -3303,10 +3303,10 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           if (Object.keys(vcsData).indexOf(vcs) < 3) {
             console.log(`[Additional Cards UI] VCS ${vcs}:`, {
               withCount: data.with.n,
-              withSFLA,
+              withSFLA: withAvgSFLA,
               withPrice: withAvgPrice,
               withoutCount: data.without.n,
-              withoutSFLA,
+              withoutSFLA: withoutAvgSFLA,
               withoutPrice: withoutAvgPrice,
               adjusted: adjustedPrice,
               flatAdj,
