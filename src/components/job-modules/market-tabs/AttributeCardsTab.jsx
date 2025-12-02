@@ -2363,11 +2363,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
       // Create list of ALL properties with additional cards (for detail table at bottom)
       const additionalCardsList = properties.filter(prop => {
-        const parsed = parseCompositeKey(prop.property_composite_key);
-        const card = parsed.card?.toUpperCase();
+        const card = (prop.property_addl_card || prop.additional_card || '').toString().trim();
 
         if (vendorType === 'Microsystems') {
-          return card && card !== 'M' && card !== 'MAIN' && /^[A-Z]$/.test(card);
+          const cardUpper = card.toUpperCase();
+          return cardUpper && cardUpper !== 'M' && cardUpper !== 'MAIN' && /^[A-Z]$/.test(cardUpper);
         } else { // BRT
           const cardNum = parseInt(card);
           return !isNaN(cardNum) && cardNum > 1;
