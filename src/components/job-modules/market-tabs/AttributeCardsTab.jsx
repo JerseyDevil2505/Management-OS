@@ -3278,28 +3278,18 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
             setExpandedAdditionalVCS(newExpanded);
           };
 
-          // Get individual property pairs for comparison
-          const withCardsProperties = data.with_cards_properties || [];
-          const withoutCardsProperties = data.without_cards_properties || [];
+          // Calculate adjusted price and impact using Jim formula
+          const withAvgSFLA = data.with.avg_sfla || 0;
+          const withAvgPrice = data.with.avg_norm_time || 0;
+          const withoutAvgSFLA = data.without.avg_sfla || 0;
+          const withoutAvgPrice = data.without.avg_norm_time || 0;
 
-          // Calculate sales-only statistics from actual sales arrays
-          // WITH cards sales data (each record is a property group that sold)
-          const withCardsSales = data.with_cards || [];
-          const withSalesCount = withCardsSales.length;
-          const withSalesAvgSFLA = withSalesCount > 0 ?
-            withCardsSales.reduce((sum, record) => sum + record.total_sfla, 0) / withSalesCount : null;
-          const withSalesAvgYear = withSalesCount > 0 ?
-            withCardsSales.filter(record => record.avg_year_built).reduce((sum, record) => sum + record.avg_year_built, 0) /
-            withCardsSales.filter(record => record.avg_year_built).length : null;
+          // Jim formula: normalize "with cards" price to "without cards" SFLA
+          const adjustedPrice = withAvgSFLA > 0 && withAvgPrice > 0 && withoutAvgSFLA > 0 ?
+            sizeNormalize(withAvgPrice, withAvgSFLA, withoutAvgSFLA) : null;
 
-          // WITHOUT cards sales data (each record is a single property that sold)
-          const withoutCardsSales = data.without_cards || [];
-          const withoutSalesCount = withoutCardsSales.length;
-          const withoutSalesAvgSFLA = withoutSalesCount > 0 ?
-            withoutCardsSales.reduce((sum, record) => sum + record.sfla, 0) / withoutSalesCount : null;
-          const withoutSalesAvgYear = withoutSalesCount > 0 ?
-            withoutCardsSales.filter(record => record.year_built).reduce((sum, record) => sum + record.year_built, 0) /
-            withoutCardsSales.filter(record => record.year_built).length : null;
+          const flatAdj = adjustedPrice && withoutAvgPrice > 0 ? adjustedPrice - withoutAvgPrice : null;
+          const pctAdj = adjustedPrice && withoutAvgPrice > 0 ? ((adjustedPrice - withoutAvgPrice) / withoutAvgPrice) * 100 : null;
 
           return (
             <div key={vcs} style={{ marginBottom: '15px', border: '1px solid #E5E7EB', borderRadius: '6px' }}>
