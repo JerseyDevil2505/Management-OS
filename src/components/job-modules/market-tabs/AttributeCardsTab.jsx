@@ -2708,11 +2708,6 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     titleRow[0] = `Additional Cards Analysis - ${jobData?.job_name || 'Job'}`;
     rows.push(titleRow);
 
-    // Description row
-    const descRow = [];
-    descRow[0] = `Comparing properties WITH additional cards vs properties WITHOUT additional cards (${vendorType})`;
-    rows.push(descRow);
-
     // Blank row
     rows.push([]);
 
@@ -2749,12 +2744,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       PCT_ADJ: 11
     };
 
-    // Add data rows with formulas (only VCS with data)
+    // Add data rows with formulas (only VCS with complete data on both sides)
     const vcsKeys = Object.keys(additionalResults.byVCS)
       .filter(vcs => {
         const data = additionalResults.byVCS[vcs];
-        // Only include VCS that have either with or without cards
-        return (data.with.n > 0 || data.without.n > 0);
+        // Only include VCS that have valid data on BOTH sides (matching UI logic)
+        const withSFLA = data.with.avg_sfla || 0;
+        const withPrice = data.with.avg_norm_time || 0;
+        const withoutSFLA = data.without.avg_sfla || 0;
+        const withoutPrice = data.without.avg_norm_time || 0;
+        return (withSFLA > 0 && withPrice > 0 && withoutSFLA > 0 && withoutPrice > 0);
       })
       .sort();
 
@@ -2811,8 +2810,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     rows.push(summaryHeaders);
 
     // Calculate summary stats
-    const firstDataRow = 5; // Row 5 in Excel (after title, description, blank, header rows)
-    const lastDataRow = vcsKeys.length + 4; // Last VCS row
+    const firstDataRow = 4; // Row 4 in Excel (after title, blank, header rows)
+    const lastDataRow = vcsKeys.length + 3; // Last VCS row
 
     // VCS Count
     const vcsCountRow = [];
