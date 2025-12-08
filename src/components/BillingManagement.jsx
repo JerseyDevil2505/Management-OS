@@ -319,9 +319,9 @@ const calculateDistributionMetrics = async () => {
       const monthsElapsed = currentMonth;
       const monthsRemaining = 12 - currentMonth;
       
-      // Use distributions from props instead of fetching
+      // Use distributions from props - FILTER BY CURRENT YEAR ONLY
       const ytdDistributions = distributions
-        ?.filter(d => d.status === 'paid')
+        ?.filter(d => d.status === 'paid' && d.year === currentYear)
         ?.reduce((sum, dist) => sum + parseFloat(dist.amount), 0) || 0;
       
       // Recalculate revenue metrics using ONLY jobs with project_start_date
