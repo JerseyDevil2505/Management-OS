@@ -95,6 +95,11 @@ const BillingManagement = ({
     cashReserve: 125000
   });
 
+  // Year selectors for historical data
+  const [selectedDistributionYear, setSelectedDistributionYear] = useState(new Date().getFullYear());
+  const [selectedExpenseYear, setSelectedExpenseYear] = useState(new Date().getFullYear());
+  const [selectedReceivableYear, setSelectedReceivableYear] = useState(new Date().getFullYear());
+
   //Invoice aging helpers
   const calculateInvoiceAge = (billingDate) => {
     const today = new Date();
@@ -275,7 +280,7 @@ Thank you for your immediate attention to this matter.`;
     if (activeTab === 'distributions' && globalMetrics.totalPaid > 0) {
       calculateDistributionMetrics();
     }
-  }, [globalMetrics.totalPaid, reserveSettings, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [globalMetrics.totalPaid, reserveSettings, activeTab, selectedDistributionYear]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const calculateGlobalMetrics = async () => {
     // Use the pre-calculated metrics from App.js
@@ -319,21 +324,49 @@ const calculateDistributionMetrics = async () => {
       const monthsElapsed = currentMonth;
       const monthsRemaining = 12 - currentMonth;
       
-      // Use distributions from props instead of fetching
+      // Use distributions from props - FILTER BY SELECTED YEAR
       const ytdDistributions = distributions
-        ?.filter(d => d.status === 'paid')
+        ?.filter(d => d.status === 'paid' && d.year === selectedDistributionYear)
         ?.reduce((sum, dist) => sum + parseFloat(dist.amount), 0) || 0;
       
+      // Recalculate revenue metrics using ONLY jobs with project_start_date
+      let startedJobsPaid = 0;
+      let startedJobsOpen = 0;
+      let startedJobsRemaining = 0;
+
+      // Process active jobs with project_start_date
+      activeJobs?.forEach(job => {
+        if (job.job_contracts?.[0] && job.project_start_date) {
+          const contract = job.job_contracts[0];
+          let jobPaid = 0;
+          let jobOpen = 0;
+
+          job.billing_events?.forEach(event => {
+            const amount = parseFloat(event.amount_billed || 0);
+            if (event.status === 'P') {
+              jobPaid += amount;
+              startedJobsPaid += amount;
+            } else if (event.status === 'O') {
+              jobOpen += amount;
+              startedJobsOpen += amount;
+            }
+          });
+
+          const jobRemaining = contract.contract_amount - jobPaid - jobOpen;
+          startedJobsRemaining += Math.max(0, jobRemaining);
+        }
+      });
+
       // Use planning jobs from props for the projection formula
       const plannedContractsTotal = planningJobs
         ?.filter(job => job.contract_amount && !job.is_archived)
         ?.reduce((sum, job) => sum + (job.contract_amount || 0), 0) || 0;
-      
+
       // Calculate monthly collection rate (keep for display purposes)
       const monthlyCollectionRate = monthsElapsed > 0 ? globalMetrics.totalPaid / monthsElapsed : 0;
-      
-      // NEW Project year-end cash formula
-      const projectedYearEnd = (globalMetrics.totalPaid + globalMetrics.totalOpen + globalMetrics.totalRemaining) - (plannedContractsTotal * 0.9);
+
+      // NEW Project year-end cash formula - ONLY jobs with project_start_date
+      const projectedYearEnd = (startedJobsPaid + startedJobsOpen + startedJobsRemaining) - (plannedContractsTotal * 0.9);
       
       // Calculate operating reserve based on user setting
       const operatingReserve = reserveSettings.operatingReserveMonths > 0 
@@ -1281,7 +1314,8 @@ const calculateDistributionMetrics = async () => {
         }
       });
       
-      // Get office receivables
+      // Get office receivables - FILTER BY CURRENT YEAR
+      const currentYear = new Date().getFullYear();
       const { data: receivables, receivablesError } = await supabase
         .from('office_receivables')
         .select('*')
@@ -1289,19 +1323,22 @@ const calculateDistributionMetrics = async () => {
 
       if (!receivablesError && receivables) {
         receivables.forEach(receivable => {
-          openInvoices.push({
-            id: receivable.id,
-            billing_date: receivable.created_at,
-            invoice_number: receivable.invoice_number,
-            amount_billed: receivable.amount,
-            percentage_billed: 0,
-            billing_type: 'office_receivable',
-            status: 'O',
-            job_name: receivable.job_name,
-            job_type: 'office_receivable',
-            job_id: receivable.id,
-            event_description: receivable.event_description
-          });
+          // Only include receivables from current year
+          if (new Date(receivable.created_at).getFullYear() === currentYear) {
+            openInvoices.push({
+              id: receivable.id,
+              billing_date: receivable.created_at,
+              invoice_number: receivable.invoice_number,
+              amount_billed: receivable.amount,
+              percentage_billed: 0,
+              billing_type: 'office_receivable',
+              status: 'O',
+              job_name: receivable.job_name,
+              job_type: 'office_receivable',
+              job_id: receivable.id,
+              event_description: receivable.event_description
+            });
+          }
         });
       }
 
@@ -1993,9 +2030,8 @@ const calculateDistributionMetrics = async () => {
       </div>
 
       {/* Using props-first pattern - no main loading screen needed */}
-      <>
-          {/* Active Jobs Tab */}
-          {activeTab === 'active' && (
+      {/* Active Jobs Tab */}
+      {activeTab === 'active' && (
             <div className="space-y-6">
               {jobs.length === 0 ? (
                 <div className="text-center py-12 bg-gray-50 rounded-lg">
@@ -2579,7 +2615,23 @@ const calculateDistributionMetrics = async () => {
           {activeTab === 'expenses' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-semibold text-gray-900">Monthly Expenses - {new Date().getFullYear()}</h2>
+                <div className="flex items-center space-x-4">
+                  <h2 className="text-2xl font-semibold text-gray-900">Monthly Expenses</h2>
+
+                  {/* Year Selector */}
+                  <div className="flex items-center space-x-2">
+                    <label className="text-sm text-gray-700 font-medium">Year:</label>
+                    <select
+                      value={selectedExpenseYear}
+                      onChange={(e) => setSelectedExpenseYear(parseInt(e.target.value))}
+                      className="px-3 py-2 border border-gray-300 rounded-md bg-white"
+                    >
+                      {Array.from(new Set([...expenses?.map(e => e.year) || [], new Date().getFullYear()])).sort((a, b) => b - a).map(year => (
+                        <option key={year} value={year}>{year}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
                 <button
                   onClick={() => setShowExpenseImport(true)}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
@@ -2630,8 +2682,9 @@ const calculateDistributionMetrics = async () => {
                         {(() => {
                           const expensesByCategory = {};
                           const categoryTotals = {};
-                          
-                          expensesState.forEach(expense => {
+
+                          // Filter expenses by selected year
+                          expensesState.filter(expense => expense.year === selectedExpenseYear).forEach(expense => {
                             if (!expensesByCategory[expense.category]) {
                               expensesByCategory[expense.category] = new Array(12).fill(0);
                               categoryTotals[expense.category] = 0;
@@ -2664,10 +2717,10 @@ const calculateDistributionMetrics = async () => {
                           </td>
                           {(() => {
                             const monthlyTotals = new Array(12).fill(0);
-                            expensesState.forEach(expense => {
+                            expensesState.filter(expense => expense.year === selectedExpenseYear).forEach(expense => {
                               monthlyTotals[expense.month - 1] += parseFloat(expense.amount);
                             });
-                            
+
                             return monthlyTotals.map((total, idx) => (
                               <td key={idx} className="px-6 py-4 text-sm text-right text-gray-900">
                                 {total > 0 ? formatCurrency(total) : '-'}
@@ -2675,7 +2728,7 @@ const calculateDistributionMetrics = async () => {
                             ));
                           })()}
                           <td className="px-6 py-4 text-sm text-right text-gray-900 bg-gray-200">
-                            {formatCurrency(expensesState.reduce((sum, exp) => sum + parseFloat(exp.amount), 0))}
+                            {formatCurrency(expensesState.filter(exp => exp.year === selectedExpenseYear).reduce((sum, exp) => sum + parseFloat(exp.amount), 0))}
                           </td>
                         </tr>
                         
@@ -2686,10 +2739,10 @@ const calculateDistributionMetrics = async () => {
                           </td>
                           {(() => {
                             const monthlyTotals = new Array(12).fill(0);
-                            expenses.forEach(expense => {
+                            expenses.filter(expense => expense.year === selectedExpenseYear).forEach(expense => {
                               monthlyTotals[expense.month - 1] += parseFloat(expense.amount);
                             });
-                            
+
                             return monthlyTotals.map((total, idx) => {
                               const dailyAvg = total / workingDays[idx + 1];
                               return (
@@ -2701,7 +2754,7 @@ const calculateDistributionMetrics = async () => {
                           })()}
                           <td className="px-6 py-4 text-sm text-right text-yellow-800 bg-yellow-100">
                             {formatCurrency(
-                              expenses.reduce((sum, exp) => sum + parseFloat(exp.amount), 0) / 
+                              expenses.filter(exp => exp.year === selectedExpenseYear).reduce((sum, exp) => sum + parseFloat(exp.amount), 0) /
                               Object.values(workingDays).reduce((sum, days) => sum + days, 0)
                             )}
                           </td>
@@ -2713,13 +2766,32 @@ const calculateDistributionMetrics = async () => {
               )}
             </div>
           )}
-        </>
-      )}
 
-          {/* Office Receivables Tab */}
-          {activeTab === 'receivables' && (
+      {/* Office Receivables Tab */}
+      {activeTab === 'receivables' && (
             <div className="space-y-6">
-              <div className="flex justify-end mb-4">
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center space-x-4">
+                  <h2 className="text-2xl font-semibold text-gray-900">Office Receivables</h2>
+
+                  {/* Year Selector */}
+                  <div className="flex items-center space-x-2">
+                    <label className="text-sm text-gray-700 font-medium">Year:</label>
+                    <select
+                      value={selectedReceivableYear}
+                      onChange={(e) => setSelectedReceivableYear(parseInt(e.target.value))}
+                      className="px-3 py-2 border border-gray-300 rounded-md bg-white"
+                    >
+                      {Array.from(new Set([
+                        ...officeReceivables?.map(r => new Date(r.created_at).getFullYear()) || [],
+                        new Date().getFullYear()
+                      ])).sort((a, b) => b - a).map(year => (
+                        <option key={year} value={year}>{year}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
                 <button
                   onClick={() => {
                     setEditingReceivable(null);
@@ -2738,114 +2810,137 @@ const calculateDistributionMetrics = async () => {
                 </button>
               </div>
 
-              {officeReceivables.length === 0 ? (
-                <div className="text-center py-12 bg-gray-50 rounded-lg">
-                  <p className="text-gray-600">No office receivables found. Click "Add Receivable" to create one.</p>
-                </div>
-              ) : (
-                <div className="bg-white rounded-lg shadow overflow-hidden">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Job Name
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Event
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Invoice #
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Amount
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {officeReceivables.map((receivable) => (
-                        <tr key={receivable.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {receivable.job_name}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {receivable.event_description || '-'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            <span className={`px-2 py-1 text-xs rounded-full ${
-                              receivable.status === 'P' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {receivable.status === 'P' ? 'Paid' : 'Open'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {receivable.invoice_number || '-'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                            {formatCurrency(receivable.amount)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button
-                              onClick={() => {
-                                setEditingReceivable(receivable);
-                                setReceivableForm({
-                                  jobName: receivable.job_name,
-                                  eventDescription: receivable.event_description || '',
-                                  status: receivable.status,
-                                  invoiceNumber: receivable.invoice_number || '',
-                                  amount: receivable.amount.toString()
-                                });
-                                setShowReceivableForm(true);
-                              }}
-                              className="text-blue-600 hover:text-blue-900 mr-3"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={async () => {
-                                if (window.confirm('Are you sure you want to delete this receivable?')) {
-                                  try {
-                                    const { error } = await supabase
-                                      .from('office_receivables')
-                                      .delete()
-                                      .eq('id', receivable.id);
-                                    
-                                    if (error) throw error;
-                                    
-                                    if (onRefresh) onRefresh();
-                                  } catch (error) {
-                                    console.error('Error deleting receivable:', error);
-                                    alert('Error deleting receivable');
-                                  }
-                                }
-                              }}
-                              className="text-red-600 hover:text-red-900"
-                            >
-                              Delete
-                            </button>
-                          </td>
+              {(() => {
+                // Filter receivables by selected year
+                const filteredReceivables = officeReceivables.filter(r =>
+                  new Date(r.created_at).getFullYear() === selectedReceivableYear
+                );
+
+                return filteredReceivables.length === 0 ? (
+                  <div className="text-center py-12 bg-gray-50 rounded-lg">
+                    <p className="text-gray-600">No office receivables found for {selectedReceivableYear}.</p>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-lg shadow overflow-hidden">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Job Name
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Event
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Invoice #
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Amount
+                          </th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {filteredReceivables.map((receivable) => (
+                          <tr key={receivable.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {receivable.job_name}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-900">
+                              {receivable.event_description || '-'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              <span className={`px-2 py-1 text-xs rounded-full ${
+                                receivable.status === 'P' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                              }`}>
+                                {receivable.status === 'P' ? 'Paid' : 'Open'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {receivable.invoice_number || '-'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                              {formatCurrency(receivable.amount)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                              <button
+                                onClick={() => {
+                                  setEditingReceivable(receivable);
+                                  setReceivableForm({
+                                    jobName: receivable.job_name,
+                                    eventDescription: receivable.event_description || '',
+                                    status: receivable.status,
+                                    invoiceNumber: receivable.invoice_number || '',
+                                    amount: receivable.amount.toString()
+                                  });
+                                  setShowReceivableForm(true);
+                                }}
+                                className="text-blue-600 hover:text-blue-900 mr-3"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  if (window.confirm('Are you sure you want to delete this receivable?')) {
+                                    try {
+                                      const { error } = await supabase
+                                        .from('office_receivables')
+                                        .delete()
+                                        .eq('id', receivable.id);
+
+                                      if (error) throw error;
+
+                                      if (onRefresh) onRefresh();
+                                    } catch (error) {
+                                      console.error('Error deleting receivable:', error);
+                                      alert('Error deleting receivable');
+                                    }
+                                  }
+                                }}
+                                className="text-red-600 hover:text-red-900"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
-          {/* Shareholder Distributions Tab */}
-          {activeTab === 'distributions' && (
+      {/* Shareholder Distributions Tab */}
+      {activeTab === 'distributions' && (
             <div className="space-y-6">
-{/* Distribution Metrics Dashboard */}
-          <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6">
+              {/* Distribution Metrics Dashboard */}
+              <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-800">Distribution Analysis</h2>
-              
+              <div className="flex items-center space-x-4">
+                <h2 className="text-lg font-semibold text-gray-800">Distribution Analysis</h2>
+
+                {/* Year Selector */}
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm text-gray-700 font-medium">Year:</label>
+                  <select
+                    value={selectedDistributionYear}
+                    onChange={(e) => setSelectedDistributionYear(parseInt(e.target.value))}
+                    className="px-3 py-1 border border-gray-300 rounded-md bg-white text-sm"
+                  >
+                    {Array.from(new Set([...distributions?.map(d => d.year) || [], new Date().getFullYear()])).sort((a, b) => b - a).map(year => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               {/* Reserve Settings */}
               <div className="flex items-center space-x-4 text-sm">
                 <div className="flex items-center space-x-2">
@@ -3012,18 +3107,18 @@ const calculateDistributionMetrics = async () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
                   {['Thomas Davis', 'Brian Schneider', 'Kristine Duda'].map(partner => {
                     const ownership = partner === 'Thomas Davis' ? 0.10 : 0.45;
-                    const partnerDistributions = distributionsState.filter(d => 
-                      d.shareholder_name === partner && d.status === 'paid'
+                    const partnerDistributions = distributionsState.filter(d =>
+                      d.shareholder_name === partner && d.status === 'paid' && d.year === selectedDistributionYear
                     );
                     const totalTaken = partnerDistributions.reduce((sum, d) => sum + d.amount, 0);
-                    
+
                     // Calculate the highest distribution level to ensure tax matching
                     const allPartners = ['Thomas Davis', 'Brian Schneider', 'Kristine Duda'];
                     let maxImpliedTotal = 0;
-                    
+
                     allPartners.forEach(p => {
                       const pOwnership = p === 'Thomas Davis' ? 0.10 : 0.45;
-                      const pDistributions = distributionsState.filter(d => d.shareholder_name === p && d.status === 'paid');
+                      const pDistributions = distributionsState.filter(d => d.shareholder_name === p && d.status === 'paid' && d.year === selectedDistributionYear);
                       const pTotal = pDistributions.reduce((sum, d) => sum + d.amount, 0);
                       const impliedTotal = pTotal / pOwnership;
                       if (impliedTotal > maxImpliedTotal) {
@@ -3074,7 +3169,7 @@ const calculateDistributionMetrics = async () => {
                           
                           {/* All distributions for the year */}
                           <div className="mt-4 max-h-40 overflow-y-auto">
-                            <p className="text-xs text-gray-500 mb-2">All {new Date().getFullYear()} Distributions:</p>
+                            <p className="text-xs text-gray-500 mb-2">All {selectedDistributionYear} Distributions:</p>
                             {partnerDistributions.length === 0 ? (
                               <p className="text-xs text-gray-400 italic">No distributions yet</p>
                             ) : (
@@ -3096,16 +3191,16 @@ const calculateDistributionMetrics = async () => {
                 <div className="bg-gray-50 p-4 m-6 rounded-lg">
                   <div className="flex justify-between items-center">
                     <div>
-                      <p className="text-sm text-gray-600">Total Distributed in {new Date().getFullYear()}:</p>
+                      <p className="text-sm text-gray-600">Total Distributed in {selectedDistributionYear}:</p>
                       <p className="text-2xl font-bold text-gray-900">
                         {formatCurrency((() => {
-                          // Calculate the highest distribution level
+                          // Calculate the highest distribution level - SELECTED YEAR
                           const allPartners = ['Thomas Davis', 'Brian Schneider', 'Kristine Duda'];
                           let maxImpliedTotal = 0;
-                          
+
                           allPartners.forEach(p => {
                             const pOwnership = p === 'Thomas Davis' ? 0.10 : 0.45;
-                            const pDistributions = distributionsState.filter(d => d.shareholder_name === p && d.status === 'paid');
+                            const pDistributions = distributionsState.filter(d => d.shareholder_name === p && d.status === 'paid' && d.year === selectedDistributionYear);
                             const pTotal = pDistributions.reduce((sum, d) => sum + d.amount, 0);
                             const impliedTotal = pTotal / pOwnership;
                             if (impliedTotal > maxImpliedTotal) {
