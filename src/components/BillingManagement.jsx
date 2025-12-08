@@ -2030,9 +2030,8 @@ const calculateDistributionMetrics = async () => {
       </div>
 
       {/* Using props-first pattern - no main loading screen needed */}
-      <>
-          {/* Active Jobs Tab */}
-          {activeTab === 'active' && (
+      {/* Active Jobs Tab */}
+      {activeTab === 'active' && (
             <div className="space-y-6">
               {jobs.length === 0 ? (
                 <div className="text-center py-12 bg-gray-50 rounded-lg">
@@ -2767,11 +2766,9 @@ const calculateDistributionMetrics = async () => {
               )}
             </div>
           )}
-        </>
-      )}
 
-          {/* Office Receivables Tab */}
-          {activeTab === 'receivables' && (
+      {/* Office Receivables Tab */}
+      {activeTab === 'receivables' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center space-x-4">
@@ -2920,8 +2917,8 @@ const calculateDistributionMetrics = async () => {
             </div>
           )}
 
-          {/* Shareholder Distributions Tab */}
-          {activeTab === 'distributions' && (
+      {/* Shareholder Distributions Tab */}
+      {activeTab === 'distributions' && (
             <div className="space-y-6">
               {/* Distribution Metrics Dashboard */}
               <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6">
