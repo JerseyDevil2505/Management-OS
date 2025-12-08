@@ -2876,8 +2876,24 @@ const calculateDistributionMetrics = async () => {
 {/* Distribution Metrics Dashboard */}
           <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-800">Distribution Analysis</h2>
-              
+              <div className="flex items-center space-x-4">
+                <h2 className="text-lg font-semibold text-gray-800">Distribution Analysis</h2>
+
+                {/* Year Selector */}
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm text-gray-700 font-medium">Year:</label>
+                  <select
+                    value={selectedDistributionYear}
+                    onChange={(e) => setSelectedDistributionYear(parseInt(e.target.value))}
+                    className="px-3 py-1 border border-gray-300 rounded-md bg-white text-sm"
+                  >
+                    {Array.from(new Set(distributions?.map(d => d.year) || [])).sort((a, b) => b - a).map(year => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               {/* Reserve Settings */}
               <div className="flex items-center space-x-4 text-sm">
                 <div className="flex items-center space-x-2">
