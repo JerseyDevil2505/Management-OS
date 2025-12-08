@@ -7,6 +7,7 @@ import BillingManagement from './components/BillingManagement';
 import PayrollManagement from './components/PayrollManagement';
 import JobContainer from './components/job-modules/JobContainer';
 import FileUploadButton from './components/job-modules/FileUploadButton';
+import AppealCoverage from './components/job-modules/AppealCoverage';
 import LandingPage from './components/LandingPage';
 import UserManagement from './components/UserManagement';
 
@@ -60,7 +61,7 @@ const App = () => {
   const [activeView, setActiveView] = useState(() => {
     // Read from URL on initial load
     const path = window.location.pathname.slice(1) || 'admin-jobs';
-    const validViews = ['admin-jobs', 'billing', 'employees', 'payroll', 'job-modules', 'users'];
+    const validViews = ['admin-jobs', 'billing', 'employees', 'payroll', 'appeal-coverage', 'job-modules', 'users'];
     return validViews.includes(path) ? path : 'admin-jobs';
   });
 
@@ -79,7 +80,7 @@ const App = () => {
       
       // Handle main navigation
       const viewPath = path.slice(1) || 'admin-jobs';
-      const validViews = ['dashboard', 'admin-jobs', 'billing', 'employees', 'payroll', 'users'];
+      const validViews = ['dashboard', 'admin-jobs', 'billing', 'employees', 'payroll', 'appeal-coverage', 'users'];
       if (validViews.includes(viewPath)) {
         setActiveView(viewPath);
         setSelectedJob(null); // Clear job selection when navigating to main views
@@ -1046,6 +1047,23 @@ const App = () => {
                 </button>
               )}
               {isAdmin && (
+                <button
+                  onClick={() => handleViewChange('appeal-coverage')}
+                  className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                    activeView === 'appeal-coverage'
+                      ? 'text-blue-600 shadow-lg border-white'
+                      : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                  }`}
+                  style={activeView === 'appeal-coverage' ? {
+                    backgroundColor: '#FFFFFF',
+                    opacity: 1,
+                    backdropFilter: 'none'
+                  } : {}}
+                >
+                  ⚖️ Appeal Coverage
+                </button>
+              )}
+              {isAdmin && (
               <button
                 onClick={() => handleViewChange('users')}
                 className={`px-4 py-2 rounded-xl font-medium text-sm border ${
@@ -1170,6 +1188,15 @@ const App = () => {
           <div className="p-6 bg-white rounded-lg shadow-sm border border-gray-200 text-center">
             <h3 className="text-lg font-semibold">Access Denied</h3>
             <p className="text-sm text-gray-600">You do not have permission to view Payroll.</p>
+          </div>
+        ))}
+
+        {activeView === 'appeal-coverage' && (isAdmin ? (
+          <AppealCoverage />
+        ) : (
+          <div className="p-6 bg-white rounded-lg shadow-sm border border-gray-200 text-center">
+            <h3 className="text-lg font-semibold">Access Denied</h3>
+            <p className="text-sm text-gray-600">You do not have permission to view Appeal Coverage.</p>
           </div>
         ))}
 
