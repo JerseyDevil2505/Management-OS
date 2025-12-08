@@ -3040,18 +3040,19 @@ const calculateDistributionMetrics = async () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
                   {['Thomas Davis', 'Brian Schneider', 'Kristine Duda'].map(partner => {
                     const ownership = partner === 'Thomas Davis' ? 0.10 : 0.45;
-                    const partnerDistributions = distributionsState.filter(d => 
-                      d.shareholder_name === partner && d.status === 'paid'
+                    const currentYear = new Date().getFullYear();
+                    const partnerDistributions = distributionsState.filter(d =>
+                      d.shareholder_name === partner && d.status === 'paid' && d.year === currentYear
                     );
                     const totalTaken = partnerDistributions.reduce((sum, d) => sum + d.amount, 0);
-                    
+
                     // Calculate the highest distribution level to ensure tax matching
                     const allPartners = ['Thomas Davis', 'Brian Schneider', 'Kristine Duda'];
                     let maxImpliedTotal = 0;
-                    
+
                     allPartners.forEach(p => {
                       const pOwnership = p === 'Thomas Davis' ? 0.10 : 0.45;
-                      const pDistributions = distributionsState.filter(d => d.shareholder_name === p && d.status === 'paid');
+                      const pDistributions = distributionsState.filter(d => d.shareholder_name === p && d.status === 'paid' && d.year === currentYear);
                       const pTotal = pDistributions.reduce((sum, d) => sum + d.amount, 0);
                       const impliedTotal = pTotal / pOwnership;
                       if (impliedTotal > maxImpliedTotal) {
