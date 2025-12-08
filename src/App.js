@@ -1004,7 +1004,7 @@ const App = () => {
                     ? 'text-blue-600 shadow-lg border-white'
                     : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
                 }`}
-                style={activeView === 'admin-jobs' ? { 
+                style={activeView === 'admin-jobs' ? {
                   backgroundColor: '#FFFFFF',
                   opacity: 1,
                   backdropFilter: 'none'
@@ -1012,6 +1012,23 @@ const App = () => {
               >
                 📋 Jobs ({appData.jobs.length})
               </button>
+              {isAdmin && (
+                <button
+                  onClick={() => handleViewChange('appeal-coverage')}
+                  className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                    activeView === 'appeal-coverage'
+                      ? 'text-blue-600 shadow-lg border-white'
+                      : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                  }`}
+                  style={activeView === 'appeal-coverage' ? {
+                    backgroundColor: '#FFFFFF',
+                    opacity: 1,
+                    backdropFilter: 'none'
+                  } : {}}
+                >
+                  ⚖️ Appeal Coverage
+                </button>
+              )}
               {isAdmin && (
                 <button
                   onClick={() => handleViewChange('billing')}
@@ -1044,23 +1061,6 @@ const App = () => {
                   } : {}}
                 >
                   💸 Payroll
-                </button>
-              )}
-              {isAdmin && (
-                <button
-                  onClick={() => handleViewChange('appeal-coverage')}
-                  className={`px-4 py-2 rounded-xl font-medium text-sm border ${
-                    activeView === 'appeal-coverage'
-                      ? 'text-blue-600 shadow-lg border-white'
-                      : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
-                  }`}
-                  style={activeView === 'appeal-coverage' ? {
-                    backgroundColor: '#FFFFFF',
-                    opacity: 1,
-                    backdropFilter: 'none'
-                  } : {}}
-                >
-                  ⚖️ Appeal Coverage
                 </button>
               )}
               {isAdmin && (
