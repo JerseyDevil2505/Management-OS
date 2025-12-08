@@ -594,8 +594,7 @@ const App = () => {
     // Process active jobs
     if (activeJobs) {
       activeJobs.forEach(job => {
-        // Only include jobs with a valid project_start_date (jobs that can actually start)
-        if (job.job_contracts?.[0] && job.project_start_date) {
+        if (job.job_contracts?.[0]) {
           const contract = job.job_contracts[0];
           totalSigned += contract.contract_amount || 0;
           
