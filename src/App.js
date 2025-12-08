@@ -682,17 +682,21 @@ const App = () => {
       });
     }
     
-    // Calculate expense metrics
+    // Calculate expense metrics - FILTER BY CURRENT YEAR ONLY
     let currentExpenses = 0;
     let monthlyExpenses = new Array(12).fill(0);
-    
+
     if (expenses) {
+      const currentYear = new Date().getFullYear();
       const currentMonth = new Date().getMonth() + 1;
       expenses.forEach(expense => {
-        const amount = parseFloat(expense.amount || 0);
-        monthlyExpenses[expense.month - 1] += amount;
-        if (expense.month <= currentMonth) {
-          currentExpenses += amount;
+        // Only include expenses from the current fiscal year
+        if (expense.year === currentYear) {
+          const amount = parseFloat(expense.amount || 0);
+          monthlyExpenses[expense.month - 1] += amount;
+          if (expense.month <= currentMonth) {
+            currentExpenses += amount;
+          }
         }
       });
     }
