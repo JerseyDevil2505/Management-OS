@@ -323,9 +323,9 @@ const calculateDistributionMetrics = async () => {
       const monthsElapsed = currentMonth;
       const monthsRemaining = 12 - currentMonth;
       
-      // Use distributions from props - FILTER BY CURRENT YEAR ONLY
+      // Use distributions from props - FILTER BY SELECTED YEAR
       const ytdDistributions = distributions
-        ?.filter(d => d.status === 'paid' && d.year === currentYear)
+        ?.filter(d => d.status === 'paid' && d.year === selectedDistributionYear)
         ?.reduce((sum, dist) => sum + parseFloat(dist.amount), 0) || 0;
       
       // Recalculate revenue metrics using ONLY jobs with project_start_date
@@ -3044,9 +3044,8 @@ const calculateDistributionMetrics = async () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
                   {['Thomas Davis', 'Brian Schneider', 'Kristine Duda'].map(partner => {
                     const ownership = partner === 'Thomas Davis' ? 0.10 : 0.45;
-                    const currentYear = new Date().getFullYear();
                     const partnerDistributions = distributionsState.filter(d =>
-                      d.shareholder_name === partner && d.status === 'paid' && d.year === currentYear
+                      d.shareholder_name === partner && d.status === 'paid' && d.year === selectedDistributionYear
                     );
                     const totalTaken = partnerDistributions.reduce((sum, d) => sum + d.amount, 0);
 
@@ -3056,7 +3055,7 @@ const calculateDistributionMetrics = async () => {
 
                     allPartners.forEach(p => {
                       const pOwnership = p === 'Thomas Davis' ? 0.10 : 0.45;
-                      const pDistributions = distributionsState.filter(d => d.shareholder_name === p && d.status === 'paid' && d.year === currentYear);
+                      const pDistributions = distributionsState.filter(d => d.shareholder_name === p && d.status === 'paid' && d.year === selectedDistributionYear);
                       const pTotal = pDistributions.reduce((sum, d) => sum + d.amount, 0);
                       const impliedTotal = pTotal / pOwnership;
                       if (impliedTotal > maxImpliedTotal) {
@@ -3129,17 +3128,16 @@ const calculateDistributionMetrics = async () => {
                 <div className="bg-gray-50 p-4 m-6 rounded-lg">
                   <div className="flex justify-between items-center">
                     <div>
-                      <p className="text-sm text-gray-600">Total Distributed in {new Date().getFullYear()}:</p>
+                      <p className="text-sm text-gray-600">Total Distributed in {selectedDistributionYear}:</p>
                       <p className="text-2xl font-bold text-gray-900">
                         {formatCurrency((() => {
-                          // Calculate the highest distribution level - CURRENT YEAR ONLY
-                          const currentYear = new Date().getFullYear();
+                          // Calculate the highest distribution level - SELECTED YEAR
                           const allPartners = ['Thomas Davis', 'Brian Schneider', 'Kristine Duda'];
                           let maxImpliedTotal = 0;
 
                           allPartners.forEach(p => {
                             const pOwnership = p === 'Thomas Davis' ? 0.10 : 0.45;
-                            const pDistributions = distributionsState.filter(d => d.shareholder_name === p && d.status === 'paid' && d.year === currentYear);
+                            const pDistributions = distributionsState.filter(d => d.shareholder_name === p && d.status === 'paid' && d.year === selectedDistributionYear);
                             const pTotal = pDistributions.reduce((sum, d) => sum + d.amount, 0);
                             const impliedTotal = pTotal / pOwnership;
                             if (impliedTotal > maxImpliedTotal) {
