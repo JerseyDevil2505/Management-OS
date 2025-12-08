@@ -2809,103 +2809,110 @@ const calculateDistributionMetrics = async () => {
                 </button>
               </div>
 
-              {officeReceivables.length === 0 ? (
-                <div className="text-center py-12 bg-gray-50 rounded-lg">
-                  <p className="text-gray-600">No office receivables found. Click "Add Receivable" to create one.</p>
-                </div>
-              ) : (
-                <div className="bg-white rounded-lg shadow overflow-hidden">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Job Name
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Event
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Invoice #
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Amount
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {officeReceivables.map((receivable) => (
-                        <tr key={receivable.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {receivable.job_name}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {receivable.event_description || '-'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            <span className={`px-2 py-1 text-xs rounded-full ${
-                              receivable.status === 'P' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {receivable.status === 'P' ? 'Paid' : 'Open'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {receivable.invoice_number || '-'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                            {formatCurrency(receivable.amount)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button
-                              onClick={() => {
-                                setEditingReceivable(receivable);
-                                setReceivableForm({
-                                  jobName: receivable.job_name,
-                                  eventDescription: receivable.event_description || '',
-                                  status: receivable.status,
-                                  invoiceNumber: receivable.invoice_number || '',
-                                  amount: receivable.amount.toString()
-                                });
-                                setShowReceivableForm(true);
-                              }}
-                              className="text-blue-600 hover:text-blue-900 mr-3"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={async () => {
-                                if (window.confirm('Are you sure you want to delete this receivable?')) {
-                                  try {
-                                    const { error } = await supabase
-                                      .from('office_receivables')
-                                      .delete()
-                                      .eq('id', receivable.id);
-                                    
-                                    if (error) throw error;
-                                    
-                                    if (onRefresh) onRefresh();
-                                  } catch (error) {
-                                    console.error('Error deleting receivable:', error);
-                                    alert('Error deleting receivable');
-                                  }
-                                }
-                              }}
-                              className="text-red-600 hover:text-red-900"
-                            >
-                              Delete
-                            </button>
-                          </td>
+              {(() => {
+                // Filter receivables by selected year
+                const filteredReceivables = officeReceivables.filter(r =>
+                  new Date(r.created_at).getFullYear() === selectedReceivableYear
+                );
+
+                return filteredReceivables.length === 0 ? (
+                  <div className="text-center py-12 bg-gray-50 rounded-lg">
+                    <p className="text-gray-600">No office receivables found for {selectedReceivableYear}.</p>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-lg shadow overflow-hidden">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Job Name
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Event
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Invoice #
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Amount
+                          </th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {filteredReceivables.map((receivable) => (
+                          <tr key={receivable.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {receivable.job_name}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-900">
+                              {receivable.event_description || '-'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              <span className={`px-2 py-1 text-xs rounded-full ${
+                                receivable.status === 'P' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                              }`}>
+                                {receivable.status === 'P' ? 'Paid' : 'Open'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {receivable.invoice_number || '-'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                              {formatCurrency(receivable.amount)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                              <button
+                                onClick={() => {
+                                  setEditingReceivable(receivable);
+                                  setReceivableForm({
+                                    jobName: receivable.job_name,
+                                    eventDescription: receivable.event_description || '',
+                                    status: receivable.status,
+                                    invoiceNumber: receivable.invoice_number || '',
+                                    amount: receivable.amount.toString()
+                                  });
+                                  setShowReceivableForm(true);
+                                }}
+                                className="text-blue-600 hover:text-blue-900 mr-3"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  if (window.confirm('Are you sure you want to delete this receivable?')) {
+                                    try {
+                                      const { error } = await supabase
+                                        .from('office_receivables')
+                                        .delete()
+                                        .eq('id', receivable.id);
+
+                                      if (error) throw error;
+
+                                      if (onRefresh) onRefresh();
+                                    } catch (error) {
+                                      console.error('Error deleting receivable:', error);
+                                      alert('Error deleting receivable');
+                                    }
+                                  }
+                                }}
+                                className="text-red-600 hover:text-red-900"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
