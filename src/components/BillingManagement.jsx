@@ -324,16 +324,44 @@ const calculateDistributionMetrics = async () => {
         ?.filter(d => d.status === 'paid')
         ?.reduce((sum, dist) => sum + parseFloat(dist.amount), 0) || 0;
       
+      // Recalculate revenue metrics using ONLY jobs with project_start_date
+      let startedJobsPaid = 0;
+      let startedJobsOpen = 0;
+      let startedJobsRemaining = 0;
+
+      // Process active jobs with project_start_date
+      activeJobs?.forEach(job => {
+        if (job.job_contracts?.[0] && job.project_start_date) {
+          const contract = job.job_contracts[0];
+          let jobPaid = 0;
+          let jobOpen = 0;
+
+          job.billing_events?.forEach(event => {
+            const amount = parseFloat(event.amount_billed || 0);
+            if (event.status === 'P') {
+              jobPaid += amount;
+              startedJobsPaid += amount;
+            } else if (event.status === 'O') {
+              jobOpen += amount;
+              startedJobsOpen += amount;
+            }
+          });
+
+          const jobRemaining = contract.contract_amount - jobPaid - jobOpen;
+          startedJobsRemaining += Math.max(0, jobRemaining);
+        }
+      });
+
       // Use planning jobs from props for the projection formula
       const plannedContractsTotal = planningJobs
         ?.filter(job => job.contract_amount && !job.is_archived)
         ?.reduce((sum, job) => sum + (job.contract_amount || 0), 0) || 0;
-      
+
       // Calculate monthly collection rate (keep for display purposes)
       const monthlyCollectionRate = monthsElapsed > 0 ? globalMetrics.totalPaid / monthsElapsed : 0;
-      
-      // NEW Project year-end cash formula
-      const projectedYearEnd = (globalMetrics.totalPaid + globalMetrics.totalOpen + globalMetrics.totalRemaining) - (plannedContractsTotal * 0.9);
+
+      // NEW Project year-end cash formula - ONLY jobs with project_start_date
+      const projectedYearEnd = (startedJobsPaid + startedJobsOpen + startedJobsRemaining) - (plannedContractsTotal * 0.9);
       
       // Calculate operating reserve based on user setting
       const operatingReserve = reserveSettings.operatingReserveMonths > 0 
