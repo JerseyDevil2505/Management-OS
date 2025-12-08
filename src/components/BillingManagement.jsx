@@ -95,6 +95,10 @@ const BillingManagement = ({
     cashReserve: 125000
   });
 
+  // Year selectors for historical data
+  const [selectedDistributionYear, setSelectedDistributionYear] = useState(new Date().getFullYear());
+  const [selectedExpenseYear, setSelectedExpenseYear] = useState(new Date().getFullYear());
+
   //Invoice aging helpers
   const calculateInvoiceAge = (billingDate) => {
     const today = new Date();
