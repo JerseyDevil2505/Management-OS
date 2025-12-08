@@ -2923,8 +2923,8 @@ const calculateDistributionMetrics = async () => {
           {/* Shareholder Distributions Tab */}
           {activeTab === 'distributions' && (
             <div className="space-y-6">
-{/* Distribution Metrics Dashboard */}
-          <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6">
+              {/* Distribution Metrics Dashboard */}
+              <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6">
             <div className="flex justify-between items-center mb-4">
               <div className="flex items-center space-x-4">
                 <h2 className="text-lg font-semibold text-gray-800">Distribution Analysis</h2>
