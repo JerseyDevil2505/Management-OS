@@ -1012,23 +1012,21 @@ const App = () => {
               >
                 📋 Jobs ({appData.jobs.length})
               </button>
-              {isAdmin && (
-                <button
-                  onClick={() => handleViewChange('appeal-coverage')}
-                  className={`px-4 py-2 rounded-xl font-medium text-sm border ${
-                    activeView === 'appeal-coverage'
-                      ? 'text-blue-600 shadow-lg border-white'
-                      : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
-                  }`}
-                  style={activeView === 'appeal-coverage' ? {
-                    backgroundColor: '#FFFFFF',
-                    opacity: 1,
-                    backdropFilter: 'none'
-                  } : {}}
-                >
-                  ⚖️ Appeal Coverage
-                </button>
-              )}
+              <button
+                onClick={() => handleViewChange('appeal-coverage')}
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                  activeView === 'appeal-coverage'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                }`}
+                style={activeView === 'appeal-coverage' ? {
+                  backgroundColor: '#FFFFFF',
+                  opacity: 1,
+                  backdropFilter: 'none'
+                } : {}}
+              >
+                ⚖️ Appeal Coverage
+              </button>
               {isAdmin && (
                 <button
                   onClick={() => handleViewChange('billing')}
@@ -1191,14 +1189,9 @@ const App = () => {
           </div>
         ))}
 
-        {activeView === 'appeal-coverage' && (isAdmin ? (
+        {activeView === 'appeal-coverage' && (
           <AppealCoverage />
-        ) : (
-          <div className="p-6 bg-white rounded-lg shadow-sm border border-gray-200 text-center">
-            <h3 className="text-lg font-semibold">Access Denied</h3>
-            <p className="text-sm text-gray-600">You do not have permission to view Appeal Coverage.</p>
-          </div>
-        ))}
+        )}
 
         {activeView === 'users' && (isAdmin ? (
           <UserManagement />
