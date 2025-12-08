@@ -98,6 +98,7 @@ const BillingManagement = ({
   // Year selectors for historical data
   const [selectedDistributionYear, setSelectedDistributionYear] = useState(new Date().getFullYear());
   const [selectedExpenseYear, setSelectedExpenseYear] = useState(new Date().getFullYear());
+  const [selectedReceivableYear, setSelectedReceivableYear] = useState(new Date().getFullYear());
 
   //Invoice aging helpers
   const calculateInvoiceAge = (billingDate) => {
@@ -2768,7 +2769,28 @@ const calculateDistributionMetrics = async () => {
           {/* Office Receivables Tab */}
           {activeTab === 'receivables' && (
             <div className="space-y-6">
-              <div className="flex justify-end mb-4">
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center space-x-4">
+                  <h2 className="text-2xl font-semibold text-gray-900">Office Receivables</h2>
+
+                  {/* Year Selector */}
+                  <div className="flex items-center space-x-2">
+                    <label className="text-sm text-gray-700 font-medium">Year:</label>
+                    <select
+                      value={selectedReceivableYear}
+                      onChange={(e) => setSelectedReceivableYear(parseInt(e.target.value))}
+                      className="px-3 py-2 border border-gray-300 rounded-md bg-white"
+                    >
+                      {Array.from(new Set([
+                        ...officeReceivables?.map(r => new Date(r.created_at).getFullYear()) || [],
+                        new Date().getFullYear()
+                      ])).sort((a, b) => b - a).map(year => (
+                        <option key={year} value={year}>{year}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
                 <button
                   onClick={() => {
                     setEditingReceivable(null);
