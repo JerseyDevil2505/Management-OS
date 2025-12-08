@@ -3139,7 +3139,7 @@ const calculateDistributionMetrics = async () => {
                           
                           {/* All distributions for the year */}
                           <div className="mt-4 max-h-40 overflow-y-auto">
-                            <p className="text-xs text-gray-500 mb-2">All {new Date().getFullYear()} Distributions:</p>
+                            <p className="text-xs text-gray-500 mb-2">All {selectedDistributionYear} Distributions:</p>
                             {partnerDistributions.length === 0 ? (
                               <p className="text-xs text-gray-400 italic">No distributions yet</p>
                             ) : (
