@@ -2611,7 +2611,23 @@ const calculateDistributionMetrics = async () => {
           {activeTab === 'expenses' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-semibold text-gray-900">Monthly Expenses - {new Date().getFullYear()}</h2>
+                <div className="flex items-center space-x-4">
+                  <h2 className="text-2xl font-semibold text-gray-900">Monthly Expenses</h2>
+
+                  {/* Year Selector */}
+                  <div className="flex items-center space-x-2">
+                    <label className="text-sm text-gray-700 font-medium">Year:</label>
+                    <select
+                      value={selectedExpenseYear}
+                      onChange={(e) => setSelectedExpenseYear(parseInt(e.target.value))}
+                      className="px-3 py-2 border border-gray-300 rounded-md bg-white"
+                    >
+                      {Array.from(new Set(expenses?.map(e => e.year) || [])).sort((a, b) => b - a).map(year => (
+                        <option key={year} value={year}>{year}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
                 <button
                   onClick={() => setShowExpenseImport(true)}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
