@@ -2622,7 +2622,7 @@ const calculateDistributionMetrics = async () => {
                       onChange={(e) => setSelectedExpenseYear(parseInt(e.target.value))}
                       className="px-3 py-2 border border-gray-300 rounded-md bg-white"
                     >
-                      {Array.from(new Set(expenses?.map(e => e.year) || [])).sort((a, b) => b - a).map(year => (
+                      {Array.from(new Set([...expenses?.map(e => e.year) || [], new Date().getFullYear()])).sort((a, b) => b - a).map(year => (
                         <option key={year} value={year}>{year}</option>
                       ))}
                     </select>
@@ -2904,7 +2904,7 @@ const calculateDistributionMetrics = async () => {
                     onChange={(e) => setSelectedDistributionYear(parseInt(e.target.value))}
                     className="px-3 py-1 border border-gray-300 rounded-md bg-white text-sm"
                   >
-                    {Array.from(new Set(distributions?.map(d => d.year) || [])).sort((a, b) => b - a).map(year => (
+                    {Array.from(new Set([...distributions?.map(d => d.year) || [], new Date().getFullYear()])).sort((a, b) => b - a).map(year => (
                       <option key={year} value={year}>{year}</option>
                     ))}
                   </select>
