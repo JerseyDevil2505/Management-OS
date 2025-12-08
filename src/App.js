@@ -658,14 +658,18 @@ const App = () => {
       });
     }
     
-    // Process receivables
+    // Process receivables - FILTER BY CURRENT YEAR ONLY
     if (receivables) {
+      const currentYear = new Date().getFullYear();
       receivables.forEach(receivable => {
-        const amount = parseFloat(receivable.amount || 0);
-        if (receivable.status === 'P') {
-          totalPaid += amount;
-        } else if (receivable.status === 'O') {
-          totalOpen += amount;
+        // Only include receivables from current year
+        if (new Date(receivable.created_at).getFullYear() === currentYear) {
+          const amount = parseFloat(receivable.amount || 0);
+          if (receivable.status === 'P') {
+            totalPaid += amount;
+          } else if (receivable.status === 'O') {
+            totalOpen += amount;
+          }
         }
       });
     }
