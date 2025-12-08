@@ -1314,7 +1314,8 @@ const calculateDistributionMetrics = async () => {
         }
       });
       
-      // Get office receivables
+      // Get office receivables - FILTER BY CURRENT YEAR
+      const currentYear = new Date().getFullYear();
       const { data: receivables, receivablesError } = await supabase
         .from('office_receivables')
         .select('*')
@@ -1322,19 +1323,22 @@ const calculateDistributionMetrics = async () => {
 
       if (!receivablesError && receivables) {
         receivables.forEach(receivable => {
-          openInvoices.push({
-            id: receivable.id,
-            billing_date: receivable.created_at,
-            invoice_number: receivable.invoice_number,
-            amount_billed: receivable.amount,
-            percentage_billed: 0,
-            billing_type: 'office_receivable',
-            status: 'O',
-            job_name: receivable.job_name,
-            job_type: 'office_receivable',
-            job_id: receivable.id,
-            event_description: receivable.event_description
-          });
+          // Only include receivables from current year
+          if (new Date(receivable.created_at).getFullYear() === currentYear) {
+            openInvoices.push({
+              id: receivable.id,
+              billing_date: receivable.created_at,
+              invoice_number: receivable.invoice_number,
+              amount_billed: receivable.amount,
+              percentage_billed: 0,
+              billing_type: 'office_receivable',
+              status: 'O',
+              job_name: receivable.job_name,
+              job_type: 'office_receivable',
+              job_id: receivable.id,
+              event_description: receivable.event_description
+            });
+          }
         });
       }
 
