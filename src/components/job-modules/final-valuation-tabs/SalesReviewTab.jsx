@@ -410,6 +410,73 @@ const SalesReviewTab = ({
     }));
   };
 
+  // Save current settings
+  const handleSaveSettings = () => {
+    if (!settingsName.trim()) {
+      alert('Please enter a settings name');
+      return;
+    }
+
+    const settings = {
+      name: settingsName.trim(),
+      dateRange,
+      salesNuFilter,
+      vcsFilter,
+      typeFilter,
+      designFilter,
+      periodFilter,
+      showAllProperties,
+      showCodesNotMeanings,
+      expandedSections,
+      sortConfig,
+      savedAt: new Date().toISOString()
+    };
+
+    const existingIndex = savedSettings.findIndex(s => s.name === settingsName.trim());
+    let updatedSettings;
+
+    if (existingIndex >= 0) {
+      // Update existing
+      updatedSettings = [...savedSettings];
+      updatedSettings[existingIndex] = settings;
+    } else {
+      // Add new
+      updatedSettings = [...savedSettings, settings];
+    }
+
+    setSavedSettings(updatedSettings);
+    localStorage.setItem(`sales-review-saved-settings-${jobData.id}`, JSON.stringify(updatedSettings));
+    setSettingsName('');
+    setShowSettingsModal(false);
+    alert(`Settings "${settings.name}" saved successfully!`);
+  };
+
+  // Load saved settings
+  const handleLoadSettings = (settings) => {
+    setDateRange(settings.dateRange || { start: '', end: '' });
+    setSalesNuFilter(settings.salesNuFilter || []);
+    setVcsFilter(settings.vcsFilter || []);
+    setTypeFilter(settings.typeFilter || []);
+    setDesignFilter(settings.designFilter || []);
+    setPeriodFilter(settings.periodFilter || []);
+    setShowAllProperties(settings.showAllProperties || false);
+    setShowCodesNotMeanings(settings.showCodesNotMeanings || false);
+    setExpandedSections(settings.expandedSections || { vcs: false, style: false, typeUse: false, view: false });
+    setSortConfig(settings.sortConfig || { key: 'sales_date', direction: 'desc' });
+    setShowSettingsModal(false);
+    alert(`Settings "${settings.name}" loaded successfully!`);
+  };
+
+  // Delete saved settings
+  const handleDeleteSettings = (settingsToDelete) => {
+    if (!confirm(`Delete settings "${settingsToDelete.name}"?`)) return;
+
+    const updatedSettings = savedSettings.filter(s => s.name !== settingsToDelete.name);
+    setSavedSettings(updatedSettings);
+    localStorage.setItem(`sales-review-saved-settings-${jobData.id}`, JSON.stringify(updatedSettings));
+    alert(`Settings "${settingsToDelete.name}" deleted`);
+  };
+
   // ==================== EXCEL EXPORT ====================
   
   const exportToExcel = () => {
