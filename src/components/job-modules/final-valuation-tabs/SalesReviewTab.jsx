@@ -600,66 +600,128 @@ const SalesReviewTab = ({
       </div>
 
       {/* Controls Row */}
-      <div className="mb-6 flex flex-wrap gap-4 items-center">
-        {/* Show All Toggle */}
-        <label className="inline-flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={showAllProperties}
-            onChange={(e) => setShowAllProperties(e.target.checked)}
-            className="rounded border-gray-300"
-          />
-          <span className="text-sm font-medium text-gray-700">Show All Properties</span>
-        </label>
+      <div className="mb-6 space-y-4">
+        {/* Top Row - Toggles and Actions */}
+        <div className="flex flex-wrap gap-4 items-center">
+          {/* Show All Toggle */}
+          <label className="inline-flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showAllProperties}
+              onChange={(e) => setShowAllProperties(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            <span className="text-sm font-medium text-gray-700">Show All Properties</span>
+          </label>
 
-        {/* Code/Meaning Toggle */}
-        <label className="inline-flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={showCodesNotMeanings}
-            onChange={(e) => setShowCodesNotMeanings(e.target.checked)}
-            className="rounded border-gray-300"
-          />
-          <span className="text-sm font-medium text-gray-700">Show Codes (not definitions)</span>
-        </label>
+          {/* Code/Meaning Toggle */}
+          <label className="inline-flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showCodesNotMeanings}
+              onChange={(e) => setShowCodesNotMeanings(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            <span className="text-sm font-medium text-gray-700">Show Codes (not definitions)</span>
+          </label>
 
-        {/* Quick Period Buttons */}
-        <div className="flex gap-2">
-          <button
-            onClick={() => handleSetDateRange('CSP')}
-            className="px-3 py-1.5 text-sm bg-green-50 text-green-700 border border-green-200 rounded hover:bg-green-100"
-          >
-            CSP Period
-          </button>
-          <button
-            onClick={() => handleSetDateRange('PSP')}
-            className="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100"
-          >
-            PSP Period
-          </button>
-          <button
-            onClick={() => handleSetDateRange('HSP')}
-            className="px-3 py-1.5 text-sm bg-orange-50 text-orange-700 border border-orange-200 rounded hover:bg-orange-100"
-          >
-            HSP Period
-          </button>
+          {/* Quick Period Buttons */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleSetDateRange('CSP')}
+              className="px-3 py-1.5 text-sm bg-green-50 text-green-700 border border-green-200 rounded hover:bg-green-100"
+            >
+              CSP Period
+            </button>
+            <button
+              onClick={() => handleSetDateRange('PSP')}
+              className="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100"
+            >
+              PSP Period
+            </button>
+            <button
+              onClick={() => handleSetDateRange('HSP')}
+              className="px-3 py-1.5 text-sm bg-orange-50 text-orange-700 border border-orange-200 rounded hover:bg-orange-100"
+            >
+              HSP Period
+            </button>
+          </div>
+
+          {/* Font Size Control */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Font:</label>
+            <select
+              value={fontSize}
+              onChange={(e) => setFontSize(Number(e.target.value))}
+              className="px-2 py-1 text-sm border rounded"
+            >
+              <option value={10}>10px</option>
+              <option value={11}>11px</option>
+              <option value={12}>12px</option>
+              <option value={13}>13px</option>
+              <option value={14}>14px</option>
+            </select>
+          </div>
+
+          <div className="ml-auto flex gap-2">
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 border border-gray-300"
+            >
+              <Save className="w-4 h-4" />
+              Settings
+            </button>
+            <button
+              onClick={exportToExcel}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              <Download className="w-4 h-4" />
+              Export to Excel
+            </button>
+          </div>
         </div>
 
-        <div className="ml-auto flex gap-2">
-          <button
-            onClick={() => setShowSettingsModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 border border-gray-300"
-          >
-            <Save className="w-4 h-4" />
-            Settings
-          </button>
-          <button
-            onClick={exportToExcel}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            <Download className="w-4 h-4" />
-            Export to Excel
-          </button>
+        {/* Filter Row - Sales Date Range and Sales Codes */}
+        <div className="flex flex-wrap gap-4 items-center bg-gray-50 p-4 rounded border">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Sales Date Range:</label>
+            <input
+              type="date"
+              value={dateRange.start}
+              onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+              className="px-2 py-1 text-sm border rounded"
+            />
+            <span className="text-gray-500">to</span>
+            <input
+              type="date"
+              value={dateRange.end}
+              onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+              className="px-2 py-1 text-sm border rounded"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Sales NU Codes:</label>
+            <div className="flex flex-wrap gap-2">
+              {['', '0', '00', '7', '07', '10', '32'].map(code => (
+                <label key={code || 'blank'} className="inline-flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    checked={salesNuFilter.includes(code)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSalesNuFilter(prev => [...prev, code]);
+                      } else {
+                        setSalesNuFilter(prev => prev.filter(c => c !== code));
+                      }
+                    }}
+                    className="rounded border-gray-300"
+                  />
+                  <span className="text-xs text-gray-700">{code || 'Blank'}</span>
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
