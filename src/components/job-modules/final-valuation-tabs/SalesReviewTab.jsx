@@ -1036,6 +1036,7 @@ const SalesReviewTab = ({
                 <th className="px-3 py-3 text-left font-medium text-gray-700">NU</th>
                 <th className="px-3 py-3 text-right font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('sales_price')}>Sale Price</th>
                 <th className="px-3 py-3 text-right font-medium text-gray-700">Price/SF</th>
+                <th className="px-3 py-3 text-center font-medium text-gray-700">Normalize</th>
                 <th className="px-3 py-3 text-right font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('values_norm_time')}>Norm Price</th>
                 <th className="px-3 py-3 text-right font-medium text-gray-700">Norm $/SF</th>
                 <th className="px-3 py-3 text-right font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('salesRatio')}>Sales Ratio</th>
@@ -1077,6 +1078,17 @@ const SalesReviewTab = ({
                   <td className="px-3 py-2">{prop.sales_nu || '-'}</td>
                   <td className="px-3 py-2 text-right">{formatCurrency(prop.sales_price)}</td>
                   <td className="px-3 py-2 text-right">{prop.pricePerSF ? formatCurrency(prop.pricePerSF) : '-'}</td>
+                  <td className="px-3 py-2 text-center">
+                    {prop.sales_date && (
+                      <button
+                        onClick={() => handleOpenNormalizeModal(prop)}
+                        className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                        title="Create/Edit Normalized Value"
+                      >
+                        {prop.values_norm_time ? 'Edit' : 'Add'}
+                      </button>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-right">{formatCurrency(prop.values_norm_time)}</td>
                   <td className="px-3 py-2 text-right">{prop.normPricePerSF ? formatCurrency(prop.normPricePerSF) : '-'}</td>
                   <td className="px-3 py-2 text-right">{prop.salesRatio !== null ? formatPercent(prop.salesRatio) : '-'}</td>
