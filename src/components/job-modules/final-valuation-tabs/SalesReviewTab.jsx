@@ -625,7 +625,14 @@ const SalesReviewTab = ({
           </button>
         </div>
 
-        <div className="ml-auto">
+        <div className="ml-auto flex gap-2">
+          <button
+            onClick={() => setShowSettingsModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 border border-gray-300"
+          >
+            <Save className="w-4 h-4" />
+            Settings
+          </button>
           <button
             onClick={exportToExcel}
             className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
@@ -635,6 +642,88 @@ const SalesReviewTab = ({
           </button>
         </div>
       </div>
+
+      {/* Settings Modal */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Manage Settings</h3>
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              {/* Save New Settings */}
+              <div className="mb-6">
+                <h4 className="font-medium text-gray-900 mb-3">Save Current Settings</h4>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={settingsName}
+                    onChange={(e) => setSettingsName(e.target.value)}
+                    placeholder="Enter settings name..."
+                    className="flex-1 px-3 py-2 border rounded"
+                  />
+                  <button
+                    onClick={handleSaveSettings}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 inline-flex items-center gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    Save
+                  </button>
+                </div>
+              </div>
+
+              {/* Saved Settings List */}
+              <div>
+                <h4 className="font-medium text-gray-900 mb-3">Saved Settings ({savedSettings.length})</h4>
+                {savedSettings.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-4">
+                    No saved settings yet. Save your current filters above.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {savedSettings.map((setting, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-3 border rounded hover:bg-gray-50"
+                      >
+                        <div>
+                          <div className="font-medium text-gray-900">{setting.name}</div>
+                          <div className="text-sm text-gray-500">
+                            Saved {new Date(setting.savedAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleLoadSettings(setting)}
+                            className="px-3 py-1.5 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm inline-flex items-center gap-1"
+                          >
+                            <Upload className="w-4 h-4" />
+                            Load
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSettings(setting)}
+                            className="px-3 py-1.5 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm inline-flex items-center gap-1"
+                          >
+                            <X className="w-4 h-4" />
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats Bar */}
       <div className="mb-6 grid grid-cols-5 gap-4">
