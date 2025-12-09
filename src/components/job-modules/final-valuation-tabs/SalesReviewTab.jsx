@@ -77,13 +77,14 @@ const SalesReviewTab = ({
     if (sale >= cspStart && sale <= cspEnd) return 'CSP';
     if (sale >= pspStart && sale <= pspEnd) return 'PSP';
     if (sale >= hspStart && sale <= hspEnd) return 'HSP';
-    return 'OTHER';
+    return ''; // Blank instead of 'OTHER'
   }, []);
 
   // ==================== STATE MANAGEMENT ====================
   
   const [showAllProperties, setShowAllProperties] = useState(false);
-  const [showCodesNotMeanings, setShowCodesNotMeanings] = useState(false);
+  const [showCodesNotMeanings, setShowCodesNotMeanings] = useState(true); // Default to codes
+  const [fontSize, setFontSize] = useState(12); // Adjustable font size
   const [sortConfig, setSortConfig] = useState({ key: 'sales_date', direction: 'desc' });
   
   // Filters
@@ -104,7 +105,7 @@ const SalesReviewTab = ({
   const [vcsFilter, setVcsFilter] = useState([]);
   const [typeFilter, setTypeFilter] = useState([]);
   const [designFilter, setDesignFilter] = useState([]);
-  const [periodFilter, setPeriodFilter] = useState([]);
+  const [periodFilter, setPeriodFilter] = useState(['CSP', 'PSP', 'HSP']); // Default to all three periods
   
   // Expandable sections
   const [expandedSections, setExpandedSections] = useState({
@@ -594,7 +595,7 @@ const SalesReviewTab = ({
             onChange={(e) => setShowCodesNotMeanings(e.target.checked)}
             className="rounded border-gray-300"
           />
-          <span className="text-sm font-medium text-gray-700">Show Codes (not meanings)</span>
+          <span className="text-sm font-medium text-gray-700">Show Codes (not definitions)</span>
         </label>
 
         {/* Quick Period Buttons */}
@@ -616,12 +617,6 @@ const SalesReviewTab = ({
             className="px-3 py-1.5 text-sm bg-orange-50 text-orange-700 border border-orange-200 rounded hover:bg-orange-100"
           >
             HSP Period
-          </button>
-          <button
-            onClick={() => setDateRange({ start: '', end: '' })}
-            className="px-3 py-1.5 text-sm bg-gray-50 text-gray-700 border border-gray-200 rounded hover:bg-gray-100"
-          >
-            All Periods
           </button>
         </div>
 
