@@ -259,7 +259,8 @@ const SalesReviewTab = ({
   
   const vcsAnalytics = useMemo(() => {
     const groups = {};
-    
+
+    // Group properties by VCS and collect sales ratios
     filteredProperties.forEach(prop => {
       const vcs = prop.property_vcs || 'Unknown';
       if (!groups[vcs]) {
@@ -272,10 +273,11 @@ const SalesReviewTab = ({
           yearBuiltCount: 0,
           assessedSum: 0,
           salesRatioSum: 0,
-          salesRatioCount: 0
+          salesRatioCount: 0,
+          salesRatios: [] // For COD and PRD calculations
         };
       }
-      
+
       groups[vcs].count++;
       if (prop.sales_price) groups[vcs].totalPrice += prop.sales_price;
       if (prop.values_norm_time) groups[vcs].totalNormPrice += prop.values_norm_time;
@@ -289,20 +291,43 @@ const SalesReviewTab = ({
       if (prop.salesRatio !== null && prop.salesRatio !== undefined) {
         groups[vcs].salesRatioSum += prop.salesRatio;
         groups[vcs].salesRatioCount++;
+        groups[vcs].salesRatios.push(prop.salesRatio);
       }
     });
 
-    return Object.entries(groups).map(([vcs, data]) => ({
-      vcs,
-      count: data.count,
-      avgPrice: data.count > 0 ? data.totalPrice / data.count : 0,
-      avgNormPrice: data.count > 0 ? data.totalNormPrice / data.count : 0,
-      avgSFLA: data.sflaSum > 0 ? data.sflaSum / data.count : 0,
-      avgPPSF: data.count > 0 && data.sflaSum > 0 ? data.totalPrice / data.sflaSum : 0,
-      avgAge: data.yearBuiltCount > 0 ? data.ageSum / data.yearBuiltCount : 0,
-      avgAssessed: data.count > 0 ? data.assessedSum / data.count : 0,
-      avgSalesRatio: data.salesRatioCount > 0 ? data.salesRatioSum / data.salesRatioCount : 0
-    })).sort((a, b) => a.vcs.localeCompare(b.vcs));
+    return Object.entries(groups).map(([vcs, data]) => {
+      const avgSalesRatio = data.salesRatioCount > 0 ? data.salesRatioSum / data.salesRatioCount : 0;
+
+      // Calculate COD (Coefficient of Deviation)
+      let cod = 0;
+      if (data.salesRatios.length > 0 && avgSalesRatio > 0) {
+        const absoluteDeviations = data.salesRatios.map(ratio => Math.abs(ratio - avgSalesRatio));
+        const avgAbsoluteDeviation = absoluteDeviations.reduce((a, b) => a + b, 0) / data.salesRatios.length;
+        cod = (avgAbsoluteDeviation / avgSalesRatio) * 100;
+      }
+
+      // Calculate PRD (Price-Related Differential)
+      let prd = 0;
+      if (data.salesRatios.length > 0 && data.totalNormPrice > 0 && data.assessedSum > 0) {
+        const meanRatio = avgSalesRatio;
+        const weightedMeanRatio = (data.assessedSum / data.totalNormPrice) * 100;
+        prd = weightedMeanRatio > 0 ? meanRatio / weightedMeanRatio : 0;
+      }
+
+      return {
+        vcs,
+        count: data.count,
+        avgPrice: data.count > 0 ? data.totalPrice / data.count : 0,
+        avgNormPrice: data.count > 0 ? data.totalNormPrice / data.count : 0,
+        avgSFLA: data.sflaSum > 0 ? data.sflaSum / data.count : 0,
+        avgPPSF: data.count > 0 && data.sflaSum > 0 ? data.totalPrice / data.sflaSum : 0,
+        avgAge: data.yearBuiltCount > 0 ? data.ageSum / data.yearBuiltCount : 0,
+        avgAssessed: data.count > 0 ? data.assessedSum / data.count : 0,
+        avgSalesRatio,
+        cod,
+        prd
+      };
+    }).sort((a, b) => a.vcs.localeCompare(b.vcs));
   }, [filteredProperties]);
 
   const styleAnalytics = useMemo(() => {
