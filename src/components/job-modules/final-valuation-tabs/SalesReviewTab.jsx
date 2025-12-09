@@ -1104,6 +1104,76 @@ const SalesReviewTab = ({
           </div>
         )}
       </div>
+
+      {/* Normalize Value Modal */}
+      {showNormalizeModal && normalizeProperty && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Normalize Sale Value</h3>
+              <button
+                onClick={() => setShowNormalizeModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Property</label>
+                  <div className="text-sm text-gray-600">
+                    {normalizeProperty.property_location || `${normalizeProperty.property_block}-${normalizeProperty.property_lot}`}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Sale Date</label>
+                  <div className="text-sm text-gray-600">{formatDate(normalizeProperty.sales_date)}</div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Sale Price</label>
+                  <div className="text-sm text-gray-600">{formatCurrency(normalizeProperty.sales_price)}</div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Normalized Price *
+                  </label>
+                  <input
+                    type="number"
+                    value={normalizeValue}
+                    onChange={(e) => setNormalizeValue(e.target.value)}
+                    placeholder="Enter normalized value..."
+                    className="w-full px-3 py-2 border rounded"
+                    step="0.01"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter the time-normalized value for this sale (e.g., adjusted to 2025 dollars)
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t flex justify-end gap-2">
+              <button
+                onClick={() => setShowNormalizeModal(false)}
+                className="px-4 py-2 border rounded text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveNormalizedValue}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
