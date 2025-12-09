@@ -1013,14 +1013,16 @@ const SalesReviewTab = ({
                   <td className="px-3 py-2 max-w-xs truncate">{prop.property_location || '-'}</td>
                   <td className="px-3 py-2 text-right">{formatCurrency(prop.values_mod_total)}</td>
                   <td className="px-3 py-2 text-center">
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${
-                      prop.periodCode === 'CSP' ? 'bg-green-100 text-green-800' :
-                      prop.periodCode === 'PSP' ? 'bg-blue-100 text-blue-800' :
-                      prop.periodCode === 'HSP' ? 'bg-orange-100 text-orange-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {prop.periodCode || '-'}
-                    </span>
+                    {prop.periodCode ? (
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        prop.periodCode === 'CSP' ? 'bg-green-100 text-green-800' :
+                        prop.periodCode === 'PSP' ? 'bg-blue-100 text-blue-800' :
+                        prop.periodCode === 'HSP' ? 'bg-orange-100 text-orange-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {prop.periodCode}
+                      </span>
+                    ) : '-'}
                   </td>
                   <td className="px-3 py-2 text-right">{formatNumber(prop.asset_lot_frontage)}</td>
                   <td className="px-3 py-2 text-right">{prop.asset_lot_acre || '-'}</td>
