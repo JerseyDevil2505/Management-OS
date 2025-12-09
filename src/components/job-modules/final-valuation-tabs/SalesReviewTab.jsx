@@ -806,6 +806,8 @@ const SalesReviewTab = ({
                     <th className="text-right py-2 px-2">Avg Age</th>
                     <th className="text-right py-2 px-2">Avg Assessed</th>
                     <th className="text-right py-2 px-2">Avg Ratio</th>
+                    <th className="text-right py-2 px-2">COD</th>
+                    <th className="text-right py-2 px-2">PRD</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -820,6 +822,8 @@ const SalesReviewTab = ({
                       <td className="py-2 px-2 text-right">{row.avgAge.toFixed(1)}</td>
                       <td className="py-2 px-2 text-right">{formatCurrency(row.avgAssessed)}</td>
                       <td className="py-2 px-2 text-right">{formatPercent(row.avgSalesRatio)}</td>
+                      <td className="py-2 px-2 text-right">{row.cod.toFixed(2)}</td>
+                      <td className="py-2 px-2 text-right">{row.prd.toFixed(3)}</td>
                     </tr>
                   ))}
                 </tbody>
