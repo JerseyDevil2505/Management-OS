@@ -114,6 +114,24 @@ const SalesReviewTab = ({
     view: false
   });
 
+  // Settings name for save/load
+  const [settingsName, setSettingsName] = useState('');
+  const [savedSettings, setSavedSettings] = useState([]);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+
+  // Load saved settings list on mount
+  useEffect(() => {
+    if (!jobData?.id) return;
+    const saved = localStorage.getItem(`sales-review-saved-settings-${jobData.id}`);
+    if (saved) {
+      try {
+        setSavedSettings(JSON.parse(saved));
+      } catch (e) {
+        console.error('Failed to parse saved settings:', e);
+      }
+    }
+  }, [jobData?.id]);
+
   // ==================== COMPUTED DATA ====================
   
   const enrichedProperties = useMemo(() => {
