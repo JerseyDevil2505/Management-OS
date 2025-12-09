@@ -971,8 +971,8 @@ const SalesReviewTab = ({
 
       {/* Main Data Table */}
       <div className="bg-white border rounded overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '70vh' }}>
+          <table className="min-w-full" style={{ fontSize: `${fontSize}px` }}>
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_vcs')}>VCS</th>
