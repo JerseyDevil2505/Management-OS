@@ -120,6 +120,11 @@ const SalesReviewTab = ({
   const [savedSettings, setSavedSettings] = useState([]);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
+  // Normalize modal state
+  const [showNormalizeModal, setShowNormalizeModal] = useState(false);
+  const [normalizeProperty, setNormalizeProperty] = useState(null);
+  const [normalizeValue, setNormalizeValue] = useState('');
+
   // Load saved settings list on mount
   useEffect(() => {
     if (!jobData?.id) return;
@@ -501,6 +506,40 @@ const SalesReviewTab = ({
     setSavedSettings(updatedSettings);
     localStorage.setItem(`sales-review-saved-settings-${jobData.id}`, JSON.stringify(updatedSettings));
     alert(`Settings "${settingsToDelete.name}" deleted`);
+  };
+
+  // Handle normalize value creation
+  const handleOpenNormalizeModal = (property) => {
+    setNormalizeProperty(property);
+    setNormalizeValue(property.values_norm_time || '');
+    setShowNormalizeModal(true);
+  };
+
+  const handleSaveNormalizedValue = async () => {
+    if (!normalizeProperty || !normalizeValue) {
+      alert('Please enter a normalized value');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('property_records')
+        .update({ values_norm_time: parseFloat(normalizeValue) })
+        .eq('id', normalizeProperty.id);
+
+      if (error) throw error;
+
+      alert('Normalized value saved successfully!');
+      setShowNormalizeModal(false);
+
+      // Refresh data
+      if (onUpdateJobCache) {
+        onUpdateJobCache(jobData.id, { forceRefresh: true });
+      }
+    } catch (error) {
+      console.error('Error saving normalized value:', error);
+      alert(`Failed to save: ${error.message}`);
+    }
   };
 
   // ==================== EXCEL EXPORT ====================
