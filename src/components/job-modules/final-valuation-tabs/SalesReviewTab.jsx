@@ -1,17 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, interpretCodes } from '../../../lib/supabaseClient';
-import { 
-  Download, 
-  Save, 
-  Upload, 
-  Filter, 
-  ChevronDown, 
+import {
+  Download,
+  Save,
+  Upload,
+  ChevronDown,
   ChevronRight,
-  Eye,
-  EyeOff,
   Check,
-  X,
-  RefreshCw
+  X
 } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 
@@ -253,7 +249,7 @@ const SalesReviewTab = ({
         isIncluded
       };
     });
-  }, [properties, jobData?.end_date, parsedCodeDefinitions, vendorType, getPeriodClassification, normalizeSalesNuCode]);
+  }, [properties, jobData?.end_date, parsedCodeDefinitions, vendorType, getPeriodClassification, normalizeSalesNuCode, includeOverrides]);
 
   // Filtered properties
   const filteredProperties = useMemo(() => {
@@ -783,7 +779,7 @@ const SalesReviewTab = ({
 
   // Delete saved settings
   const handleDeleteSettings = (settingsToDelete) => {
-    if (!confirm(`Delete settings "${settingsToDelete.name}"?`)) return;
+    if (!window.confirm(`Delete settings "${settingsToDelete.name}"?`)) return;
 
     const updatedSettings = savedSettings.filter(s => s.name !== settingsToDelete.name);
     setSavedSettings(updatedSettings);
