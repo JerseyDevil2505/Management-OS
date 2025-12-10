@@ -109,12 +109,15 @@ const SalesReviewTab = ({
   // Filters
   const [dateRange, setDateRange] = useState({ start: '', end: '' }); // Empty by default - don't filter by date initially
   
-  const [salesNuFilter, setSalesNuFilter] = useState(['0', '07', '32']); // Default to 0, 07, 32
+  const [salesNuFilter, setSalesNuFilter] = useState([]); // Empty by default
   const [vcsFilter, setVcsFilter] = useState([]);
   const [typeFilter, setTypeFilter] = useState([]);
   const [designFilter, setDesignFilter] = useState([]);
   const [periodFilter, setPeriodFilter] = useState([]); // Empty means show all periods by default
   const [viewFilter, setViewFilter] = useState([]); // View/Period filter (CSP, PSP, HSP)
+
+  // Include/Exclude state for CME tool
+  const [includeOverrides, setIncludeOverrides] = useState({}); // propertyId -> true/false/null
   
   // Expandable sections
   const [expandedSections, setExpandedSections] = useState({
@@ -180,6 +183,14 @@ const SalesReviewTab = ({
       const lotSf = prop.market_manual_lot_sf || prop.asset_lot_sf || null;
       const lotFrontage = prop.asset_lot_frontage || null;
 
+      // Determine auto-include based on default date range (12/31 pre-end to 10/1 prior-prior)
+      // This essentially matches CSP period: 10/1 of year-2 to 12/31 of year-1
+      const isAutoIncluded = periodCode === 'CSP';
+
+      // Get override status (null = auto, true = manual include, false = manual exclude)
+      const includeOverride = includeOverrides[prop.id] ?? prop.cme_include_override ?? null;
+      const isIncluded = includeOverride !== null ? includeOverride : isAutoIncluded;
+
       return {
         ...prop,
         periodCode,
@@ -194,7 +205,10 @@ const SalesReviewTab = ({
         normalizedSalesNu,
         lotAcre,
         lotSf,
-        lotFrontage
+        lotFrontage,
+        isAutoIncluded,
+        includeOverride,
+        isIncluded
       };
     });
   }, [properties, jobData?.end_date, parsedCodeDefinitions, vendorType, getPeriodClassification, normalizeSalesNuCode]);
@@ -724,6 +738,40 @@ const SalesReviewTab = ({
     setSavedSettings(updatedSettings);
     localStorage.setItem(`sales-review-saved-settings-${jobData.id}`, JSON.stringify(updatedSettings));
     alert(`Settings "${settingsToDelete.name}" deleted`);
+  };
+
+  // Handle include/exclude override
+  const handleIncludeToggle = async (property, value) => {
+    // Update local state immediately
+    setIncludeOverrides(prev => ({
+      ...prev,
+      [property.id]: value
+    }));
+
+    // Save to database (property_market_analysis table)
+    try {
+      const { error } = await supabase
+        .from('property_market_analysis')
+        .upsert({
+          job_id: jobData.id,
+          property_composite_key: property.property_composite_key,
+          cme_include_override: value,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'job_id,property_composite_key'
+        });
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error saving include override:', error);
+      alert(`Failed to save: ${error.message}`);
+      // Revert local state on error
+      setIncludeOverrides(prev => {
+        const newState = { ...prev };
+        delete newState[property.id];
+        return newState;
+      });
+    }
   };
 
   // Auto-normalize using HPI data (matches PreValuation logic)
@@ -1357,7 +1405,7 @@ const SalesReviewTab = ({
                 setVcsFilter([]);
                 setTypeFilter([]);
                 setDesignFilter([]);
-                setSalesNuFilter(['0', '07', '32']);
+                setSalesNuFilter([]);
                 setViewFilter([]);
                 setDateRange({ start: '', end: '' });
               }}
