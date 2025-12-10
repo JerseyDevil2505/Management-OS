@@ -722,14 +722,13 @@ const AdjustmentsTab = ({ jobData = {} }) => {
           <div className="mb-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Adjustment Code Configuration</h3>
             <p className="text-sm text-gray-600">
-              Select which codes from your source data represent each adjustment type.
-              These selections persist across file reloads.
+              Select codes from each category and assign them to adjustment types. When saved, selected codes will create adjustment rows in the grid.
             </p>
           </div>
 
           {isLoadingCodes ? (
             <div className="flex items-center justify-center py-12">
-              <div className="text-gray-500">Loading available codes...</div>
+              <div className="text-gray-500">Loading code definitions...</div>
             </div>
           ) : (
             <div className="space-y-8">
