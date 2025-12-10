@@ -443,52 +443,82 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
       // For dynamic attributes with selected codes, create/update adjustment rows
       const attributeLabels = {
-        garage: 'Garage',
-        deck: 'Deck',
-        patio: 'Patio',
-        open_porch: 'Open Porch',
-        enclosed_porch: 'Enclosed Porch',
-        det_garage: 'Det Garage',
-        pool: 'Pool',
         barn: 'Barn',
         stable: 'Stable',
-        pole_barn: 'Pole Barn',
-        miscellaneous: 'Miscellaneous',
-        land_positive: 'Land Adjustment (+)',
-        land_negative: 'Land Adjustment (-)'
+        pole_barn: 'Pole Barn'
       };
 
+      // Attributes that create individual rows per code (using code description as name)
+      const individualRowAttributes = ['miscellaneous', 'land_positive', 'land_negative'];
+
       const newAdjustments = [];
+      let maxSortOrder = Math.max(...adjustments.map(a => a.sort_order || 0), 0);
 
       // Only create adjustment rows for dynamic attributes that have codes selected
       DYNAMIC_ATTRIBUTES.forEach(attr => {
         const selectedCodes = codeConfig[attr.id] || [];
 
         if (selectedCodes.length > 0) {
-          const existingAdj = adjustments.find(adj => adj.adjustment_id === attr.id);
+          if (individualRowAttributes.includes(attr.id)) {
+            // For misc and land adjustments, create one row per code using code description
+            selectedCodes.forEach(codeValue => {
+              const codes = getCodesForAttribute(attr.id, attr.category);
+              const codeObj = codes.find(c => c.code === codeValue);
 
-          if (!existingAdj) {
-            // Create new adjustment row for dynamic attribute
-            const maxSortOrder = Math.max(...adjustments.map(a => a.sort_order || 0), 0);
-            newAdjustments.push({
-              job_id: jobData.id,
-              adjustment_id: attr.id,
-              adjustment_name: attributeLabels[attr.id] || attr.name,
-              adjustment_type: 'flat',
-              category: 'amenity',
-              is_default: false,
-              sort_order: maxSortOrder + newAdjustments.length + 1,
-              bracket_0: 0,
-              bracket_1: 0,
-              bracket_2: 0,
-              bracket_3: 0,
-              bracket_4: 0,
-              bracket_5: 0,
-              bracket_6: 0,
-              bracket_7: 0,
-              bracket_8: 0,
-              bracket_9: 0
+              if (codeObj) {
+                const adjustmentId = `${attr.id}_${codeValue}`;
+                const existingAdj = adjustments.find(adj => adj.adjustment_id === adjustmentId);
+
+                if (!existingAdj) {
+                  maxSortOrder += 1;
+                  newAdjustments.push({
+                    job_id: jobData.id,
+                    adjustment_id: adjustmentId,
+                    adjustment_name: codeObj.description,
+                    adjustment_type: 'flat',
+                    category: 'amenity',
+                    is_default: false,
+                    sort_order: maxSortOrder,
+                    bracket_0: 0,
+                    bracket_1: 0,
+                    bracket_2: 0,
+                    bracket_3: 0,
+                    bracket_4: 0,
+                    bracket_5: 0,
+                    bracket_6: 0,
+                    bracket_7: 0,
+                    bracket_8: 0,
+                    bracket_9: 0
+                  });
+                }
+              }
             });
+          } else {
+            // For barn, stable, pole_barn - create single row with attribute name
+            const existingAdj = adjustments.find(adj => adj.adjustment_id === attr.id);
+
+            if (!existingAdj) {
+              maxSortOrder += 1;
+              newAdjustments.push({
+                job_id: jobData.id,
+                adjustment_id: attr.id,
+                adjustment_name: attributeLabels[attr.id] || attr.name,
+                adjustment_type: 'flat',
+                category: 'amenity',
+                is_default: false,
+                sort_order: maxSortOrder,
+                bracket_0: 0,
+                bracket_1: 0,
+                bracket_2: 0,
+                bracket_3: 0,
+                bracket_4: 0,
+                bracket_5: 0,
+                bracket_6: 0,
+                bracket_7: 0,
+                bracket_8: 0,
+                bracket_9: 0
+              });
+            }
           }
         }
       });
