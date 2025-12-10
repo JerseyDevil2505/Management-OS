@@ -26,24 +26,40 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     { min: 2000000, max: 99999999, label: 'Over $2,000,000', shortLabel: 'Over $2M', color: '#FF99FF', textColor: 'black' }
   ];
 
-  // Default adjustment attributes
+  // Default adjustment attributes with sample values based on image
   const DEFAULT_ADJUSTMENTS = [
-    { id: 'area_sqft', name: 'Area or Sq Ft', type: 'flat', isDefault: true, category: 'physical' },
-    { id: 'living_area', name: 'Living Area (Sq Ft)', type: 'per_sqft', isDefault: true, category: 'physical' },
-    { id: 'basement', name: 'Basement', type: 'flat', isDefault: true, category: 'physical' },
-    { id: 'finished_basement', name: 'Finished Basement', type: 'flat', isDefault: true, category: 'physical' },
-    { id: 'bathrooms', name: 'Bathrooms', type: 'flat', isDefault: true, category: 'physical' },
-    { id: 'bedrooms', name: 'Bedrooms', type: 'flat', isDefault: true, category: 'physical' },
-    { id: 'garage', name: 'Garage', type: 'flat', isDefault: true, category: 'physical' },
-    { id: 'fireplaces', name: 'Fireplaces', type: 'flat', isDefault: true, category: 'physical' },
-    { id: 'deck', name: 'Deck', type: 'flat', isDefault: true, category: 'amenity' },
-    { id: 'deck_sqft', name: 'Deck sq. ft.', type: 'flat', isDefault: true, category: 'amenity' },
-    { id: 'open_porch', name: 'Open Porch', type: 'flat', isDefault: true, category: 'amenity' },
-    { id: 'patio', name: 'Patio', type: 'flat', isDefault: true, category: 'amenity' },
-    { id: 'enclosed_porch', name: 'Enclosed Porch', type: 'flat', isDefault: true, category: 'amenity' },
-    { id: 'condition', name: 'Condition', type: 'flat_or_percent', isDefault: true, category: 'quality' },
-    { id: 'location', name: 'Location', type: 'flat', isDefault: true, category: 'location' },
-    { id: 'miscellaneous', name: 'Miscellaneous', type: 'flat', isDefault: true, category: 'other' }
+    { id: 'area_sqft', name: 'Area or Sq Ft', type: 'flat', isDefault: true, category: 'physical',
+      values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+    { id: 'living_area', name: 'Living Area (Sq Ft)', type: 'per_sqft', isDefault: true, category: 'physical',
+      values: [7500, 10000, 15000, 15000, 20000, 25000, 30000, 40000, 45000, 60000] },
+    { id: 'basement', name: 'Basement', type: 'flat', isDefault: true, category: 'physical',
+      values: [3000, 5000, 10000, 10000, 15000, 20000, 25000, 25000, 30000, 40000] },
+    { id: 'finished_basement', name: 'Finished Basement', type: 'flat', isDefault: true, category: 'physical',
+      values: [1500, 2500, 5000, 5000, 7500, 10000, 12500, 15000, 25000, 35000] },
+    { id: 'bathrooms', name: 'Bathrooms', type: 'flat', isDefault: true, category: 'physical',
+      values: [500, 500, 500, 500, 1000, 2500, 5000, 5000, 5000, 5000] },
+    { id: 'bedrooms', name: 'Bedrooms', type: 'flat', isDefault: true, category: 'physical',
+      values: [500, 1000, 2500, 2500, 2500, 2500, 2500, 2500, 2500, 2500] },
+    { id: 'garage', name: 'Garage', type: 'flat', isDefault: true, category: 'physical',
+      values: [2500, 5000, 7500, 7500, 7500, 10000, 10000, 20000, 30000, 40000] },
+    { id: 'fireplaces', name: 'Fireplaces', type: 'flat', isDefault: true, category: 'physical',
+      values: [500, 1000, 2500, 2500, 2500, 2500, 2500, 2500, 2500, 2500] },
+    { id: 'deck', name: 'Deck', type: 'flat', isDefault: true, category: 'amenity',
+      values: [1000, 1500, 2000, 2000, 3500, 5000, 10000, 10000, 20000, 30000] },
+    { id: 'deck_sqft', name: 'Deck sq. ft.', type: 'flat', isDefault: true, category: 'amenity',
+      values: [1000, 1500, 2000, 3500, 3500, 5000, 10000, 20000, 30000, 35000] },
+    { id: 'open_porch', name: 'Open Porch', type: 'flat', isDefault: true, category: 'amenity',
+      values: [2000, 3500, 4000, 7000, 7000, 10000, 20000, 40000, 60000, 70000] },
+    { id: 'patio', name: 'Patio', type: 'flat', isDefault: true, category: 'amenity',
+      values: [1000, 1500, 3500, 3500, 3500, 5000, 10000, 20000, 30000, 35000] },
+    { id: 'enclosed_porch', name: 'Enclosed Porch', type: 'flat', isDefault: true, category: 'amenity',
+      values: [2000, 4000, 4000, 10000, 10000, 10000, 20000, 60000, 90000, 100000] },
+    { id: 'condition', name: 'Condition', type: 'flat_or_percent', isDefault: true, category: 'quality',
+      values: [5000, 10000, 10000, 15000, 15000, 20000, 30000, 50000, 75000, 100000] },
+    { id: 'location', name: 'Location', type: 'flat', isDefault: true, category: 'location',
+      values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+    { id: 'miscellaneous', name: 'Miscellaneous', type: 'flat', isDefault: true, category: 'other',
+      values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }
   ];
 
   // Load adjustments from database
