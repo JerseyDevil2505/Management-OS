@@ -1540,38 +1540,50 @@ const SalesReviewTab = ({
       )}
 
       {/* Stats Bar */}
-      <div className="mb-6 grid grid-cols-5 gap-4">
-        <div className="bg-white p-4 rounded border">
-          <div className="text-sm text-gray-600">Total Properties</div>
-          <div className="text-2xl font-bold text-gray-900">{formatNumber(filteredProperties.length)}</div>
-        </div>
-        <div className="bg-green-50 p-4 rounded border border-green-200">
-          <div className="text-sm text-green-700">CSP Sales</div>
-          <div className="text-2xl font-bold text-green-900">
-            {formatNumber(filteredProperties.filter(p => p.periodCode === 'CSP').length)}
+      <div className="mb-6">
+        <div className="grid grid-cols-6 gap-4 mb-3">
+          <div className="bg-white p-4 rounded border">
+            <div className="text-sm text-gray-600">Total Properties</div>
+            <div className="text-2xl font-bold text-gray-900">{formatNumber(filteredProperties.length)}</div>
+          </div>
+          <div className="bg-green-50 p-4 rounded border border-green-200">
+            <div className="text-sm text-green-700">Included (CME)</div>
+            <div className="text-2xl font-bold text-green-900">
+              {formatNumber(filteredProperties.filter(p => p.isIncluded).length)}
+            </div>
+          </div>
+          <div className="bg-green-50 p-4 rounded border border-green-200">
+            <div className="text-sm text-green-700">CSP Sales</div>
+            <div className="text-2xl font-bold text-green-900">
+              {formatNumber(filteredProperties.filter(p => p.periodCode === 'CSP').length)}
+            </div>
+          </div>
+          <div className="bg-blue-50 p-4 rounded border border-blue-200">
+            <div className="text-sm text-blue-700">PSP Sales</div>
+            <div className="text-2xl font-bold text-blue-900">
+              {formatNumber(filteredProperties.filter(p => p.periodCode === 'PSP').length)}
+            </div>
+          </div>
+          <div className="p-4 rounded border" style={{ backgroundColor: '#fed7aa', borderColor: '#fdba74' }}>
+            <div className="text-sm text-orange-700">HSP Sales</div>
+            <div className="text-2xl font-bold text-orange-900">
+              {formatNumber(filteredProperties.filter(p => p.periodCode === 'HSP').length)}
+            </div>
+          </div>
+          <div className="bg-gray-50 p-4 rounded border">
+            <div className="text-sm text-gray-600">Avg Sales Ratio</div>
+            <div className="text-2xl font-bold text-gray-900">
+              {(() => {
+                const ratios = filteredProperties.filter(p => p.salesRatio !== null).map(p => p.salesRatio);
+                const avg = ratios.length > 0 ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 0;
+                return formatPercent(avg);
+              })()}
+            </div>
           </div>
         </div>
-        <div className="bg-blue-50 p-4 rounded border border-blue-200">
-          <div className="text-sm text-blue-700">PSP Sales</div>
-          <div className="text-2xl font-bold text-blue-900">
-            {formatNumber(filteredProperties.filter(p => p.periodCode === 'PSP').length)}
-          </div>
-        </div>
-        <div className="p-4 rounded border" style={{ backgroundColor: '#fed7aa', borderColor: '#fdba74' }}>
-          <div className="text-sm text-orange-700">HSP Sales</div>
-          <div className="text-2xl font-bold text-orange-900">
-            {formatNumber(filteredProperties.filter(p => p.periodCode === 'HSP').length)}
-          </div>
-        </div>
-        <div className="bg-gray-50 p-4 rounded border">
-          <div className="text-sm text-gray-600">Avg Sales Ratio</div>
-          <div className="text-2xl font-bold text-gray-900">
-            {(() => {
-              const ratios = filteredProperties.filter(p => p.salesRatio !== null).map(p => p.salesRatio);
-              const avg = ratios.length > 0 ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 0;
-              return formatPercent(avg);
-            })()}
-          </div>
+        <div className="text-sm text-gray-600 bg-blue-50 border border-blue-200 rounded px-4 py-2">
+          <strong>Auto-Include Logic:</strong> CSP period sales (10/1 prior-prior year to 12/31 prior year) are automatically included.
+          Use ✓ and ✗ buttons to manually override.
         </div>
       </div>
 
