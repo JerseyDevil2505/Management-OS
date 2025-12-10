@@ -128,11 +128,6 @@ const SalesReviewTab = ({
   const [savedSettings, setSavedSettings] = useState([]);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
-  // Normalize modal state
-  const [showNormalizeModal, setShowNormalizeModal] = useState(false);
-  const [normalizeProperty, setNormalizeProperty] = useState(null);
-  const [normalizeValue, setNormalizeValue] = useState('');
-
   // Load saved settings list on mount
   useEffect(() => {
     if (!jobData?.id) return;
