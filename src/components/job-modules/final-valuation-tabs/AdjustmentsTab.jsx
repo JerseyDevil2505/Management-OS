@@ -123,10 +123,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       if (adj.adjustment_id === adjustmentId) {
         return {
           ...adj,
-          brackets: {
-            ...adj.brackets,
-            [`bracket_${bracketIndex}`]: parseFloat(value) || 0
-          }
+          [`bracket_${bracketIndex}`]: parseFloat(value) || 0
         };
       }
       return adj;
@@ -166,10 +163,16 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       category: 'custom',
       is_default: false,
       sort_order: adjustments.length,
-      brackets: CME_BRACKETS.reduce((acc, bracket, bIdx) => {
-        acc[`bracket_${bIdx}`] = 0;
-        return acc;
-      }, {})
+      bracket_0: 0,
+      bracket_1: 0,
+      bracket_2: 0,
+      bracket_3: 0,
+      bracket_4: 0,
+      bracket_5: 0,
+      bracket_6: 0,
+      bracket_7: 0,
+      bracket_8: 0,
+      bracket_9: 0
     };
 
     setAdjustments(prev => [...prev, newAdj]);
@@ -309,7 +312,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                       >
                         <input
                           type="number"
-                          value={adj.brackets?.[`bracket_${bIdx}`] || 0}
+                          value={adj[`bracket_${bIdx}`] || 0}
                           onChange={(e) => handleAdjustmentChange(adj.adjustment_id, bIdx, e.target.value)}
                           className="w-20 px-2 py-1 text-sm text-center border rounded focus:ring-2 focus:ring-blue-500"
                           step={adj.adjustment_type === 'per_sqft' ? '0.01' : '100'}
