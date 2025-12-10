@@ -259,9 +259,16 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         }
       });
 
-      // Sort by code
+      // Sort by code numerically
       Object.keys(categoryCodes).forEach(cat => {
-        categoryCodes[cat].sort((a, b) => a.code.localeCompare(b.code));
+        categoryCodes[cat].sort((a, b) => {
+          const numA = parseInt(a.code, 10);
+          const numB = parseInt(b.code, 10);
+          if (!isNaN(numA) && !isNaN(numB)) {
+            return numA - numB;
+          }
+          return a.code.localeCompare(b.code);
+        });
       });
 
       console.log('📦 Final categoryCodes:', categoryCodes);
@@ -422,8 +429,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         barn: 'Barn',
         stable: 'Stable',
         pole_barn: 'Pole Barn',
-        misc_positive: 'Miscellaneous (+)',
-        misc_negative: 'Miscellaneous (-)',
+        misc_positive: 'Miscellaneous',
         land_positive: 'Land Adjustment (+)',
         land_negative: 'Land Adjustment (-)'
       };
@@ -837,7 +843,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                 <div className="bg-green-50 px-4 py-3 border-b">
                   <h4 className="font-semibold text-gray-900">Category 15 - Detached Items</h4>
                   <p className="text-xs text-gray-600 mt-1">
-                    Det Garage, Pool
+                    Det Garage, Pool, Barn, Stable, Pole Barn
                   </p>
                 </div>
                 <div className="bg-white p-4">
@@ -850,6 +856,9 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                             <th className="text-left py-2 px-3 font-medium text-gray-700">Description</th>
                             <th className="text-center py-2 px-2 font-medium text-gray-700">Det Garage</th>
                             <th className="text-center py-2 px-2 font-medium text-gray-700">Pool</th>
+                            <th className="text-center py-2 px-2 font-medium text-gray-700">Barn</th>
+                            <th className="text-center py-2 px-2 font-medium text-gray-700">Stable</th>
+                            <th className="text-center py-2 px-2 font-medium text-gray-700">Pole Barn</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -873,45 +882,6 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                                   className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                                 />
                               </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 italic">No codes found in Category 15</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Category 39: Miscellaneous */}
-              <div className="border rounded-lg overflow-hidden">
-                <div className="bg-yellow-50 px-4 py-3 border-b">
-                  <h4 className="font-semibold text-gray-900">Category 39 - Miscellaneous</h4>
-                  <p className="text-xs text-gray-600 mt-1">
-                    Barn, Stable, Pole Barn, Other Miscellaneous Items
-                  </p>
-                </div>
-                <div className="bg-white p-4">
-                  {availableCodes['39'].length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full text-sm">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left py-2 px-3 font-medium text-gray-700">Code</th>
-                            <th className="text-left py-2 px-3 font-medium text-gray-700">Description</th>
-                            <th className="text-center py-2 px-2 font-medium text-gray-700">Barn</th>
-                            <th className="text-center py-2 px-2 font-medium text-gray-700">Stable</th>
-                            <th className="text-center py-2 px-2 font-medium text-gray-700">Pole Barn</th>
-                            <th className="text-center py-2 px-2 font-medium text-gray-700">Misc (+)</th>
-                            <th className="text-center py-2 px-2 font-medium text-gray-700">Misc (-)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {availableCodes['39'].map(item => (
-                            <tr key={item.code} className="border-b hover:bg-gray-50">
-                              <td className="py-2 px-3 font-mono text-gray-900">{item.code}</td>
-                              <td className="py-2 px-3 text-gray-700">{item.description}</td>
                               <td className="py-2 px-2 text-center">
                                 <input
                                   type="checkbox"
@@ -936,19 +906,46 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                                   className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                                 />
                               </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 italic">No codes found in Category 15</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Category 39: Miscellaneous */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-yellow-50 px-4 py-3 border-b">
+                  <h4 className="font-semibold text-gray-900">Category 39 - Miscellaneous</h4>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Other Miscellaneous Items
+                  </p>
+                </div>
+                <div className="bg-white p-4">
+                  {availableCodes['39'].length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">Code</th>
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">Description</th>
+                            <th className="text-center py-2 px-2 font-medium text-gray-700">Miscellaneous</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {availableCodes['39'].map(item => (
+                            <tr key={item.code} className="border-b hover:bg-gray-50">
+                              <td className="py-2 px-3 font-mono text-gray-900">{item.code}</td>
+                              <td className="py-2 px-3 text-gray-700">{item.description}</td>
                               <td className="py-2 px-2 text-center">
                                 <input
                                   type="checkbox"
                                   checked={codeConfig.misc_positive.includes(item.code)}
                                   onChange={() => handleCodeToggle('misc_positive', item.code)}
-                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                                />
-                              </td>
-                              <td className="py-2 px-2 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={codeConfig.misc_negative.includes(item.code)}
-                                  onChange={() => handleCodeToggle('misc_negative', item.code)}
                                   className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                                 />
                               </td>
