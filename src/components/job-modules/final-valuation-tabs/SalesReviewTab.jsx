@@ -293,6 +293,20 @@ const SalesReviewTab = ({
   const vcsAnalytics = useMemo(() => {
     const groups = {};
 
+    // Initialize overall totals for summary row
+    const overallTotals = {
+      count: 0,
+      totalPrice: 0,
+      totalNormPrice: 0,
+      sflaSum: 0,
+      ageSum: 0,
+      yearBuiltCount: 0,
+      assessedSum: 0,
+      salesRatioSum: 0,
+      salesRatioCount: 0,
+      salesRatios: []
+    };
+
     // Group properties by VCS and collect sales ratios
     filteredProperties.forEach(prop => {
       const vcs = prop.property_vcs || 'Unknown';
@@ -326,12 +340,30 @@ const SalesReviewTab = ({
         groups[vcs].salesRatioCount++;
         groups[vcs].salesRatios.push(prop.salesRatio);
       }
+
+      // Add to overall totals
+      overallTotals.count++;
+      if (prop.sales_price) overallTotals.totalPrice += prop.sales_price;
+      if (prop.values_norm_time) overallTotals.totalNormPrice += prop.values_norm_time;
+      if (prop.asset_sfla) overallTotals.sflaSum += prop.asset_sfla;
+      if (prop.asset_year_built) {
+        const currentYear = new Date().getFullYear();
+        overallTotals.ageSum += currentYear - prop.asset_year_built;
+        overallTotals.yearBuiltCount++;
+      }
+      if (prop.values_mod_total) overallTotals.assessedSum += prop.values_mod_total;
+      if (prop.salesRatio !== null && prop.salesRatio !== undefined) {
+        overallTotals.salesRatioSum += prop.salesRatio;
+        overallTotals.salesRatioCount++;
+        overallTotals.salesRatios.push(prop.salesRatio);
+      }
     });
 
-    return Object.entries(groups).map(([vcs, data]) => {
+    const analytics = Object.entries(groups).map(([vcs, data]) => {
       const avgSalesRatio = data.salesRatioCount > 0 ? data.salesRatioSum / data.salesRatioCount : 0;
 
-      // Calculate COD (Coefficient of Deviation)
+      // Calculate COD (Coefficient of Deviation) - NJ Formula
+      // COD = (Average Absolute Deviation / Mean Assessment-Sales Ratio) × 100%
       let cod = 0;
       if (data.salesRatios.length > 0 && avgSalesRatio > 0) {
         const absoluteDeviations = data.salesRatios.map(ratio => Math.abs(ratio - avgSalesRatio));
@@ -339,11 +371,13 @@ const SalesReviewTab = ({
         cod = (avgAbsoluteDeviation / avgSalesRatio) * 100;
       }
 
-      // Calculate PRD (Price-Related Differential)
+      // Calculate PRD (Price-Related Differential) - NJ Formula
+      // PRD = Mean Assessment Ratio / Weighted Mean Assessment Ratio
+      // Weighted Mean = Sum(Assessed Values) / Sum(Sale Prices)
       let prd = 0;
       if (data.salesRatios.length > 0 && data.totalNormPrice > 0 && data.assessedSum > 0) {
-        const meanRatio = avgSalesRatio;
-        const weightedMeanRatio = (data.assessedSum / data.totalNormPrice) * 100;
+        const meanRatio = avgSalesRatio / 100; // Convert from percentage
+        const weightedMeanRatio = (data.assessedSum / data.totalNormPrice);
         prd = weightedMeanRatio > 0 ? meanRatio / weightedMeanRatio : 0;
       }
 
@@ -361,10 +395,47 @@ const SalesReviewTab = ({
         prd
       };
     }).sort((a, b) => a.vcs.localeCompare(b.vcs));
+
+    // Calculate overall summary row
+    const avgSalesRatio = overallTotals.salesRatioCount > 0 ? overallTotals.salesRatioSum / overallTotals.salesRatioCount : 0;
+    let cod = 0;
+    if (overallTotals.salesRatios.length > 0 && avgSalesRatio > 0) {
+      const absoluteDeviations = overallTotals.salesRatios.map(ratio => Math.abs(ratio - avgSalesRatio));
+      const avgAbsoluteDeviation = absoluteDeviations.reduce((a, b) => a + b, 0) / overallTotals.salesRatios.length;
+      cod = (avgAbsoluteDeviation / avgSalesRatio) * 100;
+    }
+    let prd = 0;
+    if (overallTotals.salesRatios.length > 0 && overallTotals.totalNormPrice > 0 && overallTotals.assessedSum > 0) {
+      const meanRatio = avgSalesRatio / 100;
+      const weightedMeanRatio = (overallTotals.assessedSum / overallTotals.totalNormPrice);
+      prd = weightedMeanRatio > 0 ? meanRatio / weightedMeanRatio : 0;
+    }
+
+    const summary = {
+      vcs: 'OVERALL AVERAGE',
+      count: overallTotals.count,
+      avgPrice: overallTotals.count > 0 ? overallTotals.totalPrice / overallTotals.count : 0,
+      avgNormPrice: overallTotals.count > 0 ? overallTotals.totalNormPrice / overallTotals.count : 0,
+      avgSFLA: overallTotals.sflaSum > 0 ? overallTotals.sflaSum / overallTotals.count : 0,
+      avgPPSF: overallTotals.count > 0 && overallTotals.sflaSum > 0 ? overallTotals.totalPrice / overallTotals.sflaSum : 0,
+      avgAge: overallTotals.yearBuiltCount > 0 ? overallTotals.ageSum / overallTotals.yearBuiltCount : 0,
+      avgAssessed: overallTotals.count > 0 ? overallTotals.assessedSum / overallTotals.count : 0,
+      avgSalesRatio,
+      cod,
+      prd
+    };
+
+    return { analytics, summary };
   }, [filteredProperties]);
 
   const styleAnalytics = useMemo(() => {
     const groups = {};
+    const overallTotals = {
+      count: 0,
+      totalPrice: 0,
+      totalNormPrice: 0,
+      sflaSum: 0
+    };
     
     filteredProperties.forEach(prop => {
       const style = prop.asset_design_style || 'Unknown';
@@ -381,9 +452,14 @@ const SalesReviewTab = ({
       if (prop.sales_price) groups[style].totalPrice += prop.sales_price;
       if (prop.values_norm_time) groups[style].totalNormPrice += prop.values_norm_time;
       if (prop.asset_sfla) groups[style].sflaSum += prop.asset_sfla;
+
+      overallTotals.count++;
+      if (prop.sales_price) overallTotals.totalPrice += prop.sales_price;
+      if (prop.values_norm_time) overallTotals.totalNormPrice += prop.values_norm_time;
+      if (prop.asset_sfla) overallTotals.sflaSum += prop.asset_sfla;
     });
 
-    return Object.entries(groups).map(([style, data]) => ({
+    const analytics = Object.entries(groups).map(([style, data]) => ({
       style,
       styleName: showCodesNotMeanings ? style : (interpretCodes.getDesignName?.({ asset_design_style: style }, parsedCodeDefinitions, vendorType) || style),
       count: data.count,
@@ -391,10 +467,27 @@ const SalesReviewTab = ({
       avgNormPrice: data.count > 0 ? data.totalNormPrice / data.count : 0,
       avgPPSF: data.count > 0 && data.sflaSum > 0 ? data.totalPrice / data.sflaSum : 0
     })).sort((a, b) => b.count - a.count);
+
+    const summary = {
+      style: 'OVERALL AVERAGE',
+      styleName: 'OVERALL AVERAGE',
+      count: overallTotals.count,
+      avgPrice: overallTotals.count > 0 ? overallTotals.totalPrice / overallTotals.count : 0,
+      avgNormPrice: overallTotals.count > 0 ? overallTotals.totalNormPrice / overallTotals.count : 0,
+      avgPPSF: overallTotals.count > 0 && overallTotals.sflaSum > 0 ? overallTotals.totalPrice / overallTotals.sflaSum : 0
+    };
+
+    return { analytics, summary };
   }, [filteredProperties, showCodesNotMeanings, parsedCodeDefinitions, vendorType]);
 
   const typeUseAnalytics = useMemo(() => {
     const groups = {};
+    const overallTotals = {
+      count: 0,
+      totalPrice: 0,
+      totalNormPrice: 0,
+      sflaSum: 0
+    };
     
     filteredProperties.forEach(prop => {
       const type = prop.asset_type_use || 'Unknown';
@@ -411,9 +504,14 @@ const SalesReviewTab = ({
       if (prop.sales_price) groups[type].totalPrice += prop.sales_price;
       if (prop.values_norm_time) groups[type].totalNormPrice += prop.values_norm_time;
       if (prop.asset_sfla) groups[type].sflaSum += prop.asset_sfla;
+
+      overallTotals.count++;
+      if (prop.sales_price) overallTotals.totalPrice += prop.sales_price;
+      if (prop.values_norm_time) overallTotals.totalNormPrice += prop.values_norm_time;
+      if (prop.asset_sfla) overallTotals.sflaSum += prop.asset_sfla;
     });
 
-    return Object.entries(groups).map(([type, data]) => ({
+    const analytics = Object.entries(groups).map(([type, data]) => ({
       type,
       typeName: showCodesNotMeanings ? type : (interpretCodes.getTypeName?.({ asset_type_use: type }, parsedCodeDefinitions, vendorType) || type),
       count: data.count,
@@ -421,6 +519,17 @@ const SalesReviewTab = ({
       avgNormPrice: data.count > 0 ? data.totalNormPrice / data.count : 0,
       avgPPSF: data.count > 0 && data.sflaSum > 0 ? data.totalPrice / data.sflaSum : 0
     })).sort((a, b) => b.count - a.count);
+
+    const summary = {
+      type: 'OVERALL AVERAGE',
+      typeName: 'OVERALL AVERAGE',
+      count: overallTotals.count,
+      avgPrice: overallTotals.count > 0 ? overallTotals.totalPrice / overallTotals.count : 0,
+      avgNormPrice: overallTotals.count > 0 ? overallTotals.totalNormPrice / overallTotals.count : 0,
+      avgPPSF: overallTotals.count > 0 && overallTotals.sflaSum > 0 ? overallTotals.totalPrice / overallTotals.sflaSum : 0
+    };
+
+    return { analytics, summary };
   }, [filteredProperties, showCodesNotMeanings, parsedCodeDefinitions, vendorType]);
 
   // ==================== EVENT HANDLERS ====================
