@@ -13,10 +13,25 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     type: 'flat',
     values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   });
-  const [garageConfig, setGarageConfig] = useState({
-    garageTypeCode: null,
-    garageDetachedCode: null
+  const [codeConfig, setCodeConfig] = useState({
+    garage: [],
+    det_garage: [],
+    pool: [],
+    deck: [],
+    patio: [],
+    open_porch: [],
+    enclosed_porch: []
   });
+  const [availableCodes, setAvailableCodes] = useState({
+    garage: [],
+    det_garage: [],
+    pool: [],
+    deck: [],
+    patio: [],
+    open_porch: [],
+    enclosed_porch: []
+  });
+  const [isLoadingCodes, setIsLoadingCodes] = useState(false);
 
   // CME Price Brackets (matching OverallAnalysisTab)
   const CME_BRACKETS = [
