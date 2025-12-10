@@ -251,9 +251,13 @@ const SalesReviewTab = ({
       filtered = filtered.filter(p => designFilter.includes(p.asset_design_style));
     }
 
-    // Period filter
+    // Period filter (empty means show all periods)
     if (periodFilter.length > 0) {
       filtered = filtered.filter(p => periodFilter.includes(p.periodCode));
+    }
+    // If no period filter, show CSP, PSP, and HSP only (exclude blanks by default)
+    else if (!showAllProperties) {
+      filtered = filtered.filter(p => p.periodCode === 'CSP' || p.periodCode === 'PSP' || p.periodCode === 'HSP');
     }
 
     return filtered;
