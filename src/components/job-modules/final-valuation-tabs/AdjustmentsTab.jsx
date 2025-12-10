@@ -30,20 +30,11 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     land_negative: []
   });
   const [availableCodes, setAvailableCodes] = useState({
-    garage: [],
-    det_garage: [],
-    pool: [],
-    deck: [],
-    patio: [],
-    open_porch: [],
-    enclosed_porch: [],
-    barn: [],
-    stable: [],
-    pole_barn: [],
-    misc_positive: [],
-    misc_negative: [],
-    land_positive: [],
-    land_negative: []
+    '11': [], // Attached items
+    '15': [], // Detached items
+    '39': [], // Miscellaneous
+    '62': [], // Positive land adjustments
+    '63': []  // Negative land adjustments
   });
   const [isLoadingCodes, setIsLoadingCodes] = useState(false);
 
