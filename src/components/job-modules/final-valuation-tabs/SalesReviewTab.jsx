@@ -702,11 +702,12 @@ const SalesReviewTab = ({
   // Load saved settings
   const handleLoadSettings = (settings) => {
     setDateRange(settings.dateRange || { start: '', end: '' });
-    setSalesNuFilter(settings.salesNuFilter || []);
+    setSalesNuFilter(settings.salesNuFilter || ['0', '07', '32']);
     setVcsFilter(settings.vcsFilter || []);
     setTypeFilter(settings.typeFilter || []);
     setDesignFilter(settings.designFilter || []);
     setPeriodFilter(settings.periodFilter || []);
+    setViewFilter(settings.viewFilter || []);
     setShowAllProperties(settings.showAllProperties || false);
     setShowCodesNotMeanings(settings.showCodesNotMeanings || false);
     setExpandedSections(settings.expandedSections || { vcs: false, style: false, typeUse: false, view: false });
