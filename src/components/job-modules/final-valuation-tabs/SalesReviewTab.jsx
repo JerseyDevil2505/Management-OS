@@ -101,7 +101,7 @@ const SalesReviewTab = ({
   // ==================== STATE MANAGEMENT ====================
   
   const [showAllProperties, setShowAllProperties] = useState(false);
-  const [showAllNormalizedSales, setShowAllNormalizedSales] = useState(false);
+  const [showAllNormalizedSales, setShowAllNormalizedSales] = useState(true);
   const [showCodesNotMeanings, setShowCodesNotMeanings] = useState(true); // Default to codes
   const [fontSize, setFontSize] = useState(12); // Adjustable font size
   const [sortConfig, setSortConfig] = useState({ key: 'sales_date', direction: 'desc' });
@@ -109,7 +109,7 @@ const SalesReviewTab = ({
   // Filters
   const [dateRange, setDateRange] = useState({ start: '', end: '' }); // Empty by default - don't filter by date initially
   
-  const [salesNuFilter, setSalesNuFilter] = useState(['0', '07', '32']); // Normalized codes: blank/00->0, 7->07
+  const [salesNuFilter, setSalesNuFilter] = useState([]); // Empty by default - show all sales
   const [vcsFilter, setVcsFilter] = useState([]);
   const [typeFilter, setTypeFilter] = useState([]);
   const [designFilter, setDesignFilter] = useState([]);
@@ -174,6 +174,11 @@ const SalesReviewTab = ({
       // Normalize sales NU code
       const normalizedSalesNu = normalizeSalesNuCode(prop.sales_nu);
 
+      // Get lot data from market_manual fields (property_market_analysis table)
+      const lotAcre = prop.market_manual_lot_acre || prop.asset_lot_acre || null;
+      const lotSf = prop.market_manual_lot_sf || prop.asset_lot_sf || null;
+      const lotFrontage = prop.asset_lot_frontage || null;
+
       return {
         ...prop,
         periodCode,
@@ -185,7 +190,10 @@ const SalesReviewTab = ({
         designName,
         exteriorCondName,
         interiorCondName,
-        normalizedSalesNu
+        normalizedSalesNu,
+        lotAcre,
+        lotSf,
+        lotFrontage
       };
     });
   }, [properties, jobData?.end_date, parsedCodeDefinitions, vendorType, getPeriodClassification, normalizeSalesNuCode]);
