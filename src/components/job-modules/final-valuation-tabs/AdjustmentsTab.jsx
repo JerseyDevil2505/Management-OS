@@ -159,7 +159,14 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         'adjustment_codes_deck',
         'adjustment_codes_patio',
         'adjustment_codes_open_porch',
-        'adjustment_codes_enclosed_porch'
+        'adjustment_codes_enclosed_porch',
+        'adjustment_codes_barn',
+        'adjustment_codes_stable',
+        'adjustment_codes_pole_barn',
+        'adjustment_codes_misc_positive',
+        'adjustment_codes_misc_negative',
+        'adjustment_codes_land_positive',
+        'adjustment_codes_land_negative'
       ];
 
       const { data, error } = await supabase
