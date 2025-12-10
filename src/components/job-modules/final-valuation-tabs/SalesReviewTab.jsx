@@ -114,6 +114,7 @@ const SalesReviewTab = ({
   const [typeFilter, setTypeFilter] = useState([]);
   const [designFilter, setDesignFilter] = useState([]);
   const [periodFilter, setPeriodFilter] = useState([]); // Empty means show all periods by default
+  const [viewFilter, setViewFilter] = useState([]); // View/Period filter (CSP, PSP, HSP)
   
   // Expandable sections
   const [expandedSections, setExpandedSections] = useState({
@@ -254,8 +255,13 @@ const SalesReviewTab = ({
       filtered = filtered.filter(p => periodFilter.includes(p.periodCode));
     }
 
+    // View filter (same as period but separate state)
+    if (viewFilter.length > 0) {
+      filtered = filtered.filter(p => viewFilter.includes(p.periodCode));
+    }
+
     return filtered;
-  }, [enrichedProperties, showAllProperties, showAllNormalizedSales, dateRange, salesNuFilter, vcsFilter, typeFilter, designFilter, periodFilter]);
+  }, [enrichedProperties, showAllProperties, showAllNormalizedSales, dateRange, salesNuFilter, vcsFilter, typeFilter, designFilter, periodFilter, viewFilter]);
 
   // Get unique normalized Sales NU codes for dropdown
   const uniqueSalesNuCodes = useMemo(() => {
@@ -296,6 +302,17 @@ const SalesReviewTab = ({
     enrichedProperties.forEach(prop => {
       if (prop.asset_design_style) {
         codes.add(prop.asset_design_style);
+      }
+    });
+    return Array.from(codes).sort();
+  }, [enrichedProperties]);
+
+  // Get unique View/Period codes for filter dropdown
+  const uniqueViewCodes = useMemo(() => {
+    const codes = new Set();
+    enrichedProperties.forEach(prop => {
+      if (prop.periodCode) {
+        codes.add(prop.periodCode);
       }
     });
     return Array.from(codes).sort();
@@ -1086,144 +1103,263 @@ const SalesReviewTab = ({
           </div>
         </div>
 
-        {/* Filter Row - Sales Date Range and Sales Codes */}
-        <div className="flex flex-wrap gap-4 items-center bg-gray-50 p-4 rounded border">
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700">Sales Date Range:</label>
-            <input
-              type="date"
-              value={dateRange.start}
-              onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-              className="px-2 py-1 text-sm border rounded"
-            />
-            <span className="text-gray-500">to</span>
-            <input
-              type="date"
-              value={dateRange.end}
-              onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-              className="px-2 py-1 text-sm border rounded"
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700">Sales NU Codes:</label>
-            <div className="flex flex-col gap-2">
-              {/* Selected codes display */}
-              <div className="flex flex-wrap gap-1 px-3 py-2 border rounded bg-white min-w-[200px]">
-                {salesNuFilter.length === 0 ? (
-                  <span className="text-sm text-gray-400">No codes selected</span>
-                ) : (
-                  salesNuFilter.map(code => (
-                    <span
-                      key={code}
-                      className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded"
-                    >
-                      {code === '0' ? '0 (Blank/00)' : code}
-                      <button
-                        onClick={() => setSalesNuFilter(prev => prev.filter(c => c !== code))}
-                        className="hover:text-blue-900"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))
-                )}
+        {/* Unified Filters Box */}
+        <div className="bg-gray-50 p-4 rounded border">
+          <div className="grid grid-cols-2 gap-4">
+            {/* Left Column */}
+            <div className="space-y-4">
+              {/* Sales Date Range */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-1">Sales Date Range:</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={dateRange.start}
+                    onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                    className="px-2 py-1 text-sm border rounded flex-1"
+                  />
+                  <span className="text-gray-500">to</span>
+                  <input
+                    type="date"
+                    value={dateRange.end}
+                    onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                    className="px-2 py-1 text-sm border rounded flex-1"
+                  />
+                </div>
               </div>
-              {/* Dropdown to add codes */}
-              <select
-                value=""
-                onChange={(e) => {
-                  const code = e.target.value;
-                  if (code && !salesNuFilter.includes(code)) {
-                    setSalesNuFilter(prev => [...prev, code]);
-                  }
-                  e.target.value = '';
-                }}
-                className="px-2 py-1 text-sm border rounded"
-              >
-                <option value="">+ Add Code</option>
-                {uniqueSalesNuCodes.filter(code => !salesNuFilter.includes(code)).map(code => (
-                  <option key={code} value={code}>
-                    {code === '0' ? '0 (Blank/00)' : code}
-                  </option>
-                ))}
-              </select>
+
+              {/* Sales NU Codes */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-1">Sales NU Codes:</label>
+                <div className="flex flex-wrap gap-1 px-3 py-2 border rounded bg-white min-h-[42px]">
+                  {salesNuFilter.length === 0 ? (
+                    <span className="text-sm text-gray-400">No codes selected</span>
+                  ) : (
+                    salesNuFilter.map(code => (
+                      <span
+                        key={code}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded"
+                      >
+                        {code === '0' ? '0 (Blank/00)' : code}
+                        <button
+                          onClick={() => setSalesNuFilter(prev => prev.filter(c => c !== code))}
+                          className="hover:text-blue-900"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const code = e.target.value;
+                    if (code && !salesNuFilter.includes(code)) {
+                      setSalesNuFilter(prev => [...prev, code]);
+                    }
+                    e.target.value = '';
+                  }}
+                  className="px-2 py-1 text-sm border rounded w-full mt-2"
+                >
+                  <option value="">+ Add Code</option>
+                  {uniqueSalesNuCodes.filter(code => !salesNuFilter.includes(code)).map(code => (
+                    <option key={code} value={code}>
+                      {code === '0' ? '0 (Blank/00)' : code}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Filter VCS */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-1">Filter VCS</label>
+                <div className="flex flex-wrap gap-1 px-3 py-2 border rounded bg-white min-h-[42px]">
+                  {vcsFilter.length === 0 ? (
+                    <span className="text-sm text-gray-400">All VCS</span>
+                  ) : (
+                    vcsFilter.map(code => (
+                      <span
+                        key={code}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs rounded"
+                      >
+                        {code}
+                        <button
+                          onClick={() => setVcsFilter(prev => prev.filter(c => c !== code))}
+                          className="hover:text-green-900"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const code = e.target.value;
+                    if (code && !vcsFilter.includes(code)) {
+                      setVcsFilter(prev => [...prev, code]);
+                    }
+                    e.target.value = '';
+                  }}
+                  className="px-2 py-1 text-sm border rounded w-full mt-2"
+                >
+                  <option value="">+ Add VCS</option>
+                  {uniqueVcsCodes.filter(code => !vcsFilter.includes(code)).map(code => (
+                    <option key={code} value={code}>
+                      {code}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Right Column */}
+            <div className="space-y-4">
+              {/* Filter Type/Use Codes */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-1">Filter Type/Use Codes</label>
+                <div className="flex flex-wrap gap-1 px-3 py-2 border rounded bg-white min-h-[42px]">
+                  {typeFilter.length === 0 ? (
+                    <span className="text-sm text-gray-400">All Types</span>
+                  ) : (
+                    typeFilter.map(code => (
+                      <span
+                        key={code}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded"
+                      >
+                        {code}
+                        <button
+                          onClick={() => setTypeFilter(prev => prev.filter(c => c !== code))}
+                          className="hover:text-purple-900"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const code = e.target.value;
+                    if (code && !typeFilter.includes(code)) {
+                      setTypeFilter(prev => [...prev, code]);
+                    }
+                    e.target.value = '';
+                  }}
+                  className="px-2 py-1 text-sm border rounded w-full mt-2"
+                >
+                  <option value="">+ Add Type</option>
+                  {uniqueTypeCodes.filter(code => !typeFilter.includes(code)).map(code => (
+                    <option key={code} value={code}>
+                      {code}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Filter Style Codes */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-1">Filter Style Codes</label>
+                <div className="flex flex-wrap gap-1 px-3 py-2 border rounded bg-white min-h-[42px]">
+                  {designFilter.length === 0 ? (
+                    <span className="text-sm text-gray-400">All Styles</span>
+                  ) : (
+                    designFilter.map(code => (
+                      <span
+                        key={code}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded"
+                      >
+                        {code}
+                        <button
+                          onClick={() => setDesignFilter(prev => prev.filter(c => c !== code))}
+                          className="hover:text-orange-900"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const code = e.target.value;
+                    if (code && !designFilter.includes(code)) {
+                      setDesignFilter(prev => [...prev, code]);
+                    }
+                    e.target.value = '';
+                  }}
+                  className="px-2 py-1 text-sm border rounded w-full mt-2"
+                >
+                  <option value="">+ Add Style</option>
+                  {uniqueDesignCodes.filter(code => !designFilter.includes(code)).map(code => (
+                    <option key={code} value={code}>
+                      {code}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Filter View */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-1">Filter View Codes</label>
+                <div className="flex flex-wrap gap-1 px-3 py-2 border rounded bg-white min-h-[42px]">
+                  {viewFilter.length === 0 ? (
+                    <span className="text-sm text-gray-400">All Views</span>
+                  ) : (
+                    viewFilter.map(code => (
+                      <span
+                        key={code}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-pink-100 text-pink-800 text-xs rounded"
+                      >
+                        {code}
+                        <button
+                          onClick={() => setViewFilter(prev => prev.filter(c => c !== code))}
+                          className="hover:text-pink-900"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const code = e.target.value;
+                    if (code && !viewFilter.includes(code)) {
+                      setViewFilter(prev => [...prev, code]);
+                    }
+                    e.target.value = '';
+                  }}
+                  className="px-2 py-1 text-sm border rounded w-full mt-2"
+                >
+                  <option value="">+ Add View</option>
+                  {uniqueViewCodes.filter(code => !viewFilter.includes(code)).map(code => (
+                    <option key={code} value={code}>
+                      {code}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Additional Filters Row */}
-        <div className="flex flex-wrap gap-4 items-start bg-gray-50 p-4 rounded border">
-          {/* Filter VCS */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-600">Filter VCS</label>
-            <select
-              multiple
-              value={vcsFilter}
-              onChange={(e) => {
-                const selected = Array.from(e.target.selectedOptions, option => option.value);
-                setVcsFilter(selected);
-              }}
-              className="px-2 py-1 text-sm border rounded min-w-[120px] h-24"
-            >
-              {uniqueVcsCodes.map(code => (
-                <option key={code} value={code}>
-                  {code}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Filter Type/Use Codes */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-600">Filter Type/Use Codes</label>
-            <select
-              multiple
-              value={typeFilter}
-              onChange={(e) => {
-                const selected = Array.from(e.target.selectedOptions, option => option.value);
-                setTypeFilter(selected);
-              }}
-              className="px-2 py-1 text-sm border rounded min-w-[150px] h-24"
-            >
-              {uniqueTypeCodes.map(code => (
-                <option key={code} value={code}>
-                  {code}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Filter Style Codes */}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-600">Filter Style Codes</label>
-            <select
-              multiple
-              value={designFilter}
-              onChange={(e) => {
-                const selected = Array.from(e.target.selectedOptions, option => option.value);
-                setDesignFilter(selected);
-              }}
-              className="px-2 py-1 text-sm border rounded min-w-[120px] h-24"
-            >
-              {uniqueDesignCodes.map(code => (
-                <option key={code} value={code}>
-                  {code}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Clear Filters Button */}
-          <div className="flex flex-col gap-1 justify-end">
+          {/* Clear All Filters Button - Centered at Bottom */}
+          <div className="flex justify-center mt-4 pt-4 border-t">
             <button
               onClick={() => {
                 setVcsFilter([]);
                 setTypeFilter([]);
                 setDesignFilter([]);
-                setSalesNuFilter([]);
+                setSalesNuFilter(['0', '07', '32']);
+                setViewFilter([]);
+                setDateRange({ start: '', end: '' });
               }}
-              className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+              className="px-4 py-2 text-sm bg-gray-600 text-white rounded hover:bg-gray-700"
             >
               Clear All Filters
             </button>
@@ -1349,8 +1485,8 @@ const SalesReviewTab = ({
         </div>
       </div>
 
-      {/* Expandable Analytics */}
-      <div className="mb-6 space-y-2">
+      {/* Main Data Table with Horizontal Scroll */}
+      <div className="bg-white border rounded overflow-hidden">
         {/* VCS Analysis */}
         <div className="border rounded bg-white">
           <button
