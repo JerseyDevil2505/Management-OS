@@ -731,33 +731,71 @@ const AdjustmentsTab = ({ jobData = {} }) => {
               <div className="text-gray-500">Loading code definitions...</div>
             </div>
           ) : (
-            <div className="space-y-8">
-              {/* Garage */}
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <h4 className="font-semibold text-gray-900 mb-3">Garage (Attached)</h4>
-                <p className="text-xs text-gray-600 mb-3">
-                  Select all codes that represent attached garages (e.g., "ATT GAR", "BUILT IN GAR", "SM GAR")
-                </p>
-                {availableCodes.garage.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {availableCodes.garage.map(code => (
-                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={codeConfig.garage.includes(code)}
-                          onChange={() => handleCodeToggle('garage', code)}
-                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                        />
-                        <span className="text-sm font-mono">{code}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 italic">No garage codes found in source data</p>
-                )}
+            <div className="space-y-6">
+              {/* Category 11: Attached Items */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-blue-50 px-4 py-3 border-b">
+                  <h4 className="font-semibold text-gray-900">Category 11 - Attached Items</h4>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Garage, Deck, Patio, Open Porch, Enclosed Porch
+                  </p>
+                </div>
+                <div className="bg-white p-4">
+                  {availableCodes['11'].length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">Code</th>
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">Description</th>
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">Assign To</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {availableCodes['11'].map(item => (
+                            <tr key={item.code} className="border-b hover:bg-gray-50">
+                              <td className="py-2 px-3 font-mono text-gray-900">{item.code}</td>
+                              <td className="py-2 px-3 text-gray-700">{item.description}</td>
+                              <td className="py-2 px-3">
+                                <select
+                                  value={Object.keys(codeConfig).find(k => codeConfig[k].includes(item.code)) || ''}
+                                  onChange={(e) => {
+                                    const newType = e.target.value;
+                                    setCodeConfig(prev => {
+                                      const updated = { ...prev };
+                                      // Remove from all types first
+                                      Object.keys(updated).forEach(type => {
+                                        updated[type] = updated[type].filter(c => c !== item.code);
+                                      });
+                                      // Add to selected type if not empty
+                                      if (newType) {
+                                        updated[newType] = [...updated[newType], item.code];
+                                      }
+                                      return updated;
+                                    });
+                                  }}
+                                  className="text-sm border rounded px-2 py-1"
+                                >
+                                  <option value="">-- None --</option>
+                                  <option value="garage">Garage</option>
+                                  <option value="deck">Deck</option>
+                                  <option value="patio">Patio</option>
+                                  <option value="open_porch">Open Porch</option>
+                                  <option value="enclosed_porch">Enclosed Porch</option>
+                                </select>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 italic">No codes found in Category 11</p>
+                  )}
+                </div>
               </div>
 
-              {/* Detached Garage */}
+              {/* Category 15: Detached Items */}
               <div className="border rounded-lg p-4 bg-gray-50">
                 <h4 className="font-semibold text-gray-900 mb-3">Detached Garage</h4>
                 <p className="text-xs text-gray-600 mb-3">
