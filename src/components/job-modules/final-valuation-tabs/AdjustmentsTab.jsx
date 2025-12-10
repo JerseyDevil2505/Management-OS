@@ -67,11 +67,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     { id: 'interior_condition', name: 'Interior Condition', type: 'percent', isDefault: true, category: 'quality',
       values: [10, 10, 10, 10, 10, 10, 10, 10, 10, 10] },
     { id: 'pool', name: 'Pool', type: 'flat', isDefault: true, category: 'amenity',
-      values: [5000, 5000, 10000, 15000, 15000, 20000, 25000, 40000, 50000, 60000] },
-    { id: 'location', name: 'Location', type: 'flat', isDefault: true, category: 'location',
-      values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
-    { id: 'miscellaneous', name: 'Miscellaneous', type: 'flat', isDefault: true, category: 'other',
-      values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }
+      values: [5000, 5000, 10000, 15000, 15000, 20000, 25000, 40000, 50000, 60000] }
   ];
 
   // Load adjustments from database
