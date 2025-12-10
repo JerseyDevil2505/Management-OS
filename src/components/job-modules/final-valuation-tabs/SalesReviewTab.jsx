@@ -101,6 +101,7 @@ const SalesReviewTab = ({
   // ==================== STATE MANAGEMENT ====================
   
   const [showAllProperties, setShowAllProperties] = useState(false);
+  const [showAllNormalizedSales, setShowAllNormalizedSales] = useState(false);
   const [showCodesNotMeanings, setShowCodesNotMeanings] = useState(true); // Default to codes
   const [fontSize, setFontSize] = useState(12); // Adjustable font size
   const [sortConfig, setSortConfig] = useState({ key: 'sales_date', direction: 'desc' });
@@ -211,22 +212,13 @@ const SalesReviewTab = ({
 
     // Default filter: Show only properties with sales data
     if (!showAllProperties) {
-      filtered = filtered.filter(p => 
-        p.sales_date !== null && 
+      filtered = filtered.filter(p =>
+        p.sales_date !== null &&
         p.sales_date !== undefined &&
         p.values_norm_time !== null &&
         p.values_norm_time !== undefined &&
         p.values_norm_time > 0
       );
-    }
-
-    // Date range filter
-    if (dateRange.start && dateRange.end) {
-      filtered = filtered.filter(p => {
-        if (!p.sales_date) return false;
-        const saleDate = new Date(p.sales_date);
-        return saleDate >= new Date(dateRange.start) && saleDate <= new Date(dateRange.end);
-      });
     }
 
     // Sales NU filter (using normalized codes)
@@ -251,13 +243,23 @@ const SalesReviewTab = ({
       filtered = filtered.filter(p => designFilter.includes(p.asset_design_style));
     }
 
-    // Period filter (empty means show all periods)
+    // Period filter - show CSP, PSP, HSP by default unless "Show All Normalized Sales" is checked
+    if (!showAllNormalizedSales && !showAllProperties) {
+      filtered = filtered.filter(p => p.periodCode === 'CSP' || p.periodCode === 'PSP' || p.periodCode === 'HSP');
+    }
+
+    // Date range filter (only apply if user has set custom dates)
+    if (dateRange.start && dateRange.end && periodFilter.length === 0) {
+      filtered = filtered.filter(p => {
+        if (!p.sales_date) return false;
+        const saleDate = new Date(p.sales_date);
+        return saleDate >= new Date(dateRange.start) && saleDate <= new Date(dateRange.end);
+      });
+    }
+
+    // Specific period filter override
     if (periodFilter.length > 0) {
       filtered = filtered.filter(p => periodFilter.includes(p.periodCode));
-    }
-    // If no period filter, show CSP, PSP, and HSP only (exclude blanks by default)
-    else if (!showAllProperties) {
-      filtered = filtered.filter(p => p.periodCode === 'CSP' || p.periodCode === 'PSP' || p.periodCode === 'HSP');
     }
 
     return filtered;
@@ -900,7 +902,7 @@ const SalesReviewTab = ({
             {formatNumber(filteredProperties.filter(p => p.periodCode === 'PSP').length)}
           </div>
         </div>
-        <div className="bg-orange-50 p-4 rounded border border-orange-200">
+        <div className="p-4 rounded border" style={{ backgroundColor: '#fed7aa', borderColor: '#fdba74' }}>
           <div className="text-sm text-orange-700">HSP Sales</div>
           <div className="text-2xl font-bold text-orange-900">
             {formatNumber(filteredProperties.filter(p => p.periodCode === 'HSP').length)}
@@ -1057,7 +1059,7 @@ const SalesReviewTab = ({
                 <th className="px-3 py-3 text-left font-medium text-gray-700">Package</th>
                 <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_location')}>Address</th>
                 <th className="px-3 py-3 text-right font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('values_mod_total')}>Current Asmt</th>
-                <th className="px-3 py-3 text-center font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('periodCode')}>Period</th>
+                <th className="px-3 py-3 text-center font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('periodCode')}>Code</th>
                 <th className="px-3 py-3 text-right font-medium text-gray-700">Lot Front</th>
                 <th className="px-3 py-3 text-right font-medium text-gray-700">Lot Acre</th>
                 <th className="px-3 py-3 text-right font-medium text-gray-700">Lot SF</th>
