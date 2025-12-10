@@ -342,6 +342,41 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     }));
   };
 
+  const handleCodeToggle = (amenityType, code) => {
+    setCodeConfig(prev => {
+      const currentCodes = prev[amenityType] || [];
+      const isSelected = currentCodes.includes(code);
+
+      return {
+        ...prev,
+        [amenityType]: isSelected
+          ? currentCodes.filter(c => c !== code)
+          : [...currentCodes, code]
+      };
+    });
+  };
+
+  const handleSaveCodeConfig = async () => {
+    try {
+      const settings = Object.keys(codeConfig).map(amenityType => ({
+        job_id: jobData.id,
+        setting_key: `adjustment_codes_${amenityType}`,
+        setting_value: JSON.stringify(codeConfig[amenityType])
+      }));
+
+      const { error } = await supabase
+        .from('job_settings')
+        .upsert(settings, { onConflict: 'job_id,setting_key' });
+
+      if (error) throw error;
+
+      alert('Code configuration saved successfully!');
+    } catch (error) {
+      console.error('Error saving code config:', error);
+      alert(`Failed to save: ${error.message}`);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
