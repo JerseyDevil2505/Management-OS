@@ -25,7 +25,6 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     stable: [],
     pole_barn: [],
     misc_positive: [],
-    misc_negative: [],
     land_positive: [],
     land_negative: []
   });
