@@ -214,7 +214,14 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         deck: ['DECK', 'DECK_TYPE'],
         patio: ['PATIO', 'PATIO_TYPE'],
         open_porch: ['OPEN_PORCH', 'PORCH_OPEN', 'PORCH'],
-        enclosed_porch: ['ENCLOSED_PORCH', 'PORCH_ENCLOSED', 'SCREENED_PORCH']
+        enclosed_porch: ['ENCLOSED_PORCH', 'PORCH_ENCLOSED', 'SCREENED_PORCH'],
+        barn: ['BARN', 'BARN_TYPE', 'OUTBUILDING'],
+        stable: ['STABLE', 'HORSE_BARN', 'STABLES'],
+        pole_barn: ['POLE_BARN', 'POLE_BUILDING'],
+        misc_positive: ['MISC_IMPROVEMENT', 'OTHER_IMPROVEMENT', 'ADDITIONAL_FEATURE'],
+        misc_negative: ['MISC_DEDUCTION', 'NEGATIVE_FEATURE'],
+        land_positive: ['LAND_IMPROVEMENT', 'LAND_POSITIVE'],
+        land_negative: ['LAND_DEDUCTION', 'LAND_NEGATIVE']
       };
 
       const distinctCodes = {
@@ -224,7 +231,14 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         deck: new Set(),
         patio: new Set(),
         open_porch: new Set(),
-        enclosed_porch: new Set()
+        enclosed_porch: new Set(),
+        barn: new Set(),
+        stable: new Set(),
+        pole_barn: new Set(),
+        misc_positive: new Set(),
+        misc_negative: new Set(),
+        land_positive: new Set(),
+        land_negative: new Set()
       };
 
       // Iterate through all properties to find distinct codes
