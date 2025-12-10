@@ -89,7 +89,8 @@ const AdjustmentsTab = ({ jobData = {} }) => {
   useEffect(() => {
     if (!jobData?.id) return;
     loadAdjustments();
-    loadGarageConfig();
+    loadCodeConfig();
+    loadAvailableCodes();
   }, [jobData?.id]);
 
   const loadAdjustments = async () => {
