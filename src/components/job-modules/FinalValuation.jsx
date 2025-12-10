@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Calculator, TrendingUp, Sliders, BarChart3, FileSpreadsheet } from 'lucide-react';
 import SalesReviewTab from './final-valuation-tabs/SalesReviewTab';
+import AdjustmentsTab from './final-valuation-tabs/AdjustmentsTab';
 
 const FinalValuation = ({ 
   jobData = {}, 
