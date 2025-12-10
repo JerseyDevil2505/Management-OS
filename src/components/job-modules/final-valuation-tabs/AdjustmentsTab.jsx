@@ -623,61 +623,206 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       {/* Configuration Tab */}
       {activeSubTab === 'config' && (
         <div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Garage Configuration</h3>
-          <p className="text-sm text-gray-600 mb-6">
-            Configure which property attributes identify garages for adjustment calculations
-          </p>
-
-          <div className="max-w-2xl space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Garage Type Code
-              </label>
-              <input
-                type="text"
-                value={garageConfig.garageTypeCode || ''}
-                onChange={(e) => setGarageConfig(prev => ({ ...prev, garageTypeCode: e.target.value }))}
-                className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g., G1, GAR"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Enter the code(s) that identify attached garages in your data
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Detached Garage Code
-              </label>
-              <input
-                type="text"
-                value={garageConfig.garageDetachedCode || ''}
-                onChange={(e) => setGarageConfig(prev => ({ ...prev, garageDetachedCode: e.target.value }))}
-                className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g., G2, DGAR"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Enter the code(s) that identify detached garages in your data
-              </p>
-            </div>
-
-            <button
-              onClick={async () => {
-                try {
-                  await supabase.from('job_settings').upsert([
-                    { job_id: jobData.id, setting_key: 'garage_type_code', setting_value: garageConfig.garageTypeCode },
-                    { job_id: jobData.id, setting_key: 'garage_detached_code', setting_value: garageConfig.garageDetachedCode }
-                  ]);
-                  alert('Garage configuration saved!');
-                } catch (error) {
-                  alert(`Failed to save: ${error.message}`);
-                }
-              }}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-            >
-              Save Configuration
-            </button>
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Adjustment Code Configuration</h3>
+            <p className="text-sm text-gray-600">
+              Select which codes from your source data represent each adjustment type.
+              These selections persist across file reloads.
+            </p>
           </div>
+
+          {isLoadingCodes ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-gray-500">Loading available codes...</div>
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {/* Garage */}
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <h4 className="font-semibold text-gray-900 mb-3">Garage (Attached)</h4>
+                <p className="text-xs text-gray-600 mb-3">
+                  Select all codes that represent attached garages (e.g., "ATT GAR", "BUILT IN GAR", "SM GAR")
+                </p>
+                {availableCodes.garage.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {availableCodes.garage.map(code => (
+                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={codeConfig.garage.includes(code)}
+                          onChange={() => handleCodeToggle('garage', code)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-mono">{code}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No garage codes found in source data</p>
+                )}
+              </div>
+
+              {/* Detached Garage */}
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <h4 className="font-semibold text-gray-900 mb-3">Detached Garage</h4>
+                <p className="text-xs text-gray-600 mb-3">
+                  Select all codes that represent detached garages
+                </p>
+                {availableCodes.det_garage.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {availableCodes.det_garage.map(code => (
+                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={codeConfig.det_garage.includes(code)}
+                          onChange={() => handleCodeToggle('det_garage', code)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-mono">{code}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No detached garage codes found in source data</p>
+                )}
+              </div>
+
+              {/* Pool */}
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <h4 className="font-semibold text-gray-900 mb-3">Pool</h4>
+                <p className="text-xs text-gray-600 mb-3">
+                  Select all codes that represent pools
+                </p>
+                {availableCodes.pool.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {availableCodes.pool.map(code => (
+                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={codeConfig.pool.includes(code)}
+                          onChange={() => handleCodeToggle('pool', code)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-mono">{code}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No pool codes found in source data</p>
+                )}
+              </div>
+
+              {/* Deck */}
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <h4 className="font-semibold text-gray-900 mb-3">Deck</h4>
+                <p className="text-xs text-gray-600 mb-3">
+                  Select all codes that represent decks
+                </p>
+                {availableCodes.deck.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {availableCodes.deck.map(code => (
+                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={codeConfig.deck.includes(code)}
+                          onChange={() => handleCodeToggle('deck', code)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-mono">{code}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No deck codes found in source data</p>
+                )}
+              </div>
+
+              {/* Patio */}
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <h4 className="font-semibold text-gray-900 mb-3">Patio</h4>
+                <p className="text-xs text-gray-600 mb-3">
+                  Select all codes that represent patios
+                </p>
+                {availableCodes.patio.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {availableCodes.patio.map(code => (
+                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={codeConfig.patio.includes(code)}
+                          onChange={() => handleCodeToggle('patio', code)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-mono">{code}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No patio codes found in source data</p>
+                )}
+              </div>
+
+              {/* Open Porch */}
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <h4 className="font-semibold text-gray-900 mb-3">Open Porch</h4>
+                <p className="text-xs text-gray-600 mb-3">
+                  Select all codes that represent open porches
+                </p>
+                {availableCodes.open_porch.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {availableCodes.open_porch.map(code => (
+                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={codeConfig.open_porch.includes(code)}
+                          onChange={() => handleCodeToggle('open_porch', code)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-mono">{code}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No open porch codes found in source data</p>
+                )}
+              </div>
+
+              {/* Enclosed Porch */}
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <h4 className="font-semibold text-gray-900 mb-3">Enclosed Porch</h4>
+                <p className="text-xs text-gray-600 mb-3">
+                  Select all codes that represent enclosed/screened porches
+                </p>
+                {availableCodes.enclosed_porch.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {availableCodes.enclosed_porch.map(code => (
+                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={codeConfig.enclosed_porch.includes(code)}
+                          onChange={() => handleCodeToggle('enclosed_porch', code)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-mono">{code}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No enclosed porch codes found in source data</p>
+                )}
+              </div>
+
+              {/* Save Button */}
+              <div className="flex justify-end pt-4 border-t">
+                <button
+                  onClick={handleSaveCodeConfig}
+                  className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
+                >
+                  Save Configuration
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
