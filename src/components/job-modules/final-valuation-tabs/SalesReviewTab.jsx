@@ -214,6 +214,7 @@ const SalesReviewTab = ({
       const designName = interpretCodes.getDesignName?.(prop, parsedCodeDefinitions, vendorType);
       const exteriorCondName = interpretCodes.getExteriorConditionName?.(prop, parsedCodeDefinitions, vendorType);
       const interiorCondName = interpretCodes.getInteriorConditionName?.(prop, parsedCodeDefinitions, vendorType);
+      const viewName = interpretCodes.getViewName?.(prop, parsedCodeDefinitions, vendorType);
 
       // Normalize sales NU code
       const normalizedSalesNu = normalizeSalesNuCode(prop.sales_nu);
@@ -242,6 +243,7 @@ const SalesReviewTab = ({
         designName,
         exteriorCondName,
         interiorCondName,
+        viewName,
         normalizedSalesNu,
         lotAcre,
         lotSf,
@@ -309,9 +311,9 @@ const SalesReviewTab = ({
       filtered = filtered.filter(p => periodFilter.includes(p.periodCode));
     }
 
-    // View filter (same as period but separate state)
+    // View filter
     if (viewFilter.length > 0) {
-      filtered = filtered.filter(p => viewFilter.includes(p.periodCode));
+      filtered = filtered.filter(p => viewFilter.includes(p.asset_view));
     }
 
     return filtered;
@@ -361,12 +363,12 @@ const SalesReviewTab = ({
     return Array.from(codes).sort();
   }, [enrichedProperties]);
 
-  // Get unique View/Period codes for filter dropdown
+  // Get unique View codes for filter dropdown
   const uniqueViewCodes = useMemo(() => {
     const codes = new Set();
     enrichedProperties.forEach(prop => {
-      if (prop.periodCode) {
-        codes.add(prop.periodCode);
+      if (prop.asset_view) {
+        codes.add(prop.asset_view);
       }
     });
     return Array.from(codes).sort();
@@ -854,7 +856,7 @@ const SalesReviewTab = ({
     // Headers
     const headers = [
       'VCS', 'Block', 'Lot', 'Qualifier', 'Package', 'Address', 'Prop Class', 'Current Assessment',
-      'Period', 'Lot Frontage', 'Lot Acre', 'Lot Sq Ft', 'Type Use', 'Building Class',
+      'Period', 'View', 'Lot Frontage', 'Lot Acre', 'Lot Sq Ft', 'Type Use', 'Building Class',
       'Design', 'Ext Cond', 'Int Cond', 'Year Built', 'SFLA', 'Sale Date', 'Sales NU',
       'Sale Price', 'Price/SF', 'Norm Price', 'Norm Price/SF', 'Sales Ratio'
     ];
@@ -872,6 +874,7 @@ const SalesReviewTab = ({
         prop.property_m4_class || '',
         prop.values_mod_total || '',
         prop.periodCode || '',
+        showCodesNotMeanings ? (prop.asset_view || '') : (prop.viewName || prop.asset_view || ''),
         prop.lotFrontage || '',
         prop.lotAcre ? prop.lotAcre.toFixed(2) : '',
         prop.lotSf || '',
