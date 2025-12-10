@@ -265,7 +265,7 @@ const SalesReviewTab = ({
     return Array.from(codes).sort();
   }, [enrichedProperties]);
 
-  // Sorted properties
+  // Sorted properties with numerical sorting for Block and Lot
   const sortedProperties = useMemo(() => {
     if (!sortConfig.key) return filteredProperties;
 
@@ -277,7 +277,13 @@ const SalesReviewTab = ({
       if (bVal === null || bVal === undefined) return -1;
 
       let comparison = 0;
-      if (typeof aVal === 'string') {
+
+      // Numerical sorting for Block and Lot
+      if (sortConfig.key === 'property_block' || sortConfig.key === 'property_lot') {
+        const aNum = parseFloat(aVal) || 0;
+        const bNum = parseFloat(bVal) || 0;
+        comparison = aNum - bNum;
+      } else if (typeof aVal === 'string') {
         comparison = aVal.localeCompare(bVal);
       } else {
         comparison = aVal - bVal;
@@ -431,6 +437,27 @@ const SalesReviewTab = ({
     }));
   };
 
+  // Get HPI multiplier for normalization (matches PreValuation logic)
+  const getHPIMultiplier = useCallback((saleYear, targetYear = 2025) => {
+    if (!hpiData || hpiData.length === 0) return 1.0;
+
+    const maxHPIYear = Math.max(...hpiData.map(h => h.observation_year));
+
+    if (saleYear > maxHPIYear) return 1.0;
+    const effectiveTargetYear = targetYear > maxHPIYear ? maxHPIYear : targetYear;
+    if (saleYear === effectiveTargetYear) return 1.0;
+
+    const saleYearData = hpiData.find(h => h.observation_year === saleYear);
+    const targetYearData = hpiData.find(h => h.observation_year === effectiveTargetYear);
+
+    if (!saleYearData || !targetYearData) return 1.0;
+
+    const saleHPI = saleYearData.hpi_index || 100;
+    const targetHPI = targetYearData.hpi_index || 100;
+
+    return targetHPI / saleHPI;
+  }, [hpiData]);
+
   const handleSetDateRange = (period) => {
     if (!jobData?.end_date) return;
     
@@ -535,37 +562,35 @@ const SalesReviewTab = ({
     alert(`Settings "${settingsToDelete.name}" deleted`);
   };
 
-  // Handle normalize value creation
-  const handleOpenNormalizeModal = (property) => {
-    setNormalizeProperty(property);
-    setNormalizeValue(property.values_norm_time || '');
-    setShowNormalizeModal(true);
-  };
-
-  const handleSaveNormalizedValue = async () => {
-    if (!normalizeProperty || !normalizeValue) {
-      alert('Please enter a normalized value');
+  // Auto-normalize using HPI data (matches PreValuation logic)
+  const handleAutoNormalize = async (property) => {
+    if (!property.sales_date || !property.sales_price) {
+      alert('Cannot normalize: Missing sale date or price');
       return;
     }
 
     try {
+      const saleYear = new Date(property.sales_date).getFullYear();
+      const targetYear = 2025; // Current assessment year
+      const hpiMultiplier = getHPIMultiplier(saleYear, targetYear);
+      const timeNormalizedPrice = Math.round(property.sales_price * hpiMultiplier);
+
       const { error } = await supabase
         .from('property_records')
-        .update({ values_norm_time: parseFloat(normalizeValue) })
-        .eq('id', normalizeProperty.id);
+        .update({ values_norm_time: timeNormalizedPrice })
+        .eq('id', property.id);
 
       if (error) throw error;
 
-      alert('Normalized value saved successfully!');
-      setShowNormalizeModal(false);
+      alert(`Normalized value created: ${formatCurrency(timeNormalizedPrice)}\nHPI Multiplier: ${hpiMultiplier.toFixed(4)}`);
 
       // Refresh data
       if (onUpdateJobCache) {
         onUpdateJobCache(jobData.id, { forceRefresh: true });
       }
     } catch (error) {
-      console.error('Error saving normalized value:', error);
-      alert(`Failed to save: ${error.message}`);
+      console.error('Error auto-normalizing:', error);
+      alert(`Failed to normalize: ${error.message}`);
     }
   };
 
@@ -1073,11 +1098,11 @@ const SalesReviewTab = ({
         </div>
       </div>
 
-      {/* Main Data Table */}
+      {/* Main Data Table with Horizontal Scroll */}
       <div className="bg-white border rounded overflow-hidden">
-        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '70vh' }}>
+        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '70vh', overflowX: 'scroll' }}>
           <table className="min-w-full" style={{ fontSize: `${fontSize}px` }}>
-            <thead className="bg-gray-50 border-b">
+            <thead className="bg-gray-50 border-b sticky top-0 z-10">
               <tr>
                 <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_vcs')}>VCS</th>
                 <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_block')}>Block</th>
@@ -1118,16 +1143,7 @@ const SalesReviewTab = ({
                   <td className="px-3 py-2 max-w-xs truncate">{prop.property_location || '-'}</td>
                   <td className="px-3 py-2 text-right">{formatCurrency(prop.values_mod_total)}</td>
                   <td className="px-3 py-2 text-center">
-                    {prop.periodCode ? (
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        prop.periodCode === 'CSP' ? 'bg-green-100 text-green-800' :
-                        prop.periodCode === 'PSP' ? 'bg-blue-100 text-blue-800' :
-                        prop.periodCode === 'HSP' ? 'bg-orange-100 text-orange-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {prop.periodCode}
-                      </span>
-                    ) : '-'}
+                    {prop.periodCode || '-'}
                   </td>
                   <td className="px-3 py-2 text-right">{formatNumber(prop.asset_lot_frontage)}</td>
                   <td className="px-3 py-2 text-right">{prop.asset_lot_acre || '-'}</td>
@@ -1144,13 +1160,13 @@ const SalesReviewTab = ({
                   <td className="px-3 py-2 text-right">{formatCurrency(prop.sales_price)}</td>
                   <td className="px-3 py-2 text-right">{prop.pricePerSF ? formatCurrency(prop.pricePerSF) : '-'}</td>
                   <td className="px-3 py-2 text-center">
-                    {prop.sales_date && (
+                    {prop.sales_date && !prop.values_norm_time && (
                       <button
-                        onClick={() => handleOpenNormalizeModal(prop)}
+                        onClick={() => handleAutoNormalize(prop)}
                         className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                        title="Create/Edit Normalized Value"
+                        title="Auto-normalize using HPI data"
                       >
-                        {prop.values_norm_time ? 'Edit' : 'Add'}
+                        Auto
                       </button>
                     )}
                   </td>
@@ -1170,75 +1186,6 @@ const SalesReviewTab = ({
         )}
       </div>
 
-      {/* Normalize Value Modal */}
-      {showNormalizeModal && normalizeProperty && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="px-6 py-4 border-b flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Normalize Sale Value</h3>
-              <button
-                onClick={() => setShowNormalizeModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-6">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Property</label>
-                  <div className="text-sm text-gray-600">
-                    {normalizeProperty.property_location || `${normalizeProperty.property_block}-${normalizeProperty.property_lot}`}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Sale Date</label>
-                  <div className="text-sm text-gray-600">{formatDate(normalizeProperty.sales_date)}</div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Sale Price</label>
-                  <div className="text-sm text-gray-600">{formatCurrency(normalizeProperty.sales_price)}</div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Normalized Price *
-                  </label>
-                  <input
-                    type="number"
-                    value={normalizeValue}
-                    onChange={(e) => setNormalizeValue(e.target.value)}
-                    placeholder="Enter normalized value..."
-                    className="w-full px-3 py-2 border rounded"
-                    step="0.01"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Enter the time-normalized value for this sale (e.g., adjusted to 2025 dollars)
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="px-6 py-4 border-t flex justify-end gap-2">
-              <button
-                onClick={() => setShowNormalizeModal(false)}
-                className="px-4 py-2 border rounded text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveNormalizedValue}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
