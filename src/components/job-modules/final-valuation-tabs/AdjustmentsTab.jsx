@@ -760,7 +760,11 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                           <tr className="border-b">
                             <th className="text-left py-2 px-3 font-medium text-gray-700">Code</th>
                             <th className="text-left py-2 px-3 font-medium text-gray-700">Description</th>
-                            <th className="text-left py-2 px-3 font-medium text-gray-700">Assign To</th>
+                            <th className="text-center py-2 px-2 font-medium text-gray-700">Garage</th>
+                            <th className="text-center py-2 px-2 font-medium text-gray-700">Deck</th>
+                            <th className="text-center py-2 px-2 font-medium text-gray-700">Patio</th>
+                            <th className="text-center py-2 px-2 font-medium text-gray-700">Open Porch</th>
+                            <th className="text-center py-2 px-2 font-medium text-gray-700">Enclosed Porch</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -768,33 +772,45 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                             <tr key={item.code} className="border-b hover:bg-gray-50">
                               <td className="py-2 px-3 font-mono text-gray-900">{item.code}</td>
                               <td className="py-2 px-3 text-gray-700">{item.description}</td>
-                              <td className="py-2 px-3">
-                                <select
-                                  value={Object.keys(codeConfig).find(k => codeConfig[k].includes(item.code)) || ''}
-                                  onChange={(e) => {
-                                    const newType = e.target.value;
-                                    setCodeConfig(prev => {
-                                      const updated = { ...prev };
-                                      // Remove from all types first
-                                      Object.keys(updated).forEach(type => {
-                                        updated[type] = updated[type].filter(c => c !== item.code);
-                                      });
-                                      // Add to selected type if not empty
-                                      if (newType) {
-                                        updated[newType] = [...updated[newType], item.code];
-                                      }
-                                      return updated;
-                                    });
-                                  }}
-                                  className="text-sm border rounded px-2 py-1"
-                                >
-                                  <option value="">-- None --</option>
-                                  <option value="garage">Garage</option>
-                                  <option value="deck">Deck</option>
-                                  <option value="patio">Patio</option>
-                                  <option value="open_porch">Open Porch</option>
-                                  <option value="enclosed_porch">Enclosed Porch</option>
-                                </select>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={codeConfig.garage.includes(item.code)}
+                                  onChange={() => handleCodeToggle('garage', item.code)}
+                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={codeConfig.deck.includes(item.code)}
+                                  onChange={() => handleCodeToggle('deck', item.code)}
+                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={codeConfig.patio.includes(item.code)}
+                                  onChange={() => handleCodeToggle('patio', item.code)}
+                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={codeConfig.open_porch.includes(item.code)}
+                                  onChange={() => handleCodeToggle('open_porch', item.code)}
+                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={codeConfig.enclosed_porch.includes(item.code)}
+                                  onChange={() => handleCodeToggle('enclosed_porch', item.code)}
+                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                />
                               </td>
                             </tr>
                           ))}
