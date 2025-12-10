@@ -177,9 +177,37 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     try {
       setIsLoadingCodes(true);
 
-      // Import getRawDataForJob from supabaseClient
-      const { getRawDataForJob } = await import('../../../lib/supabaseClient');
-      const rawData = await getRawDataForJob(jobData.id);
+      // Fetch job's raw file content and parse it
+      const { data: job, error: jobError } = await supabase
+        .from('jobs')
+        .select('raw_file_content, vendor_type')
+        .eq('id', jobData.id)
+        .single();
+
+      if (jobError || !job?.raw_file_content) {
+        setIsLoadingCodes(false);
+        return;
+      }
+
+      // Parse the raw file content
+      let parsedData = [];
+      try {
+        parsedData = JSON.parse(job.raw_file_content);
+      } catch (e) {
+        console.error('Error parsing raw file content:', e);
+        setIsLoadingCodes(false);
+        return;
+      }
+
+      if (!Array.isArray(parsedData) || parsedData.length === 0) {
+        setIsLoadingCodes(false);
+        return;
+      }
+
+      const rawData = { propertyMap: new Map() };
+      parsedData.forEach((record, idx) => {
+        rawData.propertyMap.set(idx, record);
+      });
 
       if (!rawData || !rawData.propertyMap) {
         setIsLoadingCodes(false);
