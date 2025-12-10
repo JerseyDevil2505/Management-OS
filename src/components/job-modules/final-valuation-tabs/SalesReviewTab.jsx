@@ -107,18 +107,7 @@ const SalesReviewTab = ({
   const [sortConfig, setSortConfig] = useState({ key: 'sales_date', direction: 'desc' });
   
   // Filters
-  const [dateRange, setDateRange] = useState(() => {
-    // Default to CSP period
-    if (jobData?.end_date) {
-      const taxYear = new Date(jobData.end_date).getFullYear();
-      const yearOfValue = taxYear - 1;
-      return {
-        start: new Date(yearOfValue - 1, 9, 1).toISOString().split('T')[0],
-        end: new Date(yearOfValue, 11, 31).toISOString().split('T')[0]
-      };
-    }
-    return { start: '', end: '' };
-  });
+  const [dateRange, setDateRange] = useState({ start: '', end: '' }); // Empty by default - don't filter by date initially
   
   const [salesNuFilter, setSalesNuFilter] = useState(['0', '07', '32']); // Normalized codes: blank/00->0, 7->07
   const [vcsFilter, setVcsFilter] = useState([]);
