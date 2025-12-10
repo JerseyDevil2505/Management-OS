@@ -252,7 +252,7 @@ const SalesReviewTab = ({
     }
 
     return filtered;
-  }, [enrichedProperties, showAllProperties, dateRange, salesNuFilter, vcsFilter, typeFilter, designFilter, periodFilter]);
+  }, [enrichedProperties, showAllProperties, showAllNormalizedSales, dateRange, salesNuFilter, vcsFilter, typeFilter, designFilter, periodFilter]);
 
   // Get unique normalized Sales NU codes for dropdown
   const uniqueSalesNuCodes = useMemo(() => {
