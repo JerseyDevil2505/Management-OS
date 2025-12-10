@@ -132,7 +132,7 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 /**
  * Get parsed raw data for a job (with caching)
  */
-async function getRawDataForJob(jobId) {
+export async function getRawDataForJob(jobId) {
   // Check cache first - trust it since it's cleared on file updates
   const cacheKey = `job_raw_data_${jobId}`;
   const cached = dataCache.get(cacheKey);
