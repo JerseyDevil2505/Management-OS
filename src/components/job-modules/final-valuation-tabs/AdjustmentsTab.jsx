@@ -796,328 +796,230 @@ const AdjustmentsTab = ({ jobData = {} }) => {
               </div>
 
               {/* Category 15: Detached Items */}
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <h4 className="font-semibold text-gray-900 mb-3">Detached Garage</h4>
-                <p className="text-xs text-gray-600 mb-3">
-                  Select all codes that represent detached garages
-                </p>
-                {availableCodes.det_garage.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {availableCodes.det_garage.map(code => (
-                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={codeConfig.det_garage.includes(code)}
-                          onChange={() => handleCodeToggle('det_garage', code)}
-                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                        />
-                        <span className="text-sm font-mono">{code}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 italic">No detached garage codes found in source data</p>
-                )}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-green-50 px-4 py-3 border-b">
+                  <h4 className="font-semibold text-gray-900">Category 15 - Detached Items</h4>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Det Garage, Pool
+                  </p>
+                </div>
+                <div className="bg-white p-4">
+                  {availableCodes['15'].length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">Code</th>
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">Description</th>
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">Assign To</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {availableCodes['15'].map(item => (
+                            <tr key={item.code} className="border-b hover:bg-gray-50">
+                              <td className="py-2 px-3 font-mono text-gray-900">{item.code}</td>
+                              <td className="py-2 px-3 text-gray-700">{item.description}</td>
+                              <td className="py-2 px-3">
+                                <select
+                                  value={Object.keys(codeConfig).find(k => codeConfig[k].includes(item.code)) || ''}
+                                  onChange={(e) => {
+                                    const newType = e.target.value;
+                                    setCodeConfig(prev => {
+                                      const updated = { ...prev };
+                                      Object.keys(updated).forEach(type => {
+                                        updated[type] = updated[type].filter(c => c !== item.code);
+                                      });
+                                      if (newType) {
+                                        updated[newType] = [...updated[newType], item.code];
+                                      }
+                                      return updated;
+                                    });
+                                  }}
+                                  className="text-sm border rounded px-2 py-1"
+                                >
+                                  <option value="">-- None --</option>
+                                  <option value="det_garage">Det Garage</option>
+                                  <option value="pool">Pool</option>
+                                </select>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 italic">No codes found in Category 15</p>
+                  )}
+                </div>
               </div>
 
-              {/* Pool */}
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <h4 className="font-semibold text-gray-900 mb-3">Pool</h4>
-                <p className="text-xs text-gray-600 mb-3">
-                  Select all codes that represent pools
-                </p>
-                {availableCodes.pool.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {availableCodes.pool.map(code => (
-                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={codeConfig.pool.includes(code)}
-                          onChange={() => handleCodeToggle('pool', code)}
-                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                        />
-                        <span className="text-sm font-mono">{code}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 italic">No pool codes found in source data</p>
-                )}
+              {/* Category 39: Miscellaneous */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-yellow-50 px-4 py-3 border-b">
+                  <h4 className="font-semibold text-gray-900">Category 39 - Miscellaneous</h4>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Barn, Stable, Pole Barn, Other Miscellaneous Items
+                  </p>
+                </div>
+                <div className="bg-white p-4">
+                  {availableCodes['39'].length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">Code</th>
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">Description</th>
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">Assign To</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {availableCodes['39'].map(item => (
+                            <tr key={item.code} className="border-b hover:bg-gray-50">
+                              <td className="py-2 px-3 font-mono text-gray-900">{item.code}</td>
+                              <td className="py-2 px-3 text-gray-700">{item.description}</td>
+                              <td className="py-2 px-3">
+                                <select
+                                  value={Object.keys(codeConfig).find(k => codeConfig[k].includes(item.code)) || ''}
+                                  onChange={(e) => {
+                                    const newType = e.target.value;
+                                    setCodeConfig(prev => {
+                                      const updated = { ...prev };
+                                      Object.keys(updated).forEach(type => {
+                                        updated[type] = updated[type].filter(c => c !== item.code);
+                                      });
+                                      if (newType) {
+                                        updated[newType] = [...updated[newType], item.code];
+                                      }
+                                      return updated;
+                                    });
+                                  }}
+                                  className="text-sm border rounded px-2 py-1"
+                                >
+                                  <option value="">-- None --</option>
+                                  <option value="barn">Barn</option>
+                                  <option value="stable">Stable</option>
+                                  <option value="pole_barn">Pole Barn</option>
+                                  <option value="misc_positive">Miscellaneous (+)</option>
+                                  <option value="misc_negative">Miscellaneous (-)</option>
+                                </select>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 italic">No codes found in Category 39</p>
+                  )}
+                </div>
               </div>
 
-              {/* Deck */}
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <h4 className="font-semibold text-gray-900 mb-3">Deck</h4>
-                <p className="text-xs text-gray-600 mb-3">
-                  Select all codes that represent decks
-                </p>
-                {availableCodes.deck.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {availableCodes.deck.map(code => (
-                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={codeConfig.deck.includes(code)}
-                          onChange={() => handleCodeToggle('deck', code)}
-                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                        />
-                        <span className="text-sm font-mono">{code}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 italic">No deck codes found in source data</p>
-                )}
+              {/* Category 62: Positive Land Adjustments */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-purple-50 px-4 py-3 border-b">
+                  <h4 className="font-semibold text-gray-900">Category 62 - Positive Land Adjustments</h4>
+                </div>
+                <div className="bg-white p-4">
+                  {availableCodes['62'].length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">Code</th>
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">Description</th>
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">Assign To</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {availableCodes['62'].map(item => (
+                            <tr key={item.code} className="border-b hover:bg-gray-50">
+                              <td className="py-2 px-3 font-mono text-gray-900">{item.code}</td>
+                              <td className="py-2 px-3 text-gray-700">{item.description}</td>
+                              <td className="py-2 px-3">
+                                <select
+                                  value={Object.keys(codeConfig).find(k => codeConfig[k].includes(item.code)) || ''}
+                                  onChange={(e) => {
+                                    const newType = e.target.value;
+                                    setCodeConfig(prev => {
+                                      const updated = { ...prev };
+                                      Object.keys(updated).forEach(type => {
+                                        updated[type] = updated[type].filter(c => c !== item.code);
+                                      });
+                                      if (newType) {
+                                        updated[newType] = [...updated[newType], item.code];
+                                      }
+                                      return updated;
+                                    });
+                                  }}
+                                  className="text-sm border rounded px-2 py-1"
+                                >
+                                  <option value="">-- None --</option>
+                                  <option value="land_positive">Land Adjustment (+)</option>
+                                </select>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 italic">No codes found in Category 62</p>
+                  )}
+                </div>
               </div>
 
-              {/* Patio */}
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <h4 className="font-semibold text-gray-900 mb-3">Patio</h4>
-                <p className="text-xs text-gray-600 mb-3">
-                  Select all codes that represent patios
-                </p>
-                {availableCodes.patio.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {availableCodes.patio.map(code => (
-                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={codeConfig.patio.includes(code)}
-                          onChange={() => handleCodeToggle('patio', code)}
-                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                        />
-                        <span className="text-sm font-mono">{code}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 italic">No patio codes found in source data</p>
-                )}
-              </div>
-
-              {/* Open Porch */}
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <h4 className="font-semibold text-gray-900 mb-3">Open Porch</h4>
-                <p className="text-xs text-gray-600 mb-3">
-                  Select all codes that represent open porches
-                </p>
-                {availableCodes.open_porch.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {availableCodes.open_porch.map(code => (
-                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={codeConfig.open_porch.includes(code)}
-                          onChange={() => handleCodeToggle('open_porch', code)}
-                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                        />
-                        <span className="text-sm font-mono">{code}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 italic">No open porch codes found in source data</p>
-                )}
-              </div>
-
-              {/* Enclosed Porch */}
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <h4 className="font-semibold text-gray-900 mb-3">Enclosed Porch</h4>
-                <p className="text-xs text-gray-600 mb-3">
-                  Select all codes that represent enclosed/screened porches
-                </p>
-                {availableCodes.enclosed_porch.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {availableCodes.enclosed_porch.map(code => (
-                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={codeConfig.enclosed_porch.includes(code)}
-                          onChange={() => handleCodeToggle('enclosed_porch', code)}
-                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                        />
-                        <span className="text-sm font-mono">{code}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 italic">No enclosed porch codes found in source data</p>
-                )}
-              </div>
-
-              {/* Barn */}
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <h4 className="font-semibold text-gray-900 mb-3">Barn</h4>
-                <p className="text-xs text-gray-600 mb-3">
-                  Select all codes that represent barns
-                </p>
-                {availableCodes.barn.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {availableCodes.barn.map(code => (
-                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={codeConfig.barn.includes(code)}
-                          onChange={() => handleCodeToggle('barn', code)}
-                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                        />
-                        <span className="text-sm font-mono">{code}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 italic">No barn codes found in source data</p>
-                )}
-              </div>
-
-              {/* Stable */}
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <h4 className="font-semibold text-gray-900 mb-3">Stable</h4>
-                <p className="text-xs text-gray-600 mb-3">
-                  Select all codes that represent stables
-                </p>
-                {availableCodes.stable.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {availableCodes.stable.map(code => (
-                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={codeConfig.stable.includes(code)}
-                          onChange={() => handleCodeToggle('stable', code)}
-                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                        />
-                        <span className="text-sm font-mono">{code}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 italic">No stable codes found in source data</p>
-                )}
-              </div>
-
-              {/* Pole Barn */}
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <h4 className="font-semibold text-gray-900 mb-3">Pole Barn</h4>
-                <p className="text-xs text-gray-600 mb-3">
-                  Select all codes that represent pole barns
-                </p>
-                {availableCodes.pole_barn.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {availableCodes.pole_barn.map(code => (
-                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={codeConfig.pole_barn.includes(code)}
-                          onChange={() => handleCodeToggle('pole_barn', code)}
-                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                        />
-                        <span className="text-sm font-mono">{code}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 italic">No pole barn codes found in source data</p>
-                )}
-              </div>
-
-              {/* Miscellaneous Positive */}
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <h4 className="font-semibold text-gray-900 mb-3">Miscellaneous Adjustment (+)</h4>
-                <p className="text-xs text-gray-600 mb-3">
-                  Select all codes that represent positive miscellaneous adjustments
-                </p>
-                {availableCodes.misc_positive.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {availableCodes.misc_positive.map(code => (
-                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={codeConfig.misc_positive.includes(code)}
-                          onChange={() => handleCodeToggle('misc_positive', code)}
-                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                        />
-                        <span className="text-sm font-mono">{code}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 italic">No miscellaneous positive codes found in source data</p>
-                )}
-              </div>
-
-              {/* Miscellaneous Negative */}
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <h4 className="font-semibold text-gray-900 mb-3">Miscellaneous Adjustment (-)</h4>
-                <p className="text-xs text-gray-600 mb-3">
-                  Select all codes that represent negative miscellaneous adjustments
-                </p>
-                {availableCodes.misc_negative.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {availableCodes.misc_negative.map(code => (
-                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={codeConfig.misc_negative.includes(code)}
-                          onChange={() => handleCodeToggle('misc_negative', code)}
-                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                        />
-                        <span className="text-sm font-mono">{code}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 italic">No miscellaneous negative codes found in source data</p>
-                )}
-              </div>
-
-              {/* Land Adjustment Positive */}
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <h4 className="font-semibold text-gray-900 mb-3">Land Adjustment (+)</h4>
-                <p className="text-xs text-gray-600 mb-3">
-                  Select all codes that represent positive land adjustments
-                </p>
-                {availableCodes.land_positive.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {availableCodes.land_positive.map(code => (
-                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={codeConfig.land_positive.includes(code)}
-                          onChange={() => handleCodeToggle('land_positive', code)}
-                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                        />
-                        <span className="text-sm font-mono">{code}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 italic">No positive land adjustment codes found in source data</p>
-                )}
-              </div>
-
-              {/* Land Adjustment Negative */}
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <h4 className="font-semibold text-gray-900 mb-3">Land Adjustment (-)</h4>
-                <p className="text-xs text-gray-600 mb-3">
-                  Select all codes that represent negative land adjustments
-                </p>
-                {availableCodes.land_negative.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {availableCodes.land_negative.map(code => (
-                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={codeConfig.land_negative.includes(code)}
-                          onChange={() => handleCodeToggle('land_negative', code)}
-                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                        />
-                        <span className="text-sm font-mono">{code}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 italic">No negative land adjustment codes found in source data</p>
-                )}
+              {/* Category 63: Negative Land Adjustments */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-red-50 px-4 py-3 border-b">
+                  <h4 className="font-semibold text-gray-900">Category 63 - Negative Land Adjustments</h4>
+                </div>
+                <div className="bg-white p-4">
+                  {availableCodes['63'].length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">Code</th>
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">Description</th>
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">Assign To</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {availableCodes['63'].map(item => (
+                            <tr key={item.code} className="border-b hover:bg-gray-50">
+                              <td className="py-2 px-3 font-mono text-gray-900">{item.code}</td>
+                              <td className="py-2 px-3 text-gray-700">{item.description}</td>
+                              <td className="py-2 px-3">
+                                <select
+                                  value={Object.keys(codeConfig).find(k => codeConfig[k].includes(item.code)) || ''}
+                                  onChange={(e) => {
+                                    const newType = e.target.value;
+                                    setCodeConfig(prev => {
+                                      const updated = { ...prev };
+                                      Object.keys(updated).forEach(type => {
+                                        updated[type] = updated[type].filter(c => c !== item.code);
+                                      });
+                                      if (newType) {
+                                        updated[newType] = [...updated[newType], item.code];
+                                      }
+                                      return updated;
+                                    });
+                                  }}
+                                  className="text-sm border rounded px-2 py-1"
+                                >
+                                  <option value="">-- None --</option>
+                                  <option value="land_negative">Land Adjustment (-)</option>
+                                </select>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 italic">No codes found in Category 63</p>
+                  )}
+                </div>
               </div>
 
               {/* Save Button */}
