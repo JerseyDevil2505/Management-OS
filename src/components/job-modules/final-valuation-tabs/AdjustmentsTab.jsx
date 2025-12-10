@@ -209,11 +209,6 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         rawData.propertyMap.set(idx, record);
       });
 
-      if (!rawData || !rawData.propertyMap) {
-        setIsLoadingCodes(false);
-        return;
-      }
-
       // Field mappings for different vendors - trying common field names
       const fieldMappings = {
         garage: ['GARAGE_TYPE', 'GARAGE', 'GAR_TYPE', 'ATTACHED_GAR', 'ATT_GAR'],
