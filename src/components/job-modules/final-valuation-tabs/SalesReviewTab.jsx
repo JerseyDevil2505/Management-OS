@@ -259,6 +259,17 @@ const SalesReviewTab = ({
     return filtered;
   }, [enrichedProperties, showAllProperties, dateRange, salesNuFilter, vcsFilter, typeFilter, designFilter, periodFilter]);
 
+  // Get unique normalized Sales NU codes for dropdown
+  const uniqueSalesNuCodes = useMemo(() => {
+    const codes = new Set();
+    enrichedProperties.forEach(prop => {
+      if (prop.normalizedSalesNu) {
+        codes.add(prop.normalizedSalesNu);
+      }
+    });
+    return Array.from(codes).sort();
+  }, [enrichedProperties]);
+
   // Sorted properties
   const sortedProperties = useMemo(() => {
     if (!sortConfig.key) return filteredProperties;
@@ -764,25 +775,23 @@ const SalesReviewTab = ({
 
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-700">Sales NU Codes:</label>
-            <div className="flex flex-wrap gap-2">
-              {['', '0', '00', '7', '07', '10', '32'].map(code => (
-                <label key={code || 'blank'} className="inline-flex items-center gap-1">
-                  <input
-                    type="checkbox"
-                    checked={salesNuFilter.includes(code)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSalesNuFilter(prev => [...prev, code]);
-                      } else {
-                        setSalesNuFilter(prev => prev.filter(c => c !== code));
-                      }
-                    }}
-                    className="rounded border-gray-300"
-                  />
-                  <span className="text-xs text-gray-700">{code || 'Blank'}</span>
-                </label>
+            <select
+              multiple
+              value={salesNuFilter}
+              onChange={(e) => {
+                const selected = Array.from(e.target.selectedOptions, option => option.value);
+                setSalesNuFilter(selected);
+              }}
+              className="px-2 py-1 text-sm border rounded"
+              style={{ minWidth: '120px', minHeight: '34px' }}
+            >
+              {uniqueSalesNuCodes.map(code => (
+                <option key={code} value={code}>
+                  {code === '0' ? '0 (Blank/00)' : code}
+                </option>
               ))}
-            </div>
+            </select>
+            <span className="text-xs text-gray-500">(Hold Ctrl/Cmd to select multiple)</span>
           </div>
         </div>
       </div>
