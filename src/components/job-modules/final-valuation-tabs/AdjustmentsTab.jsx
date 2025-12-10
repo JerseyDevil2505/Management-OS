@@ -203,7 +203,10 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       }
 
       const codeDefinitions = job.parsed_code_definitions;
-      const sections = codeDefinitions.sections || {};
+      console.log('📊 Code definitions structure:', codeDefinitions);
+
+      const sections = codeDefinitions.sections || codeDefinitions || {};
+      console.log('📂 Available sections:', Object.keys(sections));
 
       // Extract codes from specific categories
       const categoryCodes = {
@@ -217,7 +220,11 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       // Process each category section
       Object.keys(categoryCodes).forEach(categoryNum => {
         const section = sections[categoryNum];
+        console.log(`🔍 Checking category ${categoryNum}:`, section ? 'Found' : 'Not found');
+
         if (section && typeof section === 'object') {
+          console.log(`📋 Category ${categoryNum} has ${Object.keys(section).length} items`);
+
           Object.keys(section).forEach(codeKey => {
             const codeItem = section[codeKey];
             let description = '';
@@ -225,17 +232,21 @@ const AdjustmentsTab = ({ jobData = {} }) => {
             // Extract description from DATA.VALUE
             if (codeItem?.DATA?.VALUE) {
               description = codeItem.DATA.VALUE;
+            } else if (codeItem?.VALUE) {
+              description = codeItem.VALUE;
             } else if (typeof codeItem === 'string') {
               description = codeItem;
             }
 
-            if (description && codeKey !== 'KEY' && codeKey !== 'DATA') {
+            if (description && codeKey !== 'KEY' && codeKey !== 'DATA' && codeKey !== 'MAP') {
               categoryCodes[categoryNum].push({
                 code: codeKey,
                 description: description.trim()
               });
             }
           });
+
+          console.log(`✅ Category ${categoryNum} loaded ${categoryCodes[categoryNum].length} codes`);
         }
       });
 
@@ -244,6 +255,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         categoryCodes[cat].sort((a, b) => a.code.localeCompare(b.code));
       });
 
+      console.log('📦 Final categoryCodes:', categoryCodes);
       setAvailableCodes(categoryCodes);
     } catch (error) {
       console.error('Error loading available codes:', error);
