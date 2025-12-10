@@ -20,7 +20,14 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     deck: [],
     patio: [],
     open_porch: [],
-    enclosed_porch: []
+    enclosed_porch: [],
+    barn: [],
+    stable: [],
+    pole_barn: [],
+    misc_positive: [],
+    misc_negative: [],
+    land_positive: [],
+    land_negative: []
   });
   const [availableCodes, setAvailableCodes] = useState({
     garage: [],
@@ -29,7 +36,14 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     deck: [],
     patio: [],
     open_porch: [],
-    enclosed_porch: []
+    enclosed_porch: [],
+    barn: [],
+    stable: [],
+    pole_barn: [],
+    misc_positive: [],
+    misc_negative: [],
+    land_positive: [],
+    land_negative: []
   });
   const [isLoadingCodes, setIsLoadingCodes] = useState(false);
 
