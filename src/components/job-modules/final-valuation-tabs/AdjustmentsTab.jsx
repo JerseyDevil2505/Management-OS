@@ -7,6 +7,12 @@ const AdjustmentsTab = ({ jobData = {} }) => {
   const [adjustments, setAdjustments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [customAdjustment, setCustomAdjustment] = useState({
+    name: '',
+    type: 'flat',
+    values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  });
   const [garageConfig, setGarageConfig] = useState({
     garageTypeCode: null,
     garageDetachedCode: null
@@ -28,10 +34,10 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
   // Default adjustment attributes with sample values based on image
   const DEFAULT_ADJUSTMENTS = [
-    { id: 'area_sqft', name: 'Area or Sq Ft', type: 'flat', isDefault: true, category: 'physical',
+    { id: 'lot_size', name: 'Lot Size', type: 'flat', isDefault: true, category: 'physical',
       values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
     { id: 'living_area', name: 'Living Area (Sq Ft)', type: 'per_sqft', isDefault: true, category: 'physical',
-      values: [7500, 10000, 15000, 15000, 20000, 25000, 30000, 40000, 45000, 60000] },
+      values: [30, 40, 50, 60, 75, 100, 125, 150, 175, 200] },
     { id: 'basement', name: 'Basement', type: 'flat', isDefault: true, category: 'physical',
       values: [3000, 5000, 10000, 10000, 15000, 20000, 25000, 25000, 30000, 40000] },
     { id: 'finished_basement', name: 'Finished Basement', type: 'flat', isDefault: true, category: 'physical',
@@ -42,19 +48,23 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       values: [500, 1000, 2500, 2500, 2500, 2500, 2500, 2500, 2500, 2500] },
     { id: 'garage', name: 'Garage', type: 'flat', isDefault: true, category: 'physical',
       values: [2500, 5000, 7500, 7500, 7500, 10000, 10000, 20000, 30000, 40000] },
+    { id: 'det_garage', name: 'Det Garage', type: 'flat', isDefault: true, category: 'physical',
+      values: [2500, 5000, 7500, 7500, 7500, 10000, 10000, 20000, 30000, 40000] },
     { id: 'fireplaces', name: 'Fireplaces', type: 'flat', isDefault: true, category: 'physical',
       values: [500, 1000, 2500, 2500, 2500, 2500, 2500, 2500, 2500, 2500] },
+    { id: 'pool', name: 'Pool', type: 'flat', isDefault: true, category: 'amenity',
+      values: [5000, 10000, 15000, 20000, 25000, 30000, 40000, 50000, 60000, 75000] },
     { id: 'deck', name: 'Deck', type: 'flat', isDefault: true, category: 'amenity',
       values: [1000, 1500, 2000, 2000, 3500, 5000, 10000, 10000, 20000, 30000] },
-    { id: 'deck_sqft', name: 'Deck sq. ft.', type: 'flat', isDefault: true, category: 'amenity',
-      values: [1000, 1500, 2000, 3500, 3500, 5000, 10000, 20000, 30000, 35000] },
-    { id: 'open_porch', name: 'Open Porch', type: 'flat', isDefault: true, category: 'amenity',
-      values: [2000, 3500, 4000, 7000, 7000, 10000, 20000, 40000, 60000, 70000] },
     { id: 'patio', name: 'Patio', type: 'flat', isDefault: true, category: 'amenity',
       values: [1000, 1500, 3500, 3500, 3500, 5000, 10000, 20000, 30000, 35000] },
+    { id: 'open_porch', name: 'Open Porch', type: 'flat', isDefault: true, category: 'amenity',
+      values: [2000, 3500, 4000, 7000, 7000, 10000, 20000, 40000, 60000, 70000] },
     { id: 'enclosed_porch', name: 'Enclosed Porch', type: 'flat', isDefault: true, category: 'amenity',
       values: [2000, 4000, 4000, 10000, 10000, 10000, 20000, 60000, 90000, 100000] },
-    { id: 'condition', name: 'Condition', type: 'flat_or_percent', isDefault: true, category: 'quality',
+    { id: 'exterior_condition', name: 'Exterior Condition', type: 'flat_or_percent', isDefault: true, category: 'quality',
+      values: [5000, 10000, 10000, 15000, 15000, 20000, 30000, 50000, 75000, 100000] },
+    { id: 'interior_condition', name: 'Interior Condition', type: 'flat_or_percent', isDefault: true, category: 'quality',
       values: [5000, 10000, 10000, 15000, 15000, 20000, 30000, 50000, 75000, 100000] },
     { id: 'location', name: 'Location', type: 'flat', isDefault: true, category: 'location',
       values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
@@ -167,30 +177,50 @@ const AdjustmentsTab = ({ jobData = {} }) => {
   };
 
   const handleAddCustomAdjustment = () => {
-    const customName = prompt('Enter custom adjustment name:');
-    if (!customName) return;
+    setShowCustomModal(true);
+    setCustomAdjustment({
+      name: '',
+      type: 'flat',
+      values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    });
+  };
+
+  const handleSaveCustomAdjustment = () => {
+    if (!customAdjustment.name.trim()) {
+      alert('Please enter an adjustment name');
+      return;
+    }
 
     const newAdj = {
       job_id: jobData.id,
       adjustment_id: `custom_${Date.now()}`,
-      adjustment_name: customName,
-      adjustment_type: 'flat',
+      adjustment_name: customAdjustment.name,
+      adjustment_type: customAdjustment.type,
       category: 'custom',
       is_default: false,
       sort_order: adjustments.length,
-      bracket_0: 0,
-      bracket_1: 0,
-      bracket_2: 0,
-      bracket_3: 0,
-      bracket_4: 0,
-      bracket_5: 0,
-      bracket_6: 0,
-      bracket_7: 0,
-      bracket_8: 0,
-      bracket_9: 0
+      bracket_0: customAdjustment.values[0],
+      bracket_1: customAdjustment.values[1],
+      bracket_2: customAdjustment.values[2],
+      bracket_3: customAdjustment.values[3],
+      bracket_4: customAdjustment.values[4],
+      bracket_5: customAdjustment.values[5],
+      bracket_6: customAdjustment.values[6],
+      bracket_7: customAdjustment.values[7],
+      bracket_8: customAdjustment.values[8],
+      bracket_9: customAdjustment.values[9]
     };
 
     setAdjustments(prev => [...prev, newAdj]);
+    setShowCustomModal(false);
+  };
+
+  const handleCustomValueChange = (bracketIndex, value) => {
+    setCustomAdjustment(prev => {
+      const newValues = [...prev.values];
+      newValues[bracketIndex] = parseFloat(value) || 0;
+      return { ...prev, values: newValues };
+    });
   };
 
   const handleDeleteAdjustment = async (adjustmentId) => {
