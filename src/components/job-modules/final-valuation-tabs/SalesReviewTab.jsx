@@ -268,6 +268,39 @@ const SalesReviewTab = ({
     return Array.from(codes).sort();
   }, [enrichedProperties]);
 
+  // Get unique VCS codes for filter dropdown
+  const uniqueVcsCodes = useMemo(() => {
+    const codes = new Set();
+    enrichedProperties.forEach(prop => {
+      if (prop.property_vcs) {
+        codes.add(prop.property_vcs);
+      }
+    });
+    return Array.from(codes).sort();
+  }, [enrichedProperties]);
+
+  // Get unique Type/Use codes for filter dropdown
+  const uniqueTypeCodes = useMemo(() => {
+    const codes = new Set();
+    enrichedProperties.forEach(prop => {
+      if (prop.asset_type_use) {
+        codes.add(prop.asset_type_use);
+      }
+    });
+    return Array.from(codes).sort();
+  }, [enrichedProperties]);
+
+  // Get unique Design/Style codes for filter dropdown
+  const uniqueDesignCodes = useMemo(() => {
+    const codes = new Set();
+    enrichedProperties.forEach(prop => {
+      if (prop.asset_design_style) {
+        codes.add(prop.asset_design_style);
+      }
+    });
+    return Array.from(codes).sort();
+  }, [enrichedProperties]);
+
   // Sorted properties with numerical sorting for Block and Lot
   const sortedProperties = useMemo(() => {
     if (!sortConfig.key) return filteredProperties;
