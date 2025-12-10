@@ -839,7 +839,8 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                           <tr className="border-b">
                             <th className="text-left py-2 px-3 font-medium text-gray-700">Code</th>
                             <th className="text-left py-2 px-3 font-medium text-gray-700">Description</th>
-                            <th className="text-left py-2 px-3 font-medium text-gray-700">Assign To</th>
+                            <th className="text-center py-2 px-2 font-medium text-gray-700">Det Garage</th>
+                            <th className="text-center py-2 px-2 font-medium text-gray-700">Pool</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -847,28 +848,21 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                             <tr key={item.code} className="border-b hover:bg-gray-50">
                               <td className="py-2 px-3 font-mono text-gray-900">{item.code}</td>
                               <td className="py-2 px-3 text-gray-700">{item.description}</td>
-                              <td className="py-2 px-3">
-                                <select
-                                  value={Object.keys(codeConfig).find(k => codeConfig[k].includes(item.code)) || ''}
-                                  onChange={(e) => {
-                                    const newType = e.target.value;
-                                    setCodeConfig(prev => {
-                                      const updated = { ...prev };
-                                      Object.keys(updated).forEach(type => {
-                                        updated[type] = updated[type].filter(c => c !== item.code);
-                                      });
-                                      if (newType) {
-                                        updated[newType] = [...updated[newType], item.code];
-                                      }
-                                      return updated;
-                                    });
-                                  }}
-                                  className="text-sm border rounded px-2 py-1"
-                                >
-                                  <option value="">-- None --</option>
-                                  <option value="det_garage">Det Garage</option>
-                                  <option value="pool">Pool</option>
-                                </select>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={codeConfig.det_garage.includes(item.code)}
+                                  onChange={() => handleCodeToggle('det_garage', item.code)}
+                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={codeConfig.pool.includes(item.code)}
+                                  onChange={() => handleCodeToggle('pool', item.code)}
+                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                />
                               </td>
                             </tr>
                           ))}
@@ -897,7 +891,11 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                           <tr className="border-b">
                             <th className="text-left py-2 px-3 font-medium text-gray-700">Code</th>
                             <th className="text-left py-2 px-3 font-medium text-gray-700">Description</th>
-                            <th className="text-left py-2 px-3 font-medium text-gray-700">Assign To</th>
+                            <th className="text-center py-2 px-2 font-medium text-gray-700">Barn</th>
+                            <th className="text-center py-2 px-2 font-medium text-gray-700">Stable</th>
+                            <th className="text-center py-2 px-2 font-medium text-gray-700">Pole Barn</th>
+                            <th className="text-center py-2 px-2 font-medium text-gray-700">Misc (+)</th>
+                            <th className="text-center py-2 px-2 font-medium text-gray-700">Misc (-)</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -905,31 +903,45 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                             <tr key={item.code} className="border-b hover:bg-gray-50">
                               <td className="py-2 px-3 font-mono text-gray-900">{item.code}</td>
                               <td className="py-2 px-3 text-gray-700">{item.description}</td>
-                              <td className="py-2 px-3">
-                                <select
-                                  value={Object.keys(codeConfig).find(k => codeConfig[k].includes(item.code)) || ''}
-                                  onChange={(e) => {
-                                    const newType = e.target.value;
-                                    setCodeConfig(prev => {
-                                      const updated = { ...prev };
-                                      Object.keys(updated).forEach(type => {
-                                        updated[type] = updated[type].filter(c => c !== item.code);
-                                      });
-                                      if (newType) {
-                                        updated[newType] = [...updated[newType], item.code];
-                                      }
-                                      return updated;
-                                    });
-                                  }}
-                                  className="text-sm border rounded px-2 py-1"
-                                >
-                                  <option value="">-- None --</option>
-                                  <option value="barn">Barn</option>
-                                  <option value="stable">Stable</option>
-                                  <option value="pole_barn">Pole Barn</option>
-                                  <option value="misc_positive">Miscellaneous (+)</option>
-                                  <option value="misc_negative">Miscellaneous (-)</option>
-                                </select>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={codeConfig.barn.includes(item.code)}
+                                  onChange={() => handleCodeToggle('barn', item.code)}
+                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={codeConfig.stable.includes(item.code)}
+                                  onChange={() => handleCodeToggle('stable', item.code)}
+                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={codeConfig.pole_barn.includes(item.code)}
+                                  onChange={() => handleCodeToggle('pole_barn', item.code)}
+                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={codeConfig.misc_positive.includes(item.code)}
+                                  onChange={() => handleCodeToggle('misc_positive', item.code)}
+                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={codeConfig.misc_negative.includes(item.code)}
+                                  onChange={() => handleCodeToggle('misc_negative', item.code)}
+                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                />
                               </td>
                             </tr>
                           ))}
@@ -955,7 +967,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                           <tr className="border-b">
                             <th className="text-left py-2 px-3 font-medium text-gray-700">Code</th>
                             <th className="text-left py-2 px-3 font-medium text-gray-700">Description</th>
-                            <th className="text-left py-2 px-3 font-medium text-gray-700">Assign To</th>
+                            <th className="text-center py-2 px-2 font-medium text-gray-700">Use</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -963,27 +975,13 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                             <tr key={item.code} className="border-b hover:bg-gray-50">
                               <td className="py-2 px-3 font-mono text-gray-900">{item.code}</td>
                               <td className="py-2 px-3 text-gray-700">{item.description}</td>
-                              <td className="py-2 px-3">
-                                <select
-                                  value={Object.keys(codeConfig).find(k => codeConfig[k].includes(item.code)) || ''}
-                                  onChange={(e) => {
-                                    const newType = e.target.value;
-                                    setCodeConfig(prev => {
-                                      const updated = { ...prev };
-                                      Object.keys(updated).forEach(type => {
-                                        updated[type] = updated[type].filter(c => c !== item.code);
-                                      });
-                                      if (newType) {
-                                        updated[newType] = [...updated[newType], item.code];
-                                      }
-                                      return updated;
-                                    });
-                                  }}
-                                  className="text-sm border rounded px-2 py-1"
-                                >
-                                  <option value="">-- None --</option>
-                                  <option value="land_positive">Land Adjustment (+)</option>
-                                </select>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={codeConfig.land_positive.includes(item.code)}
+                                  onChange={() => handleCodeToggle('land_positive', item.code)}
+                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                />
                               </td>
                             </tr>
                           ))}
@@ -1009,7 +1007,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                           <tr className="border-b">
                             <th className="text-left py-2 px-3 font-medium text-gray-700">Code</th>
                             <th className="text-left py-2 px-3 font-medium text-gray-700">Description</th>
-                            <th className="text-left py-2 px-3 font-medium text-gray-700">Assign To</th>
+                            <th className="text-center py-2 px-2 font-medium text-gray-700">Use</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1017,27 +1015,13 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                             <tr key={item.code} className="border-b hover:bg-gray-50">
                               <td className="py-2 px-3 font-mono text-gray-900">{item.code}</td>
                               <td className="py-2 px-3 text-gray-700">{item.description}</td>
-                              <td className="py-2 px-3">
-                                <select
-                                  value={Object.keys(codeConfig).find(k => codeConfig[k].includes(item.code)) || ''}
-                                  onChange={(e) => {
-                                    const newType = e.target.value;
-                                    setCodeConfig(prev => {
-                                      const updated = { ...prev };
-                                      Object.keys(updated).forEach(type => {
-                                        updated[type] = updated[type].filter(c => c !== item.code);
-                                      });
-                                      if (newType) {
-                                        updated[newType] = [...updated[newType], item.code];
-                                      }
-                                      return updated;
-                                    });
-                                  }}
-                                  className="text-sm border rounded px-2 py-1"
-                                >
-                                  <option value="">-- None --</option>
-                                  <option value="land_negative">Land Adjustment (-)</option>
-                                </select>
+                              <td className="py-2 px-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={codeConfig.land_negative.includes(item.code)}
+                                  onChange={() => handleCodeToggle('land_negative', item.code)}
+                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                />
                               </td>
                             </tr>
                           ))}
