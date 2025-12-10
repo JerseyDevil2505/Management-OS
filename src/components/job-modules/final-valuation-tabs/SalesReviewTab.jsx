@@ -1545,6 +1545,7 @@ const SalesReviewTab = ({
           <table className="min-w-full" style={{ fontSize: `${fontSize}px` }}>
             <thead className="bg-gray-50 border-b sticky top-0 z-10">
               <tr>
+                <th className="px-3 py-3 text-center font-medium text-gray-700">Include</th>
                 <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_vcs')}>VCS</th>
                 <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_block')}>Block</th>
                 <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_lot')}>Lot</th>
@@ -1576,7 +1577,38 @@ const SalesReviewTab = ({
             </thead>
             <tbody className="divide-y divide-gray-200">
               {sortedProperties.map((prop, idx) => (
-                <tr key={prop.id || idx} className="hover:bg-gray-50">
+                <tr
+                  key={prop.id || idx}
+                  className={`hover:bg-gray-50 ${prop.isIncluded ? 'bg-green-50' : ''}`}
+                >
+                  <td className="px-3 py-2 text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        onClick={() => handleIncludeToggle(prop, true)}
+                        className={`p-1 rounded hover:bg-green-200 ${
+                          prop.includeOverride === true
+                            ? 'bg-green-500 text-white'
+                            : prop.isAutoIncluded && prop.includeOverride === null
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-100 text-gray-400'
+                        }`}
+                        title="Include in CME analysis"
+                      >
+                        <Check className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleIncludeToggle(prop, false)}
+                        className={`p-1 rounded hover:bg-red-200 ${
+                          prop.includeOverride === false
+                            ? 'bg-red-500 text-white'
+                            : 'bg-gray-100 text-gray-400'
+                        }`}
+                        title="Exclude from CME analysis"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
                   <td className="px-3 py-2">{prop.property_vcs || '-'}</td>
                   <td className="px-3 py-2">{prop.property_block || '-'}</td>
                   <td className="px-3 py-2">{prop.property_lot || '-'}</td>
