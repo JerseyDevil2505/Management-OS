@@ -92,16 +92,16 @@ const AdjustmentsTab = ({ jobData = {} }) => {
           category: adj.category,
           is_default: adj.isDefault,
           sort_order: idx,
-          bracket_0: 0,
-          bracket_1: 0,
-          bracket_2: 0,
-          bracket_3: 0,
-          bracket_4: 0,
-          bracket_5: 0,
-          bracket_6: 0,
-          bracket_7: 0,
-          bracket_8: 0,
-          bracket_9: 0
+          bracket_0: adj.values[0],
+          bracket_1: adj.values[1],
+          bracket_2: adj.values[2],
+          bracket_3: adj.values[3],
+          bracket_4: adj.values[4],
+          bracket_5: adj.values[5],
+          bracket_6: adj.values[6],
+          bracket_7: adj.values[7],
+          bracket_8: adj.values[8],
+          bracket_9: adj.values[9]
         }));
         setAdjustments(defaultData);
       }
