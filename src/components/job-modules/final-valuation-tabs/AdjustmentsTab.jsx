@@ -924,6 +924,181 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                 )}
               </div>
 
+              {/* Barn */}
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <h4 className="font-semibold text-gray-900 mb-3">Barn</h4>
+                <p className="text-xs text-gray-600 mb-3">
+                  Select all codes that represent barns
+                </p>
+                {availableCodes.barn.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {availableCodes.barn.map(code => (
+                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={codeConfig.barn.includes(code)}
+                          onChange={() => handleCodeToggle('barn', code)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-mono">{code}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No barn codes found in source data</p>
+                )}
+              </div>
+
+              {/* Stable */}
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <h4 className="font-semibold text-gray-900 mb-3">Stable</h4>
+                <p className="text-xs text-gray-600 mb-3">
+                  Select all codes that represent stables
+                </p>
+                {availableCodes.stable.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {availableCodes.stable.map(code => (
+                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={codeConfig.stable.includes(code)}
+                          onChange={() => handleCodeToggle('stable', code)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-mono">{code}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No stable codes found in source data</p>
+                )}
+              </div>
+
+              {/* Pole Barn */}
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <h4 className="font-semibold text-gray-900 mb-3">Pole Barn</h4>
+                <p className="text-xs text-gray-600 mb-3">
+                  Select all codes that represent pole barns
+                </p>
+                {availableCodes.pole_barn.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {availableCodes.pole_barn.map(code => (
+                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={codeConfig.pole_barn.includes(code)}
+                          onChange={() => handleCodeToggle('pole_barn', code)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-mono">{code}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No pole barn codes found in source data</p>
+                )}
+              </div>
+
+              {/* Miscellaneous Positive */}
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <h4 className="font-semibold text-gray-900 mb-3">Miscellaneous Adjustment (+)</h4>
+                <p className="text-xs text-gray-600 mb-3">
+                  Select all codes that represent positive miscellaneous adjustments
+                </p>
+                {availableCodes.misc_positive.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {availableCodes.misc_positive.map(code => (
+                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={codeConfig.misc_positive.includes(code)}
+                          onChange={() => handleCodeToggle('misc_positive', code)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-mono">{code}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No miscellaneous positive codes found in source data</p>
+                )}
+              </div>
+
+              {/* Miscellaneous Negative */}
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <h4 className="font-semibold text-gray-900 mb-3">Miscellaneous Adjustment (-)</h4>
+                <p className="text-xs text-gray-600 mb-3">
+                  Select all codes that represent negative miscellaneous adjustments
+                </p>
+                {availableCodes.misc_negative.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {availableCodes.misc_negative.map(code => (
+                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={codeConfig.misc_negative.includes(code)}
+                          onChange={() => handleCodeToggle('misc_negative', code)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-mono">{code}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No miscellaneous negative codes found in source data</p>
+                )}
+              </div>
+
+              {/* Land Adjustment Positive */}
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <h4 className="font-semibold text-gray-900 mb-3">Land Adjustment (+)</h4>
+                <p className="text-xs text-gray-600 mb-3">
+                  Select all codes that represent positive land adjustments
+                </p>
+                {availableCodes.land_positive.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {availableCodes.land_positive.map(code => (
+                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={codeConfig.land_positive.includes(code)}
+                          onChange={() => handleCodeToggle('land_positive', code)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-mono">{code}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No positive land adjustment codes found in source data</p>
+                )}
+              </div>
+
+              {/* Land Adjustment Negative */}
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <h4 className="font-semibold text-gray-900 mb-3">Land Adjustment (-)</h4>
+                <p className="text-xs text-gray-600 mb-3">
+                  Select all codes that represent negative land adjustments
+                </p>
+                {availableCodes.land_negative.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {availableCodes.land_negative.map(code => (
+                      <label key={code} className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={codeConfig.land_negative.includes(code)}
+                          onChange={() => handleCodeToggle('land_negative', code)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-mono">{code}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No negative land adjustment codes found in source data</p>
+                )}
+              </div>
+
               {/* Save Button */}
               <div className="flex justify-end pt-4 border-t">
                 <button
