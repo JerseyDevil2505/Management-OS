@@ -53,8 +53,26 @@ const SalesReviewTab = ({
   const vendorType = jobData?.vendor_type || jobData?.vendor_source || 'BRT';
   const parsedCodeDefinitions = useMemo(() => jobData?.parsed_code_definitions || {}, [jobData?.parsed_code_definitions]);
 
+  // ==================== SALES NU CODE NORMALIZATION ====================
+
+  const normalizeSalesNuCode = useCallback((nuCode) => {
+    if (!nuCode || nuCode === '' || nuCode === null || nuCode === undefined) return '0';
+
+    const code = String(nuCode).trim().toUpperCase();
+
+    // Treat blank and '00' as '0'
+    if (code === '' || code === '00') return '0';
+
+    // Pad single digit codes with leading zero (7 -> 07, 8 -> 08)
+    if (code.length === 1 && /^\d$/.test(code)) {
+      return '0' + code;
+    }
+
+    return code;
+  }, []);
+
   // ==================== PERIOD CLASSIFICATION LOGIC ====================
-  
+
   const getPeriodClassification = useCallback((saleDate, endDate) => {
     if (!saleDate || !endDate) return null;
     
