@@ -145,6 +145,46 @@ const SalesReviewTab = ({
     }
   }, [jobData?.id]);
 
+  // Load include/exclude overrides from property_market_analysis
+  useEffect(() => {
+    const loadIncludeOverrides = async () => {
+      if (!jobData?.id || !properties || properties.length === 0) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('property_market_analysis')
+          .select('property_composite_key, cme_include_override')
+          .eq('job_id', jobData.id)
+          .not('cme_include_override', 'is', null);
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          // Create a map of composite_key to property id
+          const keyToIdMap = {};
+          properties.forEach(prop => {
+            keyToIdMap[prop.property_composite_key] = prop.id;
+          });
+
+          // Build overrides object with property id as key
+          const overrides = {};
+          data.forEach(item => {
+            const propId = keyToIdMap[item.property_composite_key];
+            if (propId) {
+              overrides[propId] = item.cme_include_override;
+            }
+          });
+
+          setIncludeOverrides(overrides);
+        }
+      } catch (error) {
+        console.error('Error loading include overrides:', error);
+      }
+    };
+
+    loadIncludeOverrides();
+  }, [jobData?.id, properties]);
+
   // ==================== COMPUTED DATA ====================
   
   const enrichedProperties = useMemo(() => {
