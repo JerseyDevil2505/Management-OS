@@ -105,7 +105,7 @@ const SalesReviewTab = ({
   const [vcsFilter, setVcsFilter] = useState([]);
   const [typeFilter, setTypeFilter] = useState([]);
   const [designFilter, setDesignFilter] = useState([]);
-  const [periodFilter, setPeriodFilter] = useState(['CSP', 'PSP', 'HSP']); // Default to all three periods
+  const [periodFilter, setPeriodFilter] = useState([]); // Empty means show all periods by default
   
   // Expandable sections
   const [expandedSections, setExpandedSections] = useState({
@@ -679,11 +679,13 @@ const SalesReviewTab = ({
               PSP Period
             </button>
             <button
-              onClick={() => handleSetDateRange('HSP')}
-              className="px-3 py-1.5 text-sm bg-orange-50 text-orange-700 border border-orange-200 rounded hover:bg-orange-100"
-            >
-              HSP Period
-            </button>
+            onClick={() => handleSetDateRange('HSP')}
+            className="px-3 py-1.5 text-sm" style={{ backgroundColor: '#fed7aa', color: '#c2410c', border: '1px solid #fdba74' }}
+            onMouseEnter={(e) => e.target.style.backgroundColor = '#fdba74'}
+            onMouseLeave={(e) => e.target.style.backgroundColor = '#fed7aa'}
+          >
+            HSP Period
+          </button>
           </div>
 
           {/* Font Size Control */}
