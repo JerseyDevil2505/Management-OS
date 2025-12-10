@@ -102,12 +102,11 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         .from('job_settings')
         .select('setting_key, setting_value')
         .eq('job_id', jobData.id)
-        .in('setting_key', ['garage_type_code', 'garage_detached_code'])
-        .single();
+        .in('setting_key', ['garage_type_code', 'garage_detached_code']);
 
       if (error && error.code !== 'PGRST116') throw error;
 
-      if (data) {
+      if (data && data.length > 0) {
         setGarageConfig({
           garageTypeCode: data.find(s => s.setting_key === 'garage_type_code')?.setting_value,
           garageDetachedCode: data.find(s => s.setting_key === 'garage_detached_code')?.setting_value
