@@ -14,21 +14,21 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   });
   
-  // Changed structure: now maps attribute -> single code value
+  // Structure: maps attribute -> array of codes
   const [codeConfig, setCodeConfig] = useState({
-    garage: '',
-    deck: '',
-    patio: '',
-    open_porch: '',
-    enclosed_porch: '',
-    det_garage: '',
-    pool: '',
-    barn: '',
-    stable: '',
-    pole_barn: '',
-    miscellaneous: '',
-    land_positive: '',
-    land_negative: ''
+    garage: [],
+    deck: [],
+    patio: [],
+    open_porch: [],
+    enclosed_porch: [],
+    det_garage: [],
+    pool: [],
+    barn: [],
+    stable: [],
+    pole_barn: [],
+    miscellaneous: [],
+    land_positive: [],
+    land_negative: []
   });
   
   const [availableCodes, setAvailableCodes] = useState({
@@ -167,19 +167,19 @@ const AdjustmentsTab = ({ jobData = {} }) => {
   const loadCodeConfig = async () => {
     try {
       const settingKeys = [
-        'adjustment_code_garage',
-        'adjustment_code_deck',
-        'adjustment_code_patio',
-        'adjustment_code_open_porch',
-        'adjustment_code_enclosed_porch',
-        'adjustment_code_det_garage',
-        'adjustment_code_pool',
-        'adjustment_code_barn',
-        'adjustment_code_stable',
-        'adjustment_code_pole_barn',
-        'adjustment_code_miscellaneous',
-        'adjustment_code_land_positive',
-        'adjustment_code_land_negative'
+        'adjustment_codes_garage',
+        'adjustment_codes_deck',
+        'adjustment_codes_patio',
+        'adjustment_codes_open_porch',
+        'adjustment_codes_enclosed_porch',
+        'adjustment_codes_det_garage',
+        'adjustment_codes_pool',
+        'adjustment_codes_barn',
+        'adjustment_codes_stable',
+        'adjustment_codes_pole_barn',
+        'adjustment_codes_miscellaneous',
+        'adjustment_codes_land_positive',
+        'adjustment_codes_land_negative'
       ];
 
       const { data, error } = await supabase
@@ -193,8 +193,12 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       if (data && data.length > 0) {
         const newConfig = { ...codeConfig };
         data.forEach(setting => {
-          const attributeId = setting.setting_key.replace('adjustment_code_', '');
-          newConfig[attributeId] = setting.setting_value || '';
+          const attributeId = setting.setting_key.replace('adjustment_codes_', '');
+          try {
+            newConfig[attributeId] = setting.setting_value ? JSON.parse(setting.setting_value) : [];
+          } catch (e) {
+            newConfig[attributeId] = [];
+          }
         });
         setCodeConfig(newConfig);
       }
@@ -406,22 +410,29 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     }));
   };
 
-  const handleCodeSelect = (attributeId, codeValue) => {
-    setCodeConfig(prev => ({
-      ...prev,
-      [attributeId]: codeValue
-    }));
+  const handleCodeToggle = (attributeId, codeValue) => {
+    setCodeConfig(prev => {
+      const currentCodes = prev[attributeId] || [];
+      const isSelected = currentCodes.includes(codeValue);
+
+      return {
+        ...prev,
+        [attributeId]: isSelected
+          ? currentCodes.filter(c => c !== codeValue)
+          : [...currentCodes, codeValue]
+      };
+    });
   };
 
   const handleSaveCodeConfig = async () => {
     try {
       // Save code configuration settings
       const settings = Object.keys(codeConfig)
-        .filter(attributeId => codeConfig[attributeId]) // Only save if a code is selected
+        .filter(attributeId => codeConfig[attributeId] && codeConfig[attributeId].length > 0) // Only save if codes are selected
         .map(attributeId => ({
           job_id: jobData.id,
-          setting_key: `adjustment_code_${attributeId}`,
-          setting_value: codeConfig[attributeId]
+          setting_key: `adjustment_codes_${attributeId}`,
+          setting_value: JSON.stringify(codeConfig[attributeId])
         }));
 
       const { error: settingsError } = await supabase
@@ -448,12 +459,12 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       };
 
       const newAdjustments = [];
-      
+
       // Only create adjustment rows for dynamic attributes that have codes selected
       DYNAMIC_ATTRIBUTES.forEach(attr => {
-        const selectedCode = codeConfig[attr.id];
-        
-        if (selectedCode) {
+        const selectedCodes = codeConfig[attr.id] || [];
+
+        if (selectedCodes.length > 0) {
           const existingAdj = adjustments.find(adj => adj.adjustment_id === attr.id);
 
           if (!existingAdj) {
@@ -592,25 +603,56 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                     <tbody>
                       {STATIC_ATTRIBUTES.map(attr => {
                         const codes = getCodesForAttribute(attr.id, attr.category);
-                        const selectedCode = codeConfig[attr.id];
-                        const selectedCodeObj = codes.find(c => c.code === selectedCode);
-                        
+                        const selectedCodes = codeConfig[attr.id] || [];
+
                         return (
                           <tr key={attr.id} className="border-b hover:bg-gray-50">
                             <td className="py-3 px-4 font-medium text-gray-900">{attr.name}</td>
                             <td className="py-3 px-4">
-                              <select
-                                value={selectedCode}
-                                onChange={(e) => handleCodeSelect(attr.id, e.target.value)}
-                                className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 text-sm"
-                              >
-                                <option value="">-- Select Code --</option>
-                                {codes.map(code => (
-                                  <option key={code.code} value={code.code}>
-                                    {code.code} - {code.description}
-                                  </option>
-                                ))}
-                              </select>
+                              <div className="space-y-2">
+                                {/* Selected codes as chips */}
+                                {selectedCodes.length > 0 && (
+                                  <div className="flex flex-wrap gap-2 mb-2">
+                                    {selectedCodes.map(codeVal => {
+                                      const codeObj = codes.find(c => c.code === codeVal);
+                                      return (
+                                        <span
+                                          key={codeVal}
+                                          className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium"
+                                        >
+                                          {codeVal} - {codeObj?.description || 'Unknown'}
+                                          <button
+                                            onClick={() => handleCodeToggle(attr.id, codeVal)}
+                                            className="ml-1 text-blue-600 hover:text-blue-800"
+                                          >
+                                            <X className="w-3 h-3" />
+                                          </button>
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+
+                                {/* Dropdown to add codes */}
+                                <select
+                                  value=""
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      handleCodeToggle(attr.id, e.target.value);
+                                    }
+                                  }}
+                                  className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 text-sm"
+                                >
+                                  <option value="">-- Add Code --</option>
+                                  {codes
+                                    .filter(code => !selectedCodes.includes(code.code))
+                                    .map(code => (
+                                      <option key={code.code} value={code.code}>
+                                        {code.code} - {code.description}
+                                      </option>
+                                    ))}
+                                </select>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -639,25 +681,56 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                     <tbody>
                       {DYNAMIC_ATTRIBUTES.map(attr => {
                         const codes = getCodesForAttribute(attr.id, attr.category);
-                        const selectedCode = codeConfig[attr.id];
-                        const selectedCodeObj = codes.find(c => c.code === selectedCode);
-                        
+                        const selectedCodes = codeConfig[attr.id] || [];
+
                         return (
                           <tr key={attr.id} className="border-b hover:bg-gray-50">
                             <td className="py-3 px-4 font-medium text-gray-900">{attr.name}</td>
                             <td className="py-3 px-4">
-                              <select
-                                value={selectedCode}
-                                onChange={(e) => handleCodeSelect(attr.id, e.target.value)}
-                                className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 text-sm"
-                              >
-                                <option value="">-- Select Code --</option>
-                                {codes.map(code => (
-                                  <option key={code.code} value={code.code}>
-                                    {code.code} - {code.description}
-                                  </option>
-                                ))}
-                              </select>
+                              <div className="space-y-2">
+                                {/* Selected codes as chips */}
+                                {selectedCodes.length > 0 && (
+                                  <div className="flex flex-wrap gap-2 mb-2">
+                                    {selectedCodes.map(codeVal => {
+                                      const codeObj = codes.find(c => c.code === codeVal);
+                                      return (
+                                        <span
+                                          key={codeVal}
+                                          className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium"
+                                        >
+                                          {codeVal} - {codeObj?.description || 'Unknown'}
+                                          <button
+                                            onClick={() => handleCodeToggle(attr.id, codeVal)}
+                                            className="ml-1 text-green-600 hover:text-green-800"
+                                          >
+                                            <X className="w-3 h-3" />
+                                          </button>
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+
+                                {/* Dropdown to add codes */}
+                                <select
+                                  value=""
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      handleCodeToggle(attr.id, e.target.value);
+                                    }
+                                  }}
+                                  className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 text-sm"
+                                >
+                                  <option value="">-- Add Code --</option>
+                                  {codes
+                                    .filter(code => !selectedCodes.includes(code.code))
+                                    .map(code => (
+                                      <option key={code.code} value={code.code}>
+                                        {code.code} - {code.description}
+                                      </option>
+                                    ))}
+                                </select>
+                              </div>
                             </td>
                           </tr>
                         );
