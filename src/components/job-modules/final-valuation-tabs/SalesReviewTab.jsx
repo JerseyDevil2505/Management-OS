@@ -1440,9 +1440,9 @@ const SalesReviewTab = ({
                   className="px-2 py-1 text-sm border rounded w-full mt-2"
                 >
                   <option value="">+ Add View</option>
-                  {uniqueViewCodes.filter(code => !viewFilter.includes(code)).map(code => (
-                    <option key={code} value={code}>
-                      {code}
+                  {uniqueViewCodes.filter(item => !viewFilter.includes(item.code)).map(item => (
+                    <option key={item.code} value={item.code}>
+                      {item.code} - {item.description}
                     </option>
                   ))}
                 </select>
