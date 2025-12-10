@@ -229,11 +229,10 @@ const SalesReviewTab = ({
       });
     }
 
-    // Sales NU filter
+    // Sales NU filter (using normalized codes)
     if (salesNuFilter.length > 0 && !showAllProperties) {
       filtered = filtered.filter(p => {
-        const nu = (p.sales_nu || '').toString().trim();
-        return salesNuFilter.includes(nu) || salesNuFilter.includes('');
+        return salesNuFilter.includes(p.normalizedSalesNu);
       });
     }
 
