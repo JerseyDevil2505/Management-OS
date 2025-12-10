@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Building, Factory, TrendingUp, DollarSign, Scale, Database, AlertCircle } from 'lucide-react';
+import { Building, Factory, TrendingUp, DollarSign, Database, AlertCircle } from 'lucide-react';
 import { supabase, interpretCodes } from '../../lib/supabaseClient';
 import ManagementChecklist from './ManagementChecklist';
 import ProductionTracker from './ProductionTracker';
 import MarketAnalysis from './MarketAnalysis';
 import FinalValuation from './FinalValuation';
-import AppealCoverage from './AppealCoverage';
 
 // 🔧 ENHANCED: Accept App.js workflow state management props + file refresh trigger
 const JobContainer = ({
@@ -1074,13 +1073,6 @@ const JobContainer = ({
       icon: DollarSign,
       component: FinalValuation,
       description: 'Final property valuations'
-    },
-    {
-      id: 'appeal-coverage',
-      name: 'Appeal Coverage',
-      icon: Scale,
-      component: AppealCoverage,
-      description: 'Appeal management and coverage'
     }
   ];
 
