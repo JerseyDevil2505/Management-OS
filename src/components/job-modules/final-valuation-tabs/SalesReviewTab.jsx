@@ -783,23 +783,48 @@ const SalesReviewTab = ({
 
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-700">Sales NU Codes:</label>
-            <select
-              multiple
-              value={salesNuFilter}
-              onChange={(e) => {
-                const selected = Array.from(e.target.selectedOptions, option => option.value);
-                setSalesNuFilter(selected);
-              }}
-              className="px-2 py-1 text-sm border rounded"
-              style={{ minWidth: '120px', minHeight: '34px' }}
-            >
-              {uniqueSalesNuCodes.map(code => (
-                <option key={code} value={code}>
-                  {code === '0' ? '0 (Blank/00)' : code}
-                </option>
-              ))}
-            </select>
-            <span className="text-xs text-gray-500">(Hold Ctrl/Cmd to select multiple)</span>
+            <div className="flex flex-col gap-2">
+              {/* Selected codes display */}
+              <div className="flex flex-wrap gap-1 px-3 py-2 border rounded bg-white min-w-[200px]">
+                {salesNuFilter.length === 0 ? (
+                  <span className="text-sm text-gray-400">No codes selected</span>
+                ) : (
+                  salesNuFilter.map(code => (
+                    <span
+                      key={code}
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded"
+                    >
+                      {code === '0' ? '0 (Blank/00)' : code}
+                      <button
+                        onClick={() => setSalesNuFilter(prev => prev.filter(c => c !== code))}
+                        className="hover:text-blue-900"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
+              {/* Dropdown to add codes */}
+              <select
+                value=""
+                onChange={(e) => {
+                  const code = e.target.value;
+                  if (code && !salesNuFilter.includes(code)) {
+                    setSalesNuFilter(prev => [...prev, code]);
+                  }
+                  e.target.value = '';
+                }}
+                className="px-2 py-1 text-sm border rounded"
+              >
+                <option value="">+ Add Code</option>
+                {uniqueSalesNuCodes.filter(code => !salesNuFilter.includes(code)).map(code => (
+                  <option key={code} value={code}>
+                    {code === '0' ? '0 (Blank/00)' : code}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </div>
