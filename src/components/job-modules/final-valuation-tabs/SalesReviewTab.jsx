@@ -672,6 +672,7 @@ const SalesReviewTab = ({
       typeFilter,
       designFilter,
       periodFilter,
+      viewFilter,
       showAllProperties,
       showCodesNotMeanings,
       expandedSections,
