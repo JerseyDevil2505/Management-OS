@@ -341,37 +341,46 @@ const SalesReviewTab = ({
     return Array.from(codes).sort();
   }, [enrichedProperties]);
 
-  // Get unique Type/Use codes for filter dropdown
+  // Get unique Type/Use codes for filter dropdown with descriptions
   const uniqueTypeCodes = useMemo(() => {
-    const codes = new Set();
+    const codeMap = new Map();
     enrichedProperties.forEach(prop => {
       if (prop.asset_type_use) {
-        codes.add(prop.asset_type_use);
+        const description = prop.typeUseName || prop.asset_type_use;
+        codeMap.set(prop.asset_type_use, description);
       }
     });
-    return Array.from(codes).sort();
+    return Array.from(codeMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([code, desc]) => ({ code, description: desc }));
   }, [enrichedProperties]);
 
-  // Get unique Design/Style codes for filter dropdown
+  // Get unique Design/Style codes for filter dropdown with descriptions
   const uniqueDesignCodes = useMemo(() => {
-    const codes = new Set();
+    const codeMap = new Map();
     enrichedProperties.forEach(prop => {
       if (prop.asset_design_style) {
-        codes.add(prop.asset_design_style);
+        const description = prop.designName || prop.asset_design_style;
+        codeMap.set(prop.asset_design_style, description);
       }
     });
-    return Array.from(codes).sort();
+    return Array.from(codeMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([code, desc]) => ({ code, description: desc }));
   }, [enrichedProperties]);
 
-  // Get unique View codes for filter dropdown
+  // Get unique View codes for filter dropdown with descriptions
   const uniqueViewCodes = useMemo(() => {
-    const codes = new Set();
+    const codeMap = new Map();
     enrichedProperties.forEach(prop => {
       if (prop.asset_view) {
-        codes.add(prop.asset_view);
+        const description = prop.viewName || prop.asset_view;
+        codeMap.set(prop.asset_view, description);
       }
     });
-    return Array.from(codes).sort();
+    return Array.from(codeMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([code, desc]) => ({ code, description: desc }));
   }, [enrichedProperties]);
 
   // Sorted properties with numerical sorting for Block and Lot
@@ -1345,9 +1354,9 @@ const SalesReviewTab = ({
                   className="px-2 py-1 text-sm border rounded w-full mt-2"
                 >
                   <option value="">+ Add Type</option>
-                  {uniqueTypeCodes.filter(code => !typeFilter.includes(code)).map(code => (
-                    <option key={code} value={code}>
-                      {code}
+                  {uniqueTypeCodes.filter(item => !typeFilter.includes(item.code)).map(item => (
+                    <option key={item.code} value={item.code}>
+                      {item.code} - {item.description}
                     </option>
                   ))}
                 </select>
@@ -1388,9 +1397,9 @@ const SalesReviewTab = ({
                   className="px-2 py-1 text-sm border rounded w-full mt-2"
                 >
                   <option value="">+ Add Style</option>
-                  {uniqueDesignCodes.filter(code => !designFilter.includes(code)).map(code => (
-                    <option key={code} value={code}>
-                      {code}
+                  {uniqueDesignCodes.filter(item => !designFilter.includes(item.code)).map(item => (
+                    <option key={item.code} value={item.code}>
+                      {item.code} - {item.description}
                     </option>
                   ))}
                 </select>
