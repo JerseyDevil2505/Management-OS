@@ -136,24 +136,101 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     }
   };
 
-  const loadGarageConfig = async () => {
+  const loadCodeConfig = async () => {
     try {
+      const settingKeys = [
+        'adjustment_codes_garage',
+        'adjustment_codes_det_garage',
+        'adjustment_codes_pool',
+        'adjustment_codes_deck',
+        'adjustment_codes_patio',
+        'adjustment_codes_open_porch',
+        'adjustment_codes_enclosed_porch'
+      ];
+
       const { data, error } = await supabase
         .from('job_settings')
         .select('setting_key, setting_value')
         .eq('job_id', jobData.id)
-        .in('setting_key', ['garage_type_code', 'garage_detached_code']);
+        .in('setting_key', settingKeys);
 
       if (error && error.code !== 'PGRST116') throw error;
 
       if (data && data.length > 0) {
-        setGarageConfig({
-          garageTypeCode: data.find(s => s.setting_key === 'garage_type_code')?.setting_value,
-          garageDetachedCode: data.find(s => s.setting_key === 'garage_detached_code')?.setting_value
+        const newConfig = { ...codeConfig };
+        data.forEach(setting => {
+          const amenityType = setting.setting_key.replace('adjustment_codes_', '');
+          try {
+            newConfig[amenityType] = setting.setting_value ? JSON.parse(setting.setting_value) : [];
+          } catch (e) {
+            newConfig[amenityType] = [];
+          }
         });
+        setCodeConfig(newConfig);
       }
     } catch (error) {
-      console.error('Error loading garage config:', error);
+      console.error('Error loading code config:', error);
+    }
+  };
+
+  const loadAvailableCodes = async () => {
+    try {
+      setIsLoadingCodes(true);
+
+      // Import getRawDataForJob from supabaseClient
+      const { getRawDataForJob } = await import('../../../lib/supabaseClient');
+      const rawData = await getRawDataForJob(jobData.id);
+
+      if (!rawData || !rawData.propertyMap) {
+        setIsLoadingCodes(false);
+        return;
+      }
+
+      // Field mappings for different vendors - trying common field names
+      const fieldMappings = {
+        garage: ['GARAGE_TYPE', 'GARAGE', 'GAR_TYPE', 'ATTACHED_GAR', 'ATT_GAR'],
+        det_garage: ['DETACHED_GAR', 'DET_GAR', 'DETACHED_GARAGE'],
+        pool: ['POOL', 'POOL_TYPE', 'SWIMMING_POOL'],
+        deck: ['DECK', 'DECK_TYPE'],
+        patio: ['PATIO', 'PATIO_TYPE'],
+        open_porch: ['OPEN_PORCH', 'PORCH_OPEN', 'PORCH'],
+        enclosed_porch: ['ENCLOSED_PORCH', 'PORCH_ENCLOSED', 'SCREENED_PORCH']
+      };
+
+      const distinctCodes = {
+        garage: new Set(),
+        det_garage: new Set(),
+        pool: new Set(),
+        deck: new Set(),
+        patio: new Set(),
+        open_porch: new Set(),
+        enclosed_porch: new Set()
+      };
+
+      // Iterate through all properties to find distinct codes
+      rawData.propertyMap.forEach(property => {
+        Object.keys(fieldMappings).forEach(amenityType => {
+          const possibleFields = fieldMappings[amenityType];
+          possibleFields.forEach(fieldName => {
+            const value = property[fieldName];
+            if (value && value !== '' && value !== '0' && value !== 'N' && value !== 'NONE') {
+              distinctCodes[amenityType].add(String(value).trim());
+            }
+          });
+        });
+      });
+
+      // Convert Sets to sorted arrays
+      const availableCodesData = {};
+      Object.keys(distinctCodes).forEach(amenityType => {
+        availableCodesData[amenityType] = Array.from(distinctCodes[amenityType]).sort();
+      });
+
+      setAvailableCodes(availableCodesData);
+    } catch (error) {
+      console.error('Error loading available codes:', error);
+    } finally {
+      setIsLoadingCodes(false);
     }
   };
 
