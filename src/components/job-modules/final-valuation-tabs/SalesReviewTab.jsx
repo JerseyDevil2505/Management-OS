@@ -119,7 +119,7 @@ const SalesReviewTab = ({
     return { start: '', end: '' };
   });
   
-  const [salesNuFilter, setSalesNuFilter] = useState(['', '0', '00', '7', '07', '32']);
+  const [salesNuFilter, setSalesNuFilter] = useState(['0', '07', '32']); // Normalized codes: blank/00->0, 7->07
   const [vcsFilter, setVcsFilter] = useState([]);
   const [typeFilter, setTypeFilter] = useState([]);
   const [designFilter, setDesignFilter] = useState([]);
@@ -186,6 +186,9 @@ const SalesReviewTab = ({
       const exteriorCondName = interpretCodes.getExteriorConditionName?.(prop, parsedCodeDefinitions, vendorType);
       const interiorCondName = interpretCodes.getInteriorConditionName?.(prop, parsedCodeDefinitions, vendorType);
 
+      // Normalize sales NU code
+      const normalizedSalesNu = normalizeSalesNuCode(prop.sales_nu);
+
       return {
         ...prop,
         periodCode,
@@ -196,10 +199,11 @@ const SalesReviewTab = ({
         typeUseName,
         designName,
         exteriorCondName,
-        interiorCondName
+        interiorCondName,
+        normalizedSalesNu
       };
     });
-  }, [properties, jobData?.end_date, parsedCodeDefinitions, vendorType, getPeriodClassification]);
+  }, [properties, jobData?.end_date, parsedCodeDefinitions, vendorType, getPeriodClassification, normalizeSalesNuCode]);
 
   // Filtered properties
   const filteredProperties = useMemo(() => {
