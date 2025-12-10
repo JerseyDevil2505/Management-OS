@@ -998,6 +998,84 @@ const SalesReviewTab = ({
             </div>
           </div>
         </div>
+
+        {/* Additional Filters Row */}
+        <div className="flex flex-wrap gap-4 items-start bg-gray-50 p-4 rounded border">
+          {/* Filter VCS */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">Filter VCS</label>
+            <select
+              multiple
+              value={vcsFilter}
+              onChange={(e) => {
+                const selected = Array.from(e.target.selectedOptions, option => option.value);
+                setVcsFilter(selected);
+              }}
+              className="px-2 py-1 text-sm border rounded min-w-[120px] h-24"
+            >
+              {uniqueVcsCodes.map(code => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filter Type/Use Codes */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">Filter Type/Use Codes</label>
+            <select
+              multiple
+              value={typeFilter}
+              onChange={(e) => {
+                const selected = Array.from(e.target.selectedOptions, option => option.value);
+                setTypeFilter(selected);
+              }}
+              className="px-2 py-1 text-sm border rounded min-w-[150px] h-24"
+            >
+              {uniqueTypeCodes.map(code => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filter Style Codes */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">Filter Style Codes</label>
+            <select
+              multiple
+              value={designFilter}
+              onChange={(e) => {
+                const selected = Array.from(e.target.selectedOptions, option => option.value);
+                setDesignFilter(selected);
+              }}
+              className="px-2 py-1 text-sm border rounded min-w-[120px] h-24"
+            >
+              {uniqueDesignCodes.map(code => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Clear Filters Button */}
+          <div className="flex flex-col gap-1 justify-end">
+            <button
+              onClick={() => {
+                setVcsFilter([]);
+                setTypeFilter([]);
+                setDesignFilter([]);
+                setSalesNuFilter([]);
+              }}
+              className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+            >
+              Clear All Filters
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Settings Modal */}
