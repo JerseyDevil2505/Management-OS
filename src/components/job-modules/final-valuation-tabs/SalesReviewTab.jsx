@@ -691,6 +691,19 @@ const SalesReviewTab = ({
             <span className="text-sm font-medium text-gray-700">Show Codes (not definitions)</span>
           </label>
 
+          {/* Show All Normalized Sales Toggle */}
+          {!showAllProperties && (
+            <label className="inline-flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showAllNormalizedSales}
+                onChange={(e) => setShowAllNormalizedSales(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              <span className="text-sm font-medium text-gray-700">Show All Normalized Sales</span>
+            </label>
+          )}
+
           {/* Quick Period Buttons */}
           <div className="flex gap-2">
             <button
