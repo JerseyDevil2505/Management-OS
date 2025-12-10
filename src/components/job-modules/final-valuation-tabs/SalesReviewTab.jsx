@@ -1106,7 +1106,7 @@ const SalesReviewTab = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {vcsAnalytics.map(row => (
+                  {vcsAnalytics.analytics.map(row => (
                     <tr key={row.vcs} className="border-b hover:bg-gray-50">
                       <td className="py-2 px-2 font-medium">{row.vcs}</td>
                       <td className="py-2 px-2 text-right">{row.count}</td>
@@ -1121,6 +1121,19 @@ const SalesReviewTab = ({
                       <td className="py-2 px-2 text-right">{row.prd.toFixed(3)}</td>
                     </tr>
                   ))}
+                  <tr className="border-t-2 border-gray-400 bg-blue-50 font-bold">
+                    <td className="py-2 px-2">{vcsAnalytics.summary.vcs}</td>
+                    <td className="py-2 px-2 text-right">{vcsAnalytics.summary.count}</td>
+                    <td className="py-2 px-2 text-right">{formatCurrency(vcsAnalytics.summary.avgPrice)}</td>
+                    <td className="py-2 px-2 text-right">{formatCurrency(vcsAnalytics.summary.avgNormPrice)}</td>
+                    <td className="py-2 px-2 text-right">{formatNumber(vcsAnalytics.summary.avgSFLA)}</td>
+                    <td className="py-2 px-2 text-right">{formatCurrency(vcsAnalytics.summary.avgPPSF)}</td>
+                    <td className="py-2 px-2 text-right">{vcsAnalytics.summary.avgAge.toFixed(1)}</td>
+                    <td className="py-2 px-2 text-right">{formatCurrency(vcsAnalytics.summary.avgAssessed)}</td>
+                    <td className="py-2 px-2 text-right">{formatPercent(vcsAnalytics.summary.avgSalesRatio)}</td>
+                    <td className="py-2 px-2 text-right">{vcsAnalytics.summary.cod.toFixed(2)}</td>
+                    <td className="py-2 px-2 text-right">{vcsAnalytics.summary.prd.toFixed(3)}</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -1149,7 +1162,7 @@ const SalesReviewTab = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {styleAnalytics.map(row => (
+                  {styleAnalytics.analytics.map(row => (
                     <tr key={row.style} className="border-b hover:bg-gray-50">
                       <td className="py-2 px-2 font-medium">{row.styleName}</td>
                       <td className="py-2 px-2 text-right">{row.count}</td>
@@ -1158,6 +1171,13 @@ const SalesReviewTab = ({
                       <td className="py-2 px-2 text-right">{formatCurrency(row.avgPPSF)}</td>
                     </tr>
                   ))}
+                  <tr className="border-t-2 border-gray-400 bg-blue-50 font-bold">
+                    <td className="py-2 px-2">{styleAnalytics.summary.styleName}</td>
+                    <td className="py-2 px-2 text-right">{styleAnalytics.summary.count}</td>
+                    <td className="py-2 px-2 text-right">{formatCurrency(styleAnalytics.summary.avgPrice)}</td>
+                    <td className="py-2 px-2 text-right">{formatCurrency(styleAnalytics.summary.avgNormPrice)}</td>
+                    <td className="py-2 px-2 text-right">{formatCurrency(styleAnalytics.summary.avgPPSF)}</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -1186,7 +1206,7 @@ const SalesReviewTab = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {typeUseAnalytics.map(row => (
+                  {typeUseAnalytics.analytics.map(row => (
                     <tr key={row.type} className="border-b hover:bg-gray-50">
                       <td className="py-2 px-2 font-medium">{row.typeName}</td>
                       <td className="py-2 px-2 text-right">{row.count}</td>
@@ -1195,6 +1215,13 @@ const SalesReviewTab = ({
                       <td className="py-2 px-2 text-right">{formatCurrency(row.avgPPSF)}</td>
                     </tr>
                   ))}
+                  <tr className="border-t-2 border-gray-400 bg-blue-50 font-bold">
+                    <td className="py-2 px-2">{typeUseAnalytics.summary.typeName}</td>
+                    <td className="py-2 px-2 text-right">{typeUseAnalytics.summary.count}</td>
+                    <td className="py-2 px-2 text-right">{formatCurrency(typeUseAnalytics.summary.avgPrice)}</td>
+                    <td className="py-2 px-2 text-right">{formatCurrency(typeUseAnalytics.summary.avgNormPrice)}</td>
+                    <td className="py-2 px-2 text-right">{formatCurrency(typeUseAnalytics.summary.avgPPSF)}</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -1204,16 +1231,21 @@ const SalesReviewTab = ({
 
       {/* Main Data Table with Horizontal Scroll */}
       <div className="bg-white border rounded overflow-hidden">
-        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '70vh', overflowX: 'scroll' }}>
+        {/* Top horizontal scrollbar for easier navigation */}
+        <div className="overflow-x-auto" style={{ overflowY: 'hidden', height: '20px' }}>
+          <div style={{ width: '2500px', height: '1px' }}></div>
+        </div>
+        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '70vh' }}>
           <table className="min-w-full" style={{ fontSize: `${fontSize}px` }}>
             <thead className="bg-gray-50 border-b sticky top-0 z-10">
               <tr>
                 <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_vcs')}>VCS</th>
                 <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_block')}>Block</th>
                 <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_lot')}>Lot</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700">Qual</th>
+                <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_qualifier')}>Qual</th>
                 <th className="px-3 py-3 text-left font-medium text-gray-700">Package</th>
                 <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_location')}>Address</th>
+                <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_m4_class')}>Prop Class</th>
                 <th className="px-3 py-3 text-right font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('values_mod_total')}>Current Asmt</th>
                 <th className="px-3 py-3 text-center font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('periodCode')}>Code</th>
                 <th className="px-3 py-3 text-right font-medium text-gray-700">Lot Front</th>
@@ -1245,6 +1277,7 @@ const SalesReviewTab = ({
                   <td className="px-3 py-2">{prop.property_qualifier || '-'}</td>
                   <td className="px-3 py-2">{prop.isPackage ? 'Yes' : 'No'}</td>
                   <td className="px-3 py-2 max-w-xs truncate">{prop.property_location || '-'}</td>
+                  <td className="px-3 py-2">{prop.property_m4_class || '-'}</td>
                   <td className="px-3 py-2 text-right">{formatCurrency(prop.values_mod_total)}</td>
                   <td className="px-3 py-2 text-center">
                     {prop.periodCode || '-'}
