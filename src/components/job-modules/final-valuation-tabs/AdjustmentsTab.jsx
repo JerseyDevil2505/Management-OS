@@ -3,7 +3,7 @@ import { supabase, getRawDataForJob } from '../../../lib/supabaseClient';
 import { Save, Plus, Trash2, Settings, X } from 'lucide-react';
 
 const AdjustmentsTab = ({ jobData = {} }) => {
-  const [activeSubTab, setActiveSubTab] = useState('adjustments');
+  const [activeSubTab, setActiveSubTab] = useState('config');
   const [adjustments, setAdjustments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -13,21 +13,24 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     type: 'flat',
     values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   });
+  
+  // Changed structure: now maps attribute -> single code value
   const [codeConfig, setCodeConfig] = useState({
-    garage: [],
-    det_garage: [],
-    pool: [],
-    deck: [],
-    patio: [],
-    open_porch: [],
-    enclosed_porch: [],
-    barn: [],
-    stable: [],
-    pole_barn: [],
-    misc_positive: [],
-    land_positive: [],
-    land_negative: []
+    garage: '',
+    deck: '',
+    patio: '',
+    open_porch: '',
+    enclosed_porch: '',
+    det_garage: '',
+    pool: '',
+    barn: '',
+    stable: '',
+    pole_barn: '',
+    miscellaneous: '',
+    land_positive: '',
+    land_negative: ''
   });
+  
   const [availableCodes, setAvailableCodes] = useState({
     '11': [], // Attached items
     '15': [], // Detached items
@@ -89,6 +92,27 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       values: [5000, 5000, 10000, 15000, 15000, 20000, 25000, 40000, 50000, 60000] }
   ];
 
+  // Static attributes (always shown)
+  const STATIC_ATTRIBUTES = [
+    { id: 'garage', name: 'Garage', category: '11' },
+    { id: 'deck', name: 'Deck', category: '11' },
+    { id: 'patio', name: 'Patio', category: '11' },
+    { id: 'open_porch', name: 'Open Porch', category: '11' },
+    { id: 'enclosed_porch', name: 'Enclosed Porch', category: '11' },
+    { id: 'det_garage', name: 'Detached Garage', category: '15' },
+    { id: 'pool', name: 'Pool', category: '15' }
+  ];
+
+  // Dynamic attributes (shown only if defined)
+  const DYNAMIC_ATTRIBUTES = [
+    { id: 'barn', name: 'Barn', category: '15' },
+    { id: 'pole_barn', name: 'Pole Barn', category: '15' },
+    { id: 'stable', name: 'Stable', category: '15' },
+    { id: 'miscellaneous', name: 'Miscellaneous', category: '39' },
+    { id: 'land_positive', name: 'Positive Land', category: '62' },
+    { id: 'land_negative', name: 'Negative Land', category: '63' }
+  ];
+
   // Load adjustments from database
   useEffect(() => {
     if (!jobData?.id) return;
@@ -143,19 +167,19 @@ const AdjustmentsTab = ({ jobData = {} }) => {
   const loadCodeConfig = async () => {
     try {
       const settingKeys = [
-        'adjustment_codes_garage',
-        'adjustment_codes_det_garage',
-        'adjustment_codes_pool',
-        'adjustment_codes_deck',
-        'adjustment_codes_patio',
-        'adjustment_codes_open_porch',
-        'adjustment_codes_enclosed_porch',
-        'adjustment_codes_barn',
-        'adjustment_codes_stable',
-        'adjustment_codes_pole_barn',
-        'adjustment_codes_misc_positive',
-        'adjustment_codes_land_positive',
-        'adjustment_codes_land_negative'
+        'adjustment_code_garage',
+        'adjustment_code_deck',
+        'adjustment_code_patio',
+        'adjustment_code_open_porch',
+        'adjustment_code_enclosed_porch',
+        'adjustment_code_det_garage',
+        'adjustment_code_pool',
+        'adjustment_code_barn',
+        'adjustment_code_stable',
+        'adjustment_code_pole_barn',
+        'adjustment_code_miscellaneous',
+        'adjustment_code_land_positive',
+        'adjustment_code_land_negative'
       ];
 
       const { data, error } = await supabase
@@ -169,12 +193,8 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       if (data && data.length > 0) {
         const newConfig = { ...codeConfig };
         data.forEach(setting => {
-          const amenityType = setting.setting_key.replace('adjustment_codes_', '');
-          try {
-            newConfig[amenityType] = setting.setting_value ? JSON.parse(setting.setting_value) : [];
-          } catch (e) {
-            newConfig[amenityType] = [];
-          }
+          const attributeId = setting.setting_key.replace('adjustment_code_', '');
+          newConfig[attributeId] = setting.setting_value || '';
         });
         setCodeConfig(newConfig);
       }
@@ -209,7 +229,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       // Extract codes from specific categories WITHIN the Residential section
       const categoryCodes = {
         '11': [], // Attached items (garage, deck, patio, open porch, enclosed porch)
-        '15': [], // Detached items (det garage, pools)
+        '15': [], // Detached items (det garage, pools, barn, stable, pole barn)
         '39': [], // Miscellaneous items
         '62': [], // Positive land adjustments
         '63': []  // Negative land adjustments
@@ -386,28 +406,23 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     }));
   };
 
-  const handleCodeToggle = (amenityType, code) => {
-    setCodeConfig(prev => {
-      const currentCodes = prev[amenityType] || [];
-      const isSelected = currentCodes.includes(code);
-
-      return {
-        ...prev,
-        [amenityType]: isSelected
-          ? currentCodes.filter(c => c !== code)
-          : [...currentCodes, code]
-      };
-    });
+  const handleCodeSelect = (attributeId, codeValue) => {
+    setCodeConfig(prev => ({
+      ...prev,
+      [attributeId]: codeValue
+    }));
   };
 
   const handleSaveCodeConfig = async () => {
     try {
       // Save code configuration settings
-      const settings = Object.keys(codeConfig).map(amenityType => ({
-        job_id: jobData.id,
-        setting_key: `adjustment_codes_${amenityType}`,
-        setting_value: JSON.stringify(codeConfig[amenityType])
-      }));
+      const settings = Object.keys(codeConfig)
+        .filter(attributeId => codeConfig[attributeId]) // Only save if a code is selected
+        .map(attributeId => ({
+          job_id: jobData.id,
+          setting_key: `adjustment_code_${attributeId}`,
+          setting_value: codeConfig[attributeId]
+        }));
 
       const { error: settingsError } = await supabase
         .from('job_settings')
@@ -415,40 +430,41 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
       if (settingsError) throw settingsError;
 
-      // For each amenity type with selected codes, create/update adjustment row
-      const amenityTypeLabels = {
+      // For dynamic attributes with selected codes, create/update adjustment rows
+      const attributeLabels = {
         garage: 'Garage',
-        det_garage: 'Det Garage',
-        pool: 'Pool',
         deck: 'Deck',
         patio: 'Patio',
         open_porch: 'Open Porch',
         enclosed_porch: 'Enclosed Porch',
+        det_garage: 'Det Garage',
+        pool: 'Pool',
         barn: 'Barn',
         stable: 'Stable',
         pole_barn: 'Pole Barn',
-        misc_positive: 'Miscellaneous',
+        miscellaneous: 'Miscellaneous',
         land_positive: 'Land Adjustment (+)',
         land_negative: 'Land Adjustment (-)'
       };
 
       const newAdjustments = [];
-      Object.keys(codeConfig).forEach(amenityType => {
-        const selectedCodes = codeConfig[amenityType] || [];
-
-        // If codes are selected for this amenity, ensure it has an adjustment row
-        if (selectedCodes.length > 0) {
-          const existingAdj = adjustments.find(adj => adj.adjustment_id === amenityType);
+      
+      // Only create adjustment rows for dynamic attributes that have codes selected
+      DYNAMIC_ATTRIBUTES.forEach(attr => {
+        const selectedCode = codeConfig[attr.id];
+        
+        if (selectedCode) {
+          const existingAdj = adjustments.find(adj => adj.adjustment_id === attr.id);
 
           if (!existingAdj) {
-            // Create new adjustment row
+            // Create new adjustment row for dynamic attribute
             const maxSortOrder = Math.max(...adjustments.map(a => a.sort_order || 0), 0);
             newAdjustments.push({
               job_id: jobData.id,
-              adjustment_id: amenityType,
-              adjustment_name: amenityTypeLabels[amenityType] || amenityType,
+              adjustment_id: attr.id,
+              adjustment_name: attributeLabels[attr.id] || attr.name,
               adjustment_type: 'flat',
-              category: 'custom',
+              category: 'amenity',
               is_default: false,
               sort_order: maxSortOrder + newAdjustments.length + 1,
               bracket_0: 0,
@@ -486,7 +502,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         });
       }
 
-      alert(`Code configuration saved! ${newAdjustments.length} new adjustment row(s) added to grid.`);
+      alert(`Code configuration saved!${newAdjustments.length > 0 ? ` ${newAdjustments.length} new adjustment row(s) added to grid.` : ''}`);
 
       // Optionally switch to adjustment grid tab to show new rows
       if (newAdjustments.length > 0) {
@@ -496,6 +512,11 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       console.error('Error saving code config:', error);
       alert(`Failed to save: ${error.message}`);
     }
+  };
+
+  // Get available codes for a specific attribute
+  const getCodesForAttribute = (attributeId, category) => {
+    return availableCodes[category] || [];
   };
 
   if (isLoading) {
@@ -508,19 +529,9 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
   return (
     <div className="adjustments-tab">
-      {/* Sub-tab Navigation */}
+      {/* Sub-tab Navigation - Configuration now comes first */}
       <div className="mb-6 border-b border-gray-200">
         <nav className="-mb-px flex space-x-8">
-          <button
-            onClick={() => setActiveSubTab('adjustments')}
-            className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${
-              activeSubTab === 'adjustments'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Adjustment Grid
-          </button>
           <button
             onClick={() => setActiveSubTab('config')}
             className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm inline-flex items-center gap-2 ${
@@ -532,8 +543,144 @@ const AdjustmentsTab = ({ jobData = {} }) => {
             <Settings className="w-4 h-4" />
             Configuration
           </button>
+          <button
+            onClick={() => setActiveSubTab('adjustments')}
+            className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${
+              activeSubTab === 'adjustments'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Adjustment Grid
+          </button>
         </nav>
       </div>
+
+      {/* Configuration Tab */}
+      {activeSubTab === 'config' && (
+        <div>
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Adjustment Code Configuration</h3>
+            <p className="text-sm text-gray-600">
+              Assign BRT codes to each adjustment attribute. Static attributes are always visible in the adjustment grid. 
+              Dynamic attributes will only appear in the grid after codes are assigned and saved.
+            </p>
+          </div>
+
+          {isLoadingCodes ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-gray-500">Loading code definitions...</div>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Static Attributes Section */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-blue-50 px-4 py-3 border-b">
+                  <h4 className="font-semibold text-gray-900">Static Attributes</h4>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Always visible in the adjustment grid
+                  </p>
+                </div>
+                <div className="bg-white">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-gray-50">
+                        <th className="text-left py-3 px-4 font-medium text-gray-700 w-1/3">Attribute</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-700">Assigned Code</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {STATIC_ATTRIBUTES.map(attr => {
+                        const codes = getCodesForAttribute(attr.id, attr.category);
+                        const selectedCode = codeConfig[attr.id];
+                        const selectedCodeObj = codes.find(c => c.code === selectedCode);
+                        
+                        return (
+                          <tr key={attr.id} className="border-b hover:bg-gray-50">
+                            <td className="py-3 px-4 font-medium text-gray-900">{attr.name}</td>
+                            <td className="py-3 px-4">
+                              <select
+                                value={selectedCode}
+                                onChange={(e) => handleCodeSelect(attr.id, e.target.value)}
+                                className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 text-sm"
+                              >
+                                <option value="">-- Select Code --</option>
+                                {codes.map(code => (
+                                  <option key={code.code} value={code.code}>
+                                    {code.code} - {code.description}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Dynamic Attributes Section */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-green-50 px-4 py-3 border-b">
+                  <h4 className="font-semibold text-gray-900">Dynamic Attributes</h4>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Only visible in the adjustment grid after codes are assigned and saved
+                  </p>
+                </div>
+                <div className="bg-white">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-gray-50">
+                        <th className="text-left py-3 px-4 font-medium text-gray-700 w-1/3">Attribute</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-700">Assigned Code</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {DYNAMIC_ATTRIBUTES.map(attr => {
+                        const codes = getCodesForAttribute(attr.id, attr.category);
+                        const selectedCode = codeConfig[attr.id];
+                        const selectedCodeObj = codes.find(c => c.code === selectedCode);
+                        
+                        return (
+                          <tr key={attr.id} className="border-b hover:bg-gray-50">
+                            <td className="py-3 px-4 font-medium text-gray-900">{attr.name}</td>
+                            <td className="py-3 px-4">
+                              <select
+                                value={selectedCode}
+                                onChange={(e) => handleCodeSelect(attr.id, e.target.value)}
+                                className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 text-sm"
+                              >
+                                <option value="">-- Select Code --</option>
+                                {codes.map(code => (
+                                  <option key={code.code} value={code.code}>
+                                    {code.code} - {code.description}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Save Button */}
+              <div className="flex justify-end pt-4 border-t">
+                <button
+                  onClick={handleSaveCodeConfig}
+                  className="inline-flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
+                >
+                  <Save className="w-4 h-4" />
+                  Save Configuration
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Adjustment Grid Tab */}
       {activeSubTab === 'adjustments' && (
@@ -735,317 +882,6 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                     Save Adjustment
                   </button>
                 </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Configuration Tab */}
-      {activeSubTab === 'config' && (
-        <div>
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Adjustment Code Configuration</h3>
-            <p className="text-sm text-gray-600">
-              Select codes from each category and assign them to adjustment types. When saved, selected codes will create adjustment rows in the grid.
-            </p>
-          </div>
-
-          {isLoadingCodes ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-gray-500">Loading code definitions...</div>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {/* Category 11: Attached Items */}
-              <div className="border rounded-lg overflow-hidden">
-                <div className="bg-blue-50 px-4 py-3 border-b">
-                  <h4 className="font-semibold text-gray-900">Category 11 - Attached Items</h4>
-                  <p className="text-xs text-gray-600 mt-1">
-                    Garage, Deck, Patio, Open Porch, Enclosed Porch
-                  </p>
-                </div>
-                <div className="bg-white p-4">
-                  {availableCodes['11'].length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full text-sm">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left py-2 px-3 font-medium text-gray-700">Code</th>
-                            <th className="text-left py-2 px-3 font-medium text-gray-700">Description</th>
-                            <th className="text-center py-2 px-2 font-medium text-gray-700">Garage</th>
-                            <th className="text-center py-2 px-2 font-medium text-gray-700">Deck</th>
-                            <th className="text-center py-2 px-2 font-medium text-gray-700">Patio</th>
-                            <th className="text-center py-2 px-2 font-medium text-gray-700">Open Porch</th>
-                            <th className="text-center py-2 px-2 font-medium text-gray-700">Enclosed Porch</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {availableCodes['11'].map(item => (
-                            <tr key={item.code} className="border-b hover:bg-gray-50">
-                              <td className="py-2 px-3 font-mono text-gray-900">{item.code}</td>
-                              <td className="py-2 px-3 text-gray-700">{item.description}</td>
-                              <td className="py-2 px-2 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={codeConfig.garage.includes(item.code)}
-                                  onChange={() => handleCodeToggle('garage', item.code)}
-                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                                />
-                              </td>
-                              <td className="py-2 px-2 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={codeConfig.deck.includes(item.code)}
-                                  onChange={() => handleCodeToggle('deck', item.code)}
-                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                                />
-                              </td>
-                              <td className="py-2 px-2 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={codeConfig.patio.includes(item.code)}
-                                  onChange={() => handleCodeToggle('patio', item.code)}
-                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                                />
-                              </td>
-                              <td className="py-2 px-2 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={codeConfig.open_porch.includes(item.code)}
-                                  onChange={() => handleCodeToggle('open_porch', item.code)}
-                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                                />
-                              </td>
-                              <td className="py-2 px-2 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={codeConfig.enclosed_porch.includes(item.code)}
-                                  onChange={() => handleCodeToggle('enclosed_porch', item.code)}
-                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                                />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 italic">No codes found in Category 11</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Category 15: Detached Items */}
-              <div className="border rounded-lg overflow-hidden">
-                <div className="bg-green-50 px-4 py-3 border-b">
-                  <h4 className="font-semibold text-gray-900">Category 15 - Detached Items</h4>
-                  <p className="text-xs text-gray-600 mt-1">
-                    Det Garage, Pool, Barn, Stable, Pole Barn
-                  </p>
-                </div>
-                <div className="bg-white p-4">
-                  {availableCodes['15'].length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full text-sm">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left py-2 px-3 font-medium text-gray-700">Code</th>
-                            <th className="text-left py-2 px-3 font-medium text-gray-700">Description</th>
-                            <th className="text-center py-2 px-2 font-medium text-gray-700">Det Garage</th>
-                            <th className="text-center py-2 px-2 font-medium text-gray-700">Pool</th>
-                            <th className="text-center py-2 px-2 font-medium text-gray-700">Barn</th>
-                            <th className="text-center py-2 px-2 font-medium text-gray-700">Stable</th>
-                            <th className="text-center py-2 px-2 font-medium text-gray-700">Pole Barn</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {availableCodes['15'].map(item => (
-                            <tr key={item.code} className="border-b hover:bg-gray-50">
-                              <td className="py-2 px-3 font-mono text-gray-900">{item.code}</td>
-                              <td className="py-2 px-3 text-gray-700">{item.description}</td>
-                              <td className="py-2 px-2 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={codeConfig.det_garage.includes(item.code)}
-                                  onChange={() => handleCodeToggle('det_garage', item.code)}
-                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                                />
-                              </td>
-                              <td className="py-2 px-2 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={codeConfig.pool.includes(item.code)}
-                                  onChange={() => handleCodeToggle('pool', item.code)}
-                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                                />
-                              </td>
-                              <td className="py-2 px-2 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={codeConfig.barn.includes(item.code)}
-                                  onChange={() => handleCodeToggle('barn', item.code)}
-                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                                />
-                              </td>
-                              <td className="py-2 px-2 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={codeConfig.stable.includes(item.code)}
-                                  onChange={() => handleCodeToggle('stable', item.code)}
-                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                                />
-                              </td>
-                              <td className="py-2 px-2 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={codeConfig.pole_barn.includes(item.code)}
-                                  onChange={() => handleCodeToggle('pole_barn', item.code)}
-                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                                />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 italic">No codes found in Category 15</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Category 39: Miscellaneous */}
-              <div className="border rounded-lg overflow-hidden">
-                <div className="bg-yellow-50 px-4 py-3 border-b">
-                  <h4 className="font-semibold text-gray-900">Category 39 - Miscellaneous</h4>
-                  <p className="text-xs text-gray-600 mt-1">
-                    Other Miscellaneous Items
-                  </p>
-                </div>
-                <div className="bg-white p-4">
-                  {availableCodes['39'].length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full text-sm">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left py-2 px-3 font-medium text-gray-700">Code</th>
-                            <th className="text-left py-2 px-3 font-medium text-gray-700">Description</th>
-                            <th className="text-center py-2 px-2 font-medium text-gray-700">Miscellaneous</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {availableCodes['39'].map(item => (
-                            <tr key={item.code} className="border-b hover:bg-gray-50">
-                              <td className="py-2 px-3 font-mono text-gray-900">{item.code}</td>
-                              <td className="py-2 px-3 text-gray-700">{item.description}</td>
-                              <td className="py-2 px-2 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={codeConfig.misc_positive.includes(item.code)}
-                                  onChange={() => handleCodeToggle('misc_positive', item.code)}
-                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                                />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 italic">No codes found in Category 39</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Category 62: Positive Land Adjustments */}
-              <div className="border rounded-lg overflow-hidden">
-                <div className="bg-purple-50 px-4 py-3 border-b">
-                  <h4 className="font-semibold text-gray-900">Category 62 - Positive Land Adjustments</h4>
-                </div>
-                <div className="bg-white p-4">
-                  {availableCodes['62'].length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full text-sm">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left py-2 px-3 font-medium text-gray-700">Code</th>
-                            <th className="text-left py-2 px-3 font-medium text-gray-700">Description</th>
-                            <th className="text-center py-2 px-2 font-medium text-gray-700">Use</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {availableCodes['62'].map(item => (
-                            <tr key={item.code} className="border-b hover:bg-gray-50">
-                              <td className="py-2 px-3 font-mono text-gray-900">{item.code}</td>
-                              <td className="py-2 px-3 text-gray-700">{item.description}</td>
-                              <td className="py-2 px-2 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={codeConfig.land_positive.includes(item.code)}
-                                  onChange={() => handleCodeToggle('land_positive', item.code)}
-                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                                />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 italic">No codes found in Category 62</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Category 63: Negative Land Adjustments */}
-              <div className="border rounded-lg overflow-hidden">
-                <div className="bg-red-50 px-4 py-3 border-b">
-                  <h4 className="font-semibold text-gray-900">Category 63 - Negative Land Adjustments</h4>
-                </div>
-                <div className="bg-white p-4">
-                  {availableCodes['63'].length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full text-sm">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left py-2 px-3 font-medium text-gray-700">Code</th>
-                            <th className="text-left py-2 px-3 font-medium text-gray-700">Description</th>
-                            <th className="text-center py-2 px-2 font-medium text-gray-700">Use</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {availableCodes['63'].map(item => (
-                            <tr key={item.code} className="border-b hover:bg-gray-50">
-                              <td className="py-2 px-3 font-mono text-gray-900">{item.code}</td>
-                              <td className="py-2 px-3 text-gray-700">{item.description}</td>
-                              <td className="py-2 px-2 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={codeConfig.land_negative.includes(item.code)}
-                                  onChange={() => handleCodeToggle('land_negative', item.code)}
-                                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                                />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 italic">No codes found in Category 63</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Save Button */}
-              <div className="flex justify-end pt-4 border-t">
-                <button
-                  onClick={handleSaveCodeConfig}
-                  className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
-                >
-                  Save Configuration
-                </button>
               </div>
             </div>
           )}
