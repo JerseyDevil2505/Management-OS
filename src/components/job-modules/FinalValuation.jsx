@@ -67,9 +67,9 @@ const FinalValuation = ({
         )}
 
         {activeTab === 'adjustments' && (
-          <div className="text-center py-12 text-gray-500">
-            Adjustments tab - Coming soon
-          </div>
+          <AdjustmentsTab
+            jobData={jobData}
+          />
         )}
 
         {activeTab === 'sales-comparison' && (
