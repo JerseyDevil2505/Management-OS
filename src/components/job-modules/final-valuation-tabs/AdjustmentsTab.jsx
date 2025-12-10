@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
-import { Save, Plus, Trash2, Settings } from 'lucide-react';
+import { Save, Plus, Trash2, Settings, X } from 'lucide-react';
 
 const AdjustmentsTab = ({ jobData = {} }) => {
   const [activeSubTab, setActiveSubTab] = useState('adjustments');
