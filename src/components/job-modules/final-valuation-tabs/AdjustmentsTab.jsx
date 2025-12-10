@@ -338,9 +338,6 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                   <th className="sticky right-0 z-10 bg-gray-50 px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-l border-gray-200">
                     Type
                   </th>
-                  <th className="bg-gray-50 px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -364,30 +361,30 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                         />
                       </td>
                     ))}
-                    <td className="sticky right-20 z-10 bg-white px-2 py-2 text-center border-l border-gray-200">
-                      <select
-                        value={adj.adjustment_type}
-                        onChange={(e) => handleTypeChange(adj.adjustment_id, e.target.value)}
-                        className="text-xs border rounded px-2 py-1"
-                        disabled={adj.is_default && adj.adjustment_type !== 'flat_or_percent'}
-                      >
-                        <option value="flat">Flat ($)</option>
-                        <option value="per_sqft">Per SF ($/SF)</option>
-                        {adj.adjustment_type === 'flat_or_percent' && (
-                          <option value="percent">Percent (%)</option>
-                        )}
-                      </select>
-                    </td>
-                    <td className="sticky right-0 z-10 bg-white px-4 py-2 text-center">
-                      {!adj.is_default && (
-                        <button
-                          onClick={() => handleDeleteAdjustment(adj.adjustment_id)}
-                          className="text-red-600 hover:text-red-800"
-                          title="Delete adjustment"
+                    <td className="sticky right-0 z-10 bg-white px-2 py-2 text-center border-l border-gray-200">
+                      <div className="flex items-center justify-center gap-2">
+                        <select
+                          value={adj.adjustment_type}
+                          onChange={(e) => handleTypeChange(adj.adjustment_id, e.target.value)}
+                          className="text-xs border rounded px-2 py-1"
+                          disabled={adj.is_default && adj.adjustment_type !== 'flat_or_percent'}
                         >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
+                          <option value="flat">Flat ($)</option>
+                          <option value="per_sqft">Per SF ($/SF)</option>
+                          {adj.adjustment_type === 'flat_or_percent' && (
+                            <option value="percent">Percent (%)</option>
+                          )}
+                        </select>
+                        {!adj.is_default && (
+                          <button
+                            onClick={() => handleDeleteAdjustment(adj.adjustment_id)}
+                            className="text-red-600 hover:text-red-800 ml-2"
+                            title="Delete custom adjustment"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -404,6 +401,96 @@ const AdjustmentsTab = ({ jobData = {} }) => {
               <li><strong>Percent (%)</strong> - Percentage-based adjustment (available for Condition)</li>
             </ul>
           </div>
+
+          {/* Custom Adjustment Modal */}
+          {showCustomModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                <div className="px-6 py-4 border-b flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">Create Custom Adjustment</h3>
+                  <button
+                    onClick={() => setShowCustomModal(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="p-6 space-y-6">
+                  {/* Adjustment Name */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Adjustment Name
+                    </label>
+                    <input
+                      type="text"
+                      value={customAdjustment.name}
+                      onChange={(e) => setCustomAdjustment(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                      placeholder="e.g., Barn, Stable, Modern Kitchen, Land Adjustment"
+                    />
+                  </div>
+
+                  {/* Adjustment Type */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Adjustment Type
+                    </label>
+                    <select
+                      value={customAdjustment.type}
+                      onChange={(e) => setCustomAdjustment(prev => ({ ...prev, type: e.target.value }))}
+                      className="px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="flat">Flat ($) - Fixed dollar amount</option>
+                      <option value="per_sqft">Per SF ($/SF) - Per square foot</option>
+                      <option value="percent">Percent (%) - Percentage-based</option>
+                    </select>
+                  </div>
+
+                  {/* Bracket Values */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                      Adjustment Values by Price Bracket
+                    </label>
+                    <div className="grid grid-cols-2 gap-4">
+                      {CME_BRACKETS.map((bracket, idx) => (
+                        <div key={idx} className="flex items-center gap-3">
+                          <div
+                            className="px-3 py-2 rounded text-xs font-medium flex-shrink-0"
+                            style={{ backgroundColor: bracket.color, color: bracket.textColor, minWidth: '140px' }}
+                          >
+                            {bracket.shortLabel}
+                          </div>
+                          <input
+                            type="number"
+                            value={customAdjustment.values[idx]}
+                            onChange={(e) => handleCustomValueChange(idx, e.target.value)}
+                            className="flex-1 px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                            step={customAdjustment.type === 'per_sqft' ? '0.01' : customAdjustment.type === 'percent' ? '1' : '100'}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="px-6 py-4 border-t flex justify-end gap-3">
+                  <button
+                    onClick={() => setShowCustomModal(false)}
+                    className="px-4 py-2 border rounded text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveCustomAdjustment}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Save Adjustment
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
