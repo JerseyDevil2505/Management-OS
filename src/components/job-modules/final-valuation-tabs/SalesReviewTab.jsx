@@ -1642,7 +1642,7 @@ const SalesReviewTab = ({
             <tbody className="divide-y divide-gray-200">
               {sortedProperties.map((prop, idx) => (
                 <tr
-                  key={prop.id || idx}
+                  key={prop.property_composite_key || prop.id || idx}
                   className={`hover:bg-gray-50 ${prop.isIncluded ? 'bg-green-50' : ''}`}
                 >
                   <td className="px-3 py-2 text-center">
