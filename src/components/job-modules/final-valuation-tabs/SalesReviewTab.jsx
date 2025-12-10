@@ -705,7 +705,7 @@ const SalesReviewTab = ({
     
     // Headers
     const headers = [
-      'VCS', 'Block', 'Lot', 'Qualifier', 'Package', 'Address', 'Current Assessment',
+      'VCS', 'Block', 'Lot', 'Qualifier', 'Package', 'Address', 'Prop Class', 'Current Assessment',
       'Period', 'Lot Frontage', 'Lot Acre', 'Lot Sq Ft', 'Type Use', 'Building Class',
       'Design', 'Ext Cond', 'Int Cond', 'Year Built', 'SFLA', 'Sale Date', 'Sales NU',
       'Sale Price', 'Price/SF', 'Norm Price', 'Norm Price/SF', 'Sales Ratio'
@@ -721,6 +721,7 @@ const SalesReviewTab = ({
         prop.property_qualifier || '',
         prop.isPackage ? 'Yes' : 'No',
         prop.property_location || '',
+        prop.property_m4_class || '',
         prop.values_mod_total || '',
         prop.periodCode || '',
         prop.asset_lot_frontage || '',
