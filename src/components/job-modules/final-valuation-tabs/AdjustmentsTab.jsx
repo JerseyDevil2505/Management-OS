@@ -154,7 +154,6 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         'adjustment_codes_stable',
         'adjustment_codes_pole_barn',
         'adjustment_codes_misc_positive',
-        'adjustment_codes_misc_negative',
         'adjustment_codes_land_positive',
         'adjustment_codes_land_negative'
       ];
