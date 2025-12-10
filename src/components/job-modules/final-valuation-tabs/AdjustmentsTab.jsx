@@ -357,19 +357,97 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
   const handleSaveCodeConfig = async () => {
     try {
+      // Save code configuration settings
       const settings = Object.keys(codeConfig).map(amenityType => ({
         job_id: jobData.id,
         setting_key: `adjustment_codes_${amenityType}`,
         setting_value: JSON.stringify(codeConfig[amenityType])
       }));
 
-      const { error } = await supabase
+      const { error: settingsError } = await supabase
         .from('job_settings')
         .upsert(settings, { onConflict: 'job_id,setting_key' });
 
-      if (error) throw error;
+      if (settingsError) throw settingsError;
 
-      alert('Code configuration saved successfully!');
+      // For each amenity type with selected codes, create/update adjustment row
+      const amenityTypeLabels = {
+        garage: 'Garage',
+        det_garage: 'Det Garage',
+        pool: 'Pool',
+        deck: 'Deck',
+        patio: 'Patio',
+        open_porch: 'Open Porch',
+        enclosed_porch: 'Enclosed Porch',
+        barn: 'Barn',
+        stable: 'Stable',
+        pole_barn: 'Pole Barn',
+        misc_positive: 'Miscellaneous (+)',
+        misc_negative: 'Miscellaneous (-)',
+        land_positive: 'Land Adjustment (+)',
+        land_negative: 'Land Adjustment (-)'
+      };
+
+      const newAdjustments = [];
+      Object.keys(codeConfig).forEach(amenityType => {
+        const selectedCodes = codeConfig[amenityType] || [];
+
+        // If codes are selected for this amenity, ensure it has an adjustment row
+        if (selectedCodes.length > 0) {
+          const existingAdj = adjustments.find(adj => adj.adjustment_id === amenityType);
+
+          if (!existingAdj) {
+            // Create new adjustment row
+            const maxSortOrder = Math.max(...adjustments.map(a => a.sort_order || 0), 0);
+            newAdjustments.push({
+              job_id: jobData.id,
+              adjustment_id: amenityType,
+              adjustment_name: amenityTypeLabels[amenityType] || amenityType,
+              adjustment_type: 'flat',
+              category: 'custom',
+              is_default: false,
+              sort_order: maxSortOrder + newAdjustments.length + 1,
+              bracket_0: 0,
+              bracket_1: 0,
+              bracket_2: 0,
+              bracket_3: 0,
+              bracket_4: 0,
+              bracket_5: 0,
+              bracket_6: 0,
+              bracket_7: 0,
+              bracket_8: 0,
+              bracket_9: 0
+            });
+          }
+        }
+      });
+
+      // Save new adjustment rows to database
+      if (newAdjustments.length > 0) {
+        const { error: adjError } = await supabase
+          .from('job_adjustment_grid')
+          .upsert(newAdjustments, { onConflict: 'job_id,adjustment_id' });
+
+        if (adjError) throw adjError;
+
+        // Update local state
+        setAdjustments(prev => {
+          const existing = [...prev];
+          newAdjustments.forEach(newAdj => {
+            if (!existing.find(a => a.adjustment_id === newAdj.adjustment_id)) {
+              existing.push(newAdj);
+            }
+          });
+          return existing;
+        });
+      }
+
+      alert(`Code configuration saved! ${newAdjustments.length} new adjustment row(s) added to grid.`);
+
+      // Optionally switch to adjustment grid tab to show new rows
+      if (newAdjustments.length > 0) {
+        setActiveSubTab('adjustments');
+      }
     } catch (error) {
       console.error('Error saving code config:', error);
       alert(`Failed to save: ${error.message}`);
