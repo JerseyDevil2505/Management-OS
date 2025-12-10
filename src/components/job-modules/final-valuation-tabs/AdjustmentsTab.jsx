@@ -76,10 +76,16 @@ const AdjustmentsTab = ({ jobData = {} }) => {
           category: adj.category,
           is_default: adj.isDefault,
           sort_order: idx,
-          brackets: CME_BRACKETS.reduce((acc, bracket, bIdx) => {
-            acc[`bracket_${bIdx}`] = 0;
-            return acc;
-          }, {})
+          bracket_0: 0,
+          bracket_1: 0,
+          bracket_2: 0,
+          bracket_3: 0,
+          bracket_4: 0,
+          bracket_5: 0,
+          bracket_6: 0,
+          bracket_7: 0,
+          bracket_8: 0,
+          bracket_9: 0
         }));
         setAdjustments(defaultData);
       }
