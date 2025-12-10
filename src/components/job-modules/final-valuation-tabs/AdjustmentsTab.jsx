@@ -208,7 +208,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       const sections = codeDefinitions.sections || codeDefinitions || {};
       console.log('📂 Available sections:', Object.keys(sections));
 
-      // Extract codes from specific categories
+      // Extract codes from specific categories WITHIN the Residential section
       const categoryCodes = {
         '11': [], // Attached items (garage, deck, patio, open porch, enclosed porch)
         '15': [], // Detached items (det garage, pools)
@@ -217,16 +217,25 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         '63': []  // Negative land adjustments
       };
 
-      // Process each category section
-      Object.keys(categoryCodes).forEach(categoryNum => {
-        const section = sections[categoryNum];
-        console.log(`🔍 Checking category ${categoryNum}:`, section ? 'Found' : 'Not found');
+      // BRT codes are nested: sections.Residential contains parent keys that have KEYs like "11", "15", etc.
+      const residentialSection = sections.Residential || sections.residential || {};
+      console.log('🏠 Residential section keys:', Object.keys(residentialSection));
 
-        if (section && typeof section === 'object') {
-          console.log(`📋 Category ${categoryNum} has ${Object.keys(section).length} items`);
+      // Search through Residential section to find categories by their KEY property
+      Object.keys(residentialSection).forEach(parentKey => {
+        const parentSection = residentialSection[parentKey];
 
-          Object.keys(section).forEach(codeKey => {
-            const codeItem = section[codeKey];
+        // Check if this parent section has a KEY property matching our category numbers
+        const categoryKey = parentSection?.KEY || parentSection?.key;
+
+        if (categoryKey && categoryCodes.hasOwnProperty(categoryKey)) {
+          console.log(`🎯 Found category ${categoryKey} at parent key "${parentKey}"`);
+
+          // Now extract codes from the MAP within this category
+          const categoryMap = parentSection.MAP || parentSection.map || {};
+
+          Object.keys(categoryMap).forEach(codeKey => {
+            const codeItem = categoryMap[codeKey];
             let description = '';
 
             // Extract description from DATA.VALUE
@@ -239,14 +248,14 @@ const AdjustmentsTab = ({ jobData = {} }) => {
             }
 
             if (description && codeKey !== 'KEY' && codeKey !== 'DATA' && codeKey !== 'MAP') {
-              categoryCodes[categoryNum].push({
+              categoryCodes[categoryKey].push({
                 code: codeKey,
                 description: description.trim()
               });
             }
           });
 
-          console.log(`✅ Category ${categoryNum} loaded ${categoryCodes[categoryNum].length} codes`);
+          console.log(`✅ Category ${categoryKey} loaded ${categoryCodes[categoryKey].length} codes`);
         }
       });
 
