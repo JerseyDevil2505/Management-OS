@@ -1324,9 +1324,9 @@ const SalesReviewTab = ({
                   <td className="px-3 py-2 text-center">
                     {prop.periodCode || '-'}
                   </td>
-                  <td className="px-3 py-2 text-right">{formatNumber(prop.asset_lot_frontage)}</td>
-                  <td className="px-3 py-2 text-right">{prop.asset_lot_acre || '-'}</td>
-                  <td className="px-3 py-2 text-right">{formatNumber(prop.asset_lot_sf)}</td>
+                  <td className="px-3 py-2 text-right">{formatNumber(prop.lotFrontage)}</td>
+                  <td className="px-3 py-2 text-right">{prop.lotAcre ? prop.lotAcre.toFixed(2) : '-'}</td>
+                  <td className="px-3 py-2 text-right">{formatNumber(prop.lotSf)}</td>
                   <td className="px-3 py-2">{showCodesNotMeanings ? (prop.asset_type_use || '-') : (prop.typeUseName || prop.asset_type_use || '-')}</td>
                   <td className="px-3 py-2">{prop.asset_building_class || '-'}</td>
                   <td className="px-3 py-2">{showCodesNotMeanings ? (prop.asset_design_style || '-') : (prop.designName || prop.asset_design_style || '-')}</td>
