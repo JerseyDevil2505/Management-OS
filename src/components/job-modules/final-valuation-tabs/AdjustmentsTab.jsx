@@ -198,69 +198,62 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     try {
       setIsLoadingCodes(true);
 
-      // Use the getRawDataForJob helper to get parsed source file data
-      const rawData = await getRawDataForJob(jobData.id);
+      // Fetch parsed code definitions from the job
+      const { data: job, error: jobError } = await supabase
+        .from('jobs')
+        .select('parsed_code_definitions')
+        .eq('id', jobData.id)
+        .single();
 
-      if (!rawData || !rawData.propertyMap) {
+      if (jobError || !job?.parsed_code_definitions) {
+        console.error('No code definitions found:', jobError);
         setIsLoadingCodes(false);
         return;
       }
 
-      // Field mappings for different vendors - trying common field names
-      const fieldMappings = {
-        garage: ['GARAGE_TYPE', 'GARAGE', 'GAR_TYPE', 'ATTACHED_GAR', 'ATT_GAR'],
-        det_garage: ['DETACHED_GAR', 'DET_GAR', 'DETACHED_GARAGE'],
-        pool: ['POOL', 'POOL_TYPE', 'SWIMMING_POOL'],
-        deck: ['DECK', 'DECK_TYPE'],
-        patio: ['PATIO', 'PATIO_TYPE'],
-        open_porch: ['OPEN_PORCH', 'PORCH_OPEN', 'PORCH'],
-        enclosed_porch: ['ENCLOSED_PORCH', 'PORCH_ENCLOSED', 'SCREENED_PORCH'],
-        barn: ['BARN', 'BARN_TYPE', 'OUTBUILDING'],
-        stable: ['STABLE', 'HORSE_BARN', 'STABLES'],
-        pole_barn: ['POLE_BARN', 'POLE_BUILDING'],
-        misc_positive: ['MISC_IMPROVEMENT', 'OTHER_IMPROVEMENT', 'ADDITIONAL_FEATURE'],
-        misc_negative: ['MISC_DEDUCTION', 'NEGATIVE_FEATURE'],
-        land_positive: ['LAND_IMPROVEMENT', 'LAND_POSITIVE'],
-        land_negative: ['LAND_DEDUCTION', 'LAND_NEGATIVE']
+      const codeDefinitions = job.parsed_code_definitions;
+      const sections = codeDefinitions.sections || {};
+
+      // Extract codes from specific categories
+      const categoryCodes = {
+        '11': [], // Attached items (garage, deck, patio, open porch, enclosed porch)
+        '15': [], // Detached items (det garage, pools)
+        '39': [], // Miscellaneous items
+        '62': [], // Positive land adjustments
+        '63': []  // Negative land adjustments
       };
 
-      const distinctCodes = {
-        garage: new Set(),
-        det_garage: new Set(),
-        pool: new Set(),
-        deck: new Set(),
-        patio: new Set(),
-        open_porch: new Set(),
-        enclosed_porch: new Set(),
-        barn: new Set(),
-        stable: new Set(),
-        pole_barn: new Set(),
-        misc_positive: new Set(),
-        misc_negative: new Set(),
-        land_positive: new Set(),
-        land_negative: new Set()
-      };
+      // Process each category section
+      Object.keys(categoryCodes).forEach(categoryNum => {
+        const section = sections[categoryNum];
+        if (section && typeof section === 'object') {
+          Object.keys(section).forEach(codeKey => {
+            const codeItem = section[codeKey];
+            let description = '';
 
-      // Iterate through all properties to find distinct codes
-      rawData.propertyMap.forEach(property => {
-        Object.keys(fieldMappings).forEach(amenityType => {
-          const possibleFields = fieldMappings[amenityType];
-          possibleFields.forEach(fieldName => {
-            const value = property[fieldName];
-            if (value && value !== '' && value !== '0' && value !== 'N' && value !== 'NONE') {
-              distinctCodes[amenityType].add(String(value).trim());
+            // Extract description from DATA.VALUE
+            if (codeItem?.DATA?.VALUE) {
+              description = codeItem.DATA.VALUE;
+            } else if (typeof codeItem === 'string') {
+              description = codeItem;
+            }
+
+            if (description && codeKey !== 'KEY' && codeKey !== 'DATA') {
+              categoryCodes[categoryNum].push({
+                code: codeKey,
+                description: description.trim()
+              });
             }
           });
-        });
+        }
       });
 
-      // Convert Sets to sorted arrays
-      const availableCodesData = {};
-      Object.keys(distinctCodes).forEach(amenityType => {
-        availableCodesData[amenityType] = Array.from(distinctCodes[amenityType]).sort();
+      // Sort by code
+      Object.keys(categoryCodes).forEach(cat => {
+        categoryCodes[cat].sort((a, b) => a.code.localeCompare(b.code));
       });
 
-      setAvailableCodes(availableCodesData);
+      setAvailableCodes(categoryCodes);
     } catch (error) {
       console.error('Error loading available codes:', error);
     } finally {
