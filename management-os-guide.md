@@ -942,6 +942,8 @@ export const interpretCodes = {
 **Unique Constraint:** (job_id, property_composite_key)
 **Indexes:** idx_final_valuation_job, idx_final_valuation_composite
 
+**Purpose:** Stores Market Data Approach calculations and CME (Comparative Market Evaluation) results for the Final Valuation module. Each property gets one record per job with user-entered effective age, calculated projections, and final valuation recommendations.
+
 #### **job_tax_rates** ⚠️ NEW TABLE (January 2025)
 **Component:** TaxRateCalculatorTab.jsx (Final Valuation)
 
@@ -969,6 +971,8 @@ export const interpretCodes = {
 **Unique Constraint:** (job_id, current_tax_year)
 **Index:** idx_job_tax_rates_job
 
+**Purpose:** Stores current and projected tax rates used for calculating property tax impact in the Market Data Approach tab. Rates are entered at the job level and apply to all properties in the assessment calculation.
+
 #### **property_class_changes** ⚠️ NEW TABLE (January 2025)
 **Components:** ClassChangesTab.jsx (Market Analysis), FileUploadButton.jsx comparison modal
 
@@ -995,6 +999,39 @@ export const interpretCodes = {
 | resolved_by | uuid | Foreign key to employees |
 
 **Indexes:** idx_property_class_changes_job, idx_property_class_changes_composite, idx_property_class_changes_type, idx_property_class_changes_resolved
+
+**Purpose:** Audit trail for property class changes (M4 vs CAMA mismatches). Tracks when property classifications change through file updates or user edits, enabling quality control and class consistency reporting.
+
+#### **job_adjustment_grid** ⚠️ NEW TABLE (January 2025)
+**Component:** AdjustmentsTab.jsx (Final Valuation)
+
+| Column | Data Type | Notes |
+|--------|-----------|-------|
+| id | uuid | Primary key |
+| job_id | uuid | Foreign key to jobs |
+| adjustment_id | text | Adjustment identifier (e.g., 'living_area', 'garage', 'pool') |
+| adjustment_name | text | Display name (e.g., 'Living Area (Sq Ft)', 'Garage', 'Pool') |
+| adjustment_type | text | 'flat', 'per_sqft', 'percent' |
+| category | text | 'physical', 'amenity', 'quality', 'custom' |
+| is_default | boolean | System default vs user-created |
+| sort_order | integer | Display order in grid |
+| bracket_0 | numeric | Adjustment value for price bracket 0 ($0-$99,999) |
+| bracket_1 | numeric | Adjustment value for price bracket 1 ($100K-$199K) |
+| bracket_2 | numeric | Adjustment value for price bracket 2 ($200K-$299K) |
+| bracket_3 | numeric | Adjustment value for price bracket 3 ($300K-$399K) |
+| bracket_4 | numeric | Adjustment value for price bracket 4 ($400K-$499K) |
+| bracket_5 | numeric | Adjustment value for price bracket 5 ($500K-$749K) |
+| bracket_6 | numeric | Adjustment value for price bracket 6 ($750K-$999K) |
+| bracket_7 | numeric | Adjustment value for price bracket 7 ($1M-$1.5M) |
+| bracket_8 | numeric | Adjustment value for price bracket 8 ($1.5M-$2M) |
+| bracket_9 | numeric | Adjustment value for price bracket 9 (Over $2M) |
+| created_at | timestamp with time zone | |
+| updated_at | timestamp with time zone | |
+
+**Unique Constraint:** (job_id, adjustment_id)
+**Index:** idx_job_adjustment_grid_job
+
+**Purpose:** Stores adjustment grid values used in the Sales Comparison (CME) tab. Each adjustment attribute has values for 10 price brackets, allowing differentiated adjustments based on property value ranges. System includes default adjustments (Living Area, Basement, Garage, etc.) and supports user-defined custom adjustments.
 
 #### **property_records** ⚠️ MAJOR SCHEMA CHANGES
 **Components:** Created in `AdminJobManagement.jsx`, Updated by `FileUploadButton.jsx`, Used by multiple components
