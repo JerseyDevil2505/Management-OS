@@ -907,6 +907,95 @@ export const interpretCodes = {
 | values_norm_size | numeric | Moved from property_records |
 | values_norm_time | numeric | Moved from property_records |
 
+#### **final_valuation_data** ⚠️ NEW TABLE (January 2025)
+**Components:** MarketDataTab.jsx (Final Valuation), SalesComparisonTab.jsx
+
+| Column | Data Type | Notes |
+|--------|-----------|-------|
+| id | uuid | Primary key |
+| job_id | uuid | Foreign key to jobs |
+| property_composite_key | text | Unique property identifier |
+| special_notes | text | User freeform notes (Column 17) |
+| actual_efa | numeric | **USER INPUT** - Actual Effective Age (Column 58) |
+| sale_comment | text | User freeform sale notes (Column 46) |
+| recommended_efa | numeric | Calculated recommended EFA (Column 57) |
+| depr_factor | numeric | Depreciation factor capped at 1.0 (Column 59) |
+| new_calculated_value | numeric | New Value calculation (Column 60) |
+| projected_improvement | numeric | Projected improvement value (Column 54) |
+| projected_total | numeric | Projected total assessment (Column 55) |
+| new_land_allocation_percent | numeric | New land allocation % (Column 53) |
+| cme_projected_assessment | numeric | LOJIK CME projected value |
+| cme_min_range | numeric | CME minimum range |
+| cme_max_range | numeric | CME maximum range |
+| cme_comparable_blq | text | Comparable B/L/Q reference |
+| cme_comp1 | text | Comparable 1 |
+| cme_comp2 | text | Comparable 2 |
+| cme_comp3 | text | Comparable 3 |
+| cme_comp4 | text | Comparable 4 |
+| cme_comp5 | text | Comparable 5 |
+| final_method_used | text | 'market_data' or 'cme' |
+| final_recommended_value | numeric | Final value recommendation |
+| final_notes | text | Additional notes |
+| created_at | timestamp with time zone | |
+| updated_at | timestamp with time zone | |
+
+**Unique Constraint:** (job_id, property_composite_key)
+**Indexes:** idx_final_valuation_job, idx_final_valuation_composite
+
+#### **job_tax_rates** ⚠️ NEW TABLE (January 2025)
+**Component:** TaxRateCalculatorTab.jsx (Final Valuation)
+
+| Column | Data Type | Notes |
+|--------|-----------|-------|
+| id | uuid | Primary key |
+| job_id | uuid | Foreign key to jobs |
+| current_tax_year | integer | Current assessment year |
+| current_general_rate | numeric(10,6) | Current general tax rate |
+| current_school_rate | numeric(10,6) | Current school tax rate |
+| current_county_rate | numeric(10,6) | Current county tax rate |
+| current_total_rate | numeric(10,6) | Current total tax rate |
+| projected_tax_year | integer | Projected assessment year |
+| projected_general_rate | numeric(10,6) | Projected general tax rate |
+| projected_school_rate | numeric(10,6) | Projected school tax rate |
+| projected_county_rate | numeric(10,6) | Projected county tax rate |
+| projected_total_rate | numeric(10,6) | Projected total tax rate |
+| current_ratable_base | numeric | Current total ratable base |
+| projected_ratable_base | numeric | Projected total ratable base |
+| current_total_levy | numeric | Current total levy amount |
+| projected_total_levy | numeric | Projected total levy amount |
+| created_at | timestamp with time zone | |
+| updated_at | timestamp with time zone | |
+
+**Unique Constraint:** (job_id, current_tax_year)
+**Index:** idx_job_tax_rates_job
+
+#### **property_class_changes** ⚠️ NEW TABLE (January 2025)
+**Components:** ClassChangesTab.jsx (Market Analysis), FileUploadButton.jsx comparison modal
+
+| Column | Data Type | Notes |
+|--------|-----------|-------|
+| id | uuid | Primary key |
+| job_id | uuid | Foreign key to jobs |
+| property_composite_key | text | Property identifier |
+| change_type | text | 'class_mismatch', 'user_edit', 'file_addition', 'file_deletion' |
+| old_m4_class | text | Previous M4 class value |
+| new_m4_class | text | New M4 class value |
+| old_cama_class | text | Previous CAMA class value |
+| new_cama_class | text | New CAMA class value |
+| property_block | text | For display in reports |
+| property_lot | text | For display in reports |
+| property_qualifier | text | For display in reports |
+| property_location | text | For display in reports |
+| change_source | text | 'comparison_modal', 'user_edit', 'file_upload', 'initial_import' |
+| changed_by | uuid | Foreign key to employees |
+| changed_at | timestamp with time zone | When change occurred |
+| notes | text | Additional context |
+| resolved | boolean | Change acknowledged/resolved |
+| resolved_at | timestamp with time zone | When resolved |
+| resolved_by | uuid | Foreign key to employees |
+
+**Indexes:** idx_property_class_changes_job, idx_property_class_changes_composite, idx_property_class_changes_type, idx_property_class_changes_resolved
+
 #### **property_records** ⚠️ MAJOR SCHEMA CHANGES
 **Components:** Created in `AdminJobManagement.jsx`, Updated by `FileUploadButton.jsx`, Used by multiple components
 
