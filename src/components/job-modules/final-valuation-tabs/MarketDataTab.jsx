@@ -344,17 +344,13 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
   // Helper: Get current EFA for display based on vendor
   const getCurrentEFA = (property) => {
-    const rawEffAge = effectiveAgeMap[property.property_composite_key];
+    // Build lookup key from individual fields to match CSV format
+    const block = property.property_block || '';
+    const lot = property.property_lot || '';
+    const qual = property.property_qualifier || '';
+    const lookupKey = `${block}_${lot}_${qual}`;
 
-    // Debug first property
-    if (property.property_block === '101' && property.property_lot === '1') {
-      console.log('🔍 getCurrentEFA debug:', {
-        composite_key: property.property_composite_key,
-        rawEffAge,
-        mapSize: Object.keys(effectiveAgeMap).length,
-        sampleMapKeys: Object.keys(effectiveAgeMap).slice(0, 3)
-      });
-    }
+    const rawEffAge = effectiveAgeMap[lookupKey];
 
     if (rawEffAge === null || rawEffAge === undefined) return '';
 
