@@ -222,20 +222,12 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   const getCurrentEFA = (property) => {
     if (vendorType === 'BRT') {
       // BRT: Direct read from EFFAGE column
-      const value = property.asset_effective_age;
-      // Debug: Check if we have this value
-      if (value === null || value === undefined || value === '') {
-        console.log('BRT: Missing asset_effective_age for property:', property.property_composite_key);
-      }
-      return value || '';
+      return property.asset_effective_age || '';
     } else {
       // Microsystems: Convert Effective Age to Effective Year
       // Effective Year = Year Prior to Due Year - Effective Age
       const effectiveAge = property.asset_effective_age;
-      if (effectiveAge === null || effectiveAge === undefined || effectiveAge === '') {
-        console.log('Microsystems: Missing asset_effective_age for property:', property.property_composite_key);
-        return '';
-      }
+      if (effectiveAge === null || effectiveAge === undefined || effectiveAge === '') return '';
       return yearPriorToDueYear - effectiveAge;
     }
   };
