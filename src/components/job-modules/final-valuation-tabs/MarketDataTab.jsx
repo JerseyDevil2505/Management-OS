@@ -817,8 +817,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         <div
           ref={mainScrollRef}
           onScroll={handleMainScroll}
-          className="overflow-x-auto overflow-y-auto"
-          style={{ maxHeight: '70vh' }}
+          className="overflow-y-auto"
+          style={{ maxHeight: '70vh', overflowX: 'hidden' }}
         >
           <table className="w-full text-xs border-collapse">
             <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
