@@ -870,8 +870,13 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         </div>
 
         {/* Horizontal scroll bar at bottom */}
-        <div className="overflow-x-auto border-t border-gray-200" style={{ height: '20px' }}>
-          <div style={{ width: 'max-content', height: '1px' }}></div>
+        <div
+          ref={bottomScrollRef}
+          onScroll={handleBottomScroll}
+          className="overflow-x-auto border-t border-gray-200"
+          style={{ height: '20px', overflowY: 'hidden' }}
+        >
+          <div style={{ width: '5000px', height: '1px' }}></div>
         </div>
       </div>
 
