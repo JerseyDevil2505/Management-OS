@@ -623,11 +623,21 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       {/* Table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         {/* Horizontal scroll bar at top */}
-        <div className="overflow-x-auto border-b border-gray-200" style={{ height: '20px' }}>
-          <div style={{ width: 'max-content', height: '1px' }}></div>
+        <div
+          ref={topScrollRef}
+          onScroll={handleTopScroll}
+          className="overflow-x-auto border-b border-gray-200"
+          style={{ height: '20px', overflowY: 'hidden' }}
+        >
+          <div style={{ width: '5000px', height: '1px' }}></div>
         </div>
 
-        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '70vh' }}>
+        <div
+          ref={mainScrollRef}
+          onScroll={handleMainScroll}
+          className="overflow-x-auto overflow-y-auto"
+          style={{ maxHeight: '70vh' }}
+        >
           <table className="w-full text-sm border-collapse">
             <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
               <tr>
