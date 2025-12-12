@@ -108,6 +108,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
   const loadEffectiveAgeFromRawFile = async () => {
     try {
+      console.log('🔍 Loading effective age from raw file...');
       const { data: job, error } = await supabase
         .from('jobs')
         .select('raw_file_content, vendor_type')
@@ -116,51 +117,73 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
       if (error) throw error;
       if (!job?.raw_file_content) {
-        console.warn('No raw file content available');
+        console.warn('❌ No raw file content available');
         return;
       }
 
+      console.log(`📄 Raw file length: ${job.raw_file_content.length} characters`);
+
       // Parse CSV to extract EFFAGE/Effective Age
       const lines = job.raw_file_content.split(/\r?\n/);
-      if (lines.length < 2) return;
+      console.log(`📄 Total lines: ${lines.length}`);
 
-      const headers = lines[0].split(/,|\t/);
+      if (lines.length < 2) {
+        console.warn('❌ File has less than 2 lines');
+        return;
+      }
+
+      // Detect separator
+      const separator = lines[0].includes('\t') ? '\t' : ',';
+      console.log(`🔍 Using separator: ${separator === '\t' ? 'TAB' : 'COMMA'}`);
+
+      const headers = lines[0].split(separator).map(h => h.trim());
+      console.log(`📋 Headers (${headers.length}):`, headers.slice(0, 20));
+
       const vendorType = job.vendor_type || jobData?.vendor_type || 'BRT';
+      console.log(`🏢 Vendor type: ${vendorType}`);
 
       // Find the column index for EFFAGE or Effective Age
       let effAgeIndex = -1;
       if (vendorType === 'BRT') {
-        effAgeIndex = headers.findIndex(h => h.trim().toUpperCase() === 'EFFAGE');
+        effAgeIndex = headers.findIndex(h => h.toUpperCase() === 'EFFAGE');
+        console.log(`🔍 Looking for 'EFFAGE' column... index: ${effAgeIndex}`);
       } else {
-        effAgeIndex = headers.findIndex(h => h.trim() === 'Effective Age');
+        effAgeIndex = headers.findIndex(h => h === 'Effective Age');
+        console.log(`🔍 Looking for 'Effective Age' column... index: ${effAgeIndex}`);
       }
 
       if (effAgeIndex === -1) {
-        console.warn(`${vendorType === 'BRT' ? 'EFFAGE' : 'Effective Age'} column not found in raw file`);
+        console.warn(`❌ ${vendorType === 'BRT' ? 'EFFAGE' : 'Effective Age'} column not found in raw file`);
+        console.log('Available columns:', headers);
         return;
       }
 
       // Find composite key columns
-      const blockIdx = headers.findIndex(h => h.trim().toUpperCase() === 'BLOCK');
-      const lotIdx = headers.findIndex(h => h.trim().toUpperCase() === 'LOT');
-      const qualIdx = headers.findIndex(h => h.trim().toUpperCase() === (vendorType === 'BRT' ? 'QUALIFIER' : 'Qual'));
+      const blockIdx = headers.findIndex(h => h.toUpperCase() === 'BLOCK');
+      const lotIdx = headers.findIndex(h => h.toUpperCase() === 'LOT');
+      const qualIdx = headers.findIndex(h => h.toUpperCase() === (vendorType === 'BRT' ? 'QUALIFIER' : 'QUAL'));
+
+      console.log(`🔑 Column indices - Block: ${blockIdx}, Lot: ${lotIdx}, Qualifier: ${qualIdx}, EffAge: ${effAgeIndex}`);
 
       if (blockIdx === -1 || lotIdx === -1 || qualIdx === -1) {
-        console.warn('Could not find block/lot/qualifier columns');
+        console.warn('❌ Could not find block/lot/qualifier columns');
         return;
       }
 
       // Build map of composite_key -> effective_age
       const map = {};
+      let successCount = 0;
+      let emptyCount = 0;
+
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
 
-        const cols = line.split(/,|\t/);
-        const block = cols[blockIdx]?.trim() || '';
-        const lot = cols[lotIdx]?.trim() || '';
-        const qual = cols[qualIdx]?.trim() || '';
-        const effAge = cols[effAgeIndex]?.trim();
+        const cols = line.split(separator).map(c => c.trim());
+        const block = cols[blockIdx] || '';
+        const lot = cols[lotIdx] || '';
+        const qual = cols[qualIdx] || '';
+        const effAge = cols[effAgeIndex];
 
         if (block && lot) {
           const compositeKey = `${block}_${lot}_${qual}`;
@@ -168,15 +191,27 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
             const numericAge = parseFloat(effAge);
             if (!isNaN(numericAge)) {
               map[compositeKey] = numericAge;
+              successCount++;
+
+              // Log first 3 for debugging
+              if (successCount <= 3) {
+                console.log(`✅ Sample ${successCount}: ${compositeKey} = ${numericAge}`);
+              }
             }
+          } else {
+            emptyCount++;
           }
         }
       }
 
-      console.log(`✅ Loaded effective age for ${Object.keys(map).length} properties`);
+      console.log(`✅ Loaded effective age for ${successCount} properties`);
+      console.log(`⚠️  ${emptyCount} properties had empty effective age`);
+      console.log('First 5 keys in map:', Object.keys(map).slice(0, 5));
+      console.log('First 5 property keys from properties:', properties.slice(0, 5).map(p => p.property_composite_key));
+
       setEffectiveAgeMap(map);
     } catch (error) {
-      console.error('Error loading effective age from raw file:', error);
+      console.error('❌ Error loading effective age from raw file:', error);
     }
   };
 
