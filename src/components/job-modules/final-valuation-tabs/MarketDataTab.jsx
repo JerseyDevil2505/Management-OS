@@ -198,16 +198,16 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     return {};
   };
 
-  // Helper: Get effective age for property based on vendor
-  const getEffectiveAge = (property) => {
+  // Helper: Get current EFA for display based on vendor
+  const getCurrentEFA = (property) => {
     if (vendorType === 'BRT') {
-      // BRT: Effective age is stored in year format (EFFAGE column)
-      return property.asset_effective_age || null;
+      // BRT: Direct read from EFFAGE column
+      return property.asset_effective_age || '';
     } else {
-      // Microsystems: Effective Age is given, need to calculate effective year
+      // Microsystems: Convert Effective Age to Effective Year
       // Effective Year = Year Prior to Due Year - Effective Age
       const effectiveAge = property.asset_effective_age;
-      if (effectiveAge === null || effectiveAge === undefined) return null;
+      if (effectiveAge === null || effectiveAge === undefined) return '';
       return yearPriorToDueYear - effectiveAge;
     }
   };
