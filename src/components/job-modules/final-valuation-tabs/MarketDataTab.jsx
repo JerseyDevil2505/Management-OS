@@ -1056,8 +1056,14 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                           {calc.qualifiesForEFA ? (
                             <input
                               type="number"
-                              value={calc.actualEFA ?? ''}
-                              onChange={(e) => handleCellEdit(property.property_composite_key, 'actual_efa', e.target.value ? parseFloat(e.target.value) : null)}
+                              defaultValue={calc.actualEFA ?? ''}
+                              onBlur={(e) => handleCellEdit(property.property_composite_key, 'actual_efa', e.target.value ? parseFloat(e.target.value) : null)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleCellEdit(property.property_composite_key, 'actual_efa', e.target.value ? parseFloat(e.target.value) : null);
+                                  e.target.blur();
+                                }
+                              }}
                               className="w-20 px-1 py-0.5 border border-gray-300 rounded text-sm text-center"
                               placeholder="EFA"
                               step="0.1"
