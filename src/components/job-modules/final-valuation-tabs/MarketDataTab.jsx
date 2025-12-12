@@ -994,14 +994,12 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                         <td className="px-2 py-2 border border-gray-300">{property.property_block}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.property_lot}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.property_qualifier}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.property_location}</td>
+                        <td className="px-2 py-2 border border-gray-300 whitespace-nowrap">{property.property_location}</td>
                         <td className="px-2 py-2 border border-gray-300">{getMaxCardNumber(property)}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.asset_type_use}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.asset_building_class}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.asset_year_built}</td>
-                        <td className="px-2 py-2 border border-gray-300">
-                          {calc.actualEFA !== null && calc.actualEFA !== undefined ? calc.actualEFA : ''}
-                        </td>
+                        <td className="px-2 py-2 border border-gray-300">{property.asset_effective_age || ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.sales_date || ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.sales_price ? `$${property.sales_price.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.values_norm_time ? `$${property.values_norm_time.toLocaleString()}` : ''}</td>
