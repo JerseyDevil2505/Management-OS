@@ -1099,7 +1099,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+            onClick={() => {
+              setCurrentPage(Math.max(1, currentPage - 1));
+              setPageInput(Math.max(1, currentPage - 1).toString());
+            }}
             disabled={currentPage === 1}
             className="flex items-center gap-1 px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -1109,8 +1112,40 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           <span className="text-sm text-gray-600">
             {((currentPage - 1) * rowsPerPage + 1).toLocaleString()} - {Math.min(currentPage * rowsPerPage, filteredAndSortedProperties.length).toLocaleString()}
           </span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">Go to:</span>
+            <input
+              type="number"
+              min="1"
+              max={totalPages}
+              value={pageInput}
+              onChange={(e) => setPageInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const page = parseInt(pageInput);
+                  if (page >= 1 && page <= totalPages) {
+                    setCurrentPage(page);
+                  } else {
+                    setPageInput(currentPage.toString());
+                  }
+                }
+              }}
+              onBlur={() => {
+                const page = parseInt(pageInput);
+                if (page >= 1 && page <= totalPages) {
+                  setCurrentPage(page);
+                } else {
+                  setPageInput(currentPage.toString());
+                }
+              }}
+              className="w-16 px-2 py-1 border border-gray-300 rounded text-sm text-center"
+            />
+          </div>
           <button
-            onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+            onClick={() => {
+              setCurrentPage(Math.min(totalPages, currentPage + 1));
+              setPageInput(Math.min(totalPages, currentPage + 1).toString());
+            }}
             disabled={currentPage === totalPages}
             className="flex items-center gap-1 px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
