@@ -884,9 +884,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                 const calc = getCalculatedValues(property);
                 const salesCode = getSalesPeriodCode(property);
                 const rowClass = getRowColorClass(salesCode);
+                const rowStyle = getRowStyle(salesCode);
 
                 return (
-                  <tr key={property.property_composite_key} className={rowClass}>
+                  <tr key={property.property_composite_key} className={rowClass} style={rowStyle}>
                     {viewMode === 'full' ? (
                       // Full view rows (truncated for brevity - you'll implement all columns)
                       <>
