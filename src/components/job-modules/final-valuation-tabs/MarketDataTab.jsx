@@ -222,12 +222,20 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   const getCurrentEFA = (property) => {
     if (vendorType === 'BRT') {
       // BRT: Direct read from EFFAGE column
-      return property.asset_effective_age || '';
+      const value = property.asset_effective_age;
+      // Debug: Check if we have this value
+      if (value === null || value === undefined || value === '') {
+        console.log('BRT: Missing asset_effective_age for property:', property.property_composite_key);
+      }
+      return value || '';
     } else {
       // Microsystems: Convert Effective Age to Effective Year
       // Effective Year = Year Prior to Due Year - Effective Age
       const effectiveAge = property.asset_effective_age;
-      if (effectiveAge === null || effectiveAge === undefined) return '';
+      if (effectiveAge === null || effectiveAge === undefined || effectiveAge === '') {
+        console.log('Microsystems: Missing asset_effective_age for property:', property.property_composite_key);
+        return '';
+      }
       return yearPriorToDueYear - effectiveAge;
     }
   };
@@ -389,15 +397,6 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     };
   };
 
-  // Memoize calculated values for all properties to improve performance
-  const allCalculatedValues = useMemo(() => {
-    const cache = {};
-    properties.forEach(property => {
-      cache[property.property_composite_key] = getCalculatedValues(property);
-    });
-    return cache;
-  }, [properties, finalValuationData, yearPriorToDueYear, vendorType]);
-
   // Filter and sort properties
   const filteredAndSortedProperties = useMemo(() => {
     let filtered = [...properties];
@@ -476,6 +475,15 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     return filteredAndSortedProperties.slice(startIndex, startIndex + rowsPerPage);
   }, [filteredAndSortedProperties, currentPage, rowsPerPage]);
 
+  // Calculate values only for current page (performance optimization)
+  const paginatedCalculatedValues = useMemo(() => {
+    const cache = {};
+    paginatedProperties.forEach(property => {
+      cache[property.property_composite_key] = getCalculatedValues(property);
+    });
+    return cache;
+  }, [paginatedProperties, finalValuationData, yearPriorToDueYear, vendorType, taxRates]);
+
   const totalPages = Math.ceil(filteredAndSortedProperties.length / rowsPerPage);
 
   // Get unique values for filters
@@ -542,10 +550,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   // Export to Excel
   const exportToExcel = () => {
     const workbook = XLSX.utils.book_new();
-    
-    // Prepare data rows
+
+    // Prepare data rows - calculate values on demand for export
     const rows = filteredAndSortedProperties.map(property => {
-      const calc = allCalculatedValues[property.property_composite_key];
+      const calc = getCalculatedValues(property);
       const salesCode = getSalesPeriodCode(property);
       
       return {
@@ -924,7 +932,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
             </thead>
             <tbody>
               {paginatedProperties.map((property) => {
-                const calc = allCalculatedValues[property.property_composite_key];
+                const calc = paginatedCalculatedValues[property.property_composite_key];
                 const salesCode = getSalesPeriodCode(property);
                 const rowClass = getRowColorClass(salesCode);
                 const rowStyle = getRowStyle(salesCode);
