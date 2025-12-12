@@ -946,7 +946,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                         <td className="px-2 py-2 border border-gray-300">{property.sales_price ? `$${property.sales_price.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.values_norm_time ? `$${property.values_norm_time.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.sales_nu}</td>
-                        <td className="px-2 py-2 border border-gray-300">{calc.projectedTotal && property.values_norm_time ? ((calc.projectedTotal / property.values_norm_time) * 100).toFixed(1) + '%' : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{calc.projectedTotal && property.values_norm_time ? Math.round((calc.projectedTotal / property.values_norm_time) * 100) + '%' : ''}</td>
                         <td className="px-2 py-2 border border-gray-300">
                           <input
                             type="text"
@@ -960,17 +960,17 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                         <td className="px-2 py-2 border border-gray-300 bg-teal-50">{property.values_repl_cost ? `$${property.values_repl_cost.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300">
                           {property.values_mod_total && property.values_mod_land ?
-                            ((property.values_mod_land / property.values_mod_total) * 100).toFixed(1) + '%' : ''}
+                            Math.round((property.values_mod_land / property.values_mod_total) * 100) + '%' : ''}
                         </td>
                         <td className="px-2 py-2 border border-gray-300">{property.values_mod_land ? `$${property.values_mod_land.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.values_mod_improvement ? `$${property.values_mod_improvement.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.values_mod_total ? `$${property.values_mod_total.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300 bg-gray-100 text-center">—</td>
-                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">{calc.newLandAllocation ? calc.newLandAllocation.toFixed(1) + '%' : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">{calc.newLandAllocation ? Math.round(calc.newLandAllocation) + '%' : ''}</td>
                         <td className="px-2 py-2 border border-gray-300 bg-teal-50">{property.values_cama_land ? `$${property.values_cama_land.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300 bg-teal-50">{calc.projectedImprovement ? `$${calc.projectedImprovement.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300 bg-teal-50 font-semibold">{calc.projectedTotal ? `$${calc.projectedTotal.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2 border border-gray-300">{calc.deltaPercent ? calc.deltaPercent.toFixed(1) + '%' : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{calc.deltaPercent ? Math.round(calc.deltaPercent) + '%' : ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{calc.recommendedEFA ? calc.recommendedEFA.toFixed(1) : ''}</td>
                         <td className="px-2 py-2 border border-gray-300 bg-blue-50">
                           <input
@@ -982,7 +982,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                             step="0.1"
                           />
                         </td>
-                        <td className="px-2 py-2 border border-gray-300">{calc.depr ? calc.depr.toFixed(4) : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{calc.depr ? calc.depr.toFixed(2) : ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{calc.newValue ? `$${calc.newValue.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{calc.currentTaxes ? `$${calc.currentTaxes.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{calc.projectedTaxes ? `$${calc.projectedTaxes.toLocaleString()}` : ''}</td>
