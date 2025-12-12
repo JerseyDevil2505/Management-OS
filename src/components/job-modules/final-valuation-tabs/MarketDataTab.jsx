@@ -352,6 +352,19 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
     const rawEffAge = effectiveAgeMap[lookupKey];
 
+    // Debug first few properties
+    if (block === '101' && lot === '1') {
+      console.log('🔑 Key lookup:', {
+        block,
+        lot,
+        qual,
+        lookupKey,
+        foundInMap: rawEffAge !== undefined,
+        rawEffAge,
+        sampleMapKeys: Object.keys(effectiveAgeMap).slice(0, 3)
+      });
+    }
+
     if (rawEffAge === null || rawEffAge === undefined) return '';
 
     if (vendorType === 'BRT') {
