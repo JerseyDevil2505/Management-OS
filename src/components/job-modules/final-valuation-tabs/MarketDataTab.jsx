@@ -345,6 +345,14 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         if (sortConfig.key === 'card_sf') {
           aValue = getCardSF(a);
           bValue = getCardSF(b);
+        } else if (sortConfig.key === 'asset_lot_acre') {
+          // Prefer market_manual_lot_acre over asset_lot_acre
+          aValue = a.market_manual_lot_acre || a.asset_lot_acre;
+          bValue = b.market_manual_lot_acre || b.asset_lot_acre;
+        } else if (sortConfig.key === 'asset_lot_sf') {
+          // Prefer market_manual_lot_sf over asset_lot_sf
+          aValue = a.market_manual_lot_sf || a.asset_lot_sf;
+          bValue = b.market_manual_lot_sf || b.asset_lot_sf;
         } else {
           aValue = a[sortConfig.key];
           bValue = b[sortConfig.key];
