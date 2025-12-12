@@ -528,7 +528,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Type Use': property.asset_type_use || '',
         'Building Class': property.asset_building_class || '',
         'Year Built': property.asset_year_built || '',
-        'Current Effective Age': property.asset_year_built ? yearPriorToDueYear - property.asset_year_built : '',
+        'Current EFA': calc.actualEFA !== null && calc.actualEFA !== undefined ? calc.actualEFA : '',
         'Test': property.asset_year_built && calc.actualEFA !== null && calc.actualEFA !== undefined ?
           (calc.actualEFA >= property.asset_year_built ? 'TRUE' : 'FALSE') : '',
         'Design': property.asset_design_style || '',
