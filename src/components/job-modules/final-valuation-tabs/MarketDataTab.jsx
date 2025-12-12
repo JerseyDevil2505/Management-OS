@@ -1044,16 +1044,20 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                         <td className="px-2 py-2 border border-gray-300 bg-teal-50">{property.values_cama_land ? `$${property.values_cama_land.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300 bg-teal-50">{calc.projectedImprovement ? `$${calc.projectedImprovement.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300 bg-teal-50 font-semibold">{calc.projectedTotal ? `$${calc.projectedTotal.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2 border border-gray-300">{calc.recommendedEFA ? calc.recommendedEFA.toFixed(1) : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{calc.recommendedEFA || ''}</td>
                         <td className="px-2 py-2 border border-gray-300 bg-blue-50">
-                          <input
-                            type="number"
-                            value={calc.actualEFA ?? ''}
-                            onChange={(e) => handleCellEdit(property.property_composite_key, 'actual_efa', e.target.value ? parseFloat(e.target.value) : null)}
-                            className="w-20 px-1 py-0.5 border border-gray-300 rounded text-sm text-center"
-                            placeholder="EFA"
-                            step="0.1"
-                          />
+                          {calc.qualifiesForEFA ? (
+                            <input
+                              type="number"
+                              value={calc.actualEFA ?? ''}
+                              onChange={(e) => handleCellEdit(property.property_composite_key, 'actual_efa', e.target.value ? parseFloat(e.target.value) : null)}
+                              className="w-20 px-1 py-0.5 border border-gray-300 rounded text-sm text-center"
+                              placeholder="EFA"
+                              step="0.1"
+                            />
+                          ) : (
+                            <span className="text-gray-400 text-xs">N/A</span>
+                          )}
                         </td>
                       </>
                     )}
