@@ -339,13 +339,21 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     // Apply sorting
     if (sortConfig.key) {
       filtered.sort((a, b) => {
-        let aValue = a[sortConfig.key];
-        let bValue = b[sortConfig.key];
-        
+        let aValue, bValue;
+
+        // Handle computed fields
+        if (sortConfig.key === 'card_sf') {
+          aValue = getCardSF(a);
+          bValue = getCardSF(b);
+        } else {
+          aValue = a[sortConfig.key];
+          bValue = b[sortConfig.key];
+        }
+
         // Handle null/undefined
         if (aValue === null || aValue === undefined) return 1;
         if (bValue === null || bValue === undefined) return -1;
-        
+
         // Compare
         if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
         if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
