@@ -10,7 +10,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   const [editingCell, setEditingCell] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage] = useState(100);
+  const [rowsPerPage] = useState(500);
   const [viewMode, setViewMode] = useState('full'); // 'full' or 'condensed'
   const [isSaving, setSaving] = useState(false);
 
@@ -127,8 +127,22 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
   // Helper: Calculate Card SF (additional cards only, excluding main)
   const getCardSF = (property) => {
-    // This would require summing additional card SFLAs
-    // For now return 0 as placeholder - needs implementation
+    // Sum SFLA of additional cards only (card > 1 for BRT, card != M for Microsystems)
+    const card = property.property_addl_card;
+    if (!card) return 0;
+
+    if (vendorType === 'BRT') {
+      // BRT: Card 1 is main, card 2+ are additional
+      const cardNum = parseInt(card.match(/\d+/)?.[0] || '1');
+      if (cardNum > 1) {
+        return property.asset_sfla || 0;
+      }
+    } else {
+      // Microsystems: Card M is main, others are additional
+      if (card.toUpperCase() !== 'M') {
+        return property.asset_sfla || 0;
+      }
+    }
     return 0;
   };
 
@@ -139,9 +153,9 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     return mainSFLA + cardSF;
   };
 
-  // Helper: Check if classes match
+  // Helper: Check if classes match - returns 'TRUE' or 'FALSE' string
   const classesMatch = (property) => {
-    return property.property_m4_class === property.property_cama_class;
+    return property.property_m4_class === property.property_cama_class ? 'TRUE' : 'FALSE';
   };
 
   // Helper: Get sales period code (CSP/PSP/HSP)
