@@ -192,6 +192,20 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     return '';
   };
 
+  // Helper: Get effective age for property based on vendor
+  const getEffectiveAge = (property) => {
+    if (vendorType === 'BRT') {
+      // BRT: Effective age is stored in year format (EFFAGE column)
+      return property.asset_effective_age || null;
+    } else {
+      // Microsystems: Effective Age is given, need to calculate effective year
+      // Effective Year = Year Prior to Due Year - Effective Age
+      const effectiveAge = property.asset_effective_age;
+      if (effectiveAge === null || effectiveAge === undefined) return null;
+      return yearPriorToDueYear - effectiveAge;
+    }
+  };
+
   // FORMULAS
 
   // Formula: Recommended EFA
@@ -284,8 +298,20 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   // Get all calculated values for a property
   const getCalculatedValues = (property) => {
     const storedData = finalValuationData[property.property_composite_key] || {};
-    const actualEFA = storedData.actual_efa;
-    
+
+    // Calculate actualEFA based on vendor type
+    let actualEFA = storedData.actual_efa;
+    if (actualEFA === null || actualEFA === undefined) {
+      // If not stored, derive from vendor-specific logic
+      if (vendorType === 'BRT' && property.asset_year_built) {
+        // BRT: actualEFA = year built
+        actualEFA = property.asset_year_built;
+      } else if (vendorType !== 'BRT' && property.asset_effective_age !== null && property.asset_effective_age !== undefined) {
+        // Microsystems: calculate effective year from effective age
+        actualEFA = yearPriorToDueYear - property.asset_effective_age;
+      }
+    }
+
     const recommendedEFA = calculateRecommendedEFA(property);
     const depr = actualEFA !== null && actualEFA !== undefined ? calculateDEPR(actualEFA) : null;
     const newValue = calculateNewValue(property, depr);
@@ -353,6 +379,20 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           // Prefer market_manual_lot_sf over asset_lot_sf
           aValue = a.market_manual_lot_sf || a.asset_lot_sf;
           bValue = b.market_manual_lot_sf || b.asset_lot_sf;
+        } else if (sortConfig.key === 'check') {
+          aValue = classesMatch(a);
+          bValue = classesMatch(b);
+        } else if (sortConfig.key === 'sales_period_code') {
+          aValue = getSalesPeriodCode(a) || '';
+          bValue = getSalesPeriodCode(b) || '';
+        } else if (sortConfig.key === 'property_block') {
+          // Numeric sort for block
+          aValue = parseFloat(a.property_block) || 0;
+          bValue = parseFloat(b.property_block) || 0;
+        } else if (sortConfig.key === 'property_lot') {
+          // Numeric sort for lot
+          aValue = parseFloat(a.property_lot) || 0;
+          bValue = parseFloat(b.property_lot) || 0;
         } else {
           aValue = a[sortConfig.key];
           bValue = b[sortConfig.key];
@@ -743,7 +783,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                     <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('property_location')}>Address ↕</th>
                     <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('property_m4_class')}>M4 Class ↕</th>
                     <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('property_cama_class')}>CAMA Class ↕</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Check</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('check')}>Check ↕</th>
                     <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('inspection_info_by')}>InfoBy ↕</th>
                     <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('property_vcs')}>VCS ↕</th>
                     <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('property_facility')}>Facility ↕</th>
@@ -766,7 +806,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                     <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Total SFLA</th>
                     <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('asset_ext_cond')}>Ext Cond ↕</th>
                     <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('asset_int_cond')}>Int Cond ↕</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Code</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('sales_period_code')}>Code ↕</th>
                     <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('sales_date')}>Sale Date ↕</th>
                     <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('sales_book')}>Book ↕</th>
                     <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('sales_page')}>Page ↕</th>
@@ -778,12 +818,12 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                     <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-teal-100" onClick={() => handleSort('values_det_items')}>Det Items ↕</th>
                     <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-teal-100" onClick={() => handleSort('values_repl_cost')}>Repl Cost ↕</th>
                     <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Old Land %</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-teal-100" onClick={() => handleSort('values_cama_land')}>CAMA Land ↕</th>
                     <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('values_mod_land')}>Curr Land ↕</th>
                     <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('values_mod_improvement')}>Curr Imp ↕</th>
                     <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('values_mod_total')}>Curr Total ↕</th>
                     <th className="px-2 py-2 text-center font-semibold border border-gray-300 bg-gray-100">---</th>
                     <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-teal-100">New Land %</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-teal-100" onClick={() => handleSort('values_cama_land')}>CAMA Land ↕</th>
                     <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-teal-100">Proj Imp</th>
                     <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-teal-100">Proj Total</th>
                     <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Delta %</th>
@@ -855,15 +895,24 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                         </td>
                         <td className="px-2 py-2 border border-gray-300">{property.asset_lot_frontage}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.asset_lot_depth}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.market_manual_lot_acre || property.asset_lot_acre}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.market_manual_lot_sf || property.asset_lot_sf}</td>
+                        <td className="px-2 py-2 border border-gray-300">
+                          {(property.market_manual_lot_acre || property.asset_lot_acre) ?
+                            (property.market_manual_lot_acre || property.asset_lot_acre).toFixed(2) : ''}
+                        </td>
+                        <td className="px-2 py-2 border border-gray-300">
+                          {(property.market_manual_lot_sf || property.asset_lot_sf) ?
+                            Math.round(property.market_manual_lot_sf || property.asset_lot_sf).toLocaleString() : ''}
+                        </td>
                         <td className="px-2 py-2 border border-gray-300">{property.asset_view}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.location_analysis}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.asset_type_use}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.asset_building_class}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.asset_year_built}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.asset_year_built ? yearPriorToDueYear - property.asset_year_built : ''}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.asset_year_built && calc.actualEFA !== null ? (calc.actualEFA >= (yearPriorToDueYear - property.asset_year_built) ? '✓' : '✗') : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">
+                          {property.asset_year_built && calc.actualEFA !== null && calc.actualEFA !== undefined ?
+                            (calc.actualEFA >= property.asset_year_built ? 'TRUE' : 'FALSE') : ''}
+                        </td>
                         <td className="px-2 py-2 border border-gray-300">{property.asset_design_style}</td>
                         <td className="px-2 py-2 border border-gray-300">{getBedroomTotal(property)}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.asset_story_height}</td>
@@ -894,12 +943,12 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                           {property.values_mod_total && property.values_mod_land ?
                             ((property.values_mod_land / property.values_mod_total) * 100).toFixed(1) + '%' : ''}
                         </td>
-                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">{property.values_cama_land ? `$${property.values_cama_land.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.values_mod_land ? `$${property.values_mod_land.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.values_mod_improvement ? `$${property.values_mod_improvement.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.values_mod_total ? `$${property.values_mod_total.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300 bg-gray-100 text-center">—</td>
                         <td className="px-2 py-2 border border-gray-300 bg-teal-50">{calc.newLandAllocation ? calc.newLandAllocation.toFixed(1) + '%' : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">{property.values_cama_land ? `$${property.values_cama_land.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300 bg-teal-50">{calc.projectedImprovement ? `$${calc.projectedImprovement.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300 bg-teal-50 font-semibold">{calc.projectedTotal ? `$${calc.projectedTotal.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{calc.deltaPercent ? calc.deltaPercent.toFixed(1) + '%' : ''}</td>
