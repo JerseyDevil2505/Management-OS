@@ -184,12 +184,18 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     return null;
   };
 
-  // Helper: Get row color class based on sales period
+  // Helper: Get row color class and style based on sales period
   const getRowColorClass = (salesCode) => {
     if (salesCode === 'CSP') return 'bg-green-50 hover:bg-green-100';
     if (salesCode === 'PSP') return 'bg-blue-50 hover:bg-blue-100';
-    if (salesCode === 'HSP') return 'bg-orange-100 hover:bg-orange-200';
     return 'hover:bg-gray-50';
+  };
+
+  const getRowStyle = (salesCode) => {
+    if (salesCode === 'HSP') {
+      return { backgroundColor: '#fed7aa' }; // Tailwind orange-200
+    }
+    return {};
   };
 
   // Helper: Get effective age for property based on vendor
