@@ -664,25 +664,25 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                 ) : (
                   // Condensed view - 19 key columns
                   <>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('property_block')}>Block</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('property_lot')}>Lot</th>
-                    <th className="px-2 py-2 text-left font-semibold">Qualifier</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('property_location')}>Address</th>
-                    <th className="px-2 py-2 text-left font-semibold">Card</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('asset_type_use')}>Type Use</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('asset_building_class')}>Class</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('asset_year_built')}>Year Built</th>
-                    <th className="px-2 py-2 text-left font-semibold">Curr EFA</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('sales_date')}>Sale Date</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('sales_price')}>Sale Price</th>
-                    <th className="px-2 py-2 text-left font-semibold">Norm Time</th>
-                    <th className="px-2 py-2 text-left font-semibold">NU</th>
-                    <th className="px-2 py-2 text-left font-semibold">Curr Total</th>
-                    <th className="px-2 py-2 text-left font-semibold">CAMA Land</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-yellow-50">Proj Imp</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-yellow-50">Proj Total</th>
-                    <th className="px-2 py-2 text-left font-semibold">Rec EFA</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-blue-50">Actual EFA</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('property_block')}>Block ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('property_lot')}>Lot ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('property_qualifier')}>Qualifier ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('property_location')}>Address ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('property_addl_card')}>Card ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('asset_type_use')}>Type Use ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('asset_building_class')}>Class ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('asset_year_built')}>Year Built ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Curr EFA</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('sales_date')}>Sale Date ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('sales_price')}>Sale Price ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('values_norm_time')}>Norm Time ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('sales_nu')}>NU ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('values_mod_total')}>Curr Total ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-teal-100" onClick={() => handleSort('values_cama_land')}>CAMA Land ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-teal-100">Proj Imp</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-teal-100">Proj Total</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Rec EFA</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-blue-50">Actual EFA</th>
                   </>
                 )}
               </tr>
@@ -692,7 +692,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                 const calc = getCalculatedValues(property);
                 const salesCode = getSalesPeriodCode(property);
                 const rowClass = getRowColorClass(salesCode);
-                
+
                 return (
                   <tr key={property.property_composite_key} className={`hover:bg-gray-50 ${rowClass}`}>
                     {viewMode === 'full' ? (
