@@ -587,58 +587,119 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
       {/* Filters */}
       <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-gray-500" />
-            <span className="text-sm font-medium text-gray-700">Filters:</span>
+        <div className="space-y-3">
+          {/* Filter Dropdowns */}
+          <div className="grid grid-cols-4 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Type/Use</label>
+              <select
+                value={filters.typeUse}
+                onChange={(e) => setFilters(f => ({ ...f, typeUse: e.target.value }))}
+                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="all">All Type/Use</option>
+                {uniqueTypeUses.map(type => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Design/Style</label>
+              <select
+                value={filters.design}
+                onChange={(e) => setFilters(f => ({ ...f, design: e.target.value }))}
+                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="all">All Designs</option>
+                {uniqueDesigns.map(design => (
+                  <option key={design} value={design}>{design}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">VCS</label>
+              <select
+                value={filters.vcs}
+                onChange={(e) => setFilters(f => ({ ...f, vcs: e.target.value }))}
+                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="all">All VCS</option>
+                {uniqueVCS.map(vcs => (
+                  <option key={vcs} value={vcs}>{vcs}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Sales Status</label>
+              <select
+                value={filters.hasSales}
+                onChange={(e) => setFilters(f => ({ ...f, hasSales: e.target.value }))}
+                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="all">All Properties</option>
+                <option value="yes">Has Sales Only</option>
+                <option value="no">No Sales Only</option>
+              </select>
+            </div>
           </div>
-          
-          <select
-            value={filters.typeUse}
-            onChange={(e) => setFilters(f => ({ ...f, typeUse: e.target.value }))}
-            className="px-3 py-1 border border-gray-300 rounded-lg text-sm"
-          >
-            <option value="all">All Type/Use</option>
-            {uniqueTypeUses.map(type => (
-              <option key={type} value={type}>{type}</option>
-            ))}
-          </select>
 
-          <select
-            value={filters.design}
-            onChange={(e) => setFilters(f => ({ ...f, design: e.target.value }))}
-            className="px-3 py-1 border border-gray-300 rounded-lg text-sm"
-          >
-            <option value="all">All Designs</option>
-            {uniqueDesigns.map(design => (
-              <option key={design} value={design}>{design}</option>
-            ))}
-          </select>
-
-          <select
-            value={filters.vcs}
-            onChange={(e) => setFilters(f => ({ ...f, vcs: e.target.value }))}
-            className="px-3 py-1 border border-gray-300 rounded-lg text-sm"
-          >
-            <option value="all">All VCS</option>
-            {uniqueVCS.map(vcs => (
-              <option key={vcs} value={vcs}>{vcs}</option>
-            ))}
-          </select>
-
-          <select
-            value={filters.hasSales}
-            onChange={(e) => setFilters(f => ({ ...f, hasSales: e.target.value }))}
-            className="px-3 py-1 border border-gray-300 rounded-lg text-sm"
-          >
-            <option value="all">All Properties</option>
-            <option value="yes">Has Sales Only</option>
-            <option value="no">No Sales Only</option>
-          </select>
-
-          <span className="text-sm text-gray-600">
-            Showing {filteredAndSortedProperties.length.toLocaleString()} of {properties.length.toLocaleString()} properties
-          </span>
+          {/* Active Filters Chips */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-medium text-gray-600">Active Filters:</span>
+            {filters.typeUse !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                Type: {filters.typeUse}
+                <button
+                  onClick={() => setFilters(f => ({ ...f, typeUse: 'all' }))}
+                  className="hover:text-blue-900"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {filters.design !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
+                Design: {filters.design}
+                <button
+                  onClick={() => setFilters(f => ({ ...f, design: 'all' }))}
+                  className="hover:text-purple-900"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {filters.vcs !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                VCS: {filters.vcs}
+                <button
+                  onClick={() => setFilters(f => ({ ...f, vcs: 'all' }))}
+                  className="hover:text-green-900"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {filters.hasSales !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full">
+                Sales: {filters.hasSales === 'yes' ? 'Has Sales' : 'No Sales'}
+                <button
+                  onClick={() => setFilters(f => ({ ...f, hasSales: 'all' }))}
+                  className="hover:text-orange-900"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {(filters.typeUse === 'all' && filters.design === 'all' && filters.vcs === 'all' && filters.hasSales === 'all') && (
+              <span className="text-xs text-gray-500 italic">No filters applied</span>
+            )}
+            <span className="text-xs text-gray-600 ml-auto">
+              Showing {filteredAndSortedProperties.length.toLocaleString()} of {properties.length.toLocaleString()} properties
+            </span>
+          </div>
         </div>
       </div>
 
