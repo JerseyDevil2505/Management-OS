@@ -7,6 +7,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   // State management
   const [finalValuationData, setFinalValuationData] = useState({});
   const [taxRates, setTaxRates] = useState(null);
+  const [effectiveAgeMap, setEffectiveAgeMap] = useState({});
   const [editingCell, setEditingCell] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'property_block', direction: 'asc' });
   const [currentPage, setCurrentPage] = useState(1);
@@ -61,6 +62,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     if (jobData?.id) {
       loadFinalValuationData();
       loadTaxRates();
+      loadEffectiveAgeFromRawFile();
     }
   }, [jobData?.id]);
 
@@ -101,6 +103,80 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       setTaxRates(data);
     } catch (error) {
       console.error('Error loading tax rates:', error);
+    }
+  };
+
+  const loadEffectiveAgeFromRawFile = async () => {
+    try {
+      const { data: job, error } = await supabase
+        .from('jobs')
+        .select('raw_file_content, vendor_type')
+        .eq('id', jobData.id)
+        .single();
+
+      if (error) throw error;
+      if (!job?.raw_file_content) {
+        console.warn('No raw file content available');
+        return;
+      }
+
+      // Parse CSV to extract EFFAGE/Effective Age
+      const lines = job.raw_file_content.split(/\r?\n/);
+      if (lines.length < 2) return;
+
+      const headers = lines[0].split(/,|\t/);
+      const vendorType = job.vendor_type || jobData?.vendor_type || 'BRT';
+
+      // Find the column index for EFFAGE or Effective Age
+      let effAgeIndex = -1;
+      if (vendorType === 'BRT') {
+        effAgeIndex = headers.findIndex(h => h.trim().toUpperCase() === 'EFFAGE');
+      } else {
+        effAgeIndex = headers.findIndex(h => h.trim() === 'Effective Age');
+      }
+
+      if (effAgeIndex === -1) {
+        console.warn(`${vendorType === 'BRT' ? 'EFFAGE' : 'Effective Age'} column not found in raw file`);
+        return;
+      }
+
+      // Find composite key columns
+      const blockIdx = headers.findIndex(h => h.trim().toUpperCase() === 'BLOCK');
+      const lotIdx = headers.findIndex(h => h.trim().toUpperCase() === 'LOT');
+      const qualIdx = headers.findIndex(h => h.trim().toUpperCase() === (vendorType === 'BRT' ? 'QUALIFIER' : 'Qual'));
+
+      if (blockIdx === -1 || lotIdx === -1 || qualIdx === -1) {
+        console.warn('Could not find block/lot/qualifier columns');
+        return;
+      }
+
+      // Build map of composite_key -> effective_age
+      const map = {};
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const cols = line.split(/,|\t/);
+        const block = cols[blockIdx]?.trim() || '';
+        const lot = cols[lotIdx]?.trim() || '';
+        const qual = cols[qualIdx]?.trim() || '';
+        const effAge = cols[effAgeIndex]?.trim();
+
+        if (block && lot) {
+          const compositeKey = `${block}_${lot}_${qual}`;
+          if (effAge && effAge !== '') {
+            const numericAge = parseFloat(effAge);
+            if (!isNaN(numericAge)) {
+              map[compositeKey] = numericAge;
+            }
+          }
+        }
+      }
+
+      console.log(`✅ Loaded effective age for ${Object.keys(map).length} properties`);
+      setEffectiveAgeMap(map);
+    } catch (error) {
+      console.error('Error loading effective age from raw file:', error);
     }
   };
 
@@ -220,15 +296,17 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
   // Helper: Get current EFA for display based on vendor
   const getCurrentEFA = (property) => {
+    const rawEffAge = effectiveAgeMap[property.property_composite_key];
+
+    if (rawEffAge === null || rawEffAge === undefined) return '';
+
     if (vendorType === 'BRT') {
-      // BRT: Direct read from EFFAGE column
-      return property.asset_effective_age || '';
+      // BRT: EFFAGE is already the effective year (like 1950)
+      return rawEffAge;
     } else {
-      // Microsystems: Convert Effective Age to Effective Year
+      // Microsystems: Effective Age is age in years, convert to year
       // Effective Year = Year Prior to Due Year - Effective Age
-      const effectiveAge = property.asset_effective_age;
-      if (effectiveAge === null || effectiveAge === undefined || effectiveAge === '') return '';
-      return yearPriorToDueYear - effectiveAge;
+      return yearPriorToDueYear - rawEffAge;
     }
   };
 
