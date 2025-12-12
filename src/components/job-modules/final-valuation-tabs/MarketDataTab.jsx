@@ -8,7 +8,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   const [finalValuationData, setFinalValuationData] = useState({});
   const [taxRates, setTaxRates] = useState(null);
   const [editingCell, setEditingCell] = useState(null);
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [sortConfig, setSortConfig] = useState({ key: 'property_block', direction: 'asc' });
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage] = useState(500);
   const [viewMode, setViewMode] = useState('full'); // 'full' or 'condensed'
@@ -186,11 +186,11 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
   // Helper: Get row color class based on sales period
   const getRowColorClass = (salesCode) => {
-    if (salesCode === 'CSP') return 'bg-green-50';
-    if (salesCode === 'PSP') return 'bg-blue-50';
-    if (salesCode === 'HSP') return 'bg-orange-50';
-    return '';
-  };
+    if (salesCode === 'CSP') return 'bg-green-50 hover:bg-green-100';
+    if (salesCode === 'PSP') return 'bg-blue-50 hover:bg-blue-100';
+    if (salesCode === 'HSP') return 'bg-orange-50 hover:bg-orange-100';
+    return 'hover:bg-gray-50';
+  }
 
   // Helper: Get effective age for property based on vendor
   const getEffectiveAge = (property) => {
@@ -880,7 +880,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                 const rowClass = getRowColorClass(salesCode);
 
                 return (
-                  <tr key={property.property_composite_key} className={`hover:bg-gray-50 ${rowClass}`}>
+                  <tr key={property.property_composite_key} className={rowClass}>
                     {viewMode === 'full' ? (
                       // Full view rows (truncated for brevity - you'll implement all columns)
                       <>
