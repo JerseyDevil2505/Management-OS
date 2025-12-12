@@ -208,8 +208,19 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
       console.log(`✅ Loaded effective age for ${successCount} properties`);
       console.log(`⚠️  ${emptyCount} properties had empty effective age`);
-      console.log('First 5 keys in map:', Object.keys(map).slice(0, 5));
-      console.log('First 5 property keys from properties:', properties.slice(0, 5).map(p => p.property_composite_key));
+      console.log('🔑 First 5 keys in effectiveAgeMap:', Object.keys(map).slice(0, 5));
+      console.log('🔑 First 5 property_composite_key from properties:', properties.slice(0, 5).map(p => p.property_composite_key));
+
+      // Check for key mismatch
+      if (properties.length > 0) {
+        const samplePropKey = properties[0].property_composite_key;
+        const mapHasKey = map[samplePropKey] !== undefined;
+        console.log(`🔍 Testing lookup: property[0].property_composite_key = "${samplePropKey}"`);
+        console.log(`🔍 Does map have this key? ${mapHasKey}`);
+        if (!mapHasKey) {
+          console.warn('⚠️  KEY MISMATCH! CSV keys and database keys use different formats!');
+        }
+      }
 
       setEffectiveAgeMap(map);
     } catch (error) {
@@ -334,6 +345,16 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   // Helper: Get current EFA for display based on vendor
   const getCurrentEFA = (property) => {
     const rawEffAge = effectiveAgeMap[property.property_composite_key];
+
+    // Debug first property
+    if (property.property_block === '101' && property.property_lot === '1') {
+      console.log('🔍 getCurrentEFA debug:', {
+        composite_key: property.property_composite_key,
+        rawEffAge,
+        mapSize: Object.keys(effectiveAgeMap).length,
+        sampleMapKeys: Object.keys(effectiveAgeMap).slice(0, 3)
+      });
+    }
 
     if (rawEffAge === null || rawEffAge === undefined) return '';
 
