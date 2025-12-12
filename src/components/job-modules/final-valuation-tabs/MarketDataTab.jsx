@@ -552,7 +552,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       cache[property.property_composite_key] = getCalculatedValues(property);
     });
     return cache;
-  }, [paginatedProperties, finalValuationData, yearPriorToDueYear, vendorType, taxRates]);
+  }, [paginatedProperties, finalValuationData, yearPriorToDueYear, vendorType, taxRates, effectiveAgeMap]);
 
   const totalPages = Math.ceil(filteredAndSortedProperties.length / rowsPerPage);
 
