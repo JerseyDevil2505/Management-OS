@@ -136,7 +136,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       const separator = lines[0].includes('\t') ? '\t' : ',';
       console.log(`🔍 Using separator: ${separator === '\t' ? 'TAB' : 'COMMA'}`);
 
-      const headers = lines[0].split(separator).map(h => h.trim());
+      // Strip quotes from headers
+      const headers = lines[0].split(separator).map(h => h.trim().replace(/^"|"$/g, ''));
       console.log(`📋 Headers (${headers.length}):`, headers.slice(0, 20));
 
       const vendorType = job.vendor_type || jobData?.vendor_type || 'BRT';
@@ -179,7 +180,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         const line = lines[i].trim();
         if (!line) continue;
 
-        const cols = line.split(separator).map(c => c.trim());
+        // Strip quotes from cell values
+        const cols = line.split(separator).map(c => c.trim().replace(/^"|"$/g, ''));
         const block = cols[blockIdx] || '';
         const lot = cols[lotIdx] || '';
         const qual = cols[qualIdx] || '';
