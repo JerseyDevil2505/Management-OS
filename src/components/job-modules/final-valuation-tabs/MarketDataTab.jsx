@@ -804,10 +804,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                         <td className="px-2 py-2 border border-gray-300">{property.sales_nu}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.values_mod_total ? `$${property.values_mod_total.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300 bg-teal-50">{property.values_cama_land ? `$${property.values_cama_land.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2 bg-yellow-50">{calc.projectedImprovement ? `$${calc.projectedImprovement.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2 bg-yellow-50 font-semibold">{calc.projectedTotal ? `$${calc.projectedTotal.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2">{calc.recommendedEFA ? calc.recommendedEFA.toFixed(1) : ''}</td>
-                        <td className="px-2 py-2 bg-blue-50">
+                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">{calc.projectedImprovement ? `$${calc.projectedImprovement.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300 bg-teal-50 font-semibold">{calc.projectedTotal ? `$${calc.projectedTotal.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{calc.recommendedEFA ? calc.recommendedEFA.toFixed(1) : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300 bg-blue-50">
                           <input
                             type="number"
                             value={calc.actualEFA ?? ''}
