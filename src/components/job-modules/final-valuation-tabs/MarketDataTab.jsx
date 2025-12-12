@@ -13,6 +13,39 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   const [rowsPerPage] = useState(100);
   const [viewMode, setViewMode] = useState('full'); // 'full' or 'condensed'
   const [isSaving, setSaving] = useState(false);
+
+  // Refs for scroll synchronization
+  const topScrollRef = React.useRef(null);
+  const mainScrollRef = React.useRef(null);
+  const bottomScrollRef = React.useRef(null);
+
+  // Scroll synchronization handlers
+  const handleTopScroll = (e) => {
+    if (mainScrollRef.current) {
+      mainScrollRef.current.scrollLeft = e.target.scrollLeft;
+    }
+    if (bottomScrollRef.current) {
+      bottomScrollRef.current.scrollLeft = e.target.scrollLeft;
+    }
+  };
+
+  const handleMainScroll = (e) => {
+    if (topScrollRef.current) {
+      topScrollRef.current.scrollLeft = e.target.scrollLeft;
+    }
+    if (bottomScrollRef.current) {
+      bottomScrollRef.current.scrollLeft = e.target.scrollLeft;
+    }
+  };
+
+  const handleBottomScroll = (e) => {
+    if (mainScrollRef.current) {
+      mainScrollRef.current.scrollLeft = e.target.scrollLeft;
+    }
+    if (topScrollRef.current) {
+      topScrollRef.current.scrollLeft = e.target.scrollLeft;
+    }
+  };
   
   // Filters
   const [filters, setFilters] = useState({
