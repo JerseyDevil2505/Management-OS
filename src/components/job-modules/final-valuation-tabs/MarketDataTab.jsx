@@ -332,19 +332,20 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     // Calculate actualEFA based on vendor type - only if property qualifies
     let actualEFA = null;
     if (qualifiesForEFA) {
-      actualEFA = storedData.actual_efa;
-      if (actualEFA === null || actualEFA === undefined) {
-        // If not stored, pull directly from EFFAGE
-        if (vendorType === 'BRT') {
-          // BRT: EFFAGE is stored as effective year (like 1950)
-          // Pull directly from asset_effective_age which maps to EFFAGE column
-          actualEFA = property.asset_effective_age;
-        } else {
-          // Microsystems: Effective Age is given as age in years
-          // Calculate effective year = Year Prior to Due Year - Effective Age
-          if (property.asset_effective_age !== null && property.asset_effective_age !== undefined) {
-            actualEFA = yearPriorToDueYear - property.asset_effective_age;
-          }
+      // Check if user has edited this value
+      if (storedData.actual_efa !== null && storedData.actual_efa !== undefined) {
+        // User has edited, use their value
+        actualEFA = storedData.actual_efa;
+      } else {
+        // Not edited yet, initialize with Current EFA value
+        actualEFA = getCurrentEFA(property);
+        // Convert to number if it's a string
+        if (typeof actualEFA === 'string' && actualEFA !== '') {
+          actualEFA = parseFloat(actualEFA);
+        }
+        // If getCurrentEFA returned empty string, set to null
+        if (actualEFA === '' || isNaN(actualEFA)) {
+          actualEFA = null;
         }
       }
     }
@@ -387,6 +388,15 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       saleComment: storedData.sale_comment || ''
     };
   };
+
+  // Memoize calculated values for all properties to improve performance
+  const allCalculatedValues = useMemo(() => {
+    const cache = {};
+    properties.forEach(property => {
+      cache[property.property_composite_key] = getCalculatedValues(property);
+    });
+    return cache;
+  }, [properties, finalValuationData, yearPriorToDueYear, vendorType]);
 
   // Filter and sort properties
   const filteredAndSortedProperties = useMemo(() => {
@@ -535,7 +545,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     
     // Prepare data rows
     const rows = filteredAndSortedProperties.map(property => {
-      const calc = getCalculatedValues(property);
+      const calc = allCalculatedValues[property.property_composite_key];
       const salesCode = getSalesPeriodCode(property);
       
       return {
@@ -587,26 +597,26 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Sales Ratio': calc.projectedTotal && property.values_norm_time ?
           Math.round((calc.projectedTotal / property.values_norm_time) * 100) : '',
         'Sale Comment': calc.saleComment,
-        'Detached Items Value': property.values_det_items || '',
-        'Cost New Value': property.values_repl_cost || '',
+        'Detached Items Value': property.values_det_items || 0,
+        'Cost New Value': property.values_repl_cost || 0,
         'Old Land Allocation %': property.values_mod_total && property.values_mod_land ?
           Math.round((property.values_mod_land / property.values_mod_total) * 100) : '',
-        'Current Land Value': property.values_mod_land || '',
-        'Current Improvement Value': property.values_mod_improvement || '',
-        'Current Total Value': property.values_mod_total || '',
+        'Current Land Value': property.values_mod_land || 0,
+        'Current Improvement Value': property.values_mod_improvement || 0,
+        'Current Total Value': property.values_mod_total || 0,
         '--- NEW PROJECTED ---': '',
         'New Land Allocation %': calc.newLandAllocation ? Math.round(calc.newLandAllocation) : '',
-        'CAMA Land Value': property.values_cama_land || '',
-        'Projected Improvement': calc.projectedImprovement || '',
-        'Projected Total': calc.projectedTotal || '',
+        'CAMA Land Value': property.values_cama_land || 0,
+        'Projected Improvement': calc.projectedImprovement || 0,
+        'Projected Total': calc.projectedTotal || 0,
         'Delta %': calc.deltaPercent ? Math.round(calc.deltaPercent) : '',
         'Recommended EFA': calc.recommendedEFA || '',
         'Actual EFA': calc.actualEFA || '',
         'DEPR': calc.depr ? parseFloat(calc.depr.toFixed(2)) : '',
-        'New Value': calc.newValue || '',
-        'Current Year Taxes': calc.currentTaxes || '',
-        'Projected Taxes': calc.projectedTaxes || '',
-        'Tax Delta $': calc.taxDelta || ''
+        'New Value': calc.newValue || 0,
+        'Current Year Taxes': calc.currentTaxes || 0,
+        'Projected Taxes': calc.projectedTaxes || 0,
+        'Tax Delta $': calc.taxDelta || 0
       };
     });
 
@@ -914,7 +924,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
             </thead>
             <tbody>
               {paginatedProperties.map((property) => {
-                const calc = getCalculatedValues(property);
+                const calc = allCalculatedValues[property.property_composite_key];
                 const salesCode = getSalesPeriodCode(property);
                 const rowClass = getRowColorClass(salesCode);
                 const rowStyle = getRowStyle(salesCode);
@@ -995,14 +1005,14 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                           {property.values_mod_total && property.values_mod_land ?
                             Math.round((property.values_mod_land / property.values_mod_total) * 100) + '%' : ''}
                         </td>
-                        <td className="px-2 py-2 border border-gray-300">{property.values_mod_land ? `$${property.values_mod_land.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.values_mod_improvement ? `$${property.values_mod_improvement.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.values_mod_total ? `$${property.values_mod_total.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">${(property.values_mod_land || 0).toLocaleString()}</td>
+                        <td className="px-2 py-2 border border-gray-300">${(property.values_mod_improvement || 0).toLocaleString()}</td>
+                        <td className="px-2 py-2 border border-gray-300">${(property.values_mod_total || 0).toLocaleString()}</td>
                         <td className="px-2 py-2 border border-gray-300 bg-gray-100 text-center">—</td>
                         <td className="px-2 py-2 border border-gray-300 bg-teal-50">{calc.newLandAllocation ? Math.round(calc.newLandAllocation) + '%' : ''}</td>
-                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">{property.values_cama_land ? `$${property.values_cama_land.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">{calc.projectedImprovement ? `$${calc.projectedImprovement.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2 border border-gray-300 bg-teal-50 font-semibold">{calc.projectedTotal ? `$${calc.projectedTotal.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">${(property.values_cama_land || 0).toLocaleString()}</td>
+                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">${(calc.projectedImprovement || 0).toLocaleString()}</td>
+                        <td className="px-2 py-2 border border-gray-300 bg-teal-50 font-semibold">${(calc.projectedTotal || 0).toLocaleString()}</td>
                         <td className="px-2 py-2 border border-gray-300">{calc.deltaPercent ? Math.round(calc.deltaPercent) + '%' : ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{calc.recommendedEFA || ''}</td>
                         <td className="px-2 py-2 border border-gray-300 bg-blue-50">
@@ -1027,10 +1037,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                           )}
                         </td>
                         <td className="px-2 py-2 border border-gray-300">{calc.depr ? calc.depr.toFixed(2) : ''}</td>
-                        <td className="px-2 py-2 border border-gray-300">{calc.newValue ? `$${calc.newValue.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2 border border-gray-300">{calc.currentTaxes ? `$${calc.currentTaxes.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2 border border-gray-300">{calc.projectedTaxes ? `$${calc.projectedTaxes.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2 border border-gray-300">{calc.taxDelta ? `$${calc.taxDelta.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">${(calc.newValue || 0).toLocaleString()}</td>
+                        <td className="px-2 py-2 border border-gray-300">${(calc.currentTaxes || 0).toLocaleString()}</td>
+                        <td className="px-2 py-2 border border-gray-300">${(calc.projectedTaxes || 0).toLocaleString()}</td>
+                        <td className="px-2 py-2 border border-gray-300">${(calc.taxDelta || 0).toLocaleString()}</td>
                       </>
                     ) : (
                       // Condensed view rows
@@ -1048,10 +1058,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                         <td className="px-2 py-2 border border-gray-300">{property.sales_price ? `$${property.sales_price.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.values_norm_time ? `$${property.values_norm_time.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.sales_nu}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.values_mod_total ? `$${property.values_mod_total.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">{property.values_cama_land ? `$${property.values_cama_land.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">{calc.projectedImprovement ? `$${calc.projectedImprovement.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2 border border-gray-300 bg-teal-50 font-semibold">{calc.projectedTotal ? `$${calc.projectedTotal.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">${(property.values_mod_total || 0).toLocaleString()}</td>
+                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">${(property.values_cama_land || 0).toLocaleString()}</td>
+                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">${(calc.projectedImprovement || 0).toLocaleString()}</td>
+                        <td className="px-2 py-2 border border-gray-300 bg-teal-50 font-semibold">${(calc.projectedTotal || 0).toLocaleString()}</td>
                         <td className="px-2 py-2 border border-gray-300">{calc.recommendedEFA || ''}</td>
                         <td className="px-2 py-2 border border-gray-300 bg-blue-50">
                           {calc.qualifiesForEFA ? (
