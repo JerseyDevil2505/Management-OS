@@ -927,7 +927,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                         <td className="px-2 py-2 border border-gray-300">{property.asset_type_use}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.asset_building_class}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.asset_year_built}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.asset_effective_age || ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{getCurrentEFA(property)}</td>
                         <td className="px-2 py-2 border border-gray-300">
                           {property.asset_year_built && calc.actualEFA !== null && calc.actualEFA !== undefined ?
                             (calc.actualEFA >= property.asset_year_built ? 'TRUE' : 'FALSE') : ''}
