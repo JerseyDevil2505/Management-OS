@@ -303,12 +303,21 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     let actualEFA = storedData.actual_efa;
     if (actualEFA === null || actualEFA === undefined) {
       // If not stored, derive from vendor-specific logic
-      if (vendorType === 'BRT' && property.asset_year_built) {
-        // BRT: actualEFA = year built
-        actualEFA = property.asset_year_built;
-      } else if (vendorType !== 'BRT' && property.asset_effective_age !== null && property.asset_effective_age !== undefined) {
-        // Microsystems: calculate effective year from effective age
-        actualEFA = yearPriorToDueYear - property.asset_effective_age;
+      if (vendorType === 'BRT') {
+        // BRT: EFFAGE is stored as effective year (like 1950)
+        // Use asset_effective_age which maps to EFFAGE column
+        if (property.asset_effective_age !== null && property.asset_effective_age !== undefined) {
+          actualEFA = property.asset_effective_age;
+        } else if (property.asset_year_built) {
+          // Fallback to year built if EFFAGE not available
+          actualEFA = property.asset_year_built;
+        }
+      } else {
+        // Microsystems: Effective Age is given as age in years
+        // Calculate effective year = Year Prior to Due Year - Effective Age
+        if (property.asset_effective_age !== null && property.asset_effective_age !== undefined) {
+          actualEFA = yearPriorToDueYear - property.asset_effective_age;
+        }
       }
     }
 
