@@ -64,6 +64,11 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     }
   }, [jobData?.id]);
 
+  // Sync pageInput with currentPage
+  useEffect(() => {
+    setPageInput(currentPage.toString());
+  }, [currentPage]);
+
   const loadFinalValuationData = async () => {
     try {
       const { data, error } = await supabase
