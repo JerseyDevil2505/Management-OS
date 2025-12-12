@@ -450,7 +450,6 @@ export class MicrosystemsUpdater {
       asset_type_use: rawRecord['Type Use Code'],
       asset_view: null, // Not available in Microsystems
       asset_year_built: this.parseInteger(rawRecord['Year Built']),
-      asset_effective_age: this.parseInteger(rawRecord['Effective Age']),
 
       // Analysis and calculation fields
       // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,

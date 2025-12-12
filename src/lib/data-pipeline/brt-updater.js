@@ -575,7 +575,6 @@ export class BRTUpdater {
       asset_type_use: rawRecord.TYPEUSE,
       asset_view: rawRecord.VIEW,
       asset_year_built: this.parseInteger(rawRecord.YEARBUILT),
-      asset_effective_age: this.parseInteger(rawRecord.EFFAGE),
 
       // LANDUR fields (BRT unit-rate codes and units) - use lowercase column names to match DB
       landur_1: (rawRecord['LANDUR_1'] !== undefined && rawRecord['LANDUR_1'] !== null) ? String(rawRecord['LANDUR_1']).replace(/[^0-9]/g,'').padStart(2,'0') : null,
