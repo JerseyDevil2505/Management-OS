@@ -510,16 +510,18 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Special': calc.specialNotes,
         'Lot Frontage': property.asset_lot_frontage || '',
         'Lot Depth': property.asset_lot_depth || '',
-        'Lot Size (Acre)': property.asset_lot_acre || '',
-        'Lot Size (SF)': property.asset_lot_sf || '',
+        'Lot Size (Acre)': (property.market_manual_lot_acre || property.asset_lot_acre) ?
+          parseFloat(property.market_manual_lot_acre || property.asset_lot_acre).toFixed(2) : '',
+        'Lot Size (SF)': (property.market_manual_lot_sf || property.asset_lot_sf) ?
+          Math.round(property.market_manual_lot_sf || property.asset_lot_sf) : '',
         'View': property.asset_view || '',
         'Location Analysis': property.location_analysis || '',
         'Type Use': property.asset_type_use || '',
         'Building Class': property.asset_building_class || '',
         'Year Built': property.asset_year_built || '',
         'Current Effective Age': property.asset_year_built ? yearPriorToDueYear - property.asset_year_built : '',
-        'Test': property.asset_year_built && calc.actualEFA !== null ? 
-          calc.actualEFA >= (yearPriorToDueYear - property.asset_year_built) : '',
+        'Test': property.asset_year_built && calc.actualEFA !== null && calc.actualEFA !== undefined ?
+          (calc.actualEFA >= property.asset_year_built ? 'TRUE' : 'FALSE') : '',
         'Design': property.asset_design_style || '',
         'Bedroom Total': getBedroomTotal(property) || '',
         'Story Height': property.asset_story_height || '',
@@ -539,13 +541,14 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Sale Comment': calc.saleComment,
         'Detached Items Value': property.values_det_items || '',
         'Cost New Value': property.values_repl_cost || '',
-        'Old Land Allocation %': property.values_mod_total && property.values_mod_land ? 
+        'Old Land Allocation %': property.values_mod_total && property.values_mod_land ?
           (property.values_mod_land / property.values_mod_total) * 100 : '',
         'Current Land Value': property.values_mod_land || '',
         'Current Improvement Value': property.values_mod_improvement || '',
         'Current Total Value': property.values_mod_total || '',
         '--- NEW PROJECTED ---': '',
         'New Land Allocation %': calc.newLandAllocation || '',
+        'CAMA Land Value': property.values_cama_land || '',
         'Projected Improvement': calc.projectedImprovement || '',
         'Projected Total': calc.projectedTotal || '',
         'Delta %': calc.deltaPercent || '',
