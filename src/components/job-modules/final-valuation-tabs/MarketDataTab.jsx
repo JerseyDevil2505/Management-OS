@@ -198,6 +198,20 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     return {};
   };
 
+  // Helper: Check if property qualifies for EFA calculation
+  const propertyQualifiesForEFA = (property) => {
+    const typeUse = property.asset_type_use;
+    const buildingClass = property.asset_building_class;
+
+    // Must have valid type/use (not blank, not null, not whitespace)
+    if (!typeUse || typeUse.trim() === '') return false;
+
+    // Must have building class > 10
+    if (!buildingClass || parseInt(buildingClass) <= 10) return false;
+
+    return true;
+  };
+
   // Helper: Get current EFA for display based on vendor
   const getCurrentEFA = (property) => {
     if (vendorType === 'BRT') {
@@ -216,15 +230,18 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
   // Formula: Recommended EFA
   const calculateRecommendedEFA = (property) => {
-    const normTime = property.values_norm_time || 0;
+    // Only calculate for properties with values_norm_time
+    if (!property.values_norm_time) return null;
+
+    const normTime = property.values_norm_time;
     const camaLand = property.values_cama_land || 0;
     const detItems = property.values_det_items || 0;
     const replCost = property.values_repl_cost || 0;
-    
+
     if (replCost === 0) return null;
-    
+
     const formula = yearPriorToDueYear - ((1 - ((normTime - camaLand - detItems) / replCost)) * 100);
-    return Math.round(formula * 10) / 10; // Round to 1 decimal
+    return Math.round(formula); // Round to no decimals
   };
 
   // Formula: DEPR factor
@@ -304,33 +321,47 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   // Get all calculated values for a property
   const getCalculatedValues = (property) => {
     const storedData = finalValuationData[property.property_composite_key] || {};
+    const qualifiesForEFA = propertyQualifiesForEFA(property);
 
-    // Calculate actualEFA based on vendor type
-    let actualEFA = storedData.actual_efa;
-    if (actualEFA === null || actualEFA === undefined) {
-      // If not stored, derive from vendor-specific logic
-      if (vendorType === 'BRT') {
-        // BRT: EFFAGE is stored as effective year (like 1950)
-        // Use asset_effective_age which maps to EFFAGE column
-        if (property.asset_effective_age !== null && property.asset_effective_age !== undefined) {
-          actualEFA = property.asset_effective_age;
-        } else if (property.asset_year_built) {
-          // Fallback to year built if EFFAGE not available
-          actualEFA = property.asset_year_built;
-        }
-      } else {
-        // Microsystems: Effective Age is given as age in years
-        // Calculate effective year = Year Prior to Due Year - Effective Age
-        if (property.asset_effective_age !== null && property.asset_effective_age !== undefined) {
-          actualEFA = yearPriorToDueYear - property.asset_effective_age;
+    // Calculate actualEFA based on vendor type - only if property qualifies
+    let actualEFA = null;
+    if (qualifiesForEFA) {
+      actualEFA = storedData.actual_efa;
+      if (actualEFA === null || actualEFA === undefined) {
+        // If not stored, derive from vendor-specific logic
+        if (vendorType === 'BRT') {
+          // BRT: EFFAGE is stored as effective year (like 1950)
+          // Use asset_effective_age which maps to EFFAGE column
+          if (property.asset_effective_age !== null && property.asset_effective_age !== undefined) {
+            actualEFA = property.asset_effective_age;
+          } else if (property.asset_year_built) {
+            // Fallback to year built if EFFAGE not available
+            actualEFA = property.asset_year_built;
+          }
+        } else {
+          // Microsystems: Effective Age is given as age in years
+          // Calculate effective year = Year Prior to Due Year - Effective Age
+          if (property.asset_effective_age !== null && property.asset_effective_age !== undefined) {
+            actualEFA = yearPriorToDueYear - property.asset_effective_age;
+          }
         }
       }
     }
 
     const recommendedEFA = calculateRecommendedEFA(property);
-    const depr = actualEFA !== null && actualEFA !== undefined ? calculateDEPR(actualEFA) : null;
-    const newValue = calculateNewValue(property, depr);
-    const projectedImprovement = calculateProjectedImprovement(property, newValue);
+
+    // Only calculate DEPR, newValue if property qualifies for EFA
+    const depr = qualifiesForEFA && actualEFA !== null && actualEFA !== undefined ? calculateDEPR(actualEFA) : null;
+    const newValue = qualifiesForEFA ? calculateNewValue(property, depr) : null;
+
+    // Projected improvement: if qualifies, use formula; otherwise use CAMA improvement directly
+    let projectedImprovement;
+    if (qualifiesForEFA) {
+      projectedImprovement = calculateProjectedImprovement(property, newValue);
+    } else {
+      projectedImprovement = property.values_cama_improvement || 0;
+    }
+
     const projectedTotal = calculateProjectedTotal(property, projectedImprovement);
     const newLandAllocation = calculateNewLandAllocation(property, projectedTotal);
     const deltaPercent = calculateDeltaPercent(property, projectedTotal);
@@ -350,6 +381,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       currentTaxes,
       projectedTaxes,
       taxDelta,
+      qualifiesForEFA,
       specialNotes: storedData.special_notes || '',
       saleComment: storedData.sale_comment || ''
     };
