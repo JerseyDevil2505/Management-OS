@@ -10,6 +10,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   const [editingCell, setEditingCell] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'property_block', direction: 'asc' });
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageInput, setPageInput] = useState('1');
   const [rowsPerPage] = useState(500);
   const [viewMode, setViewMode] = useState('full'); // 'full' or 'condensed'
   const [isSaving, setSaving] = useState(false);
