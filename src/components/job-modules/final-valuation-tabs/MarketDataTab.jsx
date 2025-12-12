@@ -825,6 +825,11 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
             </tbody>
           </table>
         </div>
+
+        {/* Horizontal scroll bar at bottom */}
+        <div className="overflow-x-auto border-t border-gray-200" style={{ height: '20px' }}>
+          <div style={{ width: 'max-content', height: '1px' }}></div>
+        </div>
       </div>
 
       {/* Pagination */}
