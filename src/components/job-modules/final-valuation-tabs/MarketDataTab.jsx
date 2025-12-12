@@ -188,9 +188,9 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   const getRowColorClass = (salesCode) => {
     if (salesCode === 'CSP') return 'bg-green-50 hover:bg-green-100';
     if (salesCode === 'PSP') return 'bg-blue-50 hover:bg-blue-100';
-    if (salesCode === 'HSP') return 'bg-orange-50 hover:bg-orange-100';
+    if (salesCode === 'HSP') return 'bg-orange-100 hover:bg-orange-200';
     return 'hover:bg-gray-50';
-  }
+  };
 
   // Helper: Get effective age for property based on vendor
   const getEffectiveAge = (property) => {
@@ -920,7 +920,9 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                         <td className="px-2 py-2 border border-gray-300">{property.asset_type_use}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.asset_building_class}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.asset_year_built}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.asset_year_built ? yearPriorToDueYear - property.asset_year_built : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">
+                          {calc.actualEFA !== null && calc.actualEFA !== undefined ? calc.actualEFA : ''}
+                        </td>
                         <td className="px-2 py-2 border border-gray-300">
                           {property.asset_year_built && calc.actualEFA !== null && calc.actualEFA !== undefined ?
                             (calc.actualEFA >= property.asset_year_built ? 'TRUE' : 'FALSE') : ''}
@@ -992,7 +994,9 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                         <td className="px-2 py-2 border border-gray-300">{property.asset_type_use}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.asset_building_class}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.asset_year_built}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.asset_year_built ? yearPriorToDueYear - property.asset_year_built : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">
+                          {calc.actualEFA !== null && calc.actualEFA !== undefined ? calc.actualEFA : ''}
+                        </td>
                         <td className="px-2 py-2 border border-gray-300">{property.sales_date || ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.sales_price ? `$${property.sales_price.toLocaleString()}` : ''}</td>
                         <td className="px-2 py-2 border border-gray-300">{property.values_norm_time ? `$${property.values_norm_time.toLocaleString()}` : ''}</td>
