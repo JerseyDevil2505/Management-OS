@@ -589,71 +589,77 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
       {/* Table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
+        {/* Horizontal scroll bar at top */}
+        <div className="overflow-x-auto border-b border-gray-200" style={{ height: '20px' }}>
+          <div style={{ width: 'max-content', height: '1px' }}></div>
+        </div>
+
+        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '70vh' }}>
+          <table className="w-full text-sm border-collapse">
+            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
               <tr>
                 {viewMode === 'full' ? (
                   // Full view - all 72+ columns
                   <>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('property_block')}>Block</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('property_lot')}>Lot</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('property_qualifier')}>Qualifier</th>
-                    <th className="px-2 py-2 text-left font-semibold">Card</th>
-                    <th className="px-2 py-2 text-left font-semibold">Card SF</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('property_location')}>Address</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('property_m4_class')}>M4 Class</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('property_cama_class')}>CAMA Class</th>
-                    <th className="px-2 py-2 text-left font-semibold">Check</th>
-                    <th className="px-2 py-2 text-left font-semibold">InfoBy</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('property_vcs')}>VCS</th>
-                    <th className="px-2 py-2 text-left font-semibold">Facility</th>
-                    <th className="px-2 py-2 text-left font-semibold">Special</th>
-                    <th className="px-2 py-2 text-left font-semibold">Lot Frontage</th>
-                    <th className="px-2 py-2 text-left font-semibold">Lot Depth</th>
-                    <th className="px-2 py-2 text-left font-semibold">Lot Acre</th>
-                    <th className="px-2 py-2 text-left font-semibold">Lot SF</th>
-                    <th className="px-2 py-2 text-left font-semibold">View</th>
-                    <th className="px-2 py-2 text-left font-semibold">Location</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('asset_type_use')}>Type Use</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('asset_building_class')}>Class</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('asset_year_built')}>Year Built</th>
-                    <th className="px-2 py-2 text-left font-semibold">Curr EFA</th>
-                    <th className="px-2 py-2 text-left font-semibold">Test</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('asset_design_style')}>Design</th>
-                    <th className="px-2 py-2 text-left font-semibold">Bedrooms</th>
-                    <th className="px-2 py-2 text-left font-semibold">Story</th>
-                    <th className="px-2 py-2 text-left font-semibold">SFLA</th>
-                    <th className="px-2 py-2 text-left font-semibold">Total SFLA</th>
-                    <th className="px-2 py-2 text-left font-semibold">Ext Cond</th>
-                    <th className="px-2 py-2 text-left font-semibold">Int Cond</th>
-                    <th className="px-2 py-2 text-left font-semibold">Code</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('sales_date')}>Sale Date</th>
-                    <th className="px-2 py-2 text-left font-semibold">Book</th>
-                    <th className="px-2 py-2 text-left font-semibold">Page</th>
-                    <th className="px-2 py-2 text-left font-semibold cursor-pointer" onClick={() => handleSort('sales_price')}>Sale Price</th>
-                    <th className="px-2 py-2 text-left font-semibold">Norm Time</th>
-                    <th className="px-2 py-2 text-left font-semibold">NU Code</th>
-                    <th className="px-2 py-2 text-left font-semibold">Sales Ratio</th>
-                    <th className="px-2 py-2 text-left font-semibold">Sale Comment</th>
-                    <th className="px-2 py-2 text-left font-semibold">Det Items</th>
-                    <th className="px-2 py-2 text-left font-semibold">Repl Cost</th>
-                    <th className="px-2 py-2 text-left font-semibold">Old Land %</th>
-                    <th className="px-2 py-2 text-left font-semibold">Curr Land</th>
-                    <th className="px-2 py-2 text-left font-semibold">Curr Imp</th>
-                    <th className="px-2 py-2 text-left font-semibold">Curr Total</th>
-                    <th className="px-2 py-2 text-center font-semibold bg-gray-100">---</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-yellow-50">New Land %</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-yellow-50">Proj Imp</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-yellow-50">Proj Total</th>
-                    <th className="px-2 py-2 text-left font-semibold">Delta %</th>
-                    <th className="px-2 py-2 text-left font-semibold">Rec EFA</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-blue-50">Actual EFA</th>
-                    <th className="px-2 py-2 text-left font-semibold">DEPR</th>
-                    <th className="px-2 py-2 text-left font-semibold">New Value</th>
-                    <th className="px-2 py-2 text-left font-semibold">Curr Taxes</th>
-                    <th className="px-2 py-2 text-left font-semibold">Proj Taxes</th>
-                    <th className="px-2 py-2 text-left font-semibold">Tax Delta</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('property_block')}>Block ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('property_lot')}>Lot ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('property_qualifier')}>Qualifier ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('property_addl_card')}>Card ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Card SF</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('property_location')}>Address ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('property_m4_class')}>M4 Class ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('property_cama_class')}>CAMA Class ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Check</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('inspection_info_by')}>InfoBy ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('property_vcs')}>VCS ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('property_facility')}>Facility ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Special</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('asset_lot_frontage')}>Lot Frontage ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('asset_lot_depth')}>Lot Depth ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('asset_lot_acre')}>Lot Acre ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('asset_lot_sf')}>Lot SF ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('asset_view')}>View ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Location</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('asset_type_use')}>Type Use ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('asset_building_class')}>Class ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('asset_year_built')}>Year Built ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Curr EFA</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Test</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('asset_design_style')}>Design ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Bedrooms</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('asset_story_height')}>Story ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('asset_sfla')}>SFLA ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Total SFLA</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('asset_ext_cond')}>Ext Cond ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('asset_int_cond')}>Int Cond ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Code</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('sales_date')}>Sale Date ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('sales_book')}>Book ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('sales_page')}>Page ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('sales_price')}>Sale Price ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('values_norm_time')}>Norm Time ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('sales_nu')}>NU Code ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Sales Ratio</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Sale Comment</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-teal-100" onClick={() => handleSort('values_det_items')}>Det Items ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-teal-100" onClick={() => handleSort('values_repl_cost')}>Repl Cost ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Old Land %</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-teal-100" onClick={() => handleSort('values_cama_land')}>CAMA Land ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('values_mod_land')}>Curr Land ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('values_mod_improvement')}>Curr Imp ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('values_mod_total')}>Curr Total ↕</th>
+                    <th className="px-2 py-2 text-center font-semibold border border-gray-300 bg-gray-100">---</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-teal-100">New Land %</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-teal-100">Proj Imp</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-teal-100">Proj Total</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Delta %</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Rec EFA</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-blue-50">Actual EFA</th>
+                    <th className="px-2 py-2 text-left font-semibold cursor-pointer border border-gray-300 bg-gray-50" onClick={() => handleSort('depr')}>DEPR ↕</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">New Value</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Curr Taxes</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Proj Taxes</th>
+                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Tax Delta</th>
                   </>
                 ) : (
                   // Condensed view - 19 key columns
@@ -688,23 +694,23 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                 const rowClass = getRowColorClass(salesCode);
                 
                 return (
-                  <tr key={property.property_composite_key} className={`border-b border-gray-100 hover:bg-gray-50 ${rowClass}`}>
+                  <tr key={property.property_composite_key} className={`hover:bg-gray-50 ${rowClass}`}>
                     {viewMode === 'full' ? (
                       // Full view rows (truncated for brevity - you'll implement all columns)
                       <>
-                        <td className="px-2 py-2">{property.property_block}</td>
-                        <td className="px-2 py-2">{property.property_lot}</td>
-                        <td className="px-2 py-2">{property.property_qualifier}</td>
-                        <td className="px-2 py-2">{getMaxCardNumber(property)}</td>
-                        <td className="px-2 py-2">{getCardSF(property)}</td>
-                        <td className="px-2 py-2">{property.property_location}</td>
-                        <td className="px-2 py-2">{property.property_m4_class}</td>
-                        <td className="px-2 py-2">{property.property_cama_class}</td>
-                        <td className="px-2 py-2">{classesMatch(property) ? '✓' : '✗'}</td>
-                        <td className="px-2 py-2">{property.inspection_info_by}</td>
-                        <td className="px-2 py-2">{property.property_vcs}</td>
-                        <td className="px-2 py-2">{property.property_facility}</td>
-                        <td className="px-2 py-2">
+                        <td className="px-2 py-2 border border-gray-300">{property.property_block}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.property_lot}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.property_qualifier}</td>
+                        <td className="px-2 py-2 border border-gray-300">{getMaxCardNumber(property)}</td>
+                        <td className="px-2 py-2 border border-gray-300">{getCardSF(property)}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.property_location}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.property_m4_class}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.property_cama_class}</td>
+                        <td className="px-2 py-2 border border-gray-300">{classesMatch(property) ? '✓' : '✗'}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.inspection_info_by}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.property_vcs}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.property_facility}</td>
+                        <td className="px-2 py-2 border border-gray-300">
                           <input
                             type="text"
                             value={calc.specialNotes}
@@ -713,34 +719,33 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                             placeholder="Notes..."
                           />
                         </td>
-                        {/* Add remaining columns here... this is getting long */}
-                        <td className="px-2 py-2">{property.asset_lot_frontage}</td>
-                        <td className="px-2 py-2">{property.asset_lot_depth}</td>
-                        <td className="px-2 py-2">{property.asset_lot_acre}</td>
-                        <td className="px-2 py-2">{property.asset_lot_sf}</td>
-                        <td className="px-2 py-2">{property.asset_view}</td>
-                        <td className="px-2 py-2">{property.location_analysis}</td>
-                        <td className="px-2 py-2">{property.asset_type_use}</td>
-                        <td className="px-2 py-2">{property.asset_building_class}</td>
-                        <td className="px-2 py-2">{property.asset_year_built}</td>
-                        <td className="px-2 py-2">{property.asset_year_built ? yearPriorToDueYear - property.asset_year_built : ''}</td>
-                        <td className="px-2 py-2">{property.asset_year_built && calc.actualEFA !== null ? (calc.actualEFA >= (yearPriorToDueYear - property.asset_year_built) ? '✓' : '✗') : ''}</td>
-                        <td className="px-2 py-2">{property.asset_design_style}</td>
-                        <td className="px-2 py-2">{getBedroomTotal(property)}</td>
-                        <td className="px-2 py-2">{property.asset_story_height}</td>
-                        <td className="px-2 py-2">{property.asset_sfla?.toLocaleString()}</td>
-                        <td className="px-2 py-2">{getTotalSFLA(property).toLocaleString()}</td>
-                        <td className="px-2 py-2">{property.asset_ext_cond}</td>
-                        <td className="px-2 py-2">{property.asset_int_cond}</td>
-                        <td className="px-2 py-2 font-semibold">{salesCode}</td>
-                        <td className="px-2 py-2">{property.sales_date || ''}</td>
-                        <td className="px-2 py-2">{property.sales_book}</td>
-                        <td className="px-2 py-2">{property.sales_page}</td>
-                        <td className="px-2 py-2">{property.sales_price ? `$${property.sales_price.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2">{property.values_norm_time ? `$${property.values_norm_time.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2">{property.sales_nu}</td>
-                        <td className="px-2 py-2">{calc.projectedTotal && property.values_norm_time ? ((calc.projectedTotal / property.values_norm_time) * 100).toFixed(1) + '%' : ''}</td>
-                        <td className="px-2 py-2">
+                        <td className="px-2 py-2 border border-gray-300">{property.asset_lot_frontage}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.asset_lot_depth}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.asset_lot_acre}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.asset_lot_sf}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.asset_view}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.location_analysis}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.asset_type_use}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.asset_building_class}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.asset_year_built}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.asset_year_built ? yearPriorToDueYear - property.asset_year_built : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.asset_year_built && calc.actualEFA !== null ? (calc.actualEFA >= (yearPriorToDueYear - property.asset_year_built) ? '✓' : '✗') : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.asset_design_style}</td>
+                        <td className="px-2 py-2 border border-gray-300">{getBedroomTotal(property)}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.asset_story_height}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.asset_sfla?.toLocaleString()}</td>
+                        <td className="px-2 py-2 border border-gray-300">{getTotalSFLA(property).toLocaleString()}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.asset_ext_cond}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.asset_int_cond}</td>
+                        <td className="px-2 py-2 border border-gray-300 font-semibold">{salesCode}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.sales_date || ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.sales_book}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.sales_page}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.sales_price ? `$${property.sales_price.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.values_norm_time ? `$${property.values_norm_time.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.sales_nu}</td>
+                        <td className="px-2 py-2 border border-gray-300">{calc.projectedTotal && property.values_norm_time ? ((calc.projectedTotal / property.values_norm_time) * 100).toFixed(1) + '%' : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">
                           <input
                             type="text"
                             value={calc.saleComment}
@@ -749,22 +754,23 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                             placeholder="Comment..."
                           />
                         </td>
-                        <td className="px-2 py-2">{property.values_det_items ? `$${property.values_det_items.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2">{property.values_repl_cost ? `$${property.values_repl_cost.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2">
-                          {property.values_mod_total && property.values_mod_land ? 
+                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">{property.values_det_items ? `$${property.values_det_items.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">{property.values_repl_cost ? `$${property.values_repl_cost.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">
+                          {property.values_mod_total && property.values_mod_land ?
                             ((property.values_mod_land / property.values_mod_total) * 100).toFixed(1) + '%' : ''}
                         </td>
-                        <td className="px-2 py-2">{property.values_mod_land ? `$${property.values_mod_land.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2">{property.values_mod_improvement ? `$${property.values_mod_improvement.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2">{property.values_mod_total ? `$${property.values_mod_total.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2 bg-gray-100 text-center">—</td>
-                        <td className="px-2 py-2 bg-yellow-50">{calc.newLandAllocation ? calc.newLandAllocation.toFixed(1) + '%' : ''}</td>
-                        <td className="px-2 py-2 bg-yellow-50">{calc.projectedImprovement ? `$${calc.projectedImprovement.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2 bg-yellow-50 font-semibold">{calc.projectedTotal ? `$${calc.projectedTotal.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2">{calc.deltaPercent ? calc.deltaPercent.toFixed(1) + '%' : ''}</td>
-                        <td className="px-2 py-2">{calc.recommendedEFA ? calc.recommendedEFA.toFixed(1) : ''}</td>
-                        <td className="px-2 py-2 bg-blue-50">
+                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">{property.values_cama_land ? `$${property.values_cama_land.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.values_mod_land ? `$${property.values_mod_land.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.values_mod_improvement ? `$${property.values_mod_improvement.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{property.values_mod_total ? `$${property.values_mod_total.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300 bg-gray-100 text-center">—</td>
+                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">{calc.newLandAllocation ? calc.newLandAllocation.toFixed(1) + '%' : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">{calc.projectedImprovement ? `$${calc.projectedImprovement.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300 bg-teal-50 font-semibold">{calc.projectedTotal ? `$${calc.projectedTotal.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{calc.deltaPercent ? calc.deltaPercent.toFixed(1) + '%' : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{calc.recommendedEFA ? calc.recommendedEFA.toFixed(1) : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300 bg-blue-50">
                           <input
                             type="number"
                             value={calc.actualEFA ?? ''}
@@ -774,11 +780,11 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
                             step="0.1"
                           />
                         </td>
-                        <td className="px-2 py-2">{calc.depr ? calc.depr.toFixed(4) : ''}</td>
-                        <td className="px-2 py-2">{calc.newValue ? `$${calc.newValue.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2">{calc.currentTaxes ? `$${calc.currentTaxes.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2">{calc.projectedTaxes ? `$${calc.projectedTaxes.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2">{calc.taxDelta ? `$${calc.taxDelta.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{calc.depr ? calc.depr.toFixed(4) : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{calc.newValue ? `$${calc.newValue.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{calc.currentTaxes ? `$${calc.currentTaxes.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{calc.projectedTaxes ? `$${calc.projectedTaxes.toLocaleString()}` : ''}</td>
+                        <td className="px-2 py-2 border border-gray-300">{calc.taxDelta ? `$${calc.taxDelta.toLocaleString()}` : ''}</td>
                       </>
                     ) : (
                       // Condensed view rows
