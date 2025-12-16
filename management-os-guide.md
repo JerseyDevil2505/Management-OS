@@ -1040,6 +1040,7 @@ export const interpretCodes = {
 |--------|-----------|-------|
 | asset_building_class | text | |
 | asset_design_style | text | |
+| asset_effective_age | integer | **NEW** - Vendor-sourced effective age (BRT: EFFAGE year, Microsystems: converted from age) |
 | asset_ext_cond | text | |
 | asset_int_cond | text | |
 | asset_key_page | text | **REMOVED** - Moved to property_market_analysis |
