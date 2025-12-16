@@ -429,7 +429,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Bedroom Total': getBedroomTotal(property) || '',
         'Story Height': property.asset_story_height || '',
         'SFLA': mainSFLA,
-        'Total SFLA': { f: `E${rowNum}+AJ${rowNum}` }, // Formula: Card SF + SFLA
+        'Total SFLA': { f: `E${rowNum}+AF${rowNum}` }, // Formula: Card SF + SFLA
         'Exterior Net Condition': property.asset_ext_cond || '',
         'Interior Net Condition': property.asset_int_cond || '',
         'Code': salesCode || '',
@@ -445,13 +445,13 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Detached Items Value': property.values_det_items || 0,
         'Cost New Value': property.values_repl_cost || 0,
         'Current Land Allocation %': property.values_mod_total && property.values_mod_land ?
-          { f: `AP${rowNum}/AR${rowNum}` } : '',
+          { f: `AV${rowNum}/AX${rowNum}` } : '',
         'Current Land Value': property.values_mod_land || 0,
         'Current Improvement Value': property.values_mod_improvement || 0,
         'Current Total Value': property.values_mod_total || 0,
         '--- NEW PROJECTED ---': '',
         'Projected Land Allocation %': calc.newLandAllocation && calc.projectedTotal ?
-          { f: `AV${rowNum}/AX${rowNum}` } : '',
+          { f: `BA${rowNum}/BC${rowNum}` } : '',
         'CAMA Land Value': property.values_cama_land || 0,
         'Projected Improvement': calc.projectedImprovement || 0,
         'Projected Total': calc.projectedTotal || 0,
