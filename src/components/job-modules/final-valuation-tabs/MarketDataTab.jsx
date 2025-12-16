@@ -616,98 +616,60 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
                 return (
                   <tr key={property.property_composite_key} className={rowClass} style={rowStyle}>
-                    {viewMode === 'full' ? (
-                      <>
-                        <td className="px-2 py-2 border border-gray-300">{property.property_block}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.property_lot}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.property_qualifier}</td>
-                        <td className="px-2 py-2 border border-gray-300">{getMaxCardNumber(property)}</td>
-                        <td className="px-2 py-2 border border-gray-300">{getCardSF(property)}</td>
-                        <td className="px-2 py-2 border border-gray-300 whitespace-nowrap">{property.property_location}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.property_m4_class}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.property_cama_class}</td>
-                        <td className="px-2 py-2 border border-gray-300">{classesMatch(property)}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.inspection_info_by}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.property_vcs}</td>
-                        <td className="px-2 py-2 border border-gray-300 whitespace-nowrap">{property.property_facility}</td>
-                        <td className="px-2 py-2 border border-gray-300">
-                          <input
-                            type="text"
-                            value={calc.specialNotes}
-                            onChange={(e) => handleCellEdit(property.property_composite_key, 'special_notes', e.target.value)}
-                            className="w-full px-1 py-0.5 border border-gray-300 rounded text-sm"
-                            placeholder="Notes..."
-                          />
-                        </td>
-                        <td className="px-2 py-2 border border-gray-300">{property.asset_type_use}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.asset_building_class}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.asset_year_built}</td>
-                        <td className="px-2 py-2 border border-gray-300">{getCurrentEFA(property)}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.asset_design_style}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.asset_sfla?.toLocaleString()}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.sales_date || ''}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.sales_price ? `$${property.sales_price.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">${(property.values_cama_land || 0).toLocaleString()}</td>
-                        <td className="px-2 py-2 border border-gray-300 bg-teal-50">${(calc.projectedImprovement || 0).toLocaleString()}</td>
-                        <td className="px-2 py-2 border border-gray-300 bg-teal-50 font-semibold">${(calc.projectedTotal || 0).toLocaleString()}</td>
-                        <td className="px-2 py-2 border border-gray-300">{calc.recommendedEFA || ''}</td>
-                        <td className="px-2 py-2 border border-gray-300 bg-blue-50">
-                          {calc.qualifiesForEFA ? (
-                            <input
-                              key={`${property.property_composite_key}-efa`}
-                              type="number"
-                              defaultValue={calc.actualEFA ?? ''}
-                              onBlur={(e) => handleCellEdit(property.property_composite_key, 'actual_efa', e.target.value ? parseFloat(e.target.value) : null)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleCellEdit(property.property_composite_key, 'actual_efa', e.target.value ? parseFloat(e.target.value) : null);
-                                  e.target.blur();
-                                }
-                              }}
-                              className="w-20 px-1 py-0.5 border border-gray-300 rounded text-sm text-center"
-                              placeholder="EFA"
-                              step="0.1"
-                            />
-                          ) : (
-                            <span className="text-gray-400 text-xs">N/A</span>
-                          )}
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="px-2 py-2 border border-gray-300">{property.property_block}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.property_lot}</td>
-                        <td className="px-2 py-2 border border-gray-300 whitespace-nowrap">{property.property_location}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.asset_type_use}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.asset_year_built}</td>
-                        <td className="px-2 py-2 border border-gray-300">{getCurrentEFA(property)}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.sales_date || ''}</td>
-                        <td className="px-2 py-2 border border-gray-300">{property.sales_price ? `$${property.sales_price.toLocaleString()}` : ''}</td>
-                        <td className="px-2 py-2 border border-gray-300 bg-teal-50 font-semibold">${(calc.projectedTotal || 0).toLocaleString()}</td>
-                        <td className="px-2 py-2 border border-gray-300">{calc.recommendedEFA || ''}</td>
-                        <td className="px-2 py-2 border border-gray-300 bg-blue-50">
-                          {calc.qualifiesForEFA ? (
-                            <input
-                              key={`${property.property_composite_key}-efa`}
-                              type="number"
-                              defaultValue={calc.actualEFA ?? ''}
-                              onBlur={(e) => handleCellEdit(property.property_composite_key, 'actual_efa', e.target.value ? parseFloat(e.target.value) : null)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleCellEdit(property.property_composite_key, 'actual_efa', e.target.value ? parseFloat(e.target.value) : null);
-                                  e.target.blur();
-                                }
-                              }}
-                              className="w-20 px-1 py-0.5 border border-gray-300 rounded text-sm text-center"
-                              placeholder="EFA"
-                              step="0.1"
-                            />
-                          ) : (
-                            <span className="text-gray-400 text-xs">N/A</span>
-                          )}
-                        </td>
-                      </>
-                    )}
+                    <td className="px-2 py-2 border border-gray-300">{property.property_block}</td>
+                    <td className="px-2 py-2 border border-gray-300">{property.property_lot}</td>
+                    <td className="px-2 py-2 border border-gray-300">{property.property_qualifier}</td>
+                    <td className="px-2 py-2 border border-gray-300">{getMaxCardNumber(property)}</td>
+                    <td className="px-2 py-2 border border-gray-300">{getCardSF(property)}</td>
+                    <td className="px-2 py-2 border border-gray-300 whitespace-nowrap">{property.property_location}</td>
+                    <td className="px-2 py-2 border border-gray-300">{property.property_m4_class}</td>
+                    <td className="px-2 py-2 border border-gray-300">{property.property_cama_class}</td>
+                    <td className="px-2 py-2 border border-gray-300">{classesMatch(property)}</td>
+                    <td className="px-2 py-2 border border-gray-300">{property.inspection_info_by}</td>
+                    <td className="px-2 py-2 border border-gray-300">{property.property_vcs}</td>
+                    <td className="px-2 py-2 border border-gray-300 whitespace-nowrap">{property.property_facility}</td>
+                    <td className="px-2 py-2 border border-gray-300">
+                      <input
+                        type="text"
+                        value={calc.specialNotes}
+                        onChange={(e) => handleCellEdit(property.property_composite_key, 'special_notes', e.target.value)}
+                        className="w-full px-1 py-0.5 border border-gray-300 rounded text-sm"
+                        placeholder="Notes..."
+                      />
+                    </td>
+                    <td className="px-2 py-2 border border-gray-300">{property.asset_type_use}</td>
+                    <td className="px-2 py-2 border border-gray-300">{property.asset_building_class}</td>
+                    <td className="px-2 py-2 border border-gray-300">{property.asset_year_built}</td>
+                    <td className="px-2 py-2 border border-gray-300">{getCurrentEFA(property)}</td>
+                    <td className="px-2 py-2 border border-gray-300">{property.asset_design_style}</td>
+                    <td className="px-2 py-2 border border-gray-300">{property.asset_sfla?.toLocaleString()}</td>
+                    <td className="px-2 py-2 border border-gray-300">{property.sales_date || ''}</td>
+                    <td className="px-2 py-2 border border-gray-300">{property.sales_price ? `$${property.sales_price.toLocaleString()}` : ''}</td>
+                    <td className="px-2 py-2 border border-gray-300 bg-teal-50">${(property.values_cama_land || 0).toLocaleString()}</td>
+                    <td className="px-2 py-2 border border-gray-300 bg-teal-50">${(calc.projectedImprovement || 0).toLocaleString()}</td>
+                    <td className="px-2 py-2 border border-gray-300 bg-teal-50 font-semibold">${(calc.projectedTotal || 0).toLocaleString()}</td>
+                    <td className="px-2 py-2 border border-gray-300">{calc.recommendedEFA || ''}</td>
+                    <td className="px-2 py-2 border border-gray-300 bg-blue-50">
+                      {calc.qualifiesForEFA ? (
+                        <input
+                          key={`${property.property_composite_key}-efa`}
+                          type="number"
+                          defaultValue={calc.actualEFA ?? ''}
+                          onBlur={(e) => handleCellEdit(property.property_composite_key, 'actual_efa', e.target.value ? parseFloat(e.target.value) : null)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleCellEdit(property.property_composite_key, 'actual_efa', e.target.value ? parseFloat(e.target.value) : null);
+                              e.target.blur();
+                            }
+                          }}
+                          className="w-20 px-1 py-0.5 border border-gray-300 rounded text-sm text-center"
+                          placeholder="EFA"
+                          step="0.1"
+                        />
+                      ) : (
+                        <span className="text-gray-400 text-xs">N/A</span>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
