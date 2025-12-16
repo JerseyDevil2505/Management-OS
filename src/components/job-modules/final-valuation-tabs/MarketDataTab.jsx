@@ -393,6 +393,12 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       const cardSF = getCardSF(property);
       const mainSFLA = property.asset_sfla || 0;
 
+      // Column mapping for formulas:
+      // K=Property M4 Class, L=Property CAMA Class, M=Check
+      // Z=Year Built, AA=Current EFA, AB=Test
+      // AO=Values Norm Time, AS=Detached Items, AT=Cost New, BA=CAMA Land
+      // BE=Recommended EFA, BF=Actual EFA, BG=DEPR, BH=New Value, BB=Projected Imp
+
       return {
         'Block': property.property_block || '',
         'Lot': property.property_lot || '',
@@ -406,7 +412,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Owner Zip': property.owner_csz?.split(' ').pop() || '',
         'Property M4 Class': property.property_m4_class || '',
         'Property CAMA Class': property.property_cama_class || '',
-        'Check': classesMatch(property) ? 'TRUE' : 'FALSE',
+        'Check': { f: `IF(K${rowNum}=L${rowNum},"TRUE","FALSE")` },
         'InfoBy Code': property.inspection_info_by || '',
         'VCS': property.property_vcs || '',
         'Exempt Facility': property.property_facility || '',
@@ -423,8 +429,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Building Class': property.asset_building_class || '',
         'Year Built': property.asset_year_built || '',
         'Current EFA': getCurrentEFA(property),
-        'Test': property.asset_year_built && calc.actualEFA !== null && calc.actualEFA !== undefined ?
-          (calc.actualEFA >= property.asset_year_built ? 'TRUE' : 'FALSE') : '',
+        'Test': { f: `IF(AND(Z${rowNum}<>"",BF${rowNum}<>""),IF(BF${rowNum}>=Z${rowNum},"TRUE","FALSE"),"")` },
         'Design': property.asset_design_style || '',
         'Bedroom Total': getBedroomTotal(property) || '',
         'Story Height': property.asset_story_height || '',
@@ -453,13 +458,17 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Projected Land Allocation %': calc.newLandAllocation && calc.projectedTotal ?
           { f: `BA${rowNum}/BC${rowNum}` } : '',
         'CAMA Land Value': property.values_cama_land || 0,
-        'Projected Improvement': calc.projectedImprovement || 0,
-        'Projected Total': calc.projectedTotal || 0,
+        'Projected Improvement': calc.qualifiesForEFA && calc.newValue !== null && calc.newValue > 0 ?
+          { f: `BH${rowNum}-BA${rowNum}` } : (property.values_cama_improvement || 0),
+        'Projected Total': { f: `BA${rowNum}+BB${rowNum}` },
         'Delta %': calc.deltaPercent ? Math.round(calc.deltaPercent) : '',
-        'Recommended EFA': calc.recommendedEFA || '',
+        'Recommended EFA': calc.recommendedEFA !== null && calc.recommendedEFA !== undefined ?
+          { f: `ROUND(${yearPriorToDueYear}-((1-((AO${rowNum}-BA${rowNum}-AS${rowNum})/AT${rowNum}))*100),0)` } : '',
         'Actual EFA': calc.actualEFA || '',
-        'DEPR': calc.depr ? parseFloat(calc.depr.toFixed(2)) : '',
-        'New Value': calc.newValue || 0,
+        'DEPR': calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined ?
+          { f: `MIN(1,1-((${yearPriorToDueYear}-BF${rowNum})/100))` } : '',
+        'New Value': calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined ?
+          { f: `ROUND((AT${rowNum}*BG${rowNum})+AS${rowNum}+BA${rowNum},-2)` } : 0,
         'Current Year Taxes': calc.currentTaxes || 0,
         'Projected Taxes': calc.projectedTaxes || 0,
         'Tax Delta $': calc.taxDelta || 0
