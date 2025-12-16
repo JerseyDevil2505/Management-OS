@@ -595,9 +595,9 @@ export class MicrosystemsUpdater {
           
           // Get preserved data for this property if available
           const preservedData = preservedDataMap.get(compositeKey) || {};
-          
+
           // Map to unified property_records table with all 82 fields and preserved data
-          const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo, preservedData);
+          const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo, preservedData, yearPriorToDueYear);
           propertyRecords.push(propertyRecord);
           
         } catch (error) {
