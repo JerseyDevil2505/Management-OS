@@ -348,6 +348,41 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     return cache;
   }, [previewProperties, finalValuationData, yearPriorToDueYear, vendorType, taxRates]);
 
+  // Calculate summary by class for all properties
+  const classSummary = useMemo(() => {
+    const summary = {
+      '1': { count: 0, total: 0 },
+      '2': { count: 0, total: 0 },
+      '3A': { count: 0, total: 0 },
+      '3B': { count: 0, total: 0 },
+      '4A': { count: 0, total: 0 },
+      '4B': { count: 0, total: 0 },
+      '4C': { count: 0, total: 0 },
+      '6A': { count: 0, total: 0 },
+      '6B': { count: 0, total: 0 }
+    };
+
+    properties.forEach(property => {
+      const isTaxable = property.property_facility !== 'EXEMPT';
+      if (!isTaxable) return;
+
+      const calc = getCalculatedValues(property);
+      const projectedTotal = calc.projectedTotal || 0;
+      const propertyClass = property.property_cama_class || '';
+
+      if (summary[propertyClass]) {
+        summary[propertyClass].count++;
+        summary[propertyClass].total += projectedTotal;
+      }
+    });
+
+    // Calculate totals
+    const totalCount = Object.values(summary).reduce((sum, item) => sum + item.count, 0);
+    const totalTotal = Object.values(summary).reduce((sum, item) => sum + item.total, 0);
+
+    return { ...summary, totalCount, totalTotal };
+  }, [properties, finalValuationData, yearPriorToDueYear, vendorType, taxRates]);
+
   // Handle cell edit
   const handleCellEdit = async (propertyKey, field, value) => {
     try {
@@ -575,6 +610,25 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
             <Download className="w-4 h-4" />
             Build Final Roster
           </button>
+        </div>
+      </div>
+
+      {/* Summary Section */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
+        <h3 className="text-lg font-bold text-gray-900 mb-4">Projected Net Valuation (Taxable)</h3>
+        <div className="grid grid-cols-3 md:grid-cols-5 gap-4">
+          {['1', '2', '3A', '3B', '4A', '4B', '4C', '6A', '6B'].map(classType => (
+            <div key={classType} className="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
+              <div className="text-xs font-semibold text-gray-500 mb-1">Class {classType}</div>
+              <div className="text-sm font-bold text-gray-900">{classSummary[classType].count.toLocaleString()}</div>
+              <div className="text-xs text-gray-600 mt-1">${(classSummary[classType].total / 1000000).toFixed(2)}M</div>
+            </div>
+          ))}
+          <div className="bg-blue-600 text-white rounded-lg p-3 shadow-md col-span-3 md:col-span-1">
+            <div className="text-xs font-semibold mb-1">TOTAL</div>
+            <div className="text-sm font-bold">{classSummary.totalCount.toLocaleString()}</div>
+            <div className="text-xs mt-1">${(classSummary.totalTotal / 1000000).toFixed(2)}M</div>
+          </div>
         </div>
       </div>
 
