@@ -518,6 +518,26 @@ export class MicrosystemsUpdater {
         console.log('⏭️ Step 2 skipped: No code file provided');
       }
 
+      // Fetch job data to calculate yearPriorToDueYear for effective age conversion
+      let yearPriorToDueYear = null;
+      try {
+        const { data: jobData, error: jobError } = await supabase
+          .from('jobs')
+          .select('end_date')
+          .eq('id', jobId)
+          .single();
+
+        if (!jobError && jobData?.end_date) {
+          const endYear = new Date(jobData.end_date).getFullYear();
+          yearPriorToDueYear = endYear - 1;
+          console.log(`📅 Calculated yearPriorToDueYear: ${yearPriorToDueYear} (from end_date: ${jobData.end_date})`);
+        } else {
+          console.warn('⚠️ Could not fetch job end_date, effective age conversion will be skipped');
+        }
+      } catch (error) {
+        console.error('❌ Error fetching job data for effective age calculation:', error);
+      }
+
       // Parse source file
       console.log('📝 Step 3: Parsing source file...');
       const records = this.parseSourceFile(sourceFileContent);
