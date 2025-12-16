@@ -229,15 +229,12 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
   // Formula: Projected Improvement
   const calculateProjectedImprovement = (property, newValue) => {
-    const typeUse = property.asset_type_use;
-    const buildingClass = property.asset_building_class;
-    const maxCard = getMaxCardNumber(property);
-    
-    if (typeUse && buildingClass && parseInt(buildingClass) > 10 && maxCard === 1 && newValue !== null) {
+    // Only use formula if newValue > 0, otherwise use cama_improvement from data file
+    if (newValue !== null && newValue > 0) {
       const camaLand = property.values_cama_land || 0;
       return newValue - camaLand;
     }
-    
+
     return property.values_cama_improvement || 0;
   };
 
@@ -389,16 +386,19 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     const workbook = XLSX.utils.book_new();
 
     // Export ALL properties (not just preview)
-    const rows = properties.map(property => {
+    const rows = properties.map((property, idx) => {
       const calc = getCalculatedValues(property);
       const salesCode = getSalesPeriodCode(property);
+      const rowNum = idx + 2; // +2 because Excel is 1-indexed and row 1 is header
+      const cardSF = getCardSF(property);
+      const mainSFLA = property.asset_sfla || 0;
 
       return {
         'Block': property.property_block || '',
         'Lot': property.property_lot || '',
         'Qualifier': property.property_qualifier || '',
         'Card': getMaxCardNumber(property),
-        'Card SF': getCardSF(property),
+        'Card SF': cardSF,
         'Address': property.property_location || '',
         'Owner Name': property.owner_name || '',
         'Owner Address': property.owner_street || '',
@@ -428,12 +428,12 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Design': property.asset_design_style || '',
         'Bedroom Total': getBedroomTotal(property) || '',
         'Story Height': property.asset_story_height || '',
-        'SFLA': property.asset_sfla || '',
-        'Total SFLA': getTotalSFLA(property),
+        'SFLA': mainSFLA,
+        'Total SFLA': { f: `E${rowNum}+AJ${rowNum}` }, // Formula: Card SF + SFLA
         'Exterior Net Condition': property.asset_ext_cond || '',
         'Interior Net Condition': property.asset_int_cond || '',
         'Code': salesCode || '',
-        'Sale Date': property.sales_date || '',
+        'Sale Date': property.sales_date ? new Date(property.sales_date) : '',
         'Sale Book': property.sales_book || '',
         'Sale Page': property.sales_page || '',
         'Sale Price': property.sales_price || '',
@@ -444,13 +444,14 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Sale Comment': calc.saleComment,
         'Detached Items Value': property.values_det_items || 0,
         'Cost New Value': property.values_repl_cost || 0,
-        'Old Land Allocation %': property.values_mod_total && property.values_mod_land ?
-          Math.round((property.values_mod_land / property.values_mod_total) * 100) : '',
+        'Current Land Allocation %': property.values_mod_total && property.values_mod_land ?
+          { f: `AP${rowNum}/AR${rowNum}` } : '',
         'Current Land Value': property.values_mod_land || 0,
         'Current Improvement Value': property.values_mod_improvement || 0,
         'Current Total Value': property.values_mod_total || 0,
         '--- NEW PROJECTED ---': '',
-        'New Land Allocation %': calc.newLandAllocation ? Math.round(calc.newLandAllocation) : '',
+        'Projected Land Allocation %': calc.newLandAllocation && calc.projectedTotal ?
+          { f: `AV${rowNum}/AX${rowNum}` } : '',
         'CAMA Land Value': property.values_cama_land || 0,
         'Projected Improvement': calc.projectedImprovement || 0,
         'Projected Total': calc.projectedTotal || 0,
@@ -467,6 +468,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
     const worksheet = XLSX.utils.json_to_sheet(rows);
     const range = XLSX.utils.decode_range(worksheet['!ref']);
+
+    // Column name to index mapping
+    const headers = Object.keys(rows[0]);
+    const getColIndex = (name) => headers.indexOf(name);
 
     // Define border style for grid lines
     const borderStyle = {
@@ -507,11 +512,31 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
         if (!worksheet[cellAddress]) continue;
 
+        const colName = headers[C];
+        let numFmt = undefined;
+
+        // Apply number formatting based on column
+        if (['Lot Size (SF)', 'SFLA', 'Total SFLA'].includes(colName)) {
+          numFmt = '#,##0'; // Number with commas
+        } else if (['Sale Price', 'Values Norm Time'].includes(colName)) {
+          numFmt = '$#,##0'; // Currency
+        } else if (['Detached Items Value', 'Cost New Value', 'Current Land Value', 'Current Improvement Value',
+                    'Current Total Value', 'CAMA Land Value', 'Projected Improvement', 'Projected Total', 'New Value'].includes(colName)) {
+          numFmt = '$#,##0'; // Currency, no decimals
+        } else if (['Current Year Taxes', 'Projected Taxes', 'Tax Delta $'].includes(colName)) {
+          numFmt = '$#,##0.00'; // Currency with two decimals
+        } else if (['Current Land Allocation %', 'Projected Land Allocation %'].includes(colName)) {
+          numFmt = '0%'; // Percentage, no decimals
+        } else if (colName === 'Sale Date') {
+          numFmt = 'mm/dd/yyyy'; // Date format
+        }
+
         worksheet[cellAddress].s = {
           font: { name: 'Leelawadee', sz: 10 },
           alignment: { horizontal: 'center', vertical: 'center' },
           fill: { fgColor: { rgb: fillColor } },
-          border: borderStyle
+          border: borderStyle,
+          numFmt: numFmt
         };
       }
     }
