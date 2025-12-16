@@ -384,8 +384,9 @@ export class MicrosystemsUpdater {
    * Map Microsystems record to property_records table (ALL 82 FIELDS)
    * UPDATED: Combines original property_records + analysis fields into single record
    * ENHANCED: Now supports field preservation for component-defined fields
+   * UPDATED: Added yearPriorToDueYear parameter for effective age conversion
    */
-  mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo = {}, preservedData = {}) {
+  mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo = {}, preservedData = {}, yearPriorToDueYear = null) {
     // Build the base record
     const baseRecord = {
       // Job context
