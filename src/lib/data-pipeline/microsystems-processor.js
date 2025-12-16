@@ -708,6 +708,22 @@ export class MicrosystemsProcessor {
   }
 
   /**
+   * Calculate effective year from Microsystems "Effective Age" field
+   * Microsystems stores age in years, convert to year: yearPriorToDueYear - effectiveAge
+   */
+  calculateEffectiveYear(effectiveAgeValue, yearPriorToDueYear) {
+    if (!effectiveAgeValue || effectiveAgeValue === '') return null;
+    if (!yearPriorToDueYear) return null;
+
+    const effectiveAge = this.parseNumeric(effectiveAgeValue);
+    if (!effectiveAge || isNaN(effectiveAge)) return null;
+
+    // Convert age to year: Year Prior to Due Year - Effective Age
+    const effectiveYear = yearPriorToDueYear - effectiveAge;
+    return Math.round(effectiveYear);
+  }
+
+  /**
    * Calculate total bathrooms - corrected weighting
    * 4 & 3 fixture = full baths (1.0), 2 fixture = half bath (0.5), single fixture not counted
    */
