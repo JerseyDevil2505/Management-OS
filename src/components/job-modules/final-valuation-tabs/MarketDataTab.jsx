@@ -1,13 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
-import { Download, Columns, AlertCircle, Save } from 'lucide-react';
+import { Download, AlertCircle, Save } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 
 const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache }) => {
   // State management
   const [finalValuationData, setFinalValuationData] = useState({});
   const [taxRates, setTaxRates] = useState(null);
-  const [viewMode, setViewMode] = useState('full'); // 'full' or 'condensed'
   const [isSaving, setSaving] = useState(false);
   const PREVIEW_LIMIT = 500; // Only show first 500 properties
 
@@ -385,7 +384,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     }
   };
 
-  // Export to Excel
+  // Export to Excel with formatting
   const exportToExcel = () => {
     const workbook = XLSX.utils.book_new();
 
@@ -393,7 +392,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     const rows = properties.map(property => {
       const calc = getCalculatedValues(property);
       const salesCode = getSalesPeriodCode(property);
-      
+
       return {
         'Block': property.property_block || '',
         'Lot': property.property_lot || '',
@@ -468,34 +467,60 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
     const worksheet = XLSX.utils.json_to_sheet(rows);
     const range = XLSX.utils.decode_range(worksheet['!ref']);
-    
-    // Style header row
+
+    // Define border style for grid lines
+    const borderStyle = {
+      top: { style: 'thin', color: { rgb: '000000' } },
+      bottom: { style: 'thin', color: { rgb: '000000' } },
+      left: { style: 'thin', color: { rgb: '000000' } },
+      right: { style: 'thin', color: { rgb: '000000' } }
+    };
+
+    // Style header row (bold, centered, light gray background, borders)
     for (let C = range.s.c; C <= range.e.c; ++C) {
       const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
       if (!worksheet[cellAddress]) continue;
       worksheet[cellAddress].s = {
-        font: { name: 'Leelawadee', sz: 10, bold: true },
-        alignment: { horizontal: 'center' }
+        font: { name: 'Leelawadee', sz: 10, bold: true, color: { rgb: '000000' } },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        fill: { fgColor: { rgb: 'D3D3D3' } },
+        border: borderStyle
       };
     }
 
-    // Style data rows
+    // Style data rows with colors based on sales code
     for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+      const property = properties[R - 1];
+      const salesCode = getSalesPeriodCode(property);
+
+      // Determine row background color
+      let fillColor = 'FFFFFF'; // Default white
+      if (salesCode === 'CSP') {
+        fillColor = 'D4EDDA'; // Light green
+      } else if (salesCode === 'PSP') {
+        fillColor = 'D1ECF1'; // Light blue
+      } else if (salesCode === 'HSP') {
+        fillColor = 'FED7AA'; // Light orange
+      }
+
       for (let C = range.s.c; C <= range.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
         if (!worksheet[cellAddress]) continue;
-        
+
         worksheet[cellAddress].s = {
           font: { name: 'Leelawadee', sz: 10 },
-          alignment: { horizontal: 'center' }
+          alignment: { horizontal: 'center', vertical: 'center' },
+          fill: { fgColor: { rgb: fillColor } },
+          border: borderStyle
         };
       }
     }
 
+    // Set column widths
     worksheet['!cols'] = Array(range.e.c + 1).fill({ wch: 12 });
 
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Market Data Approach');
-    XLSX.writeFile(workbook, `Market_Data_Approach_${jobData.job_name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(workbook, `Final_Roster_${jobData.job_name}_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   return (
@@ -510,18 +535,11 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setViewMode(viewMode === 'full' ? 'condensed' : 'full')}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-          >
-            <Columns className="w-4 h-4" />
-            {viewMode === 'full' ? 'Condensed View' : 'Full View'}
-          </button>
-          <button
             onClick={exportToExcel}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             <Download className="w-4 h-4" />
-            Export All ({properties.length.toLocaleString()})
+            Build Final Roster
           </button>
         </div>
       </div>
@@ -561,50 +579,32 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           <table className="w-full text-xs border-collapse">
             <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
               <tr>
-                {viewMode === 'full' ? (
-                  <>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Block</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Lot</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Qualifier</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Card</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Card SF</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Address</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">M4 Class</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">CAMA Class</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Check</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">InfoBy</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">VCS</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Facility</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Special</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Type Use</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Class</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Year Built</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Curr EFA</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Design</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">SFLA</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Sale Date</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Sale Price</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-teal-100">CAMA Land</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-teal-100">Proj Imp</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-teal-100">Proj Total</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Rec EFA</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-blue-50">Actual EFA</th>
-                  </>
-                ) : (
-                  <>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Block</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Lot</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Address</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Type Use</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Year Built</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Curr EFA</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Sale Date</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Sale Price</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-teal-100">Proj Total</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Rec EFA</th>
-                    <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-blue-50">Actual EFA</th>
-                  </>
-                )}
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Block</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Lot</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Qualifier</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Card</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Card SF</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Address</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">M4 Class</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">CAMA Class</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Check</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">InfoBy</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">VCS</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Facility</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Special</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Type Use</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Class</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Year Built</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Curr EFA</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Design</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">SFLA</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Sale Date</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Sale Price</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-teal-100">CAMA Land</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-teal-100">Proj Imp</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-teal-100">Proj Total</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-gray-50">Rec EFA</th>
+                <th className="px-2 py-2 text-left font-semibold border border-gray-300 bg-blue-50">Actual EFA</th>
               </tr>
             </thead>
             <tbody>
