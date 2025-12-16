@@ -376,8 +376,9 @@ export class MicrosystemsProcessor {
   /**
    * Map Microsystems record to property_records table (ALL 82 FIELDS)
    * UPDATED: Combines original property_records + analysis fields into single record
+   * UPDATED: Added yearPriorToDueYear parameter for effective age conversion
    */
-  mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo = {}) {
+  mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo = {}, yearPriorToDueYear = null) {
     return {
       // Job context
       job_id: jobId,
@@ -441,6 +442,7 @@ export class MicrosystemsProcessor {
       asset_type_use: rawRecord['Type Use Code'],
       asset_view: null, // Not available in Microsystems
       asset_year_built: this.parseInteger(rawRecord['Year Built']),
+      asset_effective_age: this.calculateEffectiveYear(rawRecord['Effective Age'], yearPriorToDueYear),  // Microsystems: Convert age to year
 
       // Analysis and calculation fields
       // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
