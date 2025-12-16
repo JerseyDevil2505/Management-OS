@@ -548,7 +548,27 @@ export class MicrosystemsProcessor {
       if (codeFileContent) {
         await this.processCodeFile(codeFileContent, jobId);
       }
-      
+
+      // Fetch job data to calculate yearPriorToDueYear for effective age conversion
+      let yearPriorToDueYear = null;
+      try {
+        const { data: jobData, error: jobError } = await supabase
+          .from('jobs')
+          .select('end_date')
+          .eq('id', jobId)
+          .single();
+
+        if (!jobError && jobData?.end_date) {
+          const endYear = new Date(jobData.end_date).getFullYear();
+          yearPriorToDueYear = endYear - 1;
+          console.log(`📅 Calculated yearPriorToDueYear: ${yearPriorToDueYear} (from end_date: ${jobData.end_date})`);
+        } else {
+          console.warn('⚠️ Could not fetch job end_date, effective age conversion will be skipped');
+        }
+      } catch (error) {
+        console.error('❌ Error fetching job data for effective age calculation:', error);
+      }
+
       // Parse source file
       const records = this.parseSourceFile(sourceFileContent);
       console.log(`Processing ${records.length} records in batches...`);
@@ -562,7 +582,7 @@ export class MicrosystemsProcessor {
       for (const rawRecord of records) {
         try {
           // Map to unified property_records table with all 82 fields
-          const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo);
+          const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo, yearPriorToDueYear);
           propertyRecords.push(propertyRecord);
           
         } catch (error) {
