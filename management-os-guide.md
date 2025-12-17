@@ -1089,6 +1089,10 @@ export const interpretCodes = {
 | asset_view | text | |
 | asset_year_built | integer | |
 | asset_zoning | text | **REMOVED** - Moved to property_market_analysis |
+| special_tax_code_1 | text | **NEW** - Special tax district code 1 (BRT: EXEMPT_SPECIAL_TAXCODE1, Micro: Sp Tax Cd1) |
+| special_tax_code_2 | text | **NEW** - Special tax district code 2 (BRT: EXEMPT_SPECIAL_TAXCODE2, Micro: Sp Tax Cd2) |
+| special_tax_code_3 | text | **NEW** - Special tax district code 3 (BRT: EXEMPT_SPECIAL_TAXCODE3, Micro: N/A) |
+| special_tax_code_4 | text | **NEW** - Special tax district code 4 (BRT: EXEMPT_SPECIAL_TAXCODE4, Micro: N/A) |
 | code_file_updated_at | timestamp without time zone | |
 | created_at | timestamp with time zone | |
 | created_by | uuid | |
