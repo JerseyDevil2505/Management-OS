@@ -575,6 +575,13 @@ export class BRTUpdater {
       asset_type_use: rawRecord.TYPEUSE,
       asset_view: rawRecord.VIEW,
       asset_year_built: this.parseInteger(rawRecord.YEARBUILT),
+      asset_effective_age: this.parseInteger(rawRecord.EFFAGE),  // BRT: EFFAGE is already a year (e.g., 1950)
+
+      // Special tax district codes (BRT: EXEMPT_SPECIAL_TAXCODE1-4)
+      special_tax_code_1: this.preserveStringValue(rawRecord.EXEMPT_SPECIAL_TAXCODE1),
+      special_tax_code_2: this.preserveStringValue(rawRecord.EXEMPT_SPECIAL_TAXCODE2),
+      special_tax_code_3: this.preserveStringValue(rawRecord.EXEMPT_SPECIAL_TAXCODE3),
+      special_tax_code_4: this.preserveStringValue(rawRecord.EXEMPT_SPECIAL_TAXCODE4),
 
       // LANDUR fields (BRT unit-rate codes and units) - use lowercase column names to match DB
       landur_1: (rawRecord['LANDUR_1'] !== undefined && rawRecord['LANDUR_1'] !== null) ? String(rawRecord['LANDUR_1']).replace(/[^0-9]/g,'').padStart(2,'0') : null,
