@@ -8,10 +8,11 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
   const [isImporting, setIsImporting] = useState(false);
 
   // Calculate years for ratable comparison
-  // If end_date = 2026: yearPriorToDueYear = 2025
+  // If end_date = '2026-01-01': yearPriorToDueYear = 2025
   const yearPriorToDueYear = useMemo(() => {
     if (!jobData?.end_date) return new Date().getFullYear();
-    const endYear = new Date(jobData.end_date).getFullYear();
+    // Extract year directly from date string to avoid timezone issues
+    const endYear = parseInt(jobData.end_date.substring(0, 4));
     return endYear - 1;
   }, [jobData?.end_date]);
 

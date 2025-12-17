@@ -87,10 +87,11 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   };
 
   // Calculate year prior to due year (for formulas)
-  // If end_date = 2026, yearPriorToDueYear = 2025
+  // If end_date = '2026-01-01', yearPriorToDueYear = 2025
   const yearPriorToDueYear = useMemo(() => {
     if (!jobData?.end_date) return new Date().getFullYear();
-    const endYear = new Date(jobData.end_date).getFullYear();
+    // Extract year directly from date string to avoid timezone issues
+    const endYear = parseInt(jobData.end_date.substring(0, 4));
     const yearPrior = endYear - 1;
     console.log('🔍 MarketDataTab Year Calculation:', {
       end_date: jobData.end_date,
