@@ -7,14 +7,15 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
   const [activeSubTab, setActiveSubTab] = useState('comparison');
   const [isImporting, setIsImporting] = useState(false);
 
-  // Calculate current year (year prior to due year)
+  // Calculate years for ratable comparison
+  // If end_date = 2026: currentYear = 2024, projectedYear = 2025 (year of value)
   const currentYear = useMemo(() => {
     if (!jobData?.end_date) return new Date().getFullYear();
     const endYear = new Date(jobData.end_date).getFullYear();
-    return endYear - 1;
+    return endYear - 2;  // Year prior to year of value
   }, [jobData?.end_date]);
 
-  const projectedYear = currentYear + 1;
+  const projectedYear = currentYear + 1;  // Year of value
 
   // Use jobData directly for current year and rate calculator data
   const currentYearData = useMemo(() => ({
