@@ -691,6 +691,24 @@ export const interpretCodes = {
 | county | character varying | |
 | created_at | timestamp with time zone | |
 | created_by | uuid | |
+| current_class_1_count | integer | **NEW** - Current year Class 1 count (ratable comparison) |
+| current_class_1_total | bigint | **NEW** - Current year Class 1 valuation (ratable comparison) |
+| current_class_1_abatements | integer | **NEW** - Current year Class 1 abatements (ratable comparison) |
+| current_class_2_count | integer | **NEW** - Current year Class 2 count (ratable comparison) |
+| current_class_2_total | bigint | **NEW** - Current year Class 2 valuation (ratable comparison) |
+| current_class_2_abatements | integer | **NEW** - Current year Class 2 abatements (ratable comparison) |
+| current_class_3a_count | integer | **NEW** - Current year Class 3A count (ratable comparison) |
+| current_class_3a_total | bigint | **NEW** - Current year Class 3A valuation (ratable comparison) |
+| current_class_3b_count | integer | **NEW** - Current year Class 3B count (ratable comparison) |
+| current_class_3b_total | bigint | **NEW** - Current year Class 3B valuation (ratable comparison) |
+| current_class_4_count | integer | **NEW** - Current year Class 4 (A,B,C) count (ratable comparison) |
+| current_class_4_total | bigint | **NEW** - Current year Class 4 (A,B,C) valuation (ratable comparison) |
+| current_class_4_abatements | integer | **NEW** - Current year Class 4 abatements (ratable comparison) |
+| current_class_6_count | integer | **NEW** - Current year Class 6 (A,B,C) count (ratable comparison) |
+| current_class_6_total | bigint | **NEW** - Current year Class 6 (A,B,C) valuation (ratable comparison) |
+| current_total_count | integer | **NEW** - Current year total count (ratable comparison) |
+| current_total_total | bigint | **NEW** - Current year total valuation (ratable comparison) |
+| current_commercial_base_pct | decimal(5,2) | **NEW** - Current year commercial base % (ratable comparison) |
 | end_date | date | |
 | external_inspectors | text | Comma-separated client codes |
 | has_property_assignments | boolean | |
@@ -709,6 +727,9 @@ export const interpretCodes = {
 | raw_file_parsed_at | timestamp with time zone | **NEW** - Parsing timestamp |
 | raw_file_rows_count | integer | **NEW** - Row count tracking |
 | raw_file_size | bigint | **NEW** - File size tracking |
+| rate_calc_budget | decimal(15,2) | **NEW** - Tax rate calculator budget input |
+| rate_calc_current_rate | decimal(6,3) | **NEW** - Tax rate calculator current rate input |
+| rate_calc_buffer_for_loss | decimal(5,2) | **NEW** - Tax rate calculator buffer for loss % |
 | source_file_name | text | |
 | source_file_status | character varying | |
 | source_file_uploaded_at | timestamp with time zone | |
@@ -907,6 +928,132 @@ export const interpretCodes = {
 | values_norm_size | numeric | Moved from property_records |
 | values_norm_time | numeric | Moved from property_records |
 
+#### **final_valuation_data** ⚠️ NEW TABLE (January 2025)
+**Components:** MarketDataTab.jsx (Final Valuation), SalesComparisonTab.jsx
+
+| Column | Data Type | Notes |
+|--------|-----------|-------|
+| id | uuid | Primary key |
+| job_id | uuid | Foreign key to jobs |
+| property_composite_key | text | Unique property identifier |
+| special_notes | text | User freeform notes (Column 17) |
+| actual_efa | numeric | **USER INPUT** - Actual Effective Age (Column 58) |
+| sale_comment | text | User freeform sale notes (Column 46) |
+| recommended_efa | numeric | Calculated recommended EFA (Column 57) |
+| depr_factor | numeric | Depreciation factor capped at 1.0 (Column 59) |
+| new_calculated_value | numeric | New Value calculation (Column 60) |
+| projected_improvement | numeric | Projected improvement value (Column 54) |
+| projected_total | numeric | Projected total assessment (Column 55) |
+| new_land_allocation_percent | numeric | New land allocation % (Column 53) |
+| cme_projected_assessment | numeric | LOJIK CME projected value |
+| cme_min_range | numeric | CME minimum range |
+| cme_max_range | numeric | CME maximum range |
+| cme_comparable_blq | text | Comparable B/L/Q reference |
+| cme_comp1 | text | Comparable 1 |
+| cme_comp2 | text | Comparable 2 |
+| cme_comp3 | text | Comparable 3 |
+| cme_comp4 | text | Comparable 4 |
+| cme_comp5 | text | Comparable 5 |
+| final_method_used | text | 'market_data' or 'cme' |
+| final_recommended_value | numeric | Final value recommendation |
+| final_notes | text | Additional notes |
+| created_at | timestamp with time zone | |
+| updated_at | timestamp with time zone | |
+
+**Unique Constraint:** (job_id, property_composite_key)
+**Indexes:** idx_final_valuation_job, idx_final_valuation_composite
+
+**Purpose:** Stores Market Data Approach calculations and CME (Comparative Market Evaluation) results for the Final Valuation module. Each property gets one record per job with user-entered effective age, calculated projections, and final valuation recommendations.
+
+#### **job_tax_rates** ⚠️ NEW TABLE (January 2025)
+**Component:** TaxRateCalculatorTab.jsx (Final Valuation)
+
+| Column | Data Type | Notes |
+|--------|-----------|-------|
+| id | uuid | Primary key |
+| job_id | uuid | Foreign key to jobs |
+| current_tax_year | integer | Current assessment year |
+| current_general_rate | numeric(10,6) | Current general tax rate |
+| current_school_rate | numeric(10,6) | Current school tax rate |
+| current_county_rate | numeric(10,6) | Current county tax rate |
+| current_total_rate | numeric(10,6) | Current total tax rate |
+| projected_tax_year | integer | Projected assessment year |
+| projected_general_rate | numeric(10,6) | Projected general tax rate |
+| projected_school_rate | numeric(10,6) | Projected school tax rate |
+| projected_county_rate | numeric(10,6) | Projected county tax rate |
+| projected_total_rate | numeric(10,6) | Projected total tax rate |
+| current_ratable_base | numeric | Current total ratable base |
+| projected_ratable_base | numeric | Projected total ratable base |
+| current_total_levy | numeric | Current total levy amount |
+| projected_total_levy | numeric | Projected total levy amount |
+| created_at | timestamp with time zone | |
+| updated_at | timestamp with time zone | |
+
+**Unique Constraint:** (job_id, current_tax_year)
+**Index:** idx_job_tax_rates_job
+
+**Purpose:** Stores current and projected tax rates used for calculating property tax impact in the Market Data Approach tab. Rates are entered at the job level and apply to all properties in the assessment calculation.
+
+#### **property_class_changes** ⚠️ NEW TABLE (January 2025)
+**Components:** ClassChangesTab.jsx (Market Analysis), FileUploadButton.jsx comparison modal
+
+| Column | Data Type | Notes |
+|--------|-----------|-------|
+| id | uuid | Primary key |
+| job_id | uuid | Foreign key to jobs |
+| property_composite_key | text | Property identifier |
+| change_type | text | 'class_mismatch', 'user_edit', 'file_addition', 'file_deletion' |
+| old_m4_class | text | Previous M4 class value |
+| new_m4_class | text | New M4 class value |
+| old_cama_class | text | Previous CAMA class value |
+| new_cama_class | text | New CAMA class value |
+| property_block | text | For display in reports |
+| property_lot | text | For display in reports |
+| property_qualifier | text | For display in reports |
+| property_location | text | For display in reports |
+| change_source | text | 'comparison_modal', 'user_edit', 'file_upload', 'initial_import' |
+| changed_by | uuid | Foreign key to employees |
+| changed_at | timestamp with time zone | When change occurred |
+| notes | text | Additional context |
+| resolved | boolean | Change acknowledged/resolved |
+| resolved_at | timestamp with time zone | When resolved |
+| resolved_by | uuid | Foreign key to employees |
+
+**Indexes:** idx_property_class_changes_job, idx_property_class_changes_composite, idx_property_class_changes_type, idx_property_class_changes_resolved
+
+**Purpose:** Audit trail for property class changes (M4 vs CAMA mismatches). Tracks when property classifications change through file updates or user edits, enabling quality control and class consistency reporting.
+
+#### **job_adjustment_grid** ⚠️ NEW TABLE (January 2025)
+**Component:** AdjustmentsTab.jsx (Final Valuation)
+
+| Column | Data Type | Notes |
+|--------|-----------|-------|
+| id | uuid | Primary key |
+| job_id | uuid | Foreign key to jobs |
+| adjustment_id | text | Adjustment identifier (e.g., 'living_area', 'garage', 'pool') |
+| adjustment_name | text | Display name (e.g., 'Living Area (Sq Ft)', 'Garage', 'Pool') |
+| adjustment_type | text | 'flat', 'per_sqft', 'percent' |
+| category | text | 'physical', 'amenity', 'quality', 'custom' |
+| is_default | boolean | System default vs user-created |
+| sort_order | integer | Display order in grid |
+| bracket_0 | numeric | Adjustment value for price bracket 0 ($0-$99,999) |
+| bracket_1 | numeric | Adjustment value for price bracket 1 ($100K-$199K) |
+| bracket_2 | numeric | Adjustment value for price bracket 2 ($200K-$299K) |
+| bracket_3 | numeric | Adjustment value for price bracket 3 ($300K-$399K) |
+| bracket_4 | numeric | Adjustment value for price bracket 4 ($400K-$499K) |
+| bracket_5 | numeric | Adjustment value for price bracket 5 ($500K-$749K) |
+| bracket_6 | numeric | Adjustment value for price bracket 6 ($750K-$999K) |
+| bracket_7 | numeric | Adjustment value for price bracket 7 ($1M-$1.5M) |
+| bracket_8 | numeric | Adjustment value for price bracket 8 ($1.5M-$2M) |
+| bracket_9 | numeric | Adjustment value for price bracket 9 (Over $2M) |
+| created_at | timestamp with time zone | |
+| updated_at | timestamp with time zone | |
+
+**Unique Constraint:** (job_id, adjustment_id)
+**Index:** idx_job_adjustment_grid_job
+
+**Purpose:** Stores adjustment grid values used in the Sales Comparison (CME) tab. Each adjustment attribute has values for 10 price brackets, allowing differentiated adjustments based on property value ranges. System includes default adjustments (Living Area, Basement, Garage, etc.) and supports user-defined custom adjustments.
+
 #### **property_records** ⚠️ MAJOR SCHEMA CHANGES
 **Components:** Created in `AdminJobManagement.jsx`, Updated by `FileUploadButton.jsx`, Used by multiple components
 
@@ -914,6 +1061,7 @@ export const interpretCodes = {
 |--------|-----------|-------|
 | asset_building_class | text | |
 | asset_design_style | text | |
+| asset_effective_age | integer | **NEW** - Vendor-sourced effective age (BRT: EFFAGE year, Microsystems: converted from age) |
 | asset_ext_cond | text | |
 | asset_int_cond | text | |
 | asset_key_page | text | **REMOVED** - Moved to property_market_analysis |
@@ -941,6 +1089,10 @@ export const interpretCodes = {
 | asset_view | text | |
 | asset_year_built | integer | |
 | asset_zoning | text | **REMOVED** - Moved to property_market_analysis |
+| special_tax_code_1 | text | **NEW** - Special tax district code 1 (BRT: EXEMPT_SPECIAL_TAXCODE1, Micro: Sp Tax Cd1) |
+| special_tax_code_2 | text | **NEW** - Special tax district code 2 (BRT: EXEMPT_SPECIAL_TAXCODE2, Micro: Sp Tax Cd2) |
+| special_tax_code_3 | text | **NEW** - Special tax district code 3 (BRT: EXEMPT_SPECIAL_TAXCODE3, Micro: N/A) |
+| special_tax_code_4 | text | **NEW** - Special tax district code 4 (BRT: EXEMPT_SPECIAL_TAXCODE4, Micro: N/A) |
 | code_file_updated_at | timestamp without time zone | |
 | created_at | timestamp with time zone | |
 | created_by | uuid | |

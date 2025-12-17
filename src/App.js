@@ -7,6 +7,7 @@ import BillingManagement from './components/BillingManagement';
 import PayrollManagement from './components/PayrollManagement';
 import JobContainer from './components/job-modules/JobContainer';
 import FileUploadButton from './components/job-modules/FileUploadButton';
+import AppealCoverage from './components/job-modules/AppealCoverage';
 import LandingPage from './components/LandingPage';
 import UserManagement from './components/UserManagement';
 
@@ -60,7 +61,7 @@ const App = () => {
   const [activeView, setActiveView] = useState(() => {
     // Read from URL on initial load
     const path = window.location.pathname.slice(1) || 'admin-jobs';
-    const validViews = ['admin-jobs', 'billing', 'employees', 'payroll', 'job-modules', 'users'];
+    const validViews = ['admin-jobs', 'billing', 'employees', 'payroll', 'appeal-coverage', 'job-modules', 'users'];
     return validViews.includes(path) ? path : 'admin-jobs';
   });
 
@@ -79,7 +80,7 @@ const App = () => {
       
       // Handle main navigation
       const viewPath = path.slice(1) || 'admin-jobs';
-      const validViews = ['dashboard', 'admin-jobs', 'billing', 'employees', 'payroll', 'users'];
+      const validViews = ['dashboard', 'admin-jobs', 'billing', 'employees', 'payroll', 'appeal-coverage', 'users'];
       if (validViews.includes(viewPath)) {
         setActiveView(viewPath);
         setSelectedJob(null); // Clear job selection when navigating to main views
@@ -658,14 +659,18 @@ const App = () => {
       });
     }
     
-    // Process receivables
+    // Process receivables - FILTER BY CURRENT YEAR ONLY
     if (receivables) {
+      const currentYear = new Date().getFullYear();
       receivables.forEach(receivable => {
-        const amount = parseFloat(receivable.amount || 0);
-        if (receivable.status === 'P') {
-          totalPaid += amount;
-        } else if (receivable.status === 'O') {
-          totalOpen += amount;
+        // Only include receivables from current year
+        if (new Date(receivable.created_at).getFullYear() === currentYear) {
+          const amount = parseFloat(receivable.amount || 0);
+          if (receivable.status === 'P') {
+            totalPaid += amount;
+          } else if (receivable.status === 'O') {
+            totalOpen += amount;
+          }
         }
       });
     }
@@ -682,17 +687,21 @@ const App = () => {
       });
     }
     
-    // Calculate expense metrics
+    // Calculate expense metrics - FILTER BY CURRENT YEAR ONLY
     let currentExpenses = 0;
     let monthlyExpenses = new Array(12).fill(0);
-    
+
     if (expenses) {
+      const currentYear = new Date().getFullYear();
       const currentMonth = new Date().getMonth() + 1;
       expenses.forEach(expense => {
-        const amount = parseFloat(expense.amount || 0);
-        monthlyExpenses[expense.month - 1] += amount;
-        if (expense.month <= currentMonth) {
-          currentExpenses += amount;
+        // Only include expenses from the current fiscal year
+        if (expense.year === currentYear) {
+          const amount = parseFloat(expense.amount || 0);
+          monthlyExpenses[expense.month - 1] += amount;
+          if (expense.month <= currentMonth) {
+            currentExpenses += amount;
+          }
         }
       });
     }
@@ -995,13 +1004,28 @@ const App = () => {
                     ? 'text-blue-600 shadow-lg border-white'
                     : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
                 }`}
-                style={activeView === 'admin-jobs' ? { 
+                style={activeView === 'admin-jobs' ? {
                   backgroundColor: '#FFFFFF',
                   opacity: 1,
                   backdropFilter: 'none'
                 } : {}}
               >
                 📋 Jobs ({appData.jobs.length})
+              </button>
+              <button
+                onClick={() => handleViewChange('appeal-coverage')}
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                  activeView === 'appeal-coverage'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                }`}
+                style={activeView === 'appeal-coverage' ? {
+                  backgroundColor: '#FFFFFF',
+                  opacity: 1,
+                  backdropFilter: 'none'
+                } : {}}
+              >
+                ⚖️ Appeal Coverage
               </button>
               {isAdmin && (
                 <button
@@ -1164,6 +1188,10 @@ const App = () => {
             <p className="text-sm text-gray-600">You do not have permission to view Payroll.</p>
           </div>
         ))}
+
+        {activeView === 'appeal-coverage' && (
+          <AppealCoverage />
+        )}
 
         {activeView === 'users' && (isAdmin ? (
           <UserManagement />

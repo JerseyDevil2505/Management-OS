@@ -132,7 +132,7 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 /**
  * Get parsed raw data for a job (with caching)
  */
-async function getRawDataForJob(jobId) {
+export async function getRawDataForJob(jobId) {
   // Check cache first - trust it since it's cleared on file updates
   const cacheKey = `job_raw_data_${jobId}`;
   const cached = dataCache.get(cacheKey);
@@ -1095,6 +1095,7 @@ getBRTValue: function(property, codeDefinitions, fieldName) {
     'asset_story_height': '22',
     'asset_ext_cond': '60',
     'asset_int_cond': '60',
+    'asset_view': '51',
     'inspection_info_by': '53'
   };
   
@@ -1150,17 +1151,33 @@ getBRTValue: function(property, codeDefinitions, fieldName) {
   // REPLACE the existing getTypeName with this:
   getTypeName: function(property, codeDefinitions, vendorType) {
     if (!property || !codeDefinitions) return null;
-    
+
     const typeCode = property.asset_type_use;
     if (!typeCode || typeCode.trim() === '') return null;
-    
+
     if (vendorType === 'Microsystems') {
       return this.getMicrosystemsValue(property, codeDefinitions, 'asset_type_use');
     } else if (vendorType === 'BRT') {
       return this.getBRTValue(property, codeDefinitions, 'asset_type_use');
     }
-    
+
     return typeCode;
+  },
+
+  getViewName: function(property, codeDefinitions, vendorType) {
+    if (!property || !codeDefinitions) return null;
+
+    const viewCode = property.asset_view;
+    if (!viewCode || viewCode.trim() === '') return null;
+
+    if (vendorType === 'Microsystems') {
+      // Microsystems doesn't provide view data
+      return null;
+    } else if (vendorType === 'BRT') {
+      return this.getBRTValue(property, codeDefinitions, 'asset_view');
+    }
+
+    return viewCode;
   },
 
   // Check if a field is empty (handles spaces, null, undefined, and BRT's "00")

@@ -376,8 +376,9 @@ export class MicrosystemsProcessor {
   /**
    * Map Microsystems record to property_records table (ALL 82 FIELDS)
    * UPDATED: Combines original property_records + analysis fields into single record
+   * UPDATED: Added yearPriorToDueYear parameter for effective age conversion
    */
-  mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo = {}) {
+  mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo = {}, yearPriorToDueYear = null) {
     return {
       // Job context
       job_id: jobId,
@@ -441,6 +442,13 @@ export class MicrosystemsProcessor {
       asset_type_use: rawRecord['Type Use Code'],
       asset_view: null, // Not available in Microsystems
       asset_year_built: this.parseInteger(rawRecord['Year Built']),
+      asset_effective_age: this.calculateEffectiveYear(rawRecord['Effective Age'], yearPriorToDueYear),  // Microsystems: Convert age to year
+
+      // Special tax district codes (Microsystems: Sp Tax Cd1 and Sp Tax Cd2)
+      special_tax_code_1: rawRecord['Sp Tax Cd1'] || null,
+      special_tax_code_2: rawRecord['Sp Tax Cd2'] || null,
+      special_tax_code_3: null, // Not available in Microsystems
+      special_tax_code_4: null, // Not available in Microsystems
 
       // Analysis and calculation fields
       // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
@@ -546,7 +554,27 @@ export class MicrosystemsProcessor {
       if (codeFileContent) {
         await this.processCodeFile(codeFileContent, jobId);
       }
-      
+
+      // Fetch job data to calculate yearPriorToDueYear for effective age conversion
+      let yearPriorToDueYear = null;
+      try {
+        const { data: jobData, error: jobError } = await supabase
+          .from('jobs')
+          .select('end_date')
+          .eq('id', jobId)
+          .single();
+
+        if (!jobError && jobData?.end_date) {
+          const endYear = new Date(jobData.end_date).getFullYear();
+          yearPriorToDueYear = endYear - 1;
+          console.log(`📅 Calculated yearPriorToDueYear: ${yearPriorToDueYear} (from end_date: ${jobData.end_date})`);
+        } else {
+          console.warn('⚠️ Could not fetch job end_date, effective age conversion will be skipped');
+        }
+      } catch (error) {
+        console.error('❌ Error fetching job data for effective age calculation:', error);
+      }
+
       // Parse source file
       const records = this.parseSourceFile(sourceFileContent);
       console.log(`Processing ${records.length} records in batches...`);
@@ -560,7 +588,7 @@ export class MicrosystemsProcessor {
       for (const rawRecord of records) {
         try {
           // Map to unified property_records table with all 82 fields
-          const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo);
+          const propertyRecord = this.mapToPropertyRecord(rawRecord, yearCreated, ccddCode, jobId, versionInfo, yearPriorToDueYear);
           propertyRecords.push(propertyRecord);
           
         } catch (error) {
@@ -703,6 +731,22 @@ export class MicrosystemsProcessor {
       console.error('❌ Enhanced Microsystems file processing failed:', error);
       throw error;
     }
+  }
+
+  /**
+   * Calculate effective year from Microsystems "Effective Age" field
+   * Microsystems stores age in years, convert to year: yearPriorToDueYear - effectiveAge
+   */
+  calculateEffectiveYear(effectiveAgeValue, yearPriorToDueYear) {
+    if (!effectiveAgeValue || effectiveAgeValue === '') return null;
+    if (!yearPriorToDueYear) return null;
+
+    const effectiveAge = this.parseNumeric(effectiveAgeValue);
+    if (!effectiveAge || isNaN(effectiveAge)) return null;
+
+    // Convert age to year: Year Prior to Due Year - Effective Age
+    const effectiveYear = yearPriorToDueYear - effectiveAge;
+    return Math.round(effectiveYear);
   }
 
   /**
