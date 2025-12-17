@@ -453,6 +453,12 @@ export class MicrosystemsUpdater {
       asset_year_built: this.parseInteger(rawRecord['Year Built']),
       asset_effective_age: this.calculateEffectiveYear(rawRecord['Effective Age'], yearPriorToDueYear),  // Microsystems: Convert age to year
 
+      // Special tax district codes (Microsystems: Sp Tax Cd1 and Sp Tax Cd2)
+      special_tax_code_1: rawRecord['Sp Tax Cd1'] || null,
+      special_tax_code_2: rawRecord['Sp Tax Cd2'] || null,
+      special_tax_code_3: null, // Not available in Microsystems
+      special_tax_code_4: null, // Not available in Microsystems
+
       // Analysis and calculation fields
       // REMOVED: location_analysis, new_vcs, asset_map_page, asset_key_page,
       //          asset_zoning, values_norm_size, values_norm_time
