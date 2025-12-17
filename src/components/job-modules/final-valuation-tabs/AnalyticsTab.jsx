@@ -396,9 +396,9 @@ const AnalyticsTab = ({ jobData, properties }) => {
               <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">Old%All</th>
               <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">New%AL</th>
               <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">Delta</th>
-              <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">HSP</th>
-              <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">PSP</th>
-              <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">CSP</th>
+              <th className="px-4 py-3 text-center text-sm font-bold text-gray-700" style={{ backgroundColor: '#FED7AA' }}>HSP</th>
+              <th className="px-4 py-3 text-center text-sm font-bold text-gray-700" style={{ backgroundColor: '#D1ECF1' }}>PSP</th>
+              <th className="px-4 py-3 text-center text-sm font-bold text-gray-700" style={{ backgroundColor: '#D4EDDA' }}>CSP</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
@@ -409,9 +409,9 @@ const AnalyticsTab = ({ jobData, properties }) => {
                 <td className="px-4 py-2 text-center">{row.oldLandPct.toFixed(0)}%</td>
                 <td className="px-4 py-2 text-center">{row.newLandPct.toFixed(0)}%</td>
                 <td className="px-4 py-2 text-center">{row.delta.toFixed(0)}%</td>
-                <td className="px-4 py-2 text-center">{row.hsp !== null ? `${row.hsp.toFixed(0)}%` : '-'}</td>
-                <td className="px-4 py-2 text-center">{row.psp !== null ? `${row.psp.toFixed(0)}%` : '-'}</td>
-                <td className="px-4 py-2 text-center">{row.csp !== null ? `${row.csp.toFixed(0)}%` : '-'}</td>
+                <td className="px-4 py-2 text-center" style={{ backgroundColor: '#FED7AA' }}>{row.hsp !== null ? `${row.hsp.toFixed(0)}%` : '-'}</td>
+                <td className="px-4 py-2 text-center" style={{ backgroundColor: '#D1ECF1' }}>{row.psp !== null ? `${row.psp.toFixed(0)}%` : '-'}</td>
+                <td className="px-4 py-2 text-center" style={{ backgroundColor: '#D4EDDA' }}>{row.csp !== null ? `${row.csp.toFixed(0)}%` : '-'}</td>
               </tr>
             ))}
             {/* Totals Row */}
@@ -421,9 +421,9 @@ const AnalyticsTab = ({ jobData, properties }) => {
               <td className="px-4 py-3 text-center">{displayData.totals.oldLandPct.toFixed(0)}%</td>
               <td className="px-4 py-3 text-center">{displayData.totals.newLandPct.toFixed(0)}%</td>
               <td className="px-4 py-3 text-center">{displayData.totals.delta.toFixed(0)}%</td>
-              <td className="px-4 py-3 text-center">{displayData.totals.hsp !== null ? `${displayData.totals.hsp.toFixed(0)}%` : '-'}</td>
-              <td className="px-4 py-3 text-center">{displayData.totals.psp !== null ? `${displayData.totals.psp.toFixed(0)}%` : '-'}</td>
-              <td className="px-4 py-3 text-center">{displayData.totals.csp !== null ? `${displayData.totals.csp.toFixed(0)}%` : '-'}</td>
+              <td className="px-4 py-3 text-center" style={{ backgroundColor: '#FED7AA' }}>{displayData.totals.hsp !== null ? `${displayData.totals.hsp.toFixed(0)}%` : '-'}</td>
+              <td className="px-4 py-3 text-center" style={{ backgroundColor: '#D1ECF1' }}>{displayData.totals.psp !== null ? `${displayData.totals.psp.toFixed(0)}%` : '-'}</td>
+              <td className="px-4 py-3 text-center" style={{ backgroundColor: '#D4EDDA' }}>{displayData.totals.csp !== null ? `${displayData.totals.csp.toFixed(0)}%` : '-'}</td>
             </tr>
           </tbody>
         </table>
