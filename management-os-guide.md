@@ -691,6 +691,24 @@ export const interpretCodes = {
 | county | character varying | |
 | created_at | timestamp with time zone | |
 | created_by | uuid | |
+| current_class_1_count | integer | **NEW** - Current year Class 1 count (ratable comparison) |
+| current_class_1_total | bigint | **NEW** - Current year Class 1 valuation (ratable comparison) |
+| current_class_1_abatements | integer | **NEW** - Current year Class 1 abatements (ratable comparison) |
+| current_class_2_count | integer | **NEW** - Current year Class 2 count (ratable comparison) |
+| current_class_2_total | bigint | **NEW** - Current year Class 2 valuation (ratable comparison) |
+| current_class_2_abatements | integer | **NEW** - Current year Class 2 abatements (ratable comparison) |
+| current_class_3a_count | integer | **NEW** - Current year Class 3A count (ratable comparison) |
+| current_class_3a_total | bigint | **NEW** - Current year Class 3A valuation (ratable comparison) |
+| current_class_3b_count | integer | **NEW** - Current year Class 3B count (ratable comparison) |
+| current_class_3b_total | bigint | **NEW** - Current year Class 3B valuation (ratable comparison) |
+| current_class_4_count | integer | **NEW** - Current year Class 4 (A,B,C) count (ratable comparison) |
+| current_class_4_total | bigint | **NEW** - Current year Class 4 (A,B,C) valuation (ratable comparison) |
+| current_class_4_abatements | integer | **NEW** - Current year Class 4 abatements (ratable comparison) |
+| current_class_6_count | integer | **NEW** - Current year Class 6 (A,B,C) count (ratable comparison) |
+| current_class_6_total | bigint | **NEW** - Current year Class 6 (A,B,C) valuation (ratable comparison) |
+| current_total_count | integer | **NEW** - Current year total count (ratable comparison) |
+| current_total_total | bigint | **NEW** - Current year total valuation (ratable comparison) |
+| current_commercial_base_pct | decimal(5,2) | **NEW** - Current year commercial base % (ratable comparison) |
 | end_date | date | |
 | external_inspectors | text | Comma-separated client codes |
 | has_property_assignments | boolean | |
@@ -709,6 +727,9 @@ export const interpretCodes = {
 | raw_file_parsed_at | timestamp with time zone | **NEW** - Parsing timestamp |
 | raw_file_rows_count | integer | **NEW** - Row count tracking |
 | raw_file_size | bigint | **NEW** - File size tracking |
+| rate_calc_budget | decimal(15,2) | **NEW** - Tax rate calculator budget input |
+| rate_calc_current_rate | decimal(6,3) | **NEW** - Tax rate calculator current rate input |
+| rate_calc_buffer_for_loss | decimal(5,2) | **NEW** - Tax rate calculator buffer for loss % |
 | source_file_name | text | |
 | source_file_status | character varying | |
 | source_file_uploaded_at | timestamp with time zone | |
