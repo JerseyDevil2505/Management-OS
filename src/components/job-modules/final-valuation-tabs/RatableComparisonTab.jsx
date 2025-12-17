@@ -89,21 +89,22 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
     return { ...summary, totalCount, totalTotal };
   }, [properties]);
 
-  // Handle import current year data
-  const handleImportCurrentYear = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
+  // Handle current year data input changes
+  const handleCurrentYearChange = async (field, value) => {
+    const numValue = parseFloat(value.replace(/,/g, '')) || 0;
 
-    setIsImporting(true);
     try {
-      // TODO: Implement Excel import to read current year counts and totals
-      // For now, just placeholder
-      alert('Import functionality coming soon');
+      const updateData = { [field]: numValue };
+
+      const { error } = await supabase
+        .from('jobs')
+        .update(updateData)
+        .eq('id', jobData.id);
+
+      if (error) throw error;
+      if (onUpdateJobCache) onUpdateJobCache();
     } catch (error) {
-      console.error('Error importing:', error);
-      alert('Error importing: ' + error.message);
-    } finally {
-      setIsImporting(false);
+      console.error('Error saving current year data:', error);
     }
   };
 
@@ -264,24 +265,6 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
       {/* Tab Content */}
       {activeSubTab === 'comparison' && (
         <div className="space-y-4">
-          {/* Import Button */}
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 cursor-pointer">
-              <Upload className="w-4 h-4" />
-              {isImporting ? 'Importing...' : 'Import Current Year Data'}
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={handleImportCurrentYear}
-                className="hidden"
-                disabled={isImporting}
-              />
-            </label>
-            <span className="text-sm text-gray-600">
-              Import Excel file with current year counts and valuations
-            </span>
-          </div>
-
           {/* Comparison Table */}
           <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
             <div className="grid grid-cols-2 gap-8 p-6">
