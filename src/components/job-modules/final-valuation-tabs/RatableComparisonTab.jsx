@@ -5,12 +5,6 @@ import * as XLSX from 'xlsx-js-style';
 
 const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
   const [activeSubTab, setActiveSubTab] = useState('comparison');
-  const [currentYearData, setCurrentYearData] = useState(null);
-  const [rateCalcData, setRateCalcData] = useState({
-    budget: 0,
-    currentRate: 0,
-    bufferForLoss: 0
-  });
   const [isImporting, setIsImporting] = useState(false);
 
   // Calculate current year (year prior to due year)
@@ -22,49 +16,33 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
 
   const projectedYear = currentYear + 1;
 
-  // Load saved data
-  useEffect(() => {
-    if (jobData?.id) {
-      loadCurrentYearData();
-      loadRateCalcData();
-    }
-  }, [jobData?.id]);
+  // Use jobData directly for current year and rate calculator data
+  const currentYearData = useMemo(() => ({
+    class_1_count: jobData?.current_class_1_count || 0,
+    class_1_total: jobData?.current_class_1_total || 0,
+    class_1_abatements: jobData?.current_class_1_abatements || 0,
+    class_2_count: jobData?.current_class_2_count || 0,
+    class_2_total: jobData?.current_class_2_total || 0,
+    class_2_abatements: jobData?.current_class_2_abatements || 0,
+    class_3a_count: jobData?.current_class_3a_count || 0,
+    class_3a_total: jobData?.current_class_3a_total || 0,
+    class_3b_count: jobData?.current_class_3b_count || 0,
+    class_3b_total: jobData?.current_class_3b_total || 0,
+    class_4_count: jobData?.current_class_4_count || 0,
+    class_4_total: jobData?.current_class_4_total || 0,
+    class_4_abatements: jobData?.current_class_4_abatements || 0,
+    class_6_count: jobData?.current_class_6_count || 0,
+    class_6_total: jobData?.current_class_6_total || 0,
+    total_count: jobData?.current_total_count || 0,
+    total_total: jobData?.current_total_total || 0,
+    commercial_base_pct: jobData?.current_commercial_base_pct || 0
+  }), [jobData]);
 
-  const loadCurrentYearData = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('ratable_comparison_current')
-        .select('*')
-        .eq('job_id', jobData.id)
-        .single();
-
-      if (error && error.code !== 'PGRST116') throw error;
-      if (data) setCurrentYearData(data);
-    } catch (error) {
-      console.error('Error loading current year data:', error);
-    }
-  };
-
-  const loadRateCalcData = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('rate_calculator')
-        .select('*')
-        .eq('job_id', jobData.id)
-        .single();
-
-      if (error && error.code !== 'PGRST116') throw error;
-      if (data) {
-        setRateCalcData({
-          budget: data.budget || 0,
-          currentRate: data.current_rate || 0,
-          bufferForLoss: data.buffer_for_loss || 0
-        });
-      }
-    } catch (error) {
-      console.error('Error loading rate calc data:', error);
-    }
-  };
+  const rateCalcData = useMemo(() => ({
+    budget: jobData?.rate_calc_budget || 0,
+    currentRate: jobData?.rate_calc_current_rate || 0,
+    bufferForLoss: jobData?.rate_calc_buffer_for_loss || 0
+  }), [jobData]);
 
   // Calculate projected ratable base from properties (using CAMA total)
   const projectedRatableBase = useMemo(() => {
@@ -131,21 +109,21 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
 
   // Handle rate calc input changes
   const handleRateCalcChange = async (field, value) => {
-    const newData = { ...rateCalcData, [field]: parseFloat(value) || 0 };
-    setRateCalcData(newData);
+    const numValue = parseFloat(value) || 0;
 
     try {
-      await supabase
-        .from('rate_calculator')
-        .upsert({
-          job_id: jobData.id,
-          budget: newData.budget,
-          current_rate: newData.currentRate,
-          buffer_for_loss: newData.bufferForLoss,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'job_id'
-        });
+      const updateData = {};
+      if (field === 'budget') updateData.rate_calc_budget = numValue;
+      if (field === 'currentRate') updateData.rate_calc_current_rate = numValue;
+      if (field === 'bufferForLoss') updateData.rate_calc_buffer_for_loss = numValue;
+
+      const { error } = await supabase
+        .from('jobs')
+        .update(updateData)
+        .eq('id', jobData.id);
+
+      if (error) throw error;
+      if (onUpdateJobCache) onUpdateJobCache();
     } catch (error) {
       console.error('Error saving rate calc data:', error);
     }
@@ -161,26 +139,26 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
       [],
       [`${currentYear} Ratable Base`, '', '', '', `${projectedYear} Ratable Base`, '', '', '', 'DIFFERENCE'],
       ['', 'Count', 'AVG ASMT', 'AVG TAX', '', 'Count', 'AVG ASMT', 'AVG TAX', ''],
-      ['Class 1', currentYearData?.class_1_count || 0, '', '', 'Class 1', projectedRatableBase['1'].count, '', '', ''],
-      ['Abatements', currentYearData?.class_1_abatements || 0, '', '', 'Abatements', 0, '', '', ''],
+      ['Class 1', currentYearData.class_1_count, '', '', 'Class 1', projectedRatableBase['1'].count, '', '', ''],
+      ['Abatements', currentYearData.class_1_abatements, '', '', 'Abatements', 0, '', '', ''],
       ['Adjusted Abatements', 0, '', '', 'Adjusted Abatements', 0, '', '', ''],
-      ['', '', currentYearData?.class_1_total || 0, '', '', '', projectedRatableBase['1'].total, '', ''],
-      ['Class 2', currentYearData?.class_2_count || 0, '', '', 'Class 2', projectedRatableBase['2'].count, '', '', ''],
-      ['Abatements', currentYearData?.class_2_abatements || 0, '', '', 'Abatements', 0, '', '', ''],
+      ['', '', currentYearData.class_1_total, '', '', '', projectedRatableBase['1'].total, '', ''],
+      ['Class 2', currentYearData.class_2_count, '', '', 'Class 2', projectedRatableBase['2'].count, '', '', ''],
+      ['Abatements', currentYearData.class_2_abatements, '', '', 'Abatements', 0, '', '', ''],
       ['Adjusted Abatements', 0, '', '', 'Adjusted Abatements', 0, '', '', ''],
-      ['', '', currentYearData?.class_2_total || 0, '', '', '', projectedRatableBase['2'].total, '', ''],
-      ['Class 3A\'s', currentYearData?.class_3a_count || 0, '', '', 'Class 3A\'s', projectedRatableBase['3A'].count, '', '', ''],
-      ['Class 3A\'s (NET)', '', currentYearData?.class_3a_total || 0, '', 'Class 3A\'s (NET)', '', projectedRatableBase['3A'].total, '', ''],
-      ['Class 3B\'s', currentYearData?.class_3b_count || 0, '', '', 'Class 3B\'s', projectedRatableBase['3B'].count, '', '', ''],
-      ['Class 4A,B,C', currentYearData?.class_4_count || 0, '', '', 'Class 4A,B,C', projectedRatableBase['4ABC'].count, '', '', ''],
-      ['Abatements', currentYearData?.class_4_abatements || 0, '', '', 'Abatements', 0, '', '', ''],
+      ['', '', currentYearData.class_2_total, '', '', '', projectedRatableBase['2'].total, '', ''],
+      ['Class 3A\'s', currentYearData.class_3a_count, '', '', 'Class 3A\'s', projectedRatableBase['3A'].count, '', '', ''],
+      ['Class 3A\'s (NET)', '', currentYearData.class_3a_total, '', 'Class 3A\'s (NET)', '', projectedRatableBase['3A'].total, '', ''],
+      ['Class 3B\'s', currentYearData.class_3b_count, '', '', 'Class 3B\'s', projectedRatableBase['3B'].count, '', '', ''],
+      ['Class 4A,B,C', currentYearData.class_4_count, '', '', 'Class 4A,B,C', projectedRatableBase['4ABC'].count, '', '', ''],
+      ['Abatements', currentYearData.class_4_abatements, '', '', 'Abatements', 0, '', '', ''],
       ['Adjusted Abatements', 0, '', '', 'Adjusted Abatements', 0, '', '', ''],
-      ['Class 4\'s (NET)', '', currentYearData?.class_4_total || 0, '', 'Class 4\'s (NET)', '', projectedRatableBase['4ABC'].total, '', ''],
-      ['6A,B,C', currentYearData?.class_6_count || 0, '0 (Not/After Ratio Applied)', '', '6A,B,C', projectedRatableBase['6ABC'].count, '0 (Not/After Ratio Applied)', '', ''],
+      ['Class 4\'s (NET)', '', currentYearData.class_4_total, '', 'Class 4\'s (NET)', '', projectedRatableBase['4ABC'].total, '', ''],
+      ['6A,B,C', currentYearData.class_6_count, '0 (Not/After Ratio Applied)', '', '6A,B,C', projectedRatableBase['6ABC'].count, '0 (Not/After Ratio Applied)', '', ''],
       ['', '', '', '', '', '', '', '', ''],
-      ['Total Ratables', currentYearData?.total_count || 0, currentYearData?.total_total || 0, '', 'Total Ratables', projectedRatableBase.totalCount, projectedRatableBase.totalTotal, '', ''],
+      ['Total Ratables', currentYearData.total_count, currentYearData.total_total, '', 'Total Ratables', projectedRatableBase.totalCount, projectedRatableBase.totalTotal, '', ''],
       ['', '', '', '', '', '', '', '', ''],
-      ['Commercial Base', '', currentYearData?.commercial_base_pct || 0, '', 'Commercial Base', '', '', '', '']
+      ['Commercial Base', '', currentYearData.commercial_base_pct, '', 'Commercial Base', '', '', '', '']
     ];
 
     const ws1 = XLSX.utils.aoa_to_sheet(comparisonData);
@@ -320,13 +298,13 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   {/* Class 1 */}
                   <div className="space-y-1">
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="text-sm font-medium">Class 1</div>
-                      <div className="text-sm text-right">{currentYearData?.class_1_count?.toLocaleString() || 0}</div>
-                      <div className="text-sm text-right">${(currentYearData?.class_1_total || 0).toLocaleString()}</div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
-                      <div>Abatements</div>
-                      <div className="text-right">{currentYearData?.class_1_abatements?.toLocaleString() || 0}</div>
+                  <div className="text-sm font-medium">Class 1</div>
+                  <div className="text-sm text-right">{currentYearData.class_1_count.toLocaleString()}</div>
+                  <div className="text-sm text-right">${currentYearData.class_1_total.toLocaleString()}</div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
+                  <div>Abatements</div>
+                  <div className="text-right">{currentYearData.class_1_abatements.toLocaleString()}</div>
                       <div></div>
                     </div>
                   </div>
