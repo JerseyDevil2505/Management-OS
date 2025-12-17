@@ -366,22 +366,38 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       const isTaxable = property.property_facility !== 'EXEMPT';
       if (!isTaxable) return;
 
-      const calc = getCalculatedValues(property);
-      const projectedTotal = calc.projectedTotal || 0;
+      // Use CAMA total from data file
+      const camaTotal = property.values_cama_total || 0;
       const propertyClass = property.property_cama_class || '';
 
       if (summary[propertyClass]) {
         summary[propertyClass].count++;
-        summary[propertyClass].total += projectedTotal;
+        summary[propertyClass].total += camaTotal;
       }
     });
 
-    // Calculate totals
+    // Calculate Class 4* aggregate (4A + 4B + 4C)
+    const class4Count = summary['4A'].count + summary['4B'].count + summary['4C'].count;
+    const class4Total = summary['4A'].total + summary['4B'].total + summary['4C'].total;
+
+    // Calculate Class 6* aggregate (6A + 6B)
+    const class6Count = summary['6A'].count + summary['6B'].count;
+    const class6Total = summary['6A'].total + summary['6B'].total;
+
+    // Calculate grand totals
     const totalCount = Object.values(summary).reduce((sum, item) => sum + item.count, 0);
     const totalTotal = Object.values(summary).reduce((sum, item) => sum + item.total, 0);
 
-    return { ...summary, totalCount, totalTotal };
-  }, [properties, finalValuationData, yearPriorToDueYear, vendorType, taxRates]);
+    return {
+      ...summary,
+      class4Count,
+      class4Total,
+      class6Count,
+      class6Total,
+      totalCount,
+      totalTotal
+    };
+  }, [properties]);
 
   // Handle cell edit
   const handleCellEdit = async (propertyKey, field, value) => {
@@ -615,19 +631,54 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
       {/* Summary Section */}
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
-        <h3 className="text-lg font-bold text-gray-900 mb-4">Projected Net Valuation (Taxable)</h3>
-        <div className="grid grid-cols-3 md:grid-cols-5 gap-4">
-          {['1', '2', '3A', '3B', '4A', '4B', '4C', '6A', '6B'].map(classType => (
-            <div key={classType} className="bg-white rounded-lg p-3 shadow-sm border border-gray-200">
-              <div className="text-xs font-semibold text-gray-500 mb-1">Class {classType}</div>
-              <div className="text-sm font-bold text-gray-900">{classSummary[classType].count.toLocaleString()}</div>
-              <div className="text-xs text-gray-600 mt-1">${(classSummary[classType].total / 1000000).toFixed(2)}M</div>
+        <h3 className="text-lg font-bold text-gray-900 mb-4">Projected Net Valuation (Taxable) - CAMA Total</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          {/* Individual Classes */}
+          {['1', '2', '3A', '3B'].map(classType => (
+            <div key={classType} className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+              <div className="text-xs font-semibold text-gray-500 mb-2">Class {classType}</div>
+              <div className="text-sm font-bold text-gray-900 mb-1">{classSummary[classType].count.toLocaleString()}</div>
+              <div className="text-base font-bold text-blue-600">${classSummary[classType].total.toLocaleString()}</div>
             </div>
           ))}
-          <div className="bg-blue-600 text-white rounded-lg p-3 shadow-md col-span-3 md:col-span-1">
-            <div className="text-xs font-semibold mb-1">TOTAL</div>
-            <div className="text-sm font-bold">{classSummary.totalCount.toLocaleString()}</div>
-            <div className="text-xs mt-1">${(classSummary.totalTotal / 1000000).toFixed(2)}M</div>
+
+          {/* Class 4A, 4B, 4C */}
+          {['4A', '4B', '4C'].map(classType => (
+            <div key={classType} className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+              <div className="text-xs font-semibold text-gray-500 mb-2">Class {classType}</div>
+              <div className="text-sm font-bold text-gray-900 mb-1">{classSummary[classType].count.toLocaleString()}</div>
+              <div className="text-base font-bold text-blue-600">${classSummary[classType].total.toLocaleString()}</div>
+            </div>
+          ))}
+
+          {/* Class 4* Total */}
+          <div className="bg-orange-100 rounded-lg p-4 shadow-md border-2 border-orange-300">
+            <div className="text-xs font-semibold text-orange-700 mb-2">Class 4*</div>
+            <div className="text-sm font-bold text-gray-900 mb-1">{classSummary.class4Count.toLocaleString()}</div>
+            <div className="text-base font-bold text-orange-700">${classSummary.class4Total.toLocaleString()}</div>
+          </div>
+
+          {/* Class 6A, 6B */}
+          {['6A', '6B'].map(classType => (
+            <div key={classType} className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+              <div className="text-xs font-semibold text-gray-500 mb-2">Class {classType}</div>
+              <div className="text-sm font-bold text-gray-900 mb-1">{classSummary[classType].count.toLocaleString()}</div>
+              <div className="text-base font-bold text-blue-600">${classSummary[classType].total.toLocaleString()}</div>
+            </div>
+          ))}
+
+          {/* Class 6* Total */}
+          <div className="bg-purple-100 rounded-lg p-4 shadow-md border-2 border-purple-300">
+            <div className="text-xs font-semibold text-purple-700 mb-2">Class 6*</div>
+            <div className="text-sm font-bold text-gray-900 mb-1">{classSummary.class6Count.toLocaleString()}</div>
+            <div className="text-base font-bold text-purple-700">${classSummary.class6Total.toLocaleString()}</div>
+          </div>
+
+          {/* Grand Total */}
+          <div className="bg-blue-600 text-white rounded-lg p-4 shadow-lg border-2 border-blue-700 col-span-2 md:col-span-2">
+            <div className="text-sm font-semibold mb-2">TOTAL</div>
+            <div className="text-base font-bold mb-1">{classSummary.totalCount.toLocaleString()}</div>
+            <div className="text-xl font-bold">${classSummary.totalTotal.toLocaleString()}</div>
           </div>
         </div>
       </div>
