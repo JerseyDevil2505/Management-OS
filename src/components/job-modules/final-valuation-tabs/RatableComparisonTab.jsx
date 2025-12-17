@@ -281,13 +281,28 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   {/* Class 1 */}
                   <div className="space-y-1">
                     <div className="grid grid-cols-3 gap-2">
-                  <div className="text-sm font-medium">Class 1</div>
-                  <div className="text-sm text-right">{currentYearData.class_1_count.toLocaleString()}</div>
-                  <div className="text-sm text-right">${currentYearData.class_1_total.toLocaleString()}</div>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
-                  <div>Abatements</div>
-                  <div className="text-right">{currentYearData.class_1_abatements.toLocaleString()}</div>
+                      <div className="text-sm font-medium">Class 1</div>
+                      <input
+                        type="number"
+                        defaultValue={currentYearData.class_1_count}
+                        onBlur={(e) => handleCurrentYearChange('current_class_1_count', e.target.value)}
+                        className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                      />
+                      <input
+                        type="number"
+                        defaultValue={currentYearData.class_1_total}
+                        onBlur={(e) => handleCurrentYearChange('current_class_1_total', e.target.value)}
+                        className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
+                      <div>Abatements</div>
+                      <input
+                        type="number"
+                        defaultValue={currentYearData.class_1_abatements}
+                        onBlur={(e) => handleCurrentYearChange('current_class_1_abatements', e.target.value)}
+                        className="text-xs text-right px-2 py-1 border border-gray-300 rounded"
+                      />
                       <div></div>
                     </div>
                   </div>
@@ -295,65 +310,136 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   {/* Class 2 */}
                   <div className="space-y-1">
                     <div className="grid grid-cols-3 gap-2">
-                  <div className="text-sm font-medium">Class 2</div>
-                  <div className="text-sm text-right">{currentYearData.class_2_count.toLocaleString()}</div>
-                  <div className="text-sm text-right">${currentYearData.class_2_total.toLocaleString()}</div>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
-                  <div>Abatements</div>
-                  <div className="text-right">{currentYearData.class_2_abatements.toLocaleString()}</div>
+                      <div className="text-sm font-medium">Class 2</div>
+                      <input
+                        type="number"
+                        defaultValue={currentYearData.class_2_count}
+                        onBlur={(e) => handleCurrentYearChange('current_class_2_count', e.target.value)}
+                        className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                      />
+                      <input
+                        type="number"
+                        defaultValue={currentYearData.class_2_total}
+                        onBlur={(e) => handleCurrentYearChange('current_class_2_total', e.target.value)}
+                        className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
+                      <div>Abatements</div>
+                      <input
+                        type="number"
+                        defaultValue={currentYearData.class_2_abatements}
+                        onBlur={(e) => handleCurrentYearChange('current_class_2_abatements', e.target.value)}
+                        className="text-xs text-right px-2 py-1 border border-gray-300 rounded"
+                      />
                       <div></div>
                     </div>
                   </div>
 
                   {/* Class 3A's */}
                   <div className="grid grid-cols-3 gap-2">
-                <div className="text-sm font-medium">Class 3A's (NET)</div>
-                <div className="text-sm text-right">{currentYearData.class_3a_count.toLocaleString()}</div>
-                <div className="text-sm text-right">${currentYearData.class_3a_total.toLocaleString()}</div>
-              </div>
+                    <div className="text-sm font-medium">Class 3A's (NET)</div>
+                    <input
+                      type="number"
+                      defaultValue={currentYearData.class_3a_count}
+                      onBlur={(e) => handleCurrentYearChange('current_class_3a_count', e.target.value)}
+                      className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                    />
+                    <input
+                      type="number"
+                      defaultValue={currentYearData.class_3a_total}
+                      onBlur={(e) => handleCurrentYearChange('current_class_3a_total', e.target.value)}
+                      className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                    />
+                  </div>
 
-              {/* Class 3B's */}
-              <div className="grid grid-cols-3 gap-2">
-                <div className="text-sm font-medium">Class 3B's</div>
-                <div className="text-sm text-right">{currentYearData.class_3b_count.toLocaleString()}</div>
-                <div className="text-sm text-right">${currentYearData.class_3b_total.toLocaleString()}</div>
-              </div>
+                  {/* Class 3B's */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-sm font-medium">Class 3B's</div>
+                    <input
+                      type="number"
+                      defaultValue={currentYearData.class_3b_count}
+                      onBlur={(e) => handleCurrentYearChange('current_class_3b_count', e.target.value)}
+                      className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                    />
+                    <input
+                      type="number"
+                      defaultValue={currentYearData.class_3b_total}
+                      onBlur={(e) => handleCurrentYearChange('current_class_3b_total', e.target.value)}
+                      className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                    />
+                  </div>
 
                   {/* Class 4A,B,C */}
                   <div className="space-y-1">
                     <div className="grid grid-cols-3 gap-2">
-                  <div className="text-sm font-medium">Class 4A,B,C (NET)</div>
-                  <div className="text-sm text-right">{currentYearData.class_4_count.toLocaleString()}</div>
-                  <div className="text-sm text-right">${currentYearData.class_4_total.toLocaleString()}</div>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
-                  <div>Abatements</div>
-                  <div className="text-right">{currentYearData.class_4_abatements.toLocaleString()}</div>
+                      <div className="text-sm font-medium">Class 4A,B,C (NET)</div>
+                      <input
+                        type="number"
+                        defaultValue={currentYearData.class_4_count}
+                        onBlur={(e) => handleCurrentYearChange('current_class_4_count', e.target.value)}
+                        className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                      />
+                      <input
+                        type="number"
+                        defaultValue={currentYearData.class_4_total}
+                        onBlur={(e) => handleCurrentYearChange('current_class_4_total', e.target.value)}
+                        className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
+                      <div>Abatements</div>
+                      <input
+                        type="number"
+                        defaultValue={currentYearData.class_4_abatements}
+                        onBlur={(e) => handleCurrentYearChange('current_class_4_abatements', e.target.value)}
+                        className="text-xs text-right px-2 py-1 border border-gray-300 rounded"
+                      />
                       <div></div>
                     </div>
                   </div>
 
                   {/* Class 6A,B,C */}
                   <div className="grid grid-cols-3 gap-2">
-                <div className="text-sm font-medium">6A,B,C</div>
-                <div className="text-sm text-right">{currentYearData.class_6_count.toLocaleString()}</div>
-                <div className="text-sm text-right text-xs text-gray-500">Not/After Ratio Applied</div>
-              </div>
+                    <div className="text-sm font-medium">6A,B,C</div>
+                    <input
+                      type="number"
+                      defaultValue={currentYearData.class_6_count}
+                      onBlur={(e) => handleCurrentYearChange('current_class_6_count', e.target.value)}
+                      className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                    />
+                    <div className="text-sm text-right text-xs text-gray-500">Not/After Ratio Applied</div>
+                  </div>
 
-              {/* Total */}
-              <div className="grid grid-cols-3 gap-2 pt-3 border-t-2 border-gray-300 font-bold">
-                <div className="text-sm">Total Ratables</div>
-                <div className="text-sm text-right">{currentYearData.total_count.toLocaleString()}</div>
-                <div className="text-base text-right">${currentYearData.total_total.toLocaleString()}</div>
-              </div>
+                  {/* Total */}
+                  <div className="grid grid-cols-3 gap-2 pt-3 border-t-2 border-gray-300 font-bold">
+                    <div className="text-sm">Total Ratables</div>
+                    <input
+                      type="number"
+                      defaultValue={currentYearData.total_count}
+                      onBlur={(e) => handleCurrentYearChange('current_total_count', e.target.value)}
+                      className="text-sm text-right px-2 py-1 border border-gray-300 rounded font-bold"
+                    />
+                    <input
+                      type="number"
+                      defaultValue={currentYearData.total_total}
+                      onBlur={(e) => handleCurrentYearChange('current_total_total', e.target.value)}
+                      className="text-base text-right px-2 py-1 border border-gray-300 rounded font-bold"
+                    />
+                  </div>
 
-              {/* Commercial Base */}
-              <div className="grid grid-cols-3 gap-2 pt-2 mt-2 border-t border-gray-200">
-                <div className="text-sm font-medium">Commercial Base</div>
-                <div></div>
-                <div className="text-sm text-right">{currentYearData.commercial_base_pct}%</div>
-              </div>
+                  {/* Commercial Base */}
+                  <div className="grid grid-cols-3 gap-2 pt-2 mt-2 border-t border-gray-200">
+                    <div className="text-sm font-medium">Commercial Base</div>
+                    <div></div>
+                    <input
+                      type="number"
+                      step="0.01"
+                      defaultValue={currentYearData.commercial_base_pct}
+                      onBlur={(e) => handleCurrentYearChange('current_commercial_base_pct', e.target.value)}
+                      className="text-sm text-right px-2 py-1 border border-gray-300 rounded w-20"
+                    />
+                  </div>
                 </div>
               </div>
 
