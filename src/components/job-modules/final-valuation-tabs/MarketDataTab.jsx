@@ -86,12 +86,12 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     }
   };
 
-  // Calculate year prior to year of value (for formulas)
-  // If end_date = 2026, year of value = 2025, year prior = 2024
+  // Calculate year prior to due year (for formulas)
+  // If end_date = 2026, yearPriorToDueYear = 2025
   const yearPriorToDueYear = useMemo(() => {
     if (!jobData?.end_date) return new Date().getFullYear();
     const endYear = new Date(jobData.end_date).getFullYear();
-    return endYear - 2;
+    return endYear - 1;
   }, [jobData?.end_date]);
 
   // Get vendor type

@@ -8,14 +8,12 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
   const [isImporting, setIsImporting] = useState(false);
 
   // Calculate years for ratable comparison
-  // If end_date = 2026: currentYear = 2024, projectedYear = 2025 (year of value)
-  const currentYear = useMemo(() => {
+  // If end_date = 2026: yearPriorToDueYear = 2025
+  const yearPriorToDueYear = useMemo(() => {
     if (!jobData?.end_date) return new Date().getFullYear();
     const endYear = new Date(jobData.end_date).getFullYear();
-    return endYear - 2;  // Year prior to year of value
+    return endYear - 1;
   }, [jobData?.end_date]);
-
-  const projectedYear = currentYear + 1;  // Year of value
 
   // Use jobData directly for current year and rate calculator data
   const currentYearData = useMemo(() => ({
@@ -138,7 +136,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
     const comparisonData = [
       ['Ratable Base Comparison'],
       [],
-      [`${currentYear} Ratable Base`, '', '', '', `${projectedYear} Ratable Base`, '', '', '', 'DIFFERENCE'],
+      ['Current Ratable Base', '', '', '', 'Projected Ratable Base', '', '', '', 'DIFFERENCE'],
       ['', 'Count', 'AVG ASMT', 'AVG TAX', '', 'Count', 'AVG ASMT', 'AVG TAX', ''],
       ['Class 1', currentYearData.class_1_count, '', '', 'Class 1', projectedRatableBase['1'].count, '', '', ''],
       ['Abatements', currentYearData.class_1_abatements, '', '', 'Abatements', 0, '', '', ''],
@@ -288,7 +286,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
             <div className="grid grid-cols-2 gap-8 p-6">
               {/* Current Year Side */}
               <div>
-                <h3 className="text-lg font-bold text-gray-900 mb-4">{currentYear} Ratable Base</h3>
+                <h3 className="text-lg font-bold text-gray-900 mb-4">Current Ratable Base</h3>
                 <div className="space-y-3">
                   <div className="grid grid-cols-3 gap-2 text-xs font-semibold text-gray-700 pb-2 border-b">
                     <div></div>
@@ -377,7 +375,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
 
               {/* Projected Year Side */}
               <div>
-                <h3 className="text-lg font-bold text-gray-900 mb-4">{projectedYear} Ratable Base</h3>
+                <h3 className="text-lg font-bold text-gray-900 mb-4">Projected Ratable Base</h3>
                 <div className="space-y-3">
                   <div className="grid grid-cols-3 gap-2 text-xs font-semibold text-gray-700 pb-2 border-b">
                     <div></div>
