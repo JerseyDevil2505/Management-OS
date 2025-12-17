@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calculator, TrendingUp, Sliders, BarChart3, FileSpreadsheet, DollarSign, LineChart } from 'lucide-react';
+import { Calculator, TrendingUp, Sliders, BarChart3, FileSpreadsheet, DollarSign } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import SalesReviewTab from './final-valuation-tabs/SalesReviewTab';
 import MarketDataTab from './final-valuation-tabs/MarketDataTab';
@@ -7,7 +7,6 @@ import RatableComparisonTab from './final-valuation-tabs/RatableComparisonTab';
 import AdjustmentsTab from './final-valuation-tabs/AdjustmentsTab';
 import SalesComparisonTab from './final-valuation-tabs/SalesComparisonTab';
 import AnalyticsTab from './final-valuation-tabs/AnalyticsTab';
-import DataVisualizationTab from './final-valuation-tabs/DataVisualizationTab';
 
 const FinalValuation = ({
   jobData = {},
@@ -26,8 +25,7 @@ const FinalValuation = ({
     { id: 'ratable-comparison', label: 'Ratable Comparison', icon: DollarSign },
     { id: 'adjustments', label: 'Adjustments', icon: Sliders },
     { id: 'sales-comparison', label: 'Sales Comparison', icon: TrendingUp },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-    { id: 'visualizations', label: 'Data Visualizations', icon: LineChart }
+    { id: 'analytics', label: 'Analytics', icon: BarChart3 }
   ];
 
   // Load final valuation data for analytics
@@ -146,13 +144,6 @@ const FinalValuation = ({
             jobData={jobData}
             properties={properties}
             finalValuationData={finalValuationData}
-          />
-        )}
-
-        {activeTab === 'visualizations' && (
-          <DataVisualizationTab
-            jobData={jobData}
-            properties={properties}
           />
         )}
       </div>
