@@ -638,7 +638,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
               <tr>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Class</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Description</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Count</th>
+                <th className="px-3 py-3 text-right text-sm font-semibold text-gray-700">Count</th>
                 <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Valuation</th>
               </tr>
             </thead>
@@ -646,86 +646,82 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
               <tr className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">Class 1</td>
                 <td className="px-4 py-3 text-sm text-gray-700">Vacant Land</td>
-                <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">{classSummary['1'].count.toLocaleString()}</td>
+                <td className="px-3 py-3 text-sm text-right font-semibold text-gray-900">{classSummary['1'].count.toLocaleString()}</td>
                 <td className="px-4 py-3 text-base text-right font-bold text-blue-600">${classSummary['1'].total.toLocaleString()}</td>
               </tr>
               <tr className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">Class 2</td>
                 <td className="px-4 py-3 text-sm text-gray-700">Residential</td>
-                <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">{classSummary['2'].count.toLocaleString()}</td>
+                <td className="px-3 py-3 text-sm text-right font-semibold text-gray-900">{classSummary['2'].count.toLocaleString()}</td>
                 <td className="px-4 py-3 text-base text-right font-bold text-blue-600">${classSummary['2'].total.toLocaleString()}</td>
               </tr>
               <tr className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">Class 3A</td>
                 <td className="px-4 py-3 text-sm text-gray-700">Farmhouse</td>
-                <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">{classSummary['3A'].count.toLocaleString()}</td>
+                <td className="px-3 py-3 text-sm text-right font-semibold text-gray-900">{classSummary['3A'].count.toLocaleString()}</td>
                 <td className="px-4 py-3 text-base text-right font-bold text-blue-600">${classSummary['3A'].total.toLocaleString()}</td>
               </tr>
               <tr className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">Class 3B</td>
                 <td className="px-4 py-3 text-sm text-gray-700">Qualified Farmland</td>
-                <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">{classSummary['3B'].count.toLocaleString()}</td>
+                <td className="px-3 py-3 text-sm text-right font-semibold text-gray-900">{classSummary['3B'].count.toLocaleString()}</td>
                 <td className="px-4 py-3 text-base text-right font-bold text-blue-600">${classSummary['3B'].total.toLocaleString()}</td>
               </tr>
               <tr className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">Class 4A</td>
                 <td className="px-4 py-3 text-sm text-gray-700">Commercial</td>
-                <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">{classSummary['4A'].count.toLocaleString()}</td>
+                <td className="px-3 py-3 text-sm text-right font-semibold text-gray-900">{classSummary['4A'].count.toLocaleString()}</td>
                 <td className="px-4 py-3 text-base text-right font-bold text-blue-600">${classSummary['4A'].total.toLocaleString()}</td>
               </tr>
               <tr className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">Class 4B</td>
                 <td className="px-4 py-3 text-sm text-gray-700">Industrial</td>
-                <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">{classSummary['4B'].count.toLocaleString()}</td>
+                <td className="px-3 py-3 text-sm text-right font-semibold text-gray-900">{classSummary['4B'].count.toLocaleString()}</td>
                 <td className="px-4 py-3 text-base text-right font-bold text-blue-600">${classSummary['4B'].total.toLocaleString()}</td>
               </tr>
               <tr className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">Class 4C</td>
                 <td className="px-4 py-3 text-sm text-gray-700">Apartment</td>
-                <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">{classSummary['4C'].count.toLocaleString()}</td>
+                <td className="px-3 py-3 text-sm text-right font-semibold text-gray-900">{classSummary['4C'].count.toLocaleString()}</td>
                 <td className="px-4 py-3 text-base text-right font-bold text-blue-600">${classSummary['4C'].total.toLocaleString()}</td>
               </tr>
               <tr className="bg-orange-50 hover:bg-orange-100 border-t-2 border-orange-300">
                 <td className="px-4 py-3 text-sm font-bold text-orange-700">Class 4*</td>
                 <td className="px-4 py-3 text-sm font-semibold text-orange-700">Aggregate Total</td>
-                <td className="px-4 py-3 text-sm text-right font-bold text-orange-700">{classSummary.class4Count.toLocaleString()}</td>
+                <td className="px-3 py-3 text-sm text-right font-bold text-orange-700">{classSummary.class4Count.toLocaleString()}</td>
                 <td className="px-4 py-3 text-base text-right font-bold text-orange-700">${classSummary.class4Total.toLocaleString()}</td>
               </tr>
               <tr className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">Class 6A</td>
                 <td className="px-4 py-3 text-sm text-gray-700">Personal Property</td>
-                <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">{classSummary['6A'].count.toLocaleString()}</td>
+                <td className="px-3 py-3 text-sm text-right font-semibold text-gray-900">{classSummary['6A'].count.toLocaleString()}</td>
                 <td className="px-4 py-3 text-base text-right font-bold text-blue-600">${classSummary['6A'].total.toLocaleString()}</td>
               </tr>
               <tr className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">Class 6B</td>
                 <td className="px-4 py-3 text-sm text-gray-700">Machinery, Apparatus, Petroleum Factor</td>
-                <td className="px-4 py-3 text-sm text-right font-semibold text-gray-900">{classSummary['6B'].count.toLocaleString()}</td>
+                <td className="px-3 py-3 text-sm text-right font-semibold text-gray-900">{classSummary['6B'].count.toLocaleString()}</td>
                 <td className="px-4 py-3 text-base text-right font-bold text-blue-600">${classSummary['6B'].total.toLocaleString()}</td>
               </tr>
               <tr className="bg-purple-50 hover:bg-purple-100 border-t-2 border-purple-300">
                 <td className="px-4 py-3 text-sm font-bold text-purple-700">Class 6*</td>
                 <td className="px-4 py-3 text-sm font-semibold text-purple-700">Aggregate Total</td>
-                <td className="px-4 py-3 text-sm text-right font-bold text-purple-700">{classSummary.class6Count.toLocaleString()}</td>
+                <td className="px-3 py-3 text-sm text-right font-bold text-purple-700">{classSummary.class6Count.toLocaleString()}</td>
                 <td className="px-4 py-3 text-base text-right font-bold text-purple-700">${classSummary.class6Total.toLocaleString()}</td>
               </tr>
               <tr className="bg-blue-600 text-white border-t-4 border-blue-700">
-                <td className="px-4 py-4 text-sm font-bold" colSpan="2">TOTAL</td>
-                <td className="px-4 py-4 text-base text-right font-bold">{classSummary.totalCount.toLocaleString()}</td>
-                <td className="px-4 py-4 text-xl text-right font-bold">${classSummary.totalTotal.toLocaleString()}</td>
+                <td className="px-4 py-4 text-sm font-bold" colSpan="2"></td>
+                <td className="px-3 py-4 text-right">
+                  <div className="text-xs font-semibold mb-1">Total Lines</div>
+                  <div className="text-base font-bold">{classSummary.totalCount.toLocaleString()}</div>
+                </td>
+                <td className="px-4 py-4 text-right">
+                  <div className="text-xs font-semibold mb-1">Net Valuation Taxable</div>
+                  <div className="text-xl font-bold">${classSummary.totalTotal.toLocaleString()}</div>
+                </td>
               </tr>
             </tbody>
           </table>
-        </div>
-        <div className="mt-3 text-sm text-gray-600">
-          <div className="flex justify-between">
-            <span className="font-semibold">Total Line Items:</span>
-            <span className="font-bold text-gray-900">{classSummary.totalCount.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between mt-1">
-            <span className="font-semibold">Net Valuation Taxable:</span>
-            <span className="font-bold text-blue-600 text-lg">${classSummary.totalTotal.toLocaleString()}</span>
-          </div>
         </div>
       </div>
 
