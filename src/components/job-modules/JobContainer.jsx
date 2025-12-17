@@ -1048,6 +1048,13 @@ const JobContainer = ({
 
   const modules = [
     {
+      id: 'visualizations',
+      name: 'Data Visualizations',
+      icon: LineChart,
+      component: DataVisualizations,
+      description: 'Interactive charts and analytics'
+    },
+    {
       id: 'checklist',
       name: 'Checklist',
       icon: Building,
