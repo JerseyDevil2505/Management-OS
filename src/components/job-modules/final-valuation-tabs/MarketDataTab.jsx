@@ -91,7 +91,13 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   const yearPriorToDueYear = useMemo(() => {
     if (!jobData?.end_date) return new Date().getFullYear();
     const endYear = new Date(jobData.end_date).getFullYear();
-    return endYear - 1;
+    const yearPrior = endYear - 1;
+    console.log('🔍 MarketDataTab Year Calculation:', {
+      end_date: jobData.end_date,
+      endYear,
+      yearPriorToDueYear: yearPrior
+    });
+    return yearPrior;
   }, [jobData?.end_date]);
 
   // Get vendor type
