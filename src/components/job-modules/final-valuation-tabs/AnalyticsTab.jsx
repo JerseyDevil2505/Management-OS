@@ -202,7 +202,7 @@ const AnalyticsTab = ({ jobData, properties }) => {
 
   // Delete a saved run
   const handleDeleteRun = async (runId) => {
-    if (!confirm('Are you sure you want to delete this run?')) return;
+    if (!window.confirm('Are you sure you want to delete this run?')) return;
 
     try {
       const { error } = await supabase
