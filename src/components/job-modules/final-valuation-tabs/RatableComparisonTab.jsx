@@ -5,7 +5,6 @@ import * as XLSX from 'xlsx-js-style';
 
 const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
   const [activeSubTab, setActiveSubTab] = useState('comparison');
-  const [isImporting, setIsImporting] = useState(false);
 
   // Calculate years for ratable comparison
   // If end_date = '2026-01-01': yearPriorToDueYear = 2025
