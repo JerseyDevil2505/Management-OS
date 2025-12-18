@@ -1343,11 +1343,11 @@ const handleCodeFileUpdate = async () => {
         }
       }, 10000); // Every 10 seconds
       
-      // Execute the operation with timeout protection (reduced from 5 to 2 minutes)
+      // Execute the operation with timeout protection (15 minutes for large jobs with 100+ batches)
       Promise.race([
         operation(),
         new Promise((_, timeoutReject) =>
-          setTimeout(() => timeoutReject(new Error('Batch processing timeout after 2 minutes')), 2 * 60 * 1000)
+          setTimeout(() => timeoutReject(new Error('Batch processing timeout after 15 minutes')), 15 * 60 * 1000)
         )
       ]).then(result => {
         // Clear heartbeat and restore original console methods
@@ -1378,7 +1378,7 @@ const handleCodeFileUpdate = async () => {
         
         const isTimeout = error.message && error.message.includes('timeout');
         const errorMessage = isTimeout ?
-          'Batch processing timeout - try refreshing and uploading again' :
+          'Batch processing timeout after 15 minutes - try refreshing and uploading again' :
           'Batch processing failed';
 
         setBatchInsertProgress(prev => ({
@@ -1392,7 +1392,7 @@ const handleCodeFileUpdate = async () => {
         }));
 
         if (isTimeout) {
-          addBatchLog('��� Operation timed out after 2 minutes. The database may be overloaded or there\'s a query issue. Try refreshing the page and uploading again.', 'error');
+          addBatchLog('⏰ Operation timed out after 15 minutes. The database may be overloaded or there\'s a query issue. Try refreshing the page and uploading again.', 'error');
         }
         
         addBatchLog(`❌ Batch processing failed: ${error.message}`, 'error');
