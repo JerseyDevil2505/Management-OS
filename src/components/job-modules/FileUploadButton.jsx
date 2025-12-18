@@ -1392,7 +1392,7 @@ const handleCodeFileUpdate = async () => {
         }));
 
         if (isTimeout) {
-          addBatchLog('��� Operation timed out after 2 minutes. The database may be overloaded or there\'s a query issue. Try refreshing the page and uploading again.', 'error');
+          addBatchLog('⏰ Operation timed out after 15 minutes. The database may be overloaded or there\'s a query issue. Try refreshing the page and uploading again.', 'error');
         }
         
         addBatchLog(`❌ Batch processing failed: ${error.message}`, 'error');
