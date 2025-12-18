@@ -1378,7 +1378,7 @@ const handleCodeFileUpdate = async () => {
         
         const isTimeout = error.message && error.message.includes('timeout');
         const errorMessage = isTimeout ?
-          'Batch processing timeout - try refreshing and uploading again' :
+          'Batch processing timeout after 15 minutes - try refreshing and uploading again' :
           'Batch processing failed';
 
         setBatchInsertProgress(prev => ({
