@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx-js-style';
 
 const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
   const [activeSubTab, setActiveSubTab] = useState('comparison');
+  const [saveStatus, setSaveStatus] = useState(''); // 'saving' or 'saved'
 
   // Calculate years for ratable comparison
   // If end_date = '2026-01-01': yearPriorToDueYear = 2025
@@ -14,6 +15,28 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
     const endYear = parseInt(jobData.end_date.substring(0, 4));
     return endYear - 1;
   }, [jobData?.end_date]);
+
+  // Calculate current year totals based on individual class values
+  const currentYearCalculatedTotals = useMemo(() => {
+    const totalCount = (jobData?.current_class_1_count || 0) +
+                       (jobData?.current_class_2_count || 0) +
+                       (jobData?.current_class_3a_count || 0) +
+                       (jobData?.current_class_3b_count || 0) +
+                       (jobData?.current_class_4_count || 0) +
+                       (jobData?.current_class_6_count || 0);
+
+    const totalTotal = (jobData?.current_class_1_total || 0) +
+                       (jobData?.current_class_2_total || 0) +
+                       (jobData?.current_class_3a_total || 0) +
+                       (jobData?.current_class_3b_total || 0) +
+                       (jobData?.current_class_4_total || 0);
+
+    const commercialBasePct = totalTotal > 0
+      ? ((jobData?.current_class_4_total || 0) / totalTotal) * 100
+      : 0;
+
+    return { totalCount, totalTotal, commercialBasePct };
+  }, [jobData]);
 
   // Use jobData directly for current year and rate calculator data
   const currentYearData = useMemo(() => ({
@@ -32,9 +55,9 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
     class_4_abatements: jobData?.current_class_4_abatements || 0,
     class_6_count: jobData?.current_class_6_count || 0,
     class_6_total: jobData?.current_class_6_total || 0,
-    total_count: jobData?.current_total_count || 0,
-    total_total: jobData?.current_total_total || 0,
-    commercial_base_pct: jobData?.current_commercial_base_pct || 0
+    total_count: currentYearCalculatedTotals.totalCount,
+    total_total: currentYearCalculatedTotals.totalTotal,
+    commercial_base_pct: currentYearCalculatedTotals.commercialBasePct
   }), [jobData]);
 
   const rateCalcData = useMemo(() => ({
@@ -88,11 +111,12 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
     return { ...summary, totalCount, totalTotal };
   }, [properties]);
 
-  // Handle current year data input changes
+  // Handle current year data input changes with save feedback
   const handleCurrentYearChange = async (field, value) => {
     const numValue = parseFloat(value.replace(/,/g, '')) || 0;
 
     try {
+      setSaveStatus('saving');
       const updateData = { [field]: numValue };
 
       const { error } = await supabase
@@ -101,17 +125,24 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
         .eq('id', jobData.id);
 
       if (error) throw error;
+
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus(''), 2000); // Clear after 2 seconds
+
       if (onUpdateJobCache) onUpdateJobCache();
     } catch (error) {
       console.error('Error saving current year data:', error);
+      setSaveStatus('');
+      alert('Error saving data: ' + error.message);
     }
   };
 
-  // Handle rate calc input changes
+  // Handle rate calc input changes with save feedback
   const handleRateCalcChange = async (field, value) => {
     const numValue = parseFloat(value) || 0;
 
     try {
+      setSaveStatus('saving');
       const updateData = {};
       if (field === 'budget') updateData.rate_calc_budget = numValue;
       if (field === 'currentRate') updateData.rate_calc_current_rate = numValue;
@@ -123,9 +154,15 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
         .eq('id', jobData.id);
 
       if (error) throw error;
+
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus(''), 2000); // Clear after 2 seconds
+
       if (onUpdateJobCache) onUpdateJobCache();
     } catch (error) {
       console.error('Error saving rate calc data:', error);
+      setSaveStatus('');
+      alert('Error saving data: ' + error.message);
     }
   };
 
@@ -218,7 +255,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
 
   return (
     <div className="space-y-4">
-      {/* Header with Export */}
+      {/* Header with Export and Save Status */}
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Ratable Comparison & Rate Calculator</h2>
@@ -226,13 +263,29 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
             Compare current vs projected ratables and calculate tax rates
           </p>
         </div>
-        <button
-          onClick={exportToExcel}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          <Download className="w-4 h-4" />
-          Export Analysis
-        </button>
+        <div className="flex items-center gap-3">
+          {saveStatus === 'saving' && (
+            <span className="text-sm text-blue-600 flex items-center gap-2">
+              <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+              Saving...
+            </span>
+          )}
+          {saveStatus === 'saved' && (
+            <span className="text-sm text-green-600 flex items-center gap-2">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              Saved
+            </span>
+          )}
+          <button
+            onClick={exportToExcel}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            <Download className="w-4 h-4" />
+            Export Analysis
+          </button>
+        </div>
       </div>
 
       {/* Sub-Tab Navigation */}
@@ -280,27 +333,27 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   {/* Class 1 */}
                   <div className="space-y-1">
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="text-sm font-medium">Class 1</div>
+                      <div className="text-sm font-medium py-1">Class 1</div>
                       <input
                         type="number"
                         defaultValue={currentYearData.class_1_count}
                         onBlur={(e) => handleCurrentYearChange('current_class_1_count', e.target.value)}
-                        className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                       <input
                         type="number"
                         defaultValue={currentYearData.class_1_total}
                         onBlur={(e) => handleCurrentYearChange('current_class_1_total', e.target.value)}
-                        className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
-                      <div>Abatements</div>
+                      <div className="py-1">Abatements</div>
                       <input
                         type="number"
                         defaultValue={currentYearData.class_1_abatements}
                         onBlur={(e) => handleCurrentYearChange('current_class_1_abatements', e.target.value)}
-                        className="text-xs text-right px-2 py-1 border border-gray-300 rounded"
+                        className="text-xs text-right px-2 py-0.5 border border-gray-300 rounded h-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                       <div></div>
                     </div>
@@ -309,27 +362,27 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   {/* Class 2 */}
                   <div className="space-y-1">
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="text-sm font-medium">Class 2</div>
+                      <div className="text-sm font-medium py-1">Class 2</div>
                       <input
                         type="number"
                         defaultValue={currentYearData.class_2_count}
                         onBlur={(e) => handleCurrentYearChange('current_class_2_count', e.target.value)}
-                        className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                       <input
                         type="number"
                         defaultValue={currentYearData.class_2_total}
                         onBlur={(e) => handleCurrentYearChange('current_class_2_total', e.target.value)}
-                        className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
-                      <div>Abatements</div>
+                      <div className="py-1">Abatements</div>
                       <input
                         type="number"
                         defaultValue={currentYearData.class_2_abatements}
                         onBlur={(e) => handleCurrentYearChange('current_class_2_abatements', e.target.value)}
-                        className="text-xs text-right px-2 py-1 border border-gray-300 rounded"
+                        className="text-xs text-right px-2 py-0.5 border border-gray-300 rounded h-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                       <div></div>
                     </div>
@@ -337,62 +390,62 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
 
                   {/* Class 3A's */}
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="text-sm font-medium">Class 3A's (NET)</div>
+                    <div className="text-sm font-medium py-1">Class 3A's (NET)</div>
                     <input
                       type="number"
                       defaultValue={currentYearData.class_3a_count}
                       onBlur={(e) => handleCurrentYearChange('current_class_3a_count', e.target.value)}
-                      className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <input
                       type="number"
                       defaultValue={currentYearData.class_3a_total}
                       onBlur={(e) => handleCurrentYearChange('current_class_3a_total', e.target.value)}
-                      className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </div>
 
                   {/* Class 3B's */}
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="text-sm font-medium">Class 3B's</div>
+                    <div className="text-sm font-medium py-1">Class 3B's</div>
                     <input
                       type="number"
                       defaultValue={currentYearData.class_3b_count}
                       onBlur={(e) => handleCurrentYearChange('current_class_3b_count', e.target.value)}
-                      className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <input
                       type="number"
                       defaultValue={currentYearData.class_3b_total}
                       onBlur={(e) => handleCurrentYearChange('current_class_3b_total', e.target.value)}
-                      className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </div>
 
                   {/* Class 4A,B,C */}
                   <div className="space-y-1">
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="text-sm font-medium">Class 4A,B,C (NET)</div>
+                      <div className="text-sm font-medium py-1">Class 4A,B,C (NET)</div>
                       <input
                         type="number"
                         defaultValue={currentYearData.class_4_count}
                         onBlur={(e) => handleCurrentYearChange('current_class_4_count', e.target.value)}
-                        className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                       <input
                         type="number"
                         defaultValue={currentYearData.class_4_total}
                         onBlur={(e) => handleCurrentYearChange('current_class_4_total', e.target.value)}
-                        className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
-                      <div>Abatements</div>
+                      <div className="py-1">Abatements</div>
                       <input
                         type="number"
                         defaultValue={currentYearData.class_4_abatements}
                         onBlur={(e) => handleCurrentYearChange('current_class_4_abatements', e.target.value)}
-                        className="text-xs text-right px-2 py-1 border border-gray-300 rounded"
+                        className="text-xs text-right px-2 py-0.5 border border-gray-300 rounded h-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                       <div></div>
                     </div>
@@ -400,44 +453,34 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
 
                   {/* Class 6A,B,C */}
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="text-sm font-medium">6A,B,C</div>
+                    <div className="text-sm font-medium py-1">6A,B,C</div>
                     <input
                       type="number"
                       defaultValue={currentYearData.class_6_count}
                       onBlur={(e) => handleCurrentYearChange('current_class_6_count', e.target.value)}
-                      className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
-                    <div className="text-sm text-right text-xs text-gray-500">Not/After Ratio Applied</div>
+                    <div className="text-sm text-right text-xs text-gray-500 py-1">Not/After Ratio Applied</div>
                   </div>
 
-                  {/* Total */}
+                  {/* Total - CALCULATED */}
                   <div className="grid grid-cols-3 gap-2 pt-3 border-t-2 border-gray-300 font-bold">
-                    <div className="text-sm">Total Ratables</div>
-                    <input
-                      type="number"
-                      defaultValue={currentYearData.total_count}
-                      onBlur={(e) => handleCurrentYearChange('current_total_count', e.target.value)}
-                      className="text-sm text-right px-2 py-1 border border-gray-300 rounded font-bold"
-                    />
-                    <input
-                      type="number"
-                      defaultValue={currentYearData.total_total}
-                      onBlur={(e) => handleCurrentYearChange('current_total_total', e.target.value)}
-                      className="text-base text-right px-2 py-1 border border-gray-300 rounded font-bold"
-                    />
+                    <div className="text-sm py-1">Total Ratables</div>
+                    <div className="text-sm text-right px-2 py-1 bg-gray-100 rounded border border-gray-300">
+                      {currentYearData.total_count.toLocaleString()}
+                    </div>
+                    <div className="text-base text-right px-2 py-1 bg-gray-100 rounded border border-gray-300">
+                      ${currentYearData.total_total.toLocaleString()}
+                    </div>
                   </div>
 
-                  {/* Commercial Base */}
+                  {/* Commercial Base - CALCULATED */}
                   <div className="grid grid-cols-3 gap-2 pt-2 mt-2 border-t border-gray-200">
-                    <div className="text-sm font-medium">Commercial Base</div>
+                    <div className="text-sm font-medium py-1">Commercial Base</div>
                     <div></div>
-                    <input
-                      type="number"
-                      step="0.01"
-                      defaultValue={currentYearData.commercial_base_pct}
-                      onBlur={(e) => handleCurrentYearChange('current_commercial_base_pct', e.target.value)}
-                      className="text-sm text-right px-2 py-1 border border-gray-300 rounded w-20"
-                    />
+                    <div className="text-sm text-right px-2 py-1 bg-gray-100 rounded border border-gray-300">
+                      {currentYearData.commercial_base_pct.toFixed(2)}%
+                    </div>
                   </div>
                 </div>
               </div>
@@ -455,13 +498,13 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   {/* Class 1 */}
                   <div className="space-y-1">
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="text-sm font-medium">Class 1</div>
-                      <div className="text-sm text-right">{projectedRatableBase['1'].count.toLocaleString()}</div>
-                      <div className="text-sm text-right">${projectedRatableBase['1'].total.toLocaleString()}</div>
+                      <div className="text-sm font-medium py-1">Class 1</div>
+                      <div className="text-sm text-right px-2 py-1">{projectedRatableBase['1'].count.toLocaleString()}</div>
+                      <div className="text-sm text-right px-2 py-1">${projectedRatableBase['1'].total.toLocaleString()}</div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
-                      <div>Abatements</div>
-                      <div className="text-right">0</div>
+                      <div className="py-1">Abatements</div>
+                      <div className="text-right px-2 py-1">0</div>
                       <div></div>
                     </div>
                   </div>
@@ -469,66 +512,66 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   {/* Class 2 */}
                   <div className="space-y-1">
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="text-sm font-medium">Class 2</div>
-                      <div className="text-sm text-right">{projectedRatableBase['2'].count.toLocaleString()}</div>
-                      <div className="text-sm text-right">${projectedRatableBase['2'].total.toLocaleString()}</div>
+                      <div className="text-sm font-medium py-1">Class 2</div>
+                      <div className="text-sm text-right px-2 py-1">{projectedRatableBase['2'].count.toLocaleString()}</div>
+                      <div className="text-sm text-right px-2 py-1">${projectedRatableBase['2'].total.toLocaleString()}</div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
-                      <div>Abatements</div>
-                      <div className="text-right">0</div>
+                      <div className="py-1">Abatements</div>
+                      <div className="text-right px-2 py-1">0</div>
                       <div></div>
                     </div>
                   </div>
 
                   {/* Class 3A's */}
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="text-sm font-medium">Class 3A's (NET)</div>
-                    <div className="text-sm text-right">{projectedRatableBase['3A'].count.toLocaleString()}</div>
-                    <div className="text-sm text-right">${projectedRatableBase['3A'].total.toLocaleString()}</div>
+                    <div className="text-sm font-medium py-1">Class 3A's (NET)</div>
+                    <div className="text-sm text-right px-2 py-1">{projectedRatableBase['3A'].count.toLocaleString()}</div>
+                    <div className="text-sm text-right px-2 py-1">${projectedRatableBase['3A'].total.toLocaleString()}</div>
                   </div>
 
                   {/* Class 3B's */}
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="text-sm font-medium">Class 3B's</div>
-                    <div className="text-sm text-right">{projectedRatableBase['3B'].count.toLocaleString()}</div>
-                    <div className="text-sm text-right">${projectedRatableBase['3B'].total.toLocaleString()}</div>
+                    <div className="text-sm font-medium py-1">Class 3B's</div>
+                    <div className="text-sm text-right px-2 py-1">{projectedRatableBase['3B'].count.toLocaleString()}</div>
+                    <div className="text-sm text-right px-2 py-1">${projectedRatableBase['3B'].total.toLocaleString()}</div>
                   </div>
 
                   {/* Class 4A,B,C */}
                   <div className="space-y-1">
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="text-sm font-medium">Class 4A,B,C (NET)</div>
-                      <div className="text-sm text-right">{projectedRatableBase['4ABC'].count.toLocaleString()}</div>
-                      <div className="text-sm text-right">${projectedRatableBase['4ABC'].total.toLocaleString()}</div>
+                      <div className="text-sm font-medium py-1">Class 4A,B,C (NET)</div>
+                      <div className="text-sm text-right px-2 py-1">{projectedRatableBase['4ABC'].count.toLocaleString()}</div>
+                      <div className="text-sm text-right px-2 py-1">${projectedRatableBase['4ABC'].total.toLocaleString()}</div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
-                      <div>Abatements</div>
-                      <div className="text-right">0</div>
+                      <div className="py-1">Abatements</div>
+                      <div className="text-right px-2 py-1">0</div>
                       <div></div>
                     </div>
                   </div>
 
                   {/* Class 6A,B,C */}
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="text-sm font-medium">6A,B,C</div>
-                    <div className="text-sm text-right">{projectedRatableBase['6ABC'].count.toLocaleString()}</div>
-                    <div className="text-sm text-right text-xs text-gray-500">Not/After Ratio Applied</div>
+                    <div className="text-sm font-medium py-1">6A,B,C</div>
+                    <div className="text-sm text-right px-2 py-1">{projectedRatableBase['6ABC'].count.toLocaleString()}</div>
+                    <div className="text-sm text-right text-xs text-gray-500 py-1">Not/After Ratio Applied</div>
                   </div>
 
                   {/* Total */}
                   <div className="grid grid-cols-3 gap-2 pt-3 border-t-2 border-gray-300 font-bold">
-                    <div className="text-sm">Total Ratables</div>
-                    <div className="text-sm text-right">{projectedRatableBase.totalCount.toLocaleString()}</div>
-                    <div className="text-base text-right">${projectedRatableBase.totalTotal.toLocaleString()}</div>
+                    <div className="text-sm py-1">Total Ratables</div>
+                    <div className="text-sm text-right px-2 py-1">{projectedRatableBase.totalCount.toLocaleString()}</div>
+                    <div className="text-base text-right px-2 py-1">${projectedRatableBase.totalTotal.toLocaleString()}</div>
                   </div>
 
                   {/* Commercial Base - Calculate */}
                   <div className="grid grid-cols-3 gap-2 pt-2 mt-2 border-t border-gray-200">
-                    <div className="text-sm font-medium">Commercial Base</div>
+                    <div className="text-sm font-medium py-1">Commercial Base</div>
                     <div></div>
-                    <div className="text-sm text-right">
-                      {projectedRatableBase.totalTotal > 0 
-                        ? ((projectedRatableBase['4ABC'].total / projectedRatableBase.totalTotal) * 100).toFixed(2) 
+                    <div className="text-sm text-right px-2 py-1">
+                      {projectedRatableBase.totalTotal > 0
+                        ? ((projectedRatableBase['4ABC'].total / projectedRatableBase.totalTotal) * 100).toFixed(2)
                         : 0}%
                     </div>
                   </div>
@@ -553,7 +596,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   type="number"
                   value={rateCalcData.budget}
                   onChange={(e) => handleRateCalcChange('budget', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-lg font-bold"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-lg font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   placeholder="Enter budget"
                 />
               </div>
@@ -564,7 +607,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   step="0.001"
                   value={rateCalcData.currentRate}
                   onChange={(e) => handleRateCalcChange('currentRate', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-lg font-bold"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-lg font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   placeholder="Enter current rate"
                 />
               </div>
@@ -609,7 +652,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                       step="0.01"
                       value={rateCalcData.bufferForLoss}
                       onChange={(e) => handleRateCalcChange('bufferForLoss', e.target.value)}
-                      className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                      className="w-20 px-2 py-1 border border-gray-300 rounded text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       placeholder="0.00"
                     />
                     <span className="text-sm">%</span>
