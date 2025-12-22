@@ -538,7 +538,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Property M4 Class': property.property_m4_class || '',
         'Property CAMA Class': property.property_cama_class || '',
         'Check': { f: `IF(O${rowNum}=P${rowNum},"TRUE","FALSE")` },
-        'InfoBy Code': cleanValue(property.inspection_info_by) ? { v: String(property.inspection_info_by), t: 's' } : null,
+        'InfoBy Code': (() => {
+          const cleaned = cleanValue(property.inspection_info_by);
+          return cleaned ? { v: String(cleaned), t: 's' } : null;
+        })(),
         'VCS': property.property_vcs || '',
         'Exempt Facility': property.property_facility || '',
         'Special': calc.specialNotes,
