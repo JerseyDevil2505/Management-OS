@@ -333,7 +333,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   {/* Class 1 */}
                   <div className="space-y-1">
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="text-sm font-medium">Class 1</div>
+                      <div className="text-sm font-medium py-1">Class 1</div>
                       <input
                         type="number"
                         defaultValue={currentYearData.class_1_count}
@@ -348,7 +348,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
-                      <div>Abatements</div>
+                      <div className="py-1">Abatements</div>
                       <input
                         type="number"
                         defaultValue={currentYearData.class_1_abatements}
@@ -362,7 +362,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   {/* Class 2 */}
                   <div className="space-y-1">
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="text-sm font-medium">Class 2</div>
+                      <div className="text-sm font-medium py-1">Class 2</div>
                       <input
                         type="number"
                         defaultValue={currentYearData.class_2_count}
@@ -377,7 +377,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
-                      <div>Abatements</div>
+                      <div className="py-1">Abatements</div>
                       <input
                         type="number"
                         defaultValue={currentYearData.class_2_abatements}
@@ -390,7 +390,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
 
                   {/* Class 3A's */}
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="text-sm font-medium">Class 3A's (NET)</div>
+                    <div className="text-sm font-medium py-1">Class 3A's (NET)</div>
                     <input
                       type="number"
                       defaultValue={currentYearData.class_3a_count}
@@ -407,7 +407,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
 
                   {/* Class 3B's */}
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="text-sm font-medium">Class 3B's</div>
+                    <div className="text-sm font-medium py-1">Class 3B's</div>
                     <input
                       type="number"
                       defaultValue={currentYearData.class_3b_count}
@@ -425,7 +425,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   {/* Class 4A,B,C */}
                   <div className="space-y-1">
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="text-sm font-medium">Class 4A,B,C (NET)</div>
+                      <div className="text-sm font-medium py-1">Class 4A,B,C (NET)</div>
                       <input
                         type="number"
                         defaultValue={currentYearData.class_4_count}
@@ -440,7 +440,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
-                      <div>Abatements</div>
+                      <div className="py-1">Abatements</div>
                       <input
                         type="number"
                         defaultValue={currentYearData.class_4_abatements}
@@ -453,19 +453,19 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
 
                   {/* Class 6A,B,C */}
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="text-sm font-medium">6A,B,C</div>
+                    <div className="text-sm font-medium py-1">6A,B,C</div>
                     <input
                       type="number"
                       defaultValue={currentYearData.class_6_count}
                       onBlur={(e) => handleCurrentYearChange('current_class_6_count', e.target.value)}
                       className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
                     />
-                    <div className="text-sm text-right text-xs text-gray-500">Not/After Ratio Applied</div>
+                    <div className="text-sm text-right text-xs text-gray-500 py-1">Not/After Ratio Applied</div>
                   </div>
 
                   {/* Total - CALCULATED */}
                   <div className="grid grid-cols-3 gap-2 pt-3 border-t-2 border-gray-300 font-bold">
-                    <div className="text-sm">Total Ratables</div>
+                    <div className="text-sm py-1">Total Ratables</div>
                     <div className="text-sm text-right px-2 py-1 bg-gray-100 rounded border border-gray-300">
                       {currentYearData.total_count.toLocaleString()}
                     </div>
@@ -476,7 +476,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
 
                   {/* Commercial Base - CALCULATED */}
                   <div className="grid grid-cols-3 gap-2 pt-2 mt-2 border-t border-gray-200">
-                    <div className="text-sm font-medium">Commercial Base</div>
+                    <div className="text-sm font-medium py-1">Commercial Base</div>
                     <div></div>
                     <div className="text-sm text-right px-2 py-1 bg-gray-100 rounded border border-gray-300">
                       {currentYearData.commercial_base_pct.toFixed(2)}%
