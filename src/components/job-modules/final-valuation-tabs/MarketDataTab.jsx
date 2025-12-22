@@ -570,11 +570,12 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Interior': cleanValue(property.asset_int_cond),
         'Code': salesCode || '',
         'Sale Date': property.sales_date ? (() => {
-          // Convert to Excel date serial number
-          const date = new Date(property.sales_date);
+          // Convert to Excel date serial number (strip time component)
+          const dateOnly = property.sales_date.split('T')[0]; // Get YYYY-MM-DD only
+          const date = new Date(dateOnly + 'T12:00:00'); // Add noon time to avoid timezone issues
           const epoch = new Date(1899, 11, 30); // Excel epoch
-          const days = (date - epoch) / (1000 * 60 * 60 * 24);
-          return { v: days, t: 'n' }; // Excel serial date as number
+          const days = Math.floor((date - epoch) / (1000 * 60 * 60 * 24));
+          return { v: days, t: 'n', z: 'mm/dd/yyyy' }; // Excel serial date as number with explicit format
         })() : '',
         'Sale Book': cleanValue(property.sales_book),
         'Sale Page': cleanValue(property.sales_page),
