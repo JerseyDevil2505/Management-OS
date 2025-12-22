@@ -76,16 +76,13 @@ const DataVisualizations = ({ jobData, properties }) => {
     });
   }, [properties, filters, jobData.end_date]);
 
-  // Market History - Building Class > 10 with valid type and use, default single family
+  // Market History - Properties with norm_time
   const marketHistoryData = useMemo(() => {
     const salesByYear = {};
-    
-    // Filter for building class > 10 and valid type/use
+
+    // Filter for properties with norm_time (normalized/adjusted sales)
     const qualifiedProperties = filteredProperties.filter(prop => {
-      const buildingClass = parseInt(prop.asset_building_class) || 0;
-      const hasValidType = prop.property_type && prop.property_type.trim() !== '';
-      const hasValidUse = prop.property_use && prop.property_use.trim() !== '';
-      return buildingClass > 10 && hasValidType && hasValidUse;
+      return prop.norm_time && prop.norm_time !== null && prop.norm_time !== '';
     });
     
     qualifiedProperties.forEach(prop => {
@@ -477,10 +474,10 @@ const DataVisualizations = ({ jobData, properties }) => {
             <div className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-blue-600" />
               <h3 className="chart-title text-lg font-semibold text-gray-900">Market History</h3>
-              <span className="text-xs text-gray-500 ml-2">(Building Class &gt; 10, Valid Type & Use)</span>
+              <span className="text-xs text-gray-500 ml-2">(Properties with Norm Time)</span>
             </div>
             <div className="text-xs text-gray-600">
-              Using Sale Price • Default: Single Family
+              Using Sale Price • Normalized Sales Only
             </div>
           </div>
           <ResponsiveContainer width="100%" height={350}>
