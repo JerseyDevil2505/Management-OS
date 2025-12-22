@@ -562,6 +562,192 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     return Math.round(sum / yearBuilts.length);
   }, [properties, jobData?.end_date]);
 
+  // Calculate metrics by VCS
+  const metricsByVCS = useMemo(() => {
+    const vcsGroups = {};
+
+    properties.forEach(property => {
+      const salesCode = getSalesPeriodCode(property);
+      const isSalesPeriod = salesCode === 'CSP' || salesCode === 'PSP' || salesCode === 'HSP';
+      const vcs = property.property_vcs || 'Unknown';
+
+      if (!vcsGroups[vcs]) {
+        vcsGroups[vcs] = {
+          overall: { yearBuilts: [], recEffAges: [] },
+          salesPeriods: { yearBuilts: [], recEffAges: [] }
+        };
+      }
+
+      const yearBuilt = property.asset_year_built;
+      if (yearBuilt && !isNaN(parseInt(yearBuilt))) {
+        vcsGroups[vcs].overall.yearBuilts.push(parseInt(yearBuilt));
+        if (isSalesPeriod) {
+          vcsGroups[vcs].salesPeriods.yearBuilts.push(parseInt(yearBuilt));
+        }
+      }
+
+      const calc = getCalculatedValues(property);
+      if (calc.recommendedEFA !== null && calc.recommendedEFA !== undefined) {
+        vcsGroups[vcs].overall.recEffAges.push(calc.recommendedEFA);
+        if (isSalesPeriod) {
+          vcsGroups[vcs].salesPeriods.recEffAges.push(calc.recommendedEFA);
+        }
+      }
+    });
+
+    // Calculate averages
+    const result = {};
+    Object.keys(vcsGroups).forEach(vcs => {
+      const group = vcsGroups[vcs];
+      result[vcs] = {
+        overall: {
+          avgYearBuilt: group.overall.yearBuilts.length > 0
+            ? Math.round(group.overall.yearBuilts.reduce((a, b) => a + b, 0) / group.overall.yearBuilts.length)
+            : null,
+          avgRecEffAge: group.overall.recEffAges.length > 0
+            ? Math.round(group.overall.recEffAges.reduce((a, b) => a + b, 0) / group.overall.recEffAges.length)
+            : null,
+          count: group.overall.yearBuilts.length
+        },
+        salesPeriods: {
+          avgYearBuilt: group.salesPeriods.yearBuilts.length > 0
+            ? Math.round(group.salesPeriods.yearBuilts.reduce((a, b) => a + b, 0) / group.salesPeriods.yearBuilts.length)
+            : null,
+          avgRecEffAge: group.salesPeriods.recEffAges.length > 0
+            ? Math.round(group.salesPeriods.recEffAges.reduce((a, b) => a + b, 0) / group.salesPeriods.recEffAges.length)
+            : null,
+          count: group.salesPeriods.yearBuilts.length
+        }
+      };
+    });
+
+    return result;
+  }, [properties, finalValuationData, yearPriorToDueYear, vendorType, jobData?.end_date]);
+
+  // Calculate metrics by Type Use
+  const metricsByTypeUse = useMemo(() => {
+    const typeUseGroups = {};
+
+    properties.forEach(property => {
+      const salesCode = getSalesPeriodCode(property);
+      const isSalesPeriod = salesCode === 'CSP' || salesCode === 'PSP' || salesCode === 'HSP';
+      const typeUse = property.asset_type_use || 'Unknown';
+
+      if (!typeUseGroups[typeUse]) {
+        typeUseGroups[typeUse] = {
+          overall: { yearBuilts: [], recEffAges: [] },
+          salesPeriods: { yearBuilts: [], recEffAges: [] }
+        };
+      }
+
+      const yearBuilt = property.asset_year_built;
+      if (yearBuilt && !isNaN(parseInt(yearBuilt))) {
+        typeUseGroups[typeUse].overall.yearBuilts.push(parseInt(yearBuilt));
+        if (isSalesPeriod) {
+          typeUseGroups[typeUse].salesPeriods.yearBuilts.push(parseInt(yearBuilt));
+        }
+      }
+
+      const calc = getCalculatedValues(property);
+      if (calc.recommendedEFA !== null && calc.recommendedEFA !== undefined) {
+        typeUseGroups[typeUse].overall.recEffAges.push(calc.recommendedEFA);
+        if (isSalesPeriod) {
+          typeUseGroups[typeUse].salesPeriods.recEffAges.push(calc.recommendedEFA);
+        }
+      }
+    });
+
+    // Calculate averages
+    const result = {};
+    Object.keys(typeUseGroups).forEach(typeUse => {
+      const group = typeUseGroups[typeUse];
+      result[typeUse] = {
+        overall: {
+          avgYearBuilt: group.overall.yearBuilts.length > 0
+            ? Math.round(group.overall.yearBuilts.reduce((a, b) => a + b, 0) / group.overall.yearBuilts.length)
+            : null,
+          avgRecEffAge: group.overall.recEffAges.length > 0
+            ? Math.round(group.overall.recEffAges.reduce((a, b) => a + b, 0) / group.overall.recEffAges.length)
+            : null,
+          count: group.overall.yearBuilts.length
+        },
+        salesPeriods: {
+          avgYearBuilt: group.salesPeriods.yearBuilts.length > 0
+            ? Math.round(group.salesPeriods.yearBuilts.reduce((a, b) => a + b, 0) / group.salesPeriods.yearBuilts.length)
+            : null,
+          avgRecEffAge: group.salesPeriods.recEffAges.length > 0
+            ? Math.round(group.salesPeriods.recEffAges.reduce((a, b) => a + b, 0) / group.salesPeriods.recEffAges.length)
+            : null,
+          count: group.salesPeriods.yearBuilts.length
+        }
+      };
+    });
+
+    return result;
+  }, [properties, finalValuationData, yearPriorToDueYear, vendorType, jobData?.end_date]);
+
+  // Calculate metrics by Design
+  const metricsByDesign = useMemo(() => {
+    const designGroups = {};
+
+    properties.forEach(property => {
+      const salesCode = getSalesPeriodCode(property);
+      const isSalesPeriod = salesCode === 'CSP' || salesCode === 'PSP' || salesCode === 'HSP';
+      const design = property.asset_design_style || 'Unknown';
+
+      if (!designGroups[design]) {
+        designGroups[design] = {
+          overall: { yearBuilts: [], recEffAges: [] },
+          salesPeriods: { yearBuilts: [], recEffAges: [] }
+        };
+      }
+
+      const yearBuilt = property.asset_year_built;
+      if (yearBuilt && !isNaN(parseInt(yearBuilt))) {
+        designGroups[design].overall.yearBuilts.push(parseInt(yearBuilt));
+        if (isSalesPeriod) {
+          designGroups[design].salesPeriods.yearBuilts.push(parseInt(yearBuilt));
+        }
+      }
+
+      const calc = getCalculatedValues(property);
+      if (calc.recommendedEFA !== null && calc.recommendedEFA !== undefined) {
+        designGroups[design].overall.recEffAges.push(calc.recommendedEFA);
+        if (isSalesPeriod) {
+          designGroups[design].salesPeriods.recEffAges.push(calc.recommendedEFA);
+        }
+      }
+    });
+
+    // Calculate averages
+    const result = {};
+    Object.keys(designGroups).forEach(design => {
+      const group = designGroups[design];
+      result[design] = {
+        overall: {
+          avgYearBuilt: group.overall.yearBuilts.length > 0
+            ? Math.round(group.overall.yearBuilts.reduce((a, b) => a + b, 0) / group.overall.yearBuilts.length)
+            : null,
+          avgRecEffAge: group.overall.recEffAges.length > 0
+            ? Math.round(group.overall.recEffAges.reduce((a, b) => a + b, 0) / group.overall.recEffAges.length)
+            : null,
+          count: group.overall.yearBuilts.length
+        },
+        salesPeriods: {
+          avgYearBuilt: group.salesPeriods.yearBuilts.length > 0
+            ? Math.round(group.salesPeriods.yearBuilts.reduce((a, b) => a + b, 0) / group.salesPeriods.yearBuilts.length)
+            : null,
+          avgRecEffAge: group.salesPeriods.recEffAges.length > 0
+            ? Math.round(group.salesPeriods.recEffAges.reduce((a, b) => a + b, 0) / group.salesPeriods.recEffAges.length)
+            : null,
+          count: group.salesPeriods.yearBuilts.length
+        }
+      };
+    });
+
+    return result;
+  }, [properties, finalValuationData, yearPriorToDueYear, vendorType, jobData?.end_date]);
+
   // Handle cell edit
   const handleCellEdit = async (propertyKey, field, value) => {
     try {
