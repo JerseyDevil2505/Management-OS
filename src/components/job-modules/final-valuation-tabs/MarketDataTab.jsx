@@ -452,11 +452,11 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       const cardSF = getCardSF(property);
       const mainSFLA = property.asset_sfla || 0;
 
-      // Column mapping for formulas:
-      // K=Property M4 Class, L=Property CAMA Class, M=Check
-      // Z=Year Built, AA=Current EFA, AB=Test
-      // AO=Values Norm Time, AS=Detached Items, AT=Cost New, BA=CAMA Land
-      // BE=Recommended EFA, BF=Actual EFA, BG=DEPR, BH=New Value, BB=Projected Imp
+      // Column mapping for formulas (UPDATED for 4 special tax code columns K-N):
+      // O=Property M4 Class, P=Property CAMA Class, Q=Check
+      // AD=Year Built, AE=Current EFA, AF=Test
+      // AS=Values Norm Time, AW=Detached Items, AX=Cost New, BE=CAMA Land
+      // BI=Recommended EFA, BJ=Actual EFA, BK=DEPR, BL=New Value, BF=Projected Imp
 
       return {
         'Block': property.property_block || '',
@@ -475,7 +475,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Sp Tax Cd 4': property.special_tax_code_4 || '',
         'Property M4 Class': property.property_m4_class || '',
         'Property CAMA Class': property.property_cama_class || '',
-        'Check': { f: `IF(K${rowNum}=L${rowNum},"TRUE","FALSE")` },
+        'Check': { f: `IF(O${rowNum}=P${rowNum},"TRUE","FALSE")` },
         'InfoBy Code': property.inspection_info_by || '',
         'VCS': property.property_vcs || '',
         'Exempt Facility': property.property_facility || '',
@@ -492,12 +492,12 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Building Class': property.asset_building_class || '',
         'Year Built': property.asset_year_built || '',
         'Current EFA': getCurrentEFA(property),
-        'Test': { f: `IF(AND(Z${rowNum}<>"",BF${rowNum}<>""),IF(BF${rowNum}>=Z${rowNum},"TRUE","FALSE"),"")` },
+        'Test': { f: `IF(AND(AD${rowNum}<>"",BJ${rowNum}<>""),IF(BJ${rowNum}>=AD${rowNum},"TRUE","FALSE"),"")` },
         'Design': property.asset_design_style || '',
         'Bedroom Total': getBedroomTotal(property) || '',
         'Story Height': property.asset_story_height || '',
         'SFLA': mainSFLA,
-        'Total SFLA': { f: `E${rowNum}+AF${rowNum}` }, // Formula: Card SF + SFLA
+        'Total SFLA': { f: `E${rowNum}+AJ${rowNum}` }, // Formula: Card SF + SFLA
         'Exterior Net Condition': property.asset_ext_cond || '',
         'Interior Net Condition': property.asset_int_cond || '',
         'Code': salesCode || '',
@@ -513,25 +513,25 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Detached Items Value': property.values_det_items || 0,
         'Cost New Value': property.values_repl_cost || 0,
         'Current Land Allocation %': property.values_mod_total && property.values_mod_land ?
-          { f: `AV${rowNum}/AX${rowNum}` } : '',
+          { f: `AZ${rowNum}/BB${rowNum}` } : '',
         'Current Land Value': property.values_mod_land || 0,
         'Current Improvement Value': property.values_mod_improvement || 0,
         'Current Total Value': property.values_mod_total || 0,
         '--- NEW PROJECTED ---': '',
         'Projected Land Allocation %': calc.newLandAllocation && calc.projectedTotal ?
-          { f: `BA${rowNum}/BC${rowNum}` } : '',
+          { f: `BE${rowNum}/BG${rowNum}` } : '',
         'CAMA Land Value': property.values_cama_land || 0,
         'Projected Improvement': calc.qualifiesForEFA && calc.newValue !== null && calc.newValue > 0 ?
-          { f: `BH${rowNum}-BA${rowNum}` } : (property.values_cama_improvement || 0),
-        'Projected Total': { f: `BA${rowNum}+BB${rowNum}` },
+          { f: `BL${rowNum}-BE${rowNum}` } : (property.values_cama_improvement || 0),
+        'Projected Total': { f: `BE${rowNum}+BF${rowNum}` },
         'Delta %': calc.deltaPercent ? Math.round(calc.deltaPercent) : '',
         'Recommended EFA': calc.recommendedEFA !== null && calc.recommendedEFA !== undefined ?
-          { f: `ROUND(${yearPriorToDueYear}-((1-((AO${rowNum}-BA${rowNum}-AS${rowNum})/AT${rowNum}))*100),0)` } : '',
+          { f: `ROUND(${yearPriorToDueYear}-((1-((AS${rowNum}-BE${rowNum}-AW${rowNum})/AX${rowNum}))*100),0)` } : '',
         'Actual EFA': calc.actualEFA || '',
         'DEPR': calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined ?
-          { f: `MIN(1,1-((${yearPriorToDueYear}-BF${rowNum})/100))` } : '',
+          { f: `MIN(1,1-((${yearPriorToDueYear}-BJ${rowNum})/100))` } : '',
         'New Value': calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined ?
-          { f: `ROUND((AT${rowNum}*BG${rowNum})+AS${rowNum}+BA${rowNum},-2)` } : 0,
+          { f: `ROUND((AX${rowNum}*BK${rowNum})+AW${rowNum}+BE${rowNum},-2)` } : 0,
         'Current Year Taxes': calc.currentTaxes || 0,
         'Projected Taxes': calc.projectedTaxes || 0,
         'Tax Delta $': calc.taxDelta || 0
