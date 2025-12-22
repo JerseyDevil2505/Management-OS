@@ -706,7 +706,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         // Apply number formatting based on column
         if (['Lot Size (SF)', 'SFLA', 'Total SFLA'].includes(colName)) {
           numFmt = '#,##0'; // Number with commas
-        } else if (['Sale Price', 'Values Norm Time'].includes(colName)) {
+        } else if (['Sale Price', 'Norm Time Value'].includes(colName)) {
           numFmt = '$#,##0'; // Currency
         } else if (['Det Items', 'Cost New', 'Current Land', 'Current Impr',
                     'Current Total', 'CAMA Land', 'Cama/Proj Imp', 'Proj Total', 'New Value'].includes(colName)) {
