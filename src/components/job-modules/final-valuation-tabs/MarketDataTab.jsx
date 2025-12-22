@@ -509,9 +509,9 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       const totalCardSF = property._totalCardSF || 0;
 
       // Column mapping for formulas (UPDATED for 4 special tax code columns K-N):
-      // O=Property M4 Class, P=Property CAMA Class, Q=Check
+      // O=MOD IV, P=CAMA, Q=Check
       // AD=Year Built, AE=Current EFA, AF=Test
-      // AS=Values Norm Time, AW=Detached Items, AX=Cost New, BE=CAMA Land
+      // AS=Values Norm Time, AW=Det Items, AX=Cost New, BE=CAMA Land
       // BI=Recommended EFA, BJ=Actual EFA, BK=DEPR, BL=New Value, BF=Projected Imp
 
       // Helper to convert "00" or blank to empty string (for proper gridlines)
