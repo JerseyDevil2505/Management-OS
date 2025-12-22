@@ -535,10 +535,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Sp Tax Cd 2': cleanValue(property.special_tax_code_2),
         'Sp Tax Cd 3': cleanValue(property.special_tax_code_3),
         'Sp Tax Cd 4': cleanValue(property.special_tax_code_4),
-        'Property M4 Class': property.property_m4_class || '',
-        'Property CAMA Class': property.property_cama_class || '',
+        'MOD IV': property.property_m4_class || '',
+        'CAMA': property.property_cama_class || '',
         'Check': { f: `IF(O${rowNum}=P${rowNum},"TRUE","FALSE")` },
-        'InfoBy Code': (() => {
+        'Info By': (() => {
           const cleaned = cleanValue(property.inspection_info_by);
           return cleaned ? { v: String(cleaned), t: 's' } : null;
         })(),
@@ -566,8 +566,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         })(),
         'SFLA': mainSFLA,
         'Total SFLA': { f: `E${rowNum}+AJ${rowNum}` }, // Formula: Card SF + SFLA
-        'Exterior Net Condition': cleanValue(property.asset_ext_cond),
-        'Interior Net Condition': cleanValue(property.asset_int_cond),
+        'Exterior': cleanValue(property.asset_ext_cond),
+        'Interior': cleanValue(property.asset_int_cond),
         'Code': salesCode || '',
         'Sale Date': property.sales_date ? (() => {
           // Convert to Excel date serial number
