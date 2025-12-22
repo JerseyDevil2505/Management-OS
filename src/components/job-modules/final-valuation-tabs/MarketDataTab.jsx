@@ -1126,34 +1126,186 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         </div>
       </div>
 
-      {/* Rec Eff Age & Year Built Analysis */}
+      {/* Effective Age Metrics */}
       <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-6">
-        <h3 className="text-lg font-bold text-gray-900 mb-4">Sales Analysis - Average Metrics</h3>
-        <div className="grid grid-cols-2 gap-6">
-          {/* Avg Rec Eff Age */}
+        <h3 className="text-lg font-bold text-gray-900 mb-4">Effective Age Metrics</h3>
+
+        {/* Summary Cards */}
+        <div className="grid grid-cols-2 gap-6 mb-6">
+          {/* Overall */}
           <div className="bg-white rounded-lg border border-gray-300 p-4">
-            <div className="text-sm font-semibold text-gray-600 mb-2">Average Recommended Effective Age</div>
+            <div className="text-sm font-semibold text-gray-600 mb-2">Overall Dataset</div>
             <div className="text-3xl font-bold text-purple-600">
+              {avgYearBuiltOverall !== null ? avgYearBuiltOverall : 'N/A'}
+              <span className="text-gray-400 mx-2">/</span>
               {avgRecEffAgeOverall !== null ? Math.round(avgRecEffAgeOverall) : 'N/A'}
+            </div>
+            <div className="text-xs text-gray-500 mt-2">
+              Year Built / Rec Eff Age
+            </div>
+          </div>
+
+          {/* CSP-PSP-HSP Periods */}
+          <div className="bg-white rounded-lg border border-gray-300 p-4">
+            <div className="text-sm font-semibold text-gray-600 mb-2">CSP-PSP-HSP Periods</div>
+            <div className="text-3xl font-bold text-pink-600">
+              {avgYearBuiltSalesPeriods !== null ? avgYearBuiltSalesPeriods : 'N/A'}
               <span className="text-gray-400 mx-2">/</span>
               {avgRecEffAgeSalesPeriods !== null ? Math.round(avgRecEffAgeSalesPeriods) : 'N/A'}
             </div>
             <div className="text-xs text-gray-500 mt-2">
-              Overall / CSP-PSP-HSP Periods
+              Year Built / Rec Eff Age
             </div>
           </div>
+        </div>
 
-          {/* Avg Year Built */}
-          <div className="bg-white rounded-lg border border-gray-300 p-4">
-            <div className="text-sm font-semibold text-gray-600 mb-2">Average Year Built</div>
-            <div className="text-3xl font-bold text-pink-600">
-              {avgYearBuiltOverall !== null ? avgYearBuiltOverall : 'N/A'}
-              <span className="text-gray-400 mx-2">/</span>
-              {avgYearBuiltSalesPeriods !== null ? avgYearBuiltSalesPeriods : 'N/A'}
-            </div>
-            <div className="text-xs text-gray-500 mt-2">
-              Overall / CSP-PSP-HSP Periods
-            </div>
+        {/* Expandable Sections */}
+        <div className="space-y-3">
+          {/* By VCS */}
+          <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
+            <button
+              onClick={() => setExpandedSections(prev => ({ ...prev, vcs: !prev.vcs }))}
+              className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            >
+              <span className="font-semibold text-gray-700">By VCS</span>
+              {expandedSections.vcs ? (
+                <ChevronUp className="w-5 h-5 text-gray-500" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-gray-500" />
+              )}
+            </button>
+            {expandedSections.vcs && (
+              <div className="px-4 pb-4 border-t border-gray-200">
+                <table className="w-full text-sm mt-3">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">VCS</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">Overall</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">CSP-PSP-HSP</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">Count</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {Object.entries(metricsByVCS).sort(([a], [b]) => a.localeCompare(b)).map(([vcs, metrics]) => (
+                      <tr key={vcs} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 font-medium text-gray-900">{vcs}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className="text-purple-600 font-semibold">
+                            {metrics.overall.avgYearBuilt || 'N/A'} / {metrics.overall.avgRecEffAge || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <span className="text-pink-600 font-semibold">
+                            {metrics.salesPeriods.avgYearBuilt || 'N/A'} / {metrics.salesPeriods.avgRecEffAge || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center text-gray-600">
+                          {metrics.overall.count} / {metrics.salesPeriods.count}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* By Type Use */}
+          <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
+            <button
+              onClick={() => setExpandedSections(prev => ({ ...prev, typeUse: !prev.typeUse }))}
+              className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            >
+              <span className="font-semibold text-gray-700">By Type Use</span>
+              {expandedSections.typeUse ? (
+                <ChevronUp className="w-5 h-5 text-gray-500" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-gray-500" />
+              )}
+            </button>
+            {expandedSections.typeUse && (
+              <div className="px-4 pb-4 border-t border-gray-200">
+                <table className="w-full text-sm mt-3">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Type Use</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">Overall</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">CSP-PSP-HSP</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">Count</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {Object.entries(metricsByTypeUse).sort(([a], [b]) => a.localeCompare(b)).map(([typeUse, metrics]) => (
+                      <tr key={typeUse} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 font-medium text-gray-900">{typeUse}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className="text-purple-600 font-semibold">
+                            {metrics.overall.avgYearBuilt || 'N/A'} / {metrics.overall.avgRecEffAge || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <span className="text-pink-600 font-semibold">
+                            {metrics.salesPeriods.avgYearBuilt || 'N/A'} / {metrics.salesPeriods.avgRecEffAge || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center text-gray-600">
+                          {metrics.overall.count} / {metrics.salesPeriods.count}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* By Design */}
+          <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
+            <button
+              onClick={() => setExpandedSections(prev => ({ ...prev, design: !prev.design }))}
+              className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            >
+              <span className="font-semibold text-gray-700">By Design</span>
+              {expandedSections.design ? (
+                <ChevronUp className="w-5 h-5 text-gray-500" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-gray-500" />
+              )}
+            </button>
+            {expandedSections.design && (
+              <div className="px-4 pb-4 border-t border-gray-200">
+                <table className="w-full text-sm mt-3">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Design</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">Overall</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">CSP-PSP-HSP</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">Count</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {Object.entries(metricsByDesign).sort(([a], [b]) => a.localeCompare(b)).map(([design, metrics]) => (
+                      <tr key={design} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 font-medium text-gray-900">{design}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className="text-purple-600 font-semibold">
+                            {metrics.overall.avgYearBuilt || 'N/A'} / {metrics.overall.avgRecEffAge || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <span className="text-pink-600 font-semibold">
+                            {metrics.salesPeriods.avgYearBuilt || 'N/A'} / {metrics.salesPeriods.avgRecEffAge || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center text-gray-600">
+                          {metrics.overall.count} / {metrics.salesPeriods.count}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       </div>
