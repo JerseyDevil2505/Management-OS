@@ -151,18 +151,27 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   // Helper: Get sales period code
   const getSalesPeriodCode = (property) => {
     if (!property.sales_date) return null;
-    
+
+    // Must have valid building class > 10
+    const buildingClass = parseInt(property.asset_building_class);
+    if (!buildingClass || buildingClass <= 10) return null;
+
+    // Sales NU code must be blank, 00, 0, 07, 7, or 32
+    const salesNU = property.sales_nu;
+    const validSalesNUCodes = ['', '00', '0', '07', '7', '32'];
+    if (!validSalesNUCodes.includes(salesNU || '')) return null;
+
     const saleDate = new Date(property.sales_date);
     const endYear = new Date(jobData.end_date).getFullYear();
     const yearOfValue = endYear - 1;
-    
+
     const cspStart = new Date(yearOfValue - 1, 9, 1);
     const cspEnd = new Date(yearOfValue, 11, 31);
     const pspStart = new Date(yearOfValue - 2, 9, 1);
     const pspEnd = new Date(yearOfValue - 1, 8, 30);
     const hspStart = new Date(yearOfValue - 3, 9, 1);
     const hspEnd = new Date(yearOfValue - 2, 8, 30);
-    
+
     if (saleDate >= cspStart && saleDate <= cspEnd) return 'CSP';
     if (saleDate >= pspStart && saleDate <= pspEnd) return 'PSP';
     if (saleDate >= hspStart && saleDate <= hspEnd) return 'HSP';
