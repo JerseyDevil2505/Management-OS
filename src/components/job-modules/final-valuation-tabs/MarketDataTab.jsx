@@ -620,7 +620,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
     // Style data rows with colors based on sales code
     for (let R = range.s.r + 1; R <= range.e.r; ++R) {
-      const property = properties[R - 1];
+      const property = consolidatedProperties[R - 1];
       const salesCode = getSalesPeriodCode(property);
 
       // Determine row background color
