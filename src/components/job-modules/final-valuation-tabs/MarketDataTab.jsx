@@ -397,8 +397,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     const grouped = {};
 
     allProperties.forEach(property => {
-      // Create base key without card designation
-      const baseKey = `${property.property_block}-${property.property_lot}-${property.property_qualifier}`;
+      // Create base key without card designation - MUST include location to distinguish separate properties
+      const baseKey = `${property.property_block}-${property.property_lot}-${property.property_qualifier || 'NONE'}-${property.property_location || 'NONE'}`;
 
       if (!grouped[baseKey]) {
         grouped[baseKey] = {
