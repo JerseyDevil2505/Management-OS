@@ -497,12 +497,6 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     // Consolidate additional cards before export
     const consolidatedProperties = consolidateProperties(properties);
 
-    // Check if special tax codes have any data
-    const hasSpTax1 = consolidatedProperties.some(p => p.special_tax_code_1 && p.special_tax_code_1 !== '00');
-    const hasSpTax2 = consolidatedProperties.some(p => p.special_tax_code_2 && p.special_tax_code_2 !== '00');
-    const hasSpTax3 = consolidatedProperties.some(p => p.special_tax_code_3 && p.special_tax_code_3 !== '00');
-    const hasSpTax4 = consolidatedProperties.some(p => p.special_tax_code_4 && p.special_tax_code_4 !== '00');
-
     // Export consolidated properties
     const rows = consolidatedProperties.map((property, idx) => {
       const calc = getCalculatedValues(property);
