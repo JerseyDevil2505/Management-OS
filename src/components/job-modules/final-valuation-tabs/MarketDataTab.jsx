@@ -804,13 +804,21 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       const maxCard = property._maxCard || 1;
       const totalCardSF = property._totalCardSF || 0;
 
-      // Column mapping for formulas (UPDATED for 4 special tax code columns K-N):
-      // O=MOD IV, P=CAMA, Q=Check
-      // AD=Year Built, AE=Current EFA, AF=Test
-      // AN=Sale Price, AO=HPI Multiplier, AP=Norm Time Value (formula: =AN*AO)
-      // AT=Det Items, AU=Cost New, AW=Current Land, AY=Current Total
-      // BA=CAMA Land, BB=Cama/Proj Imp, BC=Proj Total
-      // BE=Recommended EFA, BF=Actual EFA, BG=DEPR, BH=New Value
+      // Column mapping for formulas:
+      // A=Block, B=Lot, C=Qualifier, D=Card, E=Card SF, F=Address
+      // G=Owner Name, H=Owner Address, I=Owner City State, J=Owner Zip
+      // K=Sp Tax Cd 1, L=Sp Tax Cd 2, M=Sp Tax Cd 3, N=Sp Tax Cd 4
+      // O=MOD IV, P=CAMA, Q=Check, R=Info By, S=VCS, T=Exempt Facility, U=Special
+      // V=Lot Frontage, W=Lot Depth, X=Lot Size (Acre), Y=Lot Size (SF), Z=View, AA=Location Analysis
+      // AB=Type Use, AC=Building Class, AD=Year Built, AE=Current EFA, AF=Test
+      // AG=Design, AH=Bedroom Total, AI=Story Height, AJ=SFLA, AK=Total SFLA
+      // AL=Exterior, AM=Interior, AN=Code (Sales Period), AO=Sale Date, AP=Sale Book, AQ=Sale Page
+      // AR=Sale Price, AS=HPI Multiplier, AT=Norm Time Value (formula: =AR*AS)
+      // AU=Sales NU Code, AV=Sales Ratio, AW=Sale Comment
+      // AX=Det Items, AY=Cost New, AZ=CLA, BA=Current Land, BB=Current Impr, BC=Current Total
+      // BD=PLA, BE=CAMA Land, BF=Cama/Proj Imp, BG=Proj Total, BH=Delta %
+      // BI=Recommended EFA, BJ=Actual EFA, BK=DEPR, BL=New Value
+      // BM=Current Taxes, BN=Projected Taxes, BO=Tax Delta $
 
       // Helper to convert "00" or blank to empty string (for proper gridlines)
       const cleanValue = (val) => {
