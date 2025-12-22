@@ -512,7 +512,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       // O=MOD IV, P=CAMA, Q=Check
       // AD=Year Built, AE=Current EFA, AF=Test
       // AS=Values Norm Time, AW=Det Items, AX=Cost New, BE=CAMA Land
-      // BI=Recommended EFA, BJ=Actual EFA, BK=DEPR, BL=New Value, BF=Projected Imp
+      // BI=Recommended EFA, BJ=Actual EFA, BK=DEPR, BL=New Value, BF=Cama/Proj Imp
 
       // Helper to convert "00" or blank to empty string (for proper gridlines)
       const cleanValue = (val) => {
