@@ -627,24 +627,24 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Det Items': property.values_det_items || 0,
         'Cost New': property.values_repl_cost || 0,
         'CLA': property.values_mod_total && property.values_mod_land ?
-          { f: `AZ${rowNum}/BB${rowNum}` } : '',
+          { f: `BD${rowNum}/BF${rowNum}` } : '',
         'Current Land': property.values_mod_land || 0,
         'Current Impr': property.values_mod_improvement || 0,
         'Current Total': property.values_mod_total || 0,
         'PLA': calc.newLandAllocation && calc.projectedTotal ?
-          { f: `BD${rowNum}/BF${rowNum}` } : '',
+          { f: `BH${rowNum}/BJ${rowNum}` } : '',
         'CAMA Land': property.values_cama_land || 0,
         'Cama/Proj Imp': calc.qualifiesForEFA && calc.newValue !== null && calc.newValue > 0 ?
-          { f: `BK${rowNum}-BD${rowNum}` } : (property.values_cama_improvement || 0),
-        'Proj Total': { f: `BD${rowNum}+BE${rowNum}` },
+          { f: `BO${rowNum}-BH${rowNum}` } : (property.values_cama_improvement || 0),
+        'Proj Total': { f: `BH${rowNum}+BI${rowNum}` },
         'Delta %': calc.deltaPercent ? (calc.deltaPercent / 100) : '',
         'Recommended EFA': calc.recommendedEFA !== null && calc.recommendedEFA !== undefined ?
-          { f: `ROUND(${yearPriorToDueYear}-((1-((AS${rowNum}-BD${rowNum}-AW${rowNum})/AX${rowNum}))*100),0)` } : '',
+          { f: `ROUND(${yearPriorToDueYear}-((1-((AW${rowNum}-BH${rowNum}-BA${rowNum})/BB${rowNum}))*100),0)` } : '',
         'Actual EFA': calc.actualEFA || '',
         'DEPR': calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined ?
-          { f: `MIN(1,1-((${yearPriorToDueYear}-BI${rowNum})/100))` } : '',
+          { f: `MIN(1,1-((${yearPriorToDueYear}-BM${rowNum})/100))` } : '',
         'New Value': calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined ?
-          { f: `ROUND((AX${rowNum}*BJ${rowNum})+AW${rowNum}+BD${rowNum},-2)` } : 0,
+          { f: `ROUND((BB${rowNum}*BN${rowNum})+BA${rowNum}+BH${rowNum},-2)` } : 0,
         'Current Taxes': calc.currentTaxes || 0,
         'Projected Taxes': calc.projectedTaxes || 0,
         'Tax Delta $': calc.taxDelta || 0
