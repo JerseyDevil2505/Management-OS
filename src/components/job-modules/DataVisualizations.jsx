@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ScatterChart, Scatter } from 'recharts';
-import { Filter, TrendingUp, PieChart as PieIcon, BarChart3, Download } from 'lucide-react';
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { Filter, TrendingUp, PieChart as PieIcon, BarChart3, Download, Calendar } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 
 const DataVisualizations = ({ jobData, properties }) => {
@@ -10,6 +10,17 @@ const DataVisualizations = ({ jobData, properties }) => {
     vcs: 'all',
     designStyle: 'all',
     yearRange: 'all'
+  });
+
+  // Sales NU date range state - default to October 1st prior year to current date
+  const [nuDateRange, setNuDateRange] = useState(() => {
+    const now = new Date();
+    const priorYear = now.getFullYear() - 1;
+    const startDate = new Date(priorYear, 9, 1); // October 1st of prior year
+    return {
+      start: startDate.toISOString().split('T')[0],
+      end: now.toISOString().split('T')[0]
+    };
   });
 
   // Extract unique filter values
@@ -65,11 +76,19 @@ const DataVisualizations = ({ jobData, properties }) => {
     });
   }, [properties, filters, jobData.end_date]);
 
-  // Market History Chart Data - Sales Price vs Year
+  // Market History - Building Class > 10 with valid type and use, default single family
   const marketHistoryData = useMemo(() => {
     const salesByYear = {};
     
-    filteredProperties.forEach(prop => {
+    // Filter for building class > 10 and valid type/use
+    const qualifiedProperties = filteredProperties.filter(prop => {
+      const buildingClass = parseInt(prop.asset_building_class) || 0;
+      const hasValidType = prop.property_type && prop.property_type.trim() !== '';
+      const hasValidUse = prop.property_use && prop.property_use.trim() !== '';
+      return buildingClass > 10 && hasValidType && hasValidUse;
+    });
+    
+    qualifiedProperties.forEach(prop => {
       if (prop.sales_date && prop.sales_price && prop.sales_price > 0) {
         const year = new Date(prop.sales_date).getFullYear();
         if (!salesByYear[year]) {
@@ -100,21 +119,39 @@ const DataVisualizations = ({ jobData, properties }) => {
       .sort((a, b) => a.year - b.year);
   }, [filteredProperties]);
 
-  // Building Class Breakdown - Pie Chart
-  const buildingClassData = useMemo(() => {
-    const classCounts = {};
-    
+  // Sales NU Distribution - filtered by date range
+  const salesNuData = useMemo(() => {
+    const nuCounts = {
+      'NU': 0,
+      'U': 0,
+      'Other': 0
+    };
+
+    const startDate = new Date(nuDateRange.start);
+    const endDate = new Date(nuDateRange.end);
+
     filteredProperties.forEach(prop => {
-      const buildingClass = prop.asset_building_class || 'Unknown';
-      classCounts[buildingClass] = (classCounts[buildingClass] || 0) + 1;
+      if (prop.sales_date) {
+        const saleDate = new Date(prop.sales_date);
+        if (saleDate >= startDate && saleDate <= endDate) {
+          const nuCode = (prop.sales_nu || '').toUpperCase().trim();
+          if (nuCode === 'NU' || nuCode === 'N') {
+            nuCounts['NU']++;
+          } else if (nuCode === 'U' || nuCode === '') {
+            nuCounts['U']++;
+          } else {
+            nuCounts['Other']++;
+          }
+        }
+      }
     });
 
-    return Object.entries(classCounts)
+    return Object.entries(nuCounts)
       .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
-  }, [filteredProperties]);
+      .filter(item => item.value > 0);
+  }, [filteredProperties, nuDateRange]);
 
-  // Usable vs Non-Usable Sales - Pie Chart
+  // Usable vs Non-Usable Sales
   const usableSalesData = useMemo(() => {
     const usableCounts = {
       'Usable': 0,
@@ -137,7 +174,54 @@ const DataVisualizations = ({ jobData, properties }) => {
       .filter(item => item.value > 0);
   }, [filteredProperties]);
 
-  // VCS Distribution by Value - Bar Chart
+  // Design & Style Breakdown
+  const designStyleData = useMemo(() => {
+    const styleCounts = {};
+    
+    filteredProperties.forEach(prop => {
+      const style = prop.property_design_style || 'Unknown';
+      styleCounts[style] = (styleCounts[style] || 0) + 1;
+    });
+
+    return Object.entries(styleCounts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10); // Top 10
+  }, [filteredProperties]);
+
+  // Type & Use Breakdown
+  const typeUseData = useMemo(() => {
+    const typeUseCounts = {};
+    
+    filteredProperties.forEach(prop => {
+      const type = prop.property_type || 'Unknown';
+      const use = prop.property_use || 'Unknown';
+      const key = `${type} / ${use}`;
+      
+      typeUseCounts[key] = (typeUseCounts[key] || 0) + 1;
+    });
+
+    return Object.entries(typeUseCounts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 12); // Top 12
+  }, [filteredProperties]);
+
+  // Building Class Breakdown
+  const buildingClassData = useMemo(() => {
+    const classCounts = {};
+    
+    filteredProperties.forEach(prop => {
+      const buildingClass = prop.asset_building_class || 'Unknown';
+      classCounts[buildingClass] = (classCounts[buildingClass] || 0) + 1;
+    });
+
+    return Object.entries(classCounts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [filteredProperties]);
+
+  // VCS Distribution by Value
   const vcsValueData = useMemo(() => {
     const vcsTotals = {};
     
@@ -166,39 +250,15 @@ const DataVisualizations = ({ jobData, properties }) => {
       .sort((a, b) => a.vcs.localeCompare(b.vcs));
   }, [filteredProperties]);
 
-  // Property Type Distribution - Bar Chart
-  const typeDistributionData = useMemo(() => {
-    const typeCounts = {};
-    
-    filteredProperties.forEach(prop => {
-      const type = prop.property_type || 'Unknown';
-      typeCounts[type] = (typeCounts[type] || 0) + 1;
-    });
-
-    return Object.entries(typeCounts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count);
-  }, [filteredProperties]);
-
-  // Sales Price Distribution (Scatter Plot)
-  const salesScatterData = useMemo(() => {
-    return filteredProperties
-      .filter(prop => prop.sales_date && prop.sales_price && prop.sales_price > 0)
-      .map(prop => ({
-        date: new Date(prop.sales_date).getTime(),
-        price: prop.sales_price,
-        vcs: prop.property_vcs || 'Unknown',
-        address: prop.property_address || 'Unknown'
-      }))
-      .sort((a, b) => a.date - b.date);
-  }, [filteredProperties]);
-
   // Color palettes
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
   const PIE_COLORS = {
     'Usable': '#10b981',
     'Non-Usable': '#ef4444',
-    'No Sale Data': '#94a3b8'
+    'No Sale Data': '#94a3b8',
+    'NU': '#ef4444',
+    'U': '#10b981',
+    'Other': '#f59e0b'
   };
 
   // Export all charts data
@@ -211,6 +271,30 @@ const DataVisualizations = ({ jobData, properties }) => {
       XLSX.utils.book_append_sheet(workbook, marketSheet, 'Market History');
     }
 
+    // Sales NU Distribution
+    if (salesNuData.length > 0) {
+      const nuSheet = XLSX.utils.json_to_sheet(salesNuData);
+      XLSX.utils.book_append_sheet(workbook, nuSheet, 'Sales NU Distribution');
+    }
+
+    // Usable Sales Sheet
+    if (usableSalesData.length > 0) {
+      const usableSheet = XLSX.utils.json_to_sheet(usableSalesData);
+      XLSX.utils.book_append_sheet(workbook, usableSheet, 'Usable Sales');
+    }
+
+    // Design & Style Sheet
+    if (designStyleData.length > 0) {
+      const designSheet = XLSX.utils.json_to_sheet(designStyleData);
+      XLSX.utils.book_append_sheet(workbook, designSheet, 'Design & Style');
+    }
+
+    // Type & Use Sheet
+    if (typeUseData.length > 0) {
+      const typeUseSheet = XLSX.utils.json_to_sheet(typeUseData);
+      XLSX.utils.book_append_sheet(workbook, typeUseSheet, 'Type & Use');
+    }
+
     // Building Class Sheet
     if (buildingClassData.length > 0) {
       const classSheet = XLSX.utils.json_to_sheet(buildingClassData);
@@ -221,18 +305,6 @@ const DataVisualizations = ({ jobData, properties }) => {
     if (vcsValueData.length > 0) {
       const vcsSheet = XLSX.utils.json_to_sheet(vcsValueData);
       XLSX.utils.book_append_sheet(workbook, vcsSheet, 'VCS Analysis');
-    }
-
-    // Usable Sales Sheet
-    if (usableSalesData.length > 0) {
-      const usableSheet = XLSX.utils.json_to_sheet(usableSalesData);
-      XLSX.utils.book_append_sheet(workbook, usableSheet, 'Usable Sales');
-    }
-
-    // Property Type Sheet
-    if (typeDistributionData.length > 0) {
-      const typeSheet = XLSX.utils.json_to_sheet(typeDistributionData);
-      XLSX.utils.book_append_sheet(workbook, typeSheet, 'Property Types');
     }
 
     XLSX.writeFile(workbook, `Data_Visualization_${jobData.job_name}_${new Date().toISOString().split('T')[0]}.xlsx`);
@@ -265,7 +337,7 @@ const DataVisualizations = ({ jobData, properties }) => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
+    <div className="max-w-7xl mx-auto p-6">
       <div className="data-visualization-container space-y-6">
         {/* Header */}
         <div className="header-section flex justify-between items-center">
@@ -399,53 +471,222 @@ const DataVisualizations = ({ jobData, properties }) => {
           )}
         </div>
 
-        {/* Charts Grid */}
-        <div className="charts-grid grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Market History Chart */}
-          <div className="chart-card bg-white rounded-lg border border-gray-200 p-6">
-            <div className="chart-header flex items-center gap-2 mb-4">
+        {/* Market History Chart - FULL WIDTH */}
+        <div className="chart-card bg-white rounded-lg border border-gray-200 p-6">
+          <div className="chart-header flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-blue-600" />
               <h3 className="chart-title text-lg font-semibold text-gray-900">Market History</h3>
+              <span className="text-xs text-gray-500 ml-2">(Building Class &gt; 10, Valid Type & Use)</span>
+            </div>
+            <div className="text-xs text-gray-600">
+              Using Sale Price • Default: Single Family
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={350}>
+            <LineChart data={marketHistoryData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="year" stroke="#6b7280" />
+              <YAxis stroke="#6b7280" tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
+              <Tooltip content={<CustomTooltip />} formatter={(value) => formatCurrency(value)} />
+              <Legend />
+              <Line type="monotone" dataKey="avgPrice" name="Average Price" stroke="#3b82f6" strokeWidth={3} dot={{ r: 5 }} />
+              <Line type="monotone" dataKey="medianPrice" name="Median Price" stroke="#10b981" strokeWidth={3} dot={{ r: 5 }} />
+            </LineChart>
+          </ResponsiveContainer>
+          <div className="chart-stats mt-4 grid grid-cols-4 gap-4 text-center">
+            <div className="stat-item">
+              <div className="stat-label text-xs text-gray-600">Sales Count</div>
+              <div className="stat-value text-lg font-semibold text-gray-900">
+                {marketHistoryData.reduce((sum, d) => sum + d.count, 0).toLocaleString()}
+              </div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label text-xs text-gray-600">Year Range</div>
+              <div className="stat-value text-lg font-semibold text-gray-900">
+                {marketHistoryData.length > 0 ? `${marketHistoryData[0].year} - ${marketHistoryData[marketHistoryData.length - 1].year}` : 'N/A'}
+              </div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label text-xs text-gray-600">Overall Avg</div>
+              <div className="stat-value text-lg font-semibold text-gray-900">
+                {marketHistoryData.length > 0 ? formatCurrency(
+                  marketHistoryData.reduce((sum, d) => sum + d.avgPrice, 0) / marketHistoryData.length
+                ) : 'N/A'}
+              </div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label text-xs text-gray-600">Price Range</div>
+              <div className="stat-value text-sm font-semibold text-gray-900">
+                {marketHistoryData.length > 0 ? `${formatCurrency(Math.min(...marketHistoryData.map(d => d.minPrice)))} - ${formatCurrency(Math.max(...marketHistoryData.map(d => d.maxPrice)))}` : 'N/A'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Pie Charts Row - Sales Usability and Sales NU Distribution */}
+        <div className="charts-grid grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Sales Usability Pie */}
+          <div className="chart-card bg-white rounded-lg border border-gray-200 p-6">
+            <div className="chart-header flex items-center gap-2 mb-4">
+              <PieIcon className="w-5 h-5 text-amber-600" />
+              <h3 className="chart-title text-lg font-semibold text-gray-900">Sales Usability</h3>
             </div>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={marketHistoryData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="year" stroke="#6b7280" />
-                <YAxis stroke="#6b7280" tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
-                <Tooltip content={<CustomTooltip />} formatter={(value) => formatCurrency(value)} />
-                <Legend />
-                <Line type="monotone" dataKey="avgPrice" name="Average Price" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="medianPrice" name="Median Price" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} />
-              </LineChart>
+              <PieChart>
+                <Pie
+                  data={usableSalesData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent, value }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
+                  outerRadius={100}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {usableSalesData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={PIE_COLORS[entry.name] || COLORS[index]} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+              </PieChart>
             </ResponsiveContainer>
             <div className="chart-stats mt-4 grid grid-cols-3 gap-4 text-center">
-              <div className="stat-item">
-                <div className="stat-label text-xs text-gray-600">Sales Count</div>
-                <div className="stat-value text-lg font-semibold text-gray-900">
-                  {marketHistoryData.reduce((sum, d) => sum + d.count, 0).toLocaleString()}
+              {usableSalesData.map(item => (
+                <div key={item.name} className="stat-item">
+                  <div className="stat-label text-xs text-gray-600">{item.name}</div>
+                  <div className="stat-value text-lg font-semibold" style={{ color: PIE_COLORS[item.name] || '#374151' }}>
+                    {item.value.toLocaleString()}
+                  </div>
                 </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Sales NU Distribution Pie with Date Range */}
+          <div className="chart-card bg-white rounded-lg border border-gray-200 p-6">
+            <div className="chart-header flex items-center gap-2 mb-4">
+              <PieIcon className="w-5 h-5 text-green-600" />
+              <h3 className="chart-title text-lg font-semibold text-gray-900">Sales NU Distribution</h3>
+            </div>
+            
+            {/* Date Range Selector */}
+            <div className="date-range-controls mb-4 grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <Calendar className="w-3 h-3 inline mr-1" />
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  value={nuDateRange.start}
+                  onChange={(e) => setNuDateRange({ ...nuDateRange, start: e.target.value })}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
               </div>
-              <div className="stat-item">
-                <div className="stat-label text-xs text-gray-600">Year Range</div>
-                <div className="stat-value text-lg font-semibold text-gray-900">
-                  {marketHistoryData.length > 0 ? `${marketHistoryData[0].year} - ${marketHistoryData[marketHistoryData.length - 1].year}` : 'N/A'}
-                </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <Calendar className="w-3 h-3 inline mr-1" />
+                  End Date
+                </label>
+                <input
+                  type="date"
+                  value={nuDateRange.end}
+                  onChange={(e) => setNuDateRange({ ...nuDateRange, end: e.target.value })}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
               </div>
-              <div className="stat-item">
-                <div className="stat-label text-xs text-gray-600">Overall Avg</div>
-                <div className="stat-value text-lg font-semibold text-gray-900">
-                  {marketHistoryData.length > 0 ? formatCurrency(
-                    marketHistoryData.reduce((sum, d) => sum + d.avgPrice, 0) / marketHistoryData.length
-                  ) : 'N/A'}
+            </div>
+
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie
+                  data={salesNuData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent, value }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
+                  outerRadius={90}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {salesNuData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={PIE_COLORS[entry.name] || COLORS[index]} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="chart-stats mt-4 flex justify-around text-center">
+              {salesNuData.map(item => (
+                <div key={item.name} className="stat-item">
+                  <div className="stat-label text-xs text-gray-600">{item.name}</div>
+                  <div className="stat-value text-lg font-semibold" style={{ color: PIE_COLORS[item.name] || '#374151' }}>
+                    {item.value.toLocaleString()}
+                  </div>
                 </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Design & Style and Type & Use Breakdowns */}
+        <div className="charts-grid grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Design & Style Breakdown */}
+          <div className="chart-card bg-white rounded-lg border border-gray-200 p-6">
+            <div className="chart-header flex items-center gap-2 mb-4">
+              <BarChart3 className="w-5 h-5 text-purple-600" />
+              <h3 className="chart-title text-lg font-semibold text-gray-900">Design & Style Breakdown</h3>
+            </div>
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={designStyleData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis type="number" stroke="#6b7280" />
+                <YAxis dataKey="name" type="category" stroke="#6b7280" width={120} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend />
+                <Bar dataKey="count" name="Count" fill="#8b5cf6" />
+              </BarChart>
+            </ResponsiveContainer>
+            <div className="chart-stats mt-4 text-center">
+              <div className="stat-label text-xs text-gray-600">Total Styles</div>
+              <div className="stat-value text-lg font-semibold text-gray-900">
+                {designStyleData.reduce((sum, d) => sum + d.count, 0).toLocaleString()}
               </div>
             </div>
           </div>
 
+          {/* Type & Use Breakdown */}
+          <div className="chart-card bg-white rounded-lg border border-gray-200 p-6">
+            <div className="chart-header flex items-center gap-2 mb-4">
+              <BarChart3 className="w-5 h-5 text-red-600" />
+              <h3 className="chart-title text-lg font-semibold text-gray-900">Type & Use Breakdown</h3>
+            </div>
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={typeUseData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis type="number" stroke="#6b7280" />
+                <YAxis dataKey="name" type="category" stroke="#6b7280" width={150} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend />
+                <Bar dataKey="count" name="Count" fill="#ef4444" />
+              </BarChart>
+            </ResponsiveContainer>
+            <div className="chart-stats mt-4 text-center">
+              <div className="stat-label text-xs text-gray-600">Total Combinations</div>
+              <div className="stat-value text-lg font-semibold text-gray-900">
+                {typeUseData.reduce((sum, d) => sum + d.count, 0).toLocaleString()}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Additional Charts - Building Class and VCS */}
+        <div className="charts-grid grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Building Class Breakdown */}
           <div className="chart-card bg-white rounded-lg border border-gray-200 p-6">
             <div className="chart-header flex items-center gap-2 mb-4">
-              <PieIcon className="w-5 h-5 text-green-600" />
+              <PieIcon className="w-5 h-5 text-teal-600" />
               <h3 className="chart-title text-lg font-semibold text-gray-900">Building Class Distribution</h3>
             </div>
             <ResponsiveContainer width="100%" height={300}>
@@ -480,47 +721,10 @@ const DataVisualizations = ({ jobData, properties }) => {
             </div>
           </div>
 
-          {/* Usable vs Non-Usable Sales */}
-          <div className="chart-card bg-white rounded-lg border border-gray-200 p-6">
-            <div className="chart-header flex items-center gap-2 mb-4">
-              <BarChart3 className="w-5 h-5 text-amber-600" />
-              <h3 className="chart-title text-lg font-semibold text-gray-900">Sales Usability</h3>
-            </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={usableSalesData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent, value }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
-                  outerRadius={100}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {usableSalesData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={PIE_COLORS[entry.name] || COLORS[index]} />
-                  ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="chart-stats mt-4 grid grid-cols-3 gap-4 text-center">
-              {usableSalesData.map(item => (
-                <div key={item.name} className="stat-item">
-                  <div className="stat-label text-xs text-gray-600">{item.name}</div>
-                  <div className="stat-value text-lg font-semibold" style={{ color: PIE_COLORS[item.name] || '#374151' }}>
-                    {item.value.toLocaleString()}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
           {/* VCS Value Distribution */}
           <div className="chart-card bg-white rounded-lg border border-gray-200 p-6">
             <div className="chart-header flex items-center gap-2 mb-4">
-              <BarChart3 className="w-5 h-5 text-purple-600" />
+              <BarChart3 className="w-5 h-5 text-indigo-600" />
               <h3 className="chart-title text-lg font-semibold text-gray-900">VCS Average Values</h3>
             </div>
             <ResponsiveContainer width="100%" height={300}>
@@ -530,80 +734,13 @@ const DataVisualizations = ({ jobData, properties }) => {
                 <YAxis stroke="#6b7280" tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
                 <Tooltip content={<CustomTooltip />} formatter={(value) => formatCurrency(value)} />
                 <Legend />
-                <Bar dataKey="avgValue" name="Average Value" fill="#8b5cf6" />
+                <Bar dataKey="avgValue" name="Average Value" fill="#6366f1" />
               </BarChart>
             </ResponsiveContainer>
             <div className="chart-stats mt-4 text-center">
               <div className="stat-label text-xs text-gray-600">Total Combined Value</div>
               <div className="stat-value text-lg font-semibold text-gray-900">
                 {formatCurrency(vcsValueData.reduce((sum, d) => sum + d.totalValue, 0))}
-              </div>
-            </div>
-          </div>
-
-          {/* Property Type Distribution */}
-          <div className="chart-card bg-white rounded-lg border border-gray-200 p-6">
-            <div className="chart-header flex items-center gap-2 mb-4">
-              <BarChart3 className="w-5 h-5 text-red-600" />
-              <h3 className="chart-title text-lg font-semibold text-gray-900">Property Type Breakdown</h3>
-            </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={typeDistributionData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis type="number" stroke="#6b7280" />
-                <YAxis dataKey="name" type="category" stroke="#6b7280" width={100} />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend />
-                <Bar dataKey="count" name="Count" fill="#ef4444" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Sales Scatter Plot */}
-          <div className="chart-card bg-white rounded-lg border border-gray-200 p-6">
-            <div className="chart-header flex items-center gap-2 mb-4">
-              <TrendingUp className="w-5 h-5 text-teal-600" />
-              <h3 className="chart-title text-lg font-semibold text-gray-900">Sales Price Scatter</h3>
-            </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <ScatterChart>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis 
-                  dataKey="date" 
-                  type="number" 
-                  domain={['auto', 'auto']}
-                  tickFormatter={(timestamp) => new Date(timestamp).getFullYear()}
-                  stroke="#6b7280"
-                />
-                <YAxis 
-                  dataKey="price" 
-                  type="number" 
-                  stroke="#6b7280"
-                  tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
-                />
-                <Tooltip 
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload;
-                      return (
-                        <div className="bg-white p-3 border border-gray-300 rounded-lg shadow-lg">
-                          <p className="font-semibold text-gray-900">{data.address}</p>
-                          <p className="text-sm text-gray-700">Price: {formatCurrency(data.price)}</p>
-                          <p className="text-sm text-gray-700">Date: {new Date(data.date).toLocaleDateString()}</p>
-                          <p className="text-sm text-gray-700">VCS: {data.vcs}</p>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <Scatter data={salesScatterData} fill="#14b8a6" />
-              </ScatterChart>
-            </ResponsiveContainer>
-            <div className="chart-stats mt-4 text-center">
-              <div className="stat-label text-xs text-gray-600">Total Sales Plotted</div>
-              <div className="stat-value text-lg font-semibold text-gray-900">
-                {salesScatterData.length.toLocaleString()}
               </div>
             </div>
           </div>
