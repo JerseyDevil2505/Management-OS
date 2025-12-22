@@ -1715,15 +1715,15 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     // Get worksheet range
     const range = XLSX.utils.decode_range(ws['!ref']);
 
-    // Column indices (0-based)
-    const colSFLA = 8; // Column I (SFLA)
-    const colAssessedValue = 11; // Column L (Assessed Value)
-    const colSalePrice = 13; // Column N (Sale Price)
-    const colHPIMultiplier = 15; // Column P (HPI Multiplier)
-    const colTimeNormalized = 16; // Column Q (Time Normalized Price)
-    const colAvgSFLA = 17; // Column R (Avg SFLA Type Group)
-    const colSizeNormalized = 18; // Column S (Size Normalized Price)
-    const colSalesRatio = 19; // Column T (Sales Ratio)
+    // Column indices (0-based) - Updated after adding VCS column at position 5
+    const colSFLA = 9; // Column J (SFLA)
+    const colAssessedValue = 12; // Column M (Assessed Value)
+    const colSalePrice = 14; // Column O (Sale Price)
+    const colHPIMultiplier = 16; // Column Q (HPI Multiplier)
+    const colTimeNormalized = 17; // Column R (Time Normalized Price)
+    const colAvgSFLA = 18; // Column S (Avg SFLA Type Group)
+    const colSizeNormalized = 19; // Column T (Size Normalized Price)
+    const colSalesRatio = 20; // Column U (Sales Ratio)
 
     // Ensure range extends to include all columns (Sales Ratio is the last)
     if (range.e.c < colSalesRatio) {
