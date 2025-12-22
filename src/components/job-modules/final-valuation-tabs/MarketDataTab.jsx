@@ -600,12 +600,12 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Proj Total': { f: `BD${rowNum}+BE${rowNum}` },
         'Delta %': calc.deltaPercent ? (calc.deltaPercent / 100) : '',
         'Recommended EFA': calc.recommendedEFA !== null && calc.recommendedEFA !== undefined ?
-          { f: `ROUND(${yearPriorToDueYear}-((1-((AS${rowNum}-BE${rowNum}-AW${rowNum})/AX${rowNum}))*100),0)` } : '',
+          { f: `ROUND(${yearPriorToDueYear}-((1-((AS${rowNum}-BD${rowNum}-AW${rowNum})/AX${rowNum}))*100),0)` } : '',
         'Actual EFA': calc.actualEFA || '',
         'DEPR': calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined ?
-          { f: `MIN(1,1-((${yearPriorToDueYear}-BJ${rowNum})/100))` } : '',
+          { f: `MIN(1,1-((${yearPriorToDueYear}-BI${rowNum})/100))` } : '',
         'New Value': calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined ?
-          { f: `ROUND((AX${rowNum}*BK${rowNum})+AW${rowNum}+BE${rowNum},-2)` } : 0,
+          { f: `ROUND((AX${rowNum}*BJ${rowNum})+AW${rowNum}+BD${rowNum},-2)` } : 0,
         'Current Taxes': calc.currentTaxes || 0,
         'Projected Taxes': calc.projectedTaxes || 0,
         'Tax Delta $': calc.taxDelta || 0
@@ -674,7 +674,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           numFmt = '$#,##0'; // Currency, no decimals
         } else if (['Current Taxes', 'Projected Taxes', 'Tax Delta $'].includes(colName)) {
           numFmt = '$#,##0.00'; // Currency with two decimals
-        } else if (['CLA', 'PLA', 'Sales Ratio'].includes(colName)) {
+        } else if (['CLA', 'PLA', 'Sales Ratio', 'Delta %'].includes(colName)) {
           numFmt = '0%'; // Percentage, no decimals
         } else if (colName === 'Sale Date') {
           numFmt = 'mm/dd/yyyy'; // Date format
