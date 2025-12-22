@@ -898,7 +898,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           return '';
         })(),
         'Norm Time Value': property.sales_price && property.values_norm_time ?
-          { f: `AN${rowNum}*AO${rowNum}` } : (property.values_norm_time || ''),
+          { f: `AR${rowNum}*AS${rowNum}` } : (property.values_norm_time || ''),
         'Sales NU Code': cleanValue(property.sales_nu),
         'Sales Ratio': calc.projectedTotal && property.values_norm_time ?
           (calc.projectedTotal / property.values_norm_time) : '',
@@ -906,24 +906,24 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Det Items': property.values_det_items || 0,
         'Cost New': property.values_repl_cost || 0,
         'CLA': property.values_mod_total && property.values_mod_land ?
-          { f: `AW${rowNum}/AY${rowNum}` } : '',
+          { f: `BA${rowNum}/BC${rowNum}` } : '',
         'Current Land': property.values_mod_land || 0,
         'Current Impr': property.values_mod_improvement || 0,
         'Current Total': property.values_mod_total || 0,
         'PLA': calc.newLandAllocation && calc.projectedTotal ?
-          { f: `BA${rowNum}/BC${rowNum}` } : '',
+          { f: `BE${rowNum}/BG${rowNum}` } : '',
         'CAMA Land': property.values_cama_land || 0,
         'Cama/Proj Imp': calc.qualifiesForEFA && calc.newValue !== null && calc.newValue > 0 ?
-          { f: `BH${rowNum}-BA${rowNum}` } : (property.values_cama_improvement || 0),
-        'Proj Total': { f: `BA${rowNum}+BB${rowNum}` },
+          { f: `BL${rowNum}-BE${rowNum}` } : (property.values_cama_improvement || 0),
+        'Proj Total': { f: `BE${rowNum}+BF${rowNum}` },
         'Delta %': calc.deltaPercent ? (calc.deltaPercent / 100) : '',
         'Recommended EFA': calc.recommendedEFA !== null && calc.recommendedEFA !== undefined ?
-          { f: `ROUND(${yearPriorToDueYear}-((1-((AP${rowNum}-BA${rowNum}-AT${rowNum})/AU${rowNum}))*100),0)` } : '',
+          { f: `ROUND(${yearPriorToDueYear}-((1-((AT${rowNum}-BE${rowNum}-AX${rowNum})/AY${rowNum}))*100),0)` } : '',
         'Actual EFA': calc.actualEFA || '',
         'DEPR': calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined ?
-          { f: `MIN(1,1-((${yearPriorToDueYear}-BF${rowNum})/100))` } : '',
+          { f: `MIN(1,1-((${yearPriorToDueYear}-BJ${rowNum})/100))` } : '',
         'New Value': calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined ?
-          { f: `ROUND((AU${rowNum}*BG${rowNum})+AT${rowNum}+BA${rowNum},-2)` } : 0,
+          { f: `ROUND((AY${rowNum}*BK${rowNum})+AX${rowNum}+BE${rowNum},-2)` } : 0,
         'Current Taxes': calc.currentTaxes || 0,
         'Projected Taxes': calc.projectedTaxes || 0,
         'Tax Delta $': calc.taxDelta || 0
