@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
-import { Download, AlertCircle, Save } from 'lucide-react';
+import { Download, AlertCircle, Save, ChevronDown, ChevronUp } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 
 const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache }) => {
