@@ -1687,6 +1687,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         'Qualifier': parsed.qualifier || '',
         'Card': parsed.card || '',
         'Location': prop.property_location || '',
+        'VCS': prop.property_vcs || '',
         'Class': prop.property_m4_class || prop.property_class || prop.asset_building_class || '',
         'Type': getTypeUseDisplay(prop) || '',
         'Design': getDesignDisplay(prop) || '',
