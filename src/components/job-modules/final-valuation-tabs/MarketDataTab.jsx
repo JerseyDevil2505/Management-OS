@@ -499,8 +499,11 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       const calc = getCalculatedValues(property);
       const salesCode = getSalesPeriodCode(property);
       const rowNum = idx + 2; // +2 because Excel is 1-indexed and row 1 is header
-      const cardSF = getCardSF(property);
       const mainSFLA = property.asset_sfla || 0;
+
+      // Use consolidated card data
+      const maxCard = property._maxCard || 1;
+      const totalCardSF = property._totalCardSF || 0;
 
       // Column mapping for formulas (UPDATED for 4 special tax code columns K-N):
       // O=Property M4 Class, P=Property CAMA Class, Q=Check
@@ -512,8 +515,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Block': property.property_block || '',
         'Lot': property.property_lot || '',
         'Qualifier': property.property_qualifier || '',
-        'Card': getMaxCardNumber(property),
-        'Card SF': cardSF,
+        'Card': maxCard,
+        'Card SF': totalCardSF,
         'Address': property.property_location || '',
         'Owner Name': property.owner_name || '',
         'Owner Address': property.owner_street || '',
