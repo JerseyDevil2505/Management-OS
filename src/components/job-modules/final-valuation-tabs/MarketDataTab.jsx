@@ -560,7 +560,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Test': { f: `IF(AND(AD${rowNum}<>"",BJ${rowNum}<>""),IF(BJ${rowNum}>=AD${rowNum},"TRUE","FALSE"),"")` },
         'Design': cleanValue(property.asset_design_style),
         'Bedroom Total': getBedroomTotal(property) || '',
-        'Story Height': cleanValue(property.asset_story_height),
+        'Story Height': (() => {
+          const cleaned = cleanValue(property.asset_story_height);
+          return cleaned ? { v: String(cleaned), t: 's' } : null;
+        })(),
         'SFLA': mainSFLA,
         'Total SFLA': { f: `E${rowNum}+AJ${rowNum}` }, // Formula: Card SF + SFLA
         'Exterior Net Condition': cleanValue(property.asset_ext_cond),
