@@ -356,7 +356,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     return cache;
   }, [previewProperties, finalValuationData, yearPriorToDueYear, vendorType, taxRates]);
 
-  // Calculate summary by class for all properties
+  // Calculate summary by class for all properties (consolidated)
   const classSummary = useMemo(() => {
     const summary = {
       '1': { count: 0, total: 0 },
@@ -370,7 +370,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       '6B': { count: 0, total: 0 }
     };
 
-    properties.forEach(property => {
+    // Use consolidated properties to match export
+    const consolidated = consolidateProperties(properties);
+
+    consolidated.forEach(property => {
       const isTaxable = property.property_facility !== 'EXEMPT';
       if (!isTaxable) return;
 
