@@ -592,14 +592,13 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Current Land': property.values_mod_land || 0,
         'Current Impr': property.values_mod_improvement || 0,
         'Current Total': property.values_mod_total || 0,
-        '--- NEW PROJECTED ---': '',
         'PLA': calc.newLandAllocation && calc.projectedTotal ?
-          { f: `BE${rowNum}/BG${rowNum}` } : '',
+          { f: `BD${rowNum}/BF${rowNum}` } : '',
         'CAMA Land': property.values_cama_land || 0,
         'Cama/Proj Imp': calc.qualifiesForEFA && calc.newValue !== null && calc.newValue > 0 ?
-          { f: `BL${rowNum}-BE${rowNum}` } : (property.values_cama_improvement || 0),
-        'Proj Total': { f: `BE${rowNum}+BF${rowNum}` },
-        'Delta %': calc.deltaPercent ? Math.round(calc.deltaPercent) : '',
+          { f: `BK${rowNum}-BD${rowNum}` } : (property.values_cama_improvement || 0),
+        'Proj Total': { f: `BD${rowNum}+BE${rowNum}` },
+        'Delta %': calc.deltaPercent ? (calc.deltaPercent / 100) : '',
         'Recommended EFA': calc.recommendedEFA !== null && calc.recommendedEFA !== undefined ?
           { f: `ROUND(${yearPriorToDueYear}-((1-((AS${rowNum}-BE${rowNum}-AW${rowNum})/AX${rowNum}))*100),0)` } : '',
         'Actual EFA': calc.actualEFA || '',
