@@ -514,9 +514,9 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       // AS=Values Norm Time, AW=Detached Items, AX=Cost New, BE=CAMA Land
       // BI=Recommended EFA, BJ=Actual EFA, BK=DEPR, BL=New Value, BF=Projected Imp
 
-      // Helper to convert "00" or blank to null
+      // Helper to convert "00" or blank to empty string (for proper gridlines)
       const cleanValue = (val) => {
-        if (!val || val === '' || val === '00') return null;
+        if (!val || val === '' || val === '00') return '';
         return val;
       };
 
