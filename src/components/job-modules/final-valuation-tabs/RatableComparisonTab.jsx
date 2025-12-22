@@ -498,13 +498,13 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   {/* Class 1 */}
                   <div className="space-y-1">
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="text-sm font-medium">Class 1</div>
-                      <div className="text-sm text-right">{projectedRatableBase['1'].count.toLocaleString()}</div>
-                      <div className="text-sm text-right">${projectedRatableBase['1'].total.toLocaleString()}</div>
+                      <div className="text-sm font-medium py-1">Class 1</div>
+                      <div className="text-sm text-right px-2 py-1">{projectedRatableBase['1'].count.toLocaleString()}</div>
+                      <div className="text-sm text-right px-2 py-1">${projectedRatableBase['1'].total.toLocaleString()}</div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
-                      <div>Abatements</div>
-                      <div className="text-right">0</div>
+                      <div className="py-1">Abatements</div>
+                      <div className="text-right px-2 py-1">0</div>
                       <div></div>
                     </div>
                   </div>
@@ -512,66 +512,66 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   {/* Class 2 */}
                   <div className="space-y-1">
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="text-sm font-medium">Class 2</div>
-                      <div className="text-sm text-right">{projectedRatableBase['2'].count.toLocaleString()}</div>
-                      <div className="text-sm text-right">${projectedRatableBase['2'].total.toLocaleString()}</div>
+                      <div className="text-sm font-medium py-1">Class 2</div>
+                      <div className="text-sm text-right px-2 py-1">{projectedRatableBase['2'].count.toLocaleString()}</div>
+                      <div className="text-sm text-right px-2 py-1">${projectedRatableBase['2'].total.toLocaleString()}</div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
-                      <div>Abatements</div>
-                      <div className="text-right">0</div>
+                      <div className="py-1">Abatements</div>
+                      <div className="text-right px-2 py-1">0</div>
                       <div></div>
                     </div>
                   </div>
 
                   {/* Class 3A's */}
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="text-sm font-medium">Class 3A's (NET)</div>
-                    <div className="text-sm text-right">{projectedRatableBase['3A'].count.toLocaleString()}</div>
-                    <div className="text-sm text-right">${projectedRatableBase['3A'].total.toLocaleString()}</div>
+                    <div className="text-sm font-medium py-1">Class 3A's (NET)</div>
+                    <div className="text-sm text-right px-2 py-1">{projectedRatableBase['3A'].count.toLocaleString()}</div>
+                    <div className="text-sm text-right px-2 py-1">${projectedRatableBase['3A'].total.toLocaleString()}</div>
                   </div>
 
                   {/* Class 3B's */}
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="text-sm font-medium">Class 3B's</div>
-                    <div className="text-sm text-right">{projectedRatableBase['3B'].count.toLocaleString()}</div>
-                    <div className="text-sm text-right">${projectedRatableBase['3B'].total.toLocaleString()}</div>
+                    <div className="text-sm font-medium py-1">Class 3B's</div>
+                    <div className="text-sm text-right px-2 py-1">{projectedRatableBase['3B'].count.toLocaleString()}</div>
+                    <div className="text-sm text-right px-2 py-1">${projectedRatableBase['3B'].total.toLocaleString()}</div>
                   </div>
 
                   {/* Class 4A,B,C */}
                   <div className="space-y-1">
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="text-sm font-medium">Class 4A,B,C (NET)</div>
-                      <div className="text-sm text-right">{projectedRatableBase['4ABC'].count.toLocaleString()}</div>
-                      <div className="text-sm text-right">${projectedRatableBase['4ABC'].total.toLocaleString()}</div>
+                      <div className="text-sm font-medium py-1">Class 4A,B,C (NET)</div>
+                      <div className="text-sm text-right px-2 py-1">{projectedRatableBase['4ABC'].count.toLocaleString()}</div>
+                      <div className="text-sm text-right px-2 py-1">${projectedRatableBase['4ABC'].total.toLocaleString()}</div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
-                      <div>Abatements</div>
-                      <div className="text-right">0</div>
+                      <div className="py-1">Abatements</div>
+                      <div className="text-right px-2 py-1">0</div>
                       <div></div>
                     </div>
                   </div>
 
                   {/* Class 6A,B,C */}
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="text-sm font-medium">6A,B,C</div>
-                    <div className="text-sm text-right">{projectedRatableBase['6ABC'].count.toLocaleString()}</div>
-                    <div className="text-sm text-right text-xs text-gray-500">Not/After Ratio Applied</div>
+                    <div className="text-sm font-medium py-1">6A,B,C</div>
+                    <div className="text-sm text-right px-2 py-1">{projectedRatableBase['6ABC'].count.toLocaleString()}</div>
+                    <div className="text-sm text-right text-xs text-gray-500 py-1">Not/After Ratio Applied</div>
                   </div>
 
                   {/* Total */}
                   <div className="grid grid-cols-3 gap-2 pt-3 border-t-2 border-gray-300 font-bold">
-                    <div className="text-sm">Total Ratables</div>
-                    <div className="text-sm text-right">{projectedRatableBase.totalCount.toLocaleString()}</div>
-                    <div className="text-base text-right">${projectedRatableBase.totalTotal.toLocaleString()}</div>
+                    <div className="text-sm py-1">Total Ratables</div>
+                    <div className="text-sm text-right px-2 py-1">{projectedRatableBase.totalCount.toLocaleString()}</div>
+                    <div className="text-base text-right px-2 py-1">${projectedRatableBase.totalTotal.toLocaleString()}</div>
                   </div>
 
                   {/* Commercial Base - Calculate */}
                   <div className="grid grid-cols-3 gap-2 pt-2 mt-2 border-t border-gray-200">
-                    <div className="text-sm font-medium">Commercial Base</div>
+                    <div className="text-sm font-medium py-1">Commercial Base</div>
                     <div></div>
-                    <div className="text-sm text-right">
-                      {projectedRatableBase.totalTotal > 0 
-                        ? ((projectedRatableBase['4ABC'].total / projectedRatableBase.totalTotal) * 100).toFixed(2) 
+                    <div className="text-sm text-right px-2 py-1">
+                      {projectedRatableBase.totalTotal > 0
+                        ? ((projectedRatableBase['4ABC'].total / projectedRatableBase.totalTotal) * 100).toFixed(2)
                         : 0}%
                     </div>
                   </div>
