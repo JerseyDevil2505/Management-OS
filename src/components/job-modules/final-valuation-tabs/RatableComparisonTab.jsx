@@ -338,13 +338,13 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                         type="number"
                         defaultValue={currentYearData.class_1_count}
                         onBlur={(e) => handleCurrentYearChange('current_class_1_count', e.target.value)}
-                        className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                       />
                       <input
                         type="number"
                         defaultValue={currentYearData.class_1_total}
                         onBlur={(e) => handleCurrentYearChange('current_class_1_total', e.target.value)}
-                        className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
@@ -353,7 +353,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                         type="number"
                         defaultValue={currentYearData.class_1_abatements}
                         onBlur={(e) => handleCurrentYearChange('current_class_1_abatements', e.target.value)}
-                        className="text-xs text-right px-2 py-1 border border-gray-300 rounded"
+                        className="text-xs text-right px-2 py-0.5 border border-gray-300 rounded h-6"
                       />
                       <div></div>
                     </div>
@@ -367,13 +367,13 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                         type="number"
                         defaultValue={currentYearData.class_2_count}
                         onBlur={(e) => handleCurrentYearChange('current_class_2_count', e.target.value)}
-                        className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                       />
                       <input
                         type="number"
                         defaultValue={currentYearData.class_2_total}
                         onBlur={(e) => handleCurrentYearChange('current_class_2_total', e.target.value)}
-                        className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
@@ -382,7 +382,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                         type="number"
                         defaultValue={currentYearData.class_2_abatements}
                         onBlur={(e) => handleCurrentYearChange('current_class_2_abatements', e.target.value)}
-                        className="text-xs text-right px-2 py-1 border border-gray-300 rounded"
+                        className="text-xs text-right px-2 py-0.5 border border-gray-300 rounded h-6"
                       />
                       <div></div>
                     </div>
@@ -395,13 +395,13 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                       type="number"
                       defaultValue={currentYearData.class_3a_count}
                       onBlur={(e) => handleCurrentYearChange('current_class_3a_count', e.target.value)}
-                      className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                     />
                     <input
                       type="number"
                       defaultValue={currentYearData.class_3a_total}
                       onBlur={(e) => handleCurrentYearChange('current_class_3a_total', e.target.value)}
-                      className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                     />
                   </div>
 
@@ -412,13 +412,13 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                       type="number"
                       defaultValue={currentYearData.class_3b_count}
                       onBlur={(e) => handleCurrentYearChange('current_class_3b_count', e.target.value)}
-                      className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                     />
                     <input
                       type="number"
                       defaultValue={currentYearData.class_3b_total}
                       onBlur={(e) => handleCurrentYearChange('current_class_3b_total', e.target.value)}
-                      className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                     />
                   </div>
 
@@ -430,13 +430,13 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                         type="number"
                         defaultValue={currentYearData.class_4_count}
                         onBlur={(e) => handleCurrentYearChange('current_class_4_count', e.target.value)}
-                        className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                       />
                       <input
                         type="number"
                         defaultValue={currentYearData.class_4_total}
                         onBlur={(e) => handleCurrentYearChange('current_class_4_total', e.target.value)}
-                        className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                       />
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
@@ -445,7 +445,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                         type="number"
                         defaultValue={currentYearData.class_4_abatements}
                         onBlur={(e) => handleCurrentYearChange('current_class_4_abatements', e.target.value)}
-                        className="text-xs text-right px-2 py-1 border border-gray-300 rounded"
+                        className="text-xs text-right px-2 py-0.5 border border-gray-300 rounded h-6"
                       />
                       <div></div>
                     </div>
@@ -458,7 +458,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                       type="number"
                       defaultValue={currentYearData.class_6_count}
                       onBlur={(e) => handleCurrentYearChange('current_class_6_count', e.target.value)}
-                      className="text-sm text-right px-2 py-1 border border-gray-300 rounded"
+                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                     />
                     <div className="text-sm text-right text-xs text-gray-500 py-1">Not/After Ratio Applied</div>
                   </div>
