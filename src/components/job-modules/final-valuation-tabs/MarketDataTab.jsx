@@ -488,6 +488,43 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     };
   }, [properties]);
 
+  // Calculate average Recommended EFA overall
+  const avgRecEffAgeOverall = useMemo(() => {
+    const recEffAges = [];
+
+    properties.forEach(property => {
+      const calc = getCalculatedValues(property);
+      if (calc.recommendedEFA !== null && calc.recommendedEFA !== undefined) {
+        recEffAges.push(calc.recommendedEFA);
+      }
+    });
+
+    if (recEffAges.length === 0) return null;
+
+    const sum = recEffAges.reduce((acc, val) => acc + val, 0);
+    return sum / recEffAges.length;
+  }, [properties, finalValuationData, yearPriorToDueYear, vendorType]);
+
+  // Calculate average Recommended EFA for CSP-PSP-HSP periods
+  const avgRecEffAgeSalesPeriods = useMemo(() => {
+    const recEffAges = [];
+
+    properties.forEach(property => {
+      const salesCode = getSalesPeriodCode(property);
+      if (salesCode === 'CSP' || salesCode === 'PSP' || salesCode === 'HSP') {
+        const calc = getCalculatedValues(property);
+        if (calc.recommendedEFA !== null && calc.recommendedEFA !== undefined) {
+          recEffAges.push(calc.recommendedEFA);
+        }
+      }
+    });
+
+    if (recEffAges.length === 0) return null;
+
+    const sum = recEffAges.reduce((acc, val) => acc + val, 0);
+    return sum / recEffAges.length;
+  }, [properties, finalValuationData, yearPriorToDueYear, vendorType, jobData?.end_date]);
+
   // Handle cell edit
   const handleCellEdit = async (propertyKey, field, value) => {
     try {
