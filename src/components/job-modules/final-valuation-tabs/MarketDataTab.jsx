@@ -583,10 +583,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Values Norm Time': property.values_norm_time || '',
         'Sales NU Code': cleanValue(property.sales_nu),
         'Sales Ratio': calc.projectedTotal && property.values_norm_time ?
-          Math.round((calc.projectedTotal / property.values_norm_time) * 100) : '',
+          (calc.projectedTotal / property.values_norm_time) : '',
         'Sale Comment': calc.saleComment,
-        'Detached Items Value': property.values_det_items || 0,
-        'Cost New Value': property.values_repl_cost || 0,
+        'Det Items': property.values_det_items || 0,
+        'Cost New': property.values_repl_cost || 0,
         'Current Land Allocation %': property.values_mod_total && property.values_mod_land ?
           { f: `AZ${rowNum}/BB${rowNum}` } : '',
         'Current Land Value': property.values_mod_land || 0,
@@ -670,12 +670,12 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           numFmt = '#,##0'; // Number with commas
         } else if (['Sale Price', 'Values Norm Time'].includes(colName)) {
           numFmt = '$#,##0'; // Currency
-        } else if (['Detached Items Value', 'Cost New Value', 'Current Land Value', 'Current Improvement Value',
+        } else if (['Det Items', 'Cost New', 'Current Land Value', 'Current Improvement Value',
                     'Current Total Value', 'CAMA Land Value', 'Projected Improvement', 'Projected Total', 'New Value'].includes(colName)) {
           numFmt = '$#,##0'; // Currency, no decimals
         } else if (['Current Year Taxes', 'Projected Taxes', 'Tax Delta $'].includes(colName)) {
           numFmt = '$#,##0.00'; // Currency with two decimals
-        } else if (['Current Land Allocation %', 'Projected Land Allocation %'].includes(colName)) {
+        } else if (['Current Land Allocation %', 'Projected Land Allocation %', 'Sales Ratio'].includes(colName)) {
           numFmt = '0%'; // Percentage, no decimals
         } else if (colName === 'Sale Date') {
           numFmt = 'mm/dd/yyyy'; // Date format
