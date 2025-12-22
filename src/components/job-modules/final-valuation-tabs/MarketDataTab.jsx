@@ -525,6 +525,43 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     return sum / recEffAges.length;
   }, [properties, finalValuationData, yearPriorToDueYear, vendorType, jobData?.end_date]);
 
+  // Calculate average Year Built overall
+  const avgYearBuiltOverall = useMemo(() => {
+    const yearBuilts = [];
+
+    properties.forEach(property => {
+      const yearBuilt = property.asset_year_built;
+      if (yearBuilt && !isNaN(parseInt(yearBuilt))) {
+        yearBuilts.push(parseInt(yearBuilt));
+      }
+    });
+
+    if (yearBuilts.length === 0) return null;
+
+    const sum = yearBuilts.reduce((acc, val) => acc + val, 0);
+    return Math.round(sum / yearBuilts.length);
+  }, [properties]);
+
+  // Calculate average Year Built for CSP-PSP-HSP periods
+  const avgYearBuiltSalesPeriods = useMemo(() => {
+    const yearBuilts = [];
+
+    properties.forEach(property => {
+      const salesCode = getSalesPeriodCode(property);
+      if (salesCode === 'CSP' || salesCode === 'PSP' || salesCode === 'HSP') {
+        const yearBuilt = property.asset_year_built;
+        if (yearBuilt && !isNaN(parseInt(yearBuilt))) {
+          yearBuilts.push(parseInt(yearBuilt));
+        }
+      }
+    });
+
+    if (yearBuilts.length === 0) return null;
+
+    const sum = yearBuilts.reduce((acc, val) => acc + val, 0);
+    return Math.round(sum / yearBuilts.length);
+  }, [properties, jobData?.end_date]);
+
   // Handle cell edit
   const handleCellEdit = async (propertyKey, field, value) => {
     try {
