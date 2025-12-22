@@ -118,6 +118,25 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     return match ? parseInt(match[0]) : 1;
   };
 
+  // Helper: Get HPI value for a specific year
+  const getHPIForYear = (year) => {
+    if (!hpiData || !year) return null;
+    const hpiRecord = hpiData.find(h => h.observation_year === parseInt(year));
+    return hpiRecord?.hpi_index || null;
+  };
+
+  // Helper: Get sale year from date
+  const getSaleYear = (property) => {
+    if (!property.sales_date) return null;
+    return new Date(property.sales_date).getFullYear();
+  };
+
+  // Helper: Get normalization target year (typically end year - 1)
+  const getNormalizeToYear = () => {
+    if (!jobData?.end_date) return new Date().getFullYear();
+    return new Date(jobData.end_date).getFullYear() - 1;
+  };
+
   // Helper: Calculate Card SF (additional cards only, excluding main)
   const getCardSF = (property) => {
     const card = property.property_addl_card;
