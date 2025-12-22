@@ -517,7 +517,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       return {
         'Block': property.property_block || '',
         'Lot': property.property_lot || '',
-        'Qualifier': property.property_qualifier || '',
+        'Qualifier': property.property_qualifier || null, // Use null for truly blank cells in Excel
         'Card': maxCard,
         'Card SF': totalCardSF,
         'Address': property.property_location || '',
