@@ -935,6 +935,38 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         </div>
       </div>
 
+      {/* Rec Eff Age & Year Built Analysis */}
+      <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-6">
+        <h3 className="text-lg font-bold text-gray-900 mb-4">Sales Analysis - Average Metrics</h3>
+        <div className="grid grid-cols-2 gap-6">
+          {/* Avg Rec Eff Age */}
+          <div className="bg-white rounded-lg border border-gray-300 p-4">
+            <div className="text-sm font-semibold text-gray-600 mb-2">Average Recommended Effective Age</div>
+            <div className="text-3xl font-bold text-purple-600">
+              {avgRecEffAgeOverall !== null ? Math.round(avgRecEffAgeOverall) : 'N/A'}
+              <span className="text-gray-400 mx-2">/</span>
+              {avgRecEffAgeSalesPeriods !== null ? Math.round(avgRecEffAgeSalesPeriods) : 'N/A'}
+            </div>
+            <div className="text-xs text-gray-500 mt-2">
+              Overall / CSP-PSP-HSP Periods
+            </div>
+          </div>
+
+          {/* Avg Year Built */}
+          <div className="bg-white rounded-lg border border-gray-300 p-4">
+            <div className="text-sm font-semibold text-gray-600 mb-2">Average Year Built</div>
+            <div className="text-3xl font-bold text-pink-600">
+              {avgYearBuiltOverall !== null ? avgYearBuiltOverall : 'N/A'}
+              <span className="text-gray-400 mx-2">/</span>
+              {avgYearBuiltSalesPeriods !== null ? avgYearBuiltSalesPeriods : 'N/A'}
+            </div>
+            <div className="text-xs text-gray-500 mt-2">
+              Overall / CSP-PSP-HSP Periods
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Preview Notice */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex items-start gap-3">
