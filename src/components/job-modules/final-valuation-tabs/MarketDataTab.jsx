@@ -538,7 +538,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Property M4 Class': property.property_m4_class || '',
         'Property CAMA Class': property.property_cama_class || '',
         'Check': { f: `IF(O${rowNum}=P${rowNum},"TRUE","FALSE")` },
-        'InfoBy Code': property.inspection_info_by || '',
+        'InfoBy Code': property.inspection_info_by ? { v: String(property.inspection_info_by), t: 's' } : '',
         'VCS': property.property_vcs || '',
         'Exempt Facility': property.property_facility || '',
         'Special': calc.specialNotes,
