@@ -557,7 +557,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Exterior Net Condition': property.asset_ext_cond || '',
         'Interior Net Condition': property.asset_int_cond || '',
         'Code': salesCode || '',
-        'Sale Date': property.sales_date ? new Date(property.sales_date) : '',
+        'Sale Date': property.sales_date ? property.sales_date.split('T')[0] : '', // Date only, no timestamp
         'Sale Book': property.sales_book || '',
         'Sale Page': property.sales_page || '',
         'Sale Price': property.sales_price || '',
