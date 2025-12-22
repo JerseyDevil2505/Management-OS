@@ -8,6 +8,11 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   const [finalValuationData, setFinalValuationData] = useState({});
   const [taxRates, setTaxRates] = useState(null);
   const [isSaving, setSaving] = useState(false);
+  const [expandedSections, setExpandedSections] = useState({
+    vcs: false,
+    typeUse: false,
+    design: false
+  });
   const PREVIEW_LIMIT = 500; // Only show first 500 properties
 
   // Refs for scroll synchronization
