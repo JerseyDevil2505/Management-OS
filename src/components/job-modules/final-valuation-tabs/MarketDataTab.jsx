@@ -514,10 +514,16 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       // AS=Values Norm Time, AW=Detached Items, AX=Cost New, BE=CAMA Land
       // BI=Recommended EFA, BJ=Actual EFA, BK=DEPR, BL=New Value, BF=Projected Imp
 
+      // Helper to convert "00" or blank to null
+      const cleanValue = (val) => {
+        if (!val || val === '' || val === '00') return null;
+        return val;
+      };
+
       return {
         'Block': property.property_block || '',
         'Lot': property.property_lot || '',
-        'Qualifier': property.property_qualifier || null, // Use null for truly blank cells in Excel
+        'Qualifier': cleanValue(property.property_qualifier),
         'Card': maxCard,
         'Card SF': totalCardSF,
         'Address': property.property_location || '',
@@ -525,10 +531,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Owner Address': property.owner_street || '',
         'Owner City State': property.owner_csz || '',
         'Owner Zip': property.owner_csz?.split(' ').pop() || '',
-        'Sp Tax Cd 1': property.special_tax_code_1 || '',
-        'Sp Tax Cd 2': property.special_tax_code_2 || '',
-        'Sp Tax Cd 3': property.special_tax_code_3 || '',
-        'Sp Tax Cd 4': property.special_tax_code_4 || '',
+        'Sp Tax Cd 1': cleanValue(property.special_tax_code_1),
+        'Sp Tax Cd 2': cleanValue(property.special_tax_code_2),
+        'Sp Tax Cd 3': cleanValue(property.special_tax_code_3),
+        'Sp Tax Cd 4': cleanValue(property.special_tax_code_4),
         'Property M4 Class': property.property_m4_class || '',
         'Property CAMA Class': property.property_cama_class || '',
         'Check': { f: `IF(O${rowNum}=P${rowNum},"TRUE","FALSE")` },
@@ -557,12 +563,18 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Exterior Net Condition': property.asset_ext_cond || '',
         'Interior Net Condition': property.asset_int_cond || '',
         'Code': salesCode || '',
-        'Sale Date': property.sales_date ? property.sales_date.split('T')[0] : '', // Date only, no timestamp
-        'Sale Book': property.sales_book || '',
-        'Sale Page': property.sales_page || '',
+        'Sale Date': property.sales_date ? (() => {
+          // Convert to Excel date serial number
+          const date = new Date(property.sales_date);
+          const epoch = new Date(1899, 11, 30); // Excel epoch
+          const days = (date - epoch) / (1000 * 60 * 60 * 24);
+          return { v: days, t: 'n' }; // Excel serial date as number
+        })() : '',
+        'Sale Book': cleanValue(property.sales_book),
+        'Sale Page': cleanValue(property.sales_page),
         'Sale Price': property.sales_price || '',
         'Values Norm Time': property.values_norm_time || '',
-        'Sales NU Code': property.sales_nu || '',
+        'Sales NU Code': cleanValue(property.sales_nu),
         'Sales Ratio': calc.projectedTotal && property.values_norm_time ?
           Math.round((calc.projectedTotal / property.values_norm_time) * 100) : '',
         'Sale Comment': calc.saleComment,
@@ -638,7 +650,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
       for (let C = range.s.c; C <= range.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-        if (!worksheet[cellAddress]) continue;
+        // Create cell if it doesn't exist (for null values)
+        if (!worksheet[cellAddress]) {
+          worksheet[cellAddress] = { v: '', t: 's' };
+        }
 
         const colName = headers[C];
         let numFmt = undefined;
