@@ -711,10 +711,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         // Apply number formatting based on column
         if (['Lot Size (SF)', 'SFLA', 'Total SFLA'].includes(colName)) {
           numFmt = '#,##0'; // Number with commas
-        } else if (['Sale Year', 'Norm Year'].includes(colName)) {
-          numFmt = '0'; // Year as integer
-        } else if (['Sale Year HPI', 'Norm Year HPI'].includes(colName)) {
-          numFmt = '0.00'; // HPI as decimal with 2 places
+        } else if (colName === 'HPI Multiplier') {
+          numFmt = '0.0000'; // Multiplier as decimal with 4 places
         } else if (['Sale Price', 'Norm Time Value'].includes(colName)) {
           numFmt = '$#,##0'; // Currency
         } else if (['Det Items', 'Cost New', 'Current Land', 'Current Impr',
