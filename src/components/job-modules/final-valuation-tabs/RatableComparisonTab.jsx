@@ -596,7 +596,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   type="number"
                   value={rateCalcData.budget}
                   onChange={(e) => handleRateCalcChange('budget', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-lg font-bold"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-lg font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   placeholder="Enter budget"
                 />
               </div>
@@ -607,7 +607,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   step="0.001"
                   value={rateCalcData.currentRate}
                   onChange={(e) => handleRateCalcChange('currentRate', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-lg font-bold"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-lg font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   placeholder="Enter current rate"
                 />
               </div>
@@ -652,7 +652,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                       step="0.01"
                       value={rateCalcData.bufferForLoss}
                       onChange={(e) => handleRateCalcChange('bufferForLoss', e.target.value)}
-                      className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                      className="w-20 px-2 py-1 border border-gray-300 rounded text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       placeholder="0.00"
                     />
                     <span className="text-sm">%</span>
