@@ -587,18 +587,18 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Sale Comment': calc.saleComment,
         'Det Items': property.values_det_items || 0,
         'Cost New': property.values_repl_cost || 0,
-        'Current Land Allocation %': property.values_mod_total && property.values_mod_land ?
+        'CLA': property.values_mod_total && property.values_mod_land ?
           { f: `AZ${rowNum}/BB${rowNum}` } : '',
-        'Current Land Value': property.values_mod_land || 0,
-        'Current Improvement Value': property.values_mod_improvement || 0,
-        'Current Total Value': property.values_mod_total || 0,
+        'Current Land': property.values_mod_land || 0,
+        'Current Impr': property.values_mod_improvement || 0,
+        'Current Total': property.values_mod_total || 0,
         '--- NEW PROJECTED ---': '',
-        'Projected Land Allocation %': calc.newLandAllocation && calc.projectedTotal ?
+        'PLA': calc.newLandAllocation && calc.projectedTotal ?
           { f: `BE${rowNum}/BG${rowNum}` } : '',
-        'CAMA Land Value': property.values_cama_land || 0,
-        'Projected Improvement': calc.qualifiesForEFA && calc.newValue !== null && calc.newValue > 0 ?
+        'CAMA Land': property.values_cama_land || 0,
+        'Cama/Proj Imp': calc.qualifiesForEFA && calc.newValue !== null && calc.newValue > 0 ?
           { f: `BL${rowNum}-BE${rowNum}` } : (property.values_cama_improvement || 0),
-        'Projected Total': { f: `BE${rowNum}+BF${rowNum}` },
+        'Proj Total': { f: `BE${rowNum}+BF${rowNum}` },
         'Delta %': calc.deltaPercent ? Math.round(calc.deltaPercent) : '',
         'Recommended EFA': calc.recommendedEFA !== null && calc.recommendedEFA !== undefined ?
           { f: `ROUND(${yearPriorToDueYear}-((1-((AS${rowNum}-BE${rowNum}-AW${rowNum})/AX${rowNum}))*100),0)` } : '',
@@ -607,7 +607,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           { f: `MIN(1,1-((${yearPriorToDueYear}-BJ${rowNum})/100))` } : '',
         'New Value': calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined ?
           { f: `ROUND((AX${rowNum}*BK${rowNum})+AW${rowNum}+BE${rowNum},-2)` } : 0,
-        'Current Year Taxes': calc.currentTaxes || 0,
+        'Current Taxes': calc.currentTaxes || 0,
         'Projected Taxes': calc.projectedTaxes || 0,
         'Tax Delta $': calc.taxDelta || 0
       };
@@ -670,12 +670,12 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           numFmt = '#,##0'; // Number with commas
         } else if (['Sale Price', 'Values Norm Time'].includes(colName)) {
           numFmt = '$#,##0'; // Currency
-        } else if (['Det Items', 'Cost New', 'Current Land Value', 'Current Improvement Value',
-                    'Current Total Value', 'CAMA Land Value', 'Projected Improvement', 'Projected Total', 'New Value'].includes(colName)) {
+        } else if (['Det Items', 'Cost New', 'Current Land', 'Current Impr',
+                    'Current Total', 'CAMA Land', 'Cama/Proj Imp', 'Proj Total', 'New Value'].includes(colName)) {
           numFmt = '$#,##0'; // Currency, no decimals
-        } else if (['Current Year Taxes', 'Projected Taxes', 'Tax Delta $'].includes(colName)) {
+        } else if (['Current Taxes', 'Projected Taxes', 'Tax Delta $'].includes(colName)) {
           numFmt = '$#,##0.00'; // Currency with two decimals
-        } else if (['Current Land Allocation %', 'Projected Land Allocation %', 'Sales Ratio'].includes(colName)) {
+        } else if (['CLA', 'PLA', 'Sales Ratio'].includes(colName)) {
           numFmt = '0%'; // Percentage, no decimals
         } else if (colName === 'Sale Date') {
           numFmt = 'mm/dd/yyyy'; // Date format
