@@ -356,6 +356,53 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     return cache;
   }, [previewProperties, finalValuationData, yearPriorToDueYear, vendorType, taxRates]);
 
+  // Consolidate properties by grouping additional cards
+  const consolidateProperties = (allProperties) => {
+    const grouped = {};
+
+    allProperties.forEach(property => {
+      // Create base key without card designation
+      const baseKey = `${property.property_block}-${property.property_lot}-${property.property_qualifier}`;
+
+      if (!grouped[baseKey]) {
+        grouped[baseKey] = {
+          mainCard: null,
+          additionalCards: [],
+          maxCard: 1,
+          totalCardSF: 0
+        };
+      }
+
+      const card = property.property_addl_card;
+      const isMainCard = vendorType === 'BRT'
+        ? (!card || card === '1')
+        : (!card || card.toUpperCase() === 'M');
+
+      if (isMainCard) {
+        grouped[baseKey].mainCard = property;
+      } else {
+        grouped[baseKey].additionalCards.push(property);
+        // Card SF for additional cards only
+        grouped[baseKey].totalCardSF += property.asset_sfla || 0;
+      }
+
+      // Track max card number
+      if (card) {
+        const cardNum = vendorType === 'BRT'
+          ? parseInt(card.match(/\d+/)?.[0] || '1')
+          : (card.toUpperCase() === 'M' ? 1 : (card.charCodeAt(0) - 64)); // A=1, B=2, etc.
+        grouped[baseKey].maxCard = Math.max(grouped[baseKey].maxCard, cardNum);
+      }
+    });
+
+    // Return array of consolidated properties
+    return Object.values(grouped).map(group => ({
+      ...group.mainCard,
+      _maxCard: group.maxCard,
+      _totalCardSF: group.totalCardSF
+    })).filter(p => p.property_composite_key); // Filter out any null mainCards
+  };
+
   // Calculate summary by class for all properties (consolidated)
   const classSummary = useMemo(() => {
     const summary = {
