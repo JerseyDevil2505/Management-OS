@@ -511,8 +511,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       // Column mapping for formulas (UPDATED for 4 special tax code columns K-N):
       // O=MOD IV, P=CAMA, Q=Check
       // AD=Year Built, AE=Current EFA, AF=Test
-      // AS=Values Norm Time, AW=Det Items, AX=Cost New, BE=CAMA Land
-      // BI=Recommended EFA, BJ=Actual EFA, BK=DEPR, BL=New Value, BF=Cama/Proj Imp
+      // AS=Values Norm Time, AW=Det Items, AX=Cost New, BD=CAMA Land
+      // BH=Recommended EFA, BI=Actual EFA, BJ=DEPR, BK=New Value, BE=Cama/Proj Imp
 
       // Helper to convert "00" or blank to empty string (for proper gridlines)
       const cleanValue = (val) => {
