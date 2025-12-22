@@ -395,12 +395,30 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       }
     });
 
-    // Return array of consolidated properties
-    return Object.values(grouped).map(group => ({
-      ...group.mainCard,
-      _maxCard: group.maxCard,
-      _totalCardSF: group.totalCardSF
-    })).filter(p => p.property_composite_key); // Filter out any null mainCards
+    // Return array of consolidated properties with proper sorting
+    return Object.values(grouped)
+      .map(group => ({
+        ...group.mainCard,
+        _maxCard: group.maxCard,
+        _totalCardSF: group.totalCardSF
+      }))
+      .filter(p => p.property_composite_key) // Filter out any null mainCards
+      .sort((a, b) => {
+        // Sort by Block (numeric)
+        const blockA = parseFloat(a.property_block) || 0;
+        const blockB = parseFloat(b.property_block) || 0;
+        if (blockA !== blockB) return blockA - blockB;
+
+        // Sort by Lot (numeric)
+        const lotA = parseFloat(a.property_lot) || 0;
+        const lotB = parseFloat(b.property_lot) || 0;
+        if (lotA !== lotB) return lotA - lotB;
+
+        // Sort by Qualifier (alphabetic A-Z)
+        const qualA = (a.property_qualifier || '').toString().toUpperCase();
+        const qualB = (b.property_qualifier || '').toString().toUpperCase();
+        return qualA.localeCompare(qualB);
+      });
   };
 
   // Calculate summary by class for all properties (consolidated)
