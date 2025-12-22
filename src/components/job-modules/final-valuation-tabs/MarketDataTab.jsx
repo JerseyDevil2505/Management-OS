@@ -156,16 +156,24 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     // This means the sale was accepted during Market and Land Analysis phase
     if (!property.values_norm_time || property.values_norm_time <= 0) return null;
 
-    const saleDate = new Date(property.sales_date);
+    // Parse date carefully to avoid timezone issues
+    const saleDateStr = property.sales_date.split('T')[0]; // Get YYYY-MM-DD only
+    const saleDate = new Date(saleDateStr + 'T12:00:00'); // Add noon to avoid timezone shifts
+
     const endYear = new Date(jobData.end_date).getFullYear();
     const yearOfValue = endYear - 1;
 
-    const cspStart = new Date(yearOfValue - 1, 9, 1);
-    const cspEnd = new Date(yearOfValue, 11, 31);
-    const pspStart = new Date(yearOfValue - 2, 9, 1);
-    const pspEnd = new Date(yearOfValue - 1, 8, 30);
-    const hspStart = new Date(yearOfValue - 3, 9, 1);
-    const hspEnd = new Date(yearOfValue - 2, 8, 30);
+    // CSP: 10/1 of year-prior-to-value → 12/31 of year-of-value
+    const cspStart = new Date(yearOfValue - 1, 9, 1, 0, 0, 0);
+    const cspEnd = new Date(yearOfValue, 11, 31, 23, 59, 59);
+
+    // PSP: 10/1 of two-years-prior → 9/30 of year-prior-to-value
+    const pspStart = new Date(yearOfValue - 2, 9, 1, 0, 0, 0);
+    const pspEnd = new Date(yearOfValue - 1, 8, 30, 23, 59, 59);
+
+    // HSP: 10/1 of three-years-prior → 9/30 of two-years-prior
+    const hspStart = new Date(yearOfValue - 3, 9, 1, 0, 0, 0);
+    const hspEnd = new Date(yearOfValue - 2, 8, 30, 23, 59, 59);
 
     if (saleDate >= cspStart && saleDate <= cspEnd) return 'CSP';
     if (saleDate >= pspStart && saleDate <= pspEnd) return 'PSP';
