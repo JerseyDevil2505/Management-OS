@@ -76,13 +76,13 @@ const DataVisualizations = ({ jobData, properties }) => {
     });
   }, [properties, filters, jobData.end_date]);
 
-  // Market History - Properties with norm_time
+  // Market History - Properties with values_norm_time
   const marketHistoryData = useMemo(() => {
     const salesByYear = {};
 
-    // Filter for properties with norm_time (normalized/adjusted sales)
+    // Filter for properties with values_norm_time (normalized/adjusted sales)
     const qualifiedProperties = filteredProperties.filter(prop => {
-      return prop.norm_time && prop.norm_time !== null && prop.norm_time !== '';
+      return prop.values_norm_time && prop.values_norm_time > 0;
     });
     
     qualifiedProperties.forEach(prop => {
