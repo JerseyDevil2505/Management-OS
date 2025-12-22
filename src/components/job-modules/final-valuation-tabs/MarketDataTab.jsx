@@ -612,14 +612,19 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Sale Book': cleanValue(property.sales_book),
         'Sale Page': cleanValue(property.sales_page),
         'Sale Price': property.sales_price || '',
-        'Sale Year': getSaleYear(property) || '',
-        'Sale Year HPI': (() => {
+        'HPI Multiplier': (() => {
           const saleYear = getSaleYear(property);
-          return saleYear ? getHPIForYear(saleYear) : '';
+          const normYear = getNormalizeToYear();
+          const saleYearHPI = saleYear ? getHPIForYear(saleYear) : null;
+          const normYearHPI = getHPIForYear(normYear);
+
+          if (saleYearHPI && normYearHPI && saleYearHPI > 0) {
+            return normYearHPI / saleYearHPI;
+          }
+          return '';
         })(),
-        'Norm Year': getNormalizeToYear(),
-        'Norm Year HPI': getHPIForYear(getNormalizeToYear()) || '',
-        'Norm Time Value': property.values_norm_time || '',
+        'Norm Time Value': property.sales_price && property.values_norm_time ?
+          { f: `AN${rowNum}*AO${rowNum}` } : (property.values_norm_time || ''),
         'Sales NU Code': cleanValue(property.sales_nu),
         'Sales Ratio': calc.projectedTotal && property.values_norm_time ?
           (calc.projectedTotal / property.values_norm_time) : '',
