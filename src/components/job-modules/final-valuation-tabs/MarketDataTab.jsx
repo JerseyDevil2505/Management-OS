@@ -152,14 +152,9 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   const getSalesPeriodCode = (property) => {
     if (!property.sales_date) return null;
 
-    // Must have valid building class > 10
-    const buildingClass = parseInt(property.asset_building_class);
-    if (!buildingClass || buildingClass <= 10) return null;
-
-    // Sales NU code must be blank, 00, 0, 07, 7, or 32
-    const salesNU = property.sales_nu;
-    const validSalesNUCodes = ['', '00', '0', '07', '7', '32'];
-    if (!validSalesNUCodes.includes(salesNU || '')) return null;
+    // Only assign period code if sale has been normalized (values_norm_time exists)
+    // This means the sale was accepted during Market and Land Analysis phase
+    if (!property.values_norm_time || property.values_norm_time <= 0) return null;
 
     const saleDate = new Date(property.sales_date);
     const endYear = new Date(jobData.end_date).getFullYear();
