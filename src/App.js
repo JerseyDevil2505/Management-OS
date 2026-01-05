@@ -404,12 +404,13 @@ const App = () => {
           updates.planningJobs = planningData;
         }
 
-        // Load expenses
+        // Load expenses (last 3 years)
         const currentYear = new Date().getFullYear();
         const { data: expensesData } = await supabase
           .from('expenses')
           .select('*')
-          .eq('year', currentYear);
+          .gte('year', currentYear - 2)
+          .order('year', { ascending: false });
 
         if (expensesData) {
           updates.expenses = expensesData;
@@ -425,11 +426,12 @@ const App = () => {
           updates.receivables = receivablesData;
         }
 
-        // Load distributions
+        // Load distributions (last 3 years)
         const { data: distributionsData } = await supabase
           .from('shareholder_distributions')
           .select('*')
-          .eq('year', currentYear);
+          .gte('year', currentYear - 2)
+          .order('year', { ascending: false });
 
         if (distributionsData) {
           updates.distributions = distributionsData;
