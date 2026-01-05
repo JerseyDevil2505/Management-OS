@@ -1816,8 +1816,8 @@ const calculateDistributionMetrics = async () => {
           .insert(expenseData);
         
         if (error) throw error;
-        
-        alert(`Successfully imported ${expenseData.length} expense entries`);
+
+        alert(`Successfully imported ${expenseData.length} expense entries for year ${targetYear}`);
         setShowExpenseImport(false);
         setExpenseFile(null);
         if (onRefresh) onRefresh();
