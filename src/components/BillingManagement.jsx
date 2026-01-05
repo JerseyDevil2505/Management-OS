@@ -1721,7 +1721,12 @@ const calculateDistributionMetrics = async () => {
 
   const handleExpenseImport = async () => {
     if (!expenseFile) return;
-    
+
+    // Confirm with user which year they're importing to
+    if (!window.confirm(`Import expenses for year ${selectedExpenseYear}?\n\nThis will REPLACE all existing ${selectedExpenseYear} expense data with the data from your Excel file.`)) {
+      return;
+    }
+
     try {
       // Read the file
       const arrayBuffer = await expenseFile.arrayBuffer();
