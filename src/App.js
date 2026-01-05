@@ -443,7 +443,8 @@ const App = () => {
           updates.legacyJobs || appData.legacyJobs,
           updates.planningJobs || appData.planningJobs,
           updates.expenses || appData.expenses,
-          updates.receivables || appData.receivables
+          updates.receivables || appData.receivables,
+          updates.distributions || appData.distributions
         );
       }
 
