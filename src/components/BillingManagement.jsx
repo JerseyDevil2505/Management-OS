@@ -2626,9 +2626,15 @@ const calculateDistributionMetrics = async () => {
                       onChange={(e) => setSelectedExpenseYear(parseInt(e.target.value))}
                       className="px-3 py-2 border border-gray-300 rounded-md bg-white"
                     >
-                      {Array.from(new Set([...expenses?.map(e => e.year) || [], new Date().getFullYear()])).sort((a, b) => b - a).map(year => (
-                        <option key={year} value={year}>{year}</option>
-                      ))}
+                      {(() => {
+                        const currentYear = new Date().getFullYear();
+                        const yearsWithData = expenses?.map(e => e.year) || [];
+                        // Include current year and previous 2 years, plus any years with data
+                        const allYears = new Set([...yearsWithData, currentYear, currentYear - 1, currentYear - 2]);
+                        return Array.from(allYears).sort((a, b) => b - a).map(year => (
+                          <option key={year} value={year}>{year}</option>
+                        ));
+                      })()}
                     </select>
                   </div>
                 </div>
@@ -2934,9 +2940,15 @@ const calculateDistributionMetrics = async () => {
                     onChange={(e) => setSelectedDistributionYear(parseInt(e.target.value))}
                     className="px-3 py-1 border border-gray-300 rounded-md bg-white text-sm"
                   >
-                    {Array.from(new Set([...distributions?.map(d => d.year) || [], new Date().getFullYear()])).sort((a, b) => b - a).map(year => (
-                      <option key={year} value={year}>{year}</option>
-                    ))}
+                    {(() => {
+                      const currentYear = new Date().getFullYear();
+                      const yearsWithData = distributions?.map(d => d.year) || [];
+                      // Include current year and previous 2 years, plus any years with data
+                      const allYears = new Set([...yearsWithData, currentYear, currentYear - 1, currentYear - 2]);
+                      return Array.from(allYears).sort((a, b) => b - a).map(year => (
+                        <option key={year} value={year}>{year}</option>
+                      ));
+                    })()}
                   </select>
                 </div>
               </div>
