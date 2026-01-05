@@ -2664,7 +2664,18 @@ const AdminJobManagement = ({
                         </div>
                         
                         <div className="flex space-x-2">
-                          <button 
+                          <button
+                            onClick={() => {
+                              setSelectedJobForUpload(job);
+                              setShowFileUploadModal(true);
+                            }}
+                            className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                            title="Update source or code files"
+                          >
+                            <Upload className="w-4 h-4" />
+                            <span>Update File</span>
+                          </button>
+                          <button
                             onClick={() => goToJob(job)}
                             className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm font-medium shadow-md hover:shadow-lg transition-all transform hover:scale-105"
                           >
