@@ -1768,21 +1768,22 @@ const calculateDistributionMetrics = async () => {
       });
       
       // Process expense rows
-      const currentYear = new Date().getFullYear();
+      // Use the selected year from the dropdown, not current year
+      const targetYear = selectedExpenseYear;
       const expenseData = [];
-      
+
       // Start from row after header, stop at SUB TOTAL or empty rows
       for (let rowIndex = headerRowIndex + 1; rowIndex < jsonData.length; rowIndex++) {
         const row = jsonData[rowIndex];
         const category = row[0]; // First column is category
-        
+
         // Skip if no category or if it's a total row
-        if (!category || 
+        if (!category ||
             category.toString().toUpperCase().includes('TOTAL') ||
             category.toString().toUpperCase().includes('FRINGE')) {
           continue;
         }
-        
+
         // Extract amounts for each month
         for (const [monthNum, colIndex] of Object.entries(monthColumns)) {
           const amount = row[colIndex];
@@ -1790,18 +1791,18 @@ const calculateDistributionMetrics = async () => {
             expenseData.push({
               category: category.toString().trim(),
               month: parseInt(monthNum),
-              year: currentYear,
+              year: targetYear,
               amount: parseFloat(amount)
             });
           }
         }
       }
-      
-      // Clear existing expenses for the year
+
+      // Clear existing expenses for the selected year only
       await supabase
         .from('expenses')
         .delete()
-        .eq('year', currentYear);
+        .eq('year', targetYear);
       
       // Insert new expenses
       if (expenseData.length > 0) {
