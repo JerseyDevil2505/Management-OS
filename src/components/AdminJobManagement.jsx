@@ -41,6 +41,10 @@ const AdminJobManagement = ({
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(null);
   const [archiveChecklistWarning, setArchiveChecklistWarning] = useState(null);
 
+  // File upload modal state
+  const [showFileUploadModal, setShowFileUploadModal] = useState(false);
+  const [selectedJobForUpload, setSelectedJobForUpload] = useState(null);
+
   // Processing and notification state
   const [processingStatus, setProcessingStatus] = useState({
     isProcessing: false,
