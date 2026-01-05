@@ -3130,62 +3130,72 @@ const handleCodeFileUpdate = async () => {
         </div>
       )}
 
-      {/* Source File Section */}
-      <div className="flex items-center gap-3 text-gray-300">
-        <FileText className="w-4 h-4 text-blue-400" />
-        <span className="text-sm min-w-0 flex-1">
-          📄 Source: {getFileStatusWithRealVersion(job.updated_at || job.created_at, 'source')}
-        </span>
-        
-        <input
-          type="file"
-          accept=".csv,.txt"
-          onChange={handleSourceFileUpload}
-          className="hidden"
-          id="source-file-upload"
-        />
-        
-        <button
-          onClick={() => document.getElementById('source-file-upload').click()}
-          disabled={comparing || processing || isJobLoading || isJobContainerLoading}
-          className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:bg-gray-500 flex items-center gap-1"
-          title={isJobLoading || isJobContainerLoading ? 'Job data is loading...' : ''}
-        >
-          <Upload className="w-3 h-3" />
-          {sourceFile ? sourceFile.name.substring(0, 10) + '...' : 'Select File'}
-        </button>
-        
-        {sourceFile && (
-          <>
-            <button
-              onClick={() => {
-                setSourceFile(null);
-                setSourceFileContent(null);
-                // REMOVED: Don't reset vendor - keep using prop from JobContainer
-                document.getElementById('source-file-upload').value = '';
-                addNotification('Source file cleared', 'info');
-              }}
-              disabled={comparing || processing}
-              className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 disabled:bg-gray-500 flex items-center"
-            >
-              <X className="w-3 h-3" />
-            </button>
-            <button
-              onClick={() => handleCompareFile('source')}
-              disabled={comparing || processing || isJobLoading}
-              className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
-              title={isJobLoading ? 'Job data is loading...' : ''}
-            >
-              {comparing ? (
-                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-              ) : (
-                <CheckCircle className="w-3 h-3" />
-              )}
-              Update
-            </button>
-          </>
-        )}
-      </div>
+      {/* Source File Section - Hidden when codeFileOnly is true */}
+      {!codeFileOnly && (
+        <div className="flex items-center gap-3 text-gray-300">
+          <FileText className="w-4 h-4 text-blue-400" />
+          <span className="text-sm min-w-0 flex-1">
+            📄 Source: {getFileStatusWithRealVersion(job.updated_at || job.created_at, 'source')}
+          </span>
+
+          <input
+            type="file"
+            accept=".csv,.txt"
+            onChange={handleSourceFileUpload}
+            className="hidden"
+            id="source-file-upload"
+          />
+
+          <button
+            onClick={() => document.getElementById('source-file-upload').click()}
+            disabled={comparing || processing || isJobLoading || isJobContainerLoading}
+            className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:bg-gray-500 flex items-center gap-1"
+            title={isJobLoading || isJobContainerLoading ? 'Job data is loading...' : ''}
+          >
+            <Upload className="w-3 h-3" />
+            {sourceFile ? sourceFile.name.substring(0, 10) + '...' : 'Select File'}
+          </button>
+
+          {sourceFile && (
+            <>
+              <button
+                onClick={() => {
+                  setSourceFile(null);
+                  setSourceFileContent(null);
+                  // REMOVED: Don't reset vendor - keep using prop from JobContainer
+                  document.getElementById('source-file-upload').value = '';
+                  addNotification('Source file cleared', 'info');
+                }}
+                disabled={comparing || processing}
+                className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 disabled:bg-gray-500 flex items-center"
+              >
+                <X className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => handleCompareFile('source')}
+                disabled={comparing || processing || isJobLoading}
+                className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
+                title={isJobLoading ? 'Job data is loading...' : ''}
+              >
+                {comparing ? (
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                ) : (
+                  <CheckCircle className="w-3 h-3" />
+                )}
+                Update
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Show message when source upload is disabled */}
+      {codeFileOnly && (
+        <div className="flex items-center gap-2 text-yellow-400 bg-yellow-900 bg-opacity-30 px-3 py-2 rounded">
+          <AlertTriangle className="w-4 h-4" />
+          <span className="text-xs">Source file uploads disabled in job view. Use "Update File" button from Admin Jobs page.</span>
+        </div>
+      )}
 
       {/* Code File Section */}
       <div className="flex items-center gap-3 text-gray-300">
