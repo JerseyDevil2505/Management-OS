@@ -9,7 +9,9 @@ const FileUploadButton = ({
   isJobLoading = false,
   onDataRefresh,
   onUpdateJobCache,  // JobContainer's refresh callback
-  isJobContainerLoading = false  // Accept loading state from JobContainer
+  isJobContainerLoading = false,  // Accept loading state from JobContainer
+  codeFileOnly = false,  // NEW: When true, only allow code file uploads (disable source file)
+  standalone = false  // NEW: When true, component is rendered standalone (not in job container)
 }) => {
   const [sourceFile, setSourceFile] = useState(null);
   const [codeFile, setCodeFile] = useState(null);
