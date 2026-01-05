@@ -4,6 +4,7 @@ import {
   DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X, Clock, Download
 } from 'lucide-react';
 import { supabase, employeeService, jobService, planningJobService, utilityService, authService, propertyService, checklistService } from '../lib/supabaseClient';
+import FileUploadButton from './job-modules/FileUploadButton';
 
 // Accept jobMetrics props for live metrics integration
 const AdminJobManagement = ({ 
