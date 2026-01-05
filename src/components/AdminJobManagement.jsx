@@ -3061,6 +3061,50 @@ const AdminJobManagement = ({
           </div>
         </div>
       )}
+
+      {/* File Upload Modal - Standalone mode */}
+      {showFileUploadModal && selectedJobForUpload && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+            <div className="flex justify-between items-center p-6 border-b">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Update Files - {selectedJobForUpload.job_name || selectedJobForUpload.name}</h2>
+                <p className="text-sm text-gray-600 mt-1">Upload source or code files without loading the full job</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowFileUploadModal(false);
+                  setSelectedJobForUpload(null);
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+              <FileUploadButton
+                job={selectedJobForUpload}
+                onFileProcessed={(result) => {
+                  console.log('✅ File processed from Admin Jobs:', result);
+                  // Refresh the jobs list to show updated version/timestamp
+                  if (onRefresh) {
+                    onRefresh();
+                  }
+                }}
+                isJobLoading={false}
+                onDataRefresh={async () => {
+                  // Refresh jobs list after file processing
+                  console.log('🔄 Refreshing jobs list after file upload...');
+                  if (onRefresh) {
+                    await onRefresh();
+                  }
+                }}
+                standalone={true}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
