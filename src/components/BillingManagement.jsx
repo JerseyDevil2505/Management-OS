@@ -2745,7 +2745,7 @@ const calculateDistributionMetrics = async () => {
                           </td>
                           {(() => {
                             const monthlyTotals = new Array(12).fill(0);
-                            expenses.filter(expense => expense.year === selectedExpenseYear).forEach(expense => {
+                            expensesState.filter(expense => expense.year === selectedExpenseYear).forEach(expense => {
                               monthlyTotals[expense.month - 1] += parseFloat(expense.amount);
                             });
 
@@ -2760,7 +2760,7 @@ const calculateDistributionMetrics = async () => {
                           })()}
                           <td className="px-6 py-4 text-sm text-right text-yellow-800 bg-yellow-100">
                             {formatCurrency(
-                              expenses.filter(exp => exp.year === selectedExpenseYear).reduce((sum, exp) => sum + parseFloat(exp.amount), 0) /
+                              expensesState.filter(exp => exp.year === selectedExpenseYear).reduce((sum, exp) => sum + parseFloat(exp.amount), 0) /
                               Object.values(workingDays).reduce((sum, days) => sum + days, 0)
                             )}
                           </td>
