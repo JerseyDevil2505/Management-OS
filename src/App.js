@@ -588,7 +588,7 @@ const App = () => {
   // ==========================================
   // CALCULATION FUNCTIONS
   // ==========================================
-  const calculateBillingMetrics = (activeJobs, legacyJobs, planningJobs, expenses, receivables) => {
+  const calculateBillingMetrics = (activeJobs, legacyJobs, planningJobs, expenses, receivables, distributions) => {
     let totalSigned = 0;
     let totalPaid = 0;
     let totalOpen = 0;
