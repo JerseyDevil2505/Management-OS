@@ -913,13 +913,16 @@ const handleCodeFileUpdate = async () => {
       
       const dbRecords = allDbRecords;
       const dbError = null;
-        
-      
+
+      console.log(`🔍 DEBUG - Comparison data loaded:`);
+      console.log(`   - Source file records: ${sourceRecords.length}`);
+      console.log(`   - Database records (version ${currentDbVersion}): ${allDbRecords.length}`);
+
       if (dbError) {
         throw new Error(`Database fetch failed: ${dbError.message}`);
       }
-      
-      
+
+
       // Generate composite keys for source records using EXACT processor logic
       setProcessingStatus('Generating composite keys...');
       const yearCreated = job.year_created || new Date().getFullYear();
@@ -948,6 +951,12 @@ const handleCodeFileUpdate = async () => {
         if (norm && !dbNormMap.has(norm)) dbNormMap.set(norm, r.property_composite_key);
       });
 
+      console.log(`🔍 DEBUG - Composite keys generated:`);
+      console.log(`   - Source keys: ${sourceKeys.size}`);
+      console.log(`   - Database keys: ${dbKeys.size}`);
+      console.log(`   - Sample source key: ${[...sourceKeys][0]}`);
+      console.log(`   - Sample DB key: ${[...dbKeys][0]}`);
+
 
       // Find differences
       setProcessingStatus('Comparing records...');
@@ -969,6 +978,17 @@ const handleCodeFileUpdate = async () => {
       // Extra records (in database but not in source)
       const extraKeys = [...dbKeys].filter(key => !sourceKeys.has(key));
       const deletions = extraKeys.map(key => dbKeyMap.get(key));
+
+      console.log(`🔍 DEBUG - Comparison results:`);
+      console.log(`   - Added (in source, not in DB): ${missing.length}`);
+      console.log(`   - Deleted (in DB, not in source): ${deletions.length}`);
+      if (deletions.length > 0 && deletions.length <= 5) {
+        console.log(`   - Sample deletions:`, deletions.slice(0, 5).map(d => ({
+          key: d.property_composite_key,
+          block: d.property_block,
+          lot: d.property_lot
+        })));
+      }
       
       // Changed records (same key, different data)
       const changes = [];
