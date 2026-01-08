@@ -196,13 +196,19 @@ const SalesReviewTab = ({
       const pricePerSF = prop.sales_price && prop.asset_sfla && prop.asset_sfla > 0
         ? prop.sales_price / prop.asset_sfla
         : null;
-      
+
       const normPricePerSF = prop.values_norm_time && prop.asset_sfla && prop.asset_sfla > 0
         ? prop.values_norm_time / prop.asset_sfla
         : null;
-      
+
+      // Current/MOD sales ratio (uses values_mod_total)
       const salesRatio = prop.values_norm_time && prop.values_norm_time > 0
         ? (prop.values_mod_total / prop.values_norm_time) * 100
+        : null;
+
+      // Proposed/CAMA sales ratio (uses values_cama_total)
+      const salesRatioCama = prop.values_norm_time && prop.values_norm_time > 0
+        ? (prop.values_cama_total / prop.values_norm_time) * 100
         : null;
 
       // Code interpretations
@@ -1549,7 +1555,7 @@ const SalesReviewTab = ({
 
       {/* Stats Bar */}
       <div className="mb-6">
-        <div className="grid grid-cols-6 gap-4 mb-3">
+        <div className="grid grid-cols-7 gap-4 mb-3">
           <div className="bg-white p-4 rounded border">
             <div className="text-sm text-gray-600">Total Properties</div>
             <div className="text-2xl font-bold text-gray-900">{formatNumber(filteredProperties.length)}</div>
@@ -1579,10 +1585,20 @@ const SalesReviewTab = ({
             </div>
           </div>
           <div className="bg-gray-50 p-4 rounded border">
-            <div className="text-sm text-gray-600">Avg Sales Ratio</div>
+            <div className="text-sm text-gray-600">Crnt Avg Sales Ratio</div>
             <div className="text-2xl font-bold text-gray-900">
               {(() => {
                 const ratios = filteredProperties.filter(p => p.salesRatio !== null).map(p => p.salesRatio);
+                const avg = ratios.length > 0 ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 0;
+                return formatPercent(avg);
+              })()}
+            </div>
+          </div>
+          <div className="bg-purple-50 p-4 rounded border border-purple-200">
+            <div className="text-sm text-purple-700">Prop Avg Sales Ratio</div>
+            <div className="text-2xl font-bold text-purple-900">
+              {(() => {
+                const ratios = filteredProperties.filter(p => p.salesRatioCama !== null).map(p => p.salesRatioCama);
                 const avg = ratios.length > 0 ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 0;
                 return formatPercent(avg);
               })()}
