@@ -439,8 +439,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     })).filter(p => p.property_composite_key); // Filter out any null mainCards
   };
 
-  // Calculate summary by class for all properties (count ALL cards individually)
-  // CRITICAL: This must match RatableComparisonTab logic exactly - count every card as a separate taxable unit
+  // Calculate summary by class for all properties (consolidated)
   const classSummary = useMemo(() => {
     const summary = {
       '1': { count: 0, total: 0 },
@@ -454,8 +453,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       '6B': { count: 0, total: 0 }
     };
 
-    // Use ALL properties (every card counted separately) to match RatableComparisonTab
-    properties.forEach(property => {
+    // Use consolidated properties to match export
+    const consolidated = consolidateProperties(properties);
+
+    consolidated.forEach(property => {
       const isTaxable = property.property_facility !== 'EXEMPT';
       if (!isTaxable) return;
 
