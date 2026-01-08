@@ -869,17 +869,31 @@ const handleCodeFileUpdate = async () => {
         .eq('job_id', job.id);
    
      
-      // FIXED: Use pagination to get ALL records instead of relying on limit
+      // FIXED: Get current file version first to only compare against latest data
+      console.log('🔍 DEBUG - Fetching current file version before comparison...');
+      const { data: versionCheck, error: versionError } = await supabase
+        .from('property_records')
+        .select('file_version')
+        .eq('job_id', job.id)
+        .order('file_version', { ascending: false })
+        .limit(1)
+        .single();
+
+      const currentDbVersion = versionCheck?.file_version || 1;
+      console.log(`🔍 DEBUG - Current DB file_version: ${currentDbVersion}, will only compare against this version`);
+
+      // FIXED: Use pagination to get records from CURRENT file version only
       let allDbRecords = [];
       let rangeStart = 0;
       const batchSize = 1000;
       let hasMore = true;
-      
+
       while (hasMore) {
         const { data: batch, error: batchError } = await supabase
           .from('property_records')
           .select('property_composite_key, property_block, property_lot, property_qualifier, property_location, sales_price, sales_date, sales_nu, sales_book, sales_page, property_m4_class, property_cama_class')
           .eq('job_id', job.id)
+          .eq('file_version', currentDbVersion)  // CRITICAL FIX: Only get current version!
           .range(rangeStart, rangeStart + batchSize - 1);
           
         if (batchError) {
