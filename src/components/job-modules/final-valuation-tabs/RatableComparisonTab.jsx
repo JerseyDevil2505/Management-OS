@@ -66,7 +66,58 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
     bufferForLoss: jobData?.rate_calc_buffer_for_loss || 0
   }), [jobData]);
 
-  // Calculate projected ratable base from properties (using CAMA total)
+  // Get vendor type for consolidation logic
+  const vendorType = jobData?.vendor_type || 'BRT';
+
+  // Consolidate properties by grouping additional cards (same logic as MarketDataTab)
+  const consolidateProperties = (allProperties) => {
+    const grouped = {};
+
+    allProperties.forEach(property => {
+      // Create base key without card designation - MUST include location to distinguish separate properties
+      const baseKey = `${property.property_block}-${property.property_lot}-${property.property_qualifier || 'NONE'}-${property.property_location || 'NONE'}`;
+
+      if (!grouped[baseKey]) {
+        grouped[baseKey] = {
+          mainCard: null,
+          additionalCards: [],
+          maxCard: 1,
+          totalCardSF: 0
+        };
+      }
+
+      const card = property.property_addl_card;
+      const isMainCard = vendorType === 'BRT'
+        ? (!card || card === '1')
+        : (!card || card.toUpperCase() === 'M');
+
+      if (isMainCard) {
+        grouped[baseKey].mainCard = property;
+      } else {
+        grouped[baseKey].additionalCards.push(property);
+        // Card SF for additional cards only
+        grouped[baseKey].totalCardSF += property.asset_sfla || 0;
+      }
+
+      // Track max card number
+      if (card) {
+        const cardNum = vendorType === 'BRT'
+          ? parseInt(card.match(/\d+/)?.[0] || '1')
+          : (card.toUpperCase() === 'M' ? 1 : (card.charCodeAt(0) - 64)); // A=1, B=2, etc.
+        grouped[baseKey].maxCard = Math.max(grouped[baseKey].maxCard, cardNum);
+      }
+    });
+
+    // Return array of consolidated properties
+    return Object.values(grouped).map(group => ({
+      ...group.mainCard,
+      _maxCard: group.maxCard,
+      _totalCardSF: group.totalCardSF
+    })).filter(p => p.property_composite_key); // Filter out any null mainCards
+  };
+
+  // Calculate projected ratable base from CONSOLIDATED properties (using CAMA total)
+  // CRITICAL: Must match MarketDataTab consolidation logic
   const projectedRatableBase = useMemo(() => {
     const summary = {
       '1': { count: 0, total: 0 },
@@ -77,7 +128,10 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
       '6ABC': { count: 0, total: 0 }
     };
 
-    properties.forEach(property => {
+    // Use consolidated properties to match MarketDataTab
+    const consolidated = consolidateProperties(properties);
+
+    consolidated.forEach(property => {
       const isTaxable = property.property_facility !== 'EXEMPT';
       if (!isTaxable) return;
 
@@ -109,7 +163,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
     const totalTotal = Object.values(summary).reduce((sum, item) => sum + item.total, 0);
 
     return { ...summary, totalCount, totalTotal };
-  }, [properties]);
+  }, [properties, vendorType]);
 
   // Handle current year data input changes with save feedback
   const handleCurrentYearChange = async (field, value) => {
