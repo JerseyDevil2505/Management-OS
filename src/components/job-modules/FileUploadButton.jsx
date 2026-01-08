@@ -957,6 +957,25 @@ const handleCodeFileUpdate = async () => {
       console.log(`   - Sample source key: ${[...sourceKeys][0]}`);
       console.log(`   - Sample DB key: ${[...dbKeys][0]}`);
 
+      // Check for card distribution in source file
+      const sourceCardCounts = {};
+      sourceRecords.forEach(record => {
+        const cardField = job.vendor_type === 'BRT' ? 'CARD' : 'Bldg';
+        const cardValue = record[cardField] || 'NONE';
+        sourceCardCounts[cardValue] = (sourceCardCounts[cardValue] || 0) + 1;
+      });
+      console.log(`🔍 DEBUG - Source file CARD distribution:`, sourceCardCounts);
+
+      // Check for card distribution in database
+      const dbCardCounts = {};
+      dbRecords.forEach(record => {
+        const key = record.property_composite_key;
+        const cardMatch = key.match(/_([^-]+)-[^-]+$/);
+        const cardValue = cardMatch ? cardMatch[1] : 'UNKNOWN';
+        dbCardCounts[cardValue] = (dbCardCounts[cardValue] || 0) + 1;
+      });
+      console.log(`🔍 DEBUG - Database CARD distribution:`, dbCardCounts);
+
 
       // Find differences
       setProcessingStatus('Comparing records...');
@@ -982,12 +1001,33 @@ const handleCodeFileUpdate = async () => {
       console.log(`🔍 DEBUG - Comparison results:`);
       console.log(`   - Added (in source, not in DB): ${missing.length}`);
       console.log(`   - Deleted (in DB, not in source): ${deletions.length}`);
-      if (deletions.length > 0 && deletions.length <= 5) {
-        console.log(`   - Sample deletions:`, deletions.slice(0, 5).map(d => ({
-          key: d.property_composite_key,
-          block: d.property_block,
-          lot: d.property_lot
-        })));
+
+      if (deletions.length > 0) {
+        // Analyze what's being deleted
+        const deletionCardCounts = {};
+        deletions.forEach(d => {
+          const key = d.property_composite_key;
+          const cardMatch = key.match(/_([^-]+)-[^-]+$/);
+          const cardValue = cardMatch ? cardMatch[1] : 'UNKNOWN';
+          deletionCardCounts[cardValue] = (deletionCardCounts[cardValue] || 0) + 1;
+        });
+        console.log(`🔍 DEBUG - Deletions by CARD number:`, deletionCardCounts);
+
+        if (deletions.length <= 10) {
+          console.log(`   - All deletions:`, deletions.map(d => ({
+            key: d.property_composite_key,
+            block: d.property_block,
+            lot: d.property_lot,
+            card: d.property_addl_card
+          })));
+        } else {
+          console.log(`   - Sample deletions (first 10):`, deletions.slice(0, 10).map(d => ({
+            key: d.property_composite_key,
+            block: d.property_block,
+            lot: d.property_lot,
+            card: d.property_addl_card
+          })));
+        }
       }
       
       // Changed records (same key, different data)
