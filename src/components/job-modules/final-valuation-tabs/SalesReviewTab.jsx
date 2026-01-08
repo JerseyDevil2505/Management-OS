@@ -241,6 +241,7 @@ const SalesReviewTab = ({
         pricePerSF,
         normPricePerSF,
         salesRatio,
+        salesRatioCama,
         typeUseName,
         designName,
         exteriorCondName,
