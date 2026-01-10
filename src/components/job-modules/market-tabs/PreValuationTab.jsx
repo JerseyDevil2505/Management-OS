@@ -4163,13 +4163,6 @@ const analyzeImportFile = async (file) => {
                   {isCalculatingUnitSizes ? 'Calculating...' : 'Calculate Lot Size'}
                 </button>
                 <button
-                  onClick={cleanupDuplicateLotSizes}
-                  className="px-3 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
-                  title="Remove lot size records from previous file versions"
-                >
-                  🧹 Cleanup Duplicates
-                </button>
-                <button
                   onClick={exportLotSizeReport}
                   disabled={isExportingLotSizes}
                   className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
@@ -4348,11 +4341,18 @@ const analyzeImportFile = async (file) => {
                                 <div className="text-xs text-green-800">Saved</div>
                                 <button
                                   onClick={async () => {
-                                    if (!window.confirm(`Remove VCS ${getVCSDisplayName(k)} from saved configuration?`)) return;
                                     const currentJobId = jobData?.id;
                                     if (!currentJobId) return;
+
+                                    // Update local state immediately for instant UI feedback
+                                    setCombinedMappings(prev => {
+                                      const copy = { ...prev };
+                                      delete copy[k];
+                                      return copy;
+                                    });
+
+                                    // Update database in background
                                     try {
-                                      // Remove from unit_rate_config in database
                                       const { data: fetchedJob, error: fetchErr } = await supabase
                                         .from('jobs')
                                         .select('unit_rate_config')
@@ -4371,11 +4371,9 @@ const analyzeImportFile = async (file) => {
                                         .eq('id', currentJobId);
 
                                       if (updateErr) throw updateErr;
-
-                                      alert(`Removed VCS ${getVCSDisplayName(k)} from saved configuration. Please refresh to see changes.`);
-                                      if (onUpdateJobCache) onUpdateJobCache();
                                     } catch (e) {
-                                      alert(`Failed to remove VCS: ${e.message}`);
+                                      console.error('Failed to remove VCS from database:', e);
+                                      // Silently fail - user already sees the UI update
                                     }
                                   }}
                                   className="text-red-500 hover:text-red-700 text-xs"
