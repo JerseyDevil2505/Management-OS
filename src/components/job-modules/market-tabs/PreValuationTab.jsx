@@ -877,6 +877,9 @@ useEffect(() => {
       const updated = res?.updated ?? 0;
       console.log(`✅ Generated lot sizes for ${updated} properties`);
 
+      // Show completion popup
+      alert(`✅ Lot size calculation complete!\n\nProcessed: ${updated} properties\n\nYou can now export the report to review results.`);
+
       // Do NOT auto-refresh job to avoid supabase 500 spikes
       // Keep local UI state as-is; user can refresh manually if needed
     } catch (e) {
@@ -891,6 +894,18 @@ useEffect(() => {
     if (!jobData?.id) return;
     setIsExportingLotSizes(true);
     try {
+      // Get current file version first
+      const { data: versionData } = await supabase
+        .from('property_records')
+        .select('file_version')
+        .eq('job_id', jobData.id)
+        .order('file_version', { ascending: false })
+        .limit(1)
+        .single();
+
+      const currentFileVersion = versionData?.file_version || 1;
+      console.log(`📊 Exporting lot sizes for file_version ${currentFileVersion} only`);
+
       // Fetch all properties in batches to bypass 5000 record limit
       const BATCH_SIZE = 1000;
       let allProps = [];
@@ -909,6 +924,7 @@ useEffect(() => {
             asset_lot_depth
           `)
           .eq('job_id', jobData.id)
+          .eq('file_version', currentFileVersion)
           .order('property_composite_key')
           .range(offset, offset + BATCH_SIZE - 1);
 
