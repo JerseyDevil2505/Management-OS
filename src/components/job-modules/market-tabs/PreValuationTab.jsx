@@ -4351,22 +4351,22 @@ const analyzeImportFile = async (file) => {
                                     if (!confirm(`Remove VCS ${getVCSDisplayName(k)} from saved configuration?`)) return;
                                     try {
                                       // Remove from unit_rate_config in database
-                                      const { data: jobData, error: fetchErr } = await supabase
+                                      const { data: fetchedJob, error: fetchErr } = await supabase
                                         .from('jobs')
                                         .select('unit_rate_config')
-                                        .eq('id', jobData.id)
+                                        .eq('id', jobData?.id)
                                         .single();
 
                                       if (fetchErr) throw fetchErr;
 
-                                      const currentConfig = jobData?.unit_rate_config || {};
+                                      const currentConfig = fetchedJob?.unit_rate_config || {};
                                       const updated = { ...currentConfig };
                                       delete updated[k];
 
                                       const { error: updateErr } = await supabase
                                         .from('jobs')
                                         .update({ unit_rate_config: updated })
-                                        .eq('id', jobData.id);
+                                        .eq('id', jobData?.id);
 
                                       if (updateErr) throw updateErr;
 
