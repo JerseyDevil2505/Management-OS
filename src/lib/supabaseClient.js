@@ -203,9 +203,14 @@ async function persistUnitRateRunSummary(jobId, jobPayload) {
     if (!isMissingColumn) return { updated: false, error };
 
     try {
-      const { data: existing, error: selErr } = await supabase.from('market_land_valuation').select('id').eq('job_id', jobId).single();
+      const { data: existing, error: selErr } = await supabase.from('market_land_valuation').select('*').eq('job_id', jobId).single();
       if (selErr && selErr.code === 'PGRST116') {
-        const { error: insErr } = await supabase.from('market_land_valuation').insert({ job_id: jobId, unit_rate_last_run: jobPayload.unit_rate_last_run, unit_rate_codes_applied: jobPayload.unit_rate_codes_applied || null });
+        // Create new record preserving any data that might exist
+        const { error: insErr } = await supabase.from('market_land_valuation').insert({
+          job_id: jobId,
+          unit_rate_last_run: jobPayload.unit_rate_last_run,
+          unit_rate_codes_applied: jobPayload.unit_rate_codes_applied || null
+        });
         if (insErr) return { updated: false, error: insErr };
         return { updated: true, target: 'market_land_valuation', action: 'insert' };
       }
@@ -4657,9 +4662,9 @@ export const worksheetService = {
       .select('*')
       .eq('job_id', jobId)
       .single();
-    
+
     if (error && error.code === 'PGRST116') {
-      // Record doesn't exist, create it
+      // Record doesn't exist, create it with minimal data to preserve any future fields
       const { data: newRecord, error: createError } = await supabase
         .from('market_land_valuation')
         .insert({
@@ -4673,15 +4678,18 @@ export const worksheetService = {
             entries_completed: 0,
             ready_to_process: 0,
             location_variations: {}
-          }
+          },
+          // Preserve empty valuation_method and cascade_rates so they don't get lost
+          valuation_method: null,
+          cascade_rates: null
         })
         .select()
         .single();
-      
+
       if (createError) throw createError;
       return newRecord;
     }
-    
+
     if (error) throw error;
     return data;
   },
