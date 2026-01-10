@@ -2512,6 +2512,18 @@ export async function generateLotSizesForJob(jobId) {
 
   if (jobErr || !jobRow) throw new Error('Job not found');
 
+  // Get current file version to only process latest records
+  const { data: versionData, error: versionErr } = await supabase
+    .from('property_records')
+    .select('file_version')
+    .eq('job_id', jobId)
+    .order('file_version', { ascending: false })
+    .limit(1)
+    .single();
+
+  const currentFileVersion = versionData?.file_version || 1;
+  console.log(`📊 Processing lot sizes for file_version ${currentFileVersion} only`);
+
   const mappings = jobRow.unit_rate_config;
   const codeDefinitions = jobRow.parsed_code_definitions;
   const vendorType = jobRow.vendor_type;
@@ -2572,6 +2584,7 @@ export async function generateLotSizesForJob(jobId) {
         property_market_analysis(new_vcs)
       `)
       .eq('job_id', jobId)
+      .eq('file_version', currentFileVersion)
       .order('property_composite_key')
       .range(offset, offset + BATCH_SIZE - 1);
 
