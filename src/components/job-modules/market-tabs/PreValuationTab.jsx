@@ -4348,13 +4348,15 @@ const analyzeImportFile = async (file) => {
                                 <div className="text-xs text-green-800">Saved</div>
                                 <button
                                   onClick={async () => {
-                                    if (!confirm(`Remove VCS ${getVCSDisplayName(k)} from saved configuration?`)) return;
+                                    if (!window.confirm(`Remove VCS ${getVCSDisplayName(k)} from saved configuration?`)) return;
+                                    const currentJobId = jobData?.id;
+                                    if (!currentJobId) return;
                                     try {
                                       // Remove from unit_rate_config in database
                                       const { data: fetchedJob, error: fetchErr } = await supabase
                                         .from('jobs')
                                         .select('unit_rate_config')
-                                        .eq('id', jobData?.id)
+                                        .eq('id', currentJobId)
                                         .single();
 
                                       if (fetchErr) throw fetchErr;
@@ -4366,7 +4368,7 @@ const analyzeImportFile = async (file) => {
                                       const { error: updateErr } = await supabase
                                         .from('jobs')
                                         .update({ unit_rate_config: updated })
-                                        .eq('id', jobData?.id);
+                                        .eq('id', currentJobId);
 
                                       if (updateErr) throw updateErr;
 
