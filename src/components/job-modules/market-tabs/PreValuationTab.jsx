@@ -868,64 +868,6 @@ useEffect(() => {
     }
   };
 
-  const cleanupDuplicateLotSizes = async () => {
-    if (!jobData?.id) return;
-
-    try {
-      // Get current file version
-      const { data: versionData } = await supabase
-        .from('property_records')
-        .select('file_version')
-        .eq('job_id', jobData.id)
-        .order('file_version', { ascending: false })
-        .limit(1)
-        .single();
-
-      const currentFileVersion = versionData?.file_version || 1;
-
-      // Get all property_composite_keys for current version
-      const { data: currentProps } = await supabase
-        .from('property_records')
-        .select('property_composite_key')
-        .eq('job_id', jobData.id)
-        .eq('file_version', currentFileVersion);
-
-      if (!currentProps || currentProps.length === 0) {
-        console.log('No current version properties found');
-        return;
-      }
-
-      const validKeys = currentProps.map(p => p.property_composite_key);
-      console.log(`🧹 Current version has ${validKeys.length} properties`);
-
-      // Delete property_market_analysis records that don't match current version keys
-      const { data: allMarketAnalysis } = await supabase
-        .from('property_market_analysis')
-        .select('property_composite_key')
-        .eq('job_id', jobData.id);
-
-      const keysToDelete = allMarketAnalysis
-        .filter(m => !validKeys.includes(m.property_composite_key))
-        .map(m => m.property_composite_key);
-
-      if (keysToDelete.length > 0) {
-        console.log(`🗑️ Deleting ${keysToDelete.length} old lot size records`);
-        const { error: deleteError } = await supabase
-          .from('property_market_analysis')
-          .delete()
-          .eq('job_id', jobData.id)
-          .in('property_composite_key', keysToDelete);
-
-        if (deleteError) throw deleteError;
-        alert(`🧹 Cleanup complete!\n\nRemoved ${keysToDelete.length} duplicate lot size records from previous file versions.`);
-      } else {
-        alert('✅ No duplicates found - database is clean!');
-      }
-    } catch (e) {
-      console.error('Error cleaning up duplicates:', e);
-      alert(`Cleanup failed: ${e.message}`);
-    }
-  };
 
   const calculateUnitRates = async () => {
     if (!jobData?.id) return;
