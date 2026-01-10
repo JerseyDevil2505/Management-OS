@@ -4293,23 +4293,36 @@ const analyzeImportFile = async (file) => {
                                       return copy;
                                     });
 
-                                    // Update database in background
+                                    // Also remove from staged mappings if present
+                                    setStagedMappings(prev => {
+                                      const copy = { ...prev };
+                                      delete copy[k];
+                                      return copy;
+                                    });
+
+                                    // Update database in background - clear from both unit_rate_config AND staged_unit_rate_config
                                     try {
                                       const { data: fetchedJob, error: fetchErr } = await supabase
                                         .from('jobs')
-                                        .select('unit_rate_config')
+                                        .select('unit_rate_config, staged_unit_rate_config')
                                         .eq('id', currentJobId)
                                         .single();
 
                                       if (fetchErr) throw fetchErr;
 
                                       const currentConfig = fetchedJob?.unit_rate_config || {};
-                                      const updated = { ...currentConfig };
-                                      delete updated[k];
+                                      const currentStaged = fetchedJob?.staged_unit_rate_config || {};
+                                      const updatedConfig = { ...currentConfig };
+                                      const updatedStaged = { ...currentStaged };
+                                      delete updatedConfig[k];
+                                      delete updatedStaged[k];
 
                                       const { error: updateErr } = await supabase
                                         .from('jobs')
-                                        .update({ unit_rate_config: updated })
+                                        .update({
+                                          unit_rate_config: updatedConfig,
+                                          staged_unit_rate_config: updatedStaged
+                                        })
                                         .eq('id', currentJobId);
 
                                       if (updateErr) throw updateErr;
