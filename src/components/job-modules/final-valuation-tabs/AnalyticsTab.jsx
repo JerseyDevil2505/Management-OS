@@ -66,9 +66,10 @@ const AnalyticsTab = ({ jobData, properties }) => {
   // Calculate VCS analytics
   const vcsAnalytics = useMemo(() => {
     const vcsGroups = {};
-    
+
     properties.forEach(prop => {
-      const vcs = prop.property_vcs || 'Unknown';
+      // Prefer new_vcs (updated assignments) over property_vcs (original from file)
+      const vcs = prop.new_vcs || prop.property_vcs || 'Unknown';
       
       if (!vcsGroups[vcs]) {
         vcsGroups[vcs] = {
