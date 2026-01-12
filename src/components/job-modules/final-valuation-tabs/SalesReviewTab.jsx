@@ -71,22 +71,24 @@ const SalesReviewTab = ({
 
   const getPeriodClassification = useCallback((saleDate, endDate) => {
     if (!saleDate || !endDate) return null;
-    
+
     const sale = new Date(saleDate);
-    const taxYear = new Date(endDate).getFullYear();
-    const yearOfValue = taxYear - 1;
+    const assessmentYear = new Date(endDate).getFullYear();
 
-    // CSP: 10/1/prior-prior year → 12/31/prior year
-    const cspStart = new Date(yearOfValue - 1, 9, 1); // Oct 1
-    const cspEnd = new Date(yearOfValue, 11, 31);     // Dec 31
+    // CSP (Current Sale Period): 10/1 of prior year → 12/31 of assessment year
+    // For assessment date 1/1/2026 (stored as 12/31/2025): 10/1/2024 → 12/31/2025
+    const cspStart = new Date(assessmentYear - 1, 9, 1);  // Oct 1 of prior year
+    const cspEnd = new Date(assessmentYear, 11, 31);       // Dec 31 of assessment year
 
-    // PSP: 10/1/two years prior → 9/30/one year prior
-    const pspStart = new Date(yearOfValue - 2, 9, 1);  // Oct 1
-    const pspEnd = new Date(yearOfValue - 1, 8, 30);   // Sep 30
+    // PSP (Prior Sale Period): 10/1 of two years prior → 9/30 of prior year
+    // For assessment date 1/1/2026: 10/1/2023 → 9/30/2024
+    const pspStart = new Date(assessmentYear - 2, 9, 1);   // Oct 1 of two years prior
+    const pspEnd = new Date(assessmentYear - 1, 8, 30);    // Sep 30 of prior year
 
-    // HSP: 10/1/three years prior → 9/30/two years prior
-    const hspStart = new Date(yearOfValue - 3, 9, 1);  // Oct 1
-    const hspEnd = new Date(yearOfValue - 2, 8, 30);   // Sep 30
+    // HSP (Historical Sale Period): 10/1 of three years prior → 9/30 of two years prior
+    // For assessment date 1/1/2026: 10/1/2022 → 9/30/2023
+    const hspStart = new Date(assessmentYear - 3, 9, 1);   // Oct 1 of three years prior
+    const hspEnd = new Date(assessmentYear - 2, 8, 30);    // Sep 30 of two years prior
 
     if (sale >= cspStart && sale <= cspEnd) return 'CSP';
     if (sale >= pspStart && sale <= pspEnd) return 'PSP';
