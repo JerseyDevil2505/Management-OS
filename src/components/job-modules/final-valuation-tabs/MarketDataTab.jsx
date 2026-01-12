@@ -184,20 +184,22 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     const saleDateStr = property.sales_date.split('T')[0]; // Get YYYY-MM-DD only
     const saleDate = new Date(saleDateStr + 'T12:00:00'); // Add noon to avoid timezone shifts
 
-    const endYear = new Date(jobData.end_date).getFullYear();
-    const yearOfValue = endYear - 1;
+    const assessmentYear = new Date(jobData.end_date).getFullYear();
 
-    // CSP: 10/1 of year-prior-to-value → 12/31 of year-of-value
-    const cspStart = new Date(yearOfValue - 1, 9, 1, 0, 0, 0);
-    const cspEnd = new Date(yearOfValue, 11, 31, 23, 59, 59);
+    // CSP (Current Sale Period): 10/1 of prior year → 12/31 of assessment year
+    // For assessment date 1/1/2026 (stored as 12/31/2025): 10/1/2024 → 12/31/2025
+    const cspStart = new Date(assessmentYear - 1, 9, 1, 0, 0, 0);
+    const cspEnd = new Date(assessmentYear, 11, 31, 23, 59, 59);
 
-    // PSP: 10/1 of two-years-prior → 9/30 of year-prior-to-value
-    const pspStart = new Date(yearOfValue - 2, 9, 1, 0, 0, 0);
-    const pspEnd = new Date(yearOfValue - 1, 8, 30, 23, 59, 59);
+    // PSP (Prior Sale Period): 10/1 of two years prior → 9/30 of prior year
+    // For assessment date 1/1/2026: 10/1/2023 → 9/30/2024
+    const pspStart = new Date(assessmentYear - 2, 9, 1, 0, 0, 0);
+    const pspEnd = new Date(assessmentYear - 1, 8, 30, 23, 59, 59);
 
-    // HSP: 10/1 of three-years-prior → 9/30 of two-years-prior
-    const hspStart = new Date(yearOfValue - 3, 9, 1, 0, 0, 0);
-    const hspEnd = new Date(yearOfValue - 2, 8, 30, 23, 59, 59);
+    // HSP (Historical Sale Period): 10/1 of three years prior → 9/30 of two years prior
+    // For assessment date 1/1/2026: 10/1/2022 → 9/30/2023
+    const hspStart = new Date(assessmentYear - 3, 9, 1, 0, 0, 0);
+    const hspEnd = new Date(assessmentYear - 2, 8, 30, 23, 59, 59);
 
     if (saleDate >= cspStart && saleDate <= cspEnd) return 'CSP';
     if (saleDate >= pspStart && saleDate <= pspEnd) return 'PSP';
