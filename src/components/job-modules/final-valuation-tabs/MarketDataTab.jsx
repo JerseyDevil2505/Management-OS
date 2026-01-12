@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
-import { Download, AlertCircle, Save } from 'lucide-react';
+import { Download, AlertCircle, Save, ChevronDown, ChevronUp } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 
 const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache }) => {
@@ -8,6 +8,11 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   const [finalValuationData, setFinalValuationData] = useState({});
   const [taxRates, setTaxRates] = useState(null);
   const [isSaving, setSaving] = useState(false);
+  const [expandedSections, setExpandedSections] = useState({
+    vcs: false,
+    typeUse: false,
+    design: false
+  });
   const PREVIEW_LIMIT = 500; // Only show first 500 properties
 
   // Refs for scroll synchronization
@@ -118,6 +123,25 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     return match ? parseInt(match[0]) : 1;
   };
 
+  // Helper: Get HPI value for a specific year
+  const getHPIForYear = (year) => {
+    if (!hpiData || !year) return null;
+    const hpiRecord = hpiData.find(h => h.observation_year === parseInt(year));
+    return hpiRecord?.hpi_index || null;
+  };
+
+  // Helper: Get sale year from date
+  const getSaleYear = (property) => {
+    if (!property.sales_date) return null;
+    return new Date(property.sales_date).getFullYear();
+  };
+
+  // Helper: Get normalization target year (typically end year - 1)
+  const getNormalizeToYear = () => {
+    if (!jobData?.end_date) return new Date().getFullYear();
+    return new Date(jobData.end_date).getFullYear() - 1;
+  };
+
   // Helper: Calculate Card SF (additional cards only, excluding main)
   const getCardSF = (property) => {
     const card = property.property_addl_card;
@@ -151,18 +175,32 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   // Helper: Get sales period code
   const getSalesPeriodCode = (property) => {
     if (!property.sales_date) return null;
-    
-    const saleDate = new Date(property.sales_date);
-    const endYear = new Date(jobData.end_date).getFullYear();
-    const yearOfValue = endYear - 1;
-    
-    const cspStart = new Date(yearOfValue - 1, 9, 1);
-    const cspEnd = new Date(yearOfValue, 11, 31);
-    const pspStart = new Date(yearOfValue - 2, 9, 1);
-    const pspEnd = new Date(yearOfValue - 1, 8, 30);
-    const hspStart = new Date(yearOfValue - 3, 9, 1);
-    const hspEnd = new Date(yearOfValue - 2, 8, 30);
-    
+
+    // Only assign period code if sale has been normalized (values_norm_time exists)
+    // This means the sale was accepted during Market and Land Analysis phase
+    if (!property.values_norm_time || property.values_norm_time <= 0) return null;
+
+    // Parse date carefully to avoid timezone issues
+    const saleDateStr = property.sales_date.split('T')[0]; // Get YYYY-MM-DD only
+    const saleDate = new Date(saleDateStr + 'T12:00:00'); // Add noon to avoid timezone shifts
+
+    const assessmentYear = new Date(jobData.end_date).getFullYear();
+
+    // CSP (Current Sale Period): 10/1 of prior year → 12/31 of assessment year
+    // For assessment date 1/1/2026 (stored as 12/31/2025): 10/1/2024 → 12/31/2025
+    const cspStart = new Date(assessmentYear - 1, 9, 1, 0, 0, 0);
+    const cspEnd = new Date(assessmentYear, 11, 31, 23, 59, 59);
+
+    // PSP (Prior Sale Period): 10/1 of two years prior → 9/30 of prior year
+    // For assessment date 1/1/2026: 10/1/2023 → 9/30/2024
+    const pspStart = new Date(assessmentYear - 2, 9, 1, 0, 0, 0);
+    const pspEnd = new Date(assessmentYear - 1, 8, 30, 23, 59, 59);
+
+    // HSP (Historical Sale Period): 10/1 of three years prior → 9/30 of two years prior
+    // For assessment date 1/1/2026: 10/1/2022 → 9/30/2023
+    const hspStart = new Date(assessmentYear - 3, 9, 1, 0, 0, 0);
+    const hspEnd = new Date(assessmentYear - 2, 8, 30, 23, 59, 59);
+
     if (saleDate >= cspStart && saleDate <= cspEnd) return 'CSP';
     if (saleDate >= pspStart && saleDate <= pspEnd) return 'PSP';
     if (saleDate >= hspStart && saleDate <= hspEnd) return 'HSP';
@@ -356,7 +394,54 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     return cache;
   }, [previewProperties, finalValuationData, yearPriorToDueYear, vendorType, taxRates]);
 
-  // Calculate summary by class for all properties
+  // Consolidate properties by grouping additional cards
+  const consolidateProperties = (allProperties) => {
+    const grouped = {};
+
+    allProperties.forEach(property => {
+      // Create base key without card designation - MUST include location to distinguish separate properties
+      const baseKey = `${property.property_block}-${property.property_lot}-${property.property_qualifier || 'NONE'}-${property.property_location || 'NONE'}`;
+
+      if (!grouped[baseKey]) {
+        grouped[baseKey] = {
+          mainCard: null,
+          additionalCards: [],
+          maxCard: 1,
+          totalCardSF: 0
+        };
+      }
+
+      const card = property.property_addl_card;
+      const isMainCard = vendorType === 'BRT'
+        ? (!card || card === '1')
+        : (!card || card.toUpperCase() === 'M');
+
+      if (isMainCard) {
+        grouped[baseKey].mainCard = property;
+      } else {
+        grouped[baseKey].additionalCards.push(property);
+        // Card SF for additional cards only
+        grouped[baseKey].totalCardSF += property.asset_sfla || 0;
+      }
+
+      // Track max card number
+      if (card) {
+        const cardNum = vendorType === 'BRT'
+          ? parseInt(card.match(/\d+/)?.[0] || '1')
+          : (card.toUpperCase() === 'M' ? 1 : (card.charCodeAt(0) - 64)); // A=1, B=2, etc.
+        grouped[baseKey].maxCard = Math.max(grouped[baseKey].maxCard, cardNum);
+      }
+    });
+
+    // Return array of consolidated properties
+    return Object.values(grouped).map(group => ({
+      ...group.mainCard,
+      _maxCard: group.maxCard,
+      _totalCardSF: group.totalCardSF
+    })).filter(p => p.property_composite_key); // Filter out any null mainCards
+  };
+
+  // Calculate summary by class for all properties (consolidated)
   const classSummary = useMemo(() => {
     const summary = {
       '1': { count: 0, total: 0 },
@@ -370,7 +455,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       '6B': { count: 0, total: 0 }
     };
 
-    properties.forEach(property => {
+    // Use consolidated properties to match export
+    const consolidated = consolidateProperties(properties);
+
+    consolidated.forEach(property => {
       const isTaxable = property.property_facility !== 'EXEMPT';
       if (!isTaxable) return;
 
@@ -406,6 +494,266 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       totalTotal
     };
   }, [properties]);
+
+  // Calculate average Recommended EFA overall
+  const avgRecEffAgeOverall = useMemo(() => {
+    const recEffAges = [];
+
+    properties.forEach(property => {
+      const calc = getCalculatedValues(property);
+      if (calc.recommendedEFA !== null && calc.recommendedEFA !== undefined) {
+        recEffAges.push(calc.recommendedEFA);
+      }
+    });
+
+    if (recEffAges.length === 0) return null;
+
+    const sum = recEffAges.reduce((acc, val) => acc + val, 0);
+    return sum / recEffAges.length;
+  }, [properties, finalValuationData, yearPriorToDueYear, vendorType]);
+
+  // Calculate average Recommended EFA for CSP-PSP-HSP periods
+  const avgRecEffAgeSalesPeriods = useMemo(() => {
+    const recEffAges = [];
+
+    properties.forEach(property => {
+      const salesCode = getSalesPeriodCode(property);
+      if (salesCode === 'CSP' || salesCode === 'PSP' || salesCode === 'HSP') {
+        const calc = getCalculatedValues(property);
+        if (calc.recommendedEFA !== null && calc.recommendedEFA !== undefined) {
+          recEffAges.push(calc.recommendedEFA);
+        }
+      }
+    });
+
+    if (recEffAges.length === 0) return null;
+
+    const sum = recEffAges.reduce((acc, val) => acc + val, 0);
+    return sum / recEffAges.length;
+  }, [properties, finalValuationData, yearPriorToDueYear, vendorType, jobData?.end_date]);
+
+  // Calculate average Year Built overall
+  const avgYearBuiltOverall = useMemo(() => {
+    const yearBuilts = [];
+
+    properties.forEach(property => {
+      const yearBuilt = property.asset_year_built;
+      if (yearBuilt && !isNaN(parseInt(yearBuilt))) {
+        yearBuilts.push(parseInt(yearBuilt));
+      }
+    });
+
+    if (yearBuilts.length === 0) return null;
+
+    const sum = yearBuilts.reduce((acc, val) => acc + val, 0);
+    return Math.round(sum / yearBuilts.length);
+  }, [properties]);
+
+  // Calculate average Year Built for CSP-PSP-HSP periods
+  const avgYearBuiltSalesPeriods = useMemo(() => {
+    const yearBuilts = [];
+
+    properties.forEach(property => {
+      const salesCode = getSalesPeriodCode(property);
+      if (salesCode === 'CSP' || salesCode === 'PSP' || salesCode === 'HSP') {
+        const yearBuilt = property.asset_year_built;
+        if (yearBuilt && !isNaN(parseInt(yearBuilt))) {
+          yearBuilts.push(parseInt(yearBuilt));
+        }
+      }
+    });
+
+    if (yearBuilts.length === 0) return null;
+
+    const sum = yearBuilts.reduce((acc, val) => acc + val, 0);
+    return Math.round(sum / yearBuilts.length);
+  }, [properties, jobData?.end_date]);
+
+  // Calculate metrics by VCS
+  const metricsByVCS = useMemo(() => {
+    const vcsGroups = {};
+
+    properties.forEach(property => {
+      const salesCode = getSalesPeriodCode(property);
+      const isSalesPeriod = salesCode === 'CSP' || salesCode === 'PSP' || salesCode === 'HSP';
+      const vcs = property.property_vcs || 'Unknown';
+
+      if (!vcsGroups[vcs]) {
+        vcsGroups[vcs] = {
+          overall: { yearBuilts: [], recEffAges: [] },
+          salesPeriods: { yearBuilts: [], recEffAges: [] }
+        };
+      }
+
+      const yearBuilt = property.asset_year_built;
+      if (yearBuilt && !isNaN(parseInt(yearBuilt))) {
+        vcsGroups[vcs].overall.yearBuilts.push(parseInt(yearBuilt));
+        if (isSalesPeriod) {
+          vcsGroups[vcs].salesPeriods.yearBuilts.push(parseInt(yearBuilt));
+        }
+      }
+
+      const calc = getCalculatedValues(property);
+      if (calc.recommendedEFA !== null && calc.recommendedEFA !== undefined) {
+        vcsGroups[vcs].overall.recEffAges.push(calc.recommendedEFA);
+        if (isSalesPeriod) {
+          vcsGroups[vcs].salesPeriods.recEffAges.push(calc.recommendedEFA);
+        }
+      }
+    });
+
+    // Calculate averages
+    const result = {};
+    Object.keys(vcsGroups).forEach(vcs => {
+      const group = vcsGroups[vcs];
+      result[vcs] = {
+        overall: {
+          avgYearBuilt: group.overall.yearBuilts.length > 0
+            ? Math.round(group.overall.yearBuilts.reduce((a, b) => a + b, 0) / group.overall.yearBuilts.length)
+            : null,
+          avgRecEffAge: group.overall.recEffAges.length > 0
+            ? Math.round(group.overall.recEffAges.reduce((a, b) => a + b, 0) / group.overall.recEffAges.length)
+            : null,
+          count: group.overall.yearBuilts.length
+        },
+        salesPeriods: {
+          avgYearBuilt: group.salesPeriods.yearBuilts.length > 0
+            ? Math.round(group.salesPeriods.yearBuilts.reduce((a, b) => a + b, 0) / group.salesPeriods.yearBuilts.length)
+            : null,
+          avgRecEffAge: group.salesPeriods.recEffAges.length > 0
+            ? Math.round(group.salesPeriods.recEffAges.reduce((a, b) => a + b, 0) / group.salesPeriods.recEffAges.length)
+            : null,
+          count: group.salesPeriods.yearBuilts.length
+        }
+      };
+    });
+
+    return result;
+  }, [properties, finalValuationData, yearPriorToDueYear, vendorType, jobData?.end_date]);
+
+  // Calculate metrics by Type Use
+  const metricsByTypeUse = useMemo(() => {
+    const typeUseGroups = {};
+
+    properties.forEach(property => {
+      const salesCode = getSalesPeriodCode(property);
+      const isSalesPeriod = salesCode === 'CSP' || salesCode === 'PSP' || salesCode === 'HSP';
+      const typeUse = property.asset_type_use || 'Unknown';
+
+      if (!typeUseGroups[typeUse]) {
+        typeUseGroups[typeUse] = {
+          overall: { yearBuilts: [], recEffAges: [] },
+          salesPeriods: { yearBuilts: [], recEffAges: [] }
+        };
+      }
+
+      const yearBuilt = property.asset_year_built;
+      if (yearBuilt && !isNaN(parseInt(yearBuilt))) {
+        typeUseGroups[typeUse].overall.yearBuilts.push(parseInt(yearBuilt));
+        if (isSalesPeriod) {
+          typeUseGroups[typeUse].salesPeriods.yearBuilts.push(parseInt(yearBuilt));
+        }
+      }
+
+      const calc = getCalculatedValues(property);
+      if (calc.recommendedEFA !== null && calc.recommendedEFA !== undefined) {
+        typeUseGroups[typeUse].overall.recEffAges.push(calc.recommendedEFA);
+        if (isSalesPeriod) {
+          typeUseGroups[typeUse].salesPeriods.recEffAges.push(calc.recommendedEFA);
+        }
+      }
+    });
+
+    // Calculate averages
+    const result = {};
+    Object.keys(typeUseGroups).forEach(typeUse => {
+      const group = typeUseGroups[typeUse];
+      result[typeUse] = {
+        overall: {
+          avgYearBuilt: group.overall.yearBuilts.length > 0
+            ? Math.round(group.overall.yearBuilts.reduce((a, b) => a + b, 0) / group.overall.yearBuilts.length)
+            : null,
+          avgRecEffAge: group.overall.recEffAges.length > 0
+            ? Math.round(group.overall.recEffAges.reduce((a, b) => a + b, 0) / group.overall.recEffAges.length)
+            : null,
+          count: group.overall.yearBuilts.length
+        },
+        salesPeriods: {
+          avgYearBuilt: group.salesPeriods.yearBuilts.length > 0
+            ? Math.round(group.salesPeriods.yearBuilts.reduce((a, b) => a + b, 0) / group.salesPeriods.yearBuilts.length)
+            : null,
+          avgRecEffAge: group.salesPeriods.recEffAges.length > 0
+            ? Math.round(group.salesPeriods.recEffAges.reduce((a, b) => a + b, 0) / group.salesPeriods.recEffAges.length)
+            : null,
+          count: group.salesPeriods.yearBuilts.length
+        }
+      };
+    });
+
+    return result;
+  }, [properties, finalValuationData, yearPriorToDueYear, vendorType, jobData?.end_date]);
+
+  // Calculate metrics by Design
+  const metricsByDesign = useMemo(() => {
+    const designGroups = {};
+
+    properties.forEach(property => {
+      const salesCode = getSalesPeriodCode(property);
+      const isSalesPeriod = salesCode === 'CSP' || salesCode === 'PSP' || salesCode === 'HSP';
+      const design = property.asset_design_style || 'Unknown';
+
+      if (!designGroups[design]) {
+        designGroups[design] = {
+          overall: { yearBuilts: [], recEffAges: [] },
+          salesPeriods: { yearBuilts: [], recEffAges: [] }
+        };
+      }
+
+      const yearBuilt = property.asset_year_built;
+      if (yearBuilt && !isNaN(parseInt(yearBuilt))) {
+        designGroups[design].overall.yearBuilts.push(parseInt(yearBuilt));
+        if (isSalesPeriod) {
+          designGroups[design].salesPeriods.yearBuilts.push(parseInt(yearBuilt));
+        }
+      }
+
+      const calc = getCalculatedValues(property);
+      if (calc.recommendedEFA !== null && calc.recommendedEFA !== undefined) {
+        designGroups[design].overall.recEffAges.push(calc.recommendedEFA);
+        if (isSalesPeriod) {
+          designGroups[design].salesPeriods.recEffAges.push(calc.recommendedEFA);
+        }
+      }
+    });
+
+    // Calculate averages
+    const result = {};
+    Object.keys(designGroups).forEach(design => {
+      const group = designGroups[design];
+      result[design] = {
+        overall: {
+          avgYearBuilt: group.overall.yearBuilts.length > 0
+            ? Math.round(group.overall.yearBuilts.reduce((a, b) => a + b, 0) / group.overall.yearBuilts.length)
+            : null,
+          avgRecEffAge: group.overall.recEffAges.length > 0
+            ? Math.round(group.overall.recEffAges.reduce((a, b) => a + b, 0) / group.overall.recEffAges.length)
+            : null,
+          count: group.overall.yearBuilts.length
+        },
+        salesPeriods: {
+          avgYearBuilt: group.salesPeriods.yearBuilts.length > 0
+            ? Math.round(group.salesPeriods.yearBuilts.reduce((a, b) => a + b, 0) / group.salesPeriods.yearBuilts.length)
+            : null,
+          avgRecEffAge: group.salesPeriods.recEffAges.length > 0
+            ? Math.round(group.salesPeriods.recEffAges.reduce((a, b) => a + b, 0) / group.salesPeriods.recEffAges.length)
+            : null,
+          count: group.salesPeriods.yearBuilts.length
+        }
+      };
+    });
+
+    return result;
+  }, [properties, finalValuationData, yearPriorToDueYear, vendorType, jobData?.end_date]);
 
   // Handle cell edit
   const handleCellEdit = async (propertyKey, field, value) => {
@@ -444,39 +792,64 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
   const exportToExcel = () => {
     const workbook = XLSX.utils.book_new();
 
-    // Export ALL properties (not just preview)
-    const rows = properties.map((property, idx) => {
+    // Consolidate additional cards before export
+    const consolidatedProperties = consolidateProperties(properties);
+
+    // Export consolidated properties
+    const rows = consolidatedProperties.map((property, idx) => {
       const calc = getCalculatedValues(property);
       const salesCode = getSalesPeriodCode(property);
       const rowNum = idx + 2; // +2 because Excel is 1-indexed and row 1 is header
-      const cardSF = getCardSF(property);
       const mainSFLA = property.asset_sfla || 0;
 
+      // Use consolidated card data
+      const maxCard = property._maxCard || 1;
+      const totalCardSF = property._totalCardSF || 0;
+
       // Column mapping for formulas:
-      // K=Property M4 Class, L=Property CAMA Class, M=Check
-      // Z=Year Built, AA=Current EFA, AB=Test
-      // AO=Values Norm Time, AS=Detached Items, AT=Cost New, BA=CAMA Land
-      // BE=Recommended EFA, BF=Actual EFA, BG=DEPR, BH=New Value, BB=Projected Imp
+      // A=Block, B=Lot, C=Qualifier, D=Card, E=Card SF, F=Address
+      // G=Owner Name, H=Owner Address, I=Owner City State, J=Owner Zip
+      // K=Sp Tax Cd 1, L=Sp Tax Cd 2, M=Sp Tax Cd 3, N=Sp Tax Cd 4
+      // O=MOD IV, P=CAMA, Q=Check, R=Info By, S=VCS, T=Exempt Facility, U=Special
+      // V=Lot Frontage, W=Lot Depth, X=Lot Size (Acre), Y=Lot Size (SF), Z=View, AA=Location Analysis
+      // AB=Type Use, AC=Building Class, AD=Year Built, AE=Current EFA, AF=Test
+      // AG=Design, AH=Bedroom Total, AI=Story Height, AJ=SFLA, AK=Total SFLA
+      // AL=Exterior, AM=Interior, AN=Code (Sales Period), AO=Sale Date, AP=Sale Book, AQ=Sale Page
+      // AR=Sale Price, AS=HPI Multiplier, AT=Norm Time Value (formula: =AR*AS)
+      // AU=Sales NU Code, AV=Sales Ratio, AW=Sale Comment
+      // AX=Det Items, AY=Cost New, AZ=CLA, BA=Current Land, BB=Current Impr, BC=Current Total
+      // BD=PLA, BE=CAMA Land, BF=Cama/Proj Imp, BG=Proj Total, BH=Delta %
+      // BI=Recommended EFA, BJ=Actual EFA, BK=DEPR, BL=New Value
+      // BM=Current Taxes, BN=Projected Taxes, BO=Tax Delta $
+
+      // Helper to convert "00" or blank to empty string (for proper gridlines)
+      const cleanValue = (val) => {
+        if (!val || val === '' || val === '00') return '';
+        return val;
+      };
 
       return {
         'Block': property.property_block || '',
         'Lot': property.property_lot || '',
-        'Qualifier': property.property_qualifier || '',
-        'Card': getMaxCardNumber(property),
-        'Card SF': cardSF,
+        'Qualifier': cleanValue(property.property_qualifier),
+        'Card': maxCard,
+        'Card SF': totalCardSF,
         'Address': property.property_location || '',
         'Owner Name': property.owner_name || '',
         'Owner Address': property.owner_street || '',
         'Owner City State': property.owner_csz || '',
         'Owner Zip': property.owner_csz?.split(' ').pop() || '',
-        'Sp Tax Cd 1': property.special_tax_code_1 || '',
-        'Sp Tax Cd 2': property.special_tax_code_2 || '',
-        'Sp Tax Cd 3': property.special_tax_code_3 || '',
-        'Sp Tax Cd 4': property.special_tax_code_4 || '',
-        'Property M4 Class': property.property_m4_class || '',
-        'Property CAMA Class': property.property_cama_class || '',
-        'Check': { f: `IF(K${rowNum}=L${rowNum},"TRUE","FALSE")` },
-        'InfoBy Code': property.inspection_info_by || '',
+        'Sp Tax Cd 1': cleanValue(property.special_tax_code_1),
+        'Sp Tax Cd 2': cleanValue(property.special_tax_code_2),
+        'Sp Tax Cd 3': cleanValue(property.special_tax_code_3),
+        'Sp Tax Cd 4': cleanValue(property.special_tax_code_4),
+        'MOD IV': property.property_m4_class || '',
+        'CAMA': property.property_cama_class || '',
+        'Check': { f: `IF(O${rowNum}=P${rowNum},"TRUE","FALSE")` },
+        'Info By': (() => {
+          const cleaned = cleanValue(property.inspection_info_by);
+          return cleaned ? { v: String(cleaned), t: 's' } : '';
+        })(),
         'VCS': property.property_vcs || '',
         'Exempt Facility': property.property_facility || '',
         'Special': calc.specialNotes,
@@ -488,51 +861,72 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           Math.round(property.market_manual_lot_sf || property.asset_lot_sf) : '',
         'View': property.asset_view || '',
         'Location Analysis': property.location_analysis || '',
-        'Type Use': property.asset_type_use || '',
-        'Building Class': property.asset_building_class || '',
+        'Type Use': cleanValue(property.asset_type_use),
+        'Building Class': cleanValue(property.asset_building_class),
         'Year Built': property.asset_year_built || '',
         'Current EFA': getCurrentEFA(property),
-        'Test': { f: `IF(AND(Z${rowNum}<>"",BF${rowNum}<>""),IF(BF${rowNum}>=Z${rowNum},"TRUE","FALSE"),"")` },
-        'Design': property.asset_design_style || '',
+        'Test': { f: `IF(AND(AD${rowNum}<>"",BJ${rowNum}<>""),IF(BJ${rowNum}>=AD${rowNum},"TRUE","FALSE"),"")` },
+        'Design': cleanValue(property.asset_design_style),
         'Bedroom Total': getBedroomTotal(property) || '',
-        'Story Height': property.asset_story_height || '',
+        'Story Height': (() => {
+          const cleaned = cleanValue(property.asset_story_height);
+          return cleaned ? { v: String(cleaned), t: 's' } : '';
+        })(),
         'SFLA': mainSFLA,
-        'Total SFLA': { f: `E${rowNum}+AF${rowNum}` }, // Formula: Card SF + SFLA
-        'Exterior Net Condition': property.asset_ext_cond || '',
-        'Interior Net Condition': property.asset_int_cond || '',
+        'Total SFLA': { f: `E${rowNum}+AJ${rowNum}` }, // Formula: Card SF + SFLA
+        'Exterior': cleanValue(property.asset_ext_cond),
+        'Interior': cleanValue(property.asset_int_cond),
         'Code': salesCode || '',
-        'Sale Date': property.sales_date ? new Date(property.sales_date) : '',
-        'Sale Book': property.sales_book || '',
-        'Sale Page': property.sales_page || '',
+        'Sale Date': property.sales_date ? (() => {
+          // Convert to Excel date serial number (strip time component)
+          const dateOnly = property.sales_date.split('T')[0]; // Get YYYY-MM-DD only
+          const date = new Date(dateOnly + 'T12:00:00'); // Add noon time to avoid timezone issues
+          const epoch = new Date(1899, 11, 30); // Excel epoch
+          const days = Math.floor((date - epoch) / (1000 * 60 * 60 * 24));
+          return { v: days, t: 'n', z: 'mm/dd/yyyy' }; // Excel serial date as number with explicit format
+        })() : '',
+        'Sale Book': cleanValue(property.sales_book),
+        'Sale Page': cleanValue(property.sales_page),
         'Sale Price': property.sales_price || '',
-        'Values Norm Time': property.values_norm_time || '',
-        'Sales NU Code': property.sales_nu || '',
+        'HPI Multiplier': (() => {
+          const saleYear = getSaleYear(property);
+          const normYear = getNormalizeToYear();
+          const saleYearHPI = saleYear ? getHPIForYear(saleYear) : null;
+          const normYearHPI = getHPIForYear(normYear);
+
+          if (saleYearHPI && normYearHPI && saleYearHPI > 0) {
+            return normYearHPI / saleYearHPI;
+          }
+          return '';
+        })(),
+        'Norm Time Value': property.sales_price && property.values_norm_time ?
+          { f: `AR${rowNum}*AS${rowNum}` } : (property.values_norm_time || ''),
+        'Sales NU Code': cleanValue(property.sales_nu),
         'Sales Ratio': calc.projectedTotal && property.values_norm_time ?
-          Math.round((calc.projectedTotal / property.values_norm_time) * 100) : '',
+          (calc.projectedTotal / property.values_norm_time) : '',
         'Sale Comment': calc.saleComment,
-        'Detached Items Value': property.values_det_items || 0,
-        'Cost New Value': property.values_repl_cost || 0,
-        'Current Land Allocation %': property.values_mod_total && property.values_mod_land ?
-          { f: `AV${rowNum}/AX${rowNum}` } : '',
-        'Current Land Value': property.values_mod_land || 0,
-        'Current Improvement Value': property.values_mod_improvement || 0,
-        'Current Total Value': property.values_mod_total || 0,
-        '--- NEW PROJECTED ---': '',
-        'Projected Land Allocation %': calc.newLandAllocation && calc.projectedTotal ?
+        'Det Items': property.values_det_items || 0,
+        'Cost New': property.values_repl_cost || 0,
+        'CLA': property.values_mod_total && property.values_mod_land ?
           { f: `BA${rowNum}/BC${rowNum}` } : '',
-        'CAMA Land Value': property.values_cama_land || 0,
-        'Projected Improvement': calc.qualifiesForEFA && calc.newValue !== null && calc.newValue > 0 ?
-          { f: `BH${rowNum}-BA${rowNum}` } : (property.values_cama_improvement || 0),
-        'Projected Total': { f: `BA${rowNum}+BB${rowNum}` },
-        'Delta %': calc.deltaPercent ? Math.round(calc.deltaPercent) : '',
+        'Current Land': property.values_mod_land || 0,
+        'Current Impr': property.values_mod_improvement || 0,
+        'Current Total': property.values_mod_total || 0,
+        'PLA': calc.newLandAllocation && calc.projectedTotal ?
+          { f: `BE${rowNum}/BG${rowNum}` } : '',
+        'CAMA Land': property.values_cama_land || 0,
+        'Cama/Proj Imp': calc.qualifiesForEFA && calc.newValue !== null && calc.newValue > 0 ?
+          { f: `BL${rowNum}-BE${rowNum}` } : (property.values_cama_improvement || 0),
+        'Proj Total': { f: `BE${rowNum}+BF${rowNum}` },
+        'Delta %': calc.deltaPercent ? (calc.deltaPercent / 100) : '',
         'Recommended EFA': calc.recommendedEFA !== null && calc.recommendedEFA !== undefined ?
-          { f: `ROUND(${yearPriorToDueYear}-((1-((AO${rowNum}-BA${rowNum}-AS${rowNum})/AT${rowNum}))*100),0)` } : '',
+          { f: `ROUND(${yearPriorToDueYear}-((1-((AT${rowNum}-BE${rowNum}-AX${rowNum})/AY${rowNum}))*100),0)` } : '',
         'Actual EFA': calc.actualEFA || '',
         'DEPR': calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined ?
-          { f: `MIN(1,1-((${yearPriorToDueYear}-BF${rowNum})/100))` } : '',
+          { f: `MIN(1,1-((${yearPriorToDueYear}-BJ${rowNum})/100))` } : '',
         'New Value': calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined ?
-          { f: `ROUND((AT${rowNum}*BG${rowNum})+AS${rowNum}+BA${rowNum},-2)` } : 0,
-        'Current Year Taxes': calc.currentTaxes || 0,
+          { f: `ROUND((AY${rowNum}*BK${rowNum})+AX${rowNum}+BE${rowNum},-2)` } : 0,
+        'Current Taxes': calc.currentTaxes || 0,
         'Projected Taxes': calc.projectedTaxes || 0,
         'Tax Delta $': calc.taxDelta || 0
       };
@@ -567,7 +961,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
     // Style data rows with colors based on sales code
     for (let R = range.s.r + 1; R <= range.e.r; ++R) {
-      const property = properties[R - 1];
+      const property = consolidatedProperties[R - 1];
       const salesCode = getSalesPeriodCode(property);
 
       // Determine row background color
@@ -582,7 +976,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
       for (let C = range.s.c; C <= range.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-        if (!worksheet[cellAddress]) continue;
+        // Create cell if it doesn't exist (for null values)
+        if (!worksheet[cellAddress]) {
+          worksheet[cellAddress] = { v: '', t: 's' };
+        }
 
         const colName = headers[C];
         let numFmt = undefined;
@@ -590,14 +987,16 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         // Apply number formatting based on column
         if (['Lot Size (SF)', 'SFLA', 'Total SFLA'].includes(colName)) {
           numFmt = '#,##0'; // Number with commas
-        } else if (['Sale Price', 'Values Norm Time'].includes(colName)) {
+        } else if (colName === 'HPI Multiplier') {
+          numFmt = '0.0000'; // Multiplier as decimal with 4 places
+        } else if (['Sale Price', 'Norm Time Value'].includes(colName)) {
           numFmt = '$#,##0'; // Currency
-        } else if (['Detached Items Value', 'Cost New Value', 'Current Land Value', 'Current Improvement Value',
-                    'Current Total Value', 'CAMA Land Value', 'Projected Improvement', 'Projected Total', 'New Value'].includes(colName)) {
+        } else if (['Det Items', 'Cost New', 'Current Land', 'Current Impr',
+                    'Current Total', 'CAMA Land', 'Cama/Proj Imp', 'Proj Total', 'New Value'].includes(colName)) {
           numFmt = '$#,##0'; // Currency, no decimals
-        } else if (['Current Year Taxes', 'Projected Taxes', 'Tax Delta $'].includes(colName)) {
+        } else if (['Current Taxes', 'Projected Taxes', 'Tax Delta $'].includes(colName)) {
           numFmt = '$#,##0.00'; // Currency with two decimals
-        } else if (['Current Land Allocation %', 'Projected Land Allocation %'].includes(colName)) {
+        } else if (['CLA', 'PLA', 'Sales Ratio', 'Delta %'].includes(colName)) {
           numFmt = '0%'; // Percentage, no decimals
         } else if (colName === 'Sale Date') {
           numFmt = 'mm/dd/yyyy'; // Date format
@@ -734,6 +1133,190 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Effective Age Metrics */}
+      <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-6">
+        <h3 className="text-lg font-bold text-gray-900 mb-4">Effective Age Metrics</h3>
+
+        {/* Summary Cards */}
+        <div className="grid grid-cols-2 gap-6 mb-6">
+          {/* Overall */}
+          <div className="bg-white rounded-lg border border-gray-300 p-4">
+            <div className="text-sm font-semibold text-gray-600 mb-2">Overall Dataset</div>
+            <div className="text-3xl font-bold text-purple-600">
+              {avgYearBuiltOverall !== null ? avgYearBuiltOverall : 'N/A'}
+              <span className="text-gray-400 mx-2">/</span>
+              {avgRecEffAgeOverall !== null ? Math.round(avgRecEffAgeOverall) : 'N/A'}
+            </div>
+            <div className="text-xs text-gray-500 mt-2">
+              Year Built / Rec Eff Age
+            </div>
+          </div>
+
+          {/* CSP-PSP-HSP Periods */}
+          <div className="bg-white rounded-lg border border-gray-300 p-4">
+            <div className="text-sm font-semibold text-gray-600 mb-2">CSP-PSP-HSP Periods</div>
+            <div className="text-3xl font-bold text-pink-600">
+              {avgYearBuiltSalesPeriods !== null ? avgYearBuiltSalesPeriods : 'N/A'}
+              <span className="text-gray-400 mx-2">/</span>
+              {avgRecEffAgeSalesPeriods !== null ? Math.round(avgRecEffAgeSalesPeriods) : 'N/A'}
+            </div>
+            <div className="text-xs text-gray-500 mt-2">
+              Year Built / Rec Eff Age
+            </div>
+          </div>
+        </div>
+
+        {/* Expandable Sections */}
+        <div className="space-y-3">
+          {/* By VCS */}
+          <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
+            <button
+              onClick={() => setExpandedSections(prev => ({ ...prev, vcs: !prev.vcs }))}
+              className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            >
+              <span className="font-semibold text-gray-700">By VCS</span>
+              {expandedSections.vcs ? (
+                <ChevronUp className="w-5 h-5 text-gray-500" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-gray-500" />
+              )}
+            </button>
+            {expandedSections.vcs && (
+              <div className="px-4 pb-4 border-t border-gray-200">
+                <table className="w-full text-sm mt-3">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">VCS</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">Overall</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">CSP-PSP-HSP</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">Count</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {Object.entries(metricsByVCS).sort(([a], [b]) => a.localeCompare(b)).map(([vcs, metrics]) => (
+                      <tr key={vcs} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 font-medium text-gray-900">{vcs}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className="text-purple-600 font-semibold">
+                            {metrics.overall.avgYearBuilt || 'N/A'} / {metrics.overall.avgRecEffAge || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <span className="text-pink-600 font-semibold">
+                            {metrics.salesPeriods.avgYearBuilt || 'N/A'} / {metrics.salesPeriods.avgRecEffAge || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center text-gray-600">
+                          {metrics.overall.count} / {metrics.salesPeriods.count}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* By Type Use */}
+          <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
+            <button
+              onClick={() => setExpandedSections(prev => ({ ...prev, typeUse: !prev.typeUse }))}
+              className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            >
+              <span className="font-semibold text-gray-700">By Type Use</span>
+              {expandedSections.typeUse ? (
+                <ChevronUp className="w-5 h-5 text-gray-500" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-gray-500" />
+              )}
+            </button>
+            {expandedSections.typeUse && (
+              <div className="px-4 pb-4 border-t border-gray-200">
+                <table className="w-full text-sm mt-3">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Type Use</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">Overall</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">CSP-PSP-HSP</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">Count</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {Object.entries(metricsByTypeUse).sort(([a], [b]) => a.localeCompare(b)).map(([typeUse, metrics]) => (
+                      <tr key={typeUse} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 font-medium text-gray-900">{typeUse}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className="text-purple-600 font-semibold">
+                            {metrics.overall.avgYearBuilt || 'N/A'} / {metrics.overall.avgRecEffAge || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <span className="text-pink-600 font-semibold">
+                            {metrics.salesPeriods.avgYearBuilt || 'N/A'} / {metrics.salesPeriods.avgRecEffAge || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center text-gray-600">
+                          {metrics.overall.count} / {metrics.salesPeriods.count}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* By Design */}
+          <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
+            <button
+              onClick={() => setExpandedSections(prev => ({ ...prev, design: !prev.design }))}
+              className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            >
+              <span className="font-semibold text-gray-700">By Design</span>
+              {expandedSections.design ? (
+                <ChevronUp className="w-5 h-5 text-gray-500" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-gray-500" />
+              )}
+            </button>
+            {expandedSections.design && (
+              <div className="px-4 pb-4 border-t border-gray-200">
+                <table className="w-full text-sm mt-3">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Design</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">Overall</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">CSP-PSP-HSP</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-700">Count</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {Object.entries(metricsByDesign).sort(([a], [b]) => a.localeCompare(b)).map(([design, metrics]) => (
+                      <tr key={design} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 font-medium text-gray-900">{design}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className="text-purple-600 font-semibold">
+                            {metrics.overall.avgYearBuilt || 'N/A'} / {metrics.overall.avgRecEffAge || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <span className="text-pink-600 font-semibold">
+                            {metrics.salesPeriods.avgYearBuilt || 'N/A'} / {metrics.salesPeriods.avgRecEffAge || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center text-gray-600">
+                          {metrics.overall.count} / {metrics.salesPeriods.count}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

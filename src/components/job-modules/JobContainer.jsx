@@ -1163,12 +1163,12 @@ const JobContainer = ({
         {/* Show version info banner AFTER loading */}
         {!isLoading && (
           <div className={`mb-6 rounded-lg border p-4 ${
-            versionError 
-              ? 'bg-red-50 border-red-200' 
+            versionError
+              ? 'bg-red-50 border-red-200'
               : 'bg-blue-50 border-blue-200'
           }`}>
             <div className="flex items-center justify-between">
-              <div className="flex items-center">
+              <div className="flex items-center flex-wrap gap-2">
                 {versionError ? (
                   <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
                 ) : (
@@ -1177,14 +1177,25 @@ const JobContainer = ({
                 <span className={`font-medium ${
                   versionError ? 'text-red-800' : 'text-blue-800'
                 }`}>
-                  {versionError 
-                    ? 'Data Loading Error' 
+                  {versionError
+                    ? 'Data Loading Error'
                     : `Current Data Version: ${latestFileVersion} | Current Code Version: ${latestCodeVersion}`
                   }
                 </span>
                 {jobData?.has_property_assignments && (
-                  <span className="ml-3 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded">
+                  <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded">
                     Assigned Properties Only
+                  </span>
+                )}
+                {!versionError && jobData?.source_file_uploaded_at && (
+                  <span className="text-sm text-blue-600">
+                    • Last Updated: {new Date(jobData.source_file_uploaded_at).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit'
+                    })}
                   </span>
                 )}
               </div>

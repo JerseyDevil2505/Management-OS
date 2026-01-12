@@ -1721,7 +1721,12 @@ const calculateDistributionMetrics = async () => {
 
   const handleExpenseImport = async () => {
     if (!expenseFile) return;
-    
+
+    // Confirm with user which year they're importing to
+    if (!window.confirm(`Import expenses for year ${selectedExpenseYear}?\n\nThis will REPLACE all existing ${selectedExpenseYear} expense data with the data from your Excel file.`)) {
+      return;
+    }
+
     try {
       // Read the file
       const arrayBuffer = await expenseFile.arrayBuffer();
@@ -1768,21 +1773,22 @@ const calculateDistributionMetrics = async () => {
       });
       
       // Process expense rows
-      const currentYear = new Date().getFullYear();
+      // Use the selected year from the dropdown, not current year
+      const targetYear = selectedExpenseYear;
       const expenseData = [];
-      
+
       // Start from row after header, stop at SUB TOTAL or empty rows
       for (let rowIndex = headerRowIndex + 1; rowIndex < jsonData.length; rowIndex++) {
         const row = jsonData[rowIndex];
         const category = row[0]; // First column is category
-        
+
         // Skip if no category or if it's a total row
-        if (!category || 
+        if (!category ||
             category.toString().toUpperCase().includes('TOTAL') ||
             category.toString().toUpperCase().includes('FRINGE')) {
           continue;
         }
-        
+
         // Extract amounts for each month
         for (const [monthNum, colIndex] of Object.entries(monthColumns)) {
           const amount = row[colIndex];
@@ -1790,18 +1796,18 @@ const calculateDistributionMetrics = async () => {
             expenseData.push({
               category: category.toString().trim(),
               month: parseInt(monthNum),
-              year: currentYear,
+              year: targetYear,
               amount: parseFloat(amount)
             });
           }
         }
       }
-      
-      // Clear existing expenses for the year
+
+      // Clear existing expenses for the selected year only
       await supabase
         .from('expenses')
         .delete()
-        .eq('year', currentYear);
+        .eq('year', targetYear);
       
       // Insert new expenses
       if (expenseData.length > 0) {
@@ -1810,8 +1816,8 @@ const calculateDistributionMetrics = async () => {
           .insert(expenseData);
         
         if (error) throw error;
-        
-        alert(`Successfully imported ${expenseData.length} expense entries`);
+
+        alert(`Successfully imported ${expenseData.length} expense entries for year ${targetYear}`);
         setShowExpenseImport(false);
         setExpenseFile(null);
         if (onRefresh) onRefresh();
@@ -2626,9 +2632,15 @@ const calculateDistributionMetrics = async () => {
                       onChange={(e) => setSelectedExpenseYear(parseInt(e.target.value))}
                       className="px-3 py-2 border border-gray-300 rounded-md bg-white"
                     >
-                      {Array.from(new Set([...expenses?.map(e => e.year) || [], new Date().getFullYear()])).sort((a, b) => b - a).map(year => (
-                        <option key={year} value={year}>{year}</option>
-                      ))}
+                      {(() => {
+                        const currentYear = new Date().getFullYear();
+                        const yearsWithData = expenses?.map(e => e.year) || [];
+                        // Include current year and previous 2 years, plus any years with data
+                        const allYears = new Set([...yearsWithData, currentYear, currentYear - 1, currentYear - 2]);
+                        return Array.from(allYears).sort((a, b) => b - a).map(year => (
+                          <option key={year} value={year}>{year}</option>
+                        ));
+                      })()}
                     </select>
                   </div>
                 </div>
@@ -2739,7 +2751,7 @@ const calculateDistributionMetrics = async () => {
                           </td>
                           {(() => {
                             const monthlyTotals = new Array(12).fill(0);
-                            expenses.filter(expense => expense.year === selectedExpenseYear).forEach(expense => {
+                            expensesState.filter(expense => expense.year === selectedExpenseYear).forEach(expense => {
                               monthlyTotals[expense.month - 1] += parseFloat(expense.amount);
                             });
 
@@ -2754,7 +2766,7 @@ const calculateDistributionMetrics = async () => {
                           })()}
                           <td className="px-6 py-4 text-sm text-right text-yellow-800 bg-yellow-100">
                             {formatCurrency(
-                              expenses.filter(exp => exp.year === selectedExpenseYear).reduce((sum, exp) => sum + parseFloat(exp.amount), 0) /
+                              expensesState.filter(exp => exp.year === selectedExpenseYear).reduce((sum, exp) => sum + parseFloat(exp.amount), 0) /
                               Object.values(workingDays).reduce((sum, days) => sum + days, 0)
                             )}
                           </td>
@@ -2934,9 +2946,15 @@ const calculateDistributionMetrics = async () => {
                     onChange={(e) => setSelectedDistributionYear(parseInt(e.target.value))}
                     className="px-3 py-1 border border-gray-300 rounded-md bg-white text-sm"
                   >
-                    {Array.from(new Set([...distributions?.map(d => d.year) || [], new Date().getFullYear()])).sort((a, b) => b - a).map(year => (
-                      <option key={year} value={year}>{year}</option>
-                    ))}
+                    {(() => {
+                      const currentYear = new Date().getFullYear();
+                      const yearsWithData = distributions?.map(d => d.year) || [];
+                      // Include current year and previous 2 years, plus any years with data
+                      const allYears = new Set([...yearsWithData, currentYear, currentYear - 1, currentYear - 2]);
+                      return Array.from(allYears).sort((a, b) => b - a).map(year => (
+                        <option key={year} value={year}>{year}</option>
+                      ));
+                    })()}
                   </select>
                 </div>
               </div>

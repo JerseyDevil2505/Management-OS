@@ -404,12 +404,13 @@ const App = () => {
           updates.planningJobs = planningData;
         }
 
-        // Load expenses
+        // Load expenses (last 3 years)
         const currentYear = new Date().getFullYear();
         const { data: expensesData } = await supabase
           .from('expenses')
           .select('*')
-          .eq('year', currentYear);
+          .gte('year', currentYear - 2)
+          .order('year', { ascending: false });
 
         if (expensesData) {
           updates.expenses = expensesData;
@@ -425,11 +426,12 @@ const App = () => {
           updates.receivables = receivablesData;
         }
 
-        // Load distributions
+        // Load distributions (last 3 years)
         const { data: distributionsData } = await supabase
           .from('shareholder_distributions')
           .select('*')
-          .eq('year', currentYear);
+          .gte('year', currentYear - 2)
+          .order('year', { ascending: false });
 
         if (distributionsData) {
           updates.distributions = distributionsData;
@@ -441,7 +443,8 @@ const App = () => {
           updates.legacyJobs || appData.legacyJobs,
           updates.planningJobs || appData.planningJobs,
           updates.expenses || appData.expenses,
-          updates.receivables || appData.receivables
+          updates.receivables || appData.receivables,
+          updates.distributions || appData.distributions
         );
       }
 
@@ -585,7 +588,7 @@ const App = () => {
   // ==========================================
   // CALCULATION FUNCTIONS
   // ==========================================
-  const calculateBillingMetrics = (activeJobs, legacyJobs, planningJobs, expenses, receivables) => {
+  const calculateBillingMetrics = (activeJobs, legacyJobs, planningJobs, expenses, receivables, distributions) => {
     let totalSigned = 0;
     let totalPaid = 0;
     let totalOpen = 0;
@@ -1090,13 +1093,14 @@ const App = () => {
                   <p className="text-lg font-semibold text-white">{selectedJob.job_name || selectedJob.name}</p>
                 </div>
                 
-                {/* File Upload Controls */}
+                {/* File Upload Controls - Code File Only */}
                 <div className="border-l border-white border-opacity-30 pl-6">
                   <FileUploadButton
                     job={selectedJob}
                     onFileProcessed={handleFileProcessed}
                     onDataRefresh={handleFileProcessed}
                     onUpdateJobCache={handleJobDataRefresh}
+                    codeFileOnly={true}
                   />
                 </div>
               </div>

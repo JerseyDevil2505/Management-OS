@@ -9,7 +9,9 @@ const FileUploadButton = ({
   isJobLoading = false,
   onDataRefresh,
   onUpdateJobCache,  // JobContainer's refresh callback
-  isJobContainerLoading = false  // Accept loading state from JobContainer
+  isJobContainerLoading = false,  // Accept loading state from JobContainer
+  codeFileOnly = false,  // NEW: When true, only allow code file uploads (disable source file)
+  standalone = false  // NEW: When true, component is rendered standalone (not in job container)
 }) => {
   const [sourceFile, setSourceFile] = useState(null);
   const [codeFile, setCodeFile] = useState(null);
@@ -867,17 +869,31 @@ const handleCodeFileUpdate = async () => {
         .eq('job_id', job.id);
    
      
-      // FIXED: Use pagination to get ALL records instead of relying on limit
+      // FIXED: Get current file version first to only compare against latest data
+      console.log('🔍 DEBUG - Fetching current file version before comparison...');
+      const { data: versionCheck, error: versionError } = await supabase
+        .from('property_records')
+        .select('file_version')
+        .eq('job_id', job.id)
+        .order('file_version', { ascending: false })
+        .limit(1)
+        .single();
+
+      const currentDbVersion = versionCheck?.file_version || 1;
+      console.log(`🔍 DEBUG - Current DB file_version: ${currentDbVersion}, will only compare against this version`);
+
+      // FIXED: Use pagination to get records from CURRENT file version only
       let allDbRecords = [];
       let rangeStart = 0;
       const batchSize = 1000;
       let hasMore = true;
-      
+
       while (hasMore) {
         const { data: batch, error: batchError } = await supabase
           .from('property_records')
           .select('property_composite_key, property_block, property_lot, property_qualifier, property_location, sales_price, sales_date, sales_nu, sales_book, sales_page, property_m4_class, property_cama_class')
           .eq('job_id', job.id)
+          .eq('file_version', currentDbVersion)  // CRITICAL FIX: Only get current version!
           .range(rangeStart, rangeStart + batchSize - 1);
           
         if (batchError) {
@@ -897,13 +913,16 @@ const handleCodeFileUpdate = async () => {
       
       const dbRecords = allDbRecords;
       const dbError = null;
-        
-      
+
+      console.log(`🔍 DEBUG - Comparison data loaded:`);
+      console.log(`   - Source file records: ${sourceRecords.length}`);
+      console.log(`   - Database records (version ${currentDbVersion}): ${allDbRecords.length}`);
+
       if (dbError) {
         throw new Error(`Database fetch failed: ${dbError.message}`);
       }
-      
-      
+
+
       // Generate composite keys for source records using EXACT processor logic
       setProcessingStatus('Generating composite keys...');
       const yearCreated = job.year_created || new Date().getFullYear();
@@ -932,6 +951,31 @@ const handleCodeFileUpdate = async () => {
         if (norm && !dbNormMap.has(norm)) dbNormMap.set(norm, r.property_composite_key);
       });
 
+      console.log(`🔍 DEBUG - Composite keys generated:`);
+      console.log(`   - Source keys: ${sourceKeys.size}`);
+      console.log(`   - Database keys: ${dbKeys.size}`);
+      console.log(`   - Sample source key: ${[...sourceKeys][0]}`);
+      console.log(`   - Sample DB key: ${[...dbKeys][0]}`);
+
+      // Check for card distribution in source file
+      const sourceCardCounts = {};
+      sourceRecords.forEach(record => {
+        const cardField = job.vendor_type === 'BRT' ? 'CARD' : 'Bldg';
+        const cardValue = record[cardField] || 'NONE';
+        sourceCardCounts[cardValue] = (sourceCardCounts[cardValue] || 0) + 1;
+      });
+      console.log(`🔍 DEBUG - Source file CARD distribution:`, sourceCardCounts);
+
+      // Check for card distribution in database
+      const dbCardCounts = {};
+      dbRecords.forEach(record => {
+        const key = record.property_composite_key;
+        const cardMatch = key.match(/_([^-]+)-[^-]+$/);
+        const cardValue = cardMatch ? cardMatch[1] : 'UNKNOWN';
+        dbCardCounts[cardValue] = (dbCardCounts[cardValue] || 0) + 1;
+      });
+      console.log(`🔍 DEBUG - Database CARD distribution:`, dbCardCounts);
+
 
       // Find differences
       setProcessingStatus('Comparing records...');
@@ -953,6 +997,38 @@ const handleCodeFileUpdate = async () => {
       // Extra records (in database but not in source)
       const extraKeys = [...dbKeys].filter(key => !sourceKeys.has(key));
       const deletions = extraKeys.map(key => dbKeyMap.get(key));
+
+      console.log(`🔍 DEBUG - Comparison results:`);
+      console.log(`   - Added (in source, not in DB): ${missing.length}`);
+      console.log(`   - Deleted (in DB, not in source): ${deletions.length}`);
+
+      if (deletions.length > 0) {
+        // Analyze what's being deleted
+        const deletionCardCounts = {};
+        deletions.forEach(d => {
+          const key = d.property_composite_key;
+          const cardMatch = key.match(/_([^-]+)-[^-]+$/);
+          const cardValue = cardMatch ? cardMatch[1] : 'UNKNOWN';
+          deletionCardCounts[cardValue] = (deletionCardCounts[cardValue] || 0) + 1;
+        });
+        console.log(`🔍 DEBUG - Deletions by CARD number:`, deletionCardCounts);
+
+        if (deletions.length <= 10) {
+          console.log(`   - All deletions:`, deletions.map(d => ({
+            key: d.property_composite_key,
+            block: d.property_block,
+            lot: d.property_lot,
+            card: d.property_addl_card
+          })));
+        } else {
+          console.log(`   - Sample deletions (first 10):`, deletions.slice(0, 10).map(d => ({
+            key: d.property_composite_key,
+            block: d.property_block,
+            lot: d.property_lot,
+            card: d.property_addl_card
+          })));
+        }
+      }
       
       // Changed records (same key, different data)
       const changes = [];
@@ -1343,11 +1419,11 @@ const handleCodeFileUpdate = async () => {
         }
       }, 10000); // Every 10 seconds
       
-      // Execute the operation with timeout protection (reduced from 5 to 2 minutes)
+      // Execute the operation with timeout protection (15 minutes for large jobs with 100+ batches)
       Promise.race([
         operation(),
         new Promise((_, timeoutReject) =>
-          setTimeout(() => timeoutReject(new Error('Batch processing timeout after 2 minutes')), 2 * 60 * 1000)
+          setTimeout(() => timeoutReject(new Error('Batch processing timeout after 15 minutes')), 15 * 60 * 1000)
         )
       ]).then(result => {
         // Clear heartbeat and restore original console methods
@@ -1378,7 +1454,7 @@ const handleCodeFileUpdate = async () => {
         
         const isTimeout = error.message && error.message.includes('timeout');
         const errorMessage = isTimeout ?
-          'Batch processing timeout - try refreshing and uploading again' :
+          'Batch processing timeout after 15 minutes - try refreshing and uploading again' :
           'Batch processing failed';
 
         setBatchInsertProgress(prev => ({
@@ -1392,7 +1468,7 @@ const handleCodeFileUpdate = async () => {
         }));
 
         if (isTimeout) {
-          addBatchLog('��� Operation timed out after 2 minutes. The database may be overloaded or there\'s a query issue. Try refreshing the page and uploading again.', 'error');
+          addBatchLog('⏰ Operation timed out after 15 minutes. The database may be overloaded or there\'s a query issue. Try refreshing the page and uploading again.', 'error');
         }
         
         addBatchLog(`❌ Batch processing failed: ${error.message}`, 'error');
@@ -3128,62 +3204,72 @@ const handleCodeFileUpdate = async () => {
         </div>
       )}
 
-      {/* Source File Section */}
-      <div className="flex items-center gap-3 text-gray-300">
-        <FileText className="w-4 h-4 text-blue-400" />
-        <span className="text-sm min-w-0 flex-1">
-          📄 Source: {getFileStatusWithRealVersion(job.updated_at || job.created_at, 'source')}
-        </span>
-        
-        <input
-          type="file"
-          accept=".csv,.txt"
-          onChange={handleSourceFileUpload}
-          className="hidden"
-          id="source-file-upload"
-        />
-        
-        <button
-          onClick={() => document.getElementById('source-file-upload').click()}
-          disabled={comparing || processing || isJobLoading || isJobContainerLoading}
-          className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:bg-gray-500 flex items-center gap-1"
-          title={isJobLoading || isJobContainerLoading ? 'Job data is loading...' : ''}
-        >
-          <Upload className="w-3 h-3" />
-          {sourceFile ? sourceFile.name.substring(0, 10) + '...' : 'Select File'}
-        </button>
-        
-        {sourceFile && (
-          <>
-            <button
-              onClick={() => {
-                setSourceFile(null);
-                setSourceFileContent(null);
-                // REMOVED: Don't reset vendor - keep using prop from JobContainer
-                document.getElementById('source-file-upload').value = '';
-                addNotification('Source file cleared', 'info');
-              }}
-              disabled={comparing || processing}
-              className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 disabled:bg-gray-500 flex items-center"
-            >
-              <X className="w-3 h-3" />
-            </button>
-            <button
-              onClick={() => handleCompareFile('source')}
-              disabled={comparing || processing || isJobLoading}
-              className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
-              title={isJobLoading ? 'Job data is loading...' : ''}
-            >
-              {comparing ? (
-                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-              ) : (
-                <CheckCircle className="w-3 h-3" />
-              )}
-              Update
-            </button>
-          </>
-        )}
-      </div>
+      {/* Source File Section - Hidden when codeFileOnly is true */}
+      {!codeFileOnly && (
+        <div className="flex items-center gap-3 text-gray-300">
+          <FileText className="w-4 h-4 text-blue-400" />
+          <span className="text-sm min-w-0 flex-1">
+            📄 Source: {getFileStatusWithRealVersion(job.updated_at || job.created_at, 'source')}
+          </span>
+
+          <input
+            type="file"
+            accept=".csv,.txt"
+            onChange={handleSourceFileUpload}
+            className="hidden"
+            id="source-file-upload"
+          />
+
+          <button
+            onClick={() => document.getElementById('source-file-upload').click()}
+            disabled={comparing || processing || isJobLoading || isJobContainerLoading}
+            className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:bg-gray-500 flex items-center gap-1"
+            title={isJobLoading || isJobContainerLoading ? 'Job data is loading...' : ''}
+          >
+            <Upload className="w-3 h-3" />
+            {sourceFile ? sourceFile.name.substring(0, 10) + '...' : 'Select File'}
+          </button>
+
+          {sourceFile && (
+            <>
+              <button
+                onClick={() => {
+                  setSourceFile(null);
+                  setSourceFileContent(null);
+                  // REMOVED: Don't reset vendor - keep using prop from JobContainer
+                  document.getElementById('source-file-upload').value = '';
+                  addNotification('Source file cleared', 'info');
+                }}
+                disabled={comparing || processing}
+                className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 disabled:bg-gray-500 flex items-center"
+              >
+                <X className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => handleCompareFile('source')}
+                disabled={comparing || processing || isJobLoading}
+                className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-1"
+                title={isJobLoading ? 'Job data is loading...' : ''}
+              >
+                {comparing ? (
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                ) : (
+                  <CheckCircle className="w-3 h-3" />
+                )}
+                Update
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Show message when source upload is disabled */}
+      {codeFileOnly && (
+        <div className="flex items-center gap-2 text-yellow-400 bg-yellow-900 bg-opacity-30 px-3 py-2 rounded">
+          <AlertTriangle className="w-4 h-4" />
+          <span className="text-xs">Source file uploads disabled in job view. Use "Update File" button from Admin Jobs page.</span>
+        </div>
+      )}
 
       {/* Code File Section */}
       <div className="flex items-center gap-3 text-gray-300">

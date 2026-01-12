@@ -868,6 +868,7 @@ useEffect(() => {
     }
   };
 
+
   const calculateUnitRates = async () => {
     if (!jobData?.id) return;
     setIsCalculatingUnitSizes(true);
@@ -876,6 +877,9 @@ useEffect(() => {
       const res = await generateLotSizesForJob(jobData.id);
       const updated = res?.updated ?? 0;
       console.log(`✅ Generated lot sizes for ${updated} properties`);
+
+      // Show completion popup
+      alert(`✅ Lot size calculation complete!\n\nProcessed: ${updated} properties\n\nYou can now export the report to review results.`);
 
       // Do NOT auto-refresh job to avoid supabase 500 spikes
       // Keep local UI state as-is; user can refresh manually if needed
@@ -891,6 +895,18 @@ useEffect(() => {
     if (!jobData?.id) return;
     setIsExportingLotSizes(true);
     try {
+      // Get current file version first
+      const { data: versionData } = await supabase
+        .from('property_records')
+        .select('file_version')
+        .eq('job_id', jobData.id)
+        .order('file_version', { ascending: false })
+        .limit(1)
+        .single();
+
+      const currentFileVersion = versionData?.file_version || 1;
+      console.log(`📊 Exporting lot sizes for file_version ${currentFileVersion} only`);
+
       // Fetch all properties in batches to bypass 5000 record limit
       const BATCH_SIZE = 1000;
       let allProps = [];
@@ -909,6 +925,7 @@ useEffect(() => {
             asset_lot_depth
           `)
           .eq('job_id', jobData.id)
+          .eq('file_version', currentFileVersion)
           .order('property_composite_key')
           .range(offset, offset + BATCH_SIZE - 1);
 
@@ -1687,6 +1704,7 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
         'Qualifier': parsed.qualifier || '',
         'Card': parsed.card || '',
         'Location': prop.property_location || '',
+        'VCS': prop.property_vcs || '',
         'Class': prop.property_m4_class || prop.property_class || prop.asset_building_class || '',
         'Type': getTypeUseDisplay(prop) || '',
         'Design': getDesignDisplay(prop) || '',
@@ -1714,15 +1732,15 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
     // Get worksheet range
     const range = XLSX.utils.decode_range(ws['!ref']);
 
-    // Column indices (0-based)
-    const colSFLA = 8; // Column I (SFLA)
-    const colAssessedValue = 11; // Column L (Assessed Value)
-    const colSalePrice = 13; // Column N (Sale Price)
-    const colHPIMultiplier = 15; // Column P (HPI Multiplier)
-    const colTimeNormalized = 16; // Column Q (Time Normalized Price)
-    const colAvgSFLA = 17; // Column R (Avg SFLA Type Group)
-    const colSizeNormalized = 18; // Column S (Size Normalized Price)
-    const colSalesRatio = 19; // Column T (Sales Ratio)
+    // Column indices (0-based) - Updated after adding VCS column at position 5
+    const colSFLA = 9; // Column J (SFLA)
+    const colAssessedValue = 12; // Column M (Assessed Value)
+    const colSalePrice = 14; // Column O (Sale Price)
+    const colHPIMultiplier = 16; // Column Q (HPI Multiplier)
+    const colTimeNormalized = 17; // Column R (Time Normalized Price)
+    const colAvgSFLA = 18; // Column S (Avg SFLA Type Group)
+    const colSizeNormalized = 19; // Column T (Size Normalized Price)
+    const colSalesRatio = 20; // Column U (Sales Ratio)
 
     // Ensure range extends to include all columns (Sales Ratio is the last)
     if (range.e.c < colSalesRatio) {
@@ -4261,7 +4279,64 @@ const analyzeImportFile = async (file) => {
                           <div key={k} className="border p-2 rounded bg-gray-50">
                             <div className="flex justify-between items-center">
                               <div className="font-medium">{getVCSDisplayName(k)}</div>
-                              <div className="text-xs text-green-800">Saved</div>
+                              <div className="flex items-center gap-2">
+                                <div className="text-xs text-green-800">Saved</div>
+                                <button
+                                  onClick={async () => {
+                                    const currentJobId = jobData?.id;
+                                    if (!currentJobId) return;
+
+                                    // Update local state immediately for instant UI feedback
+                                    setCombinedMappings(prev => {
+                                      const copy = { ...prev };
+                                      delete copy[k];
+                                      return copy;
+                                    });
+
+                                    // Also remove from staged mappings if present
+                                    setStagedMappings(prev => {
+                                      const copy = { ...prev };
+                                      delete copy[k];
+                                      return copy;
+                                    });
+
+                                    // Update database in background - clear from both unit_rate_config AND staged_unit_rate_config
+                                    try {
+                                      const { data: fetchedJob, error: fetchErr } = await supabase
+                                        .from('jobs')
+                                        .select('unit_rate_config, staged_unit_rate_config')
+                                        .eq('id', currentJobId)
+                                        .single();
+
+                                      if (fetchErr) throw fetchErr;
+
+                                      const currentConfig = fetchedJob?.unit_rate_config || {};
+                                      const currentStaged = fetchedJob?.staged_unit_rate_config || {};
+                                      const updatedConfig = { ...currentConfig };
+                                      const updatedStaged = { ...currentStaged };
+                                      delete updatedConfig[k];
+                                      delete updatedStaged[k];
+
+                                      const { error: updateErr } = await supabase
+                                        .from('jobs')
+                                        .update({
+                                          unit_rate_config: updatedConfig,
+                                          staged_unit_rate_config: updatedStaged
+                                        })
+                                        .eq('id', currentJobId);
+
+                                      if (updateErr) throw updateErr;
+                                    } catch (e) {
+                                      console.error('Failed to remove VCS from database:', e);
+                                      // Silently fail - user already sees the UI update
+                                    }
+                                  }}
+                                  className="text-red-500 hover:text-red-700 text-xs"
+                                  title="Remove from saved configuration"
+                                >
+                                  ×
+                                </button>
+                              </div>
                             </div>
                             <div className="text-xs text-gray-600 mt-1">Acre: {(combinedMappings[k].acre||[]).join(', ') || '-'} • SF: {(combinedMappings[k].sf||[]).join(', ') || '-'} • Exclude: {(combinedMappings[k].exclude||[]).join(', ') || '-'}</div>
                           </div>

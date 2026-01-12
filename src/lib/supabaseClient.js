@@ -203,9 +203,14 @@ async function persistUnitRateRunSummary(jobId, jobPayload) {
     if (!isMissingColumn) return { updated: false, error };
 
     try {
-      const { data: existing, error: selErr } = await supabase.from('market_land_valuation').select('id').eq('job_id', jobId).single();
+      const { data: existing, error: selErr } = await supabase.from('market_land_valuation').select('*').eq('job_id', jobId).single();
       if (selErr && selErr.code === 'PGRST116') {
-        const { error: insErr } = await supabase.from('market_land_valuation').insert({ job_id: jobId, unit_rate_last_run: jobPayload.unit_rate_last_run, unit_rate_codes_applied: jobPayload.unit_rate_codes_applied || null });
+        // Create new record preserving any data that might exist
+        const { error: insErr } = await supabase.from('market_land_valuation').insert({
+          job_id: jobId,
+          unit_rate_last_run: jobPayload.unit_rate_last_run,
+          unit_rate_codes_applied: jobPayload.unit_rate_codes_applied || null
+        });
         if (insErr) return { updated: false, error: insErr };
         return { updated: true, target: 'market_land_valuation', action: 'insert' };
       }
@@ -2512,6 +2517,18 @@ export async function generateLotSizesForJob(jobId) {
 
   if (jobErr || !jobRow) throw new Error('Job not found');
 
+  // Get current file version to only process latest records
+  const { data: versionData, error: versionErr } = await supabase
+    .from('property_records')
+    .select('file_version')
+    .eq('job_id', jobId)
+    .order('file_version', { ascending: false })
+    .limit(1)
+    .single();
+
+  const currentFileVersion = versionData?.file_version || 1;
+  console.log(`📊 Processing lot sizes for file_version ${currentFileVersion} only`);
+
   const mappings = jobRow.unit_rate_config;
   const codeDefinitions = jobRow.parsed_code_definitions;
   const vendorType = jobRow.vendor_type;
@@ -2572,6 +2589,7 @@ export async function generateLotSizesForJob(jobId) {
         property_market_analysis(new_vcs)
       `)
       .eq('job_id', jobId)
+      .eq('file_version', currentFileVersion)
       .order('property_composite_key')
       .range(offset, offset + BATCH_SIZE - 1);
 
@@ -4644,9 +4662,9 @@ export const worksheetService = {
       .select('*')
       .eq('job_id', jobId)
       .single();
-    
+
     if (error && error.code === 'PGRST116') {
-      // Record doesn't exist, create it
+      // Record doesn't exist, create it with minimal data to preserve any future fields
       const { data: newRecord, error: createError } = await supabase
         .from('market_land_valuation')
         .insert({
@@ -4660,15 +4678,18 @@ export const worksheetService = {
             entries_completed: 0,
             ready_to_process: 0,
             location_variations: {}
-          }
+          },
+          // Preserve empty valuation_method and cascade_rates so they don't get lost
+          valuation_method: null,
+          cascade_rates: null
         })
         .select()
         .single();
-      
+
       if (createError) throw createError;
       return newRecord;
     }
-    
+
     if (error) throw error;
     return data;
   },
