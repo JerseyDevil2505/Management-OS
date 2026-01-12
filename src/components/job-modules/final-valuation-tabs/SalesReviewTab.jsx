@@ -71,22 +71,24 @@ const SalesReviewTab = ({
 
   const getPeriodClassification = useCallback((saleDate, endDate) => {
     if (!saleDate || !endDate) return null;
-    
+
     const sale = new Date(saleDate);
-    const taxYear = new Date(endDate).getFullYear();
-    const yearOfValue = taxYear - 1;
+    const assessmentYear = new Date(endDate).getFullYear();
 
-    // CSP: 10/1/prior-prior year → 12/31/prior year
-    const cspStart = new Date(yearOfValue - 1, 9, 1); // Oct 1
-    const cspEnd = new Date(yearOfValue, 11, 31);     // Dec 31
+    // CSP (Current Sale Period): 10/1 of prior year → 12/31 of assessment year
+    // For assessment date 1/1/2026 (stored as 12/31/2025): 10/1/2024 → 12/31/2025
+    const cspStart = new Date(assessmentYear - 1, 9, 1);  // Oct 1 of prior year
+    const cspEnd = new Date(assessmentYear, 11, 31);       // Dec 31 of assessment year
 
-    // PSP: 10/1/two years prior → 9/30/one year prior
-    const pspStart = new Date(yearOfValue - 2, 9, 1);  // Oct 1
-    const pspEnd = new Date(yearOfValue - 1, 8, 30);   // Sep 30
+    // PSP (Prior Sale Period): 10/1 of two years prior → 9/30 of prior year
+    // For assessment date 1/1/2026: 10/1/2023 → 9/30/2024
+    const pspStart = new Date(assessmentYear - 2, 9, 1);   // Oct 1 of two years prior
+    const pspEnd = new Date(assessmentYear - 1, 8, 30);    // Sep 30 of prior year
 
-    // HSP: 10/1/three years prior → 9/30/two years prior
-    const hspStart = new Date(yearOfValue - 3, 9, 1);  // Oct 1
-    const hspEnd = new Date(yearOfValue - 2, 8, 30);   // Sep 30
+    // HSP (Historical Sale Period): 10/1 of three years prior → 9/30 of two years prior
+    // For assessment date 1/1/2026: 10/1/2022 → 9/30/2023
+    const hspStart = new Date(assessmentYear - 3, 9, 1);   // Oct 1 of three years prior
+    const hspEnd = new Date(assessmentYear - 2, 8, 30);    // Sep 30 of two years prior
 
     if (sale >= cspStart && sale <= cspEnd) return 'CSP';
     if (sale >= pspStart && sale <= pspEnd) return 'PSP';
@@ -196,13 +198,19 @@ const SalesReviewTab = ({
       const pricePerSF = prop.sales_price && prop.asset_sfla && prop.asset_sfla > 0
         ? prop.sales_price / prop.asset_sfla
         : null;
-      
+
       const normPricePerSF = prop.values_norm_time && prop.asset_sfla && prop.asset_sfla > 0
         ? prop.values_norm_time / prop.asset_sfla
         : null;
-      
+
+      // Current/MOD sales ratio (uses values_mod_total)
       const salesRatio = prop.values_norm_time && prop.values_norm_time > 0
         ? (prop.values_mod_total / prop.values_norm_time) * 100
+        : null;
+
+      // Proposed/CAMA sales ratio (uses values_cama_total)
+      const salesRatioCama = prop.values_norm_time && prop.values_norm_time > 0
+        ? (prop.values_cama_total / prop.values_norm_time) * 100
         : null;
 
       // Code interpretations
@@ -235,6 +243,7 @@ const SalesReviewTab = ({
         pricePerSF,
         normPricePerSF,
         salesRatio,
+        salesRatioCama,
         typeUseName,
         designName,
         exteriorCondName,
@@ -683,27 +692,29 @@ const SalesReviewTab = ({
 
   const handleSetDateRange = (period) => {
     if (!jobData?.end_date) return;
-    
-    const taxYear = new Date(jobData.end_date).getFullYear();
-    const yearOfValue = taxYear - 1;
+
+    const assessmentYear = new Date(jobData.end_date).getFullYear();
 
     switch(period) {
       case 'CSP':
+        // CSP: 10/1 of prior year → 12/31 of assessment year
         setDateRange({
-          start: new Date(yearOfValue - 1, 9, 1).toISOString().split('T')[0],
-          end: new Date(yearOfValue, 11, 31).toISOString().split('T')[0]
+          start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0],
+          end: new Date(assessmentYear, 11, 31).toISOString().split('T')[0]
         });
         break;
       case 'PSP':
+        // PSP: 10/1 of two years prior → 9/30 of prior year
         setDateRange({
-          start: new Date(yearOfValue - 2, 9, 1).toISOString().split('T')[0],
-          end: new Date(yearOfValue - 1, 8, 30).toISOString().split('T')[0]
+          start: new Date(assessmentYear - 2, 9, 1).toISOString().split('T')[0],
+          end: new Date(assessmentYear - 1, 8, 30).toISOString().split('T')[0]
         });
         break;
       case 'HSP':
+        // HSP: 10/1 of three years prior → 9/30 of two years prior
         setDateRange({
-          start: new Date(yearOfValue - 3, 9, 1).toISOString().split('T')[0],
-          end: new Date(yearOfValue - 2, 8, 30).toISOString().split('T')[0]
+          start: new Date(assessmentYear - 3, 9, 1).toISOString().split('T')[0],
+          end: new Date(assessmentYear - 2, 8, 30).toISOString().split('T')[0]
         });
         break;
       default:
@@ -1549,7 +1560,7 @@ const SalesReviewTab = ({
 
       {/* Stats Bar */}
       <div className="mb-6">
-        <div className="grid grid-cols-6 gap-4 mb-3">
+        <div className="grid grid-cols-7 gap-4 mb-3">
           <div className="bg-white p-4 rounded border">
             <div className="text-sm text-gray-600">Total Properties</div>
             <div className="text-2xl font-bold text-gray-900">{formatNumber(filteredProperties.length)}</div>
@@ -1579,10 +1590,20 @@ const SalesReviewTab = ({
             </div>
           </div>
           <div className="bg-gray-50 p-4 rounded border">
-            <div className="text-sm text-gray-600">Avg Sales Ratio</div>
+            <div className="text-sm text-gray-600">Crnt Avg Sales Ratio</div>
             <div className="text-2xl font-bold text-gray-900">
               {(() => {
                 const ratios = filteredProperties.filter(p => p.salesRatio !== null).map(p => p.salesRatio);
+                const avg = ratios.length > 0 ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 0;
+                return formatPercent(avg);
+              })()}
+            </div>
+          </div>
+          <div className="bg-purple-50 p-4 rounded border border-purple-200">
+            <div className="text-sm text-purple-700">Prop Avg Sales Ratio</div>
+            <div className="text-2xl font-bold text-purple-900">
+              {(() => {
+                const ratios = filteredProperties.filter(p => p.salesRatioCama !== null).map(p => p.salesRatioCama);
                 const avg = ratios.length > 0 ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 0;
                 return formatPercent(avg);
               })()}
