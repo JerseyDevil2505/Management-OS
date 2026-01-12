@@ -692,27 +692,29 @@ const SalesReviewTab = ({
 
   const handleSetDateRange = (period) => {
     if (!jobData?.end_date) return;
-    
-    const taxYear = new Date(jobData.end_date).getFullYear();
-    const yearOfValue = taxYear - 1;
+
+    const assessmentYear = new Date(jobData.end_date).getFullYear();
 
     switch(period) {
       case 'CSP':
+        // CSP: 10/1 of prior year → 12/31 of assessment year
         setDateRange({
-          start: new Date(yearOfValue - 1, 9, 1).toISOString().split('T')[0],
-          end: new Date(yearOfValue, 11, 31).toISOString().split('T')[0]
+          start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0],
+          end: new Date(assessmentYear, 11, 31).toISOString().split('T')[0]
         });
         break;
       case 'PSP':
+        // PSP: 10/1 of two years prior → 9/30 of prior year
         setDateRange({
-          start: new Date(yearOfValue - 2, 9, 1).toISOString().split('T')[0],
-          end: new Date(yearOfValue - 1, 8, 30).toISOString().split('T')[0]
+          start: new Date(assessmentYear - 2, 9, 1).toISOString().split('T')[0],
+          end: new Date(assessmentYear - 1, 8, 30).toISOString().split('T')[0]
         });
         break;
       case 'HSP':
+        // HSP: 10/1 of three years prior → 9/30 of two years prior
         setDateRange({
-          start: new Date(yearOfValue - 3, 9, 1).toISOString().split('T')[0],
-          end: new Date(yearOfValue - 2, 8, 30).toISOString().split('T')[0]
+          start: new Date(assessmentYear - 3, 9, 1).toISOString().split('T')[0],
+          end: new Date(assessmentYear - 2, 8, 30).toISOString().split('T')[0]
         });
         break;
       default:
