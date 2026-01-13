@@ -64,30 +64,14 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   });
   const [expandedExteriorVCS, setExpandedExteriorVCS] = useState(new Set()); // Track which exterior VCS sections are expanded
   const [expandedInteriorVCS, setExpandedInteriorVCS] = useState(new Set()); // Track which interior VCS sections are expanded
-  const [manualExteriorBaseline, setManualExteriorBaseline] = useState(() => {
-    return localStorage.getItem(`attr-cards-exterior-baseline-${jobData?.id}`) || '';
-  });
-  const [manualInteriorBaseline, setManualInteriorBaseline] = useState(() => {
-    return localStorage.getItem(`attr-cards-interior-baseline-${jobData?.id}`) || '';
-  });
+  const [manualExteriorBaseline, setManualExteriorBaseline] = useState('');
+  const [manualInteriorBaseline, setManualInteriorBaseline] = useState('');
 
   // Condition classifications for export
-  const [exteriorBetterConditions, setExteriorBetterConditions] = useState(() => {
-    const stored = localStorage.getItem(`attr-cards-exterior-better-${jobData?.id}`);
-    return stored ? JSON.parse(stored) : [];
-  });
-  const [exteriorWorseConditions, setExteriorWorseConditions] = useState(() => {
-    const stored = localStorage.getItem(`attr-cards-exterior-worse-${jobData?.id}`);
-    return stored ? JSON.parse(stored) : [];
-  });
-  const [interiorBetterConditions, setInteriorBetterConditions] = useState(() => {
-    const stored = localStorage.getItem(`attr-cards-interior-better-${jobData?.id}`);
-    return stored ? JSON.parse(stored) : [];
-  });
-  const [interiorWorseConditions, setInteriorWorseConditions] = useState(() => {
-    const stored = localStorage.getItem(`attr-cards-interior-worse-${jobData?.id}`);
-    return stored ? JSON.parse(stored) : [];
-  });
+  const [exteriorBetterConditions, setExteriorBetterConditions] = useState([]);
+  const [exteriorWorseConditions, setExteriorWorseConditions] = useState([]);
+  const [interiorBetterConditions, setInteriorBetterConditions] = useState([]);
+  const [interiorWorseConditions, setInteriorWorseConditions] = useState([]);
 
   // UI state for condition configuration modal
   const [showConditionConfig, setShowConditionConfig] = useState(false);
