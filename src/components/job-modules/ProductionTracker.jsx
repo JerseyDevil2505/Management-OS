@@ -207,9 +207,10 @@ const ProductionTracker = ({
       ).length;
     }
 
-    console.log('🔍 Final commercial counts:', { inspected, priced });
+    console.log('🔍 Final commercial counts:', { total: commercialProps.length, inspected, priced });
 
     setCommercialCounts({
+      total: commercialProps.length,
       inspected: inspected,
       priced: priced
     });
@@ -2987,11 +2988,11 @@ const exportMissingPropertiesReport = () => {
                 <div>
                   <p className="text-sm text-gray-600">Commercial Complete</p>
                   <p className="text-2xl font-bold text-blue-600">
-                    {jobData.totalcommercial > 0 ?
-                      Math.round((commercialCounts.inspected / jobData.totalcommercial) * 100) : 0}%
+                    {commercialCounts.total > 0 ?
+                      Math.round((commercialCounts.inspected / commercialCounts.total) * 100) : 0}%
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    {`${commercialCounts.inspected.toLocaleString()} of ${(jobData.totalcommercial || 0).toLocaleString()} properties`}
+                    {`${commercialCounts.inspected.toLocaleString()} of ${commercialCounts.total.toLocaleString()} properties`}
                   </p>
                 </div>
                 <Factory className="w-8 h-8 text-blue-500" />
