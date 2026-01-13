@@ -31,9 +31,12 @@ const ProductionTracker = ({
 
   // NEW: Track properties going to external contractors
   const [unassignedPropertyCount, setUnassignedPropertyCount] = useState(0);
-  
+
   // NEW: Track if we loaded from database to prevent race condition
   const [loadedFromDatabase, setLoadedFromDatabase] = useState(false);
+
+  // REF: Track if initialization has run to prevent re-initialization
+  const hasInitialized = useRef(false);
   
   // NEW: Commercial inspection counts from inspection_data
   const [commercialCounts, setCommercialCounts] = useState({
