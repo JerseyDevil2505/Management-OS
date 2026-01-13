@@ -2981,7 +2981,7 @@ const exportMissingPropertiesReport = () => {
         )}
 
         {/* Commercial metrics */}
-        {(analytics || commercialCounts.inspected > 0) && (
+        {(analytics || commercialCounts.total > 0) && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
             <div className="bg-white p-4 rounded-lg border shadow-sm">
               <div className="flex items-center justify-between">
