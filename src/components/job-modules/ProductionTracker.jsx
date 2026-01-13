@@ -1045,14 +1045,20 @@ const ProductionTracker = ({
 
 // Initialize data loading
   useEffect(() => {
-    // Don't re-initialize if we're already loaded or currently processing
-    if (loading === false || processing) {
-      console.log('⏭️ Skipping initialization - already loaded or processing');
+    // Don't re-initialize if we've already run or are currently processing
+    if (hasInitialized.current || processing) {
+      console.log('⏭️ Skipping initialization - already initialized or processing', {
+        hasInitialized: hasInitialized.current,
+        processing
+      });
       return;
     }
 
     if (jobData?.id && properties && properties.length > 0 && inspectionData && employees) {
       const initializeData = async () => {
+        console.log('🚀 Running initialization for the first time');
+        hasInitialized.current = true; // Mark as initialized immediately
+
         // Load only the things that still need database calls
         await loadAvailableInfoByCodes();
         await loadProjectStartDate();
