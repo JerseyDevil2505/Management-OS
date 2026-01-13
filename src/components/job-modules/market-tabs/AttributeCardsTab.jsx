@@ -51,6 +51,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const parsedCodeDefinitions = useMemo(() => jobData?.parsed_code_definitions || {}, [jobData?.parsed_code_definitions]);
   const infoByCodes = useMemo(() => jobData?.info_by_config || {}, [jobData?.info_by_config]);
 
+  // Track which job ID we've loaded baseline settings for (to prevent redundant loads)
+  const loadedJobIdRef = useRef(null);
+
   // Main tab state
   const [active, setActive] = useState('condition');
 
