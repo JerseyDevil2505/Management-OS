@@ -740,7 +740,7 @@ useEffect(() => {
   
   if (marketLandData.time_normalized_sales && marketLandData.time_normalized_sales.length > 0) {
     // Filter out sales that don't meet current minSalePrice threshold (e.g., $1 nominal sales)
-    const currentMinPrice = config?.minSalePrice || 100;
+    const currentMinPrice = marketLandData.normalization_config?.minSalePrice || 100;
     const validSales = marketLandData.time_normalized_sales.filter(sale =>
       sale.sales_price && sale.sales_price > currentMinPrice
     );
