@@ -37,6 +37,7 @@ const ProductionTracker = ({
   
   // NEW: Commercial inspection counts from inspection_data
   const [commercialCounts, setCommercialCounts] = useState({
+    total: 0,
     inspected: 0,
     priced: 0
   });
@@ -156,6 +157,7 @@ const ProductionTracker = ({
       if (pricedCodes.length === 0) {
         console.log('⚠️ Skipping pricing calculation - config not loaded yet');
         setCommercialCounts({
+          total: commercialProps.length,
           inspected: inspected,
           priced: 0  // Will be recalculated when config loads
         });
