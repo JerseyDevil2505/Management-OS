@@ -3629,26 +3629,36 @@ const analyzeImportFile = async (file) => {
                           <option value="200">200 per page</option>
                         </select>
 
-                        {/* Bulk actions: Keep All Valid / Reject All Outlier */}
+                        {/* Bulk action: Keep all usable based on NU codes */}
                         <button
                           type="button"
                           onClick={async () => {
-                            const isNUKeepable = (nu) => {
+                            // Define usable NU codes: blank, 00, 07, 32, 36
+                            const isUsableNU = (nu) => {
                               const s = (nu === undefined || nu === null) ? '' : nu.toString().trim();
-                              return s === '' || s === '00' || s === '7' || s === '07';
+                              return s === '' || s === '00' || s === '7' || s === '07' || s === '32' || s === '36';
                             };
 
                             const pending = timeNormalizedSales.filter(s => s.keep_reject === 'pending');
-                            const willKeep = pending.filter(s => isNUKeepable(s.sales_nu)).length;
-                            if (willKeep === 0) {
-                              alert('No pending sales match the "sales_nu blank/00/07" rule.');
+                            const willKeep = pending.filter(s => isUsableNU(s.sales_nu)).length;
+                            const willReject = pending.filter(s => !isUsableNU(s.sales_nu)).length;
+
+                            if (pending.length === 0) {
+                              alert('No pending sales to process.');
                               return;
                             }
 
-                            if (!window.window.confirm(`Keep ${willKeep} pending sales where sales_nu is blank, 00 or 07? This will mark them as Kept and save decisions to the database.`)) return;
+                            if (!window.confirm(
+                              `This will:\n` +
+                              `• Keep ${willKeep} sales with usable NU codes (blank, 00, 07, 32, 36)\n` +
+                              `• Reject ${willReject} sales with other NU codes\n\n` +
+                              `Click 'Save All Keep/Reject Decisions' after to persist changes. Continue?`
+                            )) return;
 
                             const updated = timeNormalizedSales.map(s => {
-                              if (s.keep_reject === 'pending' && isNUKeepable(s.sales_nu)) return { ...s, keep_reject: 'keep' };
+                              if (s.keep_reject === 'pending') {
+                                return { ...s, keep_reject: isUsableNU(s.sales_nu) ? 'keep' : 'reject' };
+                              }
                               return s;
                             });
 
@@ -3664,55 +3674,12 @@ const analyzeImportFile = async (file) => {
                             setNormalizationStats(newStats);
 
                             // NOTE: Do NOT auto-save here. User should manually click "Save All Keep/Reject Decisions" to persist changes.
-                            alert(`${willKeep} sales marked as Keep. Click 'Save All Keep/Reject Decisions' to persist changes.`);
+                            alert(`${willKeep} sales marked as Keep, ${willReject} marked as Reject. Click 'Save All Keep/Reject Decisions' to persist changes.`);
 
                           }}
-                          className="px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+                          className="px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
                         >
-                          Keep All Valid
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const isNUSkip = (nu) => {
-                              const s = (nu === undefined || nu === null) ? '' : nu.toString().trim();
-                              return s === '' || s === '00' || s === '7' || s === '07';
-                            };
-
-                            const outliers = timeNormalizedSales.filter(s => s.is_outlier && s.keep_reject !== 'reject');
-                            const toReject = outliers.filter(s => !isNUSkip(s.sales_nu)).length;
-
-                            if (toReject === 0) {
-                              alert('No outlier sales qualify for rejection under the rule (skipping sales_nu blank/00/07).');
-                              return;
-                            }
-
-                            if (!window.window.confirm(`Reject ${toReject} outlier sales (skipping sales_nu blank/00/07)? This will mark them as Rejected and clear normalized values in the database.`)) return;
-
-                            const updated = timeNormalizedSales.map(s => {
-                              if (s.is_outlier && !isNUSkip(s.sales_nu)) return { ...s, keep_reject: 'reject' };
-                              return s;
-                            });
-
-                            const newStats = {
-                              ...normalizationStats,
-                              pendingReview: updated.filter(s => s.keep_reject === 'pending').length,
-                              keptCount: updated.filter(s => s.keep_reject === 'keep').length,
-                              rejectedCount: updated.filter(s => s.keep_reject === 'reject').length,
-                              acceptedSales: updated.filter(s => s.keep_reject === 'keep').length
-                            };
-
-                            setTimeNormalizedSales(updated);
-                            setNormalizationStats(newStats);
-
-                            // NOTE: Do NOT auto-save here. User should manually click "Save All Keep/Reject Decisions" to persist changes.
-                            alert(`${toReject} outlier sales marked as Rejected. Click 'Save All Keep/Reject Decisions' to persist changes.`);
-
-                          }}
-                          className="px-3 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700"
-                        >
-                          Reject All Outlier
+                          Keep All Usable
                         </button>
 
                         {/* Export to Excel button */}
