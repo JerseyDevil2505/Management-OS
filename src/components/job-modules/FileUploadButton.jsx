@@ -1850,9 +1850,10 @@ const handleCodeFileUpdate = async () => {
           salesDecisions: salesDecisions.size
         });
         addNotification(`✅ Successfully processed ${totalProcessed} records via ${job.vendor_type} updater`, 'success');
-        
+
         if (salesDecisions.size > 0) {
           addNotification(`💾 Saved ${salesDecisions.size} sales decisions`, 'success');
+          addNotification(`⚠️ IMPORTANT: Run Time Normalization in Market Analysis > Pre-Valuation to process these sales changes`, 'warning');
         }
       }
       // Check if rollback occurred
