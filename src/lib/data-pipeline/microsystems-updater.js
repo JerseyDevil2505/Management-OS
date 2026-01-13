@@ -37,24 +37,9 @@ export class MicrosystemsUpdater {
   }
 
   /**
-   * CRITICAL FIX: Optimize batch for database performance
+   * REMOVED: Payload optimization disabled to ensure database is exact mirror of source file
+   * All fields (including nulls) are now sent to database for proper UPSERT clearing
    */
-  optimizeBatchForDatabase(batch) {
-    return batch.map(record => {
-      // Remove null/undefined/empty/whitespace-only values to reduce payload size
-      const cleaned = {};
-      for (const [key, value] of Object.entries(record)) {
-        // Skip null, undefined, empty strings, and whitespace-only strings
-        if (value !== null && value !== undefined) {
-          const strValue = String(value);
-          if (strValue.trim() !== '') {
-            cleaned[key] = value;
-          }
-        }
-      }
-      return cleaned;
-    });
-  }
 
   /**
    * Save current projected ratable base to "previous" fields for delta tracking
@@ -194,8 +179,7 @@ export class MicrosystemsUpdater {
    * Upsert batch with retry logic for connection issues
    */
   async upsertBatchWithRetry(batch, batchNumber, retries = 50) {
-    // CRITICAL FIX: Optimize batch before processing
-    const optimizedBatch = this.optimizeBatchForDatabase(batch);
+    // DATA INTEGRITY: Send complete batch with all nulls to ensure database mirrors source file
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         console.log(`🔄 UPSERT Batch ${batchNumber}, attempt ${attempt}...`);
@@ -203,7 +187,7 @@ export class MicrosystemsUpdater {
         // CRITICAL FIX: Optimize for 500+ records with timeout and minimal return
         const upsertPromise = supabase
           .from('property_records')
-          .upsert(optimizedBatch, {
+          .upsert(batch, {
             onConflict: 'property_composite_key',
             ignoreDuplicates: false,
             count: 'exact',

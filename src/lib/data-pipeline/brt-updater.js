@@ -48,34 +48,9 @@ export class BRTUpdater {
   }
 
   /**
-   * CRITICAL FIX: Optimize batch for database performance
+   * REMOVED: Payload optimization disabled to ensure database is exact mirror of source file
+   * All fields (including nulls) are now sent to database for proper UPSERT clearing
    */
-  optimizeBatchForDatabase(batch) {
-    // Preserve explicit nulls for these fields so upserts can clear legacy values
-    const PRESERVE_NULL_FIELDS = new Set([
-      'asset_lot_acre',
-      'asset_lot_sf',
-      'inspection_price_by',
-      'inspection_price_date'
-    ]);
-    return batch.map(record => {
-      const cleaned = {};
-      for (const [key, value] of Object.entries(record)) {
-        if (value === null && PRESERVE_NULL_FIELDS.has(key)) {
-          cleaned[key] = null;
-          continue;
-        }
-        // Skip undefined, empty strings, and whitespace-only strings
-        if (value !== undefined && value !== null) {
-          const strValue = String(value);
-          if (strValue.trim() !== '') {
-            cleaned[key] = value;
-          }
-        }
-      }
-      return cleaned;
-    });
-  }
 
   /**
    * Save current projected ratable base to "previous" fields for delta tracking
@@ -215,8 +190,7 @@ export class BRTUpdater {
    * UPSERT batch with retry logic for connection issues
    */
   async upsertBatchWithRetry(batch, batchNumber, retries = 50) {
-    // CRITICAL FIX: Optimize batch before processing
-    const optimizedBatch = this.optimizeBatchForDatabase(batch);
+    // DATA INTEGRITY: Send complete batch with all nulls to ensure database mirrors source file
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         console.log(`🔄 UPSERT Batch ${batchNumber}, attempt ${attempt}...`);
@@ -224,7 +198,7 @@ export class BRTUpdater {
         // CRITICAL FIX: Optimize for 500+ records with timeout and minimal return
         const upsertPromise = supabase
           .from('property_records')
-          .upsert(optimizedBatch, {
+          .upsert(batch, {
             onConflict: 'property_composite_key',
             ignoreDuplicates: false,
             count: 'exact',
