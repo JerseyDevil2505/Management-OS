@@ -739,8 +739,14 @@ useEffect(() => {
   }
   
   if (marketLandData.time_normalized_sales && marketLandData.time_normalized_sales.length > 0) {
-    if (false) console.log(`✅ Restoring ${marketLandData.time_normalized_sales.length} normalized sales`);
-    setTimeNormalizedSales(marketLandData.time_normalized_sales);
+    // Filter out sales that don't meet current minSalePrice threshold (e.g., $1 nominal sales)
+    const currentMinPrice = config?.minSalePrice || 100;
+    const validSales = marketLandData.time_normalized_sales.filter(sale =>
+      sale.sales_price && sale.sales_price > currentMinPrice
+    );
+
+    if (false) console.log(`✅ Restoring ${validSales.length} normalized sales (filtered ${marketLandData.time_normalized_sales.length - validSales.length} below $${currentMinPrice})`);
+    setTimeNormalizedSales(validSales);
   }
   
   if (marketLandData.normalization_stats) {
