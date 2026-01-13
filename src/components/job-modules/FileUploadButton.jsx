@@ -1583,7 +1583,8 @@ const handleCodeFileUpdate = async () => {
 
           // Prefer Year/CCDD from CSV when present, otherwise fall back to job values
           const parsedForYear = parseSourceFile(sourceFileContent, job.vendor_type);
-          let csvYear = job.year_created || new Date().getFullYear();
+          // CRITICAL: Use start_date year to match processors
+          let csvYear = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
           let csvCcdd = job.ccdd_code || job.ccddCode || '';
           if (parsedForYear && parsedForYear.length > 0) {
             const firstRow = parsedForYear[0];
@@ -2545,7 +2546,8 @@ const handleCodeFileUpdate = async () => {
                             const lotField = job.vendor_type === 'BRT' ? 'LOT' : 'Lot';
                             const qualifierField = job.vendor_type === 'BRT' ? 'QUALIFIER' : 'Qual';
                             const locationField = job.vendor_type === 'BRT' ? 'PROPERTY_LOCATION' : 'Location';
-                            const yearCreated = job.year_created || new Date().getFullYear();
+                            // CRITICAL: Use start_date year to match processors
+                            const yearCreated = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
                             const ccddCode = job.ccdd_code || job.ccddCode;
                             const compositeKey = generateCompositeKey(record, job.vendor_type, yearCreated, ccddCode);
 
@@ -2797,7 +2799,8 @@ const handleCodeFileUpdate = async () => {
                   <div className="mt-2 p-2 bg-yellow-50 rounded">
                     <div className="font-medium text-yellow-800 mb-1">Sample "New" Record Keys:</div>
                     {details.missing.slice(0, 3).map((record, idx) => {
-                      const yearCreated = job.year_created || new Date().getFullYear();
+                      // CRITICAL: Use start_date year to match processors
+                      const yearCreated = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
                       const ccddCode = job.ccdd_code || job.ccddCode;
                       const generatedKey = generateCompositeKey(record, job.vendor_type, yearCreated, ccddCode);
                       
@@ -2904,7 +2907,8 @@ const handleCodeFileUpdate = async () => {
                         sourceFileContent,
                         codeFileContent,
                         job.id,
-                        job.year_created || new Date().getFullYear(),
+                        // CRITICAL: Use start_date year to match processors
+                        job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear(),
                         job.ccdd_code || job.ccddCode,
                         job.vendor_type,
                         {
