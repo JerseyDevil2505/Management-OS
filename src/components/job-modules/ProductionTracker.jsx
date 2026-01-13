@@ -610,16 +610,22 @@ const ProductionTracker = ({
   const loadPersistedAnalytics = async () => {
     if (!jobData?.id) return;
 
+    // Don't load from database if we just processed - use current state
+    if (processed || analytics) {
+      console.log('⏭️ Skipping loadPersistedAnalytics - already processed in this session');
+      return;
+    }
+
     try {
       const { data: job, error } = await supabase
         .from('jobs')
         .select('workflow_stats, external_inspectors')
         .eq('id', jobData.id)
         .single();
-      
+
       if (job?.external_inspectors) {
         setExternalInspectorsList(job.external_inspectors);
-      }     
+      }
 
       if (!error && job?.workflow_stats && job.workflow_stats.totalRecords) {
         // Load the persisted analytics
