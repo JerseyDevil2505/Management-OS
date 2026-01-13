@@ -3917,11 +3917,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     }
   }, [manualInteriorBaseline, jobData?.id]);
 
-  // Load baseline conditions from localStorage when job ID becomes available (only once per job)
+  // Load all saved settings from localStorage when job ID becomes available (only once per job)
   useEffect(() => {
     if (jobData?.id && loadedJobIdRef.current !== jobData.id) {
       loadedJobIdRef.current = jobData.id;
 
+      // Load filter settings
+      const savedTypeFilter = localStorage.getItem(`attr-cards-type-filter-${jobData.id}`);
+      const savedInteriorInspections = localStorage.getItem(`attr-cards-interior-inspections-${jobData.id}`);
+
+      // Load baseline conditions
       const savedExteriorBaseline = localStorage.getItem(`attr-cards-exterior-baseline-${jobData.id}`);
       const savedInteriorBaseline = localStorage.getItem(`attr-cards-interior-baseline-${jobData.id}`);
       const savedExteriorBetter = localStorage.getItem(`attr-cards-exterior-better-${jobData.id}`);
@@ -3929,6 +3934,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       const savedInteriorBetter = localStorage.getItem(`attr-cards-interior-better-${jobData.id}`);
       const savedInteriorWorse = localStorage.getItem(`attr-cards-interior-worse-${jobData.id}`);
 
+      // Apply saved settings
+      if (savedTypeFilter) setTypeUseFilter(savedTypeFilter);
+      if (savedInteriorInspections !== null) setUseInteriorInspections(savedInteriorInspections === 'true');
       if (savedExteriorBaseline !== null) setManualExteriorBaseline(savedExteriorBaseline);
       if (savedInteriorBaseline !== null) setManualInteriorBaseline(savedInteriorBaseline);
       if (savedExteriorBetter) setExteriorBetterConditions(JSON.parse(savedExteriorBetter));
