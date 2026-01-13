@@ -1307,7 +1307,20 @@ const ProductionTracker = ({
         const inspector = record.inspection_measure_by || 'UNASSIGNED';
         const propertyClass = record.property_m4_class || 'UNKNOWN';
         // Use current info_by_code from inspectionData (authoritative), fallback to property snapshot
-        const infoByCode = inspectionDataMap[propertyKey] || record.inspection_info_by;
+        const currentInfoBy = inspectionDataMap[propertyKey];
+        const infoByCode = currentInfoBy || record.inspection_info_by;
+
+        // DEBUG: Log for first 5 commercial properties to see lookup in action
+        if (index < 5 && ['4A', '4B', '4C'].includes(propertyClass)) {
+          console.log(`🔍 Commercial property ${index + 1} lookup:`, {
+            key: propertyKey,
+            foundInMap: !!currentInfoBy,
+            currentInfoBy: currentInfoBy,
+            fallbackInfoBy: record.inspection_info_by,
+            finalInfoBy: infoByCode
+          });
+        }
+
         const measuredDate = record.inspection_measure_date ? new Date(record.inspection_measure_date) : null;
         const listDate = record.inspection_list_date ? new Date(record.inspection_list_date) : null;
         const priceDate = record.inspection_price_date ? new Date(record.inspection_price_date) : null;
