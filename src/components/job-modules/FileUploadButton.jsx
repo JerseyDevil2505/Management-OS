@@ -925,7 +925,8 @@ const handleCodeFileUpdate = async () => {
 
       // Generate composite keys for source records using EXACT processor logic
       setProcessingStatus('Generating composite keys...');
-      const yearCreated = job.year_created || new Date().getFullYear();
+      // CRITICAL: Use start_date year to match what processors use, not current year!
+      const yearCreated = job.start_date ? new Date(job.start_date).getFullYear() : new Date().getFullYear();
       const ccddCode = job.ccdd_code || job.ccddCode;
 
       const sourceKeys = new Set();
