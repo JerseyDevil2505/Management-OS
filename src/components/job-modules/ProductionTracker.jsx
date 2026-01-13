@@ -1228,7 +1228,15 @@ const ProductionTracker = ({
         inspectionData.forEach(insp => {
           inspectionDataMap[insp.property_composite_key] = insp.info_by_code;
         });
+        console.log('🗺️ INSPECTION DATA MAP CREATED:', {
+          totalEntries: Object.keys(inspectionDataMap).length,
+          sampleKeys: Object.keys(inspectionDataMap).slice(0, 3),
+          sampleValues: Object.values(inspectionDataMap).slice(0, 3),
+          commercialWithP: Object.values(inspectionDataMap).filter(code => code === 'P').length
+        });
         debugLog('ANALYTICS', `✅ Created inspection lookup map with ${Object.keys(inspectionDataMap).length} entries`);
+      } else {
+        console.error('❌ NO INSPECTION DATA AVAILABLE FOR LOOKUP MAP!');
       }
 
       // CRITICAL DEBUG: Detailed analysis of received properties
