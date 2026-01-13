@@ -58,13 +58,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const [active, setActive] = useState('condition');
 
   // ============ CONDITION ANALYSIS STATE ============
-  const [typeUseFilter, setTypeUseFilter] = useState(() => {
-    return localStorage.getItem(`attr-cards-type-filter-${jobData?.id}`) || '1';
-  });
-  const [useInteriorInspections, setUseInteriorInspections] = useState(() => {
-    const stored = localStorage.getItem(`attr-cards-interior-inspections-${jobData?.id}`);
-    return stored === null ? true : stored === 'true'; // Default to true (checked) on first load
-  });
+  const [typeUseFilter, setTypeUseFilter] = useState('1');
+  const [useInteriorInspections, setUseInteriorInspections] = useState(true);
   const [expandedExteriorVCS, setExpandedExteriorVCS] = useState(new Set()); // Track which exterior VCS sections are expanded
   const [expandedInteriorVCS, setExpandedInteriorVCS] = useState(new Set()); // Track which interior VCS sections are expanded
   const [manualExteriorBaseline, setManualExteriorBaseline] = useState('');
