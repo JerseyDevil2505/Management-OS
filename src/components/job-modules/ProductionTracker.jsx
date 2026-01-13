@@ -1477,6 +1477,11 @@ const ProductionTracker = ({
         const isEstimationCode = (infoByCategoryConfig.estimation || []).includes(normalizedInfoBy) || (infoByCategoryConfig.estimation || []).includes(infoByCode);
         const isPricedCode = (infoByCategoryConfig.priced || []).includes(normalizedInfoBy) || (infoByCategoryConfig.priced || []).includes(infoByCode);
         const isSpecialCode = (infoByCategoryConfig.special || []).includes(normalizedInfoBy) || (infoByCategoryConfig.special || []).includes(infoByCode);
+
+        // DEBUG: Log pricing code detection for commercial properties
+        if (['4A', '4B', '4C'].includes(propertyClass) && actualVendor === 'Microsystems') {
+          debugLog('PRICING', `Commercial ${propertyKey}: InfoBy=${infoByCode}, isPriced=${isPricedCode}, config=${JSON.stringify(infoByCategoryConfig.priced)}`);
+        }
         const hasListingData = record.inspection_list_by && record.inspection_list_date;
         // NEW: List_by/List_date integrity validation
         const listByValue = record.inspection_list_by;
