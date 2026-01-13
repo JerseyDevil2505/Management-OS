@@ -1018,7 +1018,15 @@ const ProductionTracker = ({
 
   // Recalculate commercial counts when config or inspection data changes
   useEffect(() => {
+    console.log('🔍 useEffect triggered for commercial counts recalc:', {
+      hasInspectionData: !!inspectionData,
+      inspectionDataLength: inspectionData?.length,
+      hasPricedConfig: !!infoByCategoryConfig.priced,
+      pricedCodes: infoByCategoryConfig.priced
+    });
+
     if (inspectionData && inspectionData.length > 0 && infoByCategoryConfig.priced) {
+      console.log('🔄 Recalculating commercial counts due to config/data change');
       calculateCommercialCounts();
     }
   }, [inspectionData, infoByCategoryConfig.priced]); // eslint-disable-line react-hooks/exhaustive-deps
