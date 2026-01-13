@@ -66,8 +66,45 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
     bufferForLoss: jobData?.rate_calc_buffer_for_loss || 0
   }), [jobData]);
 
+  // Get previous projected values for delta tracking
+  const previousProjected = useMemo(() => ({
+    class_1_count: jobData?.previous_projected_class_1_count || 0,
+    class_1_total: jobData?.previous_projected_class_1_total || 0,
+    class_2_count: jobData?.previous_projected_class_2_count || 0,
+    class_2_total: jobData?.previous_projected_class_2_total || 0,
+    class_3a_count: jobData?.previous_projected_class_3a_count || 0,
+    class_3a_total: jobData?.previous_projected_class_3a_total || 0,
+    class_3b_count: jobData?.previous_projected_class_3b_count || 0,
+    class_3b_total: jobData?.previous_projected_class_3b_total || 0,
+    class_4_count: jobData?.previous_projected_class_4_count || 0,
+    class_4_total: jobData?.previous_projected_class_4_total || 0,
+    class_6_count: jobData?.previous_projected_class_6_count || 0,
+    class_6_total: jobData?.previous_projected_class_6_total || 0,
+    total_count: jobData?.previous_projected_total_count || 0,
+    total_total: jobData?.previous_projected_total_total || 0
+  }), [jobData]);
+
   // Get vendor type for consolidation logic
   const vendorType = jobData?.vendor_type || 'BRT';
+
+  // Helper function to format delta display
+  const formatDelta = (currentValue, previousValue) => {
+    if (!previousValue || previousValue === 0) return null;
+
+    const delta = currentValue - previousValue;
+    const percentChange = (delta / previousValue) * 100;
+
+    if (delta === 0) return null;
+
+    const deltaColor = delta > 0 ? 'text-green-600' : 'text-red-600';
+    const sign = delta > 0 ? '+' : '';
+
+    return (
+      <div className={`text-[10px] ${deltaColor} font-normal mt-0.5`}>
+        {sign}${Math.abs(delta).toLocaleString()} ({sign}{percentChange.toFixed(1)}%)
+      </div>
+    );
+  };
 
   // Consolidate properties by grouping additional cards (same logic as MarketDataTab)
   const consolidateProperties = (allProperties) => {
@@ -554,7 +591,10 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                     <div className="grid grid-cols-3 gap-2">
                       <div className="text-sm font-medium py-1">Class 1</div>
                       <div className="text-sm text-right px-2 py-1">{projectedRatableBase['1'].count.toLocaleString()}</div>
-                      <div className="text-sm text-right px-2 py-1">${projectedRatableBase['1'].total.toLocaleString()}</div>
+                      <div className="text-sm text-right px-2 py-1">
+                        ${projectedRatableBase['1'].total.toLocaleString()}
+                        {formatDelta(projectedRatableBase['1'].total, previousProjected.class_1_total)}
+                      </div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
                       <div className="py-1">Abatements</div>
@@ -568,7 +608,10 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                     <div className="grid grid-cols-3 gap-2">
                       <div className="text-sm font-medium py-1">Class 2</div>
                       <div className="text-sm text-right px-2 py-1">{projectedRatableBase['2'].count.toLocaleString()}</div>
-                      <div className="text-sm text-right px-2 py-1">${projectedRatableBase['2'].total.toLocaleString()}</div>
+                      <div className="text-sm text-right px-2 py-1">
+                        ${projectedRatableBase['2'].total.toLocaleString()}
+                        {formatDelta(projectedRatableBase['2'].total, previousProjected.class_2_total)}
+                      </div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
                       <div className="py-1">Abatements</div>
@@ -581,14 +624,20 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   <div className="grid grid-cols-3 gap-2">
                     <div className="text-sm font-medium py-1">Class 3A's (NET)</div>
                     <div className="text-sm text-right px-2 py-1">{projectedRatableBase['3A'].count.toLocaleString()}</div>
-                    <div className="text-sm text-right px-2 py-1">${projectedRatableBase['3A'].total.toLocaleString()}</div>
+                    <div className="text-sm text-right px-2 py-1">
+                      ${projectedRatableBase['3A'].total.toLocaleString()}
+                      {formatDelta(projectedRatableBase['3A'].total, previousProjected.class_3a_total)}
+                    </div>
                   </div>
 
                   {/* Class 3B's */}
                   <div className="grid grid-cols-3 gap-2">
                     <div className="text-sm font-medium py-1">Class 3B's</div>
                     <div className="text-sm text-right px-2 py-1">{projectedRatableBase['3B'].count.toLocaleString()}</div>
-                    <div className="text-sm text-right px-2 py-1">${projectedRatableBase['3B'].total.toLocaleString()}</div>
+                    <div className="text-sm text-right px-2 py-1">
+                      ${projectedRatableBase['3B'].total.toLocaleString()}
+                      {formatDelta(projectedRatableBase['3B'].total, previousProjected.class_3b_total)}
+                    </div>
                   </div>
 
                   {/* Class 4A,B,C */}
@@ -596,7 +645,10 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                     <div className="grid grid-cols-3 gap-2">
                       <div className="text-sm font-medium py-1">Class 4A,B,C (NET)</div>
                       <div className="text-sm text-right px-2 py-1">{projectedRatableBase['4ABC'].count.toLocaleString()}</div>
-                      <div className="text-sm text-right px-2 py-1">${projectedRatableBase['4ABC'].total.toLocaleString()}</div>
+                      <div className="text-sm text-right px-2 py-1">
+                        ${projectedRatableBase['4ABC'].total.toLocaleString()}
+                        {formatDelta(projectedRatableBase['4ABC'].total, previousProjected.class_4_total)}
+                      </div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
                       <div className="py-1">Abatements</div>
@@ -616,7 +668,10 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   <div className="grid grid-cols-3 gap-2 pt-3 border-t-2 border-gray-300 font-bold">
                     <div className="text-sm py-1">Total Ratables</div>
                     <div className="text-sm text-right px-2 py-1">{projectedRatableBase.totalCount.toLocaleString()}</div>
-                    <div className="text-base text-right px-2 py-1">${projectedRatableBase.totalTotal.toLocaleString()}</div>
+                    <div className="text-base text-right px-2 py-1">
+                      ${projectedRatableBase.totalTotal.toLocaleString()}
+                      {formatDelta(projectedRatableBase.totalTotal, previousProjected.total_total)}
+                    </div>
                   </div>
 
                   {/* Commercial Base - Calculate */}

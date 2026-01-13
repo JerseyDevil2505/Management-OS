@@ -72,6 +72,7 @@ const PreValuationTab = ({
   const [worksheetProperties, setWorksheetProperties] = useState([]);
   const [lastTimeNormalizationRun, setLastTimeNormalizationRun] = useState(null);
   const [lastSizeNormalizationRun, setLastSizeNormalizationRun] = useState(null);
+  const [recentSalesChanges, setRecentSalesChanges] = useState(null);
 
   // Control to pause parent refreshes while user is actively editing
   const [pauseAutoRefresh, setPauseAutoRefresh] = useState(false);
@@ -729,7 +730,9 @@ useEffect(() => {
     setOutlierThreshold(outThreshold);
     setNormalizeToYear(config.normalizeToYear || 2025);
     setSalesFromYear(config.salesFromYear || 2012);
-    setMinSalePrice(config.minSalePrice || 100);
+    // Ensure minSalePrice is a valid number, default to 100 if invalid
+    const loadedMinPrice = config.minSalePrice;
+    setMinSalePrice(typeof loadedMinPrice === 'number' && !isNaN(loadedMinPrice) && loadedMinPrice >= 0 ? loadedMinPrice : 100);
     setSelectedCounty(jobData?.county || config.selectedCounty || 'Bergen');
     setLastTimeNormalizationRun(config.lastTimeNormalizationRun || null);
     setLastSizeNormalizationRun(config.lastSizeNormalizationRun || null);
@@ -738,8 +741,32 @@ useEffect(() => {
   }
   
   if (marketLandData.time_normalized_sales && marketLandData.time_normalized_sales.length > 0) {
-    if (false) console.log(`✅ Restoring ${marketLandData.time_normalized_sales.length} normalized sales`);
-    setTimeNormalizedSales(marketLandData.time_normalized_sales);
+    // Filter out sales that don't meet current minSalePrice threshold (e.g., $1 nominal sales that were incorrectly normalized)
+    const currentMinPrice = marketLandData.normalization_config?.minSalePrice || 100;
+    const validSales = marketLandData.time_normalized_sales.filter(sale =>
+      sale.sales_price && sale.sales_price > currentMinPrice
+    );
+
+    const filteredCount = marketLandData.time_normalized_sales.length - validSales.length;
+
+    if (filteredCount > 0) {
+      console.warn(`⚠️ Filtered out ${filteredCount} invalid normalized sales below $${currentMinPrice} (likely from previous bug where minSalePrice was NaN)`);
+
+      // Clean up database by re-saving without the invalid sales
+      if (jobData?.id) {
+        (async () => {
+          try {
+            await worksheetService.saveTimeNormalizedSales(jobData.id, validSales, marketLandData.normalization_stats);
+            console.log('✅ Cleaned up invalid normalized sales from database');
+          } catch (error) {
+            console.error('Failed to clean up invalid sales:', error);
+          }
+        })();
+      }
+    }
+
+    if (false) console.log(`✅ Restoring ${validSales.length} normalized sales`);
+    setTimeNormalizedSales(validSales);
   }
   
   if (marketLandData.normalization_stats) {
@@ -774,6 +801,55 @@ useEffect(() => {
     // ignore
   }
 }, [marketLandData]);
+
+// Check for recent sales changes that need normalization
+useEffect(() => {
+  const checkForSalesChanges = async () => {
+    if (!jobData?.id) return;
+
+    try {
+      // Get most recent comparison report with sales changes
+      const { data: reports, error } = await supabase
+        .from('comparison_reports')
+        .select('report_date, report_data')
+        .eq('job_id', jobData.id)
+        .order('report_date', { ascending: false })
+        .limit(1);
+
+      if (error || !reports || reports.length === 0) {
+        setRecentSalesChanges(null);
+        return;
+      }
+
+      const latestReport = reports[0];
+      const reportData = latestReport.report_data;
+      const salesChangesCount = reportData?.summary?.salesChanges || 0;
+
+      if (salesChangesCount === 0) {
+        setRecentSalesChanges(null);
+        return;
+      }
+
+      // Check if normalization was run after this report
+      const reportDate = new Date(latestReport.report_date);
+      const normDate = lastTimeNormalizationRun ? new Date(lastTimeNormalizationRun) : null;
+
+      if (!normDate || reportDate > normDate) {
+        // Sales changes exist and normalization hasn't been run since
+        setRecentSalesChanges({
+          count: salesChangesCount,
+          reportDate: latestReport.report_date
+        });
+      } else {
+        setRecentSalesChanges(null);
+      }
+    } catch (error) {
+      console.error('Error checking for sales changes:', error);
+    }
+  };
+
+  checkForSalesChanges();
+}, [jobData?.id, lastTimeNormalizationRun]);
 
   // Unit Rate helpers
   const toggleUnitRateCode = (key) => {
@@ -1260,8 +1336,9 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       
       // Filter for VALID residential sales only
       const validSales = properties.filter(p => {
-        // Check for valid sales price
-        if (!p.sales_price || p.sales_price <= minSalePrice) return false;
+        // Check for valid sales price (ensure minSalePrice is valid number)
+        const minPrice = typeof minSalePrice === 'number' && !isNaN(minSalePrice) ? minSalePrice : 100;
+        if (!p.sales_price || p.sales_price <= minPrice) return false;
         
         // Check for valid sales date
         if (!p.sales_date) return false;
@@ -1476,8 +1553,9 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       })));
 
       // Calculate excluded count (properties that didn't meet criteria)
+      const minPrice = typeof minSalePrice === 'number' && !isNaN(minSalePrice) ? minSalePrice : 100;
       const excludedCount = properties.filter(p => {
-        if (!p.sales_price || p.sales_price <= minSalePrice) return true;
+        if (!p.sales_price || p.sales_price <= minPrice) return true;
         if (!p.sales_date) return true;
         const saleYear = new Date(p.sales_date).getFullYear();
         if (saleYear < salesFromYear) return true;
@@ -1511,13 +1589,13 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       
       setNormalizationStats(newStats);
       
-      // Save configuration to database
+      // Save configuration to database (ensure valid minSalePrice)
       const config = {
         equalizationRatio: equalizationRatio || '',
         outlierThreshold: outlierThreshold || '',
         normalizeToYear,
         salesFromYear,
-        minSalePrice,
+        minSalePrice: typeof minSalePrice === 'number' && !isNaN(minSalePrice) && minSalePrice >= 0 ? minSalePrice : 100,
         selectedCounty: jobData?.county || selectedCounty,
         lastTimeNormalizationRun: new Date().toISOString()
       };
@@ -3208,7 +3286,28 @@ const analyzeImportFile = async (file) => {
       {activeSubTab === 'normalization' && (
         <div className="w-full">
           <div className="space-y-6 px-2">
-            
+
+          {/* Sales Changes Warning Banner */}
+          {recentSalesChanges && (
+            <div className="bg-orange-50 border-l-4 border-orange-400 p-4 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="text-orange-600 mt-0.5 flex-shrink-0" size={24} />
+                <div className="flex-1">
+                  <h4 className="text-orange-900 font-semibold text-base mb-1">
+                    ⚠️ {recentSalesChanges.count} Sale Change{recentSalesChanges.count !== 1 ? 's' : ''} Detected
+                  </h4>
+                  <p className="text-orange-800 text-sm mb-2">
+                    New sales data from file upload on {new Date(recentSalesChanges.reportDate).toLocaleDateString()} needs to be normalized.
+                    These sales will not appear in the normalization list or be included in HPI calculations until you run Time Normalization.
+                  </p>
+                  <p className="text-orange-900 text-sm font-medium">
+                    👉 Click "Run Time Normalization" below to process these changes and mark them as pending review.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Configuration Section */}
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
@@ -3348,8 +3447,13 @@ const analyzeImportFile = async (file) => {
                 <input
                   type="number"
                   value={minSalePrice}
-                  onChange={(e) => setMinSalePrice(parseInt(e.target.value))}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value);
+                    // Prevent NaN or negative values - default to 100 if invalid
+                    setMinSalePrice(!isNaN(val) && val >= 0 ? val : 100);
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
+                  min="0"
                 />
                 <p className="text-xs text-gray-500 mt-1">Exclude non-arm's length sales</p>
               </div>
@@ -3417,8 +3521,9 @@ const analyzeImportFile = async (file) => {
                   <div className="text-2xl font-bold text-blue-700">
                     {(() => {
                       const currentYear = new Date().getFullYear();
+                      const minPrice = typeof minSalePrice === 'number' && !isNaN(minSalePrice) ? minSalePrice : 100;
                       const currentYearSales = properties.filter(p => {
-                        if (!p.sales_price || p.sales_price <= minSalePrice) return false;
+                        if (!p.sales_price || p.sales_price <= minPrice) return false;
                         if (!p.sales_date) return false;
                         
                         const saleYear = new Date(p.sales_date).getFullYear();
@@ -3524,26 +3629,36 @@ const analyzeImportFile = async (file) => {
                           <option value="200">200 per page</option>
                         </select>
 
-                        {/* Bulk actions: Keep All Valid / Reject All Outlier */}
+                        {/* Bulk action: Keep all usable based on NU codes */}
                         <button
                           type="button"
                           onClick={async () => {
-                            const isNUKeepable = (nu) => {
+                            // Define usable NU codes: blank, 00, 07, 32, 36
+                            const isUsableNU = (nu) => {
                               const s = (nu === undefined || nu === null) ? '' : nu.toString().trim();
-                              return s === '' || s === '00' || s === '7' || s === '07';
+                              return s === '' || s === '00' || s === '7' || s === '07' || s === '32' || s === '36';
                             };
 
                             const pending = timeNormalizedSales.filter(s => s.keep_reject === 'pending');
-                            const willKeep = pending.filter(s => isNUKeepable(s.sales_nu)).length;
-                            if (willKeep === 0) {
-                              alert('No pending sales match the "sales_nu blank/00/07" rule.');
+                            const willKeep = pending.filter(s => isUsableNU(s.sales_nu)).length;
+                            const willReject = pending.filter(s => !isUsableNU(s.sales_nu)).length;
+
+                            if (pending.length === 0) {
+                              alert('No pending sales to process.');
                               return;
                             }
 
-                            if (!window.window.confirm(`Keep ${willKeep} pending sales where sales_nu is blank, 00 or 07? This will mark them as Kept and save decisions to the database.`)) return;
+                            if (!window.confirm(
+                              `This will:\n` +
+                              `• Keep ${willKeep} sales with usable NU codes (blank, 00, 07, 32, 36)\n` +
+                              `• Reject ${willReject} sales with other NU codes\n\n` +
+                              `Click 'Save All Keep/Reject Decisions' after to persist changes. Continue?`
+                            )) return;
 
                             const updated = timeNormalizedSales.map(s => {
-                              if (s.keep_reject === 'pending' && isNUKeepable(s.sales_nu)) return { ...s, keep_reject: 'keep' };
+                              if (s.keep_reject === 'pending') {
+                                return { ...s, keep_reject: isUsableNU(s.sales_nu) ? 'keep' : 'reject' };
+                              }
                               return s;
                             });
 
@@ -3559,55 +3674,12 @@ const analyzeImportFile = async (file) => {
                             setNormalizationStats(newStats);
 
                             // NOTE: Do NOT auto-save here. User should manually click "Save All Keep/Reject Decisions" to persist changes.
-                            alert(`${willKeep} sales marked as Keep. Click 'Save All Keep/Reject Decisions' to persist changes.`);
+                            alert(`${willKeep} sales marked as Keep, ${willReject} marked as Reject. Click 'Save All Keep/Reject Decisions' to persist changes.`);
 
                           }}
                           className="px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700"
                         >
-                          Keep All Valid
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const isNUSkip = (nu) => {
-                              const s = (nu === undefined || nu === null) ? '' : nu.toString().trim();
-                              return s === '' || s === '00' || s === '7' || s === '07';
-                            };
-
-                            const outliers = timeNormalizedSales.filter(s => s.is_outlier && s.keep_reject !== 'reject');
-                            const toReject = outliers.filter(s => !isNUSkip(s.sales_nu)).length;
-
-                            if (toReject === 0) {
-                              alert('No outlier sales qualify for rejection under the rule (skipping sales_nu blank/00/07).');
-                              return;
-                            }
-
-                            if (!window.window.confirm(`Reject ${toReject} outlier sales (skipping sales_nu blank/00/07)? This will mark them as Rejected and clear normalized values in the database.`)) return;
-
-                            const updated = timeNormalizedSales.map(s => {
-                              if (s.is_outlier && !isNUSkip(s.sales_nu)) return { ...s, keep_reject: 'reject' };
-                              return s;
-                            });
-
-                            const newStats = {
-                              ...normalizationStats,
-                              pendingReview: updated.filter(s => s.keep_reject === 'pending').length,
-                              keptCount: updated.filter(s => s.keep_reject === 'keep').length,
-                              rejectedCount: updated.filter(s => s.keep_reject === 'reject').length,
-                              acceptedSales: updated.filter(s => s.keep_reject === 'keep').length
-                            };
-
-                            setTimeNormalizedSales(updated);
-                            setNormalizationStats(newStats);
-
-                            // NOTE: Do NOT auto-save here. User should manually click "Save All Keep/Reject Decisions" to persist changes.
-                            alert(`${toReject} outlier sales marked as Rejected. Click 'Save All Keep/Reject Decisions' to persist changes.`);
-
-                          }}
-                          className="px-3 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700"
-                        >
-                          Reject All Outlier
+                          Keep All Usable
                         </button>
 
                         {/* Export to Excel button */}
