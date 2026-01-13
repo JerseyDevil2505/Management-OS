@@ -40,21 +40,10 @@ export class MicrosystemsUpdater {
    * CRITICAL FIX: Optimize batch for database performance
    */
   optimizeBatchForDatabase(batch) {
-    // Preserve explicit nulls for these fields so upserts can clear legacy values
-    const PRESERVE_NULL_FIELDS = new Set([
-      'asset_lot_acre',
-      'asset_lot_sf',
-      'inspection_measure_date'
-    ]);
-
     return batch.map(record => {
       // Remove null/undefined/empty/whitespace-only values to reduce payload size
       const cleaned = {};
       for (const [key, value] of Object.entries(record)) {
-        if (value === null && PRESERVE_NULL_FIELDS.has(key)) {
-          cleaned[key] = null;
-          continue;
-        }
         // Skip null, undefined, empty strings, and whitespace-only strings
         if (value !== null && value !== undefined) {
           const strValue = String(value);
