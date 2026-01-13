@@ -3922,9 +3922,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     }
   }, [manualInteriorBaseline, jobData?.id]);
 
-  // Load baseline conditions from localStorage when job ID becomes available
+  // Load baseline conditions from localStorage when job ID becomes available (only once per job)
   useEffect(() => {
-    if (jobData?.id) {
+    if (jobData?.id && loadedJobIdRef.current !== jobData.id) {
+      loadedJobIdRef.current = jobData.id;
+
       const savedExteriorBaseline = localStorage.getItem(`attr-cards-exterior-baseline-${jobData.id}`);
       const savedInteriorBaseline = localStorage.getItem(`attr-cards-interior-baseline-${jobData.id}`);
       const savedExteriorBetter = localStorage.getItem(`attr-cards-exterior-better-${jobData.id}`);
