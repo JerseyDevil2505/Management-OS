@@ -998,6 +998,13 @@ const ProductionTracker = ({
     setHasUnsavedChanges(hasChanges);
   }, [infoByCategoryConfig, originalCategoryConfig]);
 
+  // Recalculate commercial counts when config or inspection data changes
+  useEffect(() => {
+    if (inspectionData && inspectionData.length > 0 && infoByCategoryConfig.priced) {
+      calculateCommercialCounts();
+    }
+  }, [inspectionData, infoByCategoryConfig.priced]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ENHANCED: Process analytics with manager-focused counting and inspection_data persistence
   const processAnalytics = async () => {
     if (!projectStartDate || !jobData?.id) {
