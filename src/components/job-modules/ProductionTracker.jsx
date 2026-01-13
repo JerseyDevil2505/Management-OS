@@ -2336,6 +2336,13 @@ const ProductionTracker = ({
       debugLog('SESSION', '✅ Processing session completed successfully');
       addNotification(`✅ Processing completed! Analytics saved and ready.`, 'success');
 
+      // Update commercial counts to match analytics
+      setCommercialCounts({
+        total: totalCommercialProperties,
+        inspected: totalCommercialInspected,
+        priced: totalCommercialPriced
+      });
+
       setProcessed(true);
 
     } catch (error) {
