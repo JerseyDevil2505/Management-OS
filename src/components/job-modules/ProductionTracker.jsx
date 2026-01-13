@@ -118,7 +118,10 @@ const ProductionTracker = ({
 
   // Calculate commercial inspection counts from passed inspection data
   const calculateCommercialCounts = () => {
-    if (!inspectionData || inspectionData.length === 0) return;
+    if (!inspectionData || inspectionData.length === 0) {
+      console.log('🔍 calculateCommercialCounts: No inspection data');
+      return;
+    }
 
     const commercialProps = inspectionData.filter(d =>
       ['4A', '4B', '4C'].includes(d.property_class)
@@ -132,6 +135,14 @@ const ProductionTracker = ({
     const currentVendor = jobData.vendor_type;
     let priced = 0;
 
+    console.log('🔍 calculateCommercialCounts:', {
+      vendor: currentVendor,
+      totalCommercial: commercialProps.length,
+      inspected: inspected,
+      configPriced: infoByCategoryConfig.priced,
+      sampleInfoByCodes: commercialProps.slice(0, 5).map(p => p.info_by_code)
+    });
+
     if (currentVendor === 'BRT') {
       // BRT: Check for price_by and price_date fields
       priced = commercialProps.filter(d =>
@@ -140,10 +151,17 @@ const ProductionTracker = ({
     } else if (currentVendor === 'Microsystems') {
       // Microsystems: Check if info_by_code is in priced category
       const pricedCodes = infoByCategoryConfig.priced || [];
+      console.log('🔍 Microsystems pricing check:', {
+        pricedCodes,
+        commercialWithP: commercialProps.filter(d => d.info_by_code === 'P').length,
+        commercialWithCodes: commercialProps.filter(d => d.info_by_code && pricedCodes.includes(d.info_by_code)).length
+      });
       priced = commercialProps.filter(d =>
         d.info_by_code && pricedCodes.includes(d.info_by_code)
       ).length;
     }
+
+    console.log('🔍 Final commercial counts:', { inspected, priced });
 
     setCommercialCounts({
       inspected: inspected,
