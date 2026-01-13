@@ -2058,12 +2058,12 @@ const ProductionTracker = ({
         jobEntryRate: totalClass2And3AProperties > 0 ? Math.round((totalEntry / totalClass2And3AProperties) * 100) : 0,
         jobRefusalRate: totalClass2And3AProperties > 0 ? Math.round((totalRefusal / totalClass2And3AProperties) * 100) : 0,
         
-        // Commercial metrics using inspector totals not class breakdown
+        // Commercial metrics using class breakdown for accuracy
         commercialInspections: totalCommercialInspected,
-        commercialPricing: totalPriced,
+        commercialPricing: totalCommercialPriced,
         totalCommercialProperties,
         commercialCompletePercent: totalCommercialProperties > 0 ? Math.round((totalCommercialInspected / totalCommercialProperties) * 100) : 0,
-        pricingCompletePercent: totalCommercialProperties > 0 ? Math.round((totalPriced / totalCommercialProperties) * 100) : 0,
+        pricingCompletePercent: totalCommercialProperties > 0 ? Math.round((totalCommercialPriced / totalCommercialProperties) * 100) : 0,
         
         // Track overrides applied during processing
         overridesAppliedCount: decisionsToApply.length
