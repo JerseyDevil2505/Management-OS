@@ -730,7 +730,9 @@ useEffect(() => {
     setOutlierThreshold(outThreshold);
     setNormalizeToYear(config.normalizeToYear || 2025);
     setSalesFromYear(config.salesFromYear || 2012);
-    setMinSalePrice(config.minSalePrice || 100);
+    // Ensure minSalePrice is a valid number, default to 100 if invalid
+    const loadedMinPrice = config.minSalePrice;
+    setMinSalePrice(typeof loadedMinPrice === 'number' && !isNaN(loadedMinPrice) && loadedMinPrice >= 0 ? loadedMinPrice : 100);
     setSelectedCounty(jobData?.county || config.selectedCounty || 'Bergen');
     setLastTimeNormalizationRun(config.lastTimeNormalizationRun || null);
     setLastSizeNormalizationRun(config.lastSizeNormalizationRun || null);
@@ -1316,8 +1318,9 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       
       // Filter for VALID residential sales only
       const validSales = properties.filter(p => {
-        // Check for valid sales price
-        if (!p.sales_price || p.sales_price <= minSalePrice) return false;
+        // Check for valid sales price (ensure minSalePrice is valid number)
+        const minPrice = typeof minSalePrice === 'number' && !isNaN(minSalePrice) ? minSalePrice : 100;
+        if (!p.sales_price || p.sales_price <= minPrice) return false;
         
         // Check for valid sales date
         if (!p.sales_date) return false;
@@ -3425,8 +3428,13 @@ const analyzeImportFile = async (file) => {
                 <input
                   type="number"
                   value={minSalePrice}
-                  onChange={(e) => setMinSalePrice(parseInt(e.target.value))}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value);
+                    // Prevent NaN or negative values - default to 100 if invalid
+                    setMinSalePrice(!isNaN(val) && val >= 0 ? val : 100);
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded"
+                  min="0"
                 />
                 <p className="text-xs text-gray-500 mt-1">Exclude non-arm's length sales</p>
               </div>
