@@ -120,23 +120,36 @@ const ProductionTracker = ({
   const calculateCommercialCounts = () => {
     if (!inspectionData || inspectionData.length === 0) return;
 
-    const commercialProps = inspectionData.filter(d => 
+    const commercialProps = inspectionData.filter(d =>
       ['4A', '4B', '4C'].includes(d.property_class)
     );
-    
-    const inspected = commercialProps.filter(d => 
+
+    const inspected = commercialProps.filter(d =>
       d.measure_by && d.measure_date
     ).length;
-    
-    const priced = commercialProps.filter(d => 
-      d.price_by && d.price_date
-    ).length;
-    
+
+    // FIXED: Use vendor-specific pricing logic
+    const currentVendor = jobData.vendor_type;
+    let priced = 0;
+
+    if (currentVendor === 'BRT') {
+      // BRT: Check for price_by and price_date fields
+      priced = commercialProps.filter(d =>
+        d.price_by && d.price_date
+      ).length;
+    } else if (currentVendor === 'Microsystems') {
+      // Microsystems: Check if info_by_code is in priced category
+      const pricedCodes = infoByCategoryConfig.priced || [];
+      priced = commercialProps.filter(d =>
+        d.info_by_code && pricedCodes.includes(d.info_by_code)
+      ).length;
+    }
+
     setCommercialCounts({
       inspected: inspected,
       priced: priced
     });
-    
+
   };
 
   // Process employee data from props instead of loading from database
