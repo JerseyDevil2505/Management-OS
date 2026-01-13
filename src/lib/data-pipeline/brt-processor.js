@@ -49,8 +49,13 @@ export class BRTProcessor {
    * CRITICAL FIX: Optimize batch for database performance
    */
   optimizeBatchForDatabase(batch) {
-    // Preserve explicit nulls for asset lot fields so upserts can clear legacy values
-    const PRESERVE_NULL_FIELDS = new Set(['asset_lot_acre', 'asset_lot_sf']);
+    // Preserve explicit nulls for these fields so upserts can clear legacy values
+    const PRESERVE_NULL_FIELDS = new Set([
+      'asset_lot_acre',
+      'asset_lot_sf',
+      'inspection_price_by',
+      'inspection_price_date'
+    ]);
     return batch.map(record => {
       const cleaned = {};
       for (const [key, value] of Object.entries(record)) {
