@@ -1218,10 +1218,18 @@ const ProductionTracker = ({
       
       debugLog('ANALYTICS', `Loaded ${existingOverrides?.length || 0} existing validation overrides`);
 
-      // Use inspectionData from props as the authoritative source
-      // (inspection_data table is updated during processing, property_records is just a snapshot)
-      const rawData = inspectionData;
-      debugLog('ANALYTICS', `✅ Using ${rawData?.length || 0} inspection records from props for analysis`);
+      // Use properties from props but will join with inspectionData for current info_by_code
+      const rawData = properties;
+      debugLog('ANALYTICS', `✅ Using ${rawData?.length || 0} property records from props for analysis`);
+
+      // Create lookup map from inspectionData for current info_by_code values
+      const inspectionDataMap = {};
+      if (inspectionData && inspectionData.length > 0) {
+        inspectionData.forEach(insp => {
+          inspectionDataMap[insp.property_composite_key] = insp.info_by_code;
+        });
+        debugLog('ANALYTICS', `✅ Created inspection lookup map with ${Object.keys(inspectionDataMap).length} entries`);
+      }
 
       // CRITICAL DEBUG: Detailed analysis of received properties
       if (!rawData || rawData.length === 0) {
