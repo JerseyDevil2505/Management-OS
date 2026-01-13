@@ -602,6 +602,9 @@ export class MicrosystemsUpdater {
     try {
       console.log('🚀 Starting Enhanced Microsystems UPDATER (UPSERT) with field preservation and ROLLBACK support...');
 
+      // NEW: Save current projected values for delta tracking
+      await this.savePreviousProjectedValues(jobId);
+
       // CRITICAL FIX: Store source file content in jobs table
       console.log('📝 Step 1: Storing source file in database...');
       await this.storeSourceFileInDatabase(sourceFileContent, jobId);
