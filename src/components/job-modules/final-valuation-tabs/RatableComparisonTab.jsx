@@ -608,7 +608,10 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                     <div className="grid grid-cols-3 gap-2">
                       <div className="text-sm font-medium py-1">Class 2</div>
                       <div className="text-sm text-right px-2 py-1">{projectedRatableBase['2'].count.toLocaleString()}</div>
-                      <div className="text-sm text-right px-2 py-1">${projectedRatableBase['2'].total.toLocaleString()}</div>
+                      <div className="text-sm text-right px-2 py-1">
+                        ${projectedRatableBase['2'].total.toLocaleString()}
+                        {formatDelta(projectedRatableBase['2'].total, previousProjected.class_2_total)}
+                      </div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
                       <div className="py-1">Abatements</div>
@@ -621,14 +624,20 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   <div className="grid grid-cols-3 gap-2">
                     <div className="text-sm font-medium py-1">Class 3A's (NET)</div>
                     <div className="text-sm text-right px-2 py-1">{projectedRatableBase['3A'].count.toLocaleString()}</div>
-                    <div className="text-sm text-right px-2 py-1">${projectedRatableBase['3A'].total.toLocaleString()}</div>
+                    <div className="text-sm text-right px-2 py-1">
+                      ${projectedRatableBase['3A'].total.toLocaleString()}
+                      {formatDelta(projectedRatableBase['3A'].total, previousProjected.class_3a_total)}
+                    </div>
                   </div>
 
                   {/* Class 3B's */}
                   <div className="grid grid-cols-3 gap-2">
                     <div className="text-sm font-medium py-1">Class 3B's</div>
                     <div className="text-sm text-right px-2 py-1">{projectedRatableBase['3B'].count.toLocaleString()}</div>
-                    <div className="text-sm text-right px-2 py-1">${projectedRatableBase['3B'].total.toLocaleString()}</div>
+                    <div className="text-sm text-right px-2 py-1">
+                      ${projectedRatableBase['3B'].total.toLocaleString()}
+                      {formatDelta(projectedRatableBase['3B'].total, previousProjected.class_3b_total)}
+                    </div>
                   </div>
 
                   {/* Class 4A,B,C */}
@@ -636,7 +645,10 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                     <div className="grid grid-cols-3 gap-2">
                       <div className="text-sm font-medium py-1">Class 4A,B,C (NET)</div>
                       <div className="text-sm text-right px-2 py-1">{projectedRatableBase['4ABC'].count.toLocaleString()}</div>
-                      <div className="text-sm text-right px-2 py-1">${projectedRatableBase['4ABC'].total.toLocaleString()}</div>
+                      <div className="text-sm text-right px-2 py-1">
+                        ${projectedRatableBase['4ABC'].total.toLocaleString()}
+                        {formatDelta(projectedRatableBase['4ABC'].total, previousProjected.class_4_total)}
+                      </div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
                       <div className="py-1">Abatements</div>
@@ -656,7 +668,10 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   <div className="grid grid-cols-3 gap-2 pt-3 border-t-2 border-gray-300 font-bold">
                     <div className="text-sm py-1">Total Ratables</div>
                     <div className="text-sm text-right px-2 py-1">{projectedRatableBase.totalCount.toLocaleString()}</div>
-                    <div className="text-base text-right px-2 py-1">${projectedRatableBase.totalTotal.toLocaleString()}</div>
+                    <div className="text-base text-right px-2 py-1">
+                      ${projectedRatableBase.totalTotal.toLocaleString()}
+                      {formatDelta(projectedRatableBase.totalTotal, previousProjected.total_total)}
+                    </div>
                   </div>
 
                   {/* Commercial Base - Calculate */}
