@@ -151,6 +151,17 @@ const ProductionTracker = ({
     } else if (currentVendor === 'Microsystems') {
       // Microsystems: Check if info_by_code is in priced category
       const pricedCodes = infoByCategoryConfig.priced || [];
+
+      // GUARD: Don't calculate if config not loaded yet
+      if (pricedCodes.length === 0) {
+        console.log('⚠️ Skipping pricing calculation - config not loaded yet');
+        setCommercialCounts({
+          inspected: inspected,
+          priced: 0  // Will be recalculated when config loads
+        });
+        return;
+      }
+
       console.log('🔍 Microsystems pricing check:', {
         pricedCodes,
         commercialWithP: commercialProps.filter(d => d.info_by_code === 'P').length,
