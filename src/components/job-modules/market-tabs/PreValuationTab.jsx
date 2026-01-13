@@ -1553,8 +1553,9 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       })));
 
       // Calculate excluded count (properties that didn't meet criteria)
+      const minPrice = typeof minSalePrice === 'number' && !isNaN(minSalePrice) ? minSalePrice : 100;
       const excludedCount = properties.filter(p => {
-        if (!p.sales_price || p.sales_price <= minSalePrice) return true;
+        if (!p.sales_price || p.sales_price <= minPrice) return true;
         if (!p.sales_date) return true;
         const saleYear = new Date(p.sales_date).getFullYear();
         if (saleYear < salesFromYear) return true;
