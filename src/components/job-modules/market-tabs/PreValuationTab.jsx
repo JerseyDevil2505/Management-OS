@@ -3677,7 +3677,7 @@ const analyzeImportFile = async (file) => {
                             alert(`${willKeep} sales marked as Keep, ${willReject} marked as Reject. Click 'Save All Keep/Reject Decisions' to persist changes.`);
 
                           }}
-                          className="px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                          className="px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700"
                         >
                           Keep All Usable
                         </button>
