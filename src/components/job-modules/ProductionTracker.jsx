@@ -1297,7 +1297,8 @@ const ProductionTracker = ({
 
         const inspector = record.inspection_measure_by || 'UNASSIGNED';
         const propertyClass = record.property_m4_class || 'UNKNOWN';
-        const infoByCode = record.inspection_info_by;
+        // Use current info_by_code from inspectionData (authoritative), fallback to property snapshot
+        const infoByCode = inspectionDataMap[propertyKey] || record.inspection_info_by;
         const measuredDate = record.inspection_measure_date ? new Date(record.inspection_measure_date) : null;
         const listDate = record.inspection_list_date ? new Date(record.inspection_list_date) : null;
         const priceDate = record.inspection_price_date ? new Date(record.inspection_price_date) : null;
