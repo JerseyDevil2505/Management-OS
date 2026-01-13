@@ -57,6 +57,98 @@ export class MicrosystemsUpdater {
   }
 
   /**
+   * Save current projected ratable base to "previous" fields for delta tracking
+   */
+  async savePreviousProjectedValues(jobId) {
+    try {
+      console.log('💾 Saving current projected ratable base to previous fields for delta tracking...');
+
+      // Get current properties for this job
+      const { data: properties, error } = await supabase
+        .from('property_records')
+        .select('values_cama_total, property_cama_class, property_facility')
+        .eq('job_id', jobId);
+
+      if (error) throw error;
+
+      if (!properties || properties.length === 0) {
+        console.log('ℹ️ No existing properties found, skipping previous value save');
+        return;
+      }
+
+      // Calculate projected ratable base from current properties
+      const summary = {
+        '1': { count: 0, total: 0 },
+        '2': { count: 0, total: 0 },
+        '3A': { count: 0, total: 0 },
+        '3B': { count: 0, total: 0 },
+        '4ABC': { count: 0, total: 0 },
+        '6ABC': { count: 0, total: 0 }
+      };
+
+      properties.forEach(property => {
+        const isTaxable = property.property_facility !== 'EXEMPT';
+        if (!isTaxable) return;
+
+        const camaTotal = property.values_cama_total || 0;
+        const propertyClass = property.property_cama_class || '';
+
+        if (propertyClass === '1') {
+          summary['1'].count++;
+          summary['1'].total += camaTotal;
+        } else if (propertyClass === '2') {
+          summary['2'].count++;
+          summary['2'].total += camaTotal;
+        } else if (propertyClass === '3A') {
+          summary['3A'].count++;
+          summary['3A'].total += camaTotal;
+        } else if (propertyClass === '3B') {
+          summary['3B'].count++;
+          summary['3B'].total += camaTotal;
+        } else if (['4A', '4B', '4C'].includes(propertyClass)) {
+          summary['4ABC'].count++;
+          summary['4ABC'].total += camaTotal;
+        } else if (['6A', '6B'].includes(propertyClass)) {
+          summary['6ABC'].count++;
+          summary['6ABC'].total += camaTotal;
+        }
+      });
+
+      const totalCount = Object.values(summary).reduce((sum, item) => sum + item.count, 0);
+      const totalTotal = Object.values(summary).reduce((sum, item) => sum + item.total, 0);
+
+      // Save to previous fields
+      const { error: updateError } = await supabase
+        .from('jobs')
+        .update({
+          previous_projected_class_1_count: summary['1'].count,
+          previous_projected_class_1_total: summary['1'].total,
+          previous_projected_class_2_count: summary['2'].count,
+          previous_projected_class_2_total: summary['2'].total,
+          previous_projected_class_3a_count: summary['3A'].count,
+          previous_projected_class_3a_total: summary['3A'].total,
+          previous_projected_class_3b_count: summary['3B'].count,
+          previous_projected_class_3b_total: summary['3B'].total,
+          previous_projected_class_4_count: summary['4ABC'].count,
+          previous_projected_class_4_total: summary['4ABC'].total,
+          previous_projected_class_6_count: summary['6ABC'].count,
+          previous_projected_class_6_total: summary['6ABC'].total,
+          previous_projected_total_count: totalCount,
+          previous_projected_total_total: totalTotal
+        })
+        .eq('id', jobId);
+
+      if (updateError) throw updateError;
+
+      console.log(`✅ Saved previous projected values: ${totalCount} properties, $${totalTotal.toLocaleString()} total`);
+
+    } catch (error) {
+      console.warn('⚠️ Could not save previous projected values:', error);
+      // Don't throw - this is non-critical for file processing
+    }
+  }
+
+  /**
    * Upsert batch with retry logic for connection issues
    */
   async upsertBatchWithRetry(batch, batchNumber, retries = 50) {
