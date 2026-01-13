@@ -776,6 +776,55 @@ useEffect(() => {
   }
 }, [marketLandData]);
 
+// Check for recent sales changes that need normalization
+useEffect(() => {
+  const checkForSalesChanges = async () => {
+    if (!jobData?.id) return;
+
+    try {
+      // Get most recent comparison report with sales changes
+      const { data: reports, error } = await supabase
+        .from('comparison_reports')
+        .select('report_date, report_data')
+        .eq('job_id', jobData.id)
+        .order('report_date', { ascending: false })
+        .limit(1);
+
+      if (error || !reports || reports.length === 0) {
+        setRecentSalesChanges(null);
+        return;
+      }
+
+      const latestReport = reports[0];
+      const reportData = latestReport.report_data;
+      const salesChangesCount = reportData?.summary?.salesChanges || 0;
+
+      if (salesChangesCount === 0) {
+        setRecentSalesChanges(null);
+        return;
+      }
+
+      // Check if normalization was run after this report
+      const reportDate = new Date(latestReport.report_date);
+      const normDate = lastTimeNormalizationRun ? new Date(lastTimeNormalizationRun) : null;
+
+      if (!normDate || reportDate > normDate) {
+        // Sales changes exist and normalization hasn't been run since
+        setRecentSalesChanges({
+          count: salesChangesCount,
+          reportDate: latestReport.report_date
+        });
+      } else {
+        setRecentSalesChanges(null);
+      }
+    } catch (error) {
+      console.error('Error checking for sales changes:', error);
+    }
+  };
+
+  checkForSalesChanges();
+}, [jobData?.id, lastTimeNormalizationRun]);
+
   // Unit Rate helpers
   const toggleUnitRateCode = (key) => {
     const s = new Set(selectedUnitRateCodes);
