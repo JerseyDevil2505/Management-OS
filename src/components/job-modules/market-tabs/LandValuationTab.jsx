@@ -3472,14 +3472,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       let vcsProps, avgSize, rawLandValue;
 
       if (valuationMode === 'sf') {
-        // Square Foot mode: use market_manual_lot_sf
-        vcsProps = properties.filter(p =>
-          p.new_vcs === vcs &&
-          (p.property_m4_class === '2' || p.property_m4_class === '3A') &&
-          p.market_manual_lot_sf && parseFloat(p.market_manual_lot_sf) > 0
-        );
-        if (vcsProps.length === 0) return;
-        avgSize = vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_sf), 0) / vcsProps.length;
+        // Square Foot mode: use pre-calculated average lot size from avgPriceLotSizes
+        // This matches what's displayed in the "Avg Price Lot Size" column
+        avgSize = avgPriceLotSizes?.[vcs];
+        if (!avgSize || avgSize <= 0) {
+          console.warn(`⚠️ No average price lot size available for VCS ${vcs} in SF mode`);
+          return;
+        }
         rawLandValue = calculateRawLandValue(avgSize, vcsRates);
       } else if (valuationMode === 'ff') {
         // Front Foot mode: need frontage data
@@ -3498,14 +3497,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
           land_zoning: vcsProps[0]?.asset_zoning
         });
       } else {
-        // Acre mode: use market_manual_lot_acre
-        vcsProps = properties.filter(p =>
-          p.new_vcs === vcs &&
-          (p.property_m4_class === '2' || p.property_m4_class === '3A') &&
-          p.market_manual_lot_acre && parseFloat(p.market_manual_lot_acre) > 0
-        );
-        if (vcsProps.length === 0) return;
-        avgSize = vcsProps.reduce((sum, p) => sum + parseFloat(p.market_manual_lot_acre), 0) / vcsProps.length;
+        // Acre mode: use pre-calculated average lot size from avgPriceLotSizes
+        // This matches what's displayed in the "Avg Price Lot Size" column
+        avgSize = avgPriceLotSizes?.[vcs];
+        if (!avgSize || avgSize <= 0) {
+          console.warn(`⚠️ No average price lot size available for VCS ${vcs} in Acre mode`);
+          return;
+        }
         rawLandValue = calculateRawLandValue(avgSize, vcsRates);
       }
 
