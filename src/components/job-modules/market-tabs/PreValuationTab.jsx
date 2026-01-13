@@ -1570,13 +1570,13 @@ const getHPIMultiplier = useCallback((saleYear, targetYear) => {
       
       setNormalizationStats(newStats);
       
-      // Save configuration to database
+      // Save configuration to database (ensure valid minSalePrice)
       const config = {
         equalizationRatio: equalizationRatio || '',
         outlierThreshold: outlierThreshold || '',
         normalizeToYear,
         salesFromYear,
-        minSalePrice,
+        minSalePrice: typeof minSalePrice === 'number' && !isNaN(minSalePrice) && minSalePrice >= 0 ? minSalePrice : 100,
         selectedCounty: jobData?.county || selectedCounty,
         lastTimeNormalizationRun: new Date().toISOString()
       };
