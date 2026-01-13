@@ -72,6 +72,7 @@ const PreValuationTab = ({
   const [worksheetProperties, setWorksheetProperties] = useState([]);
   const [lastTimeNormalizationRun, setLastTimeNormalizationRun] = useState(null);
   const [lastSizeNormalizationRun, setLastSizeNormalizationRun] = useState(null);
+  const [recentSalesChanges, setRecentSalesChanges] = useState(null);
 
   // Control to pause parent refreshes while user is actively editing
   const [pauseAutoRefresh, setPauseAutoRefresh] = useState(false);
