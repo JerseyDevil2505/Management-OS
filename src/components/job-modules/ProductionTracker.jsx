@@ -1218,9 +1218,10 @@ const ProductionTracker = ({
       
       debugLog('ANALYTICS', `Loaded ${existingOverrides?.length || 0} existing validation overrides`);
 
-      // Use properties from props instead of loading from database
-      const rawData = properties;
-      debugLog('ANALYTICS', `✅ Using ${rawData?.length || 0} property records from props for analysis`);
+      // Use inspectionData from props as the authoritative source
+      // (inspection_data table is updated during processing, property_records is just a snapshot)
+      const rawData = inspectionData;
+      debugLog('ANALYTICS', `✅ Using ${rawData?.length || 0} inspection records from props for analysis`);
 
       // CRITICAL DEBUG: Detailed analysis of received properties
       if (!rawData || rawData.length === 0) {
