@@ -87,6 +87,25 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
   // Get vendor type for consolidation logic
   const vendorType = jobData?.vendor_type || 'BRT';
 
+  // Helper function to format delta display
+  const formatDelta = (currentValue, previousValue) => {
+    if (!previousValue || previousValue === 0) return null;
+
+    const delta = currentValue - previousValue;
+    const percentChange = (delta / previousValue) * 100;
+
+    if (delta === 0) return null;
+
+    const deltaColor = delta > 0 ? 'text-green-600' : 'text-red-600';
+    const sign = delta > 0 ? '+' : '';
+
+    return (
+      <div className={`text-[10px] ${deltaColor} font-normal mt-0.5`}>
+        {sign}${Math.abs(delta).toLocaleString()} ({sign}{percentChange.toFixed(1)}%)
+      </div>
+    );
+  };
+
   // Consolidate properties by grouping additional cards (same logic as MarketDataTab)
   const consolidateProperties = (allProperties) => {
     const grouped = {};
