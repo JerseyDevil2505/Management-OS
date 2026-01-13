@@ -2091,7 +2091,9 @@ const ProductionTracker = ({
       const totalCommercialInspected = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.inspected || 0), 0);
       const totalPriced = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.priced, 0);
 
-      const totalCommercialPriced = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0);
+      // FIXED: Use the already-correct value from commercialCounts (calculated from inspectionData)
+      // instead of totalCommercialPriced from classBreakdown (which uses stale property_records data)
+      const totalCommercialPriced = commercialCounts.priced;
 
       console.log('📊 COMMERCIAL PRICING ANALYTICS:', {
         totalCommercialProperties,
@@ -2099,7 +2101,8 @@ const ProductionTracker = ({
         totalCommercialPriced,
         totalPricedAllClasses: totalPriced,
         percentComplete: totalCommercialProperties > 0 ? Math.round((totalCommercialInspected / totalCommercialProperties) * 100) : 0,
-        percentPriced: totalCommercialProperties > 0 ? Math.round((totalCommercialPriced / totalCommercialProperties) * 100) : 0
+        percentPriced: totalCommercialProperties > 0 ? Math.round((totalCommercialPriced / totalCommercialProperties) * 100) : 0,
+        source: 'Using commercialCounts.priced from inspectionData'
       });
 
       const validationReportData = {
