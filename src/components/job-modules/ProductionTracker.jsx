@@ -1012,7 +1012,7 @@ const ProductionTracker = ({
     setAnalytics(null);
     setBillingAnalytics(null);
     setValidationReport(null);
-    setCommercialCounts({ inspected: 0, priced: 0 });
+    setCommercialCounts({ total: 0, inspected: 0, priced: 0 });
     setMissingPropertiesReport(null);
     setValidationOverrides([]);
     setOverrideMap({});
