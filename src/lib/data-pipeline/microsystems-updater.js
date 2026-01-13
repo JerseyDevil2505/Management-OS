@@ -566,7 +566,8 @@ export class MicrosystemsUpdater {
       inspection_list_by: rawRecord['Insp By'],
       inspection_list_date: this.parseDate(rawRecord['Insp Date']),
       inspection_measure_by: rawRecord['Measured By'],
-      inspection_measure_date: this.parseDate(rawRecord['Insp Date 1']),
+      // Fall back to 'Insp Date' if 'Insp Date 1' is not available
+      inspection_measure_date: this.parseDate(rawRecord['Insp Date 1']) || this.parseDate(rawRecord['Insp Date']),
       inspection_price_by: null, // Not available in Microsystems
       inspection_price_date: null, // Not available in Microsystems
       
