@@ -45,6 +45,20 @@ const ProductionTracker = ({
     priced: 0
   });
 
+  // DEBUG: Log every time commercialCounts changes
+  useEffect(() => {
+    const percent = commercialCounts.inspected > 0
+      ? Math.round((commercialCounts.priced / commercialCounts.inspected) * 100)
+      : 0;
+    console.log('🔔 COMMERCIAL COUNTS CHANGED:', {
+      total: commercialCounts.total,
+      inspected: commercialCounts.inspected,
+      priced: commercialCounts.priced,
+      pricingPercent: percent + '%',
+      stack: new Error().stack
+    });
+  }, [commercialCounts]);
+
   // Calculate unassigned property count from passed properties
   const calculateUnassignedPropertyCount = () => {
     if (!properties || properties.length === 0) return;
