@@ -31,15 +31,33 @@ const ProductionTracker = ({
 
   // NEW: Track properties going to external contractors
   const [unassignedPropertyCount, setUnassignedPropertyCount] = useState(0);
-  
+
   // NEW: Track if we loaded from database to prevent race condition
   const [loadedFromDatabase, setLoadedFromDatabase] = useState(false);
+
+  // REF: Track if initialization has run to prevent re-initialization
+  const hasInitialized = useRef(false);
   
   // NEW: Commercial inspection counts from inspection_data
   const [commercialCounts, setCommercialCounts] = useState({
+    total: 0,
     inspected: 0,
     priced: 0
   });
+
+  // DEBUG: Log every time commercialCounts changes
+  useEffect(() => {
+    const percent = commercialCounts.inspected > 0
+      ? Math.round((commercialCounts.priced / commercialCounts.inspected) * 100)
+      : 0;
+    console.log('🔔 COMMERCIAL COUNTS CHANGED:', {
+      total: commercialCounts.total,
+      inspected: commercialCounts.inspected,
+      priced: commercialCounts.priced,
+      pricingPercent: percent + '%',
+      stack: new Error().stack
+    });
+  }, [commercialCounts]);
 
   // Calculate unassigned property count from passed properties
   const calculateUnassignedPropertyCount = () => {
@@ -118,25 +136,102 @@ const ProductionTracker = ({
 
   // Calculate commercial inspection counts from passed inspection data
   const calculateCommercialCounts = () => {
-    if (!inspectionData || inspectionData.length === 0) return;
+    if (!inspectionData || inspectionData.length === 0) {
+      console.log('🔍 calculateCommercialCounts: No inspection data');
+      return;
+    }
 
-    const commercialProps = inspectionData.filter(d => 
+    const commercialProps = inspectionData.filter(d =>
       ['4A', '4B', '4C'].includes(d.property_class)
     );
-    
-    const inspected = commercialProps.filter(d => 
+
+    const inspected = commercialProps.filter(d =>
       d.measure_by && d.measure_date
     ).length;
-    
-    const priced = commercialProps.filter(d => 
-      d.price_by && d.price_date
-    ).length;
-    
+
+    // FIXED: Use vendor-specific pricing logic
+    const currentVendor = jobData.vendor_type;
+    let priced = 0;
+
+    console.log('🔍 calculateCommercialCounts:', {
+      vendor: currentVendor,
+      totalCommercial: commercialProps.length,
+      inspected: inspected,
+      configPriced: infoByCategoryConfig.priced,
+      sampleInfoByCodes: commercialProps.slice(0, 5).map(p => p.info_by_code)
+    });
+
+    if (currentVendor === 'BRT') {
+      // BRT: Check for price_by and price_date fields
+      priced = commercialProps.filter(d =>
+        d.price_by && d.price_date
+      ).length;
+    } else if (currentVendor === 'Microsystems') {
+      // Microsystems: Check if info_by_code is in priced category
+      const pricedCodes = infoByCategoryConfig.priced || [];
+
+      // GUARD: Don't calculate if config not loaded yet
+      if (pricedCodes.length === 0) {
+        console.log('⚠️ Skipping pricing calculation - config not loaded yet');
+        setCommercialCounts({
+          total: commercialProps.length,
+          inspected: inspected,
+          priced: 0  // Will be recalculated when config loads
+        });
+        return;
+      }
+
+      console.log('🔍 Microsystems pricing check:', {
+        pricedCodes,
+        commercialWithP: commercialProps.filter(d => d.info_by_code === 'P').length,
+        commercialWithCodes: commercialProps.filter(d => d.info_by_code && pricedCodes.includes(d.info_by_code)).length
+      });
+
+      // DIAGNOSTIC: List all commercial properties with their pricing status
+      const pricedProperties = [];
+      const unpricedProperties = [];
+
+      commercialProps.forEach(prop => {
+        const propertyInfo = {
+          key: prop.property_composite_key,
+          block: prop.block,
+          lot: prop.lot,
+          qualifier: prop.qualifier,
+          info_by_code: prop.info_by_code,
+          measure_by: prop.measure_by,
+          measure_date: prop.measure_date
+        };
+
+        if (prop.info_by_code && pricedCodes.includes(prop.info_by_code)) {
+          pricedProperties.push(propertyInfo);
+        } else {
+          unpricedProperties.push(propertyInfo);
+        }
+      });
+
+      console.log('📊 PRICING DIAGNOSTIC:', {
+        totalCommercial: commercialProps.length,
+        pricedCount: pricedProperties.length,
+        unpricedCount: unpricedProperties.length,
+        pricedCodes: pricedCodes
+      });
+
+      console.log('✅ PRICED PROPERTIES:', pricedProperties);
+      console.log('❌ UNPRICED PROPERTIES:', unpricedProperties);
+
+      priced = commercialProps.filter(d =>
+        d.info_by_code && pricedCodes.includes(d.info_by_code)
+      ).length;
+    }
+
+    console.log('🔍 Final commercial counts:', { total: commercialProps.length, inspected, priced });
+
     setCommercialCounts({
+      total: commercialProps.length,
       inspected: inspected,
       priced: priced
     });
-    
+
   };
 
   // Process employee data from props instead of loading from database
@@ -532,16 +627,22 @@ const ProductionTracker = ({
   const loadPersistedAnalytics = async () => {
     if (!jobData?.id) return;
 
+    // Don't load from database if we just processed - use current state
+    if (processed || analytics) {
+      console.log('⏭️ Skipping loadPersistedAnalytics - already processed in this session');
+      return;
+    }
+
     try {
       const { data: job, error } = await supabase
         .from('jobs')
         .select('workflow_stats, external_inspectors')
         .eq('id', jobData.id)
         .single();
-      
+
       if (job?.external_inspectors) {
         setExternalInspectorsList(job.external_inspectors);
-      }     
+      }
 
       if (!error && job?.workflow_stats && job.workflow_stats.totalRecords) {
         // Load the persisted analytics
@@ -579,7 +680,16 @@ const ProductionTracker = ({
         setAnalytics(loadedAnalytics);
         setBillingAnalytics(loadedBillingAnalytics);
         setValidationReport(loadedValidationReport);
-        
+
+        // Restore commercial counts from saved analytics
+        if (loadedAnalytics.totalCommercialProperties) {
+          setCommercialCounts({
+            total: loadedAnalytics.totalCommercialProperties,
+            inspected: loadedAnalytics.commercialInspections || 0,
+            priced: loadedAnalytics.commercialPricing || 0
+          });
+        }
+
         if (job.workflow_stats.missingPropertiesReport) {
           setMissingPropertiesReport(job.workflow_stats.missingPropertiesReport);
         }
@@ -589,7 +699,7 @@ const ProductionTracker = ({
         if (job.workflow_stats.overrideMap) {
           setOverrideMap(job.workflow_stats.overrideMap);
         }
-        
+
         setProcessed(true);
         setSettingsLocked(true);
         setLoadedFromDatabase(true); // CRITICAL: Mark that we loaded from database
@@ -934,7 +1044,7 @@ const ProductionTracker = ({
     setAnalytics(null);
     setBillingAnalytics(null);
     setValidationReport(null);
-    setCommercialCounts({ inspected: 0, priced: 0 });
+    setCommercialCounts({ total: 0, inspected: 0, priced: 0 });
     setMissingPropertiesReport(null);
     setValidationOverrides([]);
     setOverrideMap({});
@@ -944,30 +1054,44 @@ const ProductionTracker = ({
     setProcessingComplete(false);
     setCustomOverrideReason(''); // Reset custom override reason
     setCurrentValidationIndex(0); // Reset validation index
+    hasInitialized.current = false; // Allow re-initialization after reset
+    setLoading(true); // Reset loading flag
     addNotification('🔄 Session reset - settings unlocked', 'info');
   };
 
 // Initialize data loading
   useEffect(() => {
+    // Don't re-initialize if we've already run or are currently processing
+    if (hasInitialized.current || processing) {
+      console.log('⏭️ Skipping initialization - already initialized or processing', {
+        hasInitialized: hasInitialized.current,
+        processing
+      });
+      return;
+    }
+
     if (jobData?.id && properties && properties.length > 0 && inspectionData && employees) {
       const initializeData = async () => {
+        console.log('🚀 Running initialization for the first time');
+        hasInitialized.current = true; // Mark as initialized immediately
+
         // Load only the things that still need database calls
         await loadAvailableInfoByCodes();
         await loadProjectStartDate();
         await loadVendorSource();
-        
+
         // Process from props instead of loading
         processEmployeeData();  // Uses employees prop
         await calculateValidationOverrides();  // Uses inspectionData prop initially
         calculateCommercialCounts();     // Uses inspectionData prop
         calculateUnassignedPropertyCount(); // Uses properties prop
-        
+
         // Then load persisted analytics (which may need override data)
         await loadPersistedAnalytics();
-        
+
         setLoading(false);
       };
-      
+
       initializeData();
     }
   }, [jobData?.id, properties, inspectionData, employees, latestFileVersion]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -984,6 +1108,30 @@ const ProductionTracker = ({
     const hasChanges = JSON.stringify(infoByCategoryConfig) !== JSON.stringify(originalCategoryConfig);
     setHasUnsavedChanges(hasChanges);
   }, [infoByCategoryConfig, originalCategoryConfig]);
+
+  // Recalculate commercial counts when config or inspection data changes
+  // BUT only for live preview - don't overwrite processed analytics!
+  useEffect(() => {
+    console.log('🔍 useEffect triggered for commercial counts recalc:', {
+      hasInspectionData: !!inspectionData,
+      inspectionDataLength: inspectionData?.length,
+      hasPricedConfig: !!infoByCategoryConfig.priced,
+      pricedCodes: infoByCategoryConfig.priced,
+      hasProcessedAnalytics: !!analytics,
+      processed: processed
+    });
+
+    // Skip recalculation if we have processed analytics - use those values instead
+    if (analytics || processed) {
+      console.log('⏭️ Skipping recalc - using processed analytics values');
+      return;
+    }
+
+    if (inspectionData && inspectionData.length > 0 && infoByCategoryConfig.priced) {
+      console.log('🔄 Recalculating commercial counts due to config/data change');
+      calculateCommercialCounts();
+    }
+  }, [inspectionData, infoByCategoryConfig.priced, analytics, processed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ENHANCED: Process analytics with manager-focused counting and inspection_data persistence
   const processAnalytics = async () => {
@@ -1017,6 +1165,21 @@ const ProductionTracker = ({
         detectedVendor: actualVendor,
         hasAssignments: jobData.has_property_assignments // Log assignment status
       });
+
+      // CRITICAL CHECK: Verify pricing config is loaded for Microsystems
+      if (actualVendor === 'Microsystems') {
+        console.log('🔍 MICROSYSTEMS PRICING CONFIG CHECK:', {
+          hasPricedCategory: !!infoByCategoryConfig.priced,
+          pricedCodes: infoByCategoryConfig.priced,
+          fullConfig: infoByCategoryConfig
+        });
+
+        if (!infoByCategoryConfig.priced || infoByCategoryConfig.priced.length === 0) {
+          console.error('🚨 CRITICAL: No pricing codes configured for Microsystems job!');
+          addNotification('ERROR: Pricing codes not configured. Please configure InfoBy categories first.', 'error');
+          return null;
+        }
+      }
 
       // Get all valid InfoBy codes for validation
       const allValidCodes = [
@@ -1055,9 +1218,26 @@ const ProductionTracker = ({
       
       debugLog('ANALYTICS', `Loaded ${existingOverrides?.length || 0} existing validation overrides`);
 
-      // Use properties from props instead of loading from database
+      // Use properties from props but will join with inspectionData for current info_by_code
       const rawData = properties;
       debugLog('ANALYTICS', `✅ Using ${rawData?.length || 0} property records from props for analysis`);
+
+      // Create lookup map from inspectionData for current info_by_code values
+      const inspectionDataMap = {};
+      if (inspectionData && inspectionData.length > 0) {
+        inspectionData.forEach(insp => {
+          inspectionDataMap[insp.property_composite_key] = insp.info_by_code;
+        });
+        console.log('🗺️ INSPECTION DATA MAP CREATED:', {
+          totalEntries: Object.keys(inspectionDataMap).length,
+          sampleKeys: Object.keys(inspectionDataMap).slice(0, 3),
+          sampleValues: Object.values(inspectionDataMap).slice(0, 3),
+          commercialWithP: Object.values(inspectionDataMap).filter(code => code === 'P').length
+        });
+        debugLog('ANALYTICS', `✅ Created inspection lookup map with ${Object.keys(inspectionDataMap).length} entries`);
+      } else {
+        console.error('❌ NO INSPECTION DATA AVAILABLE FOR LOOKUP MAP!');
+      }
 
       // CRITICAL DEBUG: Detailed analysis of received properties
       if (!rawData || rawData.length === 0) {
@@ -1123,13 +1303,27 @@ const ProductionTracker = ({
       rawData.forEach((record, index) => {
         processedCount++;
 
+        const propertyKey = record.property_composite_key;
         const inspector = record.inspection_measure_by || 'UNASSIGNED';
         const propertyClass = record.property_m4_class || 'UNKNOWN';
-        const infoByCode = record.inspection_info_by;
+        // Use current info_by_code from inspectionData (authoritative), fallback to property snapshot
+        const currentInfoBy = inspectionDataMap[propertyKey];
+        const infoByCode = currentInfoBy || record.inspection_info_by;
+
+        // DEBUG: Log for first 5 commercial properties to see lookup in action
+        if (index < 5 && ['4A', '4B', '4C'].includes(propertyClass)) {
+          console.log(`🔍 Commercial property ${index + 1} lookup:`, {
+            key: propertyKey,
+            foundInMap: !!currentInfoBy,
+            currentInfoBy: currentInfoBy,
+            fallbackInfoBy: record.inspection_info_by,
+            finalInfoBy: infoByCode
+          });
+        }
+
         const measuredDate = record.inspection_measure_date ? new Date(record.inspection_measure_date) : null;
         const listDate = record.inspection_list_date ? new Date(record.inspection_list_date) : null;
         const priceDate = record.inspection_price_date ? new Date(record.inspection_price_date) : null;
-        const propertyKey = record.property_composite_key;
 
         // DEBUG: Log first few properties in detail
         if (index < 5) {
@@ -1416,6 +1610,11 @@ const ProductionTracker = ({
         const isEstimationCode = (infoByCategoryConfig.estimation || []).includes(normalizedInfoBy) || (infoByCategoryConfig.estimation || []).includes(infoByCode);
         const isPricedCode = (infoByCategoryConfig.priced || []).includes(normalizedInfoBy) || (infoByCategoryConfig.priced || []).includes(infoByCode);
         const isSpecialCode = (infoByCategoryConfig.special || []).includes(normalizedInfoBy) || (infoByCategoryConfig.special || []).includes(infoByCode);
+
+        // DEBUG: Log pricing code detection for commercial properties
+        if (['4A', '4B', '4C'].includes(propertyClass) && actualVendor === 'Microsystems') {
+          debugLog('PRICING', `Commercial ${propertyKey}: InfoBy=${infoByCode}, isPriced=${isPricedCode}, config=${JSON.stringify(infoByCategoryConfig.priced)}`);
+        }
         const hasListingData = record.inspection_list_by && record.inspection_list_date;
         // NEW: List_by/List_date integrity validation
         const listByValue = record.inspection_list_by;
@@ -1892,7 +2091,19 @@ const ProductionTracker = ({
       const totalCommercialInspected = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.inspected || 0), 0);
       const totalPriced = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.priced, 0);
 
-      const totalCommercialPriced = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0);
+      // FIXED: Use the already-correct value from commercialCounts (calculated from inspectionData)
+      // instead of totalCommercialPriced from classBreakdown (which uses stale property_records data)
+      const totalCommercialPriced = commercialCounts.priced;
+
+      console.log('📊 COMMERCIAL PRICING ANALYTICS:', {
+        totalCommercialProperties,
+        totalCommercialInspected,
+        totalCommercialPriced,
+        totalPricedAllClasses: totalPriced,
+        percentComplete: totalCommercialProperties > 0 ? Math.round((totalCommercialInspected / totalCommercialProperties) * 100) : 0,
+        percentPriced: totalCommercialProperties > 0 ? Math.round((totalCommercialPriced / totalCommercialProperties) * 100) : 0,
+        source: 'Using commercialCounts.priced from inspectionData'
+      });
 
       const validationReportData = {
         summary: {
@@ -1945,12 +2156,12 @@ const ProductionTracker = ({
         jobEntryRate: totalClass2And3AProperties > 0 ? Math.round((totalEntry / totalClass2And3AProperties) * 100) : 0,
         jobRefusalRate: totalClass2And3AProperties > 0 ? Math.round((totalRefusal / totalClass2And3AProperties) * 100) : 0,
         
-        // Commercial metrics using inspector totals not class breakdown
+        // Commercial metrics using class breakdown for accuracy
         commercialInspections: totalCommercialInspected,
-        commercialPricing: totalPriced,
+        commercialPricing: totalCommercialPriced,
         totalCommercialProperties,
         commercialCompletePercent: totalCommercialProperties > 0 ? Math.round((totalCommercialInspected / totalCommercialProperties) * 100) : 0,
-        pricingCompletePercent: totalCommercialProperties > 0 ? Math.round((totalPriced / totalCommercialProperties) * 100) : 0,
+        pricingCompletePercent: totalCommercialProperties > 0 ? Math.round((totalCommercialPriced / totalCommercialProperties) * 100) : 0,
         
         // Track overrides applied during processing
         overridesAppliedCount: decisionsToApply.length
@@ -2213,6 +2424,13 @@ const ProductionTracker = ({
 
       debugLog('SESSION', '✅ Processing session completed successfully');
       addNotification(`✅ Processing completed! Analytics saved and ready.`, 'success');
+
+      // Update commercial counts to match analytics
+      setCommercialCounts({
+        total: analyticsResult.totalCommercialProperties,
+        inspected: analyticsResult.commercialInspections,
+        priced: analyticsResult.commercialPricing
+      });
 
       setProcessed(true);
 
@@ -2868,22 +3086,18 @@ const exportMissingPropertiesReport = () => {
         )}
 
         {/* Commercial metrics */}
-        {(analytics || commercialCounts.inspected > 0) && (
+        {(analytics || commercialCounts.total > 0) && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
             <div className="bg-white p-4 rounded-lg border shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Commercial Complete</p>
                   <p className="text-2xl font-bold text-blue-600">
-                    {analytics && analytics.totalCommercialProperties > 0 ? 
-                      Math.round((analytics.commercialInspections / analytics.totalCommercialProperties) * 100) : 
-                      jobData.totalcommercial > 0 ? Math.round((commercialCounts.inspected / jobData.totalcommercial) * 100) : 0}%
+                    {commercialCounts.total > 0 ?
+                      Math.round((commercialCounts.inspected / commercialCounts.total) * 100) : 0}%
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    {analytics ? 
-                      `${analytics.commercialInspections.toLocaleString()} of ${analytics.totalCommercialProperties.toLocaleString()} properties` :
-                      `${commercialCounts.inspected.toLocaleString()} of ${(jobData.totalcommercial || 0).toLocaleString()} properties`
-                    }
+                    {`${commercialCounts.inspected.toLocaleString()} of ${commercialCounts.total.toLocaleString()} properties`}
                   </p>
                 </div>
                 <Factory className="w-8 h-8 text-blue-500" />
@@ -2895,15 +3109,11 @@ const exportMissingPropertiesReport = () => {
                 <div>
                   <p className="text-sm text-gray-600">Pricing Complete</p>
                   <p className="text-2xl font-bold text-purple-600">
-                    {analytics && analytics.totalCommercialProperties > 0 ? 
-                      Math.round((analytics.commercialPricing / analytics.totalCommercialProperties) * 100) : 
-                      jobData.totalcommercial > 0 ? Math.round((commercialCounts.priced / jobData.totalcommercial) * 100) : 0}%
+                    {commercialCounts.inspected > 0 ?
+                      Math.round((commercialCounts.priced / commercialCounts.inspected) * 100) : 0}%
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    {analytics ? 
-                      `${analytics.commercialPricing.toLocaleString()} of ${analytics.totalCommercialProperties.toLocaleString()} properties` :
-                      `${commercialCounts.priced.toLocaleString()} of ${(jobData.totalcommercial || 0).toLocaleString()} properties`
-                    }
+                    {`${commercialCounts.priced.toLocaleString()} of ${commercialCounts.inspected.toLocaleString()} properties`}
                   </p>
                 </div>
                 <DollarSign className="w-8 h-8 text-purple-500" />

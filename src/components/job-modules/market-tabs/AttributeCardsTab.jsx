@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Layers, FileText, ChevronDown, ChevronRight, Info } from 'lucide-react';
 import './sharedTabNav.css';
 import { supabase, propertyService, interpretCodes } from '../../../lib/supabaseClient';
@@ -51,43 +51,25 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const parsedCodeDefinitions = useMemo(() => jobData?.parsed_code_definitions || {}, [jobData?.parsed_code_definitions]);
   const infoByCodes = useMemo(() => jobData?.info_by_config || {}, [jobData?.info_by_config]);
 
+  // Track which job ID we've loaded baseline settings for (to prevent redundant loads)
+  const loadedJobIdRef = useRef(null);
+
   // Main tab state
   const [active, setActive] = useState('condition');
 
   // ============ CONDITION ANALYSIS STATE ============
-  const [typeUseFilter, setTypeUseFilter] = useState(() => {
-    return localStorage.getItem(`attr-cards-type-filter-${jobData?.id}`) || '1';
-  });
-  const [useInteriorInspections, setUseInteriorInspections] = useState(() => {
-    const stored = localStorage.getItem(`attr-cards-interior-inspections-${jobData?.id}`);
-    return stored === null ? true : stored === 'true'; // Default to true (checked) on first load
-  });
+  const [typeUseFilter, setTypeUseFilter] = useState('1');
+  const [useInteriorInspections, setUseInteriorInspections] = useState(true);
   const [expandedExteriorVCS, setExpandedExteriorVCS] = useState(new Set()); // Track which exterior VCS sections are expanded
   const [expandedInteriorVCS, setExpandedInteriorVCS] = useState(new Set()); // Track which interior VCS sections are expanded
-  const [manualExteriorBaseline, setManualExteriorBaseline] = useState(() => {
-    return localStorage.getItem(`attr-cards-exterior-baseline-${jobData?.id}`) || '';
-  });
-  const [manualInteriorBaseline, setManualInteriorBaseline] = useState(() => {
-    return localStorage.getItem(`attr-cards-interior-baseline-${jobData?.id}`) || '';
-  });
+  const [manualExteriorBaseline, setManualExteriorBaseline] = useState('');
+  const [manualInteriorBaseline, setManualInteriorBaseline] = useState('');
 
   // Condition classifications for export
-  const [exteriorBetterConditions, setExteriorBetterConditions] = useState(() => {
-    const stored = localStorage.getItem(`attr-cards-exterior-better-${jobData?.id}`);
-    return stored ? JSON.parse(stored) : [];
-  });
-  const [exteriorWorseConditions, setExteriorWorseConditions] = useState(() => {
-    const stored = localStorage.getItem(`attr-cards-exterior-worse-${jobData?.id}`);
-    return stored ? JSON.parse(stored) : [];
-  });
-  const [interiorBetterConditions, setInteriorBetterConditions] = useState(() => {
-    const stored = localStorage.getItem(`attr-cards-interior-better-${jobData?.id}`);
-    return stored ? JSON.parse(stored) : [];
-  });
-  const [interiorWorseConditions, setInteriorWorseConditions] = useState(() => {
-    const stored = localStorage.getItem(`attr-cards-interior-worse-${jobData?.id}`);
-    return stored ? JSON.parse(stored) : [];
-  });
+  const [exteriorBetterConditions, setExteriorBetterConditions] = useState([]);
+  const [exteriorWorseConditions, setExteriorWorseConditions] = useState([]);
+  const [interiorBetterConditions, setInteriorBetterConditions] = useState([]);
+  const [interiorWorseConditions, setInteriorWorseConditions] = useState([]);
 
   // UI state for condition configuration modal
   const [showConditionConfig, setShowConditionConfig] = useState(false);
@@ -3934,6 +3916,35 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       localStorage.setItem(`attr-cards-interior-baseline-${jobData.id}`, manualInteriorBaseline);
     }
   }, [manualInteriorBaseline, jobData?.id]);
+
+  // Load all saved settings from localStorage when job ID becomes available (only once per job)
+  useEffect(() => {
+    if (jobData?.id && loadedJobIdRef.current !== jobData.id) {
+      loadedJobIdRef.current = jobData.id;
+
+      // Load filter settings
+      const savedTypeFilter = localStorage.getItem(`attr-cards-type-filter-${jobData.id}`);
+      const savedInteriorInspections = localStorage.getItem(`attr-cards-interior-inspections-${jobData.id}`);
+
+      // Load baseline conditions
+      const savedExteriorBaseline = localStorage.getItem(`attr-cards-exterior-baseline-${jobData.id}`);
+      const savedInteriorBaseline = localStorage.getItem(`attr-cards-interior-baseline-${jobData.id}`);
+      const savedExteriorBetter = localStorage.getItem(`attr-cards-exterior-better-${jobData.id}`);
+      const savedExteriorWorse = localStorage.getItem(`attr-cards-exterior-worse-${jobData.id}`);
+      const savedInteriorBetter = localStorage.getItem(`attr-cards-interior-better-${jobData.id}`);
+      const savedInteriorWorse = localStorage.getItem(`attr-cards-interior-worse-${jobData.id}`);
+
+      // Apply saved settings
+      if (savedTypeFilter) setTypeUseFilter(savedTypeFilter);
+      if (savedInteriorInspections !== null) setUseInteriorInspections(savedInteriorInspections === 'true');
+      if (savedExteriorBaseline !== null) setManualExteriorBaseline(savedExteriorBaseline);
+      if (savedInteriorBaseline !== null) setManualInteriorBaseline(savedInteriorBaseline);
+      if (savedExteriorBetter) setExteriorBetterConditions(JSON.parse(savedExteriorBetter));
+      if (savedExteriorWorse) setExteriorWorseConditions(JSON.parse(savedExteriorWorse));
+      if (savedInteriorBetter) setInteriorBetterConditions(JSON.parse(savedInteriorBetter));
+      if (savedInteriorWorse) setInteriorWorseConditions(JSON.parse(savedInteriorWorse));
+    }
+  }, [jobData?.id]);
 
   // ============ MAIN COMPONENT RENDER ============
   return (
