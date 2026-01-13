@@ -3399,7 +3399,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
       vcs3658: calculatedAvgNormTime['3658'],
       vcs3658Counts: counts['3658']
     });
-    calculateVCSRecommendedSites(calculatedAvgPrice, calculatedAvgNormTime, counts);
+    calculateVCSRecommendedSites(calculatedAvgPrice, calculatedAvgNormTime, counts, calculatedAvgPriceLotSize);
     
     // Store in vcsSheetData for display
     const sheetData = {};
@@ -3420,7 +3420,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     setVcsSheetData(sheetData);
   }, [properties, valuationMode]);
 
-  const calculateVCSRecommendedSites = useCallback((avgPrices, avgNormTimes, counts) => {
+  const calculateVCSRecommendedSites = useCallback((avgPrices, avgNormTimes, counts, avgPriceLotSizes) => {
     console.log('🔍 calculateVCSRecommendedSites called:', {
       targetAllocation,
       hasCascadePrime: !!cascadeConfig.normal.prime,
