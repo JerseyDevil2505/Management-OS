@@ -3935,6 +3935,25 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     }
   }, [manualInteriorBaseline, jobData?.id]);
 
+  // Load baseline conditions from localStorage when job ID becomes available
+  useEffect(() => {
+    if (jobData?.id) {
+      const savedExteriorBaseline = localStorage.getItem(`attr-cards-exterior-baseline-${jobData.id}`);
+      const savedInteriorBaseline = localStorage.getItem(`attr-cards-interior-baseline-${jobData.id}`);
+      const savedExteriorBetter = localStorage.getItem(`attr-cards-exterior-better-${jobData.id}`);
+      const savedExteriorWorse = localStorage.getItem(`attr-cards-exterior-worse-${jobData.id}`);
+      const savedInteriorBetter = localStorage.getItem(`attr-cards-interior-better-${jobData.id}`);
+      const savedInteriorWorse = localStorage.getItem(`attr-cards-interior-worse-${jobData.id}`);
+
+      if (savedExteriorBaseline !== null) setManualExteriorBaseline(savedExteriorBaseline);
+      if (savedInteriorBaseline !== null) setManualInteriorBaseline(savedInteriorBaseline);
+      if (savedExteriorBetter) setExteriorBetterConditions(JSON.parse(savedExteriorBetter));
+      if (savedExteriorWorse) setExteriorWorseConditions(JSON.parse(savedExteriorWorse));
+      if (savedInteriorBetter) setInteriorBetterConditions(JSON.parse(savedInteriorBetter));
+      if (savedInteriorWorse) setInteriorWorseConditions(JSON.parse(savedInteriorWorse));
+    }
+  }, [jobData?.id]);
+
   // ============ MAIN COMPONENT RENDER ============
   return (
     <div className="bg-white rounded-lg p-6">
