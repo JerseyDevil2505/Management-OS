@@ -1010,6 +1010,10 @@ const AdminJobManagement = ({
       // Start processing
       updateProcessingStatus('Creating job record...', 10);
       
+      // CRITICAL: Extract year from dueDate for assessment year (e.g., "2025-10-01" -> 2025)
+      const assessmentYear = newJob.dueDate ? parseInt(newJob.dueDate.split('-')[0]) : new Date().getFullYear();
+      const startDate = `${assessmentYear}-01-01`; // Start of assessment year
+
       const jobData = {
         name: newJob.name,
         ccdd: newJob.ccddCode,
@@ -1018,7 +1022,7 @@ const AdminJobManagement = ({
         state: newJob.state,
         vendor: newJob.vendor,
         dueDate: newJob.dueDate,
-        year_created: new Date().getFullYear(),
+        createdDate: startDate, // This maps to start_date in DB
         assignedManagers: newJob.assignedManagers,
         totalProperties: fileAnalysis.propertyCount,
         status: 'active',
@@ -1031,7 +1035,7 @@ const AdminJobManagement = ({
         source_file_name: newJob.sourceFile.name,
         source_file_version_id: crypto.randomUUID(),
         source_file_uploaded_at: new Date().toISOString(),
-        
+
         workflowStats: {
           inspectionPhases: { firstAttempt: 'PENDING', secondAttempt: 'PENDING', thirdAttempt: 'PENDING' },
           rates: { entryRate: 0, refusalRate: 0, pricingRate: 0, commercialInspectionRate: 0 },
