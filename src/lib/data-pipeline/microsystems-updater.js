@@ -58,15 +58,27 @@ export class MicrosystemsUpdater {
 
   /**
    * Save current projected ratable base to "previous" fields for delta tracking
+   * CRITICAL: Must consolidate properties (count main cards only) to match RatableComparisonTab logic
    */
   async savePreviousProjectedValues(jobId) {
     try {
       console.log('💾 Saving current projected ratable base to previous fields for delta tracking...');
 
-      // Get current properties for this job
+      // Get job to determine vendor type
+      const { data: job, error: jobError } = await supabase
+        .from('jobs')
+        .select('vendor_type')
+        .eq('id', jobId)
+        .single();
+
+      if (jobError) throw jobError;
+
+      const vendorType = job?.vendor_type || 'Microsystems';
+
+      // Get current properties for this job with all fields needed for consolidation
       const { data: properties, error } = await supabase
         .from('property_records')
-        .select('values_cama_total, property_cama_class, property_facility')
+        .select('values_cama_total, property_cama_class, property_facility, property_composite_key, property_block, property_lot, property_qualifier, property_location, property_addl_card')
         .eq('job_id', jobId);
 
       if (error) throw error;
@@ -76,7 +88,37 @@ export class MicrosystemsUpdater {
         return;
       }
 
-      // Calculate projected ratable base from current properties
+      // CRITICAL: Consolidate properties by grouping additional cards (same logic as RatableComparisonTab)
+      const grouped = {};
+
+      properties.forEach(property => {
+        // Create base key without card designation - MUST include location to distinguish separate properties
+        const baseKey = `${property.property_block}-${property.property_lot}-${property.property_qualifier || 'NONE'}-${property.property_location || 'NONE'}`;
+
+        if (!grouped[baseKey]) {
+          grouped[baseKey] = {
+            mainCard: null
+          };
+        }
+
+        const card = property.property_addl_card;
+        const isMainCard = vendorType === 'BRT'
+          ? (!card || card === '1')
+          : (!card || card.toUpperCase() === 'M');
+
+        if (isMainCard) {
+          grouped[baseKey].mainCard = property;
+        }
+      });
+
+      // Get consolidated properties (main cards only)
+      const consolidatedProperties = Object.values(grouped)
+        .map(group => group.mainCard)
+        .filter(p => p && p.property_composite_key); // Filter out any null mainCards
+
+      console.log(`🔄 Consolidated ${properties.length} property records into ${consolidatedProperties.length} properties (vendor: ${vendorType})`);
+
+      // Calculate projected ratable base from CONSOLIDATED properties
       const summary = {
         '1': { count: 0, total: 0 },
         '2': { count: 0, total: 0 },
@@ -86,7 +128,7 @@ export class MicrosystemsUpdater {
         '6ABC': { count: 0, total: 0 }
       };
 
-      properties.forEach(property => {
+      consolidatedProperties.forEach(property => {
         const isTaxable = property.property_facility !== 'EXEMPT';
         if (!isTaxable) return;
 
