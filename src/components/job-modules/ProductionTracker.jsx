@@ -1040,6 +1040,8 @@ const ProductionTracker = ({
     setProcessingComplete(false);
     setCustomOverrideReason(''); // Reset custom override reason
     setCurrentValidationIndex(0); // Reset validation index
+    hasInitialized.current = false; // Allow re-initialization after reset
+    setLoading(true); // Reset loading flag
     addNotification('🔄 Session reset - settings unlocked', 'info');
   };
 
