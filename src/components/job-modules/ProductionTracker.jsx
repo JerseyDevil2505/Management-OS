@@ -3005,15 +3005,11 @@ const exportMissingPropertiesReport = () => {
                 <div>
                   <p className="text-sm text-gray-600">Pricing Complete</p>
                   <p className="text-2xl font-bold text-purple-600">
-                    {analytics && analytics.totalCommercialProperties > 0 ? 
-                      Math.round((analytics.commercialPricing / analytics.totalCommercialProperties) * 100) : 
-                      jobData.totalcommercial > 0 ? Math.round((commercialCounts.priced / jobData.totalcommercial) * 100) : 0}%
+                    {commercialCounts.inspected > 0 ?
+                      Math.round((commercialCounts.priced / commercialCounts.inspected) * 100) : 0}%
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    {analytics ? 
-                      `${analytics.commercialPricing.toLocaleString()} of ${analytics.totalCommercialProperties.toLocaleString()} properties` :
-                      `${commercialCounts.priced.toLocaleString()} of ${(jobData.totalcommercial || 0).toLocaleString()} properties`
-                    }
+                    {`${commercialCounts.priced.toLocaleString()} of ${commercialCounts.inspected.toLocaleString()} properties`}
                   </p>
                 </div>
                 <DollarSign className="w-8 h-8 text-purple-500" />
