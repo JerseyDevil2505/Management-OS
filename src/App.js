@@ -149,9 +149,6 @@ const App = () => {
   // Job selection state
   const [selectedJob, setSelectedJob] = useState(null);
 
-  // File refresh trigger - increment to signal JobContainer to reload data
-  const [fileRefreshTrigger, setFileRefreshTrigger] = useState(0);
-
   // Simple helper - true for users allowed to access billing/payroll
   const isAdmin = (user?.role || '').toString().toLowerCase() === 'admin' || (user?.role || '').toString().toLowerCase() === 'owner';
 
@@ -582,17 +579,11 @@ const App = () => {
         // Reload jobs data to get updated file versions and property counts
         await loadLiveData(['jobs']);
         console.log('✅ Job data refreshed successfully');
-
-        // Trigger JobContainer to reload its data if we're currently viewing this job
-        if (selectedJob?.id === jobId) {
-          console.log('🔄 Triggering JobContainer data refresh via fileRefreshTrigger');
-          setFileRefreshTrigger(prev => prev + 1);
-        }
       } catch (error) {
         console.error('❌ Error refreshing job data:', error);
       }
     }
-  }, [loadLiveData, selectedJob]);
+  }, [loadLiveData]);
 
   // ==========================================
   // CALCULATION FUNCTIONS
@@ -1221,7 +1212,6 @@ const App = () => {
               selectedJob={selectedJob}
               onBackToJobs={handleBackToJobs}
               onWorkflowStatsUpdate={handleWorkflowStatsUpdate}
-              fileRefreshTrigger={fileRefreshTrigger}
             />
           </div>
         )}
