@@ -657,7 +657,16 @@ const ProductionTracker = ({
         setAnalytics(loadedAnalytics);
         setBillingAnalytics(loadedBillingAnalytics);
         setValidationReport(loadedValidationReport);
-        
+
+        // Restore commercial counts from saved analytics
+        if (loadedAnalytics.totalCommercialProperties) {
+          setCommercialCounts({
+            total: loadedAnalytics.totalCommercialProperties,
+            inspected: loadedAnalytics.commercialInspections || 0,
+            priced: loadedAnalytics.commercialPricing || 0
+          });
+        }
+
         if (job.workflow_stats.missingPropertiesReport) {
           setMissingPropertiesReport(job.workflow_stats.missingPropertiesReport);
         }
@@ -667,7 +676,7 @@ const ProductionTracker = ({
         if (job.workflow_stats.overrideMap) {
           setOverrideMap(job.workflow_stats.overrideMap);
         }
-        
+
         setProcessed(true);
         setSettingsLocked(true);
         setLoadedFromDatabase(true); // CRITICAL: Mark that we loaded from database
