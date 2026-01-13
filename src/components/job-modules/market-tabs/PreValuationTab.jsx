@@ -3521,8 +3521,9 @@ const analyzeImportFile = async (file) => {
                   <div className="text-2xl font-bold text-blue-700">
                     {(() => {
                       const currentYear = new Date().getFullYear();
+                      const minPrice = typeof minSalePrice === 'number' && !isNaN(minSalePrice) ? minSalePrice : 100;
                       const currentYearSales = properties.filter(p => {
-                        if (!p.sales_price || p.sales_price <= minSalePrice) return false;
+                        if (!p.sales_price || p.sales_price <= minPrice) return false;
                         if (!p.sales_date) return false;
                         
                         const saleYear = new Date(p.sales_date).getFullYear();
