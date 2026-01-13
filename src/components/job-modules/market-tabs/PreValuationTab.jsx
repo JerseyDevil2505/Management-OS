@@ -3258,7 +3258,28 @@ const analyzeImportFile = async (file) => {
       {activeSubTab === 'normalization' && (
         <div className="w-full">
           <div className="space-y-6 px-2">
-            
+
+          {/* Sales Changes Warning Banner */}
+          {recentSalesChanges && (
+            <div className="bg-orange-50 border-l-4 border-orange-400 p-4 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="text-orange-600 mt-0.5 flex-shrink-0" size={24} />
+                <div className="flex-1">
+                  <h4 className="text-orange-900 font-semibold text-base mb-1">
+                    ⚠️ {recentSalesChanges.count} Sale Change{recentSalesChanges.count !== 1 ? 's' : ''} Detected
+                  </h4>
+                  <p className="text-orange-800 text-sm mb-2">
+                    New sales data from file upload on {new Date(recentSalesChanges.reportDate).toLocaleDateString()} needs to be normalized.
+                    These sales will not appear in the normalization list or be included in HPI calculations until you run Time Normalization.
+                  </p>
+                  <p className="text-orange-900 text-sm font-medium">
+                    👉 Click "Run Time Normalization" below to process these changes and mark them as pending review.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Configuration Section */}
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex justify-between items-center mb-4">
