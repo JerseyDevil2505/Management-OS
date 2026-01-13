@@ -1076,11 +1076,12 @@ const AdminJobManagement = ({
           originalConsoleLog(...args);
         };
         
+        // CRITICAL: Use assessment year from start_date for composite keys
         result = await propertyService.importCSVData(
           sourceFileContent,
           codeFileContent,
           createdJob.id,
-          new Date().getFullYear(),
+          assessmentYear,  // Use year from dueDate, not current year!
           newJob.ccddCode,
           newJob.vendor,
           {
