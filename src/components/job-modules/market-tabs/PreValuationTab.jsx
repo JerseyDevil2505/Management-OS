@@ -741,13 +741,31 @@ useEffect(() => {
   }
   
   if (marketLandData.time_normalized_sales && marketLandData.time_normalized_sales.length > 0) {
-    // Filter out sales that don't meet current minSalePrice threshold (e.g., $1 nominal sales)
+    // Filter out sales that don't meet current minSalePrice threshold (e.g., $1 nominal sales that were incorrectly normalized)
     const currentMinPrice = marketLandData.normalization_config?.minSalePrice || 100;
     const validSales = marketLandData.time_normalized_sales.filter(sale =>
       sale.sales_price && sale.sales_price > currentMinPrice
     );
 
-    if (false) console.log(`✅ Restoring ${validSales.length} normalized sales (filtered ${marketLandData.time_normalized_sales.length - validSales.length} below $${currentMinPrice})`);
+    const filteredCount = marketLandData.time_normalized_sales.length - validSales.length;
+
+    if (filteredCount > 0) {
+      console.warn(`⚠️ Filtered out ${filteredCount} invalid normalized sales below $${currentMinPrice} (likely from previous bug where minSalePrice was NaN)`);
+
+      // Clean up database by re-saving without the invalid sales
+      if (jobData?.id) {
+        (async () => {
+          try {
+            await worksheetService.saveTimeNormalizedSales(jobData.id, validSales, marketLandData.normalization_stats);
+            console.log('✅ Cleaned up invalid normalized sales from database');
+          } catch (error) {
+            console.error('Failed to clean up invalid sales:', error);
+          }
+        })();
+      }
+    }
+
+    if (false) console.log(`✅ Restoring ${validSales.length} normalized sales`);
     setTimeNormalizedSales(validSales);
   }
   
