@@ -591,7 +591,10 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                     <div className="grid grid-cols-3 gap-2">
                       <div className="text-sm font-medium py-1">Class 1</div>
                       <div className="text-sm text-right px-2 py-1">{projectedRatableBase['1'].count.toLocaleString()}</div>
-                      <div className="text-sm text-right px-2 py-1">${projectedRatableBase['1'].total.toLocaleString()}</div>
+                      <div className="text-sm text-right px-2 py-1">
+                        ${projectedRatableBase['1'].total.toLocaleString()}
+                        {formatDelta(projectedRatableBase['1'].total, previousProjected.class_1_total)}
+                      </div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
                       <div className="py-1">Abatements</div>
