@@ -2347,9 +2347,9 @@ const ProductionTracker = ({
 
       // Update commercial counts to match analytics
       setCommercialCounts({
-        total: totalCommercialProperties,
-        inspected: totalCommercialInspected,
-        priced: totalCommercialPriced
+        total: analyticsResult.totalCommercialProperties,
+        inspected: analyticsResult.commercialInspections,
+        priced: analyticsResult.commercialPricing
       });
 
       setProcessed(true);
