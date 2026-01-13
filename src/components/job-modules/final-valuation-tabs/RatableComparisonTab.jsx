@@ -66,6 +66,24 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
     bufferForLoss: jobData?.rate_calc_buffer_for_loss || 0
   }), [jobData]);
 
+  // Get previous projected values for delta tracking
+  const previousProjected = useMemo(() => ({
+    class_1_count: jobData?.previous_projected_class_1_count || 0,
+    class_1_total: jobData?.previous_projected_class_1_total || 0,
+    class_2_count: jobData?.previous_projected_class_2_count || 0,
+    class_2_total: jobData?.previous_projected_class_2_total || 0,
+    class_3a_count: jobData?.previous_projected_class_3a_count || 0,
+    class_3a_total: jobData?.previous_projected_class_3a_total || 0,
+    class_3b_count: jobData?.previous_projected_class_3b_count || 0,
+    class_3b_total: jobData?.previous_projected_class_3b_total || 0,
+    class_4_count: jobData?.previous_projected_class_4_count || 0,
+    class_4_total: jobData?.previous_projected_class_4_total || 0,
+    class_6_count: jobData?.previous_projected_class_6_count || 0,
+    class_6_total: jobData?.previous_projected_class_6_total || 0,
+    total_count: jobData?.previous_projected_total_count || 0,
+    total_total: jobData?.previous_projected_total_total || 0
+  }), [jobData]);
+
   // Get vendor type for consolidation logic
   const vendorType = jobData?.vendor_type || 'BRT';
 
