@@ -1042,25 +1042,31 @@ const ProductionTracker = ({
 
 // Initialize data loading
   useEffect(() => {
+    // Don't re-initialize if we're already loaded or currently processing
+    if (loading === false || processing) {
+      console.log('⏭️ Skipping initialization - already loaded or processing');
+      return;
+    }
+
     if (jobData?.id && properties && properties.length > 0 && inspectionData && employees) {
       const initializeData = async () => {
         // Load only the things that still need database calls
         await loadAvailableInfoByCodes();
         await loadProjectStartDate();
         await loadVendorSource();
-        
+
         // Process from props instead of loading
         processEmployeeData();  // Uses employees prop
         await calculateValidationOverrides();  // Uses inspectionData prop initially
         calculateCommercialCounts();     // Uses inspectionData prop
         calculateUnassignedPropertyCount(); // Uses properties prop
-        
+
         // Then load persisted analytics (which may need override data)
         await loadPersistedAnalytics();
-        
+
         setLoading(false);
       };
-      
+
       initializeData();
     }
   }, [jobData?.id, properties, inspectionData, employees, latestFileVersion]); // eslint-disable-line react-hooks/exhaustive-deps
