@@ -2091,9 +2091,9 @@ const ProductionTracker = ({
       const totalCommercialInspected = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.inspected || 0), 0);
       const totalPriced = Object.values(inspectorStats).reduce((sum, stats) => sum + stats.priced, 0);
 
-      // FIXED: Use the already-correct value from commercialCounts (calculated from inspectionData)
-      // instead of totalCommercialPriced from classBreakdown (which uses stale property_records data)
-      const totalCommercialPriced = commercialCounts.priced;
+      // FIX: Use classBreakdown for commercial pricing (fresh data from processing loop)
+      // NOT commercialCounts.priced which uses stale inspectionData prop
+      const totalCommercialPriced = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0);
 
       console.log('📊 COMMERCIAL PRICING ANALYTICS:', {
         totalCommercialProperties,
