@@ -1735,13 +1735,6 @@ const ProductionTracker = ({
         }
       });
 
-      // DEBUG: Final processing summary
-      console.log(`📊 FINAL PROCESSING SUMMARY:`);
-      console.log(`  - Total properties processed: ${processedCount}`);
-      console.log(`  - Valid inspections found: ${validInspectionCount}`);
-      console.log(`  - Total with overrides: ${existingOverrides?.length || 0}`);
-      console.log(`  - FINAL COUNT (valid + overrides): ${validInspectionCount + (existingOverrides?.length || 0)}`);
-
       // Process ALL records first - collect validation issues and valid records
       debugLog('ANALYTICS', `Finished processing ${rawData.length} records. Found ${pendingValidationsList.length} validation issues.`);
 
