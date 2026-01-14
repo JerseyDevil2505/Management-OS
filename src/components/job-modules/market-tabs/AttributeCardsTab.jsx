@@ -84,6 +84,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     exterior: {},
     interior: {}
   });
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [configSaveSuccess, setConfigSaveSuccess] = useState(false);
 
   // ============ CUSTOM ATTRIBUTE STATE ============
   const [rawFields, setRawFields] = useState([]);
