@@ -295,10 +295,25 @@ const DataVisualizations = ({ jobData, properties }) => {
   // Building Class Breakdown
   const buildingClassData = useMemo(() => {
     const classCounts = {};
-    
+
     filteredProperties.forEach(prop => {
       const buildingClass = prop.asset_building_class || 'Unknown';
       classCounts[buildingClass] = (classCounts[buildingClass] || 0) + 1;
+    });
+
+    return Object.entries(classCounts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [filteredProperties]);
+
+  // Property Class Breakdown (M4/CAMA class)
+  const propertyClassData = useMemo(() => {
+    const classCounts = {};
+
+    filteredProperties.forEach(prop => {
+      // Use M4 class first, fallback to CAMA class
+      const propertyClass = prop.property_m4_class || prop.property_cama_class || 'Unknown';
+      classCounts[propertyClass] = (classCounts[propertyClass] || 0) + 1;
     });
 
     return Object.entries(classCounts)
@@ -745,8 +760,8 @@ const DataVisualizations = ({ jobData, properties }) => {
           <ResponsiveContainer width="100%" height={350}>
             <BarChart data={vcsValueData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="vcs" stroke="#6b7280" />
-              <YAxis stroke="#6b7280" tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
+              <XAxis dataKey="vcs" stroke="#6b7280" tick={{ fontSize: 10 }} />
+              <YAxis stroke="#6b7280" tickFormatter={(value) => `$${value.toLocaleString()}`} tick={{ fontSize: 10 }} />
               <Tooltip content={<CustomTooltip />} formatter={(value) => formatCurrency(value)} />
               <Legend />
               <Bar dataKey="avgSalePrice" name="Average Sale Price" fill="#6366f1" />
@@ -995,6 +1010,48 @@ const DataVisualizations = ({ jobData, properties }) => {
             </ResponsiveContainer>
             <div className="chart-legend mt-4 grid grid-cols-2 gap-2 text-xs">
               {buildingClassData.slice(0, 8).map((item, index) => (
+                <div key={item.name} className="legend-item flex items-center gap-2">
+                  <div
+                    className="legend-color w-3 h-3 rounded"
+                    style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                  />
+                  <span className="legend-text text-gray-700">{item.name}: {item.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Property Class Distribution */}
+          <div className="chart-card bg-white rounded-lg border border-gray-200 p-6">
+            <div className="chart-header flex items-center gap-2 mb-4">
+              <PieIcon className="w-5 h-5 text-purple-600" />
+              <h3 className="chart-title text-lg font-semibold text-gray-900">Property Class Distribution</h3>
+            </div>
+            <ResponsiveContainer width="100%" height={420}>
+              <PieChart margin={{ top: 30, right: 100, bottom: 30, left: 100 }}>
+                <Pie
+                  data={propertyClassData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={true}
+                  label={({ name, percent }) => {
+                    // Use callouts for small slices to prevent overlap
+                    return `${name}: ${(percent * 100).toFixed(0)}%`;
+                  }}
+                  outerRadius={120}
+                  fill="#8884d8"
+                  dataKey="value"
+                  style={{ fontSize: '11px' }}
+                >
+                  {propertyClassData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="chart-legend mt-4 grid grid-cols-2 gap-2 text-xs">
+              {propertyClassData.slice(0, 8).map((item, index) => (
                 <div key={item.name} className="legend-item flex items-center gap-2">
                   <div
                     className="legend-color w-3 h-3 rounded"
