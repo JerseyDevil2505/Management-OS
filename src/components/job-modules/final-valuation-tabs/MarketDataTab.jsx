@@ -828,11 +828,19 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         return val;
       };
 
-      // Helper to parse numeric value from block/lot (remove leading zeros for sorting)
+      // Helper to parse numeric value from block/lot (preserve decimals and alpha characters)
       const getNumericValue = (val) => {
         if (!val || val === '') return '';
-        const num = parseInt(String(val), 10);
-        return isNaN(num) ? '' : num;
+        const str = String(val).trim();
+
+        // Try to parse as float (preserves decimals like 1.10, 31.01)
+        const num = parseFloat(str);
+
+        // If it's a valid number, return it (removes leading zeros for sorting)
+        if (!isNaN(num)) return num;
+
+        // If it contains alpha characters (like "PIPE.LINE"), return as-is
+        return str;
       };
 
       return {
