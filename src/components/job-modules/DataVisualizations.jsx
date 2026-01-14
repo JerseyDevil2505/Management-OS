@@ -160,26 +160,40 @@ const DataVisualizations = ({ jobData, properties }) => {
   }, [filteredProperties, nuDateRange]);
 
   // Usable vs Non-Usable Sales - filtered by date range
+  // Usable: price > 100 AND code in [blank, '00', '07', '32', '36']
+  // Non-Usable: code in ['01'-'06', '08'-'31', '33'-'35']
   const usableSalesData = useMemo(() => {
     const usableCounts = {
       'Usable': 0,
-      'Non-Usable': 0,
-      'No Sale Data': 0
+      'Non-Usable': 0
     };
 
     const startDate = new Date(usableDateRange.start);
     const endDate = new Date(usableDateRange.end);
 
+    // Usable codes: blank, 00, 07, 32, 36
+    const usableCodes = ['', '00', '07', '32', '36'];
+
+    // Non-usable codes: 01-06, 08-31, 33-35
+    const nonUsableCodes = [];
+    for (let i = 1; i <= 6; i++) nonUsableCodes.push(i.toString().padStart(2, '0'));
+    for (let i = 8; i <= 31; i++) nonUsableCodes.push(i.toString().padStart(2, '0'));
+    nonUsableCodes.push('33', '34', '35');
+
     filteredProperties.forEach(prop => {
-      if (!prop.sales_date || !prop.sales_price) {
-        usableCounts['No Sale Data']++;
-      } else {
+      if (prop.sales_date && prop.sales_price) {
         const saleDate = new Date(prop.sales_date);
         if (saleDate >= startDate && saleDate <= endDate) {
-          if (prop.sales_nu === 'NU' || prop.sales_nu === 'N') {
-            usableCounts['Non-Usable']++;
-          } else {
+          const salePrice = parseFloat(prop.sales_price) || 0;
+          const nuCode = (prop.sales_nu || '').trim();
+
+          // Check if usable
+          if (salePrice > 100 && usableCodes.includes(nuCode)) {
             usableCounts['Usable']++;
+          }
+          // Check if non-usable
+          else if (nonUsableCodes.includes(nuCode)) {
+            usableCounts['Non-Usable']++;
           }
         }
       }
