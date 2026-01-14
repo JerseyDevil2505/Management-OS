@@ -1097,14 +1097,8 @@ const ProductionTracker = ({
 
       // CRITICAL CHECK: Verify pricing config is loaded for Microsystems
       if (actualVendor === 'Microsystems') {
-        console.log('🔍 MICROSYSTEMS PRICING CONFIG CHECK:', {
-          hasPricedCategory: !!infoByCategoryConfig.priced,
-          pricedCodes: infoByCategoryConfig.priced,
-          fullConfig: infoByCategoryConfig
-        });
-
         if (!infoByCategoryConfig.priced || infoByCategoryConfig.priced.length === 0) {
-          console.error('🚨 CRITICAL: No pricing codes configured for Microsystems job!');
+          console.error('CRITICAL: No pricing codes configured for Microsystems job');
           addNotification('ERROR: Pricing codes not configured. Please configure InfoBy categories first.', 'error');
           return null;
         }
