@@ -128,12 +128,9 @@ const DataVisualizations = ({ jobData, properties }) => {
   }, [filteredProperties]);
 
   // Sales NU Distribution - filtered by date range
+  // Break out individual codes, with 36 as separate, treat 00 and blank as same
   const salesNuData = useMemo(() => {
-    const nuCounts = {
-      'NU': 0,
-      'U': 0,
-      'Other': 0
-    };
+    const nuCounts = {};
 
     const startDate = new Date(nuDateRange.start);
     const endDate = new Date(nuDateRange.end);
@@ -142,20 +139,26 @@ const DataVisualizations = ({ jobData, properties }) => {
       if (prop.sales_date) {
         const saleDate = new Date(prop.sales_date);
         if (saleDate >= startDate && saleDate <= endDate) {
-          const nuCode = (prop.sales_nu || '').toUpperCase().trim();
-          if (nuCode === 'NU' || nuCode === 'N') {
-            nuCounts['NU']++;
-          } else if (nuCode === 'U' || nuCode === '') {
-            nuCounts['U']++;
-          } else {
-            nuCounts['Other']++;
+          let nuCode = (prop.sales_nu || '').trim();
+
+          // Treat blank and '00' as the same
+          if (nuCode === '' || nuCode === '00') {
+            nuCode = '00/Blank';
           }
+
+          // Initialize counter if not exists
+          if (!nuCounts[nuCode]) {
+            nuCounts[nuCode] = 0;
+          }
+
+          nuCounts[nuCode]++;
         }
       }
     });
 
     return Object.entries(nuCounts)
       .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value) // Sort by count descending
       .filter(item => item.value > 0);
   }, [filteredProperties, nuDateRange]);
 
