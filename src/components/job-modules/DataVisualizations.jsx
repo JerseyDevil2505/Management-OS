@@ -685,6 +685,97 @@ const DataVisualizations = ({ jobData, properties }) => {
           </div>
         </div>
 
+        {/* VCS Sales Analysis - Full Width under Market History */}
+        <div className="chart-card bg-white rounded-lg border border-gray-200 p-6">
+          <div className="chart-header flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-indigo-600" />
+              <h3 className="chart-title text-lg font-semibold text-gray-900">VCS Average Sale Prices</h3>
+            </div>
+            <div className="text-xs text-gray-600">
+              Using Sale Price • Date Filtered
+            </div>
+          </div>
+
+          {/* Date Range and Property Type Filter */}
+          <div className="date-range-controls mb-4 grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <Calendar className="w-3 h-3 inline mr-1" />
+                Start Date
+              </label>
+              <input
+                type="date"
+                value={vcsSalesDateRange.start}
+                onChange={(e) => setVcsSalesDateRange({ ...vcsSalesDateRange, start: e.target.value })}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <Calendar className="w-3 h-3 inline mr-1" />
+                End Date
+              </label>
+              <input
+                type="date"
+                value={vcsSalesDateRange.end}
+                onChange={(e) => setVcsSalesDateRange({ ...vcsSalesDateRange, end: e.target.value })}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Property Type
+              </label>
+              <select
+                value={vcsPropertyTypeFilter}
+                onChange={(e) => setVcsPropertyTypeFilter(e.target.value)}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Types</option>
+                <option value="single_family">Single Family</option>
+                <option value="multi_family">Multi-Family</option>
+                <option value="twin">Twin</option>
+                <option value="condo">Condo</option>
+                <option value="conversion">Conversion</option>
+              </select>
+            </div>
+          </div>
+
+          <ResponsiveContainer width="100%" height={350}>
+            <BarChart data={vcsValueData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="vcs" stroke="#6b7280" />
+              <YAxis stroke="#6b7280" tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
+              <Tooltip content={<CustomTooltip />} formatter={(value) => formatCurrency(value)} />
+              <Legend />
+              <Bar dataKey="avgSalePrice" name="Average Sale Price" fill="#6366f1" />
+            </BarChart>
+          </ResponsiveContainer>
+          <div className="chart-stats mt-4 grid grid-cols-3 gap-4 text-center">
+            <div className="stat-item">
+              <div className="stat-label text-xs text-gray-600">Total VCS Areas</div>
+              <div className="stat-value text-lg font-semibold text-gray-900">
+                {vcsValueData.length}
+              </div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label text-xs text-gray-600">Total Sales</div>
+              <div className="stat-value text-lg font-semibold text-gray-900">
+                {vcsValueData.reduce((sum, d) => sum + d.count, 0).toLocaleString()}
+              </div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label text-xs text-gray-600">Overall Avg Price</div>
+              <div className="stat-value text-lg font-semibold text-gray-900">
+                {vcsValueData.length > 0 ? formatCurrency(
+                  vcsValueData.reduce((sum, d) => sum + (d.avgSalePrice * d.count), 0) / vcsValueData.reduce((sum, d) => sum + d.count, 0)
+                ) : 'N/A'}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Pie Charts Row - Usable vs Non-Usable Sales and Sales NU Distribution */}
         <div className="charts-grid grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Usable vs Non-Usable Sales Pie with Date Range */}
