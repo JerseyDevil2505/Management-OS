@@ -474,6 +474,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           better: interiorBetterConditions,
           worse: interiorWorseConditions
         },
+        conditionHandlingMethod: conditionHandlingMethod, // 'condition_table' or 'effective_age'
         savedAt: new Date().toISOString()
       };
 
