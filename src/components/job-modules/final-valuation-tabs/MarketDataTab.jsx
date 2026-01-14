@@ -906,12 +906,27 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'HPI Multiplier': (() => {
           const saleYear = getSaleYear(property);
           const normYear = getNormalizeToYear();
-          const saleYearHPI = saleYear ? getHPIForYear(saleYear) : null;
+
+          // If no sale year, can't calculate
+          if (!saleYear) return undefined;
+
+          // If sale year equals or exceeds normalization year, no adjustment needed
+          if (saleYear >= normYear) return 1.00;
+
+          const saleYearHPI = getHPIForYear(saleYear);
           const normYearHPI = getHPIForYear(normYear);
 
+          // If we have both HPI values, calculate multiplier
           if (saleYearHPI && normYearHPI && saleYearHPI > 0) {
             return normYearHPI / saleYearHPI;
           }
+
+          // If sale year HPI is missing but sale is recent (within 2 years of norm year)
+          // assume no adjustment needed (missing data for recent years)
+          if (!saleYearHPI && (normYear - saleYear) <= 2) {
+            return 1.00;
+          }
+
           return undefined;
         })(),
         'Norm Time Value': property.sales_price && property.values_norm_time ?
