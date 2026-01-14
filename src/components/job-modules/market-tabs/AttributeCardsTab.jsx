@@ -448,6 +448,94 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     }
   };
 
+  // ============ SAVE/LOAD CONDITION CONFIG TO DATABASE ============
+  const saveConditionConfigToDatabase = async () => {
+    if (!jobData?.id) return;
+
+    // Validation: require both exterior and interior to be configured
+    if (!manualExteriorBaseline || !manualInteriorBaseline) {
+      alert('Please define both Exterior and Interior baseline conditions before saving.');
+      return;
+    }
+
+    try {
+      setIsSavingConfig(true);
+      setConfigSaveSuccess(false);
+
+      const config = {
+        exterior: {
+          baseline: manualExteriorBaseline,
+          better: exteriorBetterConditions,
+          worse: exteriorWorseConditions
+        },
+        interior: {
+          baseline: manualInteriorBaseline,
+          better: interiorBetterConditions,
+          worse: interiorWorseConditions
+        },
+        savedAt: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('jobs')
+        .update({ attribute_condition_config: config })
+        .eq('id', jobData.id);
+
+      if (error) throw error;
+
+      // Show success message
+      setConfigSaveSuccess(true);
+      setTimeout(() => setConfigSaveSuccess(false), 3000);
+
+      // Update parent cache
+      if (onUpdateJobCache) {
+        onUpdateJobCache({ attribute_condition_config: config });
+      }
+
+      console.log('✅ Condition configuration saved to database:', config);
+    } catch (error) {
+      console.error('❌ Error saving condition configuration:', error);
+      alert(`Failed to save configuration: ${error.message}`);
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
+
+  const loadConditionConfigFromDatabase = useCallback(async () => {
+    if (!jobData?.id) return;
+
+    try {
+      const config = jobData.attribute_condition_config;
+
+      if (config) {
+        // Load exterior config
+        if (config.exterior) {
+          if (config.exterior.baseline) setManualExteriorBaseline(config.exterior.baseline);
+          if (config.exterior.better) setExteriorBetterConditions(config.exterior.better);
+          if (config.exterior.worse) setExteriorWorseConditions(config.exterior.worse);
+        }
+
+        // Load interior config
+        if (config.interior) {
+          if (config.interior.baseline) setManualInteriorBaseline(config.interior.baseline);
+          if (config.interior.better) setInteriorBetterConditions(config.interior.better);
+          if (config.interior.worse) setInteriorWorseConditions(config.interior.worse);
+        }
+
+        console.log('✅ Condition configuration loaded from database:', config);
+      }
+    } catch (error) {
+      console.error('❌ Error loading condition configuration:', error);
+    }
+  }, [jobData?.id, jobData?.attribute_condition_config]);
+
+  // Load config from database on mount
+  useEffect(() => {
+    if (jobData?.id && loadedJobIdRef.current !== jobData.id) {
+      loadConditionConfigFromDatabase();
+    }
+  }, [jobData?.id, loadConditionConfigFromDatabase]);
+
   // Load data on component mount and when filters change
   useEffect(() => {
     if (!jobData?.id || properties.length === 0) return;
