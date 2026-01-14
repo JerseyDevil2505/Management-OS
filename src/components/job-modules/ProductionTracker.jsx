@@ -977,7 +977,7 @@ const ProductionTracker = ({
     }
   };
 
-  // Reset session
+  // Reset session - Simply unlock InfoBy Config for editing without reloading data
   const resetSession = () => {
     setSessionId(null);
     setSettingsLocked(false);
@@ -995,9 +995,10 @@ const ProductionTracker = ({
     setProcessingComplete(false);
     setCustomOverrideReason(''); // Reset custom override reason
     setCurrentValidationIndex(0); // Reset validation index
-    hasInitialized.current = false; // Allow re-initialization after reset
-    setLoading(true); // Reset loading flag
-    addNotification('🔄 Session reset - settings unlocked', 'info');
+    // Don't reset hasInitialized to prevent re-initialization
+    // hasInitialized.current = false;
+    setLoading(false); // Keep loading false - don't reload data
+    addNotification('🔄 Session reset - InfoBy Config unlocked for editing', 'info');
   };
 
 // Initialize data loading
