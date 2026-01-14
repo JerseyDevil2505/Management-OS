@@ -540,7 +540,7 @@ const DataVisualizations = ({ jobData, properties }) => {
           </div>
         </div>
 
-        {/* Pie Charts Row - Sales Usability and Sales NU Distribution */}
+        {/* Pie Charts Row - Usable vs Non-Usable Sales and Sales NU Distribution */}
         <div className="charts-grid grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Usable vs Non-Usable Sales Pie with Date Range */}
           <div className="chart-card bg-white rounded-lg border border-gray-200 p-6">
