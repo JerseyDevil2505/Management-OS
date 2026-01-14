@@ -888,14 +888,14 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           parseFloat(property.market_manual_lot_acre || property.asset_lot_acre).toFixed(2) : '',
         'Lot Size (SF)': (property.market_manual_lot_sf || property.asset_lot_sf) ?
           Math.round(property.market_manual_lot_sf || property.asset_lot_sf) : '',
-        'View': cleanValue(property.asset_view),
+        'View': padBRTCode(property.asset_view),
         'Location Analysis': property.location_analysis || '',
         'Type Use': cleanValue(property.asset_type_use),
         'Building Class': cleanValue(property.asset_building_class),
         'Year Built': property.asset_year_built || '',
         'Current EFA': getCurrentEFA(property) || '',
         'Test': { f: `IF(AND(AF${rowNum}<>"",BL${rowNum}<>""),IF(BL${rowNum}>=AF${rowNum},"TRUE","FALSE"),"")` },
-        'Design': cleanValue(property.asset_design_style),
+        'Design': padBRTCode(property.asset_design_style),
         'Bedroom Total': getBedroomTotal(property) || '',
         'Story Height': (() => {
           const padded = padBRTCode(property.asset_story_height);
