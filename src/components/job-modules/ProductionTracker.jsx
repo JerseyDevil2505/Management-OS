@@ -1131,7 +1131,7 @@ const ProductionTracker = ({
       console.log('🔄 Recalculating commercial counts due to config/data change');
       calculateCommercialCounts();
     }
-  }, [inspectionData, infoByCategoryConfig.priced, analytics, processed]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [inspectionData, infoByCategoryConfig.priced]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ENHANCED: Process analytics with manager-focused counting and inspection_data persistence
   const processAnalytics = async () => {
