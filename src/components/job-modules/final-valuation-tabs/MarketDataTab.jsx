@@ -828,6 +828,18 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         return val;
       };
 
+      // Helper to pad BRT codes with leading zero (e.g., "1" -> "01", "4" -> "04")
+      const padBRTCode = (val) => {
+        const cleaned = cleanValue(val);
+        if (!cleaned) return '';
+        const str = String(cleaned).trim();
+        // If it's a single digit number, pad with leading zero
+        if (/^\d$/.test(str)) {
+          return str.padStart(2, '0');
+        }
+        return str;
+      };
+
       // Helper to parse numeric value from block/lot (preserve decimals and alpha characters)
       const getNumericValue = (val) => {
         if (!val || val === '') return '';
