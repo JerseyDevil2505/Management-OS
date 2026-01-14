@@ -903,8 +903,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         })(),
         'SFLA': mainSFLA || '',
         'Total SFLA': { f: `G${rowNum}+AL${rowNum}` }, // Formula: Card SF + SFLA
-        'Exterior': cleanValue(property.asset_ext_cond),
-        'Interior': cleanValue(property.asset_int_cond),
+        'Exterior': padBRTCode(property.asset_ext_cond),
+        'Interior': padBRTCode(property.asset_int_cond),
         'Code': salesCode || '',
         'Sale Date': property.sales_date ? (() => {
           // Convert to Excel date serial number (strip time component)
