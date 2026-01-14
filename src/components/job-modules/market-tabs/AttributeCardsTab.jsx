@@ -1442,10 +1442,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               const setBaseline = (value) => {
                 if (isExterior) {
                   setManualExteriorBaseline(value);
-                  localStorage.setItem(`attr-cards-exterior-baseline-${jobData?.id}`, value);
                 } else {
                   setManualInteriorBaseline(value);
-                  localStorage.setItem(`attr-cards-interior-baseline-${jobData?.id}`, value);
                 }
               };
 
@@ -1456,10 +1454,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
                 if (isExterior) {
                   setExteriorBetterConditions(updated);
-                  localStorage.setItem(`attr-cards-exterior-better-${jobData?.id}`, JSON.stringify(updated));
                 } else {
                   setInteriorBetterConditions(updated);
-                  localStorage.setItem(`attr-cards-interior-better-${jobData?.id}`, JSON.stringify(updated));
                 }
               };
 
@@ -1470,10 +1466,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
                 if (isExterior) {
                   setExteriorWorseConditions(updated);
-                  localStorage.setItem(`attr-cards-exterior-worse-${jobData?.id}`, JSON.stringify(updated));
                 } else {
                   setInteriorWorseConditions(updated);
-                  localStorage.setItem(`attr-cards-interior-worse-${jobData?.id}`, JSON.stringify(updated));
                 }
               };
 
