@@ -983,12 +983,94 @@ export class BRTUpdater {
         }
       }
 
+      // CRITICAL: Clean up normalized values for invalid sales after file update
+      console.log('🧹 Cleaning up normalized values for invalid sales...');
+      await this.cleanupInvalidNormalizedValues(jobId);
+
       console.log('🚀 ENHANCED BRT UPDATER (UPSERT) COMPLETE WITH ALL SECTIONS:', results);
       return results;
-      
+
     } catch (error) {
       console.error('Enhanced BRT updater failed:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Clean up normalized values for sales that are no longer valid
+   * This prevents stale normalized values when:
+   * - sales_nu changes to '25' (non-usable)
+   * - sales_price becomes too low (< $100)
+   * - sales_date is removed
+   */
+  async cleanupInvalidNormalizedValues(jobId) {
+    try {
+      // Find records with normalized values that have invalid sales data
+      const { data: invalidSales, error: selectError } = await supabase
+        .from('property_market_analysis')
+        .select('property_composite_key')
+        .eq('job_id', jobId)
+        .not('values_norm_time', 'is', null);
+
+      if (selectError) {
+        console.warn('⚠️ Could not query normalized values:', selectError);
+        return;
+      }
+
+      if (!invalidSales || invalidSales.length === 0) {
+        console.log('✅ No normalized values found to check');
+        return;
+      }
+
+      const compositeKeys = invalidSales.map(s => s.property_composite_key);
+
+      // Check which ones have invalid sales data
+      const { data: propertyData, error: propError } = await supabase
+        .from('property_records')
+        .select('property_composite_key, sales_nu, sales_price, sales_date')
+        .eq('job_id', jobId)
+        .in('property_composite_key', compositeKeys);
+
+      if (propError) {
+        console.warn('⚠️ Could not query property sales data:', propError);
+        return;
+      }
+
+      // Find keys where sales are invalid
+      const keysToClean = propertyData
+        .filter(p => {
+          const hasInvalidNU = p.sales_nu === '25';
+          const hasInvalidPrice = !p.sales_price || p.sales_price < 100;
+          const hasNoSaleDate = !p.sales_date;
+          return hasInvalidNU || hasInvalidPrice || hasNoSaleDate;
+        })
+        .map(p => p.property_composite_key);
+
+      if (keysToClean.length === 0) {
+        console.log('✅ All normalized values are valid');
+        return;
+      }
+
+      // Clear normalized values for invalid sales
+      const { error: updateError } = await supabase
+        .from('property_market_analysis')
+        .update({
+          values_norm_time: null,
+          values_norm_size: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('job_id', jobId)
+        .in('property_composite_key', keysToClean);
+
+      if (updateError) {
+        console.warn('⚠️ Could not clear invalid normalized values:', updateError);
+      } else {
+        console.log(`✅ Cleared normalized values for ${keysToClean.length} invalid sales`);
+      }
+
+    } catch (error) {
+      console.warn('⚠️ Error during normalized value cleanup:', error);
+      // Don't throw - this is non-critical cleanup
     }
   }
 
