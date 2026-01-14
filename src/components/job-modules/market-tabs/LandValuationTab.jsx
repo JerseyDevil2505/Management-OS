@@ -3575,9 +3575,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         const hasValidSale = prop.sales_date && prop.sales_price > 0;
         if (!hasValidSale) return false;
 
-        // Sales within the last 3 years from October 1st
-        const isWithinThreeYears = new Date(prop.sales_date) >= octoberFirstThreeYearsPrior;
-        if (!isWithinThreeYears) return false;
+        // Sales within CSP-PSP-HSP range (HSP start through CSP end or present)
+        const saleDate = new Date(prop.sales_date);
+        const isWithinRange = saleDate >= salesRange.start && saleDate <= salesRange.end;
+        if (!isWithinRange) return false;
 
         // Valid asset type use starting with '1' (residential) - skip for condos
         const isCondo = prop.property_m4_class === '4D';
