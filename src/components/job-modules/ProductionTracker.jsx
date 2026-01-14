@@ -1963,16 +1963,6 @@ const ProductionTracker = ({
       // NOT commercialCounts.priced which uses stale inspectionData prop
       const totalCommercialPriced = ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0);
 
-      console.log('📊 COMMERCIAL PRICING ANALYTICS:', {
-        totalCommercialProperties,
-        totalCommercialInspected,
-        totalCommercialPriced,
-        totalPricedAllClasses: totalPriced,
-        percentComplete: totalCommercialProperties > 0 ? Math.round((totalCommercialInspected / totalCommercialProperties) * 100) : 0,
-        percentPriced: totalCommercialProperties > 0 ? Math.round((totalCommercialPriced / totalCommercialProperties) * 100) : 0,
-        source: 'Using commercialCounts.priced from inspectionData'
-      });
-
       const validationReportData = {
         summary: {
           total_inspectors: Object.keys(inspectorIssuesMap).filter(k => inspectorIssuesMap[k].length > 0).length,
