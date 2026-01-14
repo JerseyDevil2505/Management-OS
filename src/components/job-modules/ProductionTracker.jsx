@@ -1161,11 +1161,9 @@ const ProductionTracker = ({
         console.error('❌ NO INSPECTION DATA AVAILABLE FOR LOOKUP MAP!');
       }
 
-      // CRITICAL DEBUG: Detailed analysis of received properties
+      // Validate properties data exists
       if (!rawData || rawData.length === 0) {
-        console.error('🚨 NO PROPERTIES RECEIVED BY PRODUCTION TRACKER!');
-        console.log('Properties prop:', properties);
-        console.log('JobData:', jobData);
+        console.error('ERROR: No properties received by Production Tracker');
         addNotification('ERROR: No properties data received. Check JobContainer.', 'error');
         return null;
       }
