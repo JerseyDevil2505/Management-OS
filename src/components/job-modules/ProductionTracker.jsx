@@ -128,7 +128,6 @@ const ProductionTracker = ({
   // Calculate commercial inspection counts from passed inspection data
   const calculateCommercialCounts = () => {
     if (!inspectionData || inspectionData.length === 0) {
-      console.log('🔍 calculateCommercialCounts: No inspection data');
       return;
     }
 
@@ -144,14 +143,6 @@ const ProductionTracker = ({
     const currentVendor = jobData.vendor_type;
     let priced = 0;
 
-    console.log('🔍 calculateCommercialCounts:', {
-      vendor: currentVendor,
-      totalCommercial: commercialProps.length,
-      inspected: inspected,
-      configPriced: infoByCategoryConfig.priced,
-      sampleInfoByCodes: commercialProps.slice(0, 5).map(p => p.info_by_code)
-    });
-
     if (currentVendor === 'BRT') {
       // BRT: Check for price_by and price_date fields
       priced = commercialProps.filter(d =>
@@ -163,7 +154,6 @@ const ProductionTracker = ({
 
       // GUARD: Don't calculate if config not loaded yet
       if (pricedCodes.length === 0) {
-        console.log('⚠️ Skipping pricing calculation - config not loaded yet');
         setCommercialCounts({
           total: commercialProps.length,
           inspected: inspected,
