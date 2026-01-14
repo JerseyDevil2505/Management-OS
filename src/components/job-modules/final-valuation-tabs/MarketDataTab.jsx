@@ -935,7 +935,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           { f: `AT${rowNum}*AU${rowNum}` } : (property.values_norm_time || ''),
         'Sales NU Code': cleanValue(property.sales_nu),
         'Sales Ratio': calc.projectedTotal && property.values_norm_time ?
-          (calc.projectedTotal / property.values_norm_time) : '',
+          { f: `BI${rowNum}/AV${rowNum}` } : '',
         'Sale Comment': calc.saleComment || '',
         'Det Items': property.values_det_items || 0,
         'Cost New': property.values_repl_cost || 0,
@@ -950,7 +950,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Cama/Proj Imp': calc.qualifiesForEFA && calc.newValue !== null && calc.newValue > 0 ?
           { f: `BN${rowNum}-BG${rowNum}` } : (property.values_cama_improvement || 0),
         'Proj Total': { f: `BG${rowNum}+BH${rowNum}` },
-        'Delta %': calc.deltaPercent ? (calc.deltaPercent / 100) : '',
+        'Delta %': calc.projectedTotal && property.values_mod_total ?
+          { f: `(BI${rowNum}-BE${rowNum})/BE${rowNum}` } : '',
         'Recommended EFA': calc.recommendedEFA !== null && calc.recommendedEFA !== undefined ?
           { f: `ROUND(${yearPriorToDueYear}-((1-((AV${rowNum}-BG${rowNum}-AZ${rowNum})/BA${rowNum}))*100),0)` } : '',
         'Actual EFA': calc.actualEFA || '',
