@@ -167,8 +167,6 @@ const ProductionTracker = ({
       ).length;
     }
 
-    console.log('🔍 Final commercial counts:', { total: commercialProps.length, inspected, priced });
-
     setCommercialCounts({
       total: commercialProps.length,
       inspected: inspected,
@@ -1015,7 +1013,6 @@ const ProductionTracker = ({
 
     if (jobData?.id && properties && properties.length > 0 && inspectionData && employees) {
       const initializeData = async () => {
-        console.log('🚀 Running initialization for the first time');
         hasInitialized.current = true; // Mark as initialized immediately
 
         // Load only the things that still need database calls
@@ -1055,23 +1052,12 @@ const ProductionTracker = ({
   // Recalculate commercial counts when config or inspection data changes
   // BUT only for live preview - don't overwrite processed analytics!
   useEffect(() => {
-    console.log('🔍 useEffect triggered for commercial counts recalc:', {
-      hasInspectionData: !!inspectionData,
-      inspectionDataLength: inspectionData?.length,
-      hasPricedConfig: !!infoByCategoryConfig.priced,
-      pricedCodes: infoByCategoryConfig.priced,
-      hasProcessedAnalytics: !!analytics,
-      processed: processed
-    });
-
     // Skip recalculation if we have processed analytics - use those values instead
     if (analytics || processed) {
-      console.log('⏭️ Skipping recalc - using processed analytics values');
       return;
     }
 
     if (inspectionData && inspectionData.length > 0 && infoByCategoryConfig.priced) {
-      console.log('🔄 Recalculating commercial counts due to config/data change');
       calculateCommercialCounts();
     }
   }, [inspectionData, infoByCategoryConfig.priced, analytics, processed]); // eslint-disable-line react-hooks/exhaustive-deps
