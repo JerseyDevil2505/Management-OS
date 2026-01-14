@@ -898,8 +898,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Design': cleanValue(property.asset_design_style),
         'Bedroom Total': getBedroomTotal(property) || '',
         'Story Height': (() => {
-          const cleaned = cleanValue(property.asset_story_height);
-          return cleaned ? { v: String(cleaned), t: 's' } : '';
+          const padded = padBRTCode(property.asset_story_height);
+          return padded ? { v: String(padded), t: 's' } : '';
         })(),
         'SFLA': mainSFLA || '',
         'Total SFLA': { f: `G${rowNum}+AL${rowNum}` }, // Formula: Card SF + SFLA
