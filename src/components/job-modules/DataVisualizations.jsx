@@ -159,7 +159,7 @@ const DataVisualizations = ({ jobData, properties }) => {
       .filter(item => item.value > 0);
   }, [filteredProperties, nuDateRange]);
 
-  // Usable vs Non-Usable Sales
+  // Usable vs Non-Usable Sales - filtered by date range
   const usableSalesData = useMemo(() => {
     const usableCounts = {
       'Usable': 0,
@@ -167,20 +167,28 @@ const DataVisualizations = ({ jobData, properties }) => {
       'No Sale Data': 0
     };
 
+    const startDate = new Date(usableDateRange.start);
+    const endDate = new Date(usableDateRange.end);
+
     filteredProperties.forEach(prop => {
       if (!prop.sales_date || !prop.sales_price) {
         usableCounts['No Sale Data']++;
-      } else if (prop.sales_nu === 'NU' || prop.sales_nu === 'N') {
-        usableCounts['Non-Usable']++;
       } else {
-        usableCounts['Usable']++;
+        const saleDate = new Date(prop.sales_date);
+        if (saleDate >= startDate && saleDate <= endDate) {
+          if (prop.sales_nu === 'NU' || prop.sales_nu === 'N') {
+            usableCounts['Non-Usable']++;
+          } else {
+            usableCounts['Usable']++;
+          }
+        }
       }
     });
 
     return Object.entries(usableCounts)
       .map(([name, value]) => ({ name, value }))
       .filter(item => item.value > 0);
-  }, [filteredProperties]);
+  }, [filteredProperties, usableDateRange]);
 
   // Design & Style Breakdown
   const designStyleData = useMemo(() => {
