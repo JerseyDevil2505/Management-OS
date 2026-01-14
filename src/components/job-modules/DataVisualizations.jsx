@@ -477,6 +477,12 @@ const DataVisualizations = ({ jobData, properties }) => {
       XLSX.utils.book_append_sheet(workbook, classSheet, 'Building Classes');
     }
 
+    // Property Class Sheet
+    if (propertyClassData.length > 0) {
+      const propClassSheet = XLSX.utils.json_to_sheet(propertyClassData);
+      XLSX.utils.book_append_sheet(workbook, propClassSheet, 'Property Classes');
+    }
+
     // VCS Value Sheet
     if (vcsValueData.length > 0) {
       const vcsSheet = XLSX.utils.json_to_sheet(vcsValueData);
