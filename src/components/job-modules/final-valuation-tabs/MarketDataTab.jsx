@@ -807,20 +807,20 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       const totalCardSF = property._totalCardSF || 0;
 
       // Column mapping for formulas:
-      // A=Block, B=Lot, C=Qualifier, D=Card, E=Card SF, F=Address
-      // G=Owner Name, H=Owner Address, I=Owner City State, J=Owner Zip
-      // K=Sp Tax Cd 1, L=Sp Tax Cd 2, M=Sp Tax Cd 3, N=Sp Tax Cd 4
-      // O=MOD IV, P=CAMA, Q=Check, R=Info By, S=VCS, T=Exempt Facility, U=Special
-      // V=Lot Frontage, W=Lot Depth, X=Lot Size (Acre), Y=Lot Size (SF), Z=View, AA=Location Analysis
-      // AB=Type Use, AC=Building Class, AD=Year Built, AE=Current EFA, AF=Test
-      // AG=Design, AH=Bedroom Total, AI=Story Height, AJ=SFLA, AK=Total SFLA
-      // AL=Exterior, AM=Interior, AN=Code (Sales Period), AO=Sale Date, AP=Sale Book, AQ=Sale Page
-      // AR=Sale Price, AS=HPI Multiplier, AT=Norm Time Value (formula: =AR*AS)
-      // AU=Sales NU Code, AV=Sales Ratio, AW=Sale Comment
-      // AX=Det Items, AY=Cost New, AZ=CLA, BA=Current Land, BB=Current Impr, BC=Current Total
-      // BD=PLA, BE=CAMA Land, BF=Cama/Proj Imp, BG=Proj Total, BH=Delta %
-      // BI=Recommended EFA, BJ=Actual EFA, BK=DEPR, BL=New Value
-      // BM=Current Taxes, BN=Projected Taxes, BO=Tax Delta $
+      // A=Block (text), B=Lot (text), C=Block, D=Lot, E=Qualifier, F=Card, G=Card SF, H=Address
+      // I=Owner Name, J=Owner Address, K=Owner City State, L=Owner Zip
+      // M=Sp Tax Cd 1, N=Sp Tax Cd 2, O=Sp Tax Cd 3, P=Sp Tax Cd 4
+      // Q=MOD IV, R=CAMA, S=Check, T=Info By, U=VCS, V=Exempt Facility, W=Special
+      // X=Lot Frontage, Y=Lot Depth, Z=Lot Size (Acre), AA=Lot Size (SF), AB=View, AC=Location Analysis
+      // AD=Type Use, AE=Building Class, AF=Year Built, AG=Current EFA, AH=Test
+      // AI=Design, AJ=Bedroom Total, AK=Story Height, AL=SFLA, AM=Total SFLA
+      // AN=Exterior, AO=Interior, AP=Code (Sales Period), AQ=Sale Date, AR=Sale Book, AS=Sale Page
+      // AT=Sale Price, AU=HPI Multiplier, AV=Norm Time Value (formula: =AT*AU)
+      // AW=Sales NU Code, AX=Sales Ratio, AY=Sale Comment
+      // AZ=Det Items, BA=Cost New, BB=CLA, BC=Current Land, BD=Current Impr, BE=Current Total
+      // BF=PLA, BG=CAMA Land, BH=Cama/Proj Imp, BI=Proj Total, BJ=Delta %
+      // BK=Recommended EFA, BL=Actual EFA, BM=DEPR, BN=New Value
+      // BO=Current Taxes, BP=Projected Taxes, BQ=Tax Delta $
 
       // Helper to convert "00" or blank to empty string (for proper gridlines)
       const cleanValue = (val) => {
@@ -828,9 +828,18 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         return val;
       };
 
+      // Helper to parse numeric value from block/lot (remove leading zeros for sorting)
+      const getNumericValue = (val) => {
+        if (!val || val === '') return '';
+        const num = parseInt(String(val), 10);
+        return isNaN(num) ? '' : num;
+      };
+
       return {
-        'Block': property.property_block || '',
-        'Lot': property.property_lot || '',
+        'Block (text)': property.property_block || '',
+        'Lot (text)': property.property_lot || '',
+        'Block': getNumericValue(property.property_block),
+        'Lot': getNumericValue(property.property_lot),
         'Qualifier': cleanValue(property.property_qualifier),
         'Card': maxCard,
         'Card SF': totalCardSF,
@@ -845,7 +854,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Sp Tax Cd 4': cleanValue(property.special_tax_code_4),
         'MOD IV': property.property_m4_class || '',
         'CAMA': property.property_cama_class || '',
-        'Check': { f: `IF(O${rowNum}=P${rowNum},"TRUE","FALSE")` },
+        'Check': { f: `IF(Q${rowNum}=R${rowNum},"TRUE","FALSE")` },
         'Info By': (() => {
           const cleaned = cleanValue(property.inspection_info_by);
           return cleaned ? { v: String(cleaned), t: 's' } : '';
@@ -865,7 +874,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Building Class': cleanValue(property.asset_building_class),
         'Year Built': property.asset_year_built || '',
         'Current EFA': getCurrentEFA(property),
-        'Test': { f: `IF(AND(AD${rowNum}<>"",BJ${rowNum}<>""),IF(BJ${rowNum}>=AD${rowNum},"TRUE","FALSE"),"")` },
+        'Test': { f: `IF(AND(AF${rowNum}<>"",BL${rowNum}<>""),IF(BL${rowNum}>=AF${rowNum},"TRUE","FALSE"),"")` },
         'Design': cleanValue(property.asset_design_style),
         'Bedroom Total': getBedroomTotal(property) || '',
         'Story Height': (() => {
@@ -873,7 +882,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           return cleaned ? { v: String(cleaned), t: 's' } : '';
         })(),
         'SFLA': mainSFLA,
-        'Total SFLA': { f: `E${rowNum}+AJ${rowNum}` }, // Formula: Card SF + SFLA
+        'Total SFLA': { f: `G${rowNum}+AL${rowNum}` }, // Formula: Card SF + SFLA
         'Exterior': cleanValue(property.asset_ext_cond),
         'Interior': cleanValue(property.asset_int_cond),
         'Code': salesCode || '',
@@ -900,7 +909,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           return '';
         })(),
         'Norm Time Value': property.sales_price && property.values_norm_time ?
-          { f: `AR${rowNum}*AS${rowNum}` } : (property.values_norm_time || ''),
+          { f: `AT${rowNum}*AU${rowNum}` } : (property.values_norm_time || ''),
         'Sales NU Code': cleanValue(property.sales_nu),
         'Sales Ratio': calc.projectedTotal && property.values_norm_time ?
           (calc.projectedTotal / property.values_norm_time) : '',
@@ -908,24 +917,24 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Det Items': property.values_det_items || 0,
         'Cost New': property.values_repl_cost || 0,
         'CLA': property.values_mod_total && property.values_mod_land ?
-          { f: `BA${rowNum}/BC${rowNum}` } : '',
+          { f: `BC${rowNum}/BE${rowNum}` } : '',
         'Current Land': property.values_mod_land || 0,
         'Current Impr': property.values_mod_improvement || 0,
         'Current Total': property.values_mod_total || 0,
         'PLA': calc.newLandAllocation && calc.projectedTotal ?
-          { f: `BE${rowNum}/BG${rowNum}` } : '',
+          { f: `BG${rowNum}/BI${rowNum}` } : '',
         'CAMA Land': property.values_cama_land || 0,
         'Cama/Proj Imp': calc.qualifiesForEFA && calc.newValue !== null && calc.newValue > 0 ?
-          { f: `BL${rowNum}-BE${rowNum}` } : (property.values_cama_improvement || 0),
-        'Proj Total': { f: `BE${rowNum}+BF${rowNum}` },
+          { f: `BN${rowNum}-BG${rowNum}` } : (property.values_cama_improvement || 0),
+        'Proj Total': { f: `BG${rowNum}+BH${rowNum}` },
         'Delta %': calc.deltaPercent ? (calc.deltaPercent / 100) : '',
         'Recommended EFA': calc.recommendedEFA !== null && calc.recommendedEFA !== undefined ?
-          { f: `ROUND(${yearPriorToDueYear}-((1-((AT${rowNum}-BE${rowNum}-AX${rowNum})/AY${rowNum}))*100),0)` } : '',
+          { f: `ROUND(${yearPriorToDueYear}-((1-((AV${rowNum}-BG${rowNum}-AZ${rowNum})/BA${rowNum}))*100),0)` } : '',
         'Actual EFA': calc.actualEFA || '',
         'DEPR': calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined ?
-          { f: `MIN(1,1-((${yearPriorToDueYear}-BJ${rowNum})/100))` } : '',
+          { f: `MIN(1,1-((${yearPriorToDueYear}-BL${rowNum})/100))` } : '',
         'New Value': calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined ?
-          { f: `ROUND((AY${rowNum}*BK${rowNum})+AX${rowNum}+BE${rowNum},-2)` } : 0,
+          { f: `ROUND((BA${rowNum}*BM${rowNum})+AZ${rowNum}+BG${rowNum},-2)` } : 0,
         'Current Taxes': calc.currentTaxes || 0,
         'Projected Taxes': calc.projectedTaxes || 0,
         'Tax Delta $': calc.taxDelta || 0
@@ -951,8 +960,16 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
     for (let C = range.s.c; C <= range.e.c; ++C) {
       const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
       if (!worksheet[cellAddress]) continue;
+
+      // Special purple/blue font for Block and Lot (text) column headers
+      const headerName = headers[C];
+      let headerFontColor = { rgb: '000000' }; // Default black
+      if (headerName === 'Block (text)' || headerName === 'Lot (text)') {
+        headerFontColor = { rgb: '4B0082' }; // Indigo/purple
+      }
+
       worksheet[cellAddress].s = {
-        font: { name: 'Leelawadee', sz: 10, bold: true, color: { rgb: '000000' } },
+        font: { name: 'Leelawadee', sz: 10, bold: true, color: headerFontColor },
         alignment: { horizontal: 'center', vertical: 'center' },
         fill: { fgColor: { rgb: 'D3D3D3' } },
         border: borderStyle
@@ -976,9 +993,9 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
       for (let C = range.s.c; C <= range.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-        // Create cell if it doesn't exist (for null values)
+        // Skip empty cells entirely for truly empty cells (better Excel gridlines)
         if (!worksheet[cellAddress]) {
-          worksheet[cellAddress] = { v: '', t: 's' };
+          continue; // Don't create cell for empty values
         }
 
         const colName = headers[C];
@@ -1002,8 +1019,14 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           numFmt = 'mm/dd/yyyy'; // Date format
         }
 
+        // Special purple/blue font color for Block and Lot (text) columns
+        let fontColor = { rgb: '000000' }; // Default black
+        if (colName === 'Block (text)' || colName === 'Lot (text)') {
+          fontColor = { rgb: '4B0082' }; // Indigo/purple
+        }
+
         worksheet[cellAddress].s = {
-          font: { name: 'Leelawadee', sz: 10 },
+          font: { name: 'Leelawadee', sz: 10, color: fontColor },
           alignment: { horizontal: 'center', vertical: 'center' },
           fill: { fgColor: { rgb: fillColor } },
           border: borderStyle,
