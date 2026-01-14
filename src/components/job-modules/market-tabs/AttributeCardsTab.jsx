@@ -1561,6 +1561,57 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                         <strong>How it works:</strong> The export summary will only sum positive adjustments for "better" conditions
                         and only sum negative adjustments for "worse" conditions. The baseline shows blank (no adjustment).
                       </div>
+
+                      {/* Save Button */}
+                      <div style={{
+                        marginTop: '20px',
+                        paddingTop: '20px',
+                        borderTop: '2px solid #E5E7EB',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '15px'
+                      }}>
+                        <button
+                          onClick={saveConditionConfigToDatabase}
+                          disabled={isSavingConfig || !manualExteriorBaseline || !manualInteriorBaseline}
+                          style={{
+                            padding: '10px 20px',
+                            backgroundColor: (!manualExteriorBaseline || !manualInteriorBaseline) ? '#D1D5DB' : '#3B82F6',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            cursor: (!manualExteriorBaseline || !manualInteriorBaseline) ? 'not-allowed' : 'pointer',
+                            opacity: isSavingConfig ? 0.6 : 1
+                          }}
+                        >
+                          {isSavingConfig ? 'Saving...' : 'Save Configuration to Database'}
+                        </button>
+
+                        {configSaveSuccess && (
+                          <div style={{
+                            padding: '8px 12px',
+                            backgroundColor: '#D1FAE5',
+                            color: '#065F46',
+                            borderRadius: '6px',
+                            fontSize: '13px',
+                            fontWeight: '500'
+                          }}>
+                            ✓ Configuration saved successfully!
+                          </div>
+                        )}
+
+                        {!manualExteriorBaseline || !manualInteriorBaseline ? (
+                          <div style={{
+                            fontSize: '13px',
+                            color: '#DC2626',
+                            fontWeight: '500'
+                          }}>
+                            ⚠ Both Exterior and Interior baselines must be defined before saving
+                          </div>
+                        ) : null}
+                      </div>
                     </>
                   )}
                 </div>
