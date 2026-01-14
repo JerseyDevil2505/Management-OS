@@ -23,6 +23,17 @@ const DataVisualizations = ({ jobData, properties }) => {
     };
   });
 
+  // Usable Sales date range state - default to October 1st prior year to current date
+  const [usableDateRange, setUsableDateRange] = useState(() => {
+    const now = new Date();
+    const priorYear = now.getFullYear() - 1;
+    const startDate = new Date(priorYear, 9, 1); // October 1st of prior year
+    return {
+      start: startDate.toISOString().split('T')[0],
+      end: now.toISOString().split('T')[0]
+    };
+  });
+
   // Extract unique filter values
   const filterOptions = useMemo(() => {
     const types = new Set();
