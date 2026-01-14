@@ -822,15 +822,9 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       // BK=Recommended EFA, BL=Actual EFA, BM=DEPR, BN=New Value
       // BO=Current Taxes, BP=Projected Taxes, BQ=Tax Delta $
 
-      // Helper to convert "00" or blank to undefined (truly empty cells in Excel)
+      // Helper to convert "00" or blank to empty string (for styled tables)
       const cleanValue = (val) => {
-        if (!val || val === '' || val === '00') return undefined;
-        return val;
-      };
-
-      // Helper for optional values - returns undefined if empty/falsy (creates truly empty cells)
-      const optionalValue = (val) => {
-        if (!val || val === '' || val === '00') return undefined;
+        if (!val || val === '' || val === '00') return '';
         return val;
       };
 
@@ -842,56 +836,56 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       };
 
       return {
-        'Block (text)': property.property_block || undefined,
-        'Lot (text)': property.property_lot || undefined,
-        'Block': getNumericValue(property.property_block) || undefined,
-        'Lot': getNumericValue(property.property_lot) || undefined,
+        'Block (text)': property.property_block || '',
+        'Lot (text)': property.property_lot || '',
+        'Block': getNumericValue(property.property_block) || '',
+        'Lot': getNumericValue(property.property_lot) || '',
         'Qualifier': cleanValue(property.property_qualifier),
-        'Card': maxCard || undefined,
-        'Card SF': totalCardSF || undefined,
-        'Address': property.property_location || undefined,
-        'Owner Name': property.owner_name || undefined,
-        'Owner Address': property.owner_street || undefined,
-        'Owner City State': property.owner_csz || undefined,
-        'Owner Zip': property.owner_csz?.split(' ').pop() || undefined,
+        'Card': maxCard || '',
+        'Card SF': totalCardSF || '',
+        'Address': property.property_location || '',
+        'Owner Name': property.owner_name || '',
+        'Owner Address': property.owner_street || '',
+        'Owner City State': property.owner_csz || '',
+        'Owner Zip': property.owner_csz?.split(' ').pop() || '',
         'Sp Tax Cd 1': cleanValue(property.special_tax_code_1),
         'Sp Tax Cd 2': cleanValue(property.special_tax_code_2),
         'Sp Tax Cd 3': cleanValue(property.special_tax_code_3),
         'Sp Tax Cd 4': cleanValue(property.special_tax_code_4),
-        'MOD IV': property.property_m4_class || undefined,
-        'CAMA': property.property_cama_class || undefined,
+        'MOD IV': property.property_m4_class || '',
+        'CAMA': property.property_cama_class || '',
         'Check': { f: `IF(Q${rowNum}=R${rowNum},"TRUE","FALSE")` },
         'Info By': (() => {
           const cleaned = cleanValue(property.inspection_info_by);
-          return cleaned ? { v: String(cleaned), t: 's' } : undefined;
+          return cleaned ? { v: String(cleaned), t: 's' } : '';
         })(),
-        'VCS': property.property_vcs || undefined,
-        'Exempt Facility': property.property_facility || undefined,
-        'Special': calc.specialNotes || undefined,
-        'Lot Frontage': property.asset_lot_frontage || undefined,
-        'Lot Depth': property.asset_lot_depth || undefined,
+        'VCS': property.property_vcs || '',
+        'Exempt Facility': property.property_facility || '',
+        'Special': calc.specialNotes || '',
+        'Lot Frontage': property.asset_lot_frontage || '',
+        'Lot Depth': property.asset_lot_depth || '',
         'Lot Size (Acre)': (property.market_manual_lot_acre || property.asset_lot_acre) ?
-          parseFloat(property.market_manual_lot_acre || property.asset_lot_acre).toFixed(2) : undefined,
+          parseFloat(property.market_manual_lot_acre || property.asset_lot_acre).toFixed(2) : '',
         'Lot Size (SF)': (property.market_manual_lot_sf || property.asset_lot_sf) ?
-          Math.round(property.market_manual_lot_sf || property.asset_lot_sf) : undefined,
+          Math.round(property.market_manual_lot_sf || property.asset_lot_sf) : '',
         'View': cleanValue(property.asset_view),
-        'Location Analysis': property.location_analysis || undefined,
+        'Location Analysis': property.location_analysis || '',
         'Type Use': cleanValue(property.asset_type_use),
         'Building Class': cleanValue(property.asset_building_class),
-        'Year Built': property.asset_year_built || undefined,
-        'Current EFA': getCurrentEFA(property) || undefined,
+        'Year Built': property.asset_year_built || '',
+        'Current EFA': getCurrentEFA(property) || '',
         'Test': { f: `IF(AND(AF${rowNum}<>"",BL${rowNum}<>""),IF(BL${rowNum}>=AF${rowNum},"TRUE","FALSE"),"")` },
         'Design': cleanValue(property.asset_design_style),
-        'Bedroom Total': getBedroomTotal(property) || undefined,
+        'Bedroom Total': getBedroomTotal(property) || '',
         'Story Height': (() => {
           const cleaned = cleanValue(property.asset_story_height);
-          return cleaned ? { v: String(cleaned), t: 's' } : undefined;
+          return cleaned ? { v: String(cleaned), t: 's' } : '';
         })(),
-        'SFLA': mainSFLA || undefined,
+        'SFLA': mainSFLA || '',
         'Total SFLA': { f: `G${rowNum}+AL${rowNum}` }, // Formula: Card SF + SFLA
         'Exterior': cleanValue(property.asset_ext_cond),
         'Interior': cleanValue(property.asset_int_cond),
-        'Code': salesCode || undefined,
+        'Code': salesCode || '',
         'Sale Date': property.sales_date ? (() => {
           // Convert to Excel date serial number (strip time component)
           const dateOnly = property.sales_date.split('T')[0]; // Get YYYY-MM-DD only
@@ -899,10 +893,10 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
           const epoch = new Date(1899, 11, 30); // Excel epoch
           const days = Math.floor((date - epoch) / (1000 * 60 * 60 * 24));
           return { v: days, t: 'n', z: 'mm/dd/yyyy' }; // Excel serial date as number with explicit format
-        })() : undefined,
+        })() : '',
         'Sale Book': cleanValue(property.sales_book),
         'Sale Page': cleanValue(property.sales_page),
-        'Sale Price': property.sales_price || undefined,
+        'Sale Price': property.sales_price || '',
         'HPI Multiplier': (() => {
           const saleYear = getSaleYear(property);
           const normYear = getNormalizeToYear();
@@ -927,33 +921,33 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
             return 1.00;
           }
 
-          return undefined;
+          return '';
         })(),
         'Norm Time Value': property.sales_price && property.values_norm_time ?
-          { f: `AT${rowNum}*AU${rowNum}` } : (property.values_norm_time || undefined),
+          { f: `AT${rowNum}*AU${rowNum}` } : (property.values_norm_time || ''),
         'Sales NU Code': cleanValue(property.sales_nu),
         'Sales Ratio': calc.projectedTotal && property.values_norm_time ?
-          (calc.projectedTotal / property.values_norm_time) : undefined,
-        'Sale Comment': calc.saleComment || undefined,
+          (calc.projectedTotal / property.values_norm_time) : '',
+        'Sale Comment': calc.saleComment || '',
         'Det Items': property.values_det_items || 0,
         'Cost New': property.values_repl_cost || 0,
         'CLA': property.values_mod_total && property.values_mod_land ?
-          { f: `BC${rowNum}/BE${rowNum}` } : undefined,
+          { f: `BC${rowNum}/BE${rowNum}` } : '',
         'Current Land': property.values_mod_land || 0,
         'Current Impr': property.values_mod_improvement || 0,
         'Current Total': property.values_mod_total || 0,
         'PLA': calc.newLandAllocation && calc.projectedTotal ?
-          { f: `BG${rowNum}/BI${rowNum}` } : undefined,
+          { f: `BG${rowNum}/BI${rowNum}` } : '',
         'CAMA Land': property.values_cama_land || 0,
         'Cama/Proj Imp': calc.qualifiesForEFA && calc.newValue !== null && calc.newValue > 0 ?
           { f: `BN${rowNum}-BG${rowNum}` } : (property.values_cama_improvement || 0),
         'Proj Total': { f: `BG${rowNum}+BH${rowNum}` },
-        'Delta %': calc.deltaPercent ? (calc.deltaPercent / 100) : undefined,
+        'Delta %': calc.deltaPercent ? (calc.deltaPercent / 100) : '',
         'Recommended EFA': calc.recommendedEFA !== null && calc.recommendedEFA !== undefined ?
-          { f: `ROUND(${yearPriorToDueYear}-((1-((AV${rowNum}-BG${rowNum}-AZ${rowNum})/BA${rowNum}))*100),0)` } : undefined,
-        'Actual EFA': calc.actualEFA || undefined,
+          { f: `ROUND(${yearPriorToDueYear}-((1-((AV${rowNum}-BG${rowNum}-AZ${rowNum})/BA${rowNum}))*100),0)` } : '',
+        'Actual EFA': calc.actualEFA || '',
         'DEPR': calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined ?
-          { f: `MIN(1,1-((${yearPriorToDueYear}-BL${rowNum})/100))` } : undefined,
+          { f: `MIN(1,1-((${yearPriorToDueYear}-BL${rowNum})/100))` } : '',
         'New Value': calc.qualifiesForEFA && calc.actualEFA !== null && calc.actualEFA !== undefined ?
           { f: `ROUND((BA${rowNum}*BM${rowNum})+AZ${rowNum}+BG${rowNum},-2)` } : 0,
         'Current Taxes': calc.currentTaxes || 0,
@@ -1014,9 +1008,9 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
       for (let C = range.s.c; C <= range.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-        // Skip cells that don't exist (XLSX doesn't create cells for undefined values)
+        // Create cell if it doesn't exist (for empty string values)
         if (!worksheet[cellAddress]) {
-          continue;
+          worksheet[cellAddress] = { v: '', t: 's' };
         }
 
         const colName = headers[C];
