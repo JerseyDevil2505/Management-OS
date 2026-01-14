@@ -1217,31 +1217,9 @@ const ProductionTracker = ({
         const currentInfoBy = inspectionDataMap[propertyKey];
         const infoByCode = currentInfoBy || record.inspection_info_by;
 
-        // DEBUG: Log for first 5 commercial properties to see lookup in action
-        if (index < 5 && ['4A', '4B', '4C'].includes(propertyClass)) {
-          console.log(`🔍 Commercial property ${index + 1} lookup:`, {
-            key: propertyKey,
-            foundInMap: !!currentInfoBy,
-            currentInfoBy: currentInfoBy,
-            fallbackInfoBy: record.inspection_info_by,
-            finalInfoBy: infoByCode
-          });
-        }
-
         const measuredDate = record.inspection_measure_date ? new Date(record.inspection_measure_date) : null;
         const listDate = record.inspection_list_date ? new Date(record.inspection_list_date) : null;
         const priceDate = record.inspection_price_date ? new Date(record.inspection_price_date) : null;
-
-        // DEBUG: Log first few properties in detail
-        if (index < 5) {
-          console.log(`🔍 Processing property ${index + 1}:`, {
-            key: propertyKey,
-            class: propertyClass,
-            inspector: inspector,
-            measure_date: record.inspection_measure_date,
-            info_by: infoByCode
-          });
-        }
 
         // Track this property's processing status
         let wasAddedToInspectionData = false;
