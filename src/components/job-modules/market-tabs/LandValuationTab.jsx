@@ -3304,13 +3304,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
       }
 
-      // Avg Price Lot Size: Recent sales with valid NU codes + time constraint
+      // Avg Price Lot Size: Recent sales with valid NU codes + CSP-PSP-HSP time range
       if (prop.sales_date && prop.values_norm_time > 0) {
         const saleDate = new Date(prop.sales_date);
-        const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
+        const salesRange = getSalesPeriodRange();
 
-        // Sales from October 1st three years prior to present
-        if (saleDate >= octoberFirstThreeYearsPrior) {
+        // Sales from HSP start (10/1 three years prior) through CSP end (or present if past due)
+        if (saleDate >= salesRange.start && saleDate <= salesRange.end) {
           if (prop.values_norm_size > 0) avgNormSize[prop.new_vcs].push(prop.values_norm_size);
 
           // Avg Price: Valid NU codes + time constraint
