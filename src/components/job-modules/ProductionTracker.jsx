@@ -1177,29 +1177,7 @@ const ProductionTracker = ({
         return null;
       }
 
-      // Check data quality
-      const propertiesWithInspectors = rawData.filter(p => p.inspection_measure_by && p.inspection_measure_by.trim() !== '');
-      const propertiesWithDates = rawData.filter(p => p.inspection_measure_date);
-      const propertiesWithInfoBy = rawData.filter(p => p.inspection_info_by);
-
-      console.log(`🔍 PRODUCTION TRACKER RECEIVED:`);
-      console.log(`  - Total properties: ${rawData.length}`);
-      console.log(`  - With inspectors: ${propertiesWithInspectors.length}`);
-      console.log(`  - With measure dates: ${propertiesWithDates.length}`);
-      console.log(`  - With info_by codes: ${propertiesWithInfoBy.length}`);
-
-      // Log sample data structure
-      if (rawData.length > 0) {
-        const sample = rawData[0];
-        console.log(`🔍 SAMPLE PROPERTY STRUCTURE:`, {
-          composite_key: sample.property_composite_key,
-          class: sample.property_m4_class,
-          inspector: sample.inspection_measure_by,
-          measure_date: sample.inspection_measure_date,
-          info_by: sample.inspection_info_by,
-          available_keys: Object.keys(sample).filter(k => k.startsWith('inspection_'))
-        });
-      }
+      // Validate dataset exists
       
       // Show notification if large dataset
       if (rawData.length > 5000) {
