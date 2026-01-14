@@ -86,6 +86,7 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   });
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [configSaveSuccess, setConfigSaveSuccess] = useState(false);
+  const [conditionHandlingMethod, setConditionHandlingMethod] = useState('effective_age'); // 'condition_table' or 'effective_age'
 
   // ============ CUSTOM ATTRIBUTE STATE ============
   const [rawFields, setRawFields] = useState([]);
