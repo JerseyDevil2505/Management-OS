@@ -237,7 +237,13 @@ const DataVisualizations = ({ jobData, properties }) => {
 
       // Fallback to raw value or 'Unknown'
       if (!styleName || styleName === prop.asset_design_style) {
-        styleName = prop.asset_design_style || 'Unknown';
+        const rawStyle = prop.asset_design_style;
+        // Treat '00' as blank
+        if (!rawStyle || rawStyle.trim() === '' || rawStyle.trim() === '00') {
+          styleName = 'Blank';
+        } else {
+          styleName = rawStyle;
+        }
       }
 
       styleCounts[styleName] = (styleCounts[styleName] || 0) + 1;
@@ -265,7 +271,13 @@ const DataVisualizations = ({ jobData, properties }) => {
 
       // Fallback to raw value or 'Unknown'
       if (!typeName || typeName === prop.asset_type_use) {
-        typeName = prop.asset_type_use || 'Unknown';
+        const rawType = prop.asset_type_use;
+        // Treat '00' as blank
+        if (!rawType || rawType.trim() === '' || rawType.trim() === '00') {
+          typeName = 'Blank';
+        } else {
+          typeName = rawType;
+        }
       }
 
       // Use the decoded type name in the display
@@ -294,37 +306,103 @@ const DataVisualizations = ({ jobData, properties }) => {
       .sort((a, b) => b.value - a.value);
   }, [filteredProperties]);
 
-  // VCS Distribution by Value
+  // VCS Sales Analysis date range state - default to October 1st prior year to current date
+  const [vcsSalesDateRange, setVcsSalesDateRange] = useState(() => {
+    const now = new Date();
+    const priorYear = now.getFullYear() - 1;
+    const startDate = new Date(priorYear, 9, 1); // October 1st of prior year
+    return {
+      start: startDate.toISOString().split('T')[0],
+      end: now.toISOString().split('T')[0]
+    };
+  });
+
+  // VCS property type filter
+  const [vcsPropertyTypeFilter, setVcsPropertyTypeFilter] = useState('all');
+
+  // VCS Distribution by Sale Price (with date range and property type filter)
   const vcsValueData = useMemo(() => {
     const vcsTotals = {};
-    
+    const startDate = new Date(vcsSalesDateRange.start);
+    const endDate = new Date(vcsSalesDateRange.end);
+
+    // Property type mapping
+    const propertyTypeMap = {
+      'single_family': ['SINGLE FAMILY', 'SF', 'SNGL', '10'],
+      'multi_family': ['MULTI FAMILY', 'MULTIFAM', 'MULTI', 'MF', '15'],
+      'twin': ['TWIN', 'TW', '20'],
+      'condo': ['CONDO', 'CONDOMINIUM', 'CD', '30'],
+      'conversion': ['CONVERSION', 'CONV', 'CONVERSN', '40']
+    };
+
     filteredProperties.forEach(prop => {
-      const vcs = prop.property_vcs || 'Unknown';
-      const value = prop.values_cama_total || 0;
-      
-      if (!vcsTotals[vcs]) {
-        vcsTotals[vcs] = {
-          vcs,
-          totalValue: 0,
-          count: 0
-        };
+      // Check property type filter
+      if (vcsPropertyTypeFilter !== 'all') {
+        const propType = (prop.asset_type_use || '').toUpperCase();
+        const allowedTypes = propertyTypeMap[vcsPropertyTypeFilter] || [];
+        const matches = allowedTypes.some(type => propType.includes(type) || type.includes(propType));
+        if (!matches) return;
       }
-      vcsTotals[vcs].totalValue += value;
-      vcsTotals[vcs].count++;
+
+      // Check date range and sales data
+      if (prop.sales_date && prop.sales_price) {
+        const saleDate = new Date(prop.sales_date);
+        if (saleDate >= startDate && saleDate <= endDate) {
+          const vcs = prop.property_vcs || 'Unknown';
+          const salePrice = parseFloat(prop.sales_price) || 0;
+
+          // Only include sales with valid prices
+          if (salePrice > 0) {
+            if (!vcsTotals[vcs]) {
+              vcsTotals[vcs] = {
+                vcs,
+                totalSales: 0,
+                count: 0,
+                sales: []
+              };
+            }
+            vcsTotals[vcs].totalSales += salePrice;
+            vcsTotals[vcs].count++;
+            vcsTotals[vcs].sales.push(salePrice);
+          }
+        }
+      }
     });
 
     return Object.values(vcsTotals)
       .map(data => ({
         vcs: data.vcs,
-        avgValue: Math.round(data.totalValue / data.count),
-        totalValue: Math.round(data.totalValue),
-        count: data.count
+        avgSalePrice: Math.round(data.totalSales / data.count),
+        count: data.count,
+        minPrice: Math.min(...data.sales),
+        maxPrice: Math.max(...data.sales)
       }))
       .sort((a, b) => a.vcs.localeCompare(b.vcs));
-  }, [filteredProperties]);
+  }, [filteredProperties, vcsSalesDateRange, vcsPropertyTypeFilter]);
 
-  // Color palettes
-  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
+  // Expanded color palette with primary and light colors
+  const COLORS = [
+    '#3b82f6',  // Blue
+    '#10b981',  // Green
+    '#f59e0b',  // Amber/Yellow
+    '#ef4444',  // Red
+    '#8b5cf6',  // Purple
+    '#ec4899',  // Pink
+    '#14b8a6',  // Teal
+    '#f97316',  // Orange
+    '#06b6d4',  // Cyan
+    '#84cc16',  // Lime
+    '#eab308',  // Yellow
+    '#f43f5e',  // Rose
+    '#a855f7',  // Violet
+    '#6366f1',  // Indigo
+    '#22c55e',  // Light Green
+    '#fb923c',  // Light Orange
+    '#60a5fa',  // Light Blue
+    '#c084fc',  // Light Purple
+    '#f472b6',  // Light Pink
+    '#2dd4bf'   // Light Teal
+  ];
   const PIE_COLORS = {
     // Usable vs Non-Usable colors
     'Usable': '#10b981',
@@ -754,7 +832,7 @@ const DataVisualizations = ({ jobData, properties }) => {
               <BarChart data={designStyleData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis type="number" stroke="#6b7280" />
-                <YAxis dataKey="name" type="category" stroke="#6b7280" width={120} />
+                <YAxis dataKey="name" type="category" stroke="#6b7280" width={120} tick={{ fontSize: 11 }} />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend />
                 <Bar dataKey="count" name="Count" fill="#8b5cf6" />
@@ -778,7 +856,7 @@ const DataVisualizations = ({ jobData, properties }) => {
               <BarChart data={typeUseData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis type="number" stroke="#6b7280" />
-                <YAxis dataKey="name" type="category" stroke="#6b7280" width={150} />
+                <YAxis dataKey="name" type="category" stroke="#6b7280" width={150} tick={{ fontSize: 11 }} />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend />
                 <Bar dataKey="count" name="Count" fill="#ef4444" />
@@ -793,10 +871,101 @@ const DataVisualizations = ({ jobData, properties }) => {
           </div>
         </div>
 
-        {/* Additional Charts - Building Class and VCS */}
-        <div className="charts-grid grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Building Class Breakdown */}
-          <div className="chart-card bg-white rounded-lg border border-gray-200 p-6">
+        {/* VCS Sales Analysis - Full Width under Market History */}
+        <div className="chart-card bg-white rounded-lg border border-gray-200 p-6">
+          <div className="chart-header flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-indigo-600" />
+              <h3 className="chart-title text-lg font-semibold text-gray-900">VCS Average Sale Prices</h3>
+            </div>
+            <div className="text-xs text-gray-600">
+              Using Sale Price • Date Filtered
+            </div>
+          </div>
+
+          {/* Date Range and Property Type Filter */}
+          <div className="date-range-controls mb-4 grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <Calendar className="w-3 h-3 inline mr-1" />
+                Start Date
+              </label>
+              <input
+                type="date"
+                value={vcsSalesDateRange.start}
+                onChange={(e) => setVcsSalesDateRange({ ...vcsSalesDateRange, start: e.target.value })}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <Calendar className="w-3 h-3 inline mr-1" />
+                End Date
+              </label>
+              <input
+                type="date"
+                value={vcsSalesDateRange.end}
+                onChange={(e) => setVcsSalesDateRange({ ...vcsSalesDateRange, end: e.target.value })}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Property Type
+              </label>
+              <select
+                value={vcsPropertyTypeFilter}
+                onChange={(e) => setVcsPropertyTypeFilter(e.target.value)}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Types</option>
+                <option value="single_family">Single Family</option>
+                <option value="multi_family">Multi-Family</option>
+                <option value="twin">Twin</option>
+                <option value="condo">Condo</option>
+                <option value="conversion">Conversion</option>
+              </select>
+            </div>
+          </div>
+
+          <ResponsiveContainer width="100%" height={350}>
+            <BarChart data={vcsValueData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="vcs" stroke="#6b7280" />
+              <YAxis stroke="#6b7280" tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
+              <Tooltip content={<CustomTooltip />} formatter={(value) => formatCurrency(value)} />
+              <Legend />
+              <Bar dataKey="avgSalePrice" name="Average Sale Price" fill="#6366f1" />
+            </BarChart>
+          </ResponsiveContainer>
+          <div className="chart-stats mt-4 grid grid-cols-3 gap-4 text-center">
+            <div className="stat-item">
+              <div className="stat-label text-xs text-gray-600">Total VCS Areas</div>
+              <div className="stat-value text-lg font-semibold text-gray-900">
+                {vcsValueData.length}
+              </div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label text-xs text-gray-600">Total Sales</div>
+              <div className="stat-value text-lg font-semibold text-gray-900">
+                {vcsValueData.reduce((sum, d) => sum + d.count, 0).toLocaleString()}
+              </div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label text-xs text-gray-600">Overall Avg Price</div>
+              <div className="stat-value text-lg font-semibold text-gray-900">
+                {vcsValueData.length > 0 ? formatCurrency(
+                  vcsValueData.reduce((sum, d) => sum + (d.avgSalePrice * d.count), 0) / vcsValueData.reduce((sum, d) => sum + d.count, 0)
+                ) : 'N/A'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Additional Charts - Building Class */}
+        <div className="charts-grid grid grid-cols-1 lg:grid-cols-1 gap-6">
+          {/* Building Class Breakdown - Standalone */}
+          <div className="chart-card bg-white rounded-lg border border-gray-200 p-6 max-w-3xl mx-auto">
             <div className="chart-header flex items-center gap-2 mb-4">
               <PieIcon className="w-5 h-5 text-teal-600" />
               <h3 className="chart-title text-lg font-semibold text-gray-900">Building Class Distribution</h3>
@@ -807,11 +976,15 @@ const DataVisualizations = ({ jobData, properties }) => {
                   data={buildingClassData}
                   cx="50%"
                   cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  labelLine={true}
+                  label={({ name, percent }) => {
+                    // Use callouts for small slices to prevent overlap
+                    return `${name}: ${(percent * 100).toFixed(0)}%`;
+                  }}
                   outerRadius={100}
                   fill="#8884d8"
                   dataKey="value"
+                  style={{ fontSize: '11px' }}
                 >
                   {buildingClassData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -833,29 +1006,6 @@ const DataVisualizations = ({ jobData, properties }) => {
             </div>
           </div>
 
-          {/* VCS Value Distribution */}
-          <div className="chart-card bg-white rounded-lg border border-gray-200 p-6">
-            <div className="chart-header flex items-center gap-2 mb-4">
-              <BarChart3 className="w-5 h-5 text-indigo-600" />
-              <h3 className="chart-title text-lg font-semibold text-gray-900">VCS Average Values</h3>
-            </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={vcsValueData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="vcs" stroke="#6b7280" />
-                <YAxis stroke="#6b7280" tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
-                <Tooltip content={<CustomTooltip />} formatter={(value) => formatCurrency(value)} />
-                <Legend />
-                <Bar dataKey="avgValue" name="Average Value" fill="#6366f1" />
-              </BarChart>
-            </ResponsiveContainer>
-            <div className="chart-stats mt-4 text-center">
-              <div className="stat-label text-xs text-gray-600">Total Combined Value</div>
-              <div className="stat-value text-lg font-semibold text-gray-900">
-                {formatCurrency(vcsValueData.reduce((sum, d) => sum + d.totalValue, 0))}
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
