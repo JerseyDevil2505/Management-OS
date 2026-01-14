@@ -524,6 +524,11 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
           if (config.interior.worse) setInteriorWorseConditions(config.interior.worse);
         }
 
+        // Load condition handling method
+        if (config.conditionHandlingMethod) {
+          setConditionHandlingMethod(config.conditionHandlingMethod);
+        }
+
         console.log('✅ Condition configuration loaded from database:', config);
       }
     } catch (error) {
