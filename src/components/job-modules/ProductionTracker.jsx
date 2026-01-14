@@ -162,44 +162,6 @@ const ProductionTracker = ({
         return;
       }
 
-      console.log('🔍 Microsystems pricing check:', {
-        pricedCodes,
-        commercialWithP: commercialProps.filter(d => d.info_by_code === 'P').length,
-        commercialWithCodes: commercialProps.filter(d => d.info_by_code && pricedCodes.includes(d.info_by_code)).length
-      });
-
-      // DIAGNOSTIC: List all commercial properties with their pricing status
-      const pricedProperties = [];
-      const unpricedProperties = [];
-
-      commercialProps.forEach(prop => {
-        const propertyInfo = {
-          key: prop.property_composite_key,
-          block: prop.block,
-          lot: prop.lot,
-          qualifier: prop.qualifier,
-          info_by_code: prop.info_by_code,
-          measure_by: prop.measure_by,
-          measure_date: prop.measure_date
-        };
-
-        if (prop.info_by_code && pricedCodes.includes(prop.info_by_code)) {
-          pricedProperties.push(propertyInfo);
-        } else {
-          unpricedProperties.push(propertyInfo);
-        }
-      });
-
-      console.log('📊 PRICING DIAGNOSTIC:', {
-        totalCommercial: commercialProps.length,
-        pricedCount: pricedProperties.length,
-        unpricedCount: unpricedProperties.length,
-        pricedCodes: pricedCodes
-      });
-
-      console.log('✅ PRICED PROPERTIES:', pricedProperties);
-      console.log('❌ UNPRICED PROPERTIES:', unpricedProperties);
-
       priced = commercialProps.filter(d =>
         d.info_by_code && pricedCodes.includes(d.info_by_code)
       ).length;
