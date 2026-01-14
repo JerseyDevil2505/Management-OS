@@ -3544,7 +3544,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     debug('����� Calculating VCS recommended site values with target allocation:', targetAllocation + '%');
 
     const recommendedSites = {};
-    const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
+    const salesRange = getSalesPeriodRange();
 
     // Get all VCS from properties
     const allVCS = new Set(properties.map(p => p.new_vcs).filter(vcs => vcs));
