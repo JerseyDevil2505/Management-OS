@@ -689,7 +689,7 @@ const DataVisualizations = ({ jobData, properties }) => {
                 <Tooltip content={<CustomTooltip />} />
               </PieChart>
             </ResponsiveContainer>
-            <div className="chart-stats mt-4 flex justify-around text-center">
+            <div className="chart-stats mt-4 grid grid-cols-3 gap-3 text-center">
               {salesNuData.map(item => (
                 <div key={item.name} className="stat-item">
                   <div className="stat-label text-xs text-gray-600">{item.name}</div>
