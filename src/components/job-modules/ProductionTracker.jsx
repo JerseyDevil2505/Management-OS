@@ -1604,16 +1604,6 @@ const ProductionTracker = ({
         if (isValidInspection && hasValidInfoBy && hasValidMeasuredBy && hasValidMeasuredDate) {
           validInspectionCount++;
 
-          // DEBUG: Log first few valid inspections
-          if (validInspectionCount <= 5) {
-            console.log(`🚀 VALID INSPECTION ${validInspectionCount}: ${propertyKey}`, {
-              inspector,
-              info_by: infoByCode,
-              measure_date: record.inspection_measure_date,
-              class: propertyClass
-            });
-          }
-
           // Count for manager progress (valid inspections against total properties)
           if (classBreakdown[propertyClass]) {
             classBreakdown[propertyClass].inspected++;
