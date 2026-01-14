@@ -15,23 +15,38 @@ async function checkJob() {
     
   if (error) {
     console.error('Error:', error);
-  } else {
-    console.log('Cedar Grove Job Data:');
-    console.log(JSON.stringify(data, null, 2));
+    return;
   }
   
-  // Also check a sample property composite key
-  if (data && data.id) {
-    const { data: propData, error: propError } = await supabase
-      .from('property_records')
-      .select('property_composite_key')
-      .eq('job_id', data.id)
-      .limit(3);
-      
-    if (!propError && propData) {
-      console.log('\nSample property composite keys:');
-      propData.forEach(p => console.log(p.property_composite_key));
-    }
+  console.log('Cedar Grove Job - Available Fields:');
+  console.log('ID:', data.id);
+  console.log('Job Name:', data.job_name);
+  console.log('County:', data.county);
+  console.log('CCDD:', data.ccdd);
+  console.log('Created At:', data.created_at);
+  console.log('All field names:', Object.keys(data).filter(k => !k.includes('config') && !k.includes('vcs')));
+  
+  // Check for year-related fields
+  const yearFields = Object.keys(data).filter(k => 
+    k.toLowerCase().includes('year') || 
+    k.toLowerCase().includes('date') ||
+    k === 'created_at'
+  );
+  console.log('\nYear-related fields:');
+  yearFields.forEach(f => {
+    console.log(`  ${f}: ${data[f]}`);
+  });
+  
+  // Check composite keys
+  const { data: propData, error: propError } = await supabase
+    .from('property_records')
+    .select('property_composite_key')
+    .eq('job_id', data.id)
+    .limit(5);
+    
+  if (!propError && propData) {
+    console.log('\nSample property composite keys:');
+    propData.forEach(p => console.log('  ' + p.property_composite_key));
   }
 }
 
