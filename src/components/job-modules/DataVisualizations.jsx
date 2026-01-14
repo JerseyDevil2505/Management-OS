@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Filter, TrendingUp, PieChart as PieIcon, BarChart3, Download, Calendar } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
+import { interpretCodes } from '../../lib/supabaseClient';
 
 const DataVisualizations = ({ jobData, properties }) => {
   const [filters, setFilters] = useState({
@@ -129,6 +130,7 @@ const DataVisualizations = ({ jobData, properties }) => {
 
   // Sales NU Distribution - filtered by date range
   // Break out individual codes, with 36 as separate, treat 00 and blank as same
+  // EXCLUDE NU 25 (non-market sales typically < $1000)
   const salesNuData = useMemo(() => {
     const nuCounts = {};
 
@@ -140,6 +142,11 @@ const DataVisualizations = ({ jobData, properties }) => {
         const saleDate = new Date(prop.sales_date);
         if (saleDate >= startDate && saleDate <= endDate) {
           let nuCode = (prop.sales_nu || '').trim();
+
+          // Exclude NU 25 (non-market sales)
+          if (nuCode === '25') {
+            return;
+          }
 
           // Treat blank and '00' as the same
           if (nuCode === '' || nuCode === '00') {
@@ -165,6 +172,7 @@ const DataVisualizations = ({ jobData, properties }) => {
   // Usable vs Non-Usable Sales - filtered by date range
   // Usable: price > 100 AND code in [blank, '00', '07', '32', '36']
   // Non-Usable: code in ['01'-'06', '08'-'31', '33'-'35']
+  // EXCLUDE NU 25 (non-market sales typically < $1000)
   const usableSalesData = useMemo(() => {
     const usableCounts = {
       'Usable': 0,
@@ -177,10 +185,11 @@ const DataVisualizations = ({ jobData, properties }) => {
     // Usable codes: blank, 00, 07, 32, 36
     const usableCodes = ['', '00', '07', '32', '36'];
 
-    // Non-usable codes: 01-06, 08-31, 33-35
+    // Non-usable codes: 01-06, 08-24, 26-31, 33-35 (excluding 25)
     const nonUsableCodes = [];
     for (let i = 1; i <= 6; i++) nonUsableCodes.push(i.toString().padStart(2, '0'));
-    for (let i = 8; i <= 31; i++) nonUsableCodes.push(i.toString().padStart(2, '0'));
+    for (let i = 8; i <= 24; i++) nonUsableCodes.push(i.toString().padStart(2, '0')); // Stop at 24
+    for (let i = 26; i <= 31; i++) nonUsableCodes.push(i.toString().padStart(2, '0')); // Skip 25
     nonUsableCodes.push('33', '34', '35');
 
     filteredProperties.forEach(prop => {
@@ -189,6 +198,11 @@ const DataVisualizations = ({ jobData, properties }) => {
         if (saleDate >= startDate && saleDate <= endDate) {
           const salePrice = parseFloat(prop.sales_price) || 0;
           const nuCode = (prop.sales_nu || '').trim();
+
+          // Exclude NU 25 (non-market sales)
+          if (nuCode === '25') {
+            return;
+          }
 
           // Check if usable
           if (salePrice > 100 && usableCodes.includes(nuCode)) {
@@ -207,30 +221,56 @@ const DataVisualizations = ({ jobData, properties }) => {
       .filter(item => item.value > 0);
   }, [filteredProperties, usableDateRange]);
 
-  // Design & Style Breakdown
+  // Design & Style Breakdown - Decode using interpretCodes
   const designStyleData = useMemo(() => {
     const styleCounts = {};
-    
+    const codeDefinitions = jobData.parsed_code_definitions;
+    const vendorType = jobData.vendor_type;
+
     filteredProperties.forEach(prop => {
-      const style = prop.property_design_style || 'Unknown';
-      styleCounts[style] = (styleCounts[style] || 0) + 1;
+      // Try to decode the design style using interpretCodes
+      let styleName = null;
+
+      if (codeDefinitions && vendorType) {
+        styleName = interpretCodes.getDesignName(prop, codeDefinitions, vendorType);
+      }
+
+      // Fallback to raw value or 'Unknown'
+      if (!styleName || styleName === prop.asset_design_style) {
+        styleName = prop.asset_design_style || 'Unknown';
+      }
+
+      styleCounts[styleName] = (styleCounts[styleName] || 0) + 1;
     });
 
     return Object.entries(styleCounts)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10); // Top 10
-  }, [filteredProperties]);
+  }, [filteredProperties, jobData]);
 
-  // Type & Use Breakdown
+  // Type & Use Breakdown - Decode using interpretCodes
   const typeUseData = useMemo(() => {
     const typeUseCounts = {};
-    
+    const codeDefinitions = jobData.parsed_code_definitions;
+    const vendorType = jobData.vendor_type;
+
     filteredProperties.forEach(prop => {
-      const type = prop.property_type || 'Unknown';
-      const use = prop.property_use || 'Unknown';
-      const key = `${type} / ${use}`;
-      
+      // Try to decode the type using interpretCodes
+      let typeName = null;
+
+      if (codeDefinitions && vendorType) {
+        typeName = interpretCodes.getTypeName(prop, codeDefinitions, vendorType);
+      }
+
+      // Fallback to raw value or 'Unknown'
+      if (!typeName || typeName === prop.asset_type_use) {
+        typeName = prop.asset_type_use || 'Unknown';
+      }
+
+      // Use the decoded type name in the display
+      const key = typeName;
+
       typeUseCounts[key] = (typeUseCounts[key] || 0) + 1;
     });
 
@@ -238,7 +278,7 @@ const DataVisualizations = ({ jobData, properties }) => {
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 12); // Top 12
-  }, [filteredProperties]);
+  }, [filteredProperties, jobData]);
 
   // Building Class Breakdown
   const buildingClassData = useMemo(() => {
