@@ -293,10 +293,10 @@ const DataVisualizations = ({ jobData, properties }) => {
       XLSX.utils.book_append_sheet(workbook, nuSheet, 'Sales NU Distribution');
     }
 
-    // Usable Sales Sheet
+    // Usable vs Non-Usable Sales Sheet
     if (usableSalesData.length > 0) {
       const usableSheet = XLSX.utils.json_to_sheet(usableSalesData);
-      XLSX.utils.book_append_sheet(workbook, usableSheet, 'Usable Sales');
+      XLSX.utils.book_append_sheet(workbook, usableSheet, 'Usable vs Non-Usable');
     }
 
     // Design & Style Sheet
