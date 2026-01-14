@@ -286,12 +286,22 @@ const DataVisualizations = ({ jobData, properties }) => {
   // Color palettes
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
   const PIE_COLORS = {
+    // Usable vs Non-Usable colors
     'Usable': '#10b981',
     'Non-Usable': '#ef4444',
-    'No Sale Data': '#94a3b8',
-    'NU': '#ef4444',
-    'U': '#10b981',
-    'Other': '#f59e0b'
+
+    // Sales code colors
+    '00/Blank': '#10b981',  // Green - usable
+    '07': '#3b82f6',        // Blue - usable
+    '32': '#14b8a6',        // Teal - usable
+    '36': '#f59e0b',        // Amber - special (foreclosure)
+    '25': '#ef4444',        // Red - non-usable
+    '01': '#fca5a5',        // Light red
+    '02': '#f87171',        // Red variants
+    '03': '#dc2626',
+    '04': '#b91c1c',
+    '05': '#991b1b',
+    '06': '#7f1d1d'
   };
 
   // Export all charts data
