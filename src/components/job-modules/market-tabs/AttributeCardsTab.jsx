@@ -1321,6 +1321,86 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const renderConditionAnalysis = () => {
     return (
       <div>
+        {/* Condition Handling Method Selection */}
+        <div style={{
+          marginBottom: '20px',
+          padding: '15px',
+          backgroundColor: '#FEF3C7',
+          borderRadius: '6px',
+          border: '2px solid #F59E0B'
+        }}>
+          <div style={{ marginBottom: '10px' }}>
+            <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: '#92400E' }}>
+              Condition will be handled:
+            </h4>
+          </div>
+          <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={conditionHandlingMethod === 'condition_table'}
+                onChange={async (e) => {
+                  const newMethod = e.target.checked ? 'condition_table' : 'effective_age';
+                  setConditionHandlingMethod(newMethod);
+
+                  // Auto-save to database
+                  try {
+                    const config = jobData.attribute_condition_config || {};
+                    const updatedConfig = { ...config, conditionHandlingMethod: newMethod };
+
+                    await supabase
+                      .from('jobs')
+                      .update({ attribute_condition_config: updatedConfig })
+                      .eq('id', jobData.id);
+
+                    if (onUpdateJobCache) {
+                      onUpdateJobCache({ attribute_condition_config: updatedConfig });
+                    }
+                  } catch (error) {
+                    console.error('Error saving condition handling method:', error);
+                  }
+                }}
+                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: '14px', fontWeight: '500', color: '#92400E' }}>
+                In the Condition Table
+              </span>
+            </label>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={conditionHandlingMethod === 'effective_age'}
+                onChange={async (e) => {
+                  const newMethod = e.target.checked ? 'effective_age' : 'condition_table';
+                  setConditionHandlingMethod(newMethod);
+
+                  // Auto-save to database
+                  try {
+                    const config = jobData.attribute_condition_config || {};
+                    const updatedConfig = { ...config, conditionHandlingMethod: newMethod };
+
+                    await supabase
+                      .from('jobs')
+                      .update({ attribute_condition_config: updatedConfig })
+                      .eq('id', jobData.id);
+
+                    if (onUpdateJobCache) {
+                      onUpdateJobCache({ attribute_condition_config: updatedConfig });
+                    }
+                  } catch (error) {
+                    console.error('Error saving condition handling method:', error);
+                  }
+                }}
+                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: '14px', fontWeight: '500', color: '#92400E' }}>
+                In Effective Age
+              </span>
+            </label>
+          </div>
+        </div>
+
         {/* Type/Use Filter and Interior Inspection Toggle */}
         <div style={{ 
           marginBottom: '20px', 
