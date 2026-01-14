@@ -6,9 +6,10 @@ const supabase = createClient(
 );
 
 async function checkJob() {
+  // Get all columns
   const { data, error } = await supabase
     .from('jobs')
-    .select('id, job_name, start_year, created_at, ccdd, county')
+    .select('*')
     .ilike('job_name', '%cedar grove%')
     .single();
     
