@@ -1109,26 +1109,19 @@ const ProductionTracker = ({
     setHasUnsavedChanges(hasChanges);
   }, [infoByCategoryConfig, originalCategoryConfig]);
 
-  // Recalculate commercial counts when config or inspection data changes
-  // BUT only for live preview - don't overwrite processed analytics!
+  // FIXED: Always recalculate commercial counts from fresh data when it changes
+  // Persisted analytics are for historical metrics, but counts must reflect current data
   useEffect(() => {
     console.log('🔍 useEffect triggered for commercial counts recalc:', {
       hasInspectionData: !!inspectionData,
       inspectionDataLength: inspectionData?.length,
       hasPricedConfig: !!infoByCategoryConfig.priced,
-      pricedCodes: infoByCategoryConfig.priced,
-      hasProcessedAnalytics: !!analytics,
-      processed: processed
+      pricedCodes: infoByCategoryConfig.priced
     });
 
-    // Skip recalculation if we have processed analytics - use those values instead
-    if (analytics || processed) {
-      console.log('⏭️ Skipping recalc - using processed analytics values');
-      return;
-    }
-
+    // Calculate from current data regardless of persisted analytics
     if (inspectionData && inspectionData.length > 0 && infoByCategoryConfig.priced) {
-      console.log('🔄 Recalculating commercial counts due to config/data change');
+      console.log('🔄 Recalculating commercial counts from FRESH data');
       calculateCommercialCounts();
     }
   }, [inspectionData, infoByCategoryConfig.priced]); // eslint-disable-line react-hooks/exhaustive-deps
