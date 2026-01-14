@@ -681,14 +681,9 @@ const ProductionTracker = ({
         setBillingAnalytics(loadedBillingAnalytics);
         setValidationReport(loadedValidationReport);
 
-        // Restore commercial counts from saved analytics
-        if (loadedAnalytics.totalCommercialProperties) {
-          setCommercialCounts({
-            total: loadedAnalytics.totalCommercialProperties,
-            inspected: loadedAnalytics.commercialInspections || 0,
-            priced: loadedAnalytics.commercialPricing || 0
-          });
-        }
+        // FIXED: DON'T restore commercial counts from persisted analytics
+        // They will be calculated fresh from current inspection_data by the useEffect
+        // This prevents stale counts from blocking fresh calculations
 
         if (job.workflow_stats.missingPropertiesReport) {
           setMissingPropertiesReport(job.workflow_stats.missingPropertiesReport);
