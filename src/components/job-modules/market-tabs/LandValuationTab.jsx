@@ -10596,11 +10596,25 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }
   }, []);
 
-  // ========== SALES DATE FILTERING FOR CME ==========
-  const getOctoberFirstThreeYearsPrior = () => {
+  // ========== SALES DATE FILTERING FOR CME (CSP-PSP-HSP Range) ==========
+  const getSalesPeriodRange = () => {
+    // Use assessment year from job's end_date to calculate CSP-PSP-HSP periods
+    const assessmentYear = jobData?.end_date ? new Date(jobData.end_date).getFullYear() : new Date().getFullYear();
+
+    // HSP (Historical Sale Period): 10/1 of three years prior → 9/30 of two years prior
+    // For assessment date 1/1/2026: 10/1/2022 → 9/30/2023
+    const hspStart = new Date(assessmentYear - 3, 9, 1, 0, 0, 0);
+
+    // CSP (Current Sale Period): 10/1 of prior year → 12/31 of assessment year (or present if past due)
+    // For assessment date 1/1/2026: 10/1/2024 → 12/31/2025 (or present if job is past due)
+    const cspEnd = new Date(assessmentYear, 11, 31, 23, 59, 59);
     const now = new Date();
-    const threeYearsPrior = now.getFullYear() - 3;
-    return new Date(threeYearsPrior, 9, 1); // October 1st (month 9 = October)
+    const effectiveEnd = now > cspEnd ? now : cspEnd;
+
+    return {
+      start: hspStart,  // Overall range starts at HSP start (10/1 three years prior)
+      end: effectiveEnd // Overall range ends at CSP end or present (whichever is later)
+    };
   };
 
   // ========== CME BRACKET DEFINITIONS ==========
