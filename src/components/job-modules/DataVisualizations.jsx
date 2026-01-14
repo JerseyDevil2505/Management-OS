@@ -542,13 +542,42 @@ const DataVisualizations = ({ jobData, properties }) => {
 
         {/* Pie Charts Row - Sales Usability and Sales NU Distribution */}
         <div className="charts-grid grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Sales Usability Pie */}
+          {/* Usable vs Non-Usable Sales Pie with Date Range */}
           <div className="chart-card bg-white rounded-lg border border-gray-200 p-6">
             <div className="chart-header flex items-center gap-2 mb-4">
               <PieIcon className="w-5 h-5 text-amber-600" />
-              <h3 className="chart-title text-lg font-semibold text-gray-900">Sales Usability</h3>
+              <h3 className="chart-title text-lg font-semibold text-gray-900">Usable vs Non-Usable Sales</h3>
             </div>
-            <ResponsiveContainer width="100%" height={300}>
+
+            {/* Date Range Selector */}
+            <div className="date-range-controls mb-4 grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <Calendar className="w-3 h-3 inline mr-1" />
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  value={usableDateRange.start}
+                  onChange={(e) => setUsableDateRange({ ...usableDateRange, start: e.target.value })}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <Calendar className="w-3 h-3 inline mr-1" />
+                  End Date
+                </label>
+                <input
+                  type="date"
+                  value={usableDateRange.end}
+                  onChange={(e) => setUsableDateRange({ ...usableDateRange, end: e.target.value })}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            <ResponsiveContainer width="100%" height={240}>
               <PieChart>
                 <Pie
                   data={usableSalesData}
@@ -556,7 +585,7 @@ const DataVisualizations = ({ jobData, properties }) => {
                   cy="50%"
                   labelLine={false}
                   label={({ name, percent, value }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
-                  outerRadius={100}
+                  outerRadius={90}
                   fill="#8884d8"
                   dataKey="value"
                 >
