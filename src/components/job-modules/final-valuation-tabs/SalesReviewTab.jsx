@@ -900,7 +900,7 @@ const SalesReviewTab = ({
 
     const confirmMsg = `Clear time and size normalization for ${selectedProperties.size} selected ${selectedProperties.size === 1 ? 'property' : 'properties'}?\n\nThis will set values_norm_time and values_norm_size to null in the database.`;
 
-    if (!confirm(confirmMsg)) return;
+    if (!window.confirm(confirmMsg)) return;
 
     setIsClearing(true);
 
