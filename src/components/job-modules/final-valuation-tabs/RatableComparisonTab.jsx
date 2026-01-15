@@ -793,7 +793,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   </div>
 
                   {/* Commercial Base - Calculate */}
-                  <div className="grid grid-cols-3 gap-2 pt-2 mt-2 border-t border-gray-200">
+                  <div className="grid grid-cols-4 gap-2 pt-2 mt-2 border-t border-gray-200">
                     <div className="text-sm font-medium py-1">Commercial Base</div>
                     <div></div>
                     <div className="text-sm text-right px-2 py-1">
@@ -801,6 +801,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                         ? ((projectedRatableBase['4ABC'].total / projectedRatableBase.totalTotal) * 100).toFixed(2)
                         : 0}%
                     </div>
+                    <div></div>
                   </div>
                 </div>
               </div>
