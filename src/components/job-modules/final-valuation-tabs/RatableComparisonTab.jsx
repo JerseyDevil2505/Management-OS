@@ -877,10 +877,11 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">Buffer for Loss</span>
                     <input
-                      type="text"
+                      type="number"
+                      step="0.01"
                       value={localRateCalc.bufferForLoss}
                       onChange={(e) => handleLocalRateCalcChange('bufferForLoss', e.target.value)}
-                      className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                      className="w-20 px-2 py-1 border border-gray-300 rounded text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       placeholder="0.00"
                     />
                     <span className="text-sm">%</span>
