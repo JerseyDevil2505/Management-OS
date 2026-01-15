@@ -1295,7 +1295,11 @@ const SalesReviewTab = ({
             <button
               onClick={handleClearNormalization}
               disabled={isClearing || selectedProperties.size === 0}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded transition-colors ${
+                selectedProperties.size > 0
+                  ? 'bg-orange-600 text-white hover:bg-orange-700'
+                  : 'bg-gray-300 text-gray-600 cursor-not-allowed'
+              } ${isClearing ? 'opacity-50 cursor-wait' : ''}`}
               title={selectedProperties.size === 0 ? 'Select properties with normalization to clear' : `Clear normalization for ${selectedProperties.size} selected ${selectedProperties.size === 1 ? 'property' : 'properties'}`}
             >
               <X className="w-4 h-4" />
