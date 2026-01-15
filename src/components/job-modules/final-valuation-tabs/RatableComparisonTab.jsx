@@ -137,18 +137,18 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
 
   // Helper function to format percent change (current vs projected)
   const formatPercentChange = (projectedValue, currentValue) => {
-    if (!currentValue || currentValue === 0) return null;
+    if (!currentValue || currentValue === 0) return '-';
 
     const percentChange = ((projectedValue - currentValue) / currentValue) * 100;
 
-    if (percentChange === 0) return null;
+    if (percentChange === 0) return '0%';
 
     const deltaColor = percentChange > 0 ? 'text-green-600' : 'text-red-600';
     const sign = percentChange > 0 ? '+' : '';
 
     return (
-      <span className={`text-xs ${deltaColor} font-semibold ml-2`}>
-        ({sign}{percentChange.toFixed(2)}%)
+      <span className={`text-sm ${deltaColor} font-semibold`}>
+        {sign}{Math.round(percentChange)}%
       </span>
     );
   };
@@ -668,10 +668,11 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
               <div>
                 <h3 className="text-lg font-bold text-gray-900 mb-4">Projected Ratable Base</h3>
                 <div className="space-y-3">
-                  <div className="grid grid-cols-3 gap-2 text-xs font-semibold text-gray-700 pb-2 border-b">
+                  <div className="grid grid-cols-4 gap-2 text-xs font-semibold text-gray-700 pb-2 border-b">
                     <div></div>
                     <div className="text-right">Count</div>
                     <div className="text-right">Net Taxable Value</div>
+                    <div className="text-right">Delta (%)</div>
                   </div>
                   
                   {/* Class 1 */}
