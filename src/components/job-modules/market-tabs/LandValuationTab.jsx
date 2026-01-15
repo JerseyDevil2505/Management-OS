@@ -3304,13 +3304,13 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         }
       }
 
-      // Avg Price Lot Size: Recent sales with valid NU codes + time constraint
+      // Avg Price Lot Size: Recent sales with valid NU codes + CSP-PSP-HSP time range
       if (prop.sales_date && prop.values_norm_time > 0) {
         const saleDate = new Date(prop.sales_date);
-        const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
+        const salesRange = getSalesPeriodRange();
 
-        // Sales from October 1st three years prior to present
-        if (saleDate >= octoberFirstThreeYearsPrior) {
+        // Sales from HSP start (10/1 three years prior) through CSP end (or present if past due)
+        if (saleDate >= salesRange.start && saleDate <= salesRange.end) {
           if (prop.values_norm_size > 0) avgNormSize[prop.new_vcs].push(prop.values_norm_size);
 
           // Avg Price: Valid NU codes + time constraint
@@ -3544,7 +3544,7 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     debug('����� Calculating VCS recommended site values with target allocation:', targetAllocation + '%');
 
     const recommendedSites = {};
-    const octoberFirstThreeYearsPrior = getOctoberFirstThreeYearsPrior();
+    const salesRange = getSalesPeriodRange();
 
     // Get all VCS from properties
     const allVCS = new Set(properties.map(p => p.new_vcs).filter(vcs => vcs));
@@ -3575,9 +3575,10 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
         const hasValidSale = prop.sales_date && prop.sales_price > 0;
         if (!hasValidSale) return false;
 
-        // Sales within the last 3 years from October 1st
-        const isWithinThreeYears = new Date(prop.sales_date) >= octoberFirstThreeYearsPrior;
-        if (!isWithinThreeYears) return false;
+        // Sales within CSP-PSP-HSP range (HSP start through CSP end or present)
+        const saleDate = new Date(prop.sales_date);
+        const isWithinRange = saleDate >= salesRange.start && saleDate <= salesRange.end;
+        if (!isWithinRange) return false;
 
         // Valid asset type use starting with '1' (residential) - skip for condos
         const isCondo = prop.property_m4_class === '4D';
@@ -10596,11 +10597,25 @@ Provide only verifiable facts with sources. Be specific and actionable for valua
     }
   }, []);
 
-  // ========== SALES DATE FILTERING FOR CME ==========
-  const getOctoberFirstThreeYearsPrior = () => {
+  // ========== SALES DATE FILTERING FOR CME (CSP-PSP-HSP Range) ==========
+  const getSalesPeriodRange = () => {
+    // Use assessment year from job's end_date to calculate CSP-PSP-HSP periods
+    const assessmentYear = jobData?.end_date ? new Date(jobData.end_date).getFullYear() : new Date().getFullYear();
+
+    // HSP (Historical Sale Period): 10/1 of three years prior → 9/30 of two years prior
+    // For assessment date 1/1/2026: 10/1/2022 → 9/30/2023
+    const hspStart = new Date(assessmentYear - 3, 9, 1, 0, 0, 0);
+
+    // CSP (Current Sale Period): 10/1 of prior year → 12/31 of assessment year (or present if past due)
+    // For assessment date 1/1/2026: 10/1/2024 → 12/31/2025 (or present if job is past due)
+    const cspEnd = new Date(assessmentYear, 11, 31, 23, 59, 59);
     const now = new Date();
-    const threeYearsPrior = now.getFullYear() - 3;
-    return new Date(threeYearsPrior, 9, 1); // October 1st (month 9 = October)
+    const effectiveEnd = now > cspEnd ? now : cspEnd;
+
+    return {
+      start: hspStart,  // Overall range starts at HSP start (10/1 three years prior)
+      end: effectiveEnd // Overall range ends at CSP end or present (whichever is later)
+    };
   };
 
   // ========== CME BRACKET DEFINITIONS ==========
