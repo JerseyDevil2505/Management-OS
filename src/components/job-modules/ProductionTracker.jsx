@@ -1199,9 +1199,9 @@ const ProductionTracker = ({
         const propertyKey = record.property_composite_key;
         const inspector = record.inspection_measure_by || 'UNASSIGNED';
         const propertyClass = record.property_m4_class || 'UNKNOWN';
-        // Use current info_by_code from inspectionData (authoritative), fallback to property snapshot
-        const currentInfoBy = inspectionDataMap[propertyKey];
-        const infoByCode = currentInfoBy || record.inspection_info_by;
+        // Always use fresh info_by_code from property_records (source of truth from file updates)
+        // inspection_data is just a validated snapshot - property_records has the latest vendor data
+        const infoByCode = record.inspection_info_by;
 
         const measuredDate = record.inspection_measure_date ? new Date(record.inspection_measure_date) : null;
         const listDate = record.inspection_list_date ? new Date(record.inspection_list_date) : null;
