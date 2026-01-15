@@ -610,7 +610,12 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                       onChange={(e) => handleLocalCurrentYearChange('class_6_count', e.target.value)}
                       className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                     />
-                    <div className="text-sm text-right text-xs text-gray-500 py-1">Not/After Ratio Applied</div>
+                    <input
+                      type="text"
+                      value={formatAvgAsmt(localCurrentYear.class_6_total)}
+                      onChange={(e) => handleLocalCurrentYearChange('class_6_total', e.target.value)}
+                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
+                    />
                   </div>
 
                   {/* Total - CALCULATED */}
@@ -720,7 +725,10 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   <div className="grid grid-cols-3 gap-2">
                     <div className="text-sm font-medium py-1">6A,B,C</div>
                     <div className="text-sm text-right px-2 py-1">{formatCount(projectedRatableBase['6ABC'].count)}</div>
-                    <div className="text-sm text-right text-xs text-gray-500 py-1">Not/After Ratio Applied</div>
+                    <div className="text-sm text-right px-2 py-1">
+                      {formatAvgAsmt(projectedRatableBase['6ABC'].total)}
+                      {formatDelta(projectedRatableBase['6ABC'].total, previousProjected.class_6_total)}
+                    </div>
                   </div>
 
                   {/* Total */}
