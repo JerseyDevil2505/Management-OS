@@ -85,7 +85,8 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                        localCurrentYear.class_2_total +
                        localCurrentYear.class_3a_total +
                        localCurrentYear.class_3b_total +
-                       localCurrentYear.class_4_total;
+                       localCurrentYear.class_4_total +
+                       localCurrentYear.class_6_total;
 
     const commercialBasePct = totalTotal > 0
       ? (localCurrentYear.class_4_total / totalTotal) * 100
@@ -234,8 +235,13 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
         summary['4ABC'].count++;
         summary['4ABC'].total += camaTotal;
       } else if (['6A', '6B'].includes(propertyClass)) {
+        // For personal property (6A,B,C), use land * (imp/100) instead of land + imp
+        const land = property.values_cama_land || 0;
+        const imp = property.values_cama_imp || 0;
+        const personalPropertyValue = land * (imp / 100);
+
         summary['6ABC'].count++;
-        summary['6ABC'].total += camaTotal;
+        summary['6ABC'].total += personalPropertyValue;
       }
     });
 
