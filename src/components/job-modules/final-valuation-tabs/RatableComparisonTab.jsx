@@ -477,7 +477,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   <div className="grid grid-cols-3 gap-2 text-xs font-semibold text-gray-700 pb-2 border-b">
                     <div></div>
                     <div className="text-right">Count</div>
-                    <div className="text-right">AVG ASMT</div>
+                    <div className="text-right">Net Taxable Value</div>
                   </div>
                   
                   {/* Class 1 */}
@@ -647,7 +647,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   <div className="grid grid-cols-3 gap-2 text-xs font-semibold text-gray-700 pb-2 border-b">
                     <div></div>
                     <div className="text-right">Count</div>
-                    <div className="text-right">AVG ASMT</div>
+                    <div className="text-right">Net Taxable Value</div>
                   </div>
                   
                   {/* Class 1 */}
