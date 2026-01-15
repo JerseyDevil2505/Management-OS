@@ -116,7 +116,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
   // Get vendor type for consolidation logic
   const vendorType = jobData?.vendor_type || 'BRT';
 
-  // Helper function to format delta display
+  // Helper function to format delta display (historical comparison)
   const formatDelta = (currentValue, previousValue) => {
     if (!previousValue || previousValue === 0) return null;
 
@@ -132,6 +132,24 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
       <div className={`text-[10px] ${deltaColor} font-normal mt-0.5`}>
         {sign}${Math.abs(delta).toLocaleString()} ({sign}{percentChange.toFixed(1)}%)
       </div>
+    );
+  };
+
+  // Helper function to format percent change (current vs projected)
+  const formatPercentChange = (projectedValue, currentValue) => {
+    if (!currentValue || currentValue === 0) return null;
+
+    const percentChange = ((projectedValue - currentValue) / currentValue) * 100;
+
+    if (percentChange === 0) return null;
+
+    const deltaColor = percentChange > 0 ? 'text-green-600' : 'text-red-600';
+    const sign = percentChange > 0 ? '+' : '';
+
+    return (
+      <span className={`text-xs ${deltaColor} font-semibold ml-2`}>
+        ({sign}{percentChange.toFixed(2)}%)
+      </span>
     );
   };
 
