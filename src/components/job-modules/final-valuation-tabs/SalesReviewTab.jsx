@@ -116,7 +116,11 @@ const SalesReviewTab = ({
 
   // Include/Exclude state for CME tool
   const [includeOverrides, setIncludeOverrides] = useState({}); // propertyId -> true/false/null
-  
+
+  // Selection state for clearing normalization
+  const [selectedProperties, setSelectedProperties] = useState(new Set()); // Set of property IDs
+  const [isClearing, setIsClearing] = useState(false);
+
   // Expandable sections
   const [expandedSections, setExpandedSections] = useState({
     vcs: false,
@@ -864,8 +868,87 @@ const SalesReviewTab = ({
     }
   };
 
+  // ==================== CLEAR NORMALIZATION ====================
+
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      // Select all filtered properties that have normalized values
+      const propertiesWithNorm = sortedProperties
+        .filter(p => p.values_norm_time || p.values_norm_size)
+        .map(p => p.id);
+      setSelectedProperties(new Set(propertiesWithNorm));
+    } else {
+      setSelectedProperties(new Set());
+    }
+  };
+
+  const handleSelectProperty = (propertyId, checked) => {
+    const newSelection = new Set(selectedProperties);
+    if (checked) {
+      newSelection.add(propertyId);
+    } else {
+      newSelection.delete(propertyId);
+    }
+    setSelectedProperties(newSelection);
+  };
+
+  const handleClearNormalization = async () => {
+    if (selectedProperties.size === 0) {
+      alert('No properties selected');
+      return;
+    }
+
+    const confirmMsg = `Clear time and size normalization for ${selectedProperties.size} selected ${selectedProperties.size === 1 ? 'property' : 'properties'}?\n\nThis will set values_norm_time and values_norm_size to null in the database.`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    setIsClearing(true);
+
+    try {
+      // Get composite keys for selected properties
+      const selectedProps = properties.filter(p => selectedProperties.has(p.id));
+      const compositeKeys = selectedProps.map(p => p.property_composite_key);
+
+      if (compositeKeys.length === 0) {
+        alert('No valid properties to clear');
+        return;
+      }
+
+      // Clear normalized values in property_market_analysis
+      const { error } = await supabase
+        .from('property_market_analysis')
+        .update({
+          values_norm_time: null,
+          values_norm_size: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('job_id', jobData.id)
+        .in('property_composite_key', compositeKeys);
+
+      if (error) throw error;
+
+      // Clear selection
+      setSelectedProperties(new Set());
+
+      // Refresh data
+      if (onUpdateJobCache) {
+        setTimeout(() => {
+          onUpdateJobCache();
+        }, 500);
+      }
+
+      alert(`✅ Successfully cleared normalization for ${compositeKeys.length} ${compositeKeys.length === 1 ? 'property' : 'properties'}`);
+
+    } catch (error) {
+      console.error('Error clearing normalization:', error);
+      alert(`Failed to clear normalization: ${error.message}`);
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
   // ==================== EXCEL EXPORT ====================
-  
+
   const exportToExcel = () => {
     const ws_data = [];
     
@@ -1208,6 +1291,19 @@ const SalesReviewTab = ({
             >
               <Download className="w-4 h-4" />
               Export to Excel
+            </button>
+            <button
+              onClick={handleClearNormalization}
+              disabled={isClearing || selectedProperties.size === 0}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded transition-colors ${
+                selectedProperties.size > 0
+                  ? 'bg-orange-600 text-white hover:bg-orange-700'
+                  : 'bg-gray-300 text-gray-600 cursor-not-allowed'
+              } ${isClearing ? 'opacity-50 cursor-wait' : ''}`}
+              title={selectedProperties.size === 0 ? 'Select properties with normalization to clear' : `Clear normalization for ${selectedProperties.size} selected ${selectedProperties.size === 1 ? 'property' : 'properties'}`}
+            >
+              <X className="w-4 h-4" />
+              Clear Normalization {selectedProperties.size > 0 ? `(${selectedProperties.size})` : ''}
             </button>
           </div>
         </div>
@@ -1618,14 +1714,19 @@ const SalesReviewTab = ({
 
       {/* Main Data Table with Horizontal Scroll */}
       <div className="bg-white border rounded overflow-hidden">
-        {/* Top horizontal scrollbar for easier navigation */}
-        <div className="overflow-x-auto" style={{ overflowY: 'hidden', height: '20px' }}>
-          <div style={{ width: '2500px', height: '1px' }}></div>
-        </div>
         <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '70vh' }}>
           <table className="min-w-full" style={{ fontSize: `${fontSize}px` }}>
             <thead className="bg-gray-50 border-b sticky top-0 z-10">
               <tr>
+                <th className="px-2 py-3 text-center font-medium text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={selectedProperties.size > 0 && selectedProperties.size === sortedProperties.filter(p => p.values_norm_time || p.values_norm_size).length}
+                    onChange={handleSelectAll}
+                    className="rounded border-gray-300"
+                    title="Select all properties with normalization"
+                  />
+                </th>
                 <th className="px-3 py-3 text-center font-medium text-gray-700">Include</th>
                 <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_vcs')}>VCS</th>
                 <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_block')}>Block</th>
@@ -1662,6 +1763,18 @@ const SalesReviewTab = ({
                   key={prop.property_composite_key || prop.id || idx}
                   className={`hover:bg-gray-50 ${prop.isIncluded ? 'bg-green-50' : ''}`}
                 >
+                  <td className="px-2 py-2 text-center">
+                    {(prop.values_norm_time || prop.values_norm_size) ? (
+                      <input
+                        type="checkbox"
+                        checked={selectedProperties.has(prop.id)}
+                        onChange={(e) => handleSelectProperty(prop.id, e.target.checked)}
+                        className="rounded border-gray-300"
+                      />
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-center">
                     <div className="flex items-center justify-center gap-1">
                       <button
