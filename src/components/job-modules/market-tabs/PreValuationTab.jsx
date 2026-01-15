@@ -2927,8 +2927,12 @@ const analyzeImportFile = async (file) => {
       // Process each row from Excel
       for (const row of dataForAnalysis) {
         // Build composite key from Excel data - vendor aware
-        const year = row.Year || row.YEAR || new Date().getFullYear();
-        const ccdd = row.Ccdd || row.CCDD || jobData?.ccdd || '';
+        // Extract year from job's created_at field
+        const jobYear = jobData?.created_at
+          ? new Date(jobData.created_at).getFullYear()
+          : new Date().getFullYear();
+        const year = row.Year || row.YEAR || jobYear;
+        const ccdd = row.Ccdd || row.CCDD || jobData?.ccdd_code || jobData?.ccdd || '';
         const block = (row.Block || row.BLOCK)?.toString() || '';
         const lot = (row.Lot || row.LOT || row.lot || '')?.toString().trim();
         console.log('Lot value from row:', row.Lot, 'Final lot:', lot);

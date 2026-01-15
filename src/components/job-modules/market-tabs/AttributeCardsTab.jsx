@@ -84,6 +84,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     exterior: {},
     interior: {}
   });
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [configSaveSuccess, setConfigSaveSuccess] = useState(false);
+  const [conditionHandlingMethod, setConditionHandlingMethod] = useState('effective_age'); // 'condition_table' or 'effective_age'
 
   // ============ CUSTOM ATTRIBUTE STATE ============
   const [rawFields, setRawFields] = useState([]);
@@ -445,6 +448,100 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
       }));
     }
   };
+
+  // ============ SAVE/LOAD CONDITION CONFIG TO DATABASE ============
+  const saveConditionConfigToDatabase = async () => {
+    if (!jobData?.id) return;
+
+    // Validation: require both exterior and interior to be configured
+    if (!manualExteriorBaseline || !manualInteriorBaseline) {
+      alert('Please define both Exterior and Interior baseline conditions before saving.');
+      return;
+    }
+
+    try {
+      setIsSavingConfig(true);
+      setConfigSaveSuccess(false);
+
+      const config = {
+        exterior: {
+          baseline: manualExteriorBaseline,
+          better: exteriorBetterConditions,
+          worse: exteriorWorseConditions
+        },
+        interior: {
+          baseline: manualInteriorBaseline,
+          better: interiorBetterConditions,
+          worse: interiorWorseConditions
+        },
+        conditionHandlingMethod: conditionHandlingMethod, // 'condition_table' or 'effective_age'
+        savedAt: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('jobs')
+        .update({ attribute_condition_config: config })
+        .eq('id', jobData.id);
+
+      if (error) throw error;
+
+      // Show success message
+      setConfigSaveSuccess(true);
+      setTimeout(() => setConfigSaveSuccess(false), 3000);
+
+      // Update parent cache
+      if (onUpdateJobCache) {
+        onUpdateJobCache({ attribute_condition_config: config });
+      }
+
+      console.log('✅ Condition configuration saved to database:', config);
+    } catch (error) {
+      console.error('❌ Error saving condition configuration:', error);
+      alert(`Failed to save configuration: ${error.message}`);
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
+
+  const loadConditionConfigFromDatabase = useCallback(async () => {
+    if (!jobData?.id) return;
+
+    try {
+      const config = jobData.attribute_condition_config;
+
+      if (config) {
+        // Load exterior config
+        if (config.exterior) {
+          if (config.exterior.baseline) setManualExteriorBaseline(config.exterior.baseline);
+          if (config.exterior.better) setExteriorBetterConditions(config.exterior.better);
+          if (config.exterior.worse) setExteriorWorseConditions(config.exterior.worse);
+        }
+
+        // Load interior config
+        if (config.interior) {
+          if (config.interior.baseline) setManualInteriorBaseline(config.interior.baseline);
+          if (config.interior.better) setInteriorBetterConditions(config.interior.better);
+          if (config.interior.worse) setInteriorWorseConditions(config.interior.worse);
+        }
+
+        // Load condition handling method
+        if (config.conditionHandlingMethod) {
+          setConditionHandlingMethod(config.conditionHandlingMethod);
+        }
+
+        console.log('✅ Condition configuration loaded from database:', config);
+      }
+    } catch (error) {
+      console.error('❌ Error loading condition configuration:', error);
+    }
+  }, [jobData?.id, jobData?.attribute_condition_config]);
+
+  // Load config from database on mount
+  useEffect(() => {
+    if (jobData?.id && loadedJobIdRef.current !== jobData.id) {
+      loadConditionConfigFromDatabase();
+    }
+  }, [jobData?.id, loadConditionConfigFromDatabase]);
 
   // Load data on component mount and when filters change
   useEffect(() => {
@@ -1224,6 +1321,86 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
   const renderConditionAnalysis = () => {
     return (
       <div>
+        {/* Condition Handling Method Selection */}
+        <div style={{
+          marginBottom: '20px',
+          padding: '15px',
+          backgroundColor: '#FEF3C7',
+          borderRadius: '6px',
+          border: '2px solid #F59E0B'
+        }}>
+          <div style={{ marginBottom: '10px' }}>
+            <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: '#92400E' }}>
+              Condition will be handled:
+            </h4>
+          </div>
+          <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={conditionHandlingMethod === 'condition_table'}
+                onChange={async (e) => {
+                  const newMethod = e.target.checked ? 'condition_table' : 'effective_age';
+                  setConditionHandlingMethod(newMethod);
+
+                  // Auto-save to database
+                  try {
+                    const config = jobData.attribute_condition_config || {};
+                    const updatedConfig = { ...config, conditionHandlingMethod: newMethod };
+
+                    await supabase
+                      .from('jobs')
+                      .update({ attribute_condition_config: updatedConfig })
+                      .eq('id', jobData.id);
+
+                    if (onUpdateJobCache) {
+                      onUpdateJobCache({ attribute_condition_config: updatedConfig });
+                    }
+                  } catch (error) {
+                    console.error('Error saving condition handling method:', error);
+                  }
+                }}
+                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: '14px', fontWeight: '500', color: '#92400E' }}>
+                In the Condition Table
+              </span>
+            </label>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={conditionHandlingMethod === 'effective_age'}
+                onChange={async (e) => {
+                  const newMethod = e.target.checked ? 'effective_age' : 'condition_table';
+                  setConditionHandlingMethod(newMethod);
+
+                  // Auto-save to database
+                  try {
+                    const config = jobData.attribute_condition_config || {};
+                    const updatedConfig = { ...config, conditionHandlingMethod: newMethod };
+
+                    await supabase
+                      .from('jobs')
+                      .update({ attribute_condition_config: updatedConfig })
+                      .eq('id', jobData.id);
+
+                    if (onUpdateJobCache) {
+                      onUpdateJobCache({ attribute_condition_config: updatedConfig });
+                    }
+                  } catch (error) {
+                    console.error('Error saving condition handling method:', error);
+                  }
+                }}
+                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: '14px', fontWeight: '500', color: '#92400E' }}>
+                In Effective Age
+              </span>
+            </label>
+          </div>
+        </div>
+
         {/* Type/Use Filter and Interior Inspection Toggle */}
         <div style={{ 
           marginBottom: '20px', 
@@ -1352,10 +1529,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
               const setBaseline = (value) => {
                 if (isExterior) {
                   setManualExteriorBaseline(value);
-                  localStorage.setItem(`attr-cards-exterior-baseline-${jobData?.id}`, value);
                 } else {
                   setManualInteriorBaseline(value);
-                  localStorage.setItem(`attr-cards-interior-baseline-${jobData?.id}`, value);
                 }
               };
 
@@ -1366,10 +1541,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
                 if (isExterior) {
                   setExteriorBetterConditions(updated);
-                  localStorage.setItem(`attr-cards-exterior-better-${jobData?.id}`, JSON.stringify(updated));
                 } else {
                   setInteriorBetterConditions(updated);
-                  localStorage.setItem(`attr-cards-interior-better-${jobData?.id}`, JSON.stringify(updated));
                 }
               };
 
@@ -1380,10 +1553,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
 
                 if (isExterior) {
                   setExteriorWorseConditions(updated);
-                  localStorage.setItem(`attr-cards-exterior-worse-${jobData?.id}`, JSON.stringify(updated));
                 } else {
                   setInteriorWorseConditions(updated);
-                  localStorage.setItem(`attr-cards-interior-worse-${jobData?.id}`, JSON.stringify(updated));
                 }
               };
 
@@ -1476,6 +1647,57 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                       }}>
                         <strong>How it works:</strong> The export summary will only sum positive adjustments for "better" conditions
                         and only sum negative adjustments for "worse" conditions. The baseline shows blank (no adjustment).
+                      </div>
+
+                      {/* Save Button */}
+                      <div style={{
+                        marginTop: '20px',
+                        paddingTop: '20px',
+                        borderTop: '2px solid #E5E7EB',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '15px'
+                      }}>
+                        <button
+                          onClick={saveConditionConfigToDatabase}
+                          disabled={isSavingConfig || !manualExteriorBaseline || !manualInteriorBaseline}
+                          style={{
+                            padding: '10px 20px',
+                            backgroundColor: (!manualExteriorBaseline || !manualInteriorBaseline) ? '#D1D5DB' : '#3B82F6',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            cursor: (!manualExteriorBaseline || !manualInteriorBaseline) ? 'not-allowed' : 'pointer',
+                            opacity: isSavingConfig ? 0.6 : 1
+                          }}
+                        >
+                          {isSavingConfig ? 'Saving...' : 'Save Configuration to Database'}
+                        </button>
+
+                        {configSaveSuccess && (
+                          <div style={{
+                            padding: '8px 12px',
+                            backgroundColor: '#D1FAE5',
+                            color: '#065F46',
+                            borderRadius: '6px',
+                            fontSize: '13px',
+                            fontWeight: '500'
+                          }}>
+                            ✓ Configuration saved successfully!
+                          </div>
+                        )}
+
+                        {!manualExteriorBaseline || !manualInteriorBaseline ? (
+                          <div style={{
+                            fontSize: '13px',
+                            color: '#DC2626',
+                            fontWeight: '500'
+                          }}>
+                            ⚠ Both Exterior and Interior baselines must be defined before saving
+                          </div>
+                        ) : null}
                       </div>
                     </>
                   )}
@@ -3922,27 +4144,15 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
     if (jobData?.id && loadedJobIdRef.current !== jobData.id) {
       loadedJobIdRef.current = jobData.id;
 
-      // Load filter settings
+      // Load filter settings from localStorage (these are still OK to keep in localStorage)
       const savedTypeFilter = localStorage.getItem(`attr-cards-type-filter-${jobData.id}`);
       const savedInteriorInspections = localStorage.getItem(`attr-cards-interior-inspections-${jobData.id}`);
 
-      // Load baseline conditions
-      const savedExteriorBaseline = localStorage.getItem(`attr-cards-exterior-baseline-${jobData.id}`);
-      const savedInteriorBaseline = localStorage.getItem(`attr-cards-interior-baseline-${jobData.id}`);
-      const savedExteriorBetter = localStorage.getItem(`attr-cards-exterior-better-${jobData.id}`);
-      const savedExteriorWorse = localStorage.getItem(`attr-cards-exterior-worse-${jobData.id}`);
-      const savedInteriorBetter = localStorage.getItem(`attr-cards-interior-better-${jobData.id}`);
-      const savedInteriorWorse = localStorage.getItem(`attr-cards-interior-worse-${jobData.id}`);
-
-      // Apply saved settings
+      // Apply saved filter settings
       if (savedTypeFilter) setTypeUseFilter(savedTypeFilter);
       if (savedInteriorInspections !== null) setUseInteriorInspections(savedInteriorInspections === 'true');
-      if (savedExteriorBaseline !== null) setManualExteriorBaseline(savedExteriorBaseline);
-      if (savedInteriorBaseline !== null) setManualInteriorBaseline(savedInteriorBaseline);
-      if (savedExteriorBetter) setExteriorBetterConditions(JSON.parse(savedExteriorBetter));
-      if (savedExteriorWorse) setExteriorWorseConditions(JSON.parse(savedExteriorWorse));
-      if (savedInteriorBetter) setInteriorBetterConditions(JSON.parse(savedInteriorBetter));
-      if (savedInteriorWorse) setInteriorWorseConditions(JSON.parse(savedInteriorWorse));
+
+      // Note: Baseline conditions are now loaded from database via loadConditionConfigFromDatabase
     }
   }, [jobData?.id]);
 
