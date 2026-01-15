@@ -1292,16 +1292,15 @@ const SalesReviewTab = ({
               <Download className="w-4 h-4" />
               Export to Excel
             </button>
-            {selectedProperties.size > 0 && (
-              <button
-                onClick={handleClearNormalization}
-                disabled={isClearing}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50"
-              >
-                <X className="w-4 h-4" />
-                Clear Normalization ({selectedProperties.size})
-              </button>
-            )}
+            <button
+              onClick={handleClearNormalization}
+              disabled={isClearing || selectedProperties.size === 0}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={selectedProperties.size === 0 ? 'Select properties with normalization to clear' : `Clear normalization for ${selectedProperties.size} selected ${selectedProperties.size === 1 ? 'property' : 'properties'}`}
+            >
+              <X className="w-4 h-4" />
+              Clear Normalization {selectedProperties.size > 0 ? `(${selectedProperties.size})` : ''}
+            </button>
           </div>
         </div>
 
@@ -1711,10 +1710,6 @@ const SalesReviewTab = ({
 
       {/* Main Data Table with Horizontal Scroll */}
       <div className="bg-white border rounded overflow-hidden">
-        {/* Top horizontal scrollbar for easier navigation */}
-        <div className="overflow-x-auto" style={{ overflowY: 'hidden', height: '20px' }}>
-          <div style={{ width: '2500px', height: '1px' }}></div>
-        </div>
         <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '70vh' }}>
           <table className="min-w-full" style={{ fontSize: `${fontSize}px` }}>
             <thead className="bg-gray-50 border-b sticky top-0 z-10">
