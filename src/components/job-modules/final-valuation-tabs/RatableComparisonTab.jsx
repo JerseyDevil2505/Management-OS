@@ -677,40 +677,42 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   
                   {/* Class 1 */}
                   <div className="space-y-1">
-                    <div className="grid grid-cols-3 gap-2 items-center">
+                    <div className="grid grid-cols-4 gap-2 items-center">
                       <div className="text-sm font-medium py-1">Class 1</div>
                       <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">{formatCount(projectedRatableBase['1'].count)}</div>
                       <div className="text-sm text-right px-2 py-1 h-7 flex flex-col items-end justify-center">
-                        <div>
-                          {formatAvgAsmt(projectedRatableBase['1'].total)}
-                          {formatPercentChange(projectedRatableBase['1'].total, localCurrentYear.class_1_total)}
-                        </div>
+                        <div>{formatAvgAsmt(projectedRatableBase['1'].total)}</div>
                         {formatDelta(projectedRatableBase['1'].total, previousProjected.class_1_total)}
                       </div>
+                      <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">
+                        {formatPercentChange(projectedRatableBase['1'].total, localCurrentYear.class_1_total)}
+                      </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 items-center text-xs text-gray-600 pl-4">
+                    <div className="grid grid-cols-4 gap-2 items-center text-xs text-gray-600 pl-4">
                       <div className="py-1">Abatements</div>
                       <div className="text-right px-2 py-1 h-6 flex items-center justify-end">0</div>
+                      <div></div>
                       <div></div>
                     </div>
                   </div>
 
                   {/* Class 2 */}
                   <div className="space-y-1">
-                    <div className="grid grid-cols-3 gap-2 items-center">
+                    <div className="grid grid-cols-4 gap-2 items-center">
                       <div className="text-sm font-medium py-1">Class 2</div>
                       <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">{formatCount(projectedRatableBase['2'].count)}</div>
                       <div className="text-sm text-right px-2 py-1 h-7 flex flex-col items-end justify-center">
-                        <div>
-                          {formatAvgAsmt(projectedRatableBase['2'].total)}
-                          {formatPercentChange(projectedRatableBase['2'].total, localCurrentYear.class_2_total)}
-                        </div>
+                        <div>{formatAvgAsmt(projectedRatableBase['2'].total)}</div>
                         {formatDelta(projectedRatableBase['2'].total, previousProjected.class_2_total)}
                       </div>
+                      <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">
+                        {formatPercentChange(projectedRatableBase['2'].total, localCurrentYear.class_2_total)}
+                      </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 items-center text-xs text-gray-600 pl-4">
+                    <div className="grid grid-cols-4 gap-2 items-center text-xs text-gray-600 pl-4">
                       <div className="py-1">Abatements</div>
                       <div className="text-right px-2 py-1 h-6 flex items-center justify-end">0</div>
+                      <div></div>
                       <div></div>
                     </div>
                   </div>
