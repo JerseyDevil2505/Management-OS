@@ -821,20 +821,22 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">BUDGET</label>
                 <input
-                  type="text"
-                  value={formatBudget(localRateCalc.budget)}
+                  type="number"
+                  step="0.01"
+                  value={localRateCalc.budget}
                   onChange={(e) => handleLocalRateCalcChange('budget', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-lg font-bold"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-lg font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   placeholder="Enter budget"
                 />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">CURRENT RATE</label>
                 <input
-                  type="text"
-                  value={formatTaxRate(localRateCalc.currentRate)}
+                  type="number"
+                  step="0.001"
+                  value={localRateCalc.currentRate}
                   onChange={(e) => handleLocalRateCalcChange('currentRate', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-lg font-bold"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-lg font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   placeholder="Enter current rate"
                 />
               </div>
