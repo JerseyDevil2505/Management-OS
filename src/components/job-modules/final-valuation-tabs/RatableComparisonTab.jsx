@@ -904,7 +904,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-lg font-bold text-blue-900">Estimated Rate</div>
                   <div className="text-right text-2xl font-bold text-blue-600">
-                    {formatTaxRate(localRateCalc.budget / (projectedRatableBase.totalTotal * (1 - localRateCalc.bufferForLoss / 100)))}
+                    {formatTaxRate((localRateCalc.budget / (projectedRatableBase.totalTotal * (1 - localRateCalc.bufferForLoss / 100))) * 100)}
                   </div>
                 </div>
               </div>
