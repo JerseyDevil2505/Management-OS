@@ -778,17 +778,17 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   </div>
 
                   {/* Total */}
-                  <div className="grid grid-cols-3 gap-2 pt-3 border-t-2 border-gray-300 font-bold">
+                  <div className="grid grid-cols-4 gap-2 pt-3 border-t-2 border-gray-300 font-bold">
                     <div className="text-sm py-1">Total Ratables</div>
                     <div className="text-sm text-right px-2 py-1">{formatCount(projectedRatableBase.totalCount)}</div>
                     <div className="text-base text-right px-2 py-1">
                       <div className="flex flex-col items-end">
-                        <div>
-                          {formatAvgAsmt(projectedRatableBase.totalTotal)}
-                          {formatPercentChange(projectedRatableBase.totalTotal, currentYearCalculatedTotals.totalTotal)}
-                        </div>
+                        <div>{formatAvgAsmt(projectedRatableBase.totalTotal)}</div>
                         {formatDelta(projectedRatableBase.totalTotal, previousProjected.total_total)}
                       </div>
+                    </div>
+                    <div className="text-base text-right px-2 py-1 flex items-center justify-end">
+                      {formatPercentChange(projectedRatableBase.totalTotal, currentYearCalculatedTotals.totalTotal)}
                     </div>
                   </div>
 
