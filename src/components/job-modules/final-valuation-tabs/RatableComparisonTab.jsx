@@ -365,7 +365,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
 
     // Sheet 2: Rate Calculator
     const netRatables = projectedRatableBase.totalTotal * (1 - localRateCalc.bufferForLoss / 100);
-    const estimatedRate = netRatables > 0 ? localRateCalc.budget / netRatables : 0;
+    const estimatedRate = netRatables > 0 ? (localRateCalc.budget / netRatables) * 100 : 0;
 
     const rateCalcDataSheet = [
       ['Tax Rate Calculator'],
