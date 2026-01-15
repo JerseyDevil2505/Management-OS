@@ -482,7 +482,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   
                   {/* Class 1 */}
                   <div className="space-y-1">
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-3 gap-2 items-center">
                       <div className="text-sm font-medium py-1">Class 1</div>
                       <input
                         type="text"
@@ -497,7 +497,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                         className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                       />
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
+                    <div className="grid grid-cols-3 gap-2 items-center text-xs text-gray-600 pl-4">
                       <div className="py-1">Abatements</div>
                       <input
                         type="text"
