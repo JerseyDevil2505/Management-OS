@@ -237,7 +237,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
       } else if (['6A', '6B'].includes(propertyClass)) {
         // For personal property (6A,B,C), use land * (imp/100) instead of land + imp
         const land = property.values_cama_land || 0;
-        const imp = property.values_cama_imp || 0;
+        const imp = property.values_cama_improvement || 0;
         const personalPropertyValue = land * (imp / 100);
 
         summary['6ABC'].count++;
