@@ -191,6 +191,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       if (error && error.code !== 'PGRST116') throw error;
 
       if (data && data.length > 0) {
+        // User has saved settings - load them
         const newConfig = { ...codeConfig };
         data.forEach(setting => {
           const attributeId = setting.setting_key.replace('adjustment_codes_', '');
@@ -201,9 +202,60 @@ const AdjustmentsTab = ({ jobData = {} }) => {
           }
         });
         setCodeConfig(newConfig);
+      } else {
+        // No saved settings - auto-populate based on keyword matching
+        console.log('🔍 Auto-populating adjustment codes based on keywords...');
+        autoPopulateCodeConfig();
       }
     } catch (error) {
       console.error('Error loading code config:', error);
+    }
+  };
+
+  const autoPopulateCodeConfig = () => {
+    // Wait for available codes to be loaded first
+    if (Object.values(availableCodes).every(arr => arr.length === 0)) {
+      console.log('⏳ Waiting for codes to load before auto-populating...');
+      return;
+    }
+
+    const newConfig = { ...codeConfig };
+
+    // Auto-populate rules for static attributes
+    const autoPopulateRules = {
+      // Attached items (category '11')
+      garage: { category: '11', keywords: ['GAR'] },
+      deck: { category: '11', keywords: ['DECK'] },
+      patio: { category: '11', keywords: ['PATIO'] },
+      open_porch: { category: '11', keywords: ['OPEN'] },
+      enclosed_porch: { category: '11', keywords: ['ENCL'] },
+
+      // Detached items (category '15')
+      det_garage: { category: '15', keywords: ['GAR'] },
+      pool: { category: '15', keywords: ['POOL'] }
+    };
+
+    Object.keys(autoPopulateRules).forEach(attributeId => {
+      const rule = autoPopulateRules[attributeId];
+      const codesInCategory = availableCodes[rule.category] || [];
+
+      // Find codes matching any of the keywords
+      const matchingCodes = codesInCategory.filter(codeObj => {
+        const descUpper = codeObj.description.toUpperCase();
+        return rule.keywords.some(keyword => descUpper.includes(keyword));
+      }).map(codeObj => codeObj.code);
+
+      if (matchingCodes.length > 0) {
+        newConfig[attributeId] = matchingCodes;
+        console.log(`✅ Auto-populated ${attributeId}: ${matchingCodes.join(', ')}`);
+      }
+    });
+
+    setCodeConfig(newConfig);
+
+    // Show user notification about auto-population
+    if (Object.values(newConfig).some(arr => arr.length > 0)) {
+      console.log('💡 Codes auto-populated. Review and save configuration to persist changes.');
     }
   };
 
