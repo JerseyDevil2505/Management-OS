@@ -122,12 +122,6 @@ const FinalValuation = ({
           />
         )}
 
-        {activeTab === 'adjustments' && (
-          <AdjustmentsTab
-            jobData={jobData}
-          />
-        )}
-
         {activeTab === 'sales-comparison' && (
           <SalesComparisonTab
             jobData={jobData}
