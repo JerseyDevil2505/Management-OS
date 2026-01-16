@@ -17,6 +17,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   
   // ==================== COMPARABLE FILTERS STATE ====================
   const [compFilters, setCompFilters] = useState({
+    adjustmentBracket: 'auto', // 'auto' or 'bracket_0', 'bracket_1', etc.
+    autoAdjustment: true, // Auto checkbox
     salesCodes: [],
     salesDateStart: '',
     salesDateEnd: '',
