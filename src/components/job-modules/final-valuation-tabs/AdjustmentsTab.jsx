@@ -1193,9 +1193,16 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
                   {/* Attribute Values Table */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-3">
-                      Adjustment Values by Attribute ({adjustments.length} attributes)
-                    </label>
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Adjustment Values by Attribute ({adjustments.length} attributes)
+                      </label>
+                      {adjustments.some(adj => !adj.is_default) && (
+                        <span className="text-xs text-purple-600 font-medium">
+                          Includes dynamic attributes
+                        </span>
+                      )}
+                    </div>
                     <div className="border rounded-lg overflow-hidden max-h-96 overflow-y-auto">
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50 sticky top-0">
