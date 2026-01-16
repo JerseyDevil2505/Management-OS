@@ -1194,7 +1194,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                   {/* Attribute Values Table */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-3">
-                      Adjustment Values by Attribute
+                      Adjustment Values by Attribute ({adjustments.length} attributes)
                     </label>
                     <div className="border rounded-lg overflow-hidden max-h-96 overflow-y-auto">
                       <table className="min-w-full divide-y divide-gray-200">
@@ -1212,18 +1212,21 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                          {DEFAULT_ADJUSTMENTS.map(adj => {
-                            const attrValue = customBracket.attributeValues[adj.id] || { value: 0, type: adj.type };
+                          {adjustments.map(adj => {
+                            const attrValue = customBracket.attributeValues[adj.adjustment_id] || { value: 0, type: adj.adjustment_type };
                             return (
-                              <tr key={adj.id} className="hover:bg-gray-50">
+                              <tr key={adj.adjustment_id} className="hover:bg-gray-50">
                                 <td className="px-4 py-2 text-sm font-medium text-gray-900 whitespace-nowrap">
-                                  {adj.name}
+                                  {adj.adjustment_name}
+                                  {!adj.is_default && (
+                                    <span className="ml-2 text-xs text-purple-600 font-normal">(Custom)</span>
+                                  )}
                                 </td>
                                 <td className="px-4 py-2">
                                   <input
                                     type="number"
                                     value={attrValue.value}
-                                    onChange={(e) => handleCustomBracketValueChange(adj.id, 'value', e.target.value)}
+                                    onChange={(e) => handleCustomBracketValueChange(adj.adjustment_id, 'value', e.target.value)}
                                     className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                                     step={attrValue.type === 'per_sqft' ? '0.01' : attrValue.type === 'percent' ? '1' : '100'}
                                   />
@@ -1231,12 +1234,12 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                                 <td className="px-4 py-2">
                                   <select
                                     value={attrValue.type}
-                                    onChange={(e) => handleCustomBracketValueChange(adj.id, 'type', e.target.value)}
+                                    onChange={(e) => handleCustomBracketValueChange(adj.adjustment_id, 'type', e.target.value)}
                                     className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                                   >
                                     <option value="flat">Flat ($)</option>
                                     <option value="per_sqft">Per SF ($/SF)</option>
-                                    {(adj.type === 'percent' || adj.adjustment_type === 'percent') && (
+                                    {(adj.adjustment_type === 'percent' || adj.adjustment_type === 'flat_or_percent') && (
                                       <option value="percent">Percent (%)</option>
                                     )}
                                   </select>
