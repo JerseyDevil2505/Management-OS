@@ -517,13 +517,30 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
   const calculateAdjustment = (subject, comp, adjustmentDef) => {
     if (!subject || !comp || !adjustmentDef) return 0;
-    
-    const bracketIndex = getPriceBracketIndex(comp.values_norm_time);
-    const adjustmentValue = adjustmentDef[`bracket_${bracketIndex}`] || 0;
-    
+
+    const selectedBracket = compFilters.adjustmentBracket;
+    let adjustmentValue = 0;
+    let adjustmentType = adjustmentDef.adjustment_type;
+
+    // Check if using a custom bracket
+    if (selectedBracket && selectedBracket.startsWith('custom_')) {
+      const customBracket = customBrackets.find(b => b.bracket_id === selectedBracket);
+      if (customBracket && customBracket.adjustment_values) {
+        const customValue = customBracket.adjustment_values[adjustmentDef.adjustment_id];
+        if (customValue) {
+          adjustmentValue = customValue.value || 0;
+          adjustmentType = customValue.type || adjustmentDef.adjustment_type;
+        }
+      }
+    } else {
+      // Use default bracket
+      const bracketIndex = getPriceBracketIndex(comp.values_norm_time);
+      adjustmentValue = adjustmentDef[`bracket_${bracketIndex}`] || 0;
+    }
+
     // Simplified adjustment logic - full implementation would check property codes
     let subjectValue, compValue;
-    
+
     switch (adjustmentDef.adjustment_id) {
       case 'living_area':
         subjectValue = subject.asset_sfla || 0;
@@ -532,10 +549,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       default:
         return 0;
     }
-    
+
     const difference = subjectValue - compValue;
-    
-    switch (adjustmentDef.adjustment_type) {
+
+    switch (adjustmentType) {
       case 'flat':
         return difference * adjustmentValue;
       case 'per_sqft':
