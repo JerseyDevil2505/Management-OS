@@ -970,7 +970,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                 className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 border border-gray-300"
               >
                 <Plus className="w-4 h-4" />
-                Add Custom Adjustment
+                Create Custom Bracket
               </button>
               <button
                 onClick={handleSaveAdjustments}
