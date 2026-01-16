@@ -58,10 +58,16 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
   // Default adjustment attributes with sample values based on image
   const DEFAULT_ADJUSTMENTS = [
-    { id: 'lot_size', name: 'Lot Size', type: 'flat', isDefault: true, category: 'physical',
+    { id: 'lot_size_ff', name: 'Lot Size (FF)', type: 'flat', isDefault: true, category: 'physical',
+      values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+    { id: 'lot_size_sf', name: 'Lot Size (SF)', type: 'flat', isDefault: true, category: 'physical',
+      values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+    { id: 'lot_size_acre', name: 'Lot Size (Acre)', type: 'flat', isDefault: true, category: 'physical',
       values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
     { id: 'living_area', name: 'Living Area (Sq Ft)', type: 'per_sqft', isDefault: true, category: 'physical',
       values: [20, 30, 35, 40, 45, 50, 60, 85, 100, 130] },
+    { id: 'year_built', name: 'Year Built', type: 'flat', isDefault: true, category: 'physical',
+      values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
     { id: 'basement', name: 'Basement', type: 'flat', isDefault: true, category: 'physical',
       values: [7500, 10000, 15000, 15000, 20000, 25000, 30000, 40000, 45000, 60000] },
     { id: 'finished_basement', name: 'Finished Basement', type: 'flat', isDefault: true, category: 'physical',
