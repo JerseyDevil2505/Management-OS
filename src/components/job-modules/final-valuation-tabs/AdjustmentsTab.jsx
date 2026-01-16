@@ -1022,13 +1022,33 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                   <th className="sticky left-0 z-10 bg-gray-50 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
                     Attribute
                   </th>
+                  {/* Default Brackets */}
                   {CME_BRACKETS.map((bracket, idx) => (
                     <th
-                      key={idx}
+                      key={`default-${idx}`}
                       className="px-3 py-3 text-center text-xs font-medium uppercase tracking-wider"
                       style={{ backgroundColor: bracket.color, color: bracket.textColor }}
                     >
                       {bracket.shortLabel}
+                    </th>
+                  ))}
+                  {/* Custom Brackets */}
+                  {customBrackets.map((customBracket, idx) => (
+                    <th
+                      key={`custom-${customBracket.bracket_id}`}
+                      className="px-3 py-3 text-center text-xs font-medium uppercase tracking-wider bg-purple-100 text-purple-900 border-l-2 border-purple-300"
+                      title="Custom Bracket"
+                    >
+                      <div className="flex items-center justify-center gap-2">
+                        <span>{customBracket.bracket_name}</span>
+                        <button
+                          onClick={() => handleDeleteCustomBracket(customBracket.bracket_id)}
+                          className="text-purple-600 hover:text-purple-800"
+                          title="Delete custom bracket"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
                     </th>
                   ))}
                   <th className="sticky right-0 z-10 bg-gray-50 px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-l border-gray-200">
@@ -1042,9 +1062,10 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                     <td className="sticky left-0 z-10 bg-white px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-gray-200">
                       {adj.adjustment_name}
                     </td>
+                    {/* Default Bracket Values */}
                     {CME_BRACKETS.map((bracket, bIdx) => (
                       <td
-                        key={bIdx}
+                        key={`default-${bIdx}`}
                         className="px-2 py-2 text-center"
                         style={{ backgroundColor: `${bracket.color}33` }}
                       >
@@ -1057,6 +1078,23 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                         />
                       </td>
                     ))}
+                    {/* Custom Bracket Values */}
+                    {customBrackets.map((customBracket) => {
+                      const customValue = customBracket.adjustment_values?.[adj.adjustment_id] || { value: 0, type: adj.adjustment_type };
+                      return (
+                        <td
+                          key={`custom-${customBracket.bracket_id}`}
+                          className="px-2 py-2 text-center bg-purple-50 border-l-2 border-purple-300"
+                        >
+                          <div className="text-sm font-medium text-gray-900">
+                            {customValue.value || 0}
+                            <span className="text-xs text-gray-500 ml-1">
+                              {customValue.type === 'flat' ? '$' : customValue.type === 'per_sqft' ? '$/SF' : '%'}
+                            </span>
+                          </div>
+                        </td>
+                      );
+                    })}
                     <td className="sticky right-0 z-10 bg-white px-2 py-2 text-center border-l border-gray-200">
                       <div className="flex items-center justify-center gap-2">
                         <select
