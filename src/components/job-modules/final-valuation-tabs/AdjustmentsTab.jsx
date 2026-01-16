@@ -671,10 +671,42 @@ const AdjustmentsTab = ({ jobData = {} }) => {
           <div className="mb-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Adjustment Code Configuration</h3>
             <p className="text-sm text-gray-600">
-              Assign BRT codes to each adjustment attribute. Static attributes are always visible in the adjustment grid. 
+              Assign BRT codes to each adjustment attribute. Static attributes are always visible in the adjustment grid.
               Dynamic attributes will only appear in the grid after codes are assigned and saved.
             </p>
           </div>
+
+          {/* Auto-populate Notification */}
+          {showAutoPopulateNotice && (
+            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <Settings className="w-5 h-5 text-blue-600" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                    Codes Auto-Populated
+                  </h4>
+                  <p className="text-sm text-blue-800 mb-2">
+                    Adjustment codes have been automatically assigned based on keyword matching (GAR, DECK, PATIO, OPEN, ENCL, POOL).
+                    Review the selections below and click "Save Configuration" to persist your changes.
+                  </p>
+                  <button
+                    onClick={() => setShowAutoPopulateNotice(false)}
+                    className="text-sm text-blue-700 hover:text-blue-900 font-medium"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+                <button
+                  onClick={() => setShowAutoPopulateNotice(false)}
+                  className="flex-shrink-0 text-blue-400 hover:text-blue-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          )}
 
           {isLoadingCodes ? (
             <div className="flex items-center justify-center py-12">
