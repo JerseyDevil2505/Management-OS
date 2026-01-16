@@ -56,6 +56,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [evaluationResults, setEvaluationResults] = useState(null);
   const [adjustmentGrid, setAdjustmentGrid] = useState([]);
+  const [customBrackets, setCustomBrackets] = useState([]);
 
   const vendorType = jobData?.vendor_type || 'BRT';
   const codeDefinitions = jobData?.parsed_code_definitions;
