@@ -452,12 +452,12 @@ const AdjustmentsTab = ({ jobData = {} }) => {
   };
 
   const handleAddCustomAdjustment = () => {
-    // Initialize attribute values from all default adjustments
+    // Initialize attribute values from ALL current adjustments (default + dynamic)
     const initialValues = {};
-    DEFAULT_ADJUSTMENTS.forEach(adj => {
-      initialValues[adj.id] = {
+    adjustments.forEach(adj => {
+      initialValues[adj.adjustment_id] = {
         value: 0,
-        type: adj.type // Use the default type for each attribute
+        type: adj.adjustment_type // Use the adjustment type for each attribute
       };
     });
 
