@@ -960,6 +960,14 @@ const AdjustmentsTab = ({ jobData = {} }) => {
             </div>
             <div className="flex gap-2">
               <button
+                onClick={() => setActiveSubTab('config')}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white text-gray-700 rounded hover:bg-gray-50 border border-gray-300"
+                title="Review and edit code assignments for adjustments"
+              >
+                <Settings className="w-4 h-4" />
+                Code Configuration
+              </button>
+              <button
                 onClick={handleAddCustomAdjustment}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 border border-gray-300"
               >
