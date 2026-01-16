@@ -10,11 +10,11 @@ const AdjustmentsTab = ({ jobData = {} }) => {
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [showAutoPopulateNotice, setShowAutoPopulateNotice] = useState(false);
   const [wasReset, setWasReset] = useState(false); // Track if config was reset due to table changes
-  const [customAdjustment, setCustomAdjustment] = useState({
+  const [customBracket, setCustomBracket] = useState({
     name: '',
-    type: 'flat',
-    values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    attributeValues: {} // Will hold { lot_size_ff: { value: 0, type: 'flat' }, ... }
   });
+  const [customBrackets, setCustomBrackets] = useState([]); // Load from DB
   
   // Structure: maps attribute -> array of codes
   const [codeConfig, setCodeConfig] = useState({
