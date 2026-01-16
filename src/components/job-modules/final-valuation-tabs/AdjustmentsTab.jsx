@@ -9,6 +9,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [showAutoPopulateNotice, setShowAutoPopulateNotice] = useState(false);
+  const [wasReset, setWasReset] = useState(false); // Track if config was reset due to table changes
   const [customAdjustment, setCustomAdjustment] = useState({
     name: '',
     type: 'flat',
