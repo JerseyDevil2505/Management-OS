@@ -697,6 +697,48 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                 Which comparables do you want to use?
               </h3>
 
+              {/* Adjustment Bracket Selection */}
+              <div className="mb-6 pb-4 border-b border-gray-200">
+                <div className="flex items-center gap-4">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Adjustment Bracket
+                    </label>
+                    <select
+                      value={compFilters.adjustmentBracket || 'auto'}
+                      onChange={(e) => setCompFilters(prev => ({ ...prev, adjustmentBracket: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="auto">Auto (based on sale price)</option>
+                      <optgroup label="Default Brackets">
+                        {CME_BRACKETS.map((bracket, idx) => (
+                          <option key={idx} value={`bracket_${idx}`}>
+                            {bracket.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                      {/* TODO: Add custom brackets here */}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2 pt-6">
+                    <input
+                      type="checkbox"
+                      checked={compFilters.autoAdjustment || false}
+                      onChange={(e) => setCompFilters(prev => ({ ...prev, autoAdjustment: e.target.checked }))}
+                      className="rounded"
+                      id="auto-adjustment"
+                    />
+                    <label htmlFor="auto-adjustment" className="text-sm text-gray-700">
+                      Auto
+                    </label>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Select which adjustment bracket to use for comparable evaluations.
+                  "Auto" automatically selects the bracket based on each comparable's sale price.
+                </p>
+              </div>
+
               <div className="grid grid-cols-2 gap-6">
                 {/* LEFT COLUMN */}
                 <div className="space-y-4">
