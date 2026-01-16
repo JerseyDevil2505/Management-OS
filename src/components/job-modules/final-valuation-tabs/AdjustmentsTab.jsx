@@ -231,8 +231,10 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         // No saved settings OR version mismatch (code table changed) - re-auto-populate
         if (savedVersion && savedVersion !== currentVersion) {
           console.log('🔄 Code definitions changed - re-auto-populating adjustment codes...');
+          setWasReset(true); // Flag that this was a reset due to table changes
         } else {
           console.log('🔍 Auto-populating adjustment codes based on keywords...');
+          setWasReset(false);
         }
         autoPopulateCodeConfig();
       }
