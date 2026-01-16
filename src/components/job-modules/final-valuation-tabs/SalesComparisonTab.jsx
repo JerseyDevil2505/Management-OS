@@ -75,10 +75,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
     { min: 2000000, max: 99999999, label: 'Over $2,000,000' }
   ];
 
-  // ==================== LOAD ADJUSTMENT GRID ====================
+  // ==================== LOAD ADJUSTMENT GRID AND CUSTOM BRACKETS ====================
   useEffect(() => {
     if (jobData?.id) {
       loadAdjustmentGrid();
+      loadCustomBrackets();
     }
   }, [jobData?.id]);
 
@@ -94,6 +95,21 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       setAdjustmentGrid(data || []);
     } catch (error) {
       console.error('Error loading adjustment grid:', error);
+    }
+  };
+
+  const loadCustomBrackets = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('job_custom_brackets')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .order('sort_order');
+
+      if (error) throw error;
+      setCustomBrackets(data || []);
+    } catch (error) {
+      console.error('Error loading custom brackets:', error);
     }
   };
 
