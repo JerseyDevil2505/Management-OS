@@ -8,6 +8,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showCustomModal, setShowCustomModal] = useState(false);
+  const [showAutoPopulateNotice, setShowAutoPopulateNotice] = useState(false);
   const [customAdjustment, setCustomAdjustment] = useState({
     name: '',
     type: 'flat',
