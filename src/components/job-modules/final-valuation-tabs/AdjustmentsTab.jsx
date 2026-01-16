@@ -1098,12 +1098,15 @@ const AdjustmentsTab = ({ jobData = {} }) => {
             </ul>
           </div>
 
-          {/* Custom Adjustment Modal */}
+          {/* Create Custom Bracket Modal */}
           {showCustomModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
                 <div className="px-6 py-4 border-b flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-gray-900">Create Custom Adjustment</h3>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Create Custom Adjustment Bracket</h3>
+                    <p className="text-sm text-gray-600 mt-1">Define a custom price bracket column with adjustment values for all attributes</p>
+                  </div>
                   <button
                     onClick={() => setShowCustomModal(false)}
                     className="text-gray-400 hover:text-gray-600"
@@ -1113,118 +1116,91 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                 </div>
 
                 <div className="p-6 space-y-6">
-                  {/* Adjustment Name */}
+                  {/* Bracket Name */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Adjustment Name
+                      Bracket Name
                     </label>
                     <input
                       type="text"
-                      value={customAdjustment.name}
-                      onChange={(e) => setCustomAdjustment(prev => ({ ...prev, name: e.target.value }))}
-                      className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., Barn, Stable, Modern Kitchen, Land Adjustment"
+                      value={customBracket.name}
+                      onChange={(e) => setCustomBracket(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                      placeholder="e.g., $150K-$250K Custom, Luxury Properties, etc."
                     />
                   </div>
 
-                  {/* Adjustment Type */}
-                  <div className="border border-gray-300 rounded-lg p-4 bg-gray-50">
-                    <label className="block text-sm font-medium text-gray-900 mb-3">
-                      Adjustment Type
-                    </label>
-                    <div className="grid grid-cols-3 gap-3">
-                      <label className={`flex flex-col items-center justify-center p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                        customAdjustment.type === 'flat'
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 bg-white hover:border-gray-300'
-                      }`}>
-                        <input
-                          type="radio"
-                          name="adjustment-type"
-                          value="flat"
-                          checked={customAdjustment.type === 'flat'}
-                          onChange={(e) => setCustomAdjustment(prev => ({ ...prev, type: e.target.value }))}
-                          className="sr-only"
-                        />
-                        <div className="text-lg font-bold text-gray-900">Flat</div>
-                        <div className="text-xs text-gray-600 text-center mt-1">Fixed dollar amount ($)</div>
-                      </label>
-
-                      <label className={`flex flex-col items-center justify-center p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                        customAdjustment.type === 'per_sqft'
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 bg-white hover:border-gray-300'
-                      }`}>
-                        <input
-                          type="radio"
-                          name="adjustment-type"
-                          value="per_sqft"
-                          checked={customAdjustment.type === 'per_sqft'}
-                          onChange={(e) => setCustomAdjustment(prev => ({ ...prev, type: e.target.value }))}
-                          className="sr-only"
-                        />
-                        <div className="text-lg font-bold text-gray-900">Per SF</div>
-                        <div className="text-xs text-gray-600 text-center mt-1">Per square foot ($/SF)</div>
-                      </label>
-
-                      <label className={`flex flex-col items-center justify-center p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                        customAdjustment.type === 'percent'
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 bg-white hover:border-gray-300'
-                      }`}>
-                        <input
-                          type="radio"
-                          name="adjustment-type"
-                          value="percent"
-                          checked={customAdjustment.type === 'percent'}
-                          onChange={(e) => setCustomAdjustment(prev => ({ ...prev, type: e.target.value }))}
-                          className="sr-only"
-                        />
-                        <div className="text-lg font-bold text-gray-900">Percent</div>
-                        <div className="text-xs text-gray-600 text-center mt-1">Percentage-based (%)</div>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Bracket Values */}
+                  {/* Attribute Values Table */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-3">
-                      Adjustment Values by Price Bracket
+                      Adjustment Values by Attribute
                     </label>
-                    <div className="grid grid-cols-2 gap-4">
-                      {CME_BRACKETS.map((bracket, idx) => (
-                        <div key={idx} className="flex items-center gap-3">
-                          <div
-                            className="px-3 py-2 rounded text-xs font-medium flex-shrink-0"
-                            style={{ backgroundColor: bracket.color, color: bracket.textColor, minWidth: '140px' }}
-                          >
-                            {bracket.shortLabel}
-                          </div>
-                          <input
-                            type="number"
-                            value={customAdjustment.values[idx]}
-                            onChange={(e) => handleCustomValueChange(idx, e.target.value)}
-                            className="flex-1 px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
-                            step={customAdjustment.type === 'per_sqft' ? '0.01' : customAdjustment.type === 'percent' ? '1' : '100'}
-                          />
-                        </div>
-                      ))}
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
+                              Attribute
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
+                              Value
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
+                              Type
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {DEFAULT_ADJUSTMENTS.map(adj => {
+                            const attrValue = customBracket.attributeValues[adj.id] || { value: 0, type: adj.type };
+                            return (
+                              <tr key={adj.id} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                                  {adj.name}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <input
+                                    type="number"
+                                    value={attrValue.value}
+                                    onChange={(e) => handleCustomBracketValueChange(adj.id, 'value', e.target.value)}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                    step={attrValue.type === 'per_sqft' ? '0.01' : attrValue.type === 'percent' ? '1' : '100'}
+                                  />
+                                </td>
+                                <td className="px-4 py-3">
+                                  <select
+                                    value={attrValue.type}
+                                    onChange={(e) => handleCustomBracketValueChange(adj.id, 'type', e.target.value)}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                  >
+                                    <option value="flat">Flat ($)</option>
+                                    <option value="per_sqft">Per SF ($/SF)</option>
+                                    {(adj.type === 'percent' || adj.adjustment_type === 'percent') && (
+                                      <option value="percent">Percent (%)</option>
+                                    )}
+                                  </select>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </div>
 
-                <div className="px-6 py-4 border-t flex justify-end gap-3">
+                <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-3">
                   <button
                     onClick={() => setShowCustomModal(false)}
-                    className="px-4 py-2 border rounded text-gray-700 hover:bg-gray-50"
+                    className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 bg-white"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSaveCustomAdjustment}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
                   >
-                    Save Adjustment
+                    Save Custom Bracket
                   </button>
                 </div>
               </div>
