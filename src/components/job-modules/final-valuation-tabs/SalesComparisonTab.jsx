@@ -753,7 +753,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                           </option>
                         ))}
                       </optgroup>
-                      {/* TODO: Add custom brackets here */}
+                      {customBrackets.length > 0 && (
+                        <optgroup label="Custom Brackets">
+                          {customBrackets.map((bracket) => (
+                            <option key={bracket.bracket_id} value={bracket.bracket_id}>
+                              {bracket.bracket_name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
                     </select>
                   </div>
                   <div className="flex items-center gap-2 pt-6">
@@ -778,6 +786,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                 <p className="text-xs text-gray-500 mt-2">
                   Select which adjustment bracket to use for comparable evaluations.
                   "Auto" automatically selects the bracket based on each comparable's sale price.
+                  {customBrackets.length > 0 && ' Custom brackets allow you to define your own price ranges and adjustment values.'}
                 </p>
               </div>
 
