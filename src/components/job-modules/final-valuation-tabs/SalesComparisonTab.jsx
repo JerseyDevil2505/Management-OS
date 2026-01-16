@@ -483,6 +483,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   };
 
   const getPriceBracketIndex = (normPrice) => {
+    // Check if user selected a specific bracket (not auto)
+    if (compFilters.adjustmentBracket && compFilters.adjustmentBracket !== 'auto') {
+      // Extract bracket index from 'bracket_0', 'bracket_1', etc.
+      const match = compFilters.adjustmentBracket.match(/bracket_(\d+)/);
+      if (match) {
+        return parseInt(match[1]);
+      }
+    }
+
+    // Auto mode: determine bracket based on sale price
     if (!normPrice) return 0;
     const bracket = CME_BRACKETS.findIndex(b => normPrice >= b.min && normPrice <= b.max);
     return bracket >= 0 ? bracket : 0;
