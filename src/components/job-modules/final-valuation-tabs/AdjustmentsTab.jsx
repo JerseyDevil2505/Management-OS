@@ -468,42 +468,49 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     setShowCustomModal(true);
   };
 
-  const handleSaveCustomAdjustment = () => {
-    if (!customAdjustment.name.trim()) {
-      alert('Please enter an adjustment name');
+  const handleSaveCustomAdjustment = async () => {
+    if (!customBracket.name.trim()) {
+      alert('Please enter a bracket name');
       return;
     }
 
-    const newAdj = {
-      job_id: jobData.id,
-      adjustment_id: `custom_${Date.now()}`,
-      adjustment_name: customAdjustment.name,
-      adjustment_type: customAdjustment.type,
-      category: 'custom',
-      is_default: false,
-      sort_order: adjustments.length,
-      bracket_0: customAdjustment.values[0],
-      bracket_1: customAdjustment.values[1],
-      bracket_2: customAdjustment.values[2],
-      bracket_3: customAdjustment.values[3],
-      bracket_4: customAdjustment.values[4],
-      bracket_5: customAdjustment.values[5],
-      bracket_6: customAdjustment.values[6],
-      bracket_7: customAdjustment.values[7],
-      bracket_8: customAdjustment.values[8],
-      bracket_9: customAdjustment.values[9]
-    };
+    try {
+      const bracketId = `custom_${Date.now()}`;
+      const maxSortOrder = Math.max(...customBrackets.map(b => b.sort_order || 0), 0);
 
-    setAdjustments(prev => [...prev, newAdj]);
-    setShowCustomModal(false);
+      const { error } = await supabase
+        .from('job_custom_brackets')
+        .insert({
+          job_id: jobData.id,
+          bracket_id: bracketId,
+          bracket_name: customBracket.name,
+          adjustment_values: customBracket.attributeValues,
+          sort_order: maxSortOrder + 1
+        });
+
+      if (error) throw error;
+
+      // Reload custom brackets
+      await loadCustomBrackets();
+      setShowCustomModal(false);
+      alert('Custom bracket created successfully!');
+    } catch (error) {
+      console.error('Error saving custom bracket:', error);
+      alert(`Failed to save: ${error.message}`);
+    }
   };
 
-  const handleCustomValueChange = (bracketIndex, value) => {
-    setCustomAdjustment(prev => {
-      const newValues = [...prev.values];
-      newValues[bracketIndex] = parseFloat(value) || 0;
-      return { ...prev, values: newValues };
-    });
+  const handleCustomBracketValueChange = (attributeId, field, value) => {
+    setCustomBracket(prev => ({
+      ...prev,
+      attributeValues: {
+        ...prev.attributeValues,
+        [attributeId]: {
+          ...prev.attributeValues[attributeId],
+          [field]: field === 'value' ? (parseFloat(value) || 0) : value
+        }
+      }
+    }));
   };
 
   const handleDeleteAdjustment = async (adjustmentId) => {
