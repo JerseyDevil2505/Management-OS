@@ -526,6 +526,14 @@ const AdjustmentsTab = ({ jobData = {} }) => {
           setting_value: JSON.stringify(codeConfig[attributeId])
         }));
 
+      // Add version hash to detect future code table changes
+      const currentVersion = generateCodeVersion(availableCodes);
+      settings.push({
+        job_id: jobData.id,
+        setting_key: 'adjustment_codes_version',
+        setting_value: currentVersion
+      });
+
       const { error: settingsError } = await supabase
         .from('job_settings')
         .upsert(settings, { onConflict: 'job_id,setting_key' });
