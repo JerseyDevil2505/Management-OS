@@ -194,7 +194,8 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         'adjustment_codes_pole_barn',
         'adjustment_codes_miscellaneous',
         'adjustment_codes_land_positive',
-        'adjustment_codes_land_negative'
+        'adjustment_codes_land_negative',
+        'adjustment_codes_version' // Track code definition version
       ];
 
       const { data, error } = await supabase
@@ -205,26 +206,48 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
       if (error && error.code !== 'PGRST116') throw error;
 
-      if (data && data.length > 0) {
-        // User has saved settings - load them
+      // Generate current version hash from available codes
+      const currentVersion = generateCodeVersion(availableCodes);
+
+      // Check if saved version matches current version
+      const savedVersion = data?.find(s => s.setting_key === 'adjustment_codes_version')?.setting_value;
+
+      if (data && data.length > 0 && savedVersion === currentVersion) {
+        // User has saved settings AND version matches - load them
         const newConfig = { ...codeConfig };
         data.forEach(setting => {
           const attributeId = setting.setting_key.replace('adjustment_codes_', '');
-          try {
-            newConfig[attributeId] = setting.setting_value ? JSON.parse(setting.setting_value) : [];
-          } catch (e) {
-            newConfig[attributeId] = [];
+          if (attributeId !== 'version') {
+            try {
+              newConfig[attributeId] = setting.setting_value ? JSON.parse(setting.setting_value) : [];
+            } catch (e) {
+              newConfig[attributeId] = [];
+            }
           }
         });
         setCodeConfig(newConfig);
       } else {
-        // No saved settings - auto-populate based on keyword matching
-        console.log('🔍 Auto-populating adjustment codes based on keywords...');
+        // No saved settings OR version mismatch (code table changed) - re-auto-populate
+        if (savedVersion && savedVersion !== currentVersion) {
+          console.log('🔄 Code definitions changed - re-auto-populating adjustment codes...');
+        } else {
+          console.log('🔍 Auto-populating adjustment codes based on keywords...');
+        }
         autoPopulateCodeConfig();
       }
     } catch (error) {
       console.error('Error loading code config:', error);
     }
+  };
+
+  // Generate a simple hash/version string from available codes
+  const generateCodeVersion = (codes) => {
+    // Create a string representation of all code counts per category
+    const versionString = Object.keys(codes)
+      .sort()
+      .map(cat => `${cat}:${codes[cat].length}`)
+      .join('|');
+    return versionString || 'v0';
   };
 
   const autoPopulateCodeConfig = () => {
