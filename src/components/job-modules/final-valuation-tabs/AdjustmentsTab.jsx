@@ -715,29 +715,53 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
           {/* Auto-populate Notification */}
           {showAutoPopulateNotice && (
-            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className={`mb-6 rounded-lg p-4 ${
+              wasReset
+                ? 'bg-yellow-50 border border-yellow-200'
+                : 'bg-blue-50 border border-blue-200'
+            }`}>
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0">
-                  <Settings className="w-5 h-5 text-blue-600" />
+                  <Settings className={`w-5 h-5 ${wasReset ? 'text-yellow-600' : 'text-blue-600'}`} />
                 </div>
                 <div className="flex-1">
-                  <h4 className="text-sm font-semibold text-blue-900 mb-1">
-                    Codes Auto-Populated
+                  <h4 className={`text-sm font-semibold mb-1 ${wasReset ? 'text-yellow-900' : 'text-blue-900'}`}>
+                    {wasReset ? 'Configuration Reset - Code Table Changed' : 'Codes Auto-Populated'}
                   </h4>
-                  <p className="text-sm text-blue-800 mb-2">
-                    Adjustment codes have been automatically assigned based on keyword matching (Garage: GAR | Deck: DECK | Patio: PATIO | Open Porch: OPEN | Enclosed Porch: ENCL/SCREEN | Pool: POOL).
-                    Review the selections below and click "Save Configuration" to persist your changes.
+                  <p className={`text-sm mb-2 ${wasReset ? 'text-yellow-800' : 'text-blue-800'}`}>
+                    {wasReset ? (
+                      <>
+                        The BRT code table has been updated since your last configuration.
+                        Adjustment codes have been <strong>re-auto-populated</strong> based on keyword matching
+                        (Garage: GAR | Deck: DECK | Patio: PATIO | Open Porch: OPEN | Enclosed Porch: ENCL/SCREEN | Pool: POOL).
+                        Review the new selections and save to update your configuration.
+                      </>
+                    ) : (
+                      <>
+                        Adjustment codes have been automatically assigned based on keyword matching
+                        (Garage: GAR | Deck: DECK | Patio: PATIO | Open Porch: OPEN | Enclosed Porch: ENCL/SCREEN | Pool: POOL).
+                        Review the selections below and click "Save Configuration" to persist your changes.
+                      </>
+                    )}
                   </p>
                   <button
                     onClick={() => setShowAutoPopulateNotice(false)}
-                    className="text-sm text-blue-700 hover:text-blue-900 font-medium"
+                    className={`text-sm font-medium ${
+                      wasReset
+                        ? 'text-yellow-700 hover:text-yellow-900'
+                        : 'text-blue-700 hover:text-blue-900'
+                    }`}
                   >
                     Dismiss
                   </button>
                 </div>
                 <button
                   onClick={() => setShowAutoPopulateNotice(false)}
-                  className="flex-shrink-0 text-blue-400 hover:text-blue-600"
+                  className={`flex-shrink-0 ${
+                    wasReset
+                      ? 'text-yellow-400 hover:text-yellow-600'
+                      : 'text-blue-400 hover:text-blue-600'
+                  }`}
                 >
                   <X className="w-5 h-5" />
                 </button>
