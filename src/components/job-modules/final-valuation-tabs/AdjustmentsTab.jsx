@@ -691,7 +691,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                     Codes Auto-Populated
                   </h4>
                   <p className="text-sm text-blue-800 mb-2">
-                    Adjustment codes have been automatically assigned based on keyword matching (GAR, DECK, PATIO, OPEN, ENCL, POOL).
+                    Adjustment codes have been automatically assigned based on keyword matching (Garage: GAR | Deck: DECK | Patio: PATIO | Open Porch: OPEN | Enclosed Porch: ENCL/SCREEN | Pool: POOL).
                     Review the selections below and click "Save Configuration" to persist your changes.
                   </p>
                   <button
