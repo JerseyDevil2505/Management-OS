@@ -1191,6 +1191,17 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                     />
                   </div>
 
+                  {/* Info Note */}
+                  {!adjustments.some(adj => !adj.is_default) && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <p className="text-sm text-blue-800">
+                        <strong>Tip:</strong> To add more attributes like Barn, Pole Barn, or Land Adjustments,
+                        go to the <strong>Configuration</strong> tab, assign codes, and save.
+                        They'll appear here automatically.
+                      </p>
+                    </div>
+                  )}
+
                   {/* Attribute Values Table */}
                   <div>
                     <div className="flex items-center justify-between mb-3">
