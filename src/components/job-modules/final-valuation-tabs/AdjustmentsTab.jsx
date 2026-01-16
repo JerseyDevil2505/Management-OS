@@ -271,6 +271,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     // Show user notification about auto-population
     if (Object.values(newConfig).some(arr => arr.length > 0)) {
       console.log('💡 Codes auto-populated. Review and save configuration to persist changes.');
+      setShowAutoPopulateNotice(true);
     }
   };
 
