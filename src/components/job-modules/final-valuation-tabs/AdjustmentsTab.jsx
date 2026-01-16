@@ -243,7 +243,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       deck: { category: '11', keywords: ['DECK'] },
       patio: { category: '11', keywords: ['PATIO'] },
       open_porch: { category: '11', keywords: ['OPEN'] },
-      enclosed_porch: { category: '11', keywords: ['ENCL'] },
+      enclosed_porch: { category: '11', keywords: ['ENCL', 'SCREEN', 'SCRN'] },
 
       // Detached items (category '15')
       det_garage: { category: '15', keywords: ['GAR'] },
