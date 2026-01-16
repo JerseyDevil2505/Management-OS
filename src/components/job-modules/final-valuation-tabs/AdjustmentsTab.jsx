@@ -121,13 +121,29 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     { id: 'land_negative', name: 'Negative Land', category: '63' }
   ];
 
-  // Load adjustments from database
+  // Load adjustments and custom brackets from database
   useEffect(() => {
     if (!jobData?.id) return;
     loadAdjustments();
     loadAvailableCodes();
     loadCodeConfig(); // Load after available codes are fetched
+    loadCustomBrackets();
   }, [jobData?.id]);
+
+  const loadCustomBrackets = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('job_custom_brackets')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .order('sort_order');
+
+      if (error) throw error;
+      setCustomBrackets(data || []);
+    } catch (error) {
+      console.error('Error loading custom brackets:', error);
+    }
+  };
 
   // Auto-populate config after codes are loaded (if no saved config exists)
   useEffect(() => {
