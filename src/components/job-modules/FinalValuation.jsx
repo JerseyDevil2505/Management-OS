@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calculator, TrendingUp, Sliders, BarChart3, FileSpreadsheet, DollarSign } from 'lucide-react';
+import { Calculator, TrendingUp, BarChart3, FileSpreadsheet, DollarSign } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import SalesReviewTab from './final-valuation-tabs/SalesReviewTab';
 import MarketDataTab from './final-valuation-tabs/MarketDataTab';
 import RatableComparisonTab from './final-valuation-tabs/RatableComparisonTab';
-import AdjustmentsTab from './final-valuation-tabs/AdjustmentsTab';
 import SalesComparisonTab from './final-valuation-tabs/SalesComparisonTab';
 import AnalyticsTab from './final-valuation-tabs/AnalyticsTab';
 
@@ -23,8 +22,7 @@ const FinalValuation = ({
     { id: 'sales-review', label: 'Sales Review', icon: FileSpreadsheet },
     { id: 'market-data', label: 'Market Data', icon: Calculator },
     { id: 'ratable-comparison', label: 'Ratable Comparison', icon: DollarSign },
-    { id: 'adjustments', label: 'Adjustments', icon: Sliders },
-    { id: 'sales-comparison', label: 'Sales Comparison', icon: TrendingUp },
+    { id: 'sales-comparison', label: 'Sales Comparison (CME)', icon: TrendingUp },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 }
   ];
 
