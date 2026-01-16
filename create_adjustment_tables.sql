@@ -27,6 +27,24 @@ CREATE TABLE IF NOT EXISTS job_adjustment_grid (
   UNIQUE(job_id, adjustment_id)
 );
 
+-- Create job_custom_brackets table for user-defined price bracket columns
+CREATE TABLE IF NOT EXISTS job_custom_brackets (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  bracket_id TEXT NOT NULL, -- e.g., 'custom_1', 'custom_2'
+  bracket_name TEXT NOT NULL, -- User-provided name, e.g., "$150K-$250K Custom"
+  sort_order INTEGER DEFAULT 0,
+  
+  -- Adjustment values stored as JSONB for flexibility
+  -- Structure: { "lot_size": { "value": 10, "type": "flat" }, "living_area": { "value": 50, "type": "per_sqft" }, ... }
+  adjustment_values JSONB DEFAULT '{}'::jsonb,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  UNIQUE(job_id, bracket_id)
+);
+
 -- Create job_settings table for storing job-specific configuration
 CREATE TABLE IF NOT EXISTS job_settings (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -45,6 +63,12 @@ CREATE INDEX IF NOT EXISTS idx_job_adjustment_grid_job_id
 
 CREATE INDEX IF NOT EXISTS idx_job_adjustment_grid_category 
   ON job_adjustment_grid(job_id, category);
+
+CREATE INDEX IF NOT EXISTS idx_job_custom_brackets_job_id
+  ON job_custom_brackets(job_id);
+
+CREATE INDEX IF NOT EXISTS idx_job_custom_brackets_bracket_id
+  ON job_custom_brackets(job_id, bracket_id);
 
 CREATE INDEX IF NOT EXISTS idx_job_settings_job_id 
   ON job_settings(job_id);
@@ -69,6 +93,12 @@ COMMENT ON COLUMN job_adjustment_grid.bracket_6 IS 'Adjustment value for propert
 COMMENT ON COLUMN job_adjustment_grid.bracket_7 IS 'Adjustment value for properties priced $1,000,000-$1,499,999';
 COMMENT ON COLUMN job_adjustment_grid.bracket_8 IS 'Adjustment value for properties priced $1,500,000-$1,999,999';
 COMMENT ON COLUMN job_adjustment_grid.bracket_9 IS 'Adjustment value for properties priced over $2,000,000';
+
+COMMENT ON TABLE job_custom_brackets IS 
+'Stores user-defined custom price bracket columns with adjustment values for all attributes';
+
+COMMENT ON COLUMN job_custom_brackets.adjustment_values IS 
+'JSONB object storing adjustment values and types for each attribute. Example: {"lot_size": {"value": 10, "type": "flat"}, "living_area": {"value": 50, "type": "per_sqft"}}';
 
 COMMENT ON TABLE job_settings IS 
 'Stores job-specific configuration settings (e.g., garage codes, custom thresholds)';
