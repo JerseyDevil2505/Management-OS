@@ -513,6 +513,26 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     }));
   };
 
+  const handleDeleteCustomBracket = async (bracketId) => {
+    if (!window.confirm('Delete this custom bracket? This cannot be undone.')) return;
+
+    try {
+      const { error } = await supabase
+        .from('job_custom_brackets')
+        .delete()
+        .eq('job_id', jobData.id)
+        .eq('bracket_id', bracketId);
+
+      if (error) throw error;
+
+      setCustomBrackets(prev => prev.filter(b => b.bracket_id !== bracketId));
+      alert('Custom bracket deleted successfully');
+    } catch (error) {
+      console.error('Error deleting custom bracket:', error);
+      alert(`Failed to delete: ${error.message}`);
+    }
+  };
+
   const handleDeleteAdjustment = async (adjustmentId) => {
     if (!window.confirm('Delete this adjustment?')) return;
 
