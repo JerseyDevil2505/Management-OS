@@ -452,12 +452,20 @@ const AdjustmentsTab = ({ jobData = {} }) => {
   };
 
   const handleAddCustomAdjustment = () => {
-    setShowCustomModal(true);
-    setCustomAdjustment({
-      name: '',
-      type: 'flat',
-      values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    // Initialize attribute values from all default adjustments
+    const initialValues = {};
+    DEFAULT_ADJUSTMENTS.forEach(adj => {
+      initialValues[adj.id] = {
+        value: 0,
+        type: adj.type // Use the default type for each attribute
+      };
     });
+
+    setCustomBracket({
+      name: '',
+      attributeValues: initialValues
+    });
+    setShowCustomModal(true);
   };
 
   const handleSaveCustomAdjustment = () => {
