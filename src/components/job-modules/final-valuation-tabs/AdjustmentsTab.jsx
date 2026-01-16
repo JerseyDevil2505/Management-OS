@@ -1196,17 +1196,17 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                     <label className="block text-sm font-medium text-gray-700 mb-3">
                       Adjustment Values by Attribute
                     </label>
-                    <div className="border rounded-lg overflow-hidden">
+                    <div className="border rounded-lg overflow-hidden max-h-96 overflow-y-auto">
                       <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
+                        <thead className="bg-gray-50 sticky top-0">
                           <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Attribute
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Value
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Type
                             </th>
                           </tr>
@@ -1216,23 +1216,23 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                             const attrValue = customBracket.attributeValues[adj.id] || { value: 0, type: adj.type };
                             return (
                               <tr key={adj.id} className="hover:bg-gray-50">
-                                <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                                <td className="px-4 py-2 text-sm font-medium text-gray-900 whitespace-nowrap">
                                   {adj.name}
                                 </td>
-                                <td className="px-4 py-3">
+                                <td className="px-4 py-2">
                                   <input
                                     type="number"
                                     value={attrValue.value}
                                     onChange={(e) => handleCustomBracketValueChange(adj.id, 'value', e.target.value)}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                    className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                                     step={attrValue.type === 'per_sqft' ? '0.01' : attrValue.type === 'percent' ? '1' : '100'}
                                   />
                                 </td>
-                                <td className="px-4 py-3">
+                                <td className="px-4 py-2">
                                   <select
                                     value={attrValue.type}
                                     onChange={(e) => handleCustomBracketValueChange(adj.id, 'type', e.target.value)}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                    className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                                   >
                                     <option value="flat">Flat ($)</option>
                                     <option value="per_sqft">Per SF ($/SF)</option>
@@ -1250,10 +1250,11 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                   </div>
                 </div>
 
-                <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-3">
+                {/* Fixed Footer */}
+                <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-3 flex-shrink-0">
                   <button
                     onClick={() => setShowCustomModal(false)}
-                    className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 bg-white"
+                    className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-100 bg-white font-medium"
                   >
                     Cancel
                   </button>
