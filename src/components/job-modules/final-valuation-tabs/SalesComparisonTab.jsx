@@ -718,7 +718,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                     </label>
                     <select
                       value={compFilters.adjustmentBracket || 'auto'}
-                      onChange={(e) => setCompFilters(prev => ({ ...prev, adjustmentBracket: e.target.value }))}
+                      onChange={(e) => {
+                        const newValue = e.target.value;
+                        setCompFilters(prev => ({
+                          ...prev,
+                          adjustmentBracket: newValue,
+                          autoAdjustment: newValue === 'auto'
+                        }));
+                      }}
                       className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="auto">Auto (based on sale price)</option>
@@ -735,8 +742,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                   <div className="flex items-center gap-2 pt-6">
                     <input
                       type="checkbox"
-                      checked={compFilters.autoAdjustment || false}
-                      onChange={(e) => setCompFilters(prev => ({ ...prev, autoAdjustment: e.target.checked }))}
+                      checked={compFilters.adjustmentBracket === 'auto'}
+                      onChange={(e) => {
+                        setCompFilters(prev => ({
+                          ...prev,
+                          adjustmentBracket: e.target.checked ? 'auto' : 'bracket_1',
+                          autoAdjustment: e.target.checked
+                        }));
+                      }}
                       className="rounded"
                       id="auto-adjustment"
                     />
