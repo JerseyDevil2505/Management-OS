@@ -3,7 +3,7 @@ import { supabase, getRawDataForJob } from '../../../lib/supabaseClient';
 import { Save, Plus, Trash2, Settings, X } from 'lucide-react';
 
 const AdjustmentsTab = ({ jobData = {} }) => {
-  const [activeSubTab, setActiveSubTab] = useState('config');
+  const [activeSubTab, setActiveSubTab] = useState('adjustments');
   const [adjustments, setAdjustments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
