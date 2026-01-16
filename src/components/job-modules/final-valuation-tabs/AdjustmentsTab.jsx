@@ -117,9 +117,23 @@ const AdjustmentsTab = ({ jobData = {} }) => {
   useEffect(() => {
     if (!jobData?.id) return;
     loadAdjustments();
-    loadCodeConfig();
     loadAvailableCodes();
+    loadCodeConfig(); // Load after available codes are fetched
   }, [jobData?.id]);
+
+  // Auto-populate config after codes are loaded (if no saved config exists)
+  useEffect(() => {
+    // Only auto-populate if:
+    // 1. Available codes have been loaded
+    // 2. Config is still empty (no saved settings)
+    const codesLoaded = Object.values(availableCodes).some(arr => arr.length > 0);
+    const configEmpty = Object.values(codeConfig).every(arr => arr.length === 0);
+
+    if (codesLoaded && configEmpty && !isLoadingCodes) {
+      console.log('🚀 Triggering auto-populate after codes loaded');
+      autoPopulateCodeConfig();
+    }
+  }, [availableCodes, isLoadingCodes]);
 
   const loadAdjustments = async () => {
     try {
