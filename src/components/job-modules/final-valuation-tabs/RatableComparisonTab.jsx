@@ -1,70 +1,99 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calculator, Download, FileSpreadsheet } from 'lucide-react';
+import { Calculator, Download, FileSpreadsheet, Save } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 
 const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
   const [activeSubTab, setActiveSubTab] = useState('comparison');
   const [saveStatus, setSaveStatus] = useState(''); // 'saving' or 'saved'
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Local state for current year data (editable)
+  const [localCurrentYear, setLocalCurrentYear] = useState({
+    class_1_count: 0,
+    class_1_total: 0,
+    class_1_abatements: 0,
+    class_2_count: 0,
+    class_2_total: 0,
+    class_2_abatements: 0,
+    class_3a_count: 0,
+    class_3a_total: 0,
+    class_3b_count: 0,
+    class_3b_total: 0,
+    class_4_count: 0,
+    class_4_total: 0,
+    class_4_abatements: 0,
+    class_6_count: 0,
+    class_6_total: 0
+  });
+
+  // Local state for rate calculator data (editable)
+  const [localRateCalc, setLocalRateCalc] = useState({
+    budget: 0,
+    currentRate: 0,
+    bufferForLoss: 0
+  });
+
+  // Initialize local state from jobData
+  useEffect(() => {
+    if (jobData) {
+      setLocalCurrentYear({
+        class_1_count: jobData.current_class_1_count || 0,
+        class_1_total: jobData.current_class_1_total || 0,
+        class_1_abatements: jobData.current_class_1_abatements || 0,
+        class_2_count: jobData.current_class_2_count || 0,
+        class_2_total: jobData.current_class_2_total || 0,
+        class_2_abatements: jobData.current_class_2_abatements || 0,
+        class_3a_count: jobData.current_class_3a_count || 0,
+        class_3a_total: jobData.current_class_3a_total || 0,
+        class_3b_count: jobData.current_class_3b_count || 0,
+        class_3b_total: jobData.current_class_3b_total || 0,
+        class_4_count: jobData.current_class_4_count || 0,
+        class_4_total: jobData.current_class_4_total || 0,
+        class_4_abatements: jobData.current_class_4_abatements || 0,
+        class_6_count: jobData.current_class_6_count || 0,
+        class_6_total: jobData.current_class_6_total || 0
+      });
+
+      setLocalRateCalc({
+        budget: jobData.rate_calc_budget || 0,
+        currentRate: jobData.rate_calc_current_rate || 0,
+        bufferForLoss: jobData.rate_calc_buffer_for_loss || 0
+      });
+
+      setHasUnsavedChanges(false);
+    }
+  }, [jobData?.id]); // Reset when job changes
 
   // Calculate years for ratable comparison
-  // If end_date = '2026-01-01': yearPriorToDueYear = 2025
   const yearPriorToDueYear = useMemo(() => {
     if (!jobData?.end_date) return new Date().getFullYear();
-    // Extract year directly from date string to avoid timezone issues
     const endYear = parseInt(jobData.end_date.substring(0, 4));
     return endYear - 1;
   }, [jobData?.end_date]);
 
-  // Calculate current year totals based on individual class values
+  // Calculate current year totals based on LOCAL state values
   const currentYearCalculatedTotals = useMemo(() => {
-    const totalCount = (jobData?.current_class_1_count || 0) +
-                       (jobData?.current_class_2_count || 0) +
-                       (jobData?.current_class_3a_count || 0) +
-                       (jobData?.current_class_3b_count || 0) +
-                       (jobData?.current_class_4_count || 0) +
-                       (jobData?.current_class_6_count || 0);
+    const totalCount = localCurrentYear.class_1_count +
+                       localCurrentYear.class_2_count +
+                       localCurrentYear.class_3a_count +
+                       localCurrentYear.class_3b_count +
+                       localCurrentYear.class_4_count +
+                       localCurrentYear.class_6_count;
 
-    const totalTotal = (jobData?.current_class_1_total || 0) +
-                       (jobData?.current_class_2_total || 0) +
-                       (jobData?.current_class_3a_total || 0) +
-                       (jobData?.current_class_3b_total || 0) +
-                       (jobData?.current_class_4_total || 0);
+    const totalTotal = localCurrentYear.class_1_total +
+                       localCurrentYear.class_2_total +
+                       localCurrentYear.class_3a_total +
+                       localCurrentYear.class_3b_total +
+                       localCurrentYear.class_4_total +
+                       localCurrentYear.class_6_total;
 
     const commercialBasePct = totalTotal > 0
-      ? ((jobData?.current_class_4_total || 0) / totalTotal) * 100
+      ? (localCurrentYear.class_4_total / totalTotal) * 100
       : 0;
 
     return { totalCount, totalTotal, commercialBasePct };
-  }, [jobData]);
-
-  // Use jobData directly for current year and rate calculator data
-  const currentYearData = useMemo(() => ({
-    class_1_count: jobData?.current_class_1_count || 0,
-    class_1_total: jobData?.current_class_1_total || 0,
-    class_1_abatements: jobData?.current_class_1_abatements || 0,
-    class_2_count: jobData?.current_class_2_count || 0,
-    class_2_total: jobData?.current_class_2_total || 0,
-    class_2_abatements: jobData?.current_class_2_abatements || 0,
-    class_3a_count: jobData?.current_class_3a_count || 0,
-    class_3a_total: jobData?.current_class_3a_total || 0,
-    class_3b_count: jobData?.current_class_3b_count || 0,
-    class_3b_total: jobData?.current_class_3b_total || 0,
-    class_4_count: jobData?.current_class_4_count || 0,
-    class_4_total: jobData?.current_class_4_total || 0,
-    class_4_abatements: jobData?.current_class_4_abatements || 0,
-    class_6_count: jobData?.current_class_6_count || 0,
-    class_6_total: jobData?.current_class_6_total || 0,
-    total_count: currentYearCalculatedTotals.totalCount,
-    total_total: currentYearCalculatedTotals.totalTotal,
-    commercial_base_pct: currentYearCalculatedTotals.commercialBasePct
-  }), [jobData]);
-
-  const rateCalcData = useMemo(() => ({
-    budget: jobData?.rate_calc_budget || 0,
-    currentRate: jobData?.rate_calc_current_rate || 0,
-    bufferForLoss: jobData?.rate_calc_buffer_for_loss || 0
-  }), [jobData]);
+  }, [localCurrentYear]);
 
   // Get previous projected values for delta tracking
   const previousProjected = useMemo(() => ({
@@ -87,7 +116,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
   // Get vendor type for consolidation logic
   const vendorType = jobData?.vendor_type || 'BRT';
 
-  // Helper function to format delta display
+  // Helper function to format delta display (historical comparison)
   const formatDelta = (currentValue, previousValue) => {
     if (!previousValue || previousValue === 0) return null;
 
@@ -106,12 +135,50 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
     );
   };
 
-  // Consolidate properties by grouping additional cards (same logic as MarketDataTab)
+  // Helper function to format percent change (current vs projected)
+  const formatPercentChange = (projectedValue, currentValue) => {
+    if (!currentValue || currentValue === 0) return '-';
+
+    const percentChange = ((projectedValue - currentValue) / currentValue) * 100;
+
+    if (percentChange === 0) return '0%';
+
+    const deltaColor = percentChange > 0 ? 'text-green-600' : 'text-red-600';
+    const sign = percentChange > 0 ? '+' : '';
+
+    return (
+      <span className={`text-sm ${deltaColor} font-semibold`}>
+        {sign}{Math.round(percentChange)}%
+      </span>
+    );
+  };
+
+  // Formatting helpers
+  const formatCount = (value) => {
+    const num = parseFloat(value) || 0;
+    return num.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  };
+
+  const formatAvgAsmt = (value) => {
+    const num = parseFloat(value) || 0;
+    return '$' + num.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  };
+
+  const formatBudget = (value) => {
+    const num = parseFloat(value) || 0;
+    return '$' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const formatTaxRate = (value) => {
+    const num = parseFloat(value) || 0;
+    return '$' + num.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  };
+
+  // Consolidate properties by grouping additional cards
   const consolidateProperties = (allProperties) => {
     const grouped = {};
 
     allProperties.forEach(property => {
-      // Create base key without card designation - MUST include location to distinguish separate properties
       const baseKey = `${property.property_block}-${property.property_lot}-${property.property_qualifier || 'NONE'}-${property.property_location || 'NONE'}`;
 
       if (!grouped[baseKey]) {
@@ -132,29 +199,25 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
         grouped[baseKey].mainCard = property;
       } else {
         grouped[baseKey].additionalCards.push(property);
-        // Card SF for additional cards only
         grouped[baseKey].totalCardSF += property.asset_sfla || 0;
       }
 
-      // Track max card number
       if (card) {
         const cardNum = vendorType === 'BRT'
           ? parseInt(card.match(/\d+/)?.[0] || '1')
-          : (card.toUpperCase() === 'M' ? 1 : (card.charCodeAt(0) - 64)); // A=1, B=2, etc.
+          : (card.toUpperCase() === 'M' ? 1 : (card.charCodeAt(0) - 64));
         grouped[baseKey].maxCard = Math.max(grouped[baseKey].maxCard, cardNum);
       }
     });
 
-    // Return array of consolidated properties
     return Object.values(grouped).map(group => ({
       ...group.mainCard,
       _maxCard: group.maxCard,
       _totalCardSF: group.totalCardSF
-    })).filter(p => p.property_composite_key); // Filter out any null mainCards
+    })).filter(p => p.property_composite_key);
   };
 
-  // Calculate projected ratable base from CONSOLIDATED properties (using CAMA total)
-  // CRITICAL: Must match MarketDataTab consolidation logic
+  // Calculate projected ratable base from CONSOLIDATED properties
   const projectedRatableBase = useMemo(() => {
     const summary = {
       '1': { count: 0, total: 0 },
@@ -165,7 +228,6 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
       '6ABC': { count: 0, total: 0 }
     };
 
-    // Use consolidated properties to match MarketDataTab
     const consolidated = consolidateProperties(properties);
 
     consolidated.forEach(property => {
@@ -191,8 +253,13 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
         summary['4ABC'].count++;
         summary['4ABC'].total += camaTotal;
       } else if (['6A', '6B'].includes(propertyClass)) {
+        // For personal property (6A,B,C), use land * (imp/100) instead of land + imp
+        const land = property.values_cama_land || 0;
+        const imp = property.values_cama_improvement || 0;
+        const personalPropertyValue = land * (imp / 100);
+
         summary['6ABC'].count++;
-        summary['6ABC'].total += camaTotal;
+        summary['6ABC'].total += personalPropertyValue;
       }
     });
 
@@ -202,42 +269,45 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
     return { ...summary, totalCount, totalTotal };
   }, [properties, vendorType]);
 
-  // Handle current year data input changes with save feedback
-  const handleCurrentYearChange = async (field, value) => {
-    const numValue = parseFloat(value.replace(/,/g, '')) || 0;
-
-    try {
-      setSaveStatus('saving');
-      const updateData = { [field]: numValue };
-
-      const { error } = await supabase
-        .from('jobs')
-        .update(updateData)
-        .eq('id', jobData.id);
-
-      if (error) throw error;
-
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus(''), 2000); // Clear after 2 seconds
-
-      if (onUpdateJobCache) onUpdateJobCache();
-    } catch (error) {
-      console.error('Error saving current year data:', error);
-      setSaveStatus('');
-      alert('Error saving data: ' + error.message);
-    }
+  // Handle local state changes for current year
+  const handleLocalCurrentYearChange = (field, value) => {
+    const numValue = parseFloat(value.replace(/[,$]/g, '')) || 0;
+    setLocalCurrentYear(prev => ({ ...prev, [field]: numValue }));
+    setHasUnsavedChanges(true);
   };
 
-  // Handle rate calc input changes with save feedback
-  const handleRateCalcChange = async (field, value) => {
-    const numValue = parseFloat(value) || 0;
+  // Handle local state changes for rate calculator
+  const handleLocalRateCalcChange = (field, value) => {
+    const numValue = parseFloat(value.replace(/[,$]/g, '')) || 0;
+    setLocalRateCalc(prev => ({ ...prev, [field]: numValue }));
+    setHasUnsavedChanges(true);
+  };
 
+  // Manual save function
+  const handleManualSave = async () => {
     try {
       setSaveStatus('saving');
-      const updateData = {};
-      if (field === 'budget') updateData.rate_calc_budget = numValue;
-      if (field === 'currentRate') updateData.rate_calc_current_rate = numValue;
-      if (field === 'bufferForLoss') updateData.rate_calc_buffer_for_loss = numValue;
+
+      const updateData = {
+        current_class_1_count: localCurrentYear.class_1_count,
+        current_class_1_total: localCurrentYear.class_1_total,
+        current_class_1_abatements: localCurrentYear.class_1_abatements,
+        current_class_2_count: localCurrentYear.class_2_count,
+        current_class_2_total: localCurrentYear.class_2_total,
+        current_class_2_abatements: localCurrentYear.class_2_abatements,
+        current_class_3a_count: localCurrentYear.class_3a_count,
+        current_class_3a_total: localCurrentYear.class_3a_total,
+        current_class_3b_count: localCurrentYear.class_3b_count,
+        current_class_3b_total: localCurrentYear.class_3b_total,
+        current_class_4_count: localCurrentYear.class_4_count,
+        current_class_4_total: localCurrentYear.class_4_total,
+        current_class_4_abatements: localCurrentYear.class_4_abatements,
+        current_class_6_count: localCurrentYear.class_6_count,
+        current_class_6_total: localCurrentYear.class_6_total,
+        rate_calc_budget: localRateCalc.budget,
+        rate_calc_current_rate: localRateCalc.currentRate,
+        rate_calc_buffer_for_loss: localRateCalc.bufferForLoss
+      };
 
       const { error } = await supabase
         .from('jobs')
@@ -247,11 +317,12 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
       if (error) throw error;
 
       setSaveStatus('saved');
-      setTimeout(() => setSaveStatus(''), 2000); // Clear after 2 seconds
+      setHasUnsavedChanges(false);
+      setTimeout(() => setSaveStatus(''), 2000);
 
       if (onUpdateJobCache) onUpdateJobCache();
     } catch (error) {
-      console.error('Error saving rate calc data:', error);
+      console.error('Error saving data:', error);
       setSaveStatus('');
       alert('Error saving data: ' + error.message);
     }
@@ -267,40 +338,40 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
       [],
       ['Current Ratable Base', '', '', '', 'Projected Ratable Base', '', '', '', 'DIFFERENCE'],
       ['', 'Count', 'AVG ASMT', 'AVG TAX', '', 'Count', 'AVG ASMT', 'AVG TAX', ''],
-      ['Class 1', currentYearData.class_1_count, '', '', 'Class 1', projectedRatableBase['1'].count, '', '', ''],
-      ['Abatements', currentYearData.class_1_abatements, '', '', 'Abatements', 0, '', '', ''],
+      ['Class 1', localCurrentYear.class_1_count, '', '', 'Class 1', projectedRatableBase['1'].count, '', '', ''],
+      ['Abatements', localCurrentYear.class_1_abatements, '', '', 'Abatements', 0, '', '', ''],
       ['Adjusted Abatements', 0, '', '', 'Adjusted Abatements', 0, '', '', ''],
-      ['', '', currentYearData.class_1_total, '', '', '', projectedRatableBase['1'].total, '', ''],
-      ['Class 2', currentYearData.class_2_count, '', '', 'Class 2', projectedRatableBase['2'].count, '', '', ''],
-      ['Abatements', currentYearData.class_2_abatements, '', '', 'Abatements', 0, '', '', ''],
+      ['', '', localCurrentYear.class_1_total, '', '', '', projectedRatableBase['1'].total, '', ''],
+      ['Class 2', localCurrentYear.class_2_count, '', '', 'Class 2', projectedRatableBase['2'].count, '', '', ''],
+      ['Abatements', localCurrentYear.class_2_abatements, '', '', 'Abatements', 0, '', '', ''],
       ['Adjusted Abatements', 0, '', '', 'Adjusted Abatements', 0, '', '', ''],
-      ['', '', currentYearData.class_2_total, '', '', '', projectedRatableBase['2'].total, '', ''],
-      ['Class 3A\'s', currentYearData.class_3a_count, '', '', 'Class 3A\'s', projectedRatableBase['3A'].count, '', '', ''],
-      ['Class 3A\'s (NET)', '', currentYearData.class_3a_total, '', 'Class 3A\'s (NET)', '', projectedRatableBase['3A'].total, '', ''],
-      ['Class 3B\'s', currentYearData.class_3b_count, '', '', 'Class 3B\'s', projectedRatableBase['3B'].count, '', '', ''],
-      ['Class 4A,B,C', currentYearData.class_4_count, '', '', 'Class 4A,B,C', projectedRatableBase['4ABC'].count, '', '', ''],
-      ['Abatements', currentYearData.class_4_abatements, '', '', 'Abatements', 0, '', '', ''],
+      ['', '', localCurrentYear.class_2_total, '', '', '', projectedRatableBase['2'].total, '', ''],
+      ['Class 3A\'s', localCurrentYear.class_3a_count, '', '', 'Class 3A\'s', projectedRatableBase['3A'].count, '', '', ''],
+      ['Class 3A\'s (NET)', '', localCurrentYear.class_3a_total, '', 'Class 3A\'s (NET)', '', projectedRatableBase['3A'].total, '', ''],
+      ['Class 3B\'s', localCurrentYear.class_3b_count, '', '', 'Class 3B\'s', projectedRatableBase['3B'].count, '', '', ''],
+      ['Class 4A,B,C', localCurrentYear.class_4_count, '', '', 'Class 4A,B,C', projectedRatableBase['4ABC'].count, '', '', ''],
+      ['Abatements', localCurrentYear.class_4_abatements, '', '', 'Abatements', 0, '', '', ''],
       ['Adjusted Abatements', 0, '', '', 'Adjusted Abatements', 0, '', '', ''],
-      ['Class 4\'s (NET)', '', currentYearData.class_4_total, '', 'Class 4\'s (NET)', '', projectedRatableBase['4ABC'].total, '', ''],
-      ['6A,B,C', currentYearData.class_6_count, '0 (Not/After Ratio Applied)', '', '6A,B,C', projectedRatableBase['6ABC'].count, '0 (Not/After Ratio Applied)', '', ''],
+      ['Class 4\'s (NET)', '', localCurrentYear.class_4_total, '', 'Class 4\'s (NET)', '', projectedRatableBase['4ABC'].total, '', ''],
+      ['6A,B,C', localCurrentYear.class_6_count, '0 (Not/After Ratio Applied)', '', '6A,B,C', projectedRatableBase['6ABC'].count, '0 (Not/After Ratio Applied)', '', ''],
       ['', '', '', '', '', '', '', '', ''],
-      ['Total Ratables', currentYearData.total_count, currentYearData.total_total, '', 'Total Ratables', projectedRatableBase.totalCount, projectedRatableBase.totalTotal, '', ''],
+      ['Total Ratables', currentYearCalculatedTotals.totalCount, currentYearCalculatedTotals.totalTotal, '', 'Total Ratables', projectedRatableBase.totalCount, projectedRatableBase.totalTotal, '', ''],
       ['', '', '', '', '', '', '', '', ''],
-      ['Commercial Base', '', currentYearData.commercial_base_pct, '', 'Commercial Base', '', '', '', '']
+      ['Commercial Base', '', currentYearCalculatedTotals.commercialBasePct, '', 'Commercial Base', '', '', '', '']
     ];
 
     const ws1 = XLSX.utils.aoa_to_sheet(comparisonData);
     XLSX.utils.book_append_sheet(workbook, ws1, 'Ratable Comparison');
 
     // Sheet 2: Rate Calculator
-    const netRatables = projectedRatableBase.totalTotal * (1 - rateCalcData.bufferForLoss / 100);
-    const estimatedRate = netRatables > 0 ? rateCalcData.budget / netRatables : 0;
+    const netRatables = projectedRatableBase.totalTotal * (1 - localRateCalc.bufferForLoss / 100);
+    const estimatedRate = netRatables > 0 ? (localRateCalc.budget / netRatables) * 100 : 0;
 
     const rateCalcDataSheet = [
       ['Tax Rate Calculator'],
       [],
-      ['BUDGET', rateCalcData.budget],
-      ['CURRENT RATE', rateCalcData.currentRate],
+      ['BUDGET', localRateCalc.budget],
+      ['CURRENT RATE', localRateCalc.currentRate],
       [],
       ['Class 1\'s', projectedRatableBase['1'].total],
       ['Abatements', 0],
@@ -327,7 +398,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
       ['6A,B,C', projectedRatableBase['6ABC'].total],
       [],
       ['Total Ratables', projectedRatableBase.totalTotal],
-      ['Buffer for Loss', rateCalcData.bufferForLoss + '%', rateCalcData.bufferForLoss > 0 ? projectedRatableBase.totalTotal * (rateCalcData.bufferForLoss / 100) : 0],
+      ['Buffer for Loss', localRateCalc.bufferForLoss + '%', localRateCalc.bufferForLoss > 0 ? projectedRatableBase.totalTotal * (localRateCalc.bufferForLoss / 100) : 0],
       ['Net Ratables', netRatables],
       [],
       ['Estimated Rate', estimatedRate.toFixed(3)]
@@ -346,7 +417,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
 
   return (
     <div className="space-y-4">
-      {/* Header with Export and Save Status */}
+      {/* Header with Export, Save, and Save Status */}
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Ratable Comparison & Rate Calculator</h2>
@@ -375,6 +446,18 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
           >
             <Download className="w-4 h-4" />
             Export Analysis
+          </button>
+          <button
+            onClick={handleManualSave}
+            disabled={!hasUnsavedChanges}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
+              hasUnsavedChanges
+                ? 'bg-green-600 text-white hover:bg-green-700'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            <Save className="w-4 h-4" />
+            Save Changes
           </button>
         </div>
       </div>
@@ -418,33 +501,33 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   <div className="grid grid-cols-3 gap-2 text-xs font-semibold text-gray-700 pb-2 border-b">
                     <div></div>
                     <div className="text-right">Count</div>
-                    <div className="text-right">AVG ASMT</div>
+                    <div className="text-right">Net Taxable Value</div>
                   </div>
                   
                   {/* Class 1 */}
                   <div className="space-y-1">
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-3 gap-2 items-center">
                       <div className="text-sm font-medium py-1">Class 1</div>
                       <input
-                        type="number"
-                        defaultValue={currentYearData.class_1_count}
-                        onBlur={(e) => handleCurrentYearChange('current_class_1_count', e.target.value)}
-                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        type="text"
+                        value={formatCount(localCurrentYear.class_1_count)}
+                        onChange={(e) => handleLocalCurrentYearChange('class_1_count', e.target.value)}
+                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                       />
                       <input
-                        type="number"
-                        defaultValue={currentYearData.class_1_total}
-                        onBlur={(e) => handleCurrentYearChange('current_class_1_total', e.target.value)}
-                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        type="text"
+                        value={formatAvgAsmt(localCurrentYear.class_1_total)}
+                        onChange={(e) => handleLocalCurrentYearChange('class_1_total', e.target.value)}
+                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                       />
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
+                    <div className="grid grid-cols-3 gap-2 items-center text-xs text-gray-600 pl-4">
                       <div className="py-1">Abatements</div>
                       <input
-                        type="number"
-                        defaultValue={currentYearData.class_1_abatements}
-                        onBlur={(e) => handleCurrentYearChange('current_class_1_abatements', e.target.value)}
-                        className="text-xs text-right px-2 py-0.5 border border-gray-300 rounded h-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        type="text"
+                        value={formatCount(localCurrentYear.class_1_abatements)}
+                        onChange={(e) => handleLocalCurrentYearChange('class_1_abatements', e.target.value)}
+                        className="text-xs text-right px-2 py-0.5 border border-gray-300 rounded h-6"
                       />
                       <div></div>
                     </div>
@@ -452,116 +535,121 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
 
                   {/* Class 2 */}
                   <div className="space-y-1">
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-3 gap-2 items-center">
                       <div className="text-sm font-medium py-1">Class 2</div>
                       <input
-                        type="number"
-                        defaultValue={currentYearData.class_2_count}
-                        onBlur={(e) => handleCurrentYearChange('current_class_2_count', e.target.value)}
-                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        type="text"
+                        value={formatCount(localCurrentYear.class_2_count)}
+                        onChange={(e) => handleLocalCurrentYearChange('class_2_count', e.target.value)}
+                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                       />
                       <input
-                        type="number"
-                        defaultValue={currentYearData.class_2_total}
-                        onBlur={(e) => handleCurrentYearChange('current_class_2_total', e.target.value)}
-                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        type="text"
+                        value={formatAvgAsmt(localCurrentYear.class_2_total)}
+                        onChange={(e) => handleLocalCurrentYearChange('class_2_total', e.target.value)}
+                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                       />
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
+                    <div className="grid grid-cols-3 gap-2 items-center text-xs text-gray-600 pl-4">
                       <div className="py-1">Abatements</div>
                       <input
-                        type="number"
-                        defaultValue={currentYearData.class_2_abatements}
-                        onBlur={(e) => handleCurrentYearChange('current_class_2_abatements', e.target.value)}
-                        className="text-xs text-right px-2 py-0.5 border border-gray-300 rounded h-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        type="text"
+                        value={formatCount(localCurrentYear.class_2_abatements)}
+                        onChange={(e) => handleLocalCurrentYearChange('class_2_abatements', e.target.value)}
+                        className="text-xs text-right px-2 py-0.5 border border-gray-300 rounded h-6"
                       />
                       <div></div>
                     </div>
                   </div>
 
                   {/* Class 3A's */}
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-2 items-center">
                     <div className="text-sm font-medium py-1">Class 3A's (NET)</div>
                     <input
-                      type="number"
-                      defaultValue={currentYearData.class_3a_count}
-                      onBlur={(e) => handleCurrentYearChange('current_class_3a_count', e.target.value)}
-                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      type="text"
+                      value={formatCount(localCurrentYear.class_3a_count)}
+                      onChange={(e) => handleLocalCurrentYearChange('class_3a_count', e.target.value)}
+                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                     />
                     <input
-                      type="number"
-                      defaultValue={currentYearData.class_3a_total}
-                      onBlur={(e) => handleCurrentYearChange('current_class_3a_total', e.target.value)}
-                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      type="text"
+                      value={formatAvgAsmt(localCurrentYear.class_3a_total)}
+                      onChange={(e) => handleLocalCurrentYearChange('class_3a_total', e.target.value)}
+                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                     />
                   </div>
 
                   {/* Class 3B's */}
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-2 items-center">
                     <div className="text-sm font-medium py-1">Class 3B's</div>
                     <input
-                      type="number"
-                      defaultValue={currentYearData.class_3b_count}
-                      onBlur={(e) => handleCurrentYearChange('current_class_3b_count', e.target.value)}
-                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      type="text"
+                      value={formatCount(localCurrentYear.class_3b_count)}
+                      onChange={(e) => handleLocalCurrentYearChange('class_3b_count', e.target.value)}
+                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                     />
                     <input
-                      type="number"
-                      defaultValue={currentYearData.class_3b_total}
-                      onBlur={(e) => handleCurrentYearChange('current_class_3b_total', e.target.value)}
-                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      type="text"
+                      value={formatAvgAsmt(localCurrentYear.class_3b_total)}
+                      onChange={(e) => handleLocalCurrentYearChange('class_3b_total', e.target.value)}
+                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                     />
                   </div>
 
                   {/* Class 4A,B,C */}
                   <div className="space-y-1">
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-3 gap-2 items-center">
                       <div className="text-sm font-medium py-1">Class 4A,B,C (NET)</div>
                       <input
-                        type="number"
-                        defaultValue={currentYearData.class_4_count}
-                        onBlur={(e) => handleCurrentYearChange('current_class_4_count', e.target.value)}
-                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        type="text"
+                        value={formatCount(localCurrentYear.class_4_count)}
+                        onChange={(e) => handleLocalCurrentYearChange('class_4_count', e.target.value)}
+                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                       />
                       <input
-                        type="number"
-                        defaultValue={currentYearData.class_4_total}
-                        onBlur={(e) => handleCurrentYearChange('current_class_4_total', e.target.value)}
-                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        type="text"
+                        value={formatAvgAsmt(localCurrentYear.class_4_total)}
+                        onChange={(e) => handleLocalCurrentYearChange('class_4_total', e.target.value)}
+                        className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                       />
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
+                    <div className="grid grid-cols-3 gap-2 items-center text-xs text-gray-600 pl-4">
                       <div className="py-1">Abatements</div>
                       <input
-                        type="number"
-                        defaultValue={currentYearData.class_4_abatements}
-                        onBlur={(e) => handleCurrentYearChange('current_class_4_abatements', e.target.value)}
-                        className="text-xs text-right px-2 py-0.5 border border-gray-300 rounded h-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        type="text"
+                        value={formatCount(localCurrentYear.class_4_abatements)}
+                        onChange={(e) => handleLocalCurrentYearChange('class_4_abatements', e.target.value)}
+                        className="text-xs text-right px-2 py-0.5 border border-gray-300 rounded h-6"
                       />
                       <div></div>
                     </div>
                   </div>
 
                   {/* Class 6A,B,C */}
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-2 items-center">
                     <div className="text-sm font-medium py-1">6A,B,C</div>
                     <input
-                      type="number"
-                      defaultValue={currentYearData.class_6_count}
-                      onBlur={(e) => handleCurrentYearChange('current_class_6_count', e.target.value)}
-                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      type="text"
+                      value={formatCount(localCurrentYear.class_6_count)}
+                      onChange={(e) => handleLocalCurrentYearChange('class_6_count', e.target.value)}
+                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
                     />
-                    <div className="text-sm text-right text-xs text-gray-500 py-1">Not/After Ratio Applied</div>
+                    <input
+                      type="text"
+                      value={formatAvgAsmt(localCurrentYear.class_6_total)}
+                      onChange={(e) => handleLocalCurrentYearChange('class_6_total', e.target.value)}
+                      className="text-sm text-right px-2 py-0.5 border border-gray-300 rounded h-7"
+                    />
                   </div>
 
                   {/* Total - CALCULATED */}
                   <div className="grid grid-cols-3 gap-2 pt-3 border-t-2 border-gray-300 font-bold">
                     <div className="text-sm py-1">Total Ratables</div>
                     <div className="text-sm text-right px-2 py-1 bg-gray-100 rounded border border-gray-300">
-                      {currentYearData.total_count.toLocaleString()}
+                      {formatCount(currentYearCalculatedTotals.totalCount)}
                     </div>
                     <div className="text-base text-right px-2 py-1 bg-gray-100 rounded border border-gray-300">
-                      ${currentYearData.total_total.toLocaleString()}
+                      {formatAvgAsmt(currentYearCalculatedTotals.totalTotal)}
                     </div>
                   </div>
 
@@ -570,7 +658,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                     <div className="text-sm font-medium py-1">Commercial Base</div>
                     <div></div>
                     <div className="text-sm text-right px-2 py-1 bg-gray-100 rounded border border-gray-300">
-                      {currentYearData.commercial_base_pct.toFixed(2)}%
+                      {currentYearCalculatedTotals.commercialBasePct.toFixed(2)}%
                     </div>
                   </div>
                 </div>
@@ -580,102 +668,132 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
               <div>
                 <h3 className="text-lg font-bold text-gray-900 mb-4">Projected Ratable Base</h3>
                 <div className="space-y-3">
-                  <div className="grid grid-cols-3 gap-2 text-xs font-semibold text-gray-700 pb-2 border-b">
+                  <div className="grid grid-cols-4 gap-2 text-xs font-semibold text-gray-700 pb-2 border-b">
                     <div></div>
                     <div className="text-right">Count</div>
-                    <div className="text-right">AVG ASMT</div>
+                    <div className="text-right">Net Taxable Value</div>
+                    <div className="text-right">Delta (%)</div>
                   </div>
                   
                   {/* Class 1 */}
                   <div className="space-y-1">
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-4 gap-2 items-center">
                       <div className="text-sm font-medium py-1">Class 1</div>
-                      <div className="text-sm text-right px-2 py-1">{projectedRatableBase['1'].count.toLocaleString()}</div>
-                      <div className="text-sm text-right px-2 py-1">
-                        ${projectedRatableBase['1'].total.toLocaleString()}
+                      <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">{formatCount(projectedRatableBase['1'].count)}</div>
+                      <div className="text-sm text-right px-2 py-1 h-7 flex flex-col items-end justify-center">
+                        <div>{formatAvgAsmt(projectedRatableBase['1'].total)}</div>
                         {formatDelta(projectedRatableBase['1'].total, previousProjected.class_1_total)}
                       </div>
+                      <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">
+                        {formatPercentChange(projectedRatableBase['1'].total, localCurrentYear.class_1_total)}
+                      </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
+                    <div className="grid grid-cols-4 gap-2 items-center text-xs text-gray-600 pl-4">
                       <div className="py-1">Abatements</div>
-                      <div className="text-right px-2 py-1">0</div>
+                      <div className="text-right px-2 py-1 h-6 flex items-center justify-end">0</div>
+                      <div></div>
                       <div></div>
                     </div>
                   </div>
 
                   {/* Class 2 */}
                   <div className="space-y-1">
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-4 gap-2 items-center">
                       <div className="text-sm font-medium py-1">Class 2</div>
-                      <div className="text-sm text-right px-2 py-1">{projectedRatableBase['2'].count.toLocaleString()}</div>
-                      <div className="text-sm text-right px-2 py-1">
-                        ${projectedRatableBase['2'].total.toLocaleString()}
+                      <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">{formatCount(projectedRatableBase['2'].count)}</div>
+                      <div className="text-sm text-right px-2 py-1 h-7 flex flex-col items-end justify-center">
+                        <div>{formatAvgAsmt(projectedRatableBase['2'].total)}</div>
                         {formatDelta(projectedRatableBase['2'].total, previousProjected.class_2_total)}
                       </div>
+                      <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">
+                        {formatPercentChange(projectedRatableBase['2'].total, localCurrentYear.class_2_total)}
+                      </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
+                    <div className="grid grid-cols-4 gap-2 items-center text-xs text-gray-600 pl-4">
                       <div className="py-1">Abatements</div>
-                      <div className="text-right px-2 py-1">0</div>
+                      <div className="text-right px-2 py-1 h-6 flex items-center justify-end">0</div>
+                      <div></div>
                       <div></div>
                     </div>
                   </div>
 
                   {/* Class 3A's */}
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-4 gap-2 items-center">
                     <div className="text-sm font-medium py-1">Class 3A's (NET)</div>
-                    <div className="text-sm text-right px-2 py-1">{projectedRatableBase['3A'].count.toLocaleString()}</div>
-                    <div className="text-sm text-right px-2 py-1">
-                      ${projectedRatableBase['3A'].total.toLocaleString()}
+                    <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">{formatCount(projectedRatableBase['3A'].count)}</div>
+                    <div className="text-sm text-right px-2 py-1 h-7 flex flex-col items-end justify-center">
+                      <div>{formatAvgAsmt(projectedRatableBase['3A'].total)}</div>
                       {formatDelta(projectedRatableBase['3A'].total, previousProjected.class_3a_total)}
+                    </div>
+                    <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">
+                      {formatPercentChange(projectedRatableBase['3A'].total, localCurrentYear.class_3a_total)}
                     </div>
                   </div>
 
                   {/* Class 3B's */}
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-4 gap-2 items-center">
                     <div className="text-sm font-medium py-1">Class 3B's</div>
-                    <div className="text-sm text-right px-2 py-1">{projectedRatableBase['3B'].count.toLocaleString()}</div>
-                    <div className="text-sm text-right px-2 py-1">
-                      ${projectedRatableBase['3B'].total.toLocaleString()}
+                    <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">{formatCount(projectedRatableBase['3B'].count)}</div>
+                    <div className="text-sm text-right px-2 py-1 h-7 flex flex-col items-end justify-center">
+                      <div>{formatAvgAsmt(projectedRatableBase['3B'].total)}</div>
                       {formatDelta(projectedRatableBase['3B'].total, previousProjected.class_3b_total)}
+                    </div>
+                    <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">
+                      {formatPercentChange(projectedRatableBase['3B'].total, localCurrentYear.class_3b_total)}
                     </div>
                   </div>
 
                   {/* Class 4A,B,C */}
                   <div className="space-y-1">
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-4 gap-2 items-center">
                       <div className="text-sm font-medium py-1">Class 4A,B,C (NET)</div>
-                      <div className="text-sm text-right px-2 py-1">{projectedRatableBase['4ABC'].count.toLocaleString()}</div>
-                      <div className="text-sm text-right px-2 py-1">
-                        ${projectedRatableBase['4ABC'].total.toLocaleString()}
+                      <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">{formatCount(projectedRatableBase['4ABC'].count)}</div>
+                      <div className="text-sm text-right px-2 py-1 h-7 flex flex-col items-end justify-center">
+                        <div>{formatAvgAsmt(projectedRatableBase['4ABC'].total)}</div>
                         {formatDelta(projectedRatableBase['4ABC'].total, previousProjected.class_4_total)}
                       </div>
+                      <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">
+                        {formatPercentChange(projectedRatableBase['4ABC'].total, localCurrentYear.class_4_total)}
+                      </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 pl-4">
+                    <div className="grid grid-cols-4 gap-2 items-center text-xs text-gray-600 pl-4">
                       <div className="py-1">Abatements</div>
-                      <div className="text-right px-2 py-1">0</div>
+                      <div className="text-right px-2 py-1 h-6 flex items-center justify-end">0</div>
+                      <div></div>
                       <div></div>
                     </div>
                   </div>
 
                   {/* Class 6A,B,C */}
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-4 gap-2 items-center">
                     <div className="text-sm font-medium py-1">6A,B,C</div>
-                    <div className="text-sm text-right px-2 py-1">{projectedRatableBase['6ABC'].count.toLocaleString()}</div>
-                    <div className="text-sm text-right text-xs text-gray-500 py-1">Not/After Ratio Applied</div>
+                    <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">{formatCount(projectedRatableBase['6ABC'].count)}</div>
+                    <div className="text-sm text-right px-2 py-1 h-7 flex flex-col items-end justify-center">
+                      <div>{formatAvgAsmt(projectedRatableBase['6ABC'].total)}</div>
+                      {formatDelta(projectedRatableBase['6ABC'].total, previousProjected.class_6_total)}
+                    </div>
+                    <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">
+                      {formatPercentChange(projectedRatableBase['6ABC'].total, localCurrentYear.class_6_total)}
+                    </div>
                   </div>
 
                   {/* Total */}
-                  <div className="grid grid-cols-3 gap-2 pt-3 border-t-2 border-gray-300 font-bold">
+                  <div className="grid grid-cols-4 gap-2 pt-3 border-t-2 border-gray-300 font-bold">
                     <div className="text-sm py-1">Total Ratables</div>
-                    <div className="text-sm text-right px-2 py-1">{projectedRatableBase.totalCount.toLocaleString()}</div>
+                    <div className="text-sm text-right px-2 py-1">{formatCount(projectedRatableBase.totalCount)}</div>
                     <div className="text-base text-right px-2 py-1">
-                      ${projectedRatableBase.totalTotal.toLocaleString()}
-                      {formatDelta(projectedRatableBase.totalTotal, previousProjected.total_total)}
+                      <div className="flex flex-col items-end">
+                        <div>{formatAvgAsmt(projectedRatableBase.totalTotal)}</div>
+                        {formatDelta(projectedRatableBase.totalTotal, previousProjected.total_total)}
+                      </div>
+                    </div>
+                    <div className="text-base text-right px-2 py-1 flex items-center justify-end">
+                      {formatPercentChange(projectedRatableBase.totalTotal, currentYearCalculatedTotals.totalTotal)}
                     </div>
                   </div>
 
                   {/* Commercial Base - Calculate */}
-                  <div className="grid grid-cols-3 gap-2 pt-2 mt-2 border-t border-gray-200">
+                  <div className="grid grid-cols-4 gap-2 pt-2 mt-2 border-t border-gray-200">
                     <div className="text-sm font-medium py-1">Commercial Base</div>
                     <div></div>
                     <div className="text-sm text-right px-2 py-1">
@@ -683,6 +801,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                         ? ((projectedRatableBase['4ABC'].total / projectedRatableBase.totalTotal) * 100).toFixed(2)
                         : 0}%
                     </div>
+                    <div></div>
                   </div>
                 </div>
               </div>
@@ -703,8 +822,9 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">BUDGET</label>
                 <input
                   type="number"
-                  value={rateCalcData.budget}
-                  onChange={(e) => handleRateCalcChange('budget', e.target.value)}
+                  step="0.01"
+                  value={localRateCalc.budget}
+                  onChange={(e) => handleLocalRateCalcChange('budget', e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg text-lg font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   placeholder="Enter budget"
                 />
@@ -714,8 +834,8 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                 <input
                   type="number"
                   step="0.001"
-                  value={rateCalcData.currentRate}
-                  onChange={(e) => handleRateCalcChange('currentRate', e.target.value)}
+                  value={localRateCalc.currentRate}
+                  onChange={(e) => handleLocalRateCalcChange('currentRate', e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg text-lg font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   placeholder="Enter current rate"
                 />
@@ -728,29 +848,29 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
               
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="font-medium text-gray-700">Class 1's</div>
-                <div className="text-right font-semibold">${projectedRatableBase['1'].total.toLocaleString()}</div>
+                <div className="text-right font-semibold">{formatAvgAsmt(projectedRatableBase['1'].total)}</div>
                 
                 <div className="font-medium text-gray-700">Class 2's</div>
-                <div className="text-right font-semibold">${projectedRatableBase['2'].total.toLocaleString()}</div>
+                <div className="text-right font-semibold">{formatAvgAsmt(projectedRatableBase['2'].total)}</div>
                 
                 <div className="font-medium text-gray-700">Class 3A's</div>
-                <div className="text-right font-semibold">${projectedRatableBase['3A'].total.toLocaleString()}</div>
+                <div className="text-right font-semibold">{formatAvgAsmt(projectedRatableBase['3A'].total)}</div>
                 
                 <div className="font-medium text-gray-700">Class 3B's</div>
-                <div className="text-right font-semibold">${projectedRatableBase['3B'].total.toLocaleString()}</div>
+                <div className="text-right font-semibold">{formatAvgAsmt(projectedRatableBase['3B'].total)}</div>
                 
                 <div className="font-medium text-gray-700">Class 4A,B,C</div>
-                <div className="text-right font-semibold">${projectedRatableBase['4ABC'].total.toLocaleString()}</div>
+                <div className="text-right font-semibold">{formatAvgAsmt(projectedRatableBase['4ABC'].total)}</div>
                 
                 <div className="font-medium text-gray-700">6A,B,C</div>
-                <div className="text-right font-semibold">${projectedRatableBase['6ABC'].total.toLocaleString()}</div>
+                <div className="text-right font-semibold">{formatAvgAsmt(projectedRatableBase['6ABC'].total)}</div>
               </div>
 
               {/* Totals */}
               <div className="pt-4 mt-4 border-t-2 border-gray-300">
                 <div className="grid grid-cols-2 gap-4 text-base font-bold">
                   <div>Total Ratables</div>
-                  <div className="text-right">${projectedRatableBase.totalTotal.toLocaleString()}</div>
+                  <div className="text-right">{formatAvgAsmt(projectedRatableBase.totalTotal)}</div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mt-3">
@@ -759,22 +879,22 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                     <input
                       type="number"
                       step="0.01"
-                      value={rateCalcData.bufferForLoss}
-                      onChange={(e) => handleRateCalcChange('bufferForLoss', e.target.value)}
+                      value={localRateCalc.bufferForLoss}
+                      onChange={(e) => handleLocalRateCalcChange('bufferForLoss', e.target.value)}
                       className="w-20 px-2 py-1 border border-gray-300 rounded text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       placeholder="0.00"
                     />
                     <span className="text-sm">%</span>
                   </div>
                   <div className="text-right text-sm">
-                    ${((projectedRatableBase.totalTotal * rateCalcData.bufferForLoss) / 100).toLocaleString()}
+                    {formatAvgAsmt((projectedRatableBase.totalTotal * localRateCalc.bufferForLoss) / 100)}
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mt-3 text-base font-bold">
                   <div>Net Ratables</div>
                   <div className="text-right">
-                    ${(projectedRatableBase.totalTotal * (1 - rateCalcData.bufferForLoss / 100)).toLocaleString()}
+                    {formatAvgAsmt(projectedRatableBase.totalTotal * (1 - localRateCalc.bufferForLoss / 100))}
                   </div>
                 </div>
               </div>
@@ -784,7 +904,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-lg font-bold text-blue-900">Estimated Rate</div>
                   <div className="text-right text-2xl font-bold text-blue-600">
-                    {(rateCalcData.budget / (projectedRatableBase.totalTotal * (1 - rateCalcData.bufferForLoss / 100))).toFixed(3)}
+                    {formatTaxRate((localRateCalc.budget / (projectedRatableBase.totalTotal * (1 - localRateCalc.bufferForLoss / 100))) * 100)}
                   </div>
                 </div>
               </div>

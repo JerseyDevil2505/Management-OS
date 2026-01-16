@@ -99,8 +99,16 @@ function getErrorMessage(error) {
   return String(error);
 }
 
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://zxvavttfvpsagzluqqwn.supabase.co';
-const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4dmF2dHRmdnBzYWd6bHVxcXduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDA4NjcsImV4cCI6MjA2NzkxNjg2N30.Rrn2pTnImCpBIoKPcdlzzZ9hMwnYtIO5s7i1ejwQReg';
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl) {
+  console.warn('⚠️ REACT_APP_SUPABASE_URL not found in environment variables');
+}
+
+if (!supabaseKey) {
+  console.warn('⚠️ REACT_APP_SUPABASE_ANON_KEY not found in environment variables');
+}
 
 // Enhanced Supabase client with custom fetch options for better timeout handling
 export const supabase = createClient(supabaseUrl, supabaseKey, {
