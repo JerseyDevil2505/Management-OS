@@ -1158,22 +1158,25 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
           {/* Create Custom Bracket Modal */}
           {showCustomModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-                <div className="px-6 py-4 border-b flex items-center justify-between">
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[85vh] flex flex-col">
+                {/* Fixed Header */}
+                <div className="px-6 py-4 border-b flex items-center justify-between flex-shrink-0">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">Create Custom Adjustment Bracket</h3>
-                    <p className="text-sm text-gray-600 mt-1">Define a custom price bracket column with adjustment values for all attributes</p>
+                    <p className="text-sm text-gray-600 mt-1">Define a custom price bracket column</p>
                   </div>
                   <button
                     onClick={() => setShowCustomModal(false)}
-                    className="text-gray-400 hover:text-gray-600"
+                    className="text-gray-400 hover:text-gray-600 ml-4 flex-shrink-0"
+                    title="Close"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-6 h-6" />
                   </button>
                 </div>
 
-                <div className="p-6 space-y-6">
+                {/* Scrollable Content */}
+                <div className="p-6 space-y-6 overflow-y-auto flex-1">
                   {/* Bracket Name */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
