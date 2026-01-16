@@ -647,8 +647,9 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
       alert(`Code configuration saved!${newAdjustments.length > 0 ? ` ${newAdjustments.length} new adjustment row(s) added to grid.` : ''}`);
 
-      // Dismiss auto-populate notice after saving
+      // Dismiss auto-populate notice and reset flag after saving
       setShowAutoPopulateNotice(false);
+      setWasReset(false);
 
       // Optionally switch to adjustment grid tab to show new rows
       if (newAdjustments.length > 0) {
