@@ -68,6 +68,34 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
     }
   }, [jobData?.id]); // Reset when job changes
 
+  // Load projected_6_override values from final_valuation_data
+  useEffect(() => {
+    if (!jobData?.id) return;
+
+    const loadOverrides = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('final_valuation_data')
+          .select('property_composite_key, projected_6_override')
+          .eq('job_id', jobData.id)
+          .not('projected_6_override', 'is', null);
+
+        if (error) throw error;
+
+        // Convert array to map by property_composite_key
+        const overridesMap = {};
+        (data || []).forEach(item => {
+          overridesMap[item.property_composite_key] = item.projected_6_override;
+        });
+        setProjected6Overrides(overridesMap);
+      } catch (error) {
+        console.error('Error loading projected_6_override values:', error);
+      }
+    };
+
+    loadOverrides();
+  }, [jobData?.id]);
+
   // Calculate years for ratable comparison
   const yearPriorToDueYear = useMemo(() => {
     if (!jobData?.end_date) return new Date().getFullYear();
