@@ -841,16 +841,23 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   </div>
 
                   {/* Class 6A,B,C */}
-                  <div className="grid grid-cols-4 gap-2 items-center">
-                    <div className="text-sm font-medium py-1">6A,B,C</div>
-                    <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">{formatCount(projectedRatableBase['6ABC'].count)}</div>
-                    <div className="text-sm text-right px-2 py-1 h-7 flex flex-col items-end justify-center">
-                      <div>{formatAvgAsmt(projectedRatableBase['6ABC'].total)}</div>
-                      {formatDelta(projectedRatableBase['6ABC'].total, previousProjected.class_6_total)}
+                  <div className="space-y-1">
+                    <div className="grid grid-cols-4 gap-2 items-center">
+                      <div className="text-sm font-medium py-1">6A,B,C</div>
+                      <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">{formatCount(projectedRatableBase['6ABC'].count)}</div>
+                      <div className="text-sm text-right px-2 py-1 h-7 flex flex-col items-end justify-center">
+                        <div>{formatAvgAsmt(projectedRatableBase['6ABC'].total)}</div>
+                        {formatDelta(projectedRatableBase['6ABC'].total, previousProjected.class_6_total)}
+                      </div>
+                      <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">
+                        {formatPercentChange(projectedRatableBase['6ABC'].total, localCurrentYear.class_6_total)}
+                      </div>
                     </div>
-                    <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">
-                      {formatPercentChange(projectedRatableBase['6ABC'].total, localCurrentYear.class_6_total)}
-                    </div>
+                    {projectedRatableBase['6ABC'].overrideCount > 0 && (
+                      <div className="text-xs text-purple-600 pl-4 italic">
+                        ⓘ {projectedRatableBase['6ABC'].overrideCount} {projectedRatableBase['6ABC'].overrideCount === 1 ? 'property has' : 'properties have'} manual overrides
+                      </div>
+                    )}
                   </div>
 
                   {/* Total */}
