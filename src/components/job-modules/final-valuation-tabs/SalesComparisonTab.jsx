@@ -331,7 +331,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       return;
     }
 
-    const confirmation = confirm(
+    const confirmation = window.confirm(
       `Apply ${valued.length} projected assessments to Final Valuation?\n\n` +
       `This will update the CME fields in the final_valuation_data table.`
     );
