@@ -34,6 +34,9 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
     bufferForLoss: 0
   });
 
+  // State to store projected_6_override values per property
+  const [projected6Overrides, setProjected6Overrides] = useState({});
+
   // Initialize local state from jobData
   useEffect(() => {
     if (jobData) {
