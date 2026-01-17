@@ -322,10 +322,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
           // Exclude self
           if (comp.property_composite_key === subject.property_composite_key) return false;
 
-          // Sales codes filter
+          // Sales codes filter (normalize blank, '00', '0' to '')
           if (compFilters.salesCodes.length > 0) {
-            const nuCode = (comp.sales_nu || '').trim();
-            if (!compFilters.salesCodes.includes(nuCode)) return false;
+            const normalizedCompCode = normalizeSalesCode(comp.sales_nu);
+            const normalizedFilterCodes = compFilters.salesCodes.map(normalizeSalesCode);
+            if (!normalizedFilterCodes.includes(normalizedCompCode)) return false;
           }
 
           // Sales date range
