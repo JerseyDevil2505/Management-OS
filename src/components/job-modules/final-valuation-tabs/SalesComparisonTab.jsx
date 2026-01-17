@@ -7,6 +7,7 @@ import AdjustmentsTab from './AdjustmentsTab';
 const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) => {
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
+  const resultsRef = React.useRef(null);
   
   // ==================== SUBJECT PROPERTIES STATE ====================
   const [subjectVCS, setSubjectVCS] = useState([]);
