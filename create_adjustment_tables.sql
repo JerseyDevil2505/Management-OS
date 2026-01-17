@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS job_cme_evaluations (
   evaluation_run_id UUID DEFAULT gen_random_uuid(), -- Groups results from same "Evaluate" click
 
   -- Subject property being valued
-  subject_property_id UUID NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+  subject_property_id UUID NOT NULL REFERENCES property_records(id) ON DELETE CASCADE,
   subject_pams TEXT, -- Subject PAMS ID for reference
   subject_address TEXT,
 
