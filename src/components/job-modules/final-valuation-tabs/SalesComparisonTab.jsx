@@ -567,8 +567,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
         const subjectSaleDate = subject.sales_date ? new Date(subject.sales_date) : null;
         const subjectSoldInCSP = subjectSaleDate &&
-          subjectSaleDate >= cspStart &&
-          subjectSaleDate <= cspEnd &&
+          (subjectSaleDate >= cspStart && subjectSaleDate <= cspEnd) &&
           subject.values_norm_time > 0;
 
         let priorityComp = null;
