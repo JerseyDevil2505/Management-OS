@@ -684,6 +684,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         });
       }
 
+      console.log(`✅ Processed ${results.length} properties`);
+      console.log(`   - With 3+ comps: ${results.filter(r => r.comparables.length >= 3).length}`);
+      console.log(`   - With 0 comps: ${results.filter(r => r.comparables.length === 0).length}`);
+      console.log(`   - With projected values: ${results.filter(r => r.projectedAssessment).length}`);
+
       // Save results to database
       const evaluationRunId = crypto.randomUUID ? crypto.randomUUID() :
         'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
