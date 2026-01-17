@@ -1708,16 +1708,40 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                       <div className="text-2xl font-bold text-blue-900">{evaluationResults.length}</div>
                     </div>
                     <div className="bg-green-50 rounded-lg p-4">
-                      <div className="text-sm text-gray-600">Total Comparables Found</div>
+                      <div className="text-sm text-gray-600">Successfully Valued (3+ Comps)</div>
                       <div className="text-2xl font-bold text-green-900">
-                        {evaluationResults.reduce((sum, r) => sum + r.totalFound, 0)}
+                        {evaluationResults.filter(r => r.comparables.length >= 3).length}
                       </div>
                     </div>
-                    <div className="bg-purple-50 rounded-lg p-4">
-                      <div className="text-sm text-gray-600">Valid After Tolerance</div>
-                      <div className="text-2xl font-bold text-purple-900">
-                        {evaluationResults.reduce((sum, r) => sum + r.totalValid, 0)}
+                    <div className="bg-orange-50 rounded-lg p-4">
+                      <div className="text-sm text-gray-600">Needs More Comps (&lt;3)</div>
+                      <div className="text-2xl font-bold text-orange-900">
+                        {evaluationResults.filter(r => r.comparables.length < 3).length}
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-300">
+                    <div className="text-sm text-gray-600">
+                      <strong>Iterative Workflow:</strong> Set aside successfully valued properties (3-5 comps found),
+                      then re-run the engine with loosened criteria for remaining properties.
+                    </div>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleSetAsideSuccessful}
+                        disabled={!evaluationResults || evaluationResults.filter(r => r.comparables.length >= 3).length === 0}
+                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                      >
+                        Set Aside Successful ({evaluationResults ? evaluationResults.filter(r => r.comparables.length >= 3).length : 0})
+                      </button>
+                      <button
+                        onClick={handleApplyToFinalRoster}
+                        disabled={!evaluationResults || evaluationResults.filter(r => r.projectedAssessment).length === 0}
+                        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                      >
+                        Apply to Final Roster
+                      </button>
                     </div>
                   </div>
 
