@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { supabase, interpretCodes } from '../../../lib/supabaseClient';
-import { Search, Save, X, Download, Upload, Plus, Sliders, BarChart, FileText, Check } from 'lucide-react';
+import { supabase } from '../../../lib/supabaseClient';
+import { Search, X, Upload, Sliders, BarChart, FileText, Check } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 
@@ -71,7 +71,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   const [customBrackets, setCustomBrackets] = useState([]);
 
   const vendorType = jobData?.vendor_type || 'BRT';
-  const codeDefinitions = jobData?.parsed_code_definitions;
 
   // ==================== SALES CODE NORMALIZATION ====================
   const normalizeSalesCode = useCallback((code) => {
@@ -99,6 +98,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       loadAdjustmentGrid();
       loadCustomBrackets();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id]);
 
   const loadAdjustmentGrid = async () => {
@@ -725,9 +725,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
       const saleDate = new Date(p.sales_date);
       const inCSP = saleDate >= cspStart && saleDate <= cspEnd;
-      const inPSP = saleDate >= pspStart && saleDate <= pspEnd;
-      const inHSP = saleDate >= hspStart && saleDate <= hspEnd;
-      const inPeriod = inCSP || inPSP || inHSP;
 
       // Check for manual override from Sales Review (property_market_analysis.cme_include_override)
       const includeOverride = p.cme_include_override; // null, true, or false
