@@ -256,7 +256,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
       '3A': { count: 0, total: 0 },
       '3B': { count: 0, total: 0 },
       '4ABC': { count: 0, total: 0 },
-      '6ABC': { count: 0, total: 0 }
+      '6ABC': { count: 0, total: 0, overrideCount: 0 }
     };
 
     const consolidated = consolidateProperties(properties);
@@ -284,10 +284,20 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
         summary['4ABC'].count++;
         summary['4ABC'].total += camaTotal;
       } else if (['6A', '6B'].includes(propertyClass)) {
-        // For personal property (6A,B,C), use land * (imp/100) instead of land + imp
-        const land = property.values_cama_land || 0;
-        const imp = property.values_cama_improvement || 0;
-        const personalPropertyValue = land * (imp / 100);
+        // Check for manual override first
+        const override = projected6Overrides[property.property_composite_key];
+
+        let personalPropertyValue;
+        if (override !== null && override !== undefined) {
+          // Use the override value
+          personalPropertyValue = parseFloat(override) || 0;
+          summary['6ABC'].overrideCount++;
+        } else {
+          // Calculate using standard formula: land * (imp/100)
+          const land = property.values_cama_land || 0;
+          const imp = property.values_cama_improvement || 0;
+          personalPropertyValue = land * (imp / 100);
+        }
 
         summary['6ABC'].count++;
         summary['6ABC'].total += personalPropertyValue;
@@ -298,7 +308,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
     const totalTotal = Object.values(summary).reduce((sum, item) => sum + item.total, 0);
 
     return { ...summary, totalCount, totalTotal };
-  }, [properties, vendorType]);
+  }, [properties, vendorType, projected6Overrides]);
 
   // Handle local state changes for current year
   const handleLocalCurrentYearChange = (field, value) => {
