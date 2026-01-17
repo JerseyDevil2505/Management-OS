@@ -324,6 +324,40 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
     setHasUnsavedChanges(true);
   };
 
+  // Save override value for a specific property
+  const handleSaveOverride = async (propertyKey, overrideValue) => {
+    try {
+      const numValue = overrideValue !== null && overrideValue !== ''
+        ? parseFloat(String(overrideValue).replace(/[,$]/g, ''))
+        : null;
+
+      const { error } = await supabase
+        .from('final_valuation_data')
+        .upsert({
+          job_id: jobData.id,
+          property_composite_key: propertyKey,
+          projected_6_override: numValue,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'job_id,property_composite_key'
+        });
+
+      if (error) throw error;
+
+      // Update local state
+      setProjected6Overrides(prev => ({
+        ...prev,
+        [propertyKey]: numValue
+      }));
+
+      return true;
+    } catch (error) {
+      console.error('Error saving override:', error);
+      alert('Error saving override: ' + error.message);
+      return false;
+    }
+  };
+
   // Manual save function
   const handleManualSave = async () => {
     try {
