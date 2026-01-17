@@ -647,8 +647,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       // Save results to database
       const evaluationRunId = crypto.randomUUID ? crypto.randomUUID() :
         'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-          const r = Math.random() * 16 | 0;
-          const v = c === 'x' ? r : (r & 0x3 | 0x8);
+          const r = (Math.random() * 16) | 0;
+          const v = c === 'x' ? r : ((r & 0x3) | 0x8);
           return v.toString(16);
         });
 
@@ -714,10 +714,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
     const cspStart = new Date(assessmentYear - 1, 9, 1);
     const cspEnd = new Date(assessmentYear, 11, 31);
-    const pspStart = new Date(assessmentYear - 2, 9, 1);
-    const pspEnd = new Date(assessmentYear - 1, 8, 30);
-    const hspStart = new Date(assessmentYear - 3, 9, 1);
-    const hspEnd = new Date(assessmentYear - 2, 8, 30);
 
     return properties.filter(p => {
       if (!p.sales_date || !p.values_norm_time) return false;
