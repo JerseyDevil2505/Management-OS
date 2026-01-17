@@ -746,6 +746,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       setEvaluationResults(results);
       console.log(`✨ Results set! Scroll down to see the results table with ${results.length} properties.`);
 
+      // Auto-scroll to results after a brief delay to allow rendering
+      setTimeout(() => {
+        if (resultsRef.current) {
+          resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+
       // Results now show inline below filters - no tab switching needed
 
     } catch (error) {
