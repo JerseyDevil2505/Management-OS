@@ -1748,38 +1748,56 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
               </div>
 
               {/* Evaluate Button */}
-              <div className="mt-6 pt-6 border-t border-gray-300 flex items-center justify-between">
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      checked={evaluationMode === 'fresh'}
-                      onChange={() => setEvaluationMode('fresh')}
-                      className="rounded"
-                    />
-                    <span className="text-sm">Fresh evaluation (delete all saved results)</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      checked={evaluationMode === 'keep'}
-                      onChange={() => setEvaluationMode('keep')}
-                      className="rounded"
-                    />
-                    <span className="text-sm">Keep saved results</span>
-                  </label>
+              <div className="mt-6 pt-6 border-t border-gray-300">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        checked={evaluationMode === 'fresh'}
+                        onChange={() => setEvaluationMode('fresh')}
+                        className="rounded"
+                      />
+                      <span className="text-sm">Fresh evaluation (delete all saved results)</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        checked={evaluationMode === 'keep'}
+                        onChange={() => setEvaluationMode('keep')}
+                        className="rounded"
+                      />
+                      <span className="text-sm">Keep saved results</span>
+                    </label>
+                  </div>
+
+                  <button
+                    onClick={handleEvaluate}
+                    disabled={isEvaluating}
+                    className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold text-lg"
+                  >
+                    {isEvaluating
+                      ? `Evaluating ${evaluationProgress.current}/${evaluationProgress.total}...`
+                      : 'Evaluate'
+                    }
+                  </button>
                 </div>
 
-                <button
-                  onClick={handleEvaluate}
-                  disabled={isEvaluating}
-                  className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold text-lg"
-                >
-                  {isEvaluating
-                    ? `Evaluating ${evaluationProgress.current}/${evaluationProgress.total}...`
-                    : 'Evaluate'
-                  }
-                </button>
+                {/* Progress Bar */}
+                {isEvaluating && evaluationProgress.total > 0 && (
+                  <div className="w-full">
+                    <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                      <span>Processing properties...</span>
+                      <span>{Math.round((evaluationProgress.current / evaluationProgress.total) * 100)}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${(evaluationProgress.current / evaluationProgress.total) * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
