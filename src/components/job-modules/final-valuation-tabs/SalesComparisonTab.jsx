@@ -743,6 +743,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                 Which comparables do you want to use?
               </h3>
 
+              {/* Auto-Include Logic Info */}
+              <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-900">
+                  <strong>Auto-Include Logic:</strong> CSP period sales (10/1 prior-prior year to 12/31 prior year) are automatically included.
+                  Use <span className="inline-flex items-center mx-1"><Check className="w-3 h-3 text-green-600" /></span> and <span className="inline-flex items-center mx-1"><X className="w-3 h-3 text-red-600" /></span> buttons
+                  in <strong>Sales Review</strong> tab to manually override.
+                </p>
+              </div>
+
               {/* Adjustment Bracket Selection */}
               <div className="mb-6 pb-4 border-b border-gray-200">
                 <div className="flex items-center gap-4">
