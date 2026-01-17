@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calculator, Download, FileSpreadsheet, Save } from 'lucide-react';
+import { Calculator, Download, FileSpreadsheet, Save, Edit } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 
