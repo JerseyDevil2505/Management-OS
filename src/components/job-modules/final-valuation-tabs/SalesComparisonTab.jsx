@@ -1853,7 +1853,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
             {/* INLINE RESULTS - Show directly below search filters */}
             {evaluationResults && (
-              <div className="mt-8 bg-white border border-gray-300 rounded-lg p-6">
+              <div ref={resultsRef} className="mt-8 bg-white border border-gray-300 rounded-lg p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">
                   Evaluation Results
                 </h3>
