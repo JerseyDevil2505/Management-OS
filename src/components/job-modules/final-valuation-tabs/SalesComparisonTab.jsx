@@ -66,6 +66,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   // ==================== EVALUATION STATE ====================
   const [evaluationMode, setEvaluationMode] = useState('fresh'); // 'fresh' or 'keep'
   const [isEvaluating, setIsEvaluating] = useState(false);
+  const [evaluationProgress, setEvaluationProgress] = useState({ current: 0, total: 0 });
   const [evaluationResults, setEvaluationResults] = useState(null);
   const [adjustmentGrid, setAdjustmentGrid] = useState([]);
   const [customBrackets, setCustomBrackets] = useState([]);
@@ -390,6 +391,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   // ==================== EVALUATE COMPARABLES ====================
   const handleEvaluate = async () => {
     setIsEvaluating(true);
+    setEvaluationProgress({ current: 0, total: 0 });
 
     try {
       // Step 1: Determine subject properties
@@ -412,6 +414,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       if (subjects.length === 0) {
         alert('No subject properties match your criteria');
         setIsEvaluating(false);
+        setEvaluationProgress({ current: 0, total: 0 });
         return;
       }
 
@@ -420,8 +423,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
       // Step 3: For each subject, find matching comparables
       const results = [];
+      setEvaluationProgress({ current: 0, total: subjects.length });
 
-      for (const subject of subjects) {
+      for (let i = 0; i < subjects.length; i++) {
+        const subject = subjects[i];
+        setEvaluationProgress({ current: i + 1, total: subjects.length });
         const matchingComps = eligibleSales.filter(comp => {
           // Exclude self
           if (comp.property_composite_key === subject.property_composite_key) return false;
@@ -703,6 +709,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       alert(`Evaluation failed: ${error.message}`);
     } finally {
       setIsEvaluating(false);
+      setEvaluationProgress({ current: 0, total: 0 });
     }
   };
 
@@ -1768,7 +1775,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                   disabled={isEvaluating}
                   className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold text-lg"
                 >
-                  {isEvaluating ? 'Evaluating...' : 'Evaluate'}
+                  {isEvaluating
+                    ? `Evaluating ${evaluationProgress.current}/${evaluationProgress.total}...`
+                    : 'Evaluate'
+                  }
                 </button>
               </div>
             </div>
