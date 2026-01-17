@@ -100,5 +100,95 @@ COMMENT ON TABLE job_custom_brackets IS
 COMMENT ON COLUMN job_custom_brackets.adjustment_values IS 
 'JSONB object storing adjustment values and types for each attribute. Example: {"lot_size": {"value": 10, "type": "flat"}, "living_area": {"value": 50, "type": "per_sqft"}}';
 
-COMMENT ON TABLE job_settings IS 
+COMMENT ON TABLE job_settings IS
 'Stores job-specific configuration settings (e.g., garage codes, custom thresholds)';
+
+-- Create job_cme_evaluations table for storing iterative CME (Sales Comparison) results
+CREATE TABLE IF NOT EXISTS job_cme_evaluations (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  evaluation_run_id UUID DEFAULT gen_random_uuid(), -- Groups results from same "Evaluate" click
+
+  -- Subject property being valued
+  subject_property_id UUID NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+  subject_pams TEXT, -- Subject PAMS ID for reference
+  subject_address TEXT,
+
+  -- Search criteria used (stored for audit trail)
+  search_criteria JSONB DEFAULT '{}'::jsonb,
+  -- Example: { "timeFilter": "90", "distanceFilter": "0.5", "bracketFilter": "bracket_2", ... }
+
+  -- Comparables matched (up to 5)
+  comparables JSONB DEFAULT '[]'::jsonb,
+  -- Array of comparable objects with adjustment details
+  -- Example: [
+  --   {
+  --     "property_id": "uuid",
+  --     "pams_id": "12345",
+  --     "address": "123 Main St",
+  --     "sale_price": 450000,
+  --     "sale_date": "2024-01-15",
+  --     "rank": 1,
+  --     "adjustments": {
+  --       "living_area": { "subject": 2200, "comp": 2000, "adjustment": 10000, "type": "per_sqft" },
+  --       "garage": { "subject": 2, "comp": 1, "adjustment": 5000, "type": "flat" },
+  --       ...
+  --     },
+  --     "gross_adjustment": 35000,
+  --     "net_adjustment": 15000,
+  --     "net_adjustment_percent": 3.33,
+  --     "adjusted_sale_price": 465000,
+  --     "weight": 0.35
+  --   },
+  --   ...
+  -- ]
+
+  -- Calculated valuation
+  projected_assessment NUMERIC(12,2),
+  weighted_average_price NUMERIC(12,2),
+  confidence_score NUMERIC(5,2), -- 0-100, based on # of comps and adjustment quality
+
+  -- Workflow status
+  status TEXT DEFAULT 'pending', -- 'pending', 'saved', 'applied', 'set_aside'
+  notes TEXT,
+
+  -- User tracking
+  created_by UUID REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+  -- Prevent duplicate evaluations for same subject in same run
+  UNIQUE(evaluation_run_id, subject_property_id)
+);
+
+-- Create indexes for CME evaluations
+CREATE INDEX IF NOT EXISTS idx_job_cme_evaluations_job_id
+  ON job_cme_evaluations(job_id);
+
+CREATE INDEX IF NOT EXISTS idx_job_cme_evaluations_run_id
+  ON job_cme_evaluations(evaluation_run_id);
+
+CREATE INDEX IF NOT EXISTS idx_job_cme_evaluations_subject
+  ON job_cme_evaluations(subject_property_id);
+
+CREATE INDEX IF NOT EXISTS idx_job_cme_evaluations_status
+  ON job_cme_evaluations(job_id, status);
+
+-- Add comments
+COMMENT ON TABLE job_cme_evaluations IS
+'Stores results from iterative CME (Sales Comparison) evaluations, including matched comps, adjustments, and projected assessments';
+
+COMMENT ON COLUMN job_cme_evaluations.evaluation_run_id IS
+'Groups all evaluations from a single "Evaluate" button click, allowing batch operations';
+
+COMMENT ON COLUMN job_cme_evaluations.search_criteria IS
+'Stores the filter settings used for this evaluation (time, distance, bracket, etc.) for audit trail';
+
+COMMENT ON COLUMN job_cme_evaluations.comparables IS
+'Array of up to 5 comparable sales with full adjustment calculations, rankings, and weights';
+
+COMMENT ON COLUMN job_cme_evaluations.status IS
+'Workflow status: pending (just evaluated), saved (user reviewed), applied (written to final roster), set_aside (subject successfully valued, excluded from next run)';
+
+COMMENT ON COLUMN job_cme_evaluations.confidence_score IS
+'Quality metric 0-100 based on number of comps found and average net adjustment percentage';
