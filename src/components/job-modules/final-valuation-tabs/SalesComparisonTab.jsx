@@ -399,7 +399,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
       if (manualProperties.length > 0) {
         // Use manually entered properties
-        subjects = properties.filter(p => 
+        subjects = properties.filter(p =>
           manualProperties.includes(p.property_composite_key)
         );
       } else {
@@ -418,8 +418,32 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         return;
       }
 
+      console.log(`🔍 Evaluating ${subjects.length} subject properties...`);
+
       // Step 2: Get eligible sales (from Sales Review logic)
       const eligibleSales = getEligibleSales();
+      console.log(`📊 Found ${eligibleSales.length} eligible sales (CSP period)`);
+
+      if (eligibleSales.length === 0) {
+        alert(`No eligible sales found for comparison.\n\nThe CSP period (${compFilters.salesDateStart} to ${compFilters.salesDateEnd}) has no valid sales with time-adjusted prices.\n\nPlease check your Sales Review tab or adjust your date range.`);
+        setIsEvaluating(false);
+        setEvaluationProgress({ current: 0, total: 0 });
+        return;
+      }
+
+      if (adjustmentGrid.length === 0) {
+        const proceed = window.confirm(
+          'Warning: No adjustment grid defined!\n\n' +
+          'All comparables will have $0 adjustments.\n\n' +
+          'Go to the Adjustments tab to define your adjustment grid.\n\n' +
+          'Continue anyway?'
+        );
+        if (!proceed) {
+          setIsEvaluating(false);
+          setEvaluationProgress({ current: 0, total: 0 });
+          return;
+        }
+      }
 
       // Step 3: For each subject, find matching comparables
       const results = [];
