@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase, interpretCodes } from '../../../lib/supabaseClient';
-import { Search, Save, X, Download, Upload, Plus, Sliders, BarChart, FileText } from 'lucide-react';
+import { Search, Save, X, Download, Upload, Plus, Sliders, BarChart, FileText, Check } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 
