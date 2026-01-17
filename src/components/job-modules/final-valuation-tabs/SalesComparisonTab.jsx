@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, interpretCodes } from '../../../lib/supabaseClient';
 import { Search, Save, X, Download, Upload, Plus, Sliders, BarChart, FileText, Check } from 'lucide-react';
 import * as XLSX from 'xlsx';
