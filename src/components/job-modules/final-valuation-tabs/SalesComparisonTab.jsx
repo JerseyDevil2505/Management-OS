@@ -283,6 +283,110 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
     input.click();
   };
 
+  // ==================== SET ASIDE SUCCESSFUL ====================
+  const handleSetAsideSuccessful = async () => {
+    if (!evaluationResults) return;
+
+    const successful = evaluationResults.filter(r => r.comparables.length >= 3);
+
+    if (successful.length === 0) {
+      alert('No properties with 3+ comparables to set aside');
+      return;
+    }
+
+    try {
+      // Update status to 'set_aside' in database for these evaluations
+      const subjectIds = successful.map(r => r.subject.id);
+
+      const { error } = await supabase
+        .from('job_cme_evaluations')
+        .update({ status: 'set_aside' })
+        .in('subject_property_id', subjectIds)
+        .eq('job_id', jobData.id);
+
+      if (error) throw error;
+
+      // Remove set-aside properties from current subject filters
+      const remainingResults = evaluationResults.filter(r => r.comparables.length < 3);
+
+      alert(`${successful.length} properties set aside successfully. ${remainingResults.length} properties remain for re-evaluation.`);
+
+      // Update results to show only remaining
+      setEvaluationResults(remainingResults);
+
+    } catch (error) {
+      console.error('Error setting aside properties:', error);
+      alert(`Failed to set aside properties: ${error.message}`);
+    }
+  };
+
+  // ==================== APPLY TO FINAL ROSTER ====================
+  const handleApplyToFinalRoster = async () => {
+    if (!evaluationResults) return;
+
+    const valued = evaluationResults.filter(r => r.projectedAssessment);
+
+    if (valued.length === 0) {
+      alert('No properties with projected assessments to apply');
+      return;
+    }
+
+    const confirmation = confirm(
+      `Apply ${valued.length} projected assessments to Final Valuation?\n\n` +
+      `This will update the CME fields in the final_valuation_data table.`
+    );
+
+    if (!confirmation) return;
+
+    try {
+      // For each valued property, update or insert into final_valuation_data
+      for (const result of valued) {
+        const compKeys = result.comparables.map((c, idx) =>
+          `${c.property_block}-${c.property_lot}-${c.property_qualifier || ''}`
+        );
+
+        const finalData = {
+          job_id: jobData.id,
+          property_composite_key: result.subject.property_composite_key,
+          cme_projected_assessment: result.projectedAssessment,
+          cme_comp1: compKeys[0] || null,
+          cme_comp2: compKeys[1] || null,
+          cme_comp3: compKeys[2] || null,
+          cme_comp4: compKeys[3] || null,
+          cme_comp5: compKeys[4] || null
+        };
+
+        // Upsert into final_valuation_data
+        const { error } = await supabase
+          .from('final_valuation_data')
+          .upsert(finalData, {
+            onConflict: 'job_id,property_composite_key'
+          });
+
+        if (error) throw error;
+      }
+
+      // Update evaluation status to 'applied'
+      const subjectIds = valued.map(r => r.subject.id);
+
+      await supabase
+        .from('job_cme_evaluations')
+        .update({ status: 'applied' })
+        .in('subject_property_id', subjectIds)
+        .eq('job_id', jobData.id);
+
+      alert(`Successfully applied ${valued.length} projected assessments to Final Valuation!`);
+
+      // Clear results to indicate completion
+      setEvaluationResults(null);
+      setActiveSubTab('search');
+
+    } catch (error) {
+      console.error('Error applying to final roster:', error);
+      alert(`Failed to apply values: ${error.message}`);
+    }
+  };
+
   // ==================== EVALUATE COMPARABLES ====================
   const handleEvaluate = async () => {
     setIsEvaluating(true);
