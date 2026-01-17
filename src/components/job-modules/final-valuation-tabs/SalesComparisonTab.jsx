@@ -412,15 +412,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
         // Calculate adjustments for each comparable
         const compsWithAdjustments = matchingComps.map(comp => {
-          const { adjustments, totalAdjustment, adjustedPrice, adjustmentPercent } = 
+          const { adjustments, totalAdjustment, adjustedPrice, adjustmentPercent } =
             calculateAllAdjustments(subject, comp);
+
+          const grossAdjustment = adjustments.reduce((sum, adj) => sum + Math.abs(adj.amount), 0);
+          const grossAdjustmentPercent = comp.values_norm_time > 0
+            ? (grossAdjustment / comp.values_norm_time) * 100
+            : 0;
 
           // Apply adjustment tolerance filters
           let passesTolerance = true;
 
           // Individual adjustment tolerance
           if (compFilters.individualAdjPct > 0) {
-            const hasLargeAdjustment = adjustments.some(adj => 
+            const hasLargeAdjustment = adjustments.some(adj =>
               Math.abs((adj.amount / comp.values_norm_time) * 100) > compFilters.individualAdjPct
             );
             if (hasLargeAdjustment) passesTolerance = false;
@@ -433,16 +438,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
           // Gross adjustment tolerance (sum of absolute values)
           if (compFilters.grossAdjPct > 0) {
-            const grossPct = adjustments.reduce((sum, adj) => 
-              sum + Math.abs((adj.amount / comp.values_norm_time) * 100), 0
-            );
-            if (grossPct > compFilters.grossAdjPct) passesTolerance = false;
+            if (grossAdjustmentPercent > compFilters.grossAdjPct) passesTolerance = false;
           }
 
           return {
             ...comp,
             adjustments,
             totalAdjustment,
+            grossAdjustment,
+            grossAdjustmentPercent,
             adjustedPrice,
             adjustmentPercent,
             passesTolerance
@@ -450,14 +454,142 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         });
 
         // Filter by tolerance
-        const validComps = compsWithAdjustments.filter(c => c.passesTolerance);
+        let validComps = compsWithAdjustments.filter(c => c.passesTolerance);
+
+        // SUBJECT SALE PRIORITY: If subject sold in CSP, it becomes Comp #1 with 0% adjustment
+        const assessmentYear = new Date(jobData.end_date).getFullYear();
+        const cspStart = new Date(assessmentYear - 1, 9, 1);
+        const cspEnd = new Date(assessmentYear, 11, 31);
+
+        const subjectSaleDate = subject.sales_date ? new Date(subject.sales_date) : null;
+        const subjectSoldInCSP = subjectSaleDate &&
+          subjectSaleDate >= cspStart &&
+          subjectSaleDate <= cspEnd &&
+          subject.values_norm_time > 0;
+
+        let priorityComp = null;
+        if (subjectSoldInCSP) {
+          priorityComp = {
+            ...subject,
+            adjustments: [],
+            totalAdjustment: 0,
+            grossAdjustment: 0,
+            grossAdjustmentPercent: 0,
+            adjustedPrice: subject.values_norm_time,
+            adjustmentPercent: 0,
+            passesTolerance: true,
+            isSubjectSale: true,
+            rank: 1
+          };
+        }
+
+        // RANK COMPARABLES: Sort by absolute Net Adj % (closest to 0% is best)
+        validComps.sort((a, b) => {
+          return Math.abs(a.adjustmentPercent) - Math.abs(b.adjustmentPercent);
+        });
+
+        // SELECT TOP 5 (or Top 4 if subject sale exists)
+        const maxComps = priorityComp ? 4 : 5;
+        let topComps = validComps.slice(0, maxComps);
+
+        // Add subject sale as Comp #1 if it exists
+        if (priorityComp) {
+          topComps = [priorityComp, ...topComps];
+        }
+
+        // Assign ranks
+        topComps.forEach((comp, idx) => {
+          if (!comp.isSubjectSale) {
+            comp.rank = idx + 1;
+          }
+        });
+
+        // CALCULATE WEIGHTED AVERAGE
+        let projectedAssessment = null;
+        let confidenceScore = 0;
+
+        if (topComps.length >= 3) {
+          // Calculate weights based on closeness to 0% adjustment
+          const totalInverseAdjPct = topComps.reduce((sum, comp) => {
+            return sum + (1 / (Math.abs(comp.adjustmentPercent) + 1)); // +1 to avoid division by zero
+          }, 0);
+
+          topComps.forEach(comp => {
+            comp.weight = (1 / (Math.abs(comp.adjustmentPercent) + 1)) / totalInverseAdjPct;
+          });
+
+          // Weighted average of adjusted prices
+          projectedAssessment = topComps.reduce((sum, comp) => {
+            return sum + (comp.adjustedPrice * comp.weight);
+          }, 0);
+
+          // Confidence score: 100 for 5 comps with 0% avg adjustment, decreasing from there
+          const avgAdjPct = topComps.reduce((sum, c) => sum + Math.abs(c.adjustmentPercent), 0) / topComps.length;
+          confidenceScore = Math.max(0, Math.min(100,
+            (topComps.length / 5) * 100 - (avgAdjPct * 2)
+          ));
+        }
 
         results.push({
           subject,
-          comparables: validComps,
+          comparables: topComps,
           totalFound: matchingComps.length,
-          totalValid: validComps.length
+          totalValid: validComps.length,
+          projectedAssessment: projectedAssessment ? Math.round(projectedAssessment) : null,
+          confidenceScore: Math.round(confidenceScore),
+          hasSubjectSale: !!priorityComp
         });
+      }
+
+      // Save results to database
+      const evaluationRunId = crypto.randomUUID ? crypto.randomUUID() :
+        'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+          const r = Math.random() * 16 | 0;
+          const v = c === 'x' ? r : (r & 0x3 | 0x8);
+          return v.toString(16);
+        });
+
+      for (const result of results) {
+        const evaluationData = {
+          job_id: jobData.id,
+          evaluation_run_id: evaluationRunId,
+          subject_property_id: result.subject.id,
+          subject_pams: result.subject.property_composite_key,
+          subject_address: result.subject.property_location,
+          search_criteria: compFilters,
+          comparables: result.comparables.map(comp => ({
+            property_id: comp.id,
+            pams_id: comp.property_composite_key,
+            address: comp.property_location,
+            sale_price: comp.sales_price,
+            sale_date: comp.sales_date,
+            time_adjusted_price: comp.values_norm_time,
+            rank: comp.rank,
+            is_subject_sale: comp.isSubjectSale || false,
+            adjustments: comp.adjustments.reduce((obj, adj) => {
+              obj[adj.name] = { amount: adj.amount, category: adj.category };
+              return obj;
+            }, {}),
+            gross_adjustment: comp.grossAdjustment,
+            net_adjustment: comp.totalAdjustment,
+            net_adjustment_percent: comp.adjustmentPercent,
+            gross_adjustment_percent: comp.grossAdjustmentPercent,
+            adjusted_sale_price: comp.adjustedPrice,
+            weight: comp.weight || 0
+          })),
+          projected_assessment: result.projectedAssessment,
+          weighted_average_price: result.projectedAssessment,
+          confidence_score: result.confidenceScore,
+          status: 'pending'
+        };
+
+        const { error } = await supabase
+          .from('job_cme_evaluations')
+          .insert(evaluationData);
+
+        if (error) {
+          console.error('Error saving evaluation:', error);
+        }
       }
 
       setEvaluationResults(results);
@@ -543,6 +675,24 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
     return bracket >= 0 ? bracket : 0;
   };
 
+  // ==================== HELPER: COUNT BRT ITEMS ====================
+  const countBRTItems = useCallback((property, categoryCodes) => {
+    if (vendorType !== 'BRT' || !property.raw_brt_items) return 0;
+
+    try {
+      const items = JSON.parse(property.raw_brt_items);
+      return items.filter(item => categoryCodes.includes(item.category)).length;
+    } catch {
+      return 0;
+    }
+  }, [vendorType]);
+
+  // ==================== HELPER: READ MICRO VALUE ====================
+  const readMicroValue = useCallback((property, fieldName) => {
+    if (vendorType !== 'Microsystems') return null;
+    return property[fieldName];
+  }, [vendorType]);
+
   const calculateAdjustment = (subject, comp, adjustmentDef) => {
     if (!subject || !comp || !adjustmentDef) return 0;
 
@@ -566,27 +716,103 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       adjustmentValue = adjustmentDef[`bracket_${bracketIndex}`] || 0;
     }
 
-    // Simplified adjustment logic - full implementation would check property codes
-    let subjectValue, compValue;
+    if (adjustmentValue === 0) return 0; // No adjustment needed
+
+    // Extract subject and comp values based on adjustment type
+    let subjectValue = 0, compValue = 0;
 
     switch (adjustmentDef.adjustment_id) {
       case 'living_area':
         subjectValue = subject.asset_sfla || 0;
         compValue = comp.asset_sfla || 0;
         break;
+
+      case 'bedrooms':
+        // BRT: Count category 11, Micro: use bedrooms column
+        if (vendorType === 'BRT') {
+          subjectValue = countBRTItems(subject, ['11']);
+          compValue = countBRTItems(comp, ['11']);
+        } else {
+          subjectValue = readMicroValue(subject, 'bedrooms') || 0;
+          compValue = readMicroValue(comp, 'bedrooms') || 0;
+        }
+        break;
+
+      case 'bathrooms':
+        subjectValue = subject.total_baths_calculated || 0;
+        compValue = comp.total_baths_calculated || 0;
+        break;
+
+      case 'garage':
+        // BRT: Count category 15, Micro: use garage column
+        if (vendorType === 'BRT') {
+          subjectValue = countBRTItems(subject, ['15']);
+          compValue = countBRTItems(comp, ['15']);
+        } else {
+          subjectValue = readMicroValue(subject, 'garage') || 0;
+          compValue = readMicroValue(comp, 'garage') || 0;
+        }
+        break;
+
+      case 'basement':
+        if (vendorType === 'Microsystems') {
+          subjectValue = readMicroValue(subject, 'basement') || 0;
+          compValue = readMicroValue(comp, 'basement') || 0;
+        }
+        break;
+
+      case 'deck':
+        if (vendorType === 'Microsystems') {
+          subjectValue = readMicroValue(subject, 'deck') || 0;
+          compValue = readMicroValue(comp, 'deck') || 0;
+        }
+        break;
+
+      case 'patio':
+        if (vendorType === 'Microsystems') {
+          subjectValue = readMicroValue(subject, 'patio') || 0;
+          compValue = readMicroValue(comp, 'patio') || 0;
+        }
+        break;
+
+      case 'lot_size_ff':
+        subjectValue = subject.asset_lot_frontage || 0;
+        compValue = comp.asset_lot_frontage || 0;
+        break;
+
+      case 'lot_size_sf':
+        subjectValue = subject.asset_lot_sf || 0;
+        compValue = comp.asset_lot_sf || 0;
+        break;
+
+      case 'lot_size_acre':
+        subjectValue = subject.asset_lot_acre || 0;
+        compValue = comp.asset_lot_acre || 0;
+        break;
+
+      case 'year_built':
+        subjectValue = subject.asset_year_built || 0;
+        compValue = comp.asset_year_built || 0;
+        break;
+
       default:
-        return 0;
+        return 0; // Unknown attribute
     }
 
     const difference = subjectValue - compValue;
 
+    // Apply adjustment based on type
+    // Rule: Subject Better = ADD to comp price; Comp Better = SUBTRACT from comp price
     switch (adjustmentType) {
       case 'flat':
-        return difference * adjustmentValue;
+        return difference > 0 ? adjustmentValue : (difference < 0 ? -adjustmentValue : 0);
+
       case 'per_sqft':
         return difference * adjustmentValue;
+
       case 'percent':
         return (comp.values_norm_time || 0) * (adjustmentValue / 100) * Math.sign(difference);
+
       default:
         return 0;
     }
