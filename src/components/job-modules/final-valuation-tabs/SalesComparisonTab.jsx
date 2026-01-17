@@ -740,11 +740,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         }
       }
 
+      console.log(`💾 Saved ${results.length} evaluations to database`);
+
       setEvaluationResults(results);
+      console.log(`✨ Results set! Scroll down to see the results table with ${results.length} properties.`);
+
       // Results now show inline below filters - no tab switching needed
-      
+
     } catch (error) {
-      console.error('Error evaluating:', error);
+      console.error('❌ Error evaluating:', error);
       alert(`Evaluation failed: ${error.message}`);
     } finally {
       setIsEvaluating(false);
