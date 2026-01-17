@@ -1923,11 +1923,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                     {evaluationResults.map((result, resultIdx) => (
                       <div key={resultIdx} className="border border-gray-300 rounded-lg overflow-hidden">
                         <div className="bg-gray-100 px-4 py-3 flex items-center justify-between">
-                          <div className="font-semibold text-gray-900">
-                            Subject: {result.subject.property_block}-{result.subject.property_lot}-{result.subject.property_qualifier}
-                            <span className="ml-3 text-gray-600 font-normal">
-                              {result.subject.property_location}
-                            </span>
+                          <div>
+                            <div className="font-semibold text-gray-900">
+                              Subject: <span className="text-blue-600">{result.subject.property_vcs}</span> | Block {result.subject.property_block} | Lot {result.subject.property_lot}{result.subject.property_qualifier ? ` | Qual ${result.subject.property_qualifier}` : ''}
+                            </div>
+                            <div className="text-sm text-gray-600 mt-1">
+                              {result.subject.property_location} • {result.subject.asset_type_use} • {result.subject.asset_sfla?.toLocaleString()} SF
+                            </div>
                           </div>
                           {result.projectedAssessment && (
                             <div className="text-right">
