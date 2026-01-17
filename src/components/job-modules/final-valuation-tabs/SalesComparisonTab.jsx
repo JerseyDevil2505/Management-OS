@@ -73,6 +73,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   const vendorType = jobData?.vendor_type || 'BRT';
   const codeDefinitions = jobData?.parsed_code_definitions;
 
+  // ==================== SALES CODE NORMALIZATION ====================
+  const normalizeSalesCode = useCallback((code) => {
+    if (code === null || code === undefined || code === '' || code === '00') return '';
+    return String(code).trim();
+  }, []);
+
   // ==================== CME PRICE BRACKETS ====================
   const CME_BRACKETS = [
     { min: 0, max: 99999, label: 'up to $99,999' },
