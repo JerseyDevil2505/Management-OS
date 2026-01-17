@@ -449,9 +449,19 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       const results = [];
       setEvaluationProgress({ current: 0, total: subjects.length });
 
+      // Process in batches to allow UI updates
+      const BATCH_SIZE = 50;
+
       for (let i = 0; i < subjects.length; i++) {
         const subject = subjects[i];
+
+        // Update progress
         setEvaluationProgress({ current: i + 1, total: subjects.length });
+
+        // Allow UI to update every batch
+        if (i > 0 && i % BATCH_SIZE === 0) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
         const matchingComps = eligibleSales.filter(comp => {
           // Exclude self
           if (comp.property_composite_key === subject.property_composite_key) return false;
