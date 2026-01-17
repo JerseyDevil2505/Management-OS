@@ -702,7 +702,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       }
 
       setEvaluationResults(results);
-      setActiveSubTab('results');
+      // Results now show inline below filters - no tab switching needed
       
     } catch (error) {
       console.error('Error evaluating:', error);
@@ -924,8 +924,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   // ==================== RENDER ====================
   const subTabs = [
     { id: 'adjustments', label: 'Adjustments', icon: Sliders },
-    { id: 'search', label: 'Search', icon: Search },
-    { id: 'results', label: 'Results', icon: BarChart },
+    { id: 'search', label: 'Search & Results', icon: Search },
     { id: 'detailed', label: 'Detailed', icon: FileText }
   ];
 
