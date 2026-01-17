@@ -467,7 +467,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   // ==================== GET ELIGIBLE SALES ====================
   const getEligibleSales = () => {
     if (!jobData?.end_date) return [];
-    
+
     const assessmentYear = new Date(jobData.end_date).getFullYear();
 
     const cspStart = new Date(assessmentYear - 1, 9, 1);
@@ -476,16 +476,25 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
     const pspEnd = new Date(assessmentYear - 1, 8, 30);
     const hspStart = new Date(assessmentYear - 3, 9, 1);
     const hspEnd = new Date(assessmentYear - 2, 8, 30);
-    
+
     return properties.filter(p => {
       if (!p.sales_date || !p.values_norm_time) return false;
-      
+
       const saleDate = new Date(p.sales_date);
-      const inPeriod = (saleDate >= cspStart && saleDate <= cspEnd) ||
-                       (saleDate >= pspStart && saleDate <= pspEnd) ||
-                       (saleDate >= hspStart && saleDate <= hspEnd);
-      
-      return inPeriod;
+      const inCSP = saleDate >= cspStart && saleDate <= cspEnd;
+      const inPSP = saleDate >= pspStart && saleDate <= pspEnd;
+      const inHSP = saleDate >= hspStart && saleDate <= hspEnd;
+      const inPeriod = inCSP || inPSP || inHSP;
+
+      // Check for manual override from Sales Review (property_market_analysis.cme_include_override)
+      const includeOverride = p.cme_include_override; // null, true, or false
+
+      // If override exists, respect it; otherwise use default (CSP auto-included)
+      if (includeOverride === true) return true; // Manual include (even if not in CSP)
+      if (includeOverride === false) return false; // Manual exclude (even if in CSP)
+
+      // Default: Include if in CSP period
+      return inCSP;
     });
   };
 
