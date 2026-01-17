@@ -1856,48 +1856,42 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                     <table className="min-w-full divide-y divide-gray-200 text-sm">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-4 py-3 text-left font-medium text-gray-700">Subject Property</th>
-                          <th className="px-4 py-3 text-left font-medium text-gray-700">VCS</th>
-                          <th className="px-4 py-3 text-left font-medium text-gray-700">Type/Use</th>
-                          <th className="px-4 py-3 text-right font-medium text-gray-700">SFLA</th>
-                          <th className="px-4 py-3 text-right font-medium text-gray-700">Comps Found</th>
-                          <th className="px-4 py-3 text-right font-medium text-gray-700">Top Comps</th>
-                          <th className="px-4 py-3 text-right font-medium text-gray-700">Projected Value</th>
-                          <th className="px-4 py-3 text-center font-medium text-gray-700">Confidence</th>
+                          <th className="px-3 py-3 text-left font-medium text-gray-700">VCS</th>
+                          <th className="px-3 py-3 text-left font-medium text-gray-700">Block</th>
+                          <th className="px-3 py-3 text-left font-medium text-gray-700">Lot</th>
+                          <th className="px-3 py-3 text-left font-medium text-gray-700">Qual</th>
+                          <th className="px-3 py-3 text-left font-medium text-gray-700">Type/Use</th>
+                          <th className="px-3 py-3 text-right font-medium text-gray-700">SFLA</th>
+                          <th className="px-3 py-3 text-right font-medium text-gray-700">Comps Found</th>
+                          <th className="px-3 py-3 text-right font-medium text-gray-700">Top 5</th>
+                          <th className="px-3 py-3 text-right font-medium text-gray-700">Projected Value</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {evaluationResults.map((result, idx) => (
                           <tr key={idx} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 font-medium text-gray-900">
-                              {result.subject.property_block}-{result.subject.property_lot}-{result.subject.property_qualifier}
+                            <td className="px-3 py-3 text-gray-700">
+                              {result.subject.property_vcs}
                               {result.hasSubjectSale && (
                                 <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                                  Subject Sale
+                                  Subj Sale
                                 </span>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-gray-700">{result.subject.property_vcs}</td>
-                            <td className="px-4 py-3 text-gray-700">{result.subject.asset_type_use}</td>
-                            <td className="px-4 py-3 text-right text-gray-700">{result.subject.asset_sfla?.toLocaleString()}</td>
-                            <td className="px-4 py-3 text-right text-gray-700">{result.totalFound}</td>
-                            <td className="px-4 py-3 text-right font-semibold text-blue-700">
+                            <td className="px-3 py-3 font-medium text-gray-900">{result.subject.property_block}</td>
+                            <td className="px-3 py-3 font-medium text-gray-900">{result.subject.property_lot}</td>
+                            <td className="px-3 py-3 text-gray-700">{result.subject.property_qualifier || '-'}</td>
+                            <td className="px-3 py-3 text-gray-700">{result.subject.asset_type_use}</td>
+                            <td className="px-3 py-3 text-right text-gray-700">{result.subject.asset_sfla?.toLocaleString()}</td>
+                            <td className="px-3 py-3 text-right text-gray-700">{result.totalFound}</td>
+                            <td className="px-3 py-3 text-right font-semibold text-blue-700">
                               {result.comparables.length}
                             </td>
-                            <td className="px-4 py-3 text-right font-bold text-green-700">
+                            <td className="px-3 py-3 text-right font-bold text-green-700">
                               {result.projectedAssessment
                                 ? `$${result.projectedAssessment.toLocaleString()}`
-                                : <span className="text-red-600">Insufficient Data</span>
+                                : '-'
                               }
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${
-                                result.confidenceScore >= 75 ? 'bg-green-100 text-green-800' :
-                                result.confidenceScore >= 50 ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-red-100 text-red-800'
-                              }`}>
-                                {result.confidenceScore}%
-                              </span>
                             </td>
                           </tr>
                         ))}
