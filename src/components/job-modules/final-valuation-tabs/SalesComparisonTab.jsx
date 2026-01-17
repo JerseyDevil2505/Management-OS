@@ -16,14 +16,26 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   const [manualBlockLot, setManualBlockLot] = useState({ block: '', lot: '', qualifier: '' });
   
   // ==================== COMPARABLE FILTERS STATE ====================
+  // Calculate CSP date range on mount
+  const getCSPDateRange = useCallback(() => {
+    if (!jobData?.end_date) return { start: '', end: '' };
+    const assessmentYear = new Date(jobData.end_date).getFullYear();
+    return {
+      start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0], // 10/1 prior-prior year
+      end: new Date(assessmentYear, 11, 31).toISOString().split('T')[0] // 12/31 prior year
+    };
+  }, [jobData?.end_date]);
+
+  const cspDateRange = useMemo(() => getCSPDateRange(), [getCSPDateRange]);
+
   const [compFilters, setCompFilters] = useState({
     adjustmentBracket: 'auto', // 'auto' or 'bracket_0', 'bracket_1', etc.
     autoAdjustment: true, // Auto checkbox
-    salesCodes: [],
-    salesDateStart: '',
-    salesDateEnd: '',
+    salesCodes: ['', '00', '07', '32', '36'], // CSP default codes
+    salesDateStart: cspDateRange.start,
+    salesDateEnd: cspDateRange.end,
     vcs: [],
-    sameVCS: false,
+    sameVCS: true, // Default checked
     neighborhood: [],
     sameNeighborhood: false,
     builtWithinYears: 25,
@@ -39,9 +51,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
     buildingClass: [],
     sameBuildingClass: false,
     typeUse: [],
-    sameTypeUse: false,
+    sameTypeUse: true, // Default checked
     style: [],
-    sameStyle: false,
+    sameStyle: true, // Default checked
     storyHeight: [],
     sameStoryHeight: false,
     view: [],
