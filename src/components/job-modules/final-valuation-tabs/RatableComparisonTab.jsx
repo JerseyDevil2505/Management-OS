@@ -487,7 +487,8 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
 
   const subTabs = [
     { id: 'comparison', label: 'Ratable Comparison', icon: FileSpreadsheet },
-    { id: 'rate-calc', label: 'Rate Calculator', icon: Calculator }
+    { id: 'rate-calc', label: 'Rate Calculator', icon: Calculator },
+    { id: 'class-6-overrides', label: 'Class 6 Overrides', icon: Edit }
   ];
 
   return (
