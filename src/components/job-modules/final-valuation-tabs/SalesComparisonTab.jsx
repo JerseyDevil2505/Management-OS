@@ -837,7 +837,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         let projectedAssessment = null;
         let confidenceScore = 0;
 
-        if (topComps.length >= 3) {
+        if (topComps.length >= 1) {
           // Calculate weights based on closeness to 0% adjustment
           const totalInverseAdjPct = topComps.reduce((sum, comp) => {
             return sum + (1 / (Math.abs(comp.adjustmentPercent) + 1)); // +1 to avoid division by zero
