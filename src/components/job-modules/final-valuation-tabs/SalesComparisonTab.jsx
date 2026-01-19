@@ -744,8 +744,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
       console.log(`💾 Saved ${results.length} evaluations to database`);
 
+      // Set results BEFORE showing alert to ensure UI updates
       setEvaluationResults(results);
-      console.log(`✨ Results set! Scroll down to see the results table with ${results.length} properties.`);
+      console.log(`✨ Results set! Results array has ${results.length} properties.`);
+
+      // Force a brief pause to allow React to update
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Show summary
       const successful = results.filter(r => r.comparables.length >= 3).length;
@@ -767,11 +771,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         }
       }, 200);
 
-      // Results now show inline below filters - no tab switching needed
-
     } catch (error) {
-      console.error('❌ Error evaluating:', error);
-      alert(`Evaluation failed: ${error.message}`);
+      console.error('❌ Error during evaluation:', error);
+      console.error('Error stack:', error.stack);
+      alert(
+        `Evaluation failed!\n\n` +
+        `Error: ${error.message}\n\n` +
+        `Check the browser console for more details.`
+      );
     } finally {
       setIsEvaluating(false);
       setEvaluationProgress({ current: 0, total: 0 });
