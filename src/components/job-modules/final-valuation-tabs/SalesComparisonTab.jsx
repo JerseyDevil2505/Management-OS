@@ -2896,37 +2896,50 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                   ))}
                                 </tr>
 
-                                {/* Weight */}
-                                <tr className="bg-purple-50 border-b border-purple-200">
-                                  <td className="sticky left-0 z-10 bg-purple-50 px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                                    Weight (based on proximity to 0%)
+                                {/* Net Adjustment (matches PDF format) */}
+                                <tr className="bg-gray-100 border-b-2 border-gray-400">
+                                  <td className="sticky left-0 z-10 bg-gray-100 px-3 py-3 font-bold text-gray-900 border-r-2 border-gray-300">
+                                    Net Adjustment
                                   </td>
-                                  <td className="px-3 py-2 text-center bg-yellow-50">-</td>
+                                  <td className="px-3 py-3 text-center bg-yellow-50">-</td>
                                   {comps.map((comp, idx) => (
-                                    <td key={idx} className="px-3 py-2 text-center bg-purple-50 border-l border-gray-300">
-                                      <div className="font-bold text-purple-700">
-                                        {((comp.weight || 0) * 100).toFixed(2)}%
+                                    <td key={idx} className="px-3 py-3 text-center bg-blue-50 border-l border-gray-300">
+                                      <div className={`font-bold ${comp.totalAdjustment > 0 ? 'text-green-700' : comp.totalAdjustment < 0 ? 'text-red-700' : 'text-gray-700'}`}>
+                                        {comp.totalAdjustment > 0 ? '+' : ''}${comp.totalAdjustment?.toLocaleString() || '0'} ({comp.adjustmentPercent > 0 ? '+' : ''}{comp.adjustmentPercent?.toFixed(0) || '0'}%)
                                       </div>
                                     </td>
                                   ))}
                                 </tr>
 
-                                {/* Weighted Value */}
-                                <tr className="bg-purple-50 border-b-2 border-purple-300">
-                                  <td className="sticky left-0 z-10 bg-purple-50 px-3 py-3 font-bold text-gray-900 border-r-2 border-gray-300">
-                                    Weighted Value
+                                {/* Adjusted Valuation (final row with projected assessment) */}
+                                <tr className="bg-yellow-100 border-b-4 border-yellow-500">
+                                  <td className="sticky left-0 z-10 bg-yellow-100 px-3 py-4 font-bold text-gray-900 border-r-2 border-gray-300 text-lg">
+                                    Adjusted Valuation
                                   </td>
-                                  <td className="px-3 py-3 text-center bg-yellow-50">-</td>
-                                  {comps.map((comp, idx) => {
-                                    const weightedValue = (comp.adjustedPrice || 0) * (comp.weight || 0);
-                                    return (
-                                      <td key={idx} className="px-3 py-3 text-center bg-purple-50 border-l border-gray-300">
-                                        <div className="font-bold text-purple-700">
-                                          ${Math.round(weightedValue).toLocaleString()}
+                                  <td className="px-3 py-4 text-center bg-yellow-50">
+                                    {result.projectedAssessment && (
+                                      <div>
+                                        <div className="text-xl font-bold text-green-700">
+                                          ${result.projectedAssessment.toLocaleString()}
                                         </div>
-                                      </td>
-                                    );
-                                  })}
+                                        <div className="text-sm font-semibold text-green-600">
+                                          {(() => {
+                                            const current = subject.values_mod_total || subject.values_cama_total || 0;
+                                            if (current === 0) return '';
+                                            const changePercent = ((result.projectedAssessment - current) / current) * 100;
+                                            return `(${changePercent > 0 ? '+' : ''}${changePercent.toFixed(0)}%)`;
+                                          })()}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </td>
+                                  {comps.map((comp, idx) => (
+                                    <td key={idx} className="px-3 py-4 text-center bg-blue-50 border-l border-gray-300">
+                                      <div className="font-bold text-gray-700">
+                                        ${Math.round(comp.adjustedPrice || 0).toLocaleString()}
+                                      </div>
+                                    </td>
+                                  ))}
                                 </tr>
                               </tbody>
                             </table>
