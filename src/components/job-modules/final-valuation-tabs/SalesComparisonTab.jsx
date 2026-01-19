@@ -81,8 +81,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   const renderCompCells = (comps, renderFunc) => {
     return [1, 2, 3, 4, 5].map((compNum) => {
       const comp = comps[compNum - 1];
+      const bgColor = comp?.isSubjectSale ? 'bg-green-50' : 'bg-blue-50';
       return (
-        <td key={compNum} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300">
+        <td key={compNum} className={`px-3 py-2 text-center ${bgColor} border-l border-gray-300`}>
           {comp ? renderFunc(comp, compNum - 1) : <span className="text-gray-400">-</span>}
         </td>
       );
