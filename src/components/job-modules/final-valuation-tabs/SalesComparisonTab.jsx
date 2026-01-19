@@ -3165,38 +3165,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                   })}
                                 </tr>
 
-                                {/* Ext. Condition */}
+                                {/* Condition */}
                                 <tr className="border-b hover:bg-gray-50">
                                   <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                                    Ext. Condition
+                                    Condition
                                   </td>
-                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_ext_condition || 'N/A'}</td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                    {subject.asset_condition || subject.asset_ext_condition || 'N/A'}
+                                  </td>
                                   {renderCompCells(comps, (comp) => {
-                                    const adj = comp.adjustments?.find(a => a.name?.includes('Exterior Condition'));
+                                    const condition = comp.asset_condition || comp.asset_ext_condition;
+                                    const adj = comp.adjustments?.find(a => a.name?.toLowerCase().includes('condition'));
                                     return (
                                       <div>
-                                        <div className="text-xs">{comp.asset_ext_condition || 'N/A'}</div>
-                                        {adj && adj.amount !== 0 && (
-                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </tr>
-
-                                {/* Int. Condition */}
-                                <tr className="border-b hover:bg-gray-50">
-                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                                    Int. Condition
-                                  </td>
-                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_int_condition || 'N/A'}</td>
-                                  {renderCompCells(comps, (comp) => {
-                                    const adj = comp.adjustments?.find(a => a.name?.includes('Interior Condition'));
-                                    return (
-                                      <div>
-                                        <div className="text-xs">{comp.asset_int_condition || 'N/A'}</div>
+                                        <div className="font-semibold">{condition || 'N/A'}</div>
                                         {adj && adj.amount !== 0 && (
                                           <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
                                             {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
