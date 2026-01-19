@@ -768,6 +768,24 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         // Filter by tolerance
         let validComps = compsWithAdjustments.filter(c => c.passesTolerance);
 
+        // Debug tolerance filtering
+        if (isFirstProperty) {
+          const failedTolerance = compsWithAdjustments.length - validComps.length;
+          console.log(`\n🎯 Adjustment Tolerance Results:`);
+          console.log(`   Before tolerance: ${compsWithAdjustments.length} comps`);
+          console.log(`   ❌ Failed tolerance: ${failedTolerance}`);
+          console.log(`   ✅ Passed tolerance: ${validComps.length}`);
+          if (compFilters.individualAdjPct > 0) {
+            console.log(`      Individual adj limit: ${compFilters.individualAdjPct}%`);
+          }
+          if (compFilters.netAdjPct > 0) {
+            console.log(`      Net adj limit: ${compFilters.netAdjPct}%`);
+          }
+          if (compFilters.grossAdjPct > 0) {
+            console.log(`      Gross adj limit: ${compFilters.grossAdjPct}%`);
+          }
+        }
+
         // SUBJECT SALE PRIORITY: If subject sold in CSP, it becomes Comp #1 with 0% adjustment
         const assessmentYear = new Date(jobData.end_date).getFullYear();
         const cspStart = new Date(assessmentYear - 1, 9, 1);
