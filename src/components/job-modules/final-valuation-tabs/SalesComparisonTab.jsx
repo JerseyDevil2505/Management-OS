@@ -688,6 +688,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       console.log(`   - With 0 comps: ${results.filter(r => r.comparables.length === 0).length}`);
       console.log(`   - With projected values: ${results.filter(r => r.projectedAssessment).length}`);
 
+      // Update progress: Start database save phase
+      setEvaluationProgress({ current: subjects.length, total: subjects.length + 1 });
+      console.log(`💾 Saving ${results.length} evaluations to database...`);
+
       // Save results to database
       const evaluationRunId = crypto.randomUUID ? crypto.randomUUID() :
         'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -739,7 +743,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         }
       }
 
-      console.log(`💾 Saved ${results.length} evaluations to database`);
+      console.log(`✅ Database save complete`);
 
       // Set results and immediately scroll to them
       setEvaluationResults(results);
