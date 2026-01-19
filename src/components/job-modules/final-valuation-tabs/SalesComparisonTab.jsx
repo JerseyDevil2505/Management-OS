@@ -2084,7 +2084,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                             </td>
                             <td
                               className="border border-gray-300 px-2 py-2 text-right text-sm font-bold bg-green-50 text-green-700 cursor-pointer hover:underline"
-                              onClick={() => setActiveSubTab('detailed')}
+                              onClick={() => {
+                                setSelectedPropertyForDetail(result);
+                                setActiveSubTab('detailed');
+                              }}
                               title="Click to view detailed analysis"
                             >
                               {result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-'}
