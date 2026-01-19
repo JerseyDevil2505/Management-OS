@@ -432,19 +432,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         return;
       }
 
+      // Check if adjustment grid is defined and has valid adjustments
       if (adjustmentGrid.length === 0) {
-        const proceed = window.confirm(
+        alert(
           'Warning: No adjustment grid defined!\n\n' +
           'All comparables will have $0 adjustments.\n\n' +
-          'Go to the Adjustments tab to define your adjustment grid.\n\n' +
-          'Continue anyway?'
+          'Please go to the Adjustments tab to define your adjustment grid first.'
         );
-        if (!proceed) {
-          setIsEvaluating(false);
-          setEvaluationProgress({ current: 0, total: 0 });
-          return;
-        }
+        setIsEvaluating(false);
+        setEvaluationProgress({ current: 0, total: 0 });
+        return;
       }
+
+      console.log(`📊 Using adjustment grid with ${adjustmentGrid.length} adjustments`);
+      console.log(`   Selected bracket: ${compFilters.adjustmentBracket}`);
 
       // Step 3: For each subject, find matching comparables
       const results = [];
