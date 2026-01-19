@@ -7,14 +7,6 @@ import AdjustmentsTab from './AdjustmentsTab';
 const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) => {
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
-
-  // Reload adjustment grid when returning to search tab
-  useEffect(() => {
-    if (activeSubTab === 'search' && jobData?.id) {
-      loadAdjustmentGrid();
-      loadCustomBrackets();
-    }
-  }, [activeSubTab]);
   const resultsRef = React.useRef(null);
   const [codeDefinitions, setCodeDefinitions] = useState(null);
   
