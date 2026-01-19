@@ -156,6 +156,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
     }
   };
 
+  // Reload adjustment grid when returning to search tab (in case it was updated in Adjustments tab)
+  useEffect(() => {
+    if (activeSubTab === 'search' && jobData?.id) {
+      console.log('🔄 Switched to Search tab - reloading adjustment grid...');
+      loadAdjustmentGrid();
+      loadCustomBrackets();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSubTab, jobData?.id]);
+
   // ==================== EXTRACT UNIQUE VALUES ====================
   const uniqueVCS = useMemo(() => {
     const vcsSet = new Set();
