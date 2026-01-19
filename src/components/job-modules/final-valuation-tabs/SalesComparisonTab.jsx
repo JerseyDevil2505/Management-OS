@@ -2464,11 +2464,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                               <tr className="bg-gray-100">
                                 <th className="px-3 py-2 text-left font-semibold text-gray-700"></th>
                                 <th className="px-3 py-2 text-center font-semibold bg-yellow-50">Subject</th>
-                                {[1, 2, 3, 4, 5].map((num) => (
-                                  <th key={num} className="px-3 py-2 text-center font-semibold bg-blue-50 border-l border-gray-300">
-                                    Comparable {num}
-                                  </th>
-                                ))}
+                                {[1, 2, 3, 4, 5].map((num) => {
+                                  const comp = comps[num - 1];
+                                  const bgColor = comp?.isSubjectSale ? 'bg-green-50' : 'bg-blue-50';
+                                  return (
+                                    <th key={num} className={`px-3 py-2 text-center font-semibold ${bgColor} border-l border-gray-300`}>
+                                      Comparable {num}
+                                      {comp?.isSubjectSale && <span className="block text-xs text-green-700 font-semibold">(Subject Sale)</span>}
+                                    </th>
+                                  );
+                                })}
                               </tr>
                             </thead>
                             <tbody className="bg-white">
