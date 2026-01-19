@@ -2245,12 +2245,406 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
         {/* DETAILED TAB */}
         {activeSubTab === 'detailed' && (
-          <div className="bg-white border border-gray-300 rounded-lg p-12 text-center">
-            <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Detailed Analysis</h3>
-            <p className="text-sm text-gray-600">
-              Per-property detailed comparable analysis will appear here
-            </p>
+          <div className="space-y-6">
+            {!selectedPropertyForDetail && !evaluationResults ? (
+              <div className="bg-white border border-gray-300 rounded-lg p-12 text-center">
+                <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">No Property Selected</h3>
+                <p className="text-sm text-gray-600">
+                  Run an evaluation from the Search tab, then click on a "New Asmt" value to view detailed analysis.
+                </p>
+              </div>
+            ) : (
+              (() => {
+                // Use selected property or first evaluation result
+                const result = selectedPropertyForDetail || (evaluationResults && evaluationResults[0]);
+
+                if (!result) {
+                  return (
+                    <div className="bg-white border border-gray-300 rounded-lg p-12 text-center">
+                      <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">No Data Available</h3>
+                      <p className="text-sm text-gray-600">Run an evaluation to see detailed analysis.</p>
+                    </div>
+                  );
+                }
+
+                const subject = result.subject;
+                const comps = result.comparables || [];
+
+                return (
+                  <div>
+                    {/* Header */}
+                    <div className="bg-white border border-gray-300 rounded-lg p-6 mb-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h3 className="text-xl font-bold text-gray-900">Detailed Appraisal Analysis</h3>
+                          <p className="text-sm text-gray-600 mt-1">
+                            Subject: <span className="font-semibold">{subject.property_vcs}</span> | Block {subject.property_block} | Lot {subject.property_lot}
+                          </p>
+                        </div>
+                        {evaluationResults && evaluationResults.length > 1 && (
+                          <select
+                            value={evaluationResults.indexOf(result)}
+                            onChange={(e) => {
+                              setSelectedPropertyForDetail(evaluationResults[parseInt(e.target.value)]);
+                            }}
+                            className="px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                          >
+                            {evaluationResults.map((r, idx) => (
+                              <option key={idx} value={idx}>
+                                {r.subject.property_block}-{r.subject.property_lot} | {r.subject.property_location}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+
+                      {/* Summary Stats */}
+                      <div className="grid grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
+                        <div>
+                          <div className="text-xs text-gray-600">Current Assessment</div>
+                          <div className="text-lg font-bold text-gray-900">
+                            ${(subject.values_mod_total || subject.values_cama_total || 0).toLocaleString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-600">New Assessment</div>
+                          <div className="text-lg font-bold text-green-700">
+                            {result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : 'N/A'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-600">Change</div>
+                          <div className="text-lg font-bold">
+                            {(() => {
+                              const current = subject.values_mod_total || subject.values_cama_total || 0;
+                              const projected = result.projectedAssessment;
+                              if (!projected || current === 0) return 'N/A';
+                              const changePercent = ((projected - current) / current) * 100;
+                              const color = changePercent > 0 ? 'text-green-700' : changePercent < 0 ? 'text-red-700' : 'text-gray-700';
+                              return (
+                                <span className={color}>
+                                  {changePercent > 0 ? '+' : ''}{changePercent.toFixed(2)}%
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-600">Comparables Found</div>
+                          <div className="text-lg font-bold text-blue-700">{comps.length} / 5</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {comps.length === 0 ? (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-8 text-center">
+                        <p className="text-yellow-900 font-semibold mb-2">No Comparables Found</p>
+                        <p className="text-sm text-yellow-700">
+                          Adjust your search criteria to find matching properties.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Appraisal Grid */}
+                        <div className="bg-white border border-gray-300 rounded-lg overflow-hidden mb-6">
+                          <div className="bg-blue-600 px-4 py-3">
+                            <h4 className="font-semibold text-white">Comparable Sales Appraisal Grid</h4>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full text-xs border-collapse">
+                              <thead>
+                                <tr className="bg-gray-100 border-b-2 border-gray-300">
+                                  <th className="sticky left-0 z-10 bg-gray-100 px-3 py-3 text-left font-semibold text-gray-700 border-r-2 border-gray-300">
+                                    Attribute
+                                  </th>
+                                  <th className="px-3 py-3 text-center font-semibold bg-yellow-50">
+                                    Subject<br/>
+                                    <span className="font-normal text-xs text-gray-600">
+                                      {subject.property_block}/{subject.property_lot}
+                                    </span>
+                                  </th>
+                                  {comps.map((comp, idx) => (
+                                    <th key={idx} className="px-3 py-3 text-center font-semibold bg-blue-50 border-l border-gray-300">
+                                      Comp #{comp.rank}<br/>
+                                      <span className="font-normal text-xs text-gray-600">
+                                        {comp.property_block}/{comp.property_lot}
+                                      </span>
+                                      {comp.isSubjectSale && (
+                                        <span className="block text-xs text-green-700 font-semibold mt-1">(Subject Sale)</span>
+                                      )}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white">
+                                {/* Address */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Address
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.property_location || 'N/A'}</td>
+                                  {comps.map((comp, idx) => (
+                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
+                                      {comp.property_location || 'N/A'}
+                                    </td>
+                                  ))}
+                                </tr>
+
+                                {/* Sale Price */}
+                                <tr className="border-b hover:bg-gray-50 bg-green-50">
+                                  <td className="sticky left-0 z-10 bg-green-50 px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Sale Price
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                    {subject.sales_price ? `$${subject.sales_price.toLocaleString()}` : 'N/A'}
+                                  </td>
+                                  {comps.map((comp, idx) => (
+                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 font-semibold">
+                                      ${comp.sales_price?.toLocaleString() || 'N/A'}
+                                    </td>
+                                  ))}
+                                </tr>
+
+                                {/* Time Adjusted Price */}
+                                <tr className="border-b hover:bg-gray-50 bg-green-50">
+                                  <td className="sticky left-0 z-10 bg-green-50 px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Time Adjusted Price
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                    {subject.values_norm_time ? `$${subject.values_norm_time.toLocaleString()}` : 'N/A'}
+                                  </td>
+                                  {comps.map((comp, idx) => (
+                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 font-semibold">
+                                      ${comp.values_norm_time?.toLocaleString() || 'N/A'}
+                                    </td>
+                                  ))}
+                                </tr>
+
+                                {/* Living Area */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Living Area (SF)
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">{subject.asset_sfla?.toLocaleString() || 'N/A'}</td>
+                                  {comps.map((comp, idx) => {
+                                    const diff = (subject.asset_sfla || 0) - (comp.asset_sfla || 0);
+                                    const adj = comp.adjustments?.find(a => a.name === 'Living Area (Sq Ft)');
+                                    return (
+                                      <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300">
+                                        <div className="font-semibold">{comp.asset_sfla?.toLocaleString() || 'N/A'}</div>
+                                        {adj && (
+                                          <div className={`text-xs font-semibold ${adj.amount > 0 ? 'text-green-700' : adj.amount < 0 ? 'text-red-700' : 'text-gray-500'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                            <div className="text-xs text-gray-600">({diff > 0 ? '+' : ''}{diff} SF)</div>
+                                          </div>
+                                        )}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Year Built */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Year Built
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">{subject.asset_year_built || 'N/A'}</td>
+                                  {comps.map((comp, idx) => {
+                                    const diff = (subject.asset_year_built || 0) - (comp.asset_year_built || 0);
+                                    const adj = comp.adjustments?.find(a => a.name === 'Year Built');
+                                    return (
+                                      <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300">
+                                        <div className="font-semibold">{comp.asset_year_built || 'N/A'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-semibold ${adj.amount > 0 ? 'text-green-700' : adj.amount < 0 ? 'text-red-700' : 'text-gray-500'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                            <div className="text-xs text-gray-600">({diff > 0 ? '+' : ''}{diff} yrs)</div>
+                                          </div>
+                                        )}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Bathrooms */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Bathrooms
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">{subject.total_baths_calculated || 'N/A'}</td>
+                                  {comps.map((comp, idx) => {
+                                    const diff = (subject.total_baths_calculated || 0) - (comp.total_baths_calculated || 0);
+                                    const adj = comp.adjustments?.find(a => a.name === 'Bathrooms');
+                                    return (
+                                      <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300">
+                                        <div className="font-semibold">{comp.total_baths_calculated || 'N/A'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-semibold ${adj.amount > 0 ? 'text-green-700' : adj.amount < 0 ? 'text-red-700' : 'text-gray-500'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                            <div className="text-xs text-gray-600">({diff > 0 ? '+' : ''}{diff})</div>
+                                          </div>
+                                        )}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Other adjustments */}
+                                {adjustmentGrid.map((adjDef, adjIdx) => {
+                                  // Skip already shown attributes
+                                  if (['Living Area (Sq Ft)', 'Year Built', 'Bathrooms'].includes(adjDef.adjustment_name)) {
+                                    return null;
+                                  }
+
+                                  // Only show if at least one comp has non-zero adjustment
+                                  const hasAdjustments = comps.some(comp => {
+                                    const adj = comp.adjustments?.find(a => a.name === adjDef.adjustment_name);
+                                    return adj && adj.amount !== 0;
+                                  });
+
+                                  if (!hasAdjustments) return null;
+
+                                  return (
+                                    <tr key={adjIdx} className="border-b hover:bg-gray-50">
+                                      <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                        {adjDef.adjustment_name}
+                                      </td>
+                                      <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">-</td>
+                                      {comps.map((comp, idx) => {
+                                        const adj = comp.adjustments?.find(a => a.name === adjDef.adjustment_name);
+                                        return (
+                                          <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300">
+                                            {adj && adj.amount !== 0 ? (
+                                              <div className={`text-xs font-semibold ${adj.amount > 0 ? 'text-green-700' : adj.amount < 0 ? 'text-red-700' : 'text-gray-500'}`}>
+                                                {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                              </div>
+                                            ) : (
+                                              <span className="text-gray-400">$0</span>
+                                            )}
+                                          </td>
+                                        );
+                                      })}
+                                    </tr>
+                                  );
+                                })}
+
+                                {/* Total Adjustment */}
+                                <tr className="border-b-2 border-gray-400 bg-gray-100 font-bold">
+                                  <td className="sticky left-0 z-10 bg-gray-100 px-3 py-3 font-bold text-gray-900 border-r-2 border-gray-300">
+                                    Total Adjustment
+                                  </td>
+                                  <td className="px-3 py-3 text-center bg-yellow-50">-</td>
+                                  {comps.map((comp, idx) => (
+                                    <td key={idx} className="px-3 py-3 text-center bg-blue-50 border-l border-gray-300">
+                                      <div className={`font-bold ${comp.totalAdjustment > 0 ? 'text-green-700' : comp.totalAdjustment < 0 ? 'text-red-700' : 'text-gray-700'}`}>
+                                        {comp.totalAdjustment > 0 ? '+' : ''}${comp.totalAdjustment?.toLocaleString() || '0'}
+                                      </div>
+                                      <div className={`text-xs font-semibold ${Math.abs(comp.adjustmentPercent) < 5 ? 'text-green-600' : Math.abs(comp.adjustmentPercent) < 15 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                        ({comp.adjustmentPercent > 0 ? '+' : ''}{comp.adjustmentPercent?.toFixed(2)}%)
+                                      </div>
+                                    </td>
+                                  ))}
+                                </tr>
+
+                                {/* Adjusted Sale Price */}
+                                <tr className="bg-green-100 border-b-2 border-green-400">
+                                  <td className="sticky left-0 z-10 bg-green-100 px-3 py-3 font-bold text-gray-900 border-r-2 border-gray-300">
+                                    Adjusted Sale Price
+                                  </td>
+                                  <td className="px-3 py-3 text-center bg-yellow-50">-</td>
+                                  {comps.map((comp, idx) => (
+                                    <td key={idx} className="px-3 py-3 text-center bg-green-50 border-l border-gray-300">
+                                      <div className="text-lg font-bold text-green-700">
+                                        ${Math.round(comp.adjustedPrice || 0).toLocaleString()}
+                                      </div>
+                                    </td>
+                                  ))}
+                                </tr>
+
+                                {/* Weight */}
+                                <tr className="bg-purple-50 border-b border-purple-200">
+                                  <td className="sticky left-0 z-10 bg-purple-50 px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Weight (based on proximity to 0%)
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50">-</td>
+                                  {comps.map((comp, idx) => (
+                                    <td key={idx} className="px-3 py-2 text-center bg-purple-50 border-l border-gray-300">
+                                      <div className="font-bold text-purple-700">
+                                        {((comp.weight || 0) * 100).toFixed(2)}%
+                                      </div>
+                                    </td>
+                                  ))}
+                                </tr>
+
+                                {/* Weighted Value */}
+                                <tr className="bg-purple-50 border-b-2 border-purple-300">
+                                  <td className="sticky left-0 z-10 bg-purple-50 px-3 py-3 font-bold text-gray-900 border-r-2 border-gray-300">
+                                    Weighted Value
+                                  </td>
+                                  <td className="px-3 py-3 text-center bg-yellow-50">-</td>
+                                  {comps.map((comp, idx) => {
+                                    const weightedValue = (comp.adjustedPrice || 0) * (comp.weight || 0);
+                                    return (
+                                      <td key={idx} className="px-3 py-3 text-center bg-purple-50 border-l border-gray-300">
+                                        <div className="font-bold text-purple-700">
+                                          ${Math.round(weightedValue).toLocaleString()}
+                                        </div>
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Weighted Average Calculation */}
+                        {result.projectedAssessment && (
+                          <div className="bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-400 rounded-lg p-6">
+                            <h4 className="font-bold text-lg text-gray-900 mb-4">Weighted Average Calculation</h4>
+                            <div className="space-y-2 text-sm">
+                              {comps.map((comp, idx) => {
+                                const weightedValue = (comp.adjustedPrice || 0) * (comp.weight || 0);
+                                return (
+                                  <div key={idx} className="flex items-center justify-between py-2 border-b border-gray-200">
+                                    <span className="text-gray-700">
+                                      Comp #{comp.rank}: ${Math.round(comp.adjustedPrice || 0).toLocaleString()} × {((comp.weight || 0) * 100).toFixed(2)}%
+                                    </span>
+                                    <span className="font-semibold text-gray-900">
+                                      = ${Math.round(weightedValue).toLocaleString()}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                              <div className="flex items-center justify-between py-3 mt-2 border-t-2 border-green-400">
+                                <span className="font-bold text-lg text-gray-900">
+                                  Projected Assessment:
+                                </span>
+                                <span className="font-bold text-2xl text-green-700">
+                                  ${result.projectedAssessment.toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {!result.projectedAssessment && comps.length < 3 && (
+                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+                            <h4 className="font-semibold text-yellow-900 mb-2">Insufficient Comparables</h4>
+                            <p className="text-sm text-yellow-700">
+                              At least 3 comparables are required to calculate a projected assessment.
+                              This property currently has {comps.length} comparable{comps.length !== 1 ? 's' : ''}.
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })()
+            )}
           </div>
         )}
       </div>
