@@ -432,20 +432,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         return;
       }
 
-      // Check if adjustment grid is defined and has valid adjustments
-      if (adjustmentGrid.length === 0) {
-        alert(
-          'Warning: No adjustment grid defined!\n\n' +
-          'All comparables will have $0 adjustments.\n\n' +
-          'Please go to the Adjustments tab to define your adjustment grid first.'
-        );
-        setIsEvaluating(false);
-        setEvaluationProgress({ current: 0, total: 0 });
-        return;
-      }
+      // Log adjustment configuration
+      console.log(`📊 Adjustment Configuration:`);
+      console.log(`   - Grid entries: ${adjustmentGrid.length}`);
+      console.log(`   - Selected bracket: ${compFilters.adjustmentBracket}`);
+      console.log(`   - Custom brackets: ${customBrackets.length}`);
 
-      console.log(`📊 Using adjustment grid with ${adjustmentGrid.length} adjustments`);
-      console.log(`   Selected bracket: ${compFilters.adjustmentBracket}`);
+      // Note: Evaluation can proceed even without adjustment grid - comps will have $0 adjustments
+      // This allows users to see comp matches before setting up adjustments
 
       // Step 3: For each subject, find matching comparables
       const results = [];
