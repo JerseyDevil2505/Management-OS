@@ -2863,39 +2863,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                   );
                                 })}
 
-                                {/* Total Adjustment */}
-                                <tr className="border-b-2 border-gray-400 bg-gray-100 font-bold">
-                                  <td className="sticky left-0 z-10 bg-gray-100 px-3 py-3 font-bold text-gray-900 border-r-2 border-gray-300">
-                                    Total Adjustment
-                                  </td>
-                                  <td className="px-3 py-3 text-center bg-yellow-50">-</td>
-                                  {comps.map((comp, idx) => (
-                                    <td key={idx} className="px-3 py-3 text-center bg-blue-50 border-l border-gray-300">
-                                      <div className={`font-bold ${comp.totalAdjustment > 0 ? 'text-green-700' : comp.totalAdjustment < 0 ? 'text-red-700' : 'text-gray-700'}`}>
-                                        {comp.totalAdjustment > 0 ? '+' : ''}${comp.totalAdjustment?.toLocaleString() || '0'}
-                                      </div>
-                                      <div className={`text-xs font-semibold ${Math.abs(comp.adjustmentPercent) < 5 ? 'text-green-600' : Math.abs(comp.adjustmentPercent) < 15 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                        ({comp.adjustmentPercent > 0 ? '+' : ''}{comp.adjustmentPercent?.toFixed(2)}%)
-                                      </div>
-                                    </td>
-                                  ))}
-                                </tr>
-
-                                {/* Adjusted Sale Price */}
-                                <tr className="bg-green-100 border-b-2 border-green-400">
-                                  <td className="sticky left-0 z-10 bg-green-100 px-3 py-3 font-bold text-gray-900 border-r-2 border-gray-300">
-                                    Adjusted Sale Price
-                                  </td>
-                                  <td className="px-3 py-3 text-center bg-yellow-50">-</td>
-                                  {comps.map((comp, idx) => (
-                                    <td key={idx} className="px-3 py-3 text-center bg-green-50 border-l border-gray-300">
-                                      <div className="text-lg font-bold text-green-700">
-                                        ${Math.round(comp.adjustedPrice || 0).toLocaleString()}
-                                      </div>
-                                    </td>
-                                  ))}
-                                </tr>
-
                                 {/* Net Adjustment (matches PDF format) */}
                                 <tr className="bg-gray-100 border-b-2 border-gray-400">
                                   <td className="sticky left-0 z-10 bg-gray-100 px-3 py-3 font-bold text-gray-900 border-r-2 border-gray-300">
