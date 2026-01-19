@@ -2596,10 +2596,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                   <td className="px-3 py-2 text-center bg-yellow-50 text-xs">
                                     {subject.asset_building_class ? `${subject.asset_building_class} (QUALITY ${subject.asset_building_class})` : 'N/A'}
                                   </td>
-                                  {comps.map((comp, idx) => (
-                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
-                                      {comp.asset_building_class ? `${comp.asset_building_class} (QUALITY ${comp.asset_building_class})` : 'N/A'}
-                                    </td>
+                                  {renderCompCells(comps, (comp) => (
+                                    <span className="text-xs">{comp.asset_building_class ? `${comp.asset_building_class} (QUALITY ${comp.asset_building_class})` : 'N/A'}</span>
                                   ))}
                                 </tr>
 
@@ -2616,15 +2614,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                       : subject.asset_design_style
                                     ) : 'N/A'}
                                   </td>
-                                  {comps.map((comp, idx) => (
-                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
+                                  {renderCompCells(comps, (comp) => (
+                                    <span className="text-xs">
                                       {comp.asset_design_style ? (
                                         codeDefinitions ? interpretCodes.getDesignName(comp, codeDefinitions, vendorType)
                                           ? `${comp.asset_design_style} (${interpretCodes.getDesignName(comp, codeDefinitions, vendorType)})`
                                           : comp.asset_design_style
                                         : comp.asset_design_style
                                       ) : 'N/A'}
-                                    </td>
+                                    </span>
                                   ))}
                                 </tr>
 
@@ -2641,15 +2639,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                       : subject.asset_type_use
                                     ) : 'N/A'}
                                   </td>
-                                  {comps.map((comp, idx) => (
-                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
+                                  {renderCompCells(comps, (comp) => (
+                                    <span className="text-xs">
                                       {comp.asset_type_use ? (
                                         codeDefinitions ? interpretCodes.getTypeName(comp, codeDefinitions, vendorType)
                                           ? `${comp.asset_type_use} (${interpretCodes.getTypeName(comp, codeDefinitions, vendorType)})`
                                           : comp.asset_type_use
                                         : comp.asset_type_use
                                       ) : 'N/A'}
-                                    </td>
+                                    </span>
                                   ))}
                                 </tr>
 
@@ -2659,11 +2657,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                     Story Height Code
                                   </td>
                                   <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_story_height || 'N/A'}</td>
-                                  {comps.map((comp, idx) => (
-                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
-                                      {comp.asset_story_height || 'N/A'}
-                                    </td>
-                                  ))}
+                                  {renderCompCells(comps, (comp) => <span className="text-xs">{comp.asset_story_height || 'N/A'}</span>)}
                                 </tr>
 
                                 {/* View Code */}
@@ -2672,11 +2666,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                     View Code
                                   </td>
                                   <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_view || 'N/A'}</td>
-                                  {comps.map((comp, idx) => (
-                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
-                                      {comp.asset_view || 'N/A'}
-                                    </td>
-                                  ))}
+                                  {renderCompCells(comps, (comp) => <span className="text-xs">{comp.asset_view || 'N/A'}</span>)}
                                 </tr>
 
                                 {/* Sales Code */}
@@ -2685,11 +2675,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                     Sales Code
                                   </td>
                                   <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.sales_nu || '0'}</td>
-                                  {comps.map((comp, idx) => (
-                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
-                                      {comp.sales_nu || '0'}
-                                    </td>
-                                  ))}
+                                  {renderCompCells(comps, (comp) => <span className="text-xs">{comp.sales_nu || '0'}</span>)}
                                 </tr>
 
                                 {/* Sales Date */}
@@ -2698,41 +2684,18 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                     Sales Date
                                   </td>
                                   <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.sales_date || 'N/A'}</td>
-                                  {comps.map((comp, idx) => (
-                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
-                                      {comp.sales_date || 'N/A'}
-                                    </td>
-                                  ))}
+                                  {renderCompCells(comps, (comp) => <span className="text-xs">{comp.sales_date || 'N/A'}</span>)}
                                 </tr>
 
-                                {/* Sale Price */}
+                                {/* Sales Price */}
                                 <tr className="border-b hover:bg-gray-50 bg-green-50">
                                   <td className="sticky left-0 z-10 bg-green-50 px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                                    Sale Price
+                                    Sales Price
                                   </td>
                                   <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
                                     {subject.sales_price ? `$${subject.sales_price.toLocaleString()}` : 'N/A'}
                                   </td>
-                                  {comps.map((comp, idx) => (
-                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 font-semibold">
-                                      ${comp.sales_price?.toLocaleString() || 'N/A'}
-                                    </td>
-                                  ))}
-                                </tr>
-
-                                {/* Time Adjusted Price */}
-                                <tr className="border-b hover:bg-gray-50 bg-green-50">
-                                  <td className="sticky left-0 z-10 bg-green-50 px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                                    Time Adjusted Price
-                                  </td>
-                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
-                                    {subject.values_norm_time ? `$${subject.values_norm_time.toLocaleString()}` : 'N/A'}
-                                  </td>
-                                  {comps.map((comp, idx) => (
-                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 font-semibold">
-                                      ${comp.values_norm_time?.toLocaleString() || 'N/A'}
-                                    </td>
-                                  ))}
+                                  {renderCompCells(comps, (comp) => <span className="font-semibold">${comp.sales_price?.toLocaleString() || 'N/A'}</span>)}
                                 </tr>
 
                                 {/* Living Area */}
