@@ -543,18 +543,33 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
           if (compFilters.salesCodes.length > 0) {
             const normalizedCompCode = normalizeSalesCode(comp.sales_nu);
             const normalizedFilterCodes = compFilters.salesCodes.map(normalizeSalesCode);
-            if (!normalizedFilterCodes.includes(normalizedCompCode)) return false;
+            if (!normalizedFilterCodes.includes(normalizedCompCode)) {
+              if (isFirstProperty) debugFilters.salesCodes++;
+              return false;
+            }
           }
 
           // Sales date range
-          if (compFilters.salesDateStart && comp.sales_date < compFilters.salesDateStart) return false;
-          if (compFilters.salesDateEnd && comp.sales_date > compFilters.salesDateEnd) return false;
+          if (compFilters.salesDateStart && comp.sales_date < compFilters.salesDateStart) {
+            if (isFirstProperty) debugFilters.salesDate++;
+            return false;
+          }
+          if (compFilters.salesDateEnd && comp.sales_date > compFilters.salesDateEnd) {
+            if (isFirstProperty) debugFilters.salesDate++;
+            return false;
+          }
 
           // VCS filter
           if (compFilters.sameVCS) {
-            if (comp.property_vcs !== subject.property_vcs) return false;
+            if (comp.property_vcs !== subject.property_vcs) {
+              if (isFirstProperty) debugFilters.vcs++;
+              return false;
+            }
           } else if (compFilters.vcs.length > 0) {
-            if (!compFilters.vcs.includes(comp.property_vcs)) return false;
+            if (!compFilters.vcs.includes(comp.property_vcs)) {
+              if (isFirstProperty) debugFilters.vcs++;
+              return false;
+            }
           }
 
           // Neighborhood filter
