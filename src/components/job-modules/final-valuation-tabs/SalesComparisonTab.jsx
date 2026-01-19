@@ -2545,11 +2545,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                     VCS
                                   </td>
                                   <td className="px-3 py-2 text-center bg-yellow-50 font-semibold text-xs">{subject.property_vcs || 'N/A'}</td>
-                                  {comps.map((comp, idx) => (
-                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 font-semibold text-xs">
-                                      {comp.property_vcs || 'N/A'}
-                                    </td>
-                                  ))}
+                                  {renderCompCells(comps, (comp) => <span className="font-semibold text-xs">{comp.property_vcs || 'N/A'}</span>)}
                                 </tr>
 
                                 {/* Block/Lot/Qual */}
@@ -2560,24 +2556,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                   <td className="px-3 py-2 text-center bg-yellow-50 font-semibold text-xs">
                                     {subject.property_block}/{subject.property_lot}/{subject.property_qualifier || ''}
                                   </td>
-                                  {comps.map((comp, idx) => (
-                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 font-semibold text-xs">
-                                      {comp.property_block}/{comp.property_lot}/{comp.property_qualifier || ''}
-                                    </td>
-                                  ))}
+                                  {renderCompCells(comps, (comp) => <span className="font-semibold text-xs">{comp.property_block}/{comp.property_lot}/{comp.property_qualifier || ''}</span>)}
                                 </tr>
 
-                                {/* Address */}
+                                {/* Location */}
                                 <tr className="border-b hover:bg-gray-50">
                                   <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
                                     Location
                                   </td>
                                   <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.property_location || 'N/A'}</td>
-                                  {comps.map((comp, idx) => (
-                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
-                                      {comp.property_location || 'N/A'}
-                                    </td>
-                                  ))}
+                                  {renderCompCells(comps, (comp) => <span className="text-xs">{comp.property_location || 'N/A'}</span>)}
                                 </tr>
 
                                 {/* Prev. Assessment */}
@@ -2588,11 +2576,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                   <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
                                     ${(subject.values_mod_total || subject.values_cama_total || 0).toLocaleString()}
                                   </td>
-                                  {comps.map((comp, idx) => (
-                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 font-semibold">
-                                      ${(comp.values_mod_total || comp.values_cama_total || 0).toLocaleString()}
-                                    </td>
-                                  ))}
+                                  {renderCompCells(comps, (comp) => <span className="font-semibold">${(comp.values_mod_total || comp.values_cama_total || 0).toLocaleString()}</span>)}
                                 </tr>
 
                                 {/* Property Class */}
@@ -2601,11 +2585,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                     Property Class
                                   </td>
                                   <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.property_class || 'N/A'}</td>
-                                  {comps.map((comp, idx) => (
-                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
-                                      {comp.property_class || 'N/A'}
-                                    </td>
-                                  ))}
+                                  {renderCompCells(comps, (comp) => <span className="text-xs">{comp.property_class || 'N/A'}</span>)}
                                 </tr>
 
                                 {/* Building Class */}
