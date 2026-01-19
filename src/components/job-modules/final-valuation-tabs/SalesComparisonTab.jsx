@@ -2976,12 +2976,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                           </div>
                         )}
 
-                        {!result.projectedAssessment && comps.length < 3 && (
-                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-                            <h4 className="font-semibold text-yellow-900 mb-2">Insufficient Comparables</h4>
-                            <p className="text-sm text-yellow-700">
-                              At least 3 comparables are required to calculate a projected assessment.
-                              This property currently has {comps.length} comparable{comps.length !== 1 ? 's' : ''}.
+                        {comps.length > 0 && comps.length < 3 && (
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mt-6">
+                            <h4 className="font-semibold text-blue-900 mb-2">Limited Comparables</h4>
+                            <p className="text-sm text-blue-700">
+                              This property has {comps.length} comparable{comps.length !== 1 ? 's' : ''}.
+                              For higher confidence, consider broadening search criteria to find 3-5 comparables.
                             </p>
                           </div>
                         )}
