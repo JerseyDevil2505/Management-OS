@@ -1164,13 +1164,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         break;
 
       case 'lot_size_sf':
-        subjectValue = subject.asset_lot_sf || 0;
-        compValue = comp.asset_lot_sf || 0;
+        subjectValue = subject.market_manual_lot_sf || subject.asset_lot_sf || 0;
+        compValue = comp.market_manual_lot_sf || comp.asset_lot_sf || 0;
         break;
 
       case 'lot_size_acre':
-        subjectValue = subject.asset_lot_acre || 0;
-        compValue = comp.asset_lot_acre || 0;
+        subjectValue = subject.market_manual_lot_acre || subject.asset_lot_acre || 0;
+        compValue = comp.market_manual_lot_acre || comp.asset_lot_acre || 0;
         break;
 
       case 'year_built':
