@@ -2946,36 +2946,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                           </div>
                         </div>
 
-                        {/* Weighted Average Calculation */}
-                        {result.projectedAssessment && (
-                          <div className="bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-400 rounded-lg p-6">
-                            <h4 className="font-bold text-lg text-gray-900 mb-4">Weighted Average Calculation</h4>
-                            <div className="space-y-2 text-sm">
-                              {comps.map((comp, idx) => {
-                                const weightedValue = (comp.adjustedPrice || 0) * (comp.weight || 0);
-                                return (
-                                  <div key={idx} className="flex items-center justify-between py-2 border-b border-gray-200">
-                                    <span className="text-gray-700">
-                                      Comp #{comp.rank}: ${Math.round(comp.adjustedPrice || 0).toLocaleString()} × {((comp.weight || 0) * 100).toFixed(2)}%
-                                    </span>
-                                    <span className="font-semibold text-gray-900">
-                                      = ${Math.round(weightedValue).toLocaleString()}
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                              <div className="flex items-center justify-between py-3 mt-2 border-t-2 border-green-400">
-                                <span className="font-bold text-lg text-gray-900">
-                                  Projected Assessment:
-                                </span>
-                                <span className="font-bold text-2xl text-green-700">
-                                  ${result.projectedAssessment.toLocaleString()}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
                         {comps.length > 0 && comps.length < 3 && (
                           <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mt-6">
                             <h4 className="font-semibold text-blue-900 mb-2">Limited Comparables</h4>
