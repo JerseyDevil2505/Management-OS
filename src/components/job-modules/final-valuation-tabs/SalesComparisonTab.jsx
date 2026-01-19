@@ -2539,15 +2539,188 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                 </tr>
                               </thead>
                               <tbody className="bg-white">
+                                {/* VCS */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    VCS
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold text-xs">{subject.property_vcs || 'N/A'}</td>
+                                  {comps.map((comp, idx) => (
+                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 font-semibold text-xs">
+                                      {comp.property_vcs || 'N/A'}
+                                    </td>
+                                  ))}
+                                </tr>
+
+                                {/* Block/Lot/Qual */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Block/Lot/Qual
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold text-xs">
+                                    {subject.property_block}/{subject.property_lot}/{subject.property_qualifier || ''}
+                                  </td>
+                                  {comps.map((comp, idx) => (
+                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 font-semibold text-xs">
+                                      {comp.property_block}/{comp.property_lot}/{comp.property_qualifier || ''}
+                                    </td>
+                                  ))}
+                                </tr>
+
                                 {/* Address */}
                                 <tr className="border-b hover:bg-gray-50">
                                   <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                                    Address
+                                    Location
                                   </td>
                                   <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.property_location || 'N/A'}</td>
                                   {comps.map((comp, idx) => (
                                     <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
                                       {comp.property_location || 'N/A'}
+                                    </td>
+                                  ))}
+                                </tr>
+
+                                {/* Prev. Assessment */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Prev. Assessment
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                    ${(subject.values_mod_total || subject.values_cama_total || 0).toLocaleString()}
+                                  </td>
+                                  {comps.map((comp, idx) => (
+                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 font-semibold">
+                                      ${(comp.values_mod_total || comp.values_cama_total || 0).toLocaleString()}
+                                    </td>
+                                  ))}
+                                </tr>
+
+                                {/* Property Class */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Property Class
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.property_class || 'N/A'}</td>
+                                  {comps.map((comp, idx) => (
+                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
+                                      {comp.property_class || 'N/A'}
+                                    </td>
+                                  ))}
+                                </tr>
+
+                                {/* Building Class */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Building Class
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">
+                                    {subject.asset_building_class ? `${subject.asset_building_class} (QUALITY ${subject.asset_building_class})` : 'N/A'}
+                                  </td>
+                                  {comps.map((comp, idx) => (
+                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
+                                      {comp.asset_building_class ? `${comp.asset_building_class} (QUALITY ${comp.asset_building_class})` : 'N/A'}
+                                    </td>
+                                  ))}
+                                </tr>
+
+                                {/* Style Code */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Style Code
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">
+                                    {subject.asset_design_style ? (
+                                      codeDefinitions ? interpretCodes.getDesignName(subject, codeDefinitions, vendorType)
+                                        ? `${subject.asset_design_style} (${interpretCodes.getDesignName(subject, codeDefinitions, vendorType)})`
+                                        : subject.asset_design_style
+                                      : subject.asset_design_style
+                                    ) : 'N/A'}
+                                  </td>
+                                  {comps.map((comp, idx) => (
+                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
+                                      {comp.asset_design_style ? (
+                                        codeDefinitions ? interpretCodes.getDesignName(comp, codeDefinitions, vendorType)
+                                          ? `${comp.asset_design_style} (${interpretCodes.getDesignName(comp, codeDefinitions, vendorType)})`
+                                          : comp.asset_design_style
+                                        : comp.asset_design_style
+                                      ) : 'N/A'}
+                                    </td>
+                                  ))}
+                                </tr>
+
+                                {/* Type/Use Code */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Type/Use Code
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">
+                                    {subject.asset_type_use ? (
+                                      codeDefinitions ? interpretCodes.getTypeName(subject, codeDefinitions, vendorType)
+                                        ? `${subject.asset_type_use} (${interpretCodes.getTypeName(subject, codeDefinitions, vendorType)})`
+                                        : subject.asset_type_use
+                                      : subject.asset_type_use
+                                    ) : 'N/A'}
+                                  </td>
+                                  {comps.map((comp, idx) => (
+                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
+                                      {comp.asset_type_use ? (
+                                        codeDefinitions ? interpretCodes.getTypeName(comp, codeDefinitions, vendorType)
+                                          ? `${comp.asset_type_use} (${interpretCodes.getTypeName(comp, codeDefinitions, vendorType)})`
+                                          : comp.asset_type_use
+                                        : comp.asset_type_use
+                                      ) : 'N/A'}
+                                    </td>
+                                  ))}
+                                </tr>
+
+                                {/* Story Height Code */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Story Height Code
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_story_height || 'N/A'}</td>
+                                  {comps.map((comp, idx) => (
+                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
+                                      {comp.asset_story_height || 'N/A'}
+                                    </td>
+                                  ))}
+                                </tr>
+
+                                {/* View Code */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    View Code
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_view || 'N/A'}</td>
+                                  {comps.map((comp, idx) => (
+                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
+                                      {comp.asset_view || 'N/A'}
+                                    </td>
+                                  ))}
+                                </tr>
+
+                                {/* Sales Code */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Sales Code
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.sales_nu || '0'}</td>
+                                  {comps.map((comp, idx) => (
+                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
+                                      {comp.sales_nu || '0'}
+                                    </td>
+                                  ))}
+                                </tr>
+
+                                {/* Sales Date */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Sales Date
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.sales_date || 'N/A'}</td>
+                                  {comps.map((comp, idx) => (
+                                    <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300 text-xs">
+                                      {comp.sales_date || 'N/A'}
                                     </td>
                                   ))}
                                 </tr>
