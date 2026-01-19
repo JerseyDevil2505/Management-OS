@@ -574,41 +574,77 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
           // Neighborhood filter
           if (compFilters.sameNeighborhood) {
-            if (comp.asset_neighborhood !== subject.asset_neighborhood) return false;
+            if (comp.asset_neighborhood !== subject.asset_neighborhood) {
+              if (isFirstProperty) debugFilters.neighborhood++;
+              return false;
+            }
           } else if (compFilters.neighborhood.length > 0) {
-            if (!compFilters.neighborhood.includes(comp.asset_neighborhood)) return false;
+            if (!compFilters.neighborhood.includes(comp.asset_neighborhood)) {
+              if (isFirstProperty) debugFilters.neighborhood++;
+              return false;
+            }
           }
 
           // Year built filter
           if (compFilters.useBuiltRange) {
-            if (compFilters.builtYearMin && comp.asset_year_built < parseInt(compFilters.builtYearMin)) return false;
-            if (compFilters.builtYearMax && comp.asset_year_built > parseInt(compFilters.builtYearMax)) return false;
+            if (compFilters.builtYearMin && comp.asset_year_built < parseInt(compFilters.builtYearMin)) {
+              if (isFirstProperty) debugFilters.yearBuilt++;
+              return false;
+            }
+            if (compFilters.builtYearMax && comp.asset_year_built > parseInt(compFilters.builtYearMax)) {
+              if (isFirstProperty) debugFilters.yearBuilt++;
+              return false;
+            }
           } else {
             const yearDiff = Math.abs((comp.asset_year_built || 0) - (subject.asset_year_built || 0));
-            if (yearDiff > compFilters.builtWithinYears) return false;
+            if (yearDiff > compFilters.builtWithinYears) {
+              if (isFirstProperty) debugFilters.yearBuilt++;
+              return false;
+            }
           }
 
           // Size filter
           if (compFilters.useSizeRange) {
-            if (compFilters.sizeMin && comp.asset_sfla < parseInt(compFilters.sizeMin)) return false;
-            if (compFilters.sizeMax && comp.asset_sfla > parseInt(compFilters.sizeMax)) return false;
+            if (compFilters.sizeMin && comp.asset_sfla < parseInt(compFilters.sizeMin)) {
+              if (isFirstProperty) debugFilters.size++;
+              return false;
+            }
+            if (compFilters.sizeMax && comp.asset_sfla > parseInt(compFilters.sizeMax)) {
+              if (isFirstProperty) debugFilters.size++;
+              return false;
+            }
           } else {
             const sizeDiff = Math.abs((comp.asset_sfla || 0) - (subject.asset_sfla || 0));
-            if (sizeDiff > compFilters.sizeWithinSqft) return false;
+            if (sizeDiff > compFilters.sizeWithinSqft) {
+              if (isFirstProperty) debugFilters.size++;
+              return false;
+            }
           }
 
           // Zone filter
           if (compFilters.sameZone) {
-            if (comp.asset_zoning !== subject.asset_zoning) return false;
+            if (comp.asset_zoning !== subject.asset_zoning) {
+              if (isFirstProperty) debugFilters.zone++;
+              return false;
+            }
           } else if (compFilters.zone.length > 0) {
-            if (!compFilters.zone.includes(comp.asset_zoning)) return false;
+            if (!compFilters.zone.includes(comp.asset_zoning)) {
+              if (isFirstProperty) debugFilters.zone++;
+              return false;
+            }
           }
 
           // Building class filter
           if (compFilters.sameBuildingClass) {
-            if (comp.asset_building_class !== subject.asset_building_class) return false;
+            if (comp.asset_building_class !== subject.asset_building_class) {
+              if (isFirstProperty) debugFilters.buildingClass++;
+              return false;
+            }
           } else if (compFilters.buildingClass.length > 0) {
-            if (!compFilters.buildingClass.includes(comp.asset_building_class)) return false;
+            if (!compFilters.buildingClass.includes(comp.asset_building_class)) {
+              if (isFirstProperty) debugFilters.buildingClass++;
+              return false;
+            }
           }
 
           // Type/Use filter
