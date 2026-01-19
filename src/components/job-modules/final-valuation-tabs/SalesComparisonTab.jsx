@@ -3169,12 +3169,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                     Net Adjustment
                                   </td>
                                   <td className="px-3 py-3 text-center bg-yellow-50">-</td>
-                                  {comps.map((comp, idx) => (
-                                    <td key={idx} className="px-3 py-3 text-center bg-blue-50 border-l border-gray-300">
-                                      <div className={`font-bold ${comp.totalAdjustment > 0 ? 'text-green-700' : comp.totalAdjustment < 0 ? 'text-red-700' : 'text-gray-700'}`}>
-                                        {comp.totalAdjustment > 0 ? '+' : ''}${comp.totalAdjustment?.toLocaleString() || '0'} ({comp.adjustmentPercent > 0 ? '+' : ''}{comp.adjustmentPercent?.toFixed(0) || '0'}%)
-                                      </div>
-                                    </td>
+                                  {renderCompCells(comps, (comp) => (
+                                    <div className={`font-bold ${comp.totalAdjustment > 0 ? 'text-green-700' : comp.totalAdjustment < 0 ? 'text-red-700' : 'text-gray-700'}`}>
+                                      {comp.totalAdjustment > 0 ? '+' : ''}${comp.totalAdjustment?.toLocaleString() || '0'} ({comp.adjustmentPercent > 0 ? '+' : ''}{comp.adjustmentPercent?.toFixed(0) || '0'}%)
+                                    </div>
                                   ))}
                                 </tr>
 
@@ -3200,12 +3198,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                       </div>
                                     )}
                                   </td>
-                                  {comps.map((comp, idx) => (
-                                    <td key={idx} className="px-3 py-4 text-center bg-blue-50 border-l border-gray-300">
-                                      <div className="font-bold text-gray-700">
-                                        ${Math.round(comp.adjustedPrice || 0).toLocaleString()}
-                                      </div>
-                                    </td>
+                                  {renderCompCells(comps, (comp) => (
+                                    <div className="font-bold text-gray-700">
+                                      ${Math.round(comp.adjustedPrice || 0).toLocaleString()}
+                                    </div>
                                   ))}
                                 </tr>
                               </tbody>
