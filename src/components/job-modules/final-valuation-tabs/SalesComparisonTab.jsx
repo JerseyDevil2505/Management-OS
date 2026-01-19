@@ -2782,14 +2782,17 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                 {/* Lot Size (SF) */}
                                 <tr className="border-b hover:bg-gray-50">
                                   <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                                    Lot Size
+                                    Lot Size (SF)
                                   </td>
-                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">{subject.asset_lot_sf?.toLocaleString() || 'N/A'}</td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                    {(subject.market_manual_lot_sf || subject.asset_lot_sf)?.toLocaleString() || 'N/A'}
+                                  </td>
                                   {renderCompCells(comps, (comp) => {
+                                    const lotSF = comp.market_manual_lot_sf || comp.asset_lot_sf;
                                     const adj = comp.adjustments?.find(a => a.name?.includes('Lot Size (SF)'));
                                     return (
                                       <div>
-                                        <div className="font-semibold">{comp.asset_lot_sf?.toLocaleString() || 'N/A'}</div>
+                                        <div className="font-semibold">{lotSF?.toLocaleString() || 'N/A'}</div>
                                         {adj && adj.amount !== 0 && (
                                           <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
                                             {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
@@ -2803,9 +2806,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                 {/* Lot Size (Front Foot) */}
                                 <tr className="border-b hover:bg-gray-50">
                                   <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                                    Lot Size (Front Foot)
+                                    Lot Size (FF)
                                   </td>
-                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">{subject.asset_lot_frontage?.toLocaleString() || 'N/A'}</td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                    {subject.asset_lot_frontage?.toLocaleString() || 'N/A'}
+                                  </td>
                                   {renderCompCells(comps, (comp) => {
                                     const adj = comp.adjustments?.find(a => a.name?.includes('Lot Size (FF)'));
                                     return (
@@ -2826,12 +2831,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                   <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
                                     Lot Size (Acre)
                                   </td>
-                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">{subject.asset_lot_acre?.toLocaleString() || 'N/A'}</td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                    {(subject.market_manual_lot_acre || subject.asset_lot_acre)?.toLocaleString() || 'N/A'}
+                                  </td>
                                   {renderCompCells(comps, (comp) => {
+                                    const lotAcre = comp.market_manual_lot_acre || comp.asset_lot_acre;
                                     const adj = comp.adjustments?.find(a => a.name?.includes('Lot Size (Acre)'));
                                     return (
                                       <div>
-                                        <div className="font-semibold">{comp.asset_lot_acre?.toLocaleString() || 'N/A'}</div>
+                                        <div className="font-semibold">{lotAcre?.toLocaleString() || 'N/A'}</div>
                                         {adj && adj.amount !== 0 && (
                                           <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
                                             {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
