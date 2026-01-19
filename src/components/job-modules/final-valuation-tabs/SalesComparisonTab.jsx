@@ -445,18 +445,21 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       const results = [];
       setEvaluationProgress({ current: 0, total: subjects.length });
 
-      // Process in batches to allow UI updates
-      const BATCH_SIZE = 50;
+      // Force a small delay to ensure progress bar renders
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Process in smaller batches for more frequent UI updates
+      const BATCH_SIZE = 10;
 
       for (let i = 0; i < subjects.length; i++) {
         const subject = subjects[i];
 
-        // Update progress
-        setEvaluationProgress({ current: i + 1, total: subjects.length });
+        // Update progress immediately
+        setEvaluationProgress(prev => ({ current: i + 1, total: subjects.length }));
 
-        // Allow UI to update every batch
+        // Allow UI to update every batch (more frequently for responsive progress)
         if (i > 0 && i % BATCH_SIZE === 0) {
-          await new Promise(resolve => setTimeout(resolve, 10));
+          await new Promise(resolve => setTimeout(resolve, 0));
         }
         const matchingComps = eligibleSales.filter(comp => {
           // Exclude self
