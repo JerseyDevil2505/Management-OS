@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { supabase } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, getRawDataForJob } from '../../../lib/supabaseClient';
 import { Search, X, Upload, Sliders, FileText, Check } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
@@ -8,6 +8,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
   const resultsRef = React.useRef(null);
+  const [codeDefinitions, setCodeDefinitions] = useState(null);
   
   // ==================== SUBJECT PROPERTIES STATE ====================
   const [subjectVCS, setSubjectVCS] = useState([]);
@@ -71,8 +72,23 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   const [evaluationResults, setEvaluationResults] = useState(null);
   const [adjustmentGrid, setAdjustmentGrid] = useState([]);
   const [customBrackets, setCustomBrackets] = useState([]);
+  const [minCompsForSuccess, setMinCompsForSuccess] = useState(3); // User-selectable threshold
+  const [selectedPropertyForDetail, setSelectedPropertyForDetail] = useState(null); // For detailed tab
 
   const vendorType = jobData?.vendor_type || 'BRT';
+
+  // Helper function to render comp cells (shows all 5 even if empty)
+  const renderCompCells = (comps, renderFunc) => {
+    return [1, 2, 3, 4, 5].map((compNum) => {
+      const comp = comps[compNum - 1];
+      const bgColor = comp?.isSubjectSale ? 'bg-green-50' : 'bg-blue-50';
+      return (
+        <td key={compNum} className={`px-3 py-2 text-center ${bgColor} border-l border-gray-300`}>
+          {comp ? renderFunc(comp, compNum - 1) : <span className="text-gray-400">-</span>}
+        </td>
+      );
+    });
+  };
 
   // ==================== SALES CODE NORMALIZATION ====================
   const normalizeSalesCode = useCallback((code) => {
@@ -99,6 +115,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
     if (jobData?.id) {
       loadAdjustmentGrid();
       loadCustomBrackets();
+      loadCodeDefinitions();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id]);
@@ -112,9 +129,18 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         .order('sort_order');
 
       if (error) throw error;
+
+      console.log(`🔄 Loaded adjustment grid: ${data?.length || 0} entries`);
+      if (data && data.length > 0) {
+        console.log(`📋 Sample entry:`, data[0]);
+      } else {
+        console.warn(`⚠️  No adjustment data found in database for job ${jobData.id}`);
+        console.warn(`   Have you saved adjustments in the Adjustments tab?`);
+      }
+
       setAdjustmentGrid(data || []);
     } catch (error) {
-      console.error('Error loading adjustment grid:', error);
+      console.error('❌ Error loading adjustment grid:', error);
     }
   };
 
@@ -132,6 +158,27 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       console.error('Error loading custom brackets:', error);
     }
   };
+
+  const loadCodeDefinitions = async () => {
+    try {
+      const rawData = await getRawDataForJob(jobData.id);
+      if (rawData?.codeDefinitions || rawData?.parsed_code_definitions) {
+        setCodeDefinitions(rawData.codeDefinitions || rawData.parsed_code_definitions);
+      }
+    } catch (error) {
+      console.error('Error loading code definitions:', error);
+    }
+  };
+
+  // Reload adjustment grid when returning to search tab (in case it was updated in Adjustments tab)
+  useEffect(() => {
+    if (activeSubTab === 'search' && jobData?.id) {
+      console.log('🔄 Switched to Search tab - reloading adjustment grid...');
+      loadAdjustmentGrid();
+      loadCustomBrackets();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSubTab, jobData?.id]);
 
   // ==================== EXTRACT UNIQUE VALUES ====================
   const uniqueVCS = useMemo(() => {
@@ -289,10 +336,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   const handleSetAsideSuccessful = async () => {
     if (!evaluationResults) return;
 
-    const successful = evaluationResults.filter(r => r.comparables.length >= 3);
+    const successful = evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess);
 
     if (successful.length === 0) {
-      alert('No properties with 3+ comparables to set aside');
+      alert(`No properties with ${minCompsForSuccess}+ comparables to set aside`);
       return;
     }
 
@@ -314,7 +361,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       alert(`${successful.length} properties set aside successfully. ${remainingResults.length} properties remain for re-evaluation.`);
 
       // Update results to show only remaining
-      setEvaluationResults(remainingResults);
+      setEvaluationResults(remainingResults.length > 0 ? remainingResults : null);
 
     } catch (error) {
       console.error('Error setting aside properties:', error);
@@ -432,128 +479,261 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         return;
       }
 
+      // Log adjustment configuration
+      const bracketLabel = compFilters.adjustmentBracket === 'auto' ? 'auto' :
+        compFilters.adjustmentBracket?.startsWith('bracket_') ?
+        CME_BRACKETS[parseInt(compFilters.adjustmentBracket.replace('bracket_', ''))]?.label || compFilters.adjustmentBracket :
+        compFilters.adjustmentBracket;
+
+      console.log(`📊 Adjustment Configuration:`);
+      console.log(`   - Grid entries: ${adjustmentGrid.length}`);
+      console.log(`   - Selected bracket: ${compFilters.adjustmentBracket} (${bracketLabel})`);
+      console.log(`   - Custom brackets: ${customBrackets.length}`);
+
       if (adjustmentGrid.length === 0) {
-        const proceed = window.confirm(
-          'Warning: No adjustment grid defined!\n\n' +
-          'All comparables will have $0 adjustments.\n\n' +
-          'Go to the Adjustments tab to define your adjustment grid.\n\n' +
-          'Continue anyway?'
-        );
-        if (!proceed) {
-          setIsEvaluating(false);
-          setEvaluationProgress({ current: 0, total: 0 });
-          return;
-        }
+        console.warn(`⚠️  WARNING: No adjustment grid entries found!`);
+        console.warn(`   All adjustments will be $0. Configure adjustments in the Adjustments tab first.`);
       }
+
+      // Note: Evaluation can proceed even without adjustment grid - comps will have $0 adjustments
+      // This allows users to see comp matches before setting up adjustments
 
       // Step 3: For each subject, find matching comparables
       const results = [];
       setEvaluationProgress({ current: 0, total: subjects.length });
 
-      // Process in batches to allow UI updates
-      const BATCH_SIZE = 50;
+      // Force a small delay to ensure progress bar renders
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Process in smaller batches for more frequent UI updates
+      const BATCH_SIZE = 10;
 
       for (let i = 0; i < subjects.length; i++) {
         const subject = subjects[i];
 
-        // Update progress
-        setEvaluationProgress({ current: i + 1, total: subjects.length });
+        // Update progress immediately
+        setEvaluationProgress(prev => ({ current: i + 1, total: subjects.length }));
 
-        // Allow UI to update every batch
+        // Allow UI to update every batch (more frequently for responsive progress)
         if (i > 0 && i % BATCH_SIZE === 0) {
-          await new Promise(resolve => setTimeout(resolve, 10));
+          await new Promise(resolve => setTimeout(resolve, 0));
         }
+        // Debug: Log first property's matching process
+        const isFirstProperty = i === 0;
+        if (isFirstProperty) {
+          console.log(`\n🔍 DEBUG: Matching comps for first subject property:`);
+          console.log(`   Subject: ${subject.property_block}-${subject.property_lot}`);
+          console.log(`   VCS: ${subject.property_vcs}, Type: ${subject.asset_type_use}`);
+          console.log(`   Year Built: ${subject.asset_year_built}, SFLA: ${subject.asset_sfla}`);
+          console.log(`   Eligible sales pool: ${eligibleSales.length}`);
+        }
+
+        let debugFilters = {
+          self: 0,
+          salesCodes: 0,
+          salesDate: 0,
+          vcs: 0,
+          neighborhood: 0,
+          yearBuilt: 0,
+          size: 0,
+          zone: 0,
+          buildingClass: 0,
+          typeUse: 0,
+          style: 0,
+          storyHeight: 0,
+          view: 0,
+          passed: 0
+        };
+
         const matchingComps = eligibleSales.filter(comp => {
           // Exclude self
-          if (comp.property_composite_key === subject.property_composite_key) return false;
+          if (comp.property_composite_key === subject.property_composite_key) {
+            if (isFirstProperty) debugFilters.self++;
+            return false;
+          }
 
           // Sales codes filter (normalize blank, '00', '0' to '')
           if (compFilters.salesCodes.length > 0) {
             const normalizedCompCode = normalizeSalesCode(comp.sales_nu);
             const normalizedFilterCodes = compFilters.salesCodes.map(normalizeSalesCode);
-            if (!normalizedFilterCodes.includes(normalizedCompCode)) return false;
+            if (!normalizedFilterCodes.includes(normalizedCompCode)) {
+              if (isFirstProperty) debugFilters.salesCodes++;
+              return false;
+            }
           }
 
           // Sales date range
-          if (compFilters.salesDateStart && comp.sales_date < compFilters.salesDateStart) return false;
-          if (compFilters.salesDateEnd && comp.sales_date > compFilters.salesDateEnd) return false;
+          if (compFilters.salesDateStart && comp.sales_date < compFilters.salesDateStart) {
+            if (isFirstProperty) debugFilters.salesDate++;
+            return false;
+          }
+          if (compFilters.salesDateEnd && comp.sales_date > compFilters.salesDateEnd) {
+            if (isFirstProperty) debugFilters.salesDate++;
+            return false;
+          }
 
           // VCS filter
           if (compFilters.sameVCS) {
-            if (comp.property_vcs !== subject.property_vcs) return false;
+            if (comp.property_vcs !== subject.property_vcs) {
+              if (isFirstProperty) debugFilters.vcs++;
+              return false;
+            }
           } else if (compFilters.vcs.length > 0) {
-            if (!compFilters.vcs.includes(comp.property_vcs)) return false;
+            if (!compFilters.vcs.includes(comp.property_vcs)) {
+              if (isFirstProperty) debugFilters.vcs++;
+              return false;
+            }
           }
 
           // Neighborhood filter
           if (compFilters.sameNeighborhood) {
-            if (comp.asset_neighborhood !== subject.asset_neighborhood) return false;
+            if (comp.asset_neighborhood !== subject.asset_neighborhood) {
+              if (isFirstProperty) debugFilters.neighborhood++;
+              return false;
+            }
           } else if (compFilters.neighborhood.length > 0) {
-            if (!compFilters.neighborhood.includes(comp.asset_neighborhood)) return false;
+            if (!compFilters.neighborhood.includes(comp.asset_neighborhood)) {
+              if (isFirstProperty) debugFilters.neighborhood++;
+              return false;
+            }
           }
 
           // Year built filter
           if (compFilters.useBuiltRange) {
-            if (compFilters.builtYearMin && comp.asset_year_built < parseInt(compFilters.builtYearMin)) return false;
-            if (compFilters.builtYearMax && comp.asset_year_built > parseInt(compFilters.builtYearMax)) return false;
+            if (compFilters.builtYearMin && comp.asset_year_built < parseInt(compFilters.builtYearMin)) {
+              if (isFirstProperty) debugFilters.yearBuilt++;
+              return false;
+            }
+            if (compFilters.builtYearMax && comp.asset_year_built > parseInt(compFilters.builtYearMax)) {
+              if (isFirstProperty) debugFilters.yearBuilt++;
+              return false;
+            }
           } else {
             const yearDiff = Math.abs((comp.asset_year_built || 0) - (subject.asset_year_built || 0));
-            if (yearDiff > compFilters.builtWithinYears) return false;
+            if (yearDiff > compFilters.builtWithinYears) {
+              if (isFirstProperty) debugFilters.yearBuilt++;
+              return false;
+            }
           }
 
           // Size filter
           if (compFilters.useSizeRange) {
-            if (compFilters.sizeMin && comp.asset_sfla < parseInt(compFilters.sizeMin)) return false;
-            if (compFilters.sizeMax && comp.asset_sfla > parseInt(compFilters.sizeMax)) return false;
+            if (compFilters.sizeMin && comp.asset_sfla < parseInt(compFilters.sizeMin)) {
+              if (isFirstProperty) debugFilters.size++;
+              return false;
+            }
+            if (compFilters.sizeMax && comp.asset_sfla > parseInt(compFilters.sizeMax)) {
+              if (isFirstProperty) debugFilters.size++;
+              return false;
+            }
           } else {
             const sizeDiff = Math.abs((comp.asset_sfla || 0) - (subject.asset_sfla || 0));
-            if (sizeDiff > compFilters.sizeWithinSqft) return false;
+            if (sizeDiff > compFilters.sizeWithinSqft) {
+              if (isFirstProperty) debugFilters.size++;
+              return false;
+            }
           }
 
           // Zone filter
           if (compFilters.sameZone) {
-            if (comp.asset_zoning !== subject.asset_zoning) return false;
+            if (comp.asset_zoning !== subject.asset_zoning) {
+              if (isFirstProperty) debugFilters.zone++;
+              return false;
+            }
           } else if (compFilters.zone.length > 0) {
-            if (!compFilters.zone.includes(comp.asset_zoning)) return false;
+            if (!compFilters.zone.includes(comp.asset_zoning)) {
+              if (isFirstProperty) debugFilters.zone++;
+              return false;
+            }
           }
 
           // Building class filter
           if (compFilters.sameBuildingClass) {
-            if (comp.asset_building_class !== subject.asset_building_class) return false;
+            if (comp.asset_building_class !== subject.asset_building_class) {
+              if (isFirstProperty) debugFilters.buildingClass++;
+              return false;
+            }
           } else if (compFilters.buildingClass.length > 0) {
-            if (!compFilters.buildingClass.includes(comp.asset_building_class)) return false;
+            if (!compFilters.buildingClass.includes(comp.asset_building_class)) {
+              if (isFirstProperty) debugFilters.buildingClass++;
+              return false;
+            }
           }
 
           // Type/Use filter
           if (compFilters.sameTypeUse) {
-            if (comp.asset_type_use !== subject.asset_type_use) return false;
+            if (comp.asset_type_use !== subject.asset_type_use) {
+              if (isFirstProperty) debugFilters.typeUse++;
+              return false;
+            }
           } else if (compFilters.typeUse.length > 0) {
-            if (!compFilters.typeUse.includes(comp.asset_type_use)) return false;
+            if (!compFilters.typeUse.includes(comp.asset_type_use)) {
+              if (isFirstProperty) debugFilters.typeUse++;
+              return false;
+            }
           }
 
           // Style filter
           if (compFilters.sameStyle) {
-            if (comp.asset_design_style !== subject.asset_design_style) return false;
+            if (comp.asset_design_style !== subject.asset_design_style) {
+              if (isFirstProperty) debugFilters.style++;
+              return false;
+            }
           } else if (compFilters.style.length > 0) {
-            if (!compFilters.style.includes(comp.asset_design_style)) return false;
+            if (!compFilters.style.includes(comp.asset_design_style)) {
+              if (isFirstProperty) debugFilters.style++;
+              return false;
+            }
           }
 
           // Story height filter
           if (compFilters.sameStoryHeight) {
-            if (comp.asset_story_height !== subject.asset_story_height) return false;
+            if (comp.asset_story_height !== subject.asset_story_height) {
+              if (isFirstProperty) debugFilters.storyHeight++;
+              return false;
+            }
           } else if (compFilters.storyHeight.length > 0) {
-            if (!compFilters.storyHeight.includes(comp.asset_story_height)) return false;
+            if (!compFilters.storyHeight.includes(comp.asset_story_height)) {
+              if (isFirstProperty) debugFilters.storyHeight++;
+              return false;
+            }
           }
 
           // View filter
           if (compFilters.sameView) {
-            if (comp.asset_view !== subject.asset_view) return false;
+            if (comp.asset_view !== subject.asset_view) {
+              if (isFirstProperty) debugFilters.view++;
+              return false;
+            }
           } else if (compFilters.view.length > 0) {
-            if (!compFilters.view.includes(comp.asset_view)) return false;
+            if (!compFilters.view.includes(comp.asset_view)) {
+              if (isFirstProperty) debugFilters.view++;
+              return false;
+            }
           }
 
+          if (isFirstProperty) debugFilters.passed++;
           return true;
         });
+
+        // Log debug results for first property
+        if (isFirstProperty) {
+          console.log(`\n📊 Filter Results:`);
+          console.log(`   ❌ Excluded (self): ${debugFilters.self}`);
+          console.log(`   ❌ Failed sales codes: ${debugFilters.salesCodes}`);
+          console.log(`   ❌ Failed sales date: ${debugFilters.salesDate}`);
+          console.log(`   ❌ Failed VCS: ${debugFilters.vcs}`);
+          console.log(`   ❌ Failed neighborhood: ${debugFilters.neighborhood}`);
+          console.log(`   ❌ Failed year built: ${debugFilters.yearBuilt}`);
+          console.log(`   ❌ Failed size (SFLA): ${debugFilters.size}`);
+          console.log(`   ❌ Failed zone: ${debugFilters.zone}`);
+          console.log(`   ❌ Failed building class: ${debugFilters.buildingClass}`);
+          console.log(`   ❌ Failed type/use: ${debugFilters.typeUse}`);
+          console.log(`   ❌ Failed style: ${debugFilters.style}`);
+          console.log(`   ❌ Failed story height: ${debugFilters.storyHeight}`);
+          console.log(`   ❌ Failed view: ${debugFilters.view}`);
+          console.log(`   ✅ Passed initial filters: ${debugFilters.passed}`);
+        }
 
         // Calculate adjustments for each comparable
         const compsWithAdjustments = matchingComps.map(comp => {
@@ -600,6 +780,24 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
         // Filter by tolerance
         let validComps = compsWithAdjustments.filter(c => c.passesTolerance);
+
+        // Debug tolerance filtering
+        if (isFirstProperty) {
+          const failedTolerance = compsWithAdjustments.length - validComps.length;
+          console.log(`\n🎯 Adjustment Tolerance Results:`);
+          console.log(`   Before tolerance: ${compsWithAdjustments.length} comps`);
+          console.log(`   ❌ Failed tolerance: ${failedTolerance}`);
+          console.log(`   ✅ Passed tolerance: ${validComps.length}`);
+          if (compFilters.individualAdjPct > 0) {
+            console.log(`      Individual adj limit: ${compFilters.individualAdjPct}%`);
+          }
+          if (compFilters.netAdjPct > 0) {
+            console.log(`      Net adj limit: ${compFilters.netAdjPct}%`);
+          }
+          if (compFilters.grossAdjPct > 0) {
+            console.log(`      Gross adj limit: ${compFilters.grossAdjPct}%`);
+          }
+        }
 
         // SUBJECT SALE PRIORITY: If subject sold in CSP, it becomes Comp #1 with 0% adjustment
         const assessmentYear = new Date(jobData.end_date).getFullYear();
@@ -652,7 +850,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         let projectedAssessment = null;
         let confidenceScore = 0;
 
-        if (topComps.length >= 3) {
+        if (topComps.length >= 1) {
           // Calculate weights based on closeness to 0% adjustment
           const totalInverseAdjPct = topComps.reduce((sum, comp) => {
             return sum + (1 / (Math.abs(comp.adjustmentPercent) + 1)); // +1 to avoid division by zero
@@ -689,6 +887,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       console.log(`   - With 3+ comps: ${results.filter(r => r.comparables.length >= 3).length}`);
       console.log(`   - With 0 comps: ${results.filter(r => r.comparables.length === 0).length}`);
       console.log(`   - With projected values: ${results.filter(r => r.projectedAssessment).length}`);
+
+      // Update progress: Start database save phase
+      setEvaluationProgress({ current: subjects.length, total: subjects.length + 1 });
+      console.log(`💾 Saving ${results.length} evaluations to database...`);
 
       // Save results to database
       const evaluationRunId = crypto.randomUUID ? crypto.randomUUID() :
@@ -741,36 +943,40 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         }
       }
 
-      console.log(`💾 Saved ${results.length} evaluations to database`);
+      console.log(`✅ Database save complete`);
 
+      // Update progress: Rendering results
+      setEvaluationProgress({ current: subjects.length + 1, total: subjects.length + 1 });
+      console.log(`📊 Rendering results table...`);
+
+      // Set results and immediately scroll to them
       setEvaluationResults(results);
-      console.log(`✨ Results set! Scroll down to see the results table with ${results.length} properties.`);
 
-      // Show summary
+      // Calculate summary stats for console logging
       const successful = results.filter(r => r.comparables.length >= 3).length;
       const needsMoreComps = results.filter(r => r.comparables.length > 0 && r.comparables.length < 3).length;
       const noComps = results.filter(r => r.comparables.length === 0).length;
 
-      alert(
-        `Evaluation Complete!\n\n` +
-        `✅ ${successful} properties with 3-5 comps (ready to value)\n` +
-        `⚠️ ${needsMoreComps} properties with 1-2 comps (need more comps)\n` +
-        `❌ ${noComps} properties with 0 comps (no matches found)\n\n` +
-        `Scroll down to see detailed results.`
-      );
+      console.log(`✅ Evaluation Complete!`);
+      console.log(`   - ${successful} properties with 3-5 comps (ready to value)`);
+      console.log(`   - ${needsMoreComps} properties with 1-2 comps (need more comps)`);
+      console.log(`   - ${noComps} properties with 0 comps (no matches found)`);
 
-      // Auto-scroll to results after a brief delay to allow rendering
+      // Auto-scroll to results immediately
       setTimeout(() => {
         if (resultsRef.current) {
           resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
-      }, 200);
-
-      // Results now show inline below filters - no tab switching needed
+      }, 100);
 
     } catch (error) {
-      console.error('❌ Error evaluating:', error);
-      alert(`Evaluation failed: ${error.message}`);
+      console.error('❌ Error during evaluation:', error);
+      console.error('Error stack:', error.stack);
+      alert(
+        `Evaluation failed!\n\n` +
+        `Error: ${error.message}\n\n` +
+        `Check the browser console for more details.`
+      );
     } finally {
       setIsEvaluating(false);
       setEvaluationProgress({ current: 0, total: 0 });
@@ -881,6 +1087,17 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       // Use default bracket
       const bracketIndex = getPriceBracketIndex(comp.values_norm_time);
       adjustmentValue = adjustmentDef[`bracket_${bracketIndex}`] || 0;
+
+      // Debug first property only
+      if (!window._adjDebugLogged && adjustmentDef.adjustment_id === 'living_area') {
+        console.log(`📐 Adjustment Debug (${adjustmentDef.adjustment_name}):`);
+        console.log(`   - Selected bracket filter: ${compFilters.adjustmentBracket}`);
+        console.log(`   - Bracket index: ${bracketIndex}`);
+        console.log(`   - Looking for: bracket_${bracketIndex}`);
+        console.log(`   - Adjustment value: ${adjustmentValue}`);
+        console.log(`   - Adjustment grid entry:`, adjustmentDef);
+        window._adjDebugLogged = true;
+      }
     }
 
     if (adjustmentValue === 0) return 0; // No adjustment needed
@@ -948,13 +1165,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         break;
 
       case 'lot_size_sf':
-        subjectValue = subject.asset_lot_sf || 0;
-        compValue = comp.asset_lot_sf || 0;
+        subjectValue = subject.market_manual_lot_sf || subject.asset_lot_sf || 0;
+        compValue = comp.market_manual_lot_sf || comp.asset_lot_sf || 0;
         break;
 
       case 'lot_size_acre':
-        subjectValue = subject.asset_lot_acre || 0;
-        compValue = comp.asset_lot_acre || 0;
+        subjectValue = subject.market_manual_lot_acre || subject.asset_lot_acre || 0;
+        compValue = comp.market_manual_lot_acre || comp.asset_lot_acre || 0;
         break;
 
       case 'year_built':
@@ -1810,6 +2027,31 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                 </div>
               </div>
 
+              {/* Adjustment Grid Warning */}
+              {adjustmentGrid.length === 0 && (
+                <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 text-yellow-600">
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold text-yellow-900 mb-1">
+                        No Adjustment Grid Configured
+                      </h4>
+                      <p className="text-sm text-yellow-800 mb-2">
+                        All comparable adjustments will be <strong>$0</strong> until you configure adjustment values.
+                      </p>
+                      <p className="text-xs text-yellow-700">
+                        <strong>To fix:</strong> Go to the <button onClick={() => setActiveSubTab('adjustments')} className="underline font-semibold hover:text-yellow-900">Adjustments tab</button>,
+                        review the default values, make any changes, and click <strong>"Save Adjustments"</strong>.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Evaluate Button */}
               <div className="mt-6 pt-6 border-t border-gray-300">
                 <div className="flex items-center justify-between mb-4">
@@ -1849,32 +2091,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                 {/* Progress Bar */}
                 {isEvaluating && evaluationProgress.total > 0 && (
                   <div className="mt-4">
-                    <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-                      <span>Processing properties...</span>
-                      <span>{Math.round((evaluationProgress.current / evaluationProgress.total) * 100)}%</span>
+                    <div className="flex items-center justify-between text-sm font-semibold text-blue-700 mb-2">
+                      <span>
+                        {evaluationProgress.current > evaluationProgress.total - 1
+                          ? 'Saving and rendering results...'
+                          : `Evaluating ${evaluationProgress.current} of ${evaluationProgress.total} properties`}
+                      </span>
+                      <span>{Math.round((evaluationProgress.current / evaluationProgress.total) * 100)}% Complete</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div className="w-full bg-gray-200 rounded-full h-3 shadow-inner">
                       <div
-                        className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                        className="bg-blue-600 h-3 rounded-full transition-all duration-150 ease-out"
                         style={{
-                          width: `${(evaluationProgress.current / evaluationProgress.total) * 100}%`
+                          width: `${Math.min(100, (evaluationProgress.current / evaluationProgress.total) * 100)}%`
                         }}
-                      ></div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Progress Bar */}
-                {isEvaluating && evaluationProgress.total > 0 && (
-                  <div className="w-full">
-                    <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-                      <span>Processing properties...</span>
-                      <span>{Math.round((evaluationProgress.current / evaluationProgress.total) * 100)}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${(evaluationProgress.current / evaluationProgress.total) * 100}%` }}
                       ></div>
                     </div>
                   </div>
@@ -1884,42 +2114,55 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
             {/* INLINE RESULTS - Show directly below search filters */}
             {evaluationResults && (
-              <div ref={resultsRef} className="mt-8 bg-white border border-gray-300 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                  Evaluation Results
-                </h3>
-                <div className="grid grid-cols-3 gap-4 mb-6">
-                  <div className="bg-blue-50 rounded-lg p-4">
-                    <div className="text-sm text-gray-600">Total Subjects</div>
-                    <div className="text-2xl font-bold text-blue-900">{evaluationResults.length}</div>
-                  </div>
-                  <div className="bg-green-50 rounded-lg p-4">
-                    <div className="text-sm text-gray-600">Successfully Valued (3+ Comps)</div>
-                    <div className="text-2xl font-bold text-green-900">
-                      {evaluationResults.filter(r => r.comparables.length >= 3).length}
+              <div ref={resultsRef} className="mt-6 bg-white border border-gray-300 rounded-lg p-4">
+                {/* Summary Statistics */}
+                <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <span className="font-semibold text-gray-700">Total Evaluated:</span>
+                      <span className="ml-2 text-gray-900">{evaluationResults.length} properties</span>
                     </div>
-                  </div>
-                  <div className="bg-orange-50 rounded-lg p-4">
-                    <div className="text-sm text-gray-600">Needs More Comps (&lt;3)</div>
-                    <div className="text-2xl font-bold text-orange-900">
-                      {evaluationResults.filter(r => r.comparables.length < 3).length}
+                    <div>
+                      <span className="font-semibold text-red-700">No Comparables:</span>
+                      <span className="ml-2 text-red-900 font-bold">
+                        {evaluationResults.filter(r => r.comparables.length === 0).length} of {evaluationResults.length}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-green-700">With {minCompsForSuccess}+ Comps:</span>
+                      <span className="ml-2 text-green-900 font-bold">
+                        {evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess).length} of {evaluationResults.length}
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Action Buttons */}
-                <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-300">
-                  <div className="text-sm text-gray-600">
-                    <strong>Iterative Workflow:</strong> Set aside successfully valued properties (3-5 comps found),
-                    then re-run the engine with loosened criteria for remaining properties.
-                  </div>
-                  <div className="flex gap-3">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Evaluation Results
+                  </h3>
+                  <div className="flex items-center gap-3">
+                    {/* Minimum Comps Selector */}
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-medium text-gray-700">Min Comps:</label>
+                      <select
+                        value={minCompsForSuccess}
+                        onChange={(e) => setMinCompsForSuccess(parseInt(e.target.value))}
+                        className="px-3 py-1.5 border border-gray-300 rounded text-sm"
+                      >
+                        <option value="1">1+</option>
+                        <option value="2">2+</option>
+                        <option value="3">3+</option>
+                        <option value="4">4+</option>
+                        <option value="5">5</option>
+                      </select>
+                    </div>
                     <button
                       onClick={handleSetAsideSuccessful}
-                      disabled={!evaluationResults || evaluationResults.filter(r => r.comparables.length >= 3).length === 0}
+                      disabled={!evaluationResults || evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess).length === 0}
                       className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                     >
-                      Set Aside Successful ({evaluationResults ? evaluationResults.filter(r => r.comparables.length >= 3).length : 0})
+                      Set Aside ({evaluationResults ? evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess).length : 0})
                     </button>
                     <button
                       onClick={handleApplyToFinalRoster}
@@ -1931,50 +2174,122 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                   </div>
                 </div>
 
-                {/* Results Table */}
+                {/* Results Table - Legacy Format */}
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead className="bg-gray-50">
+                  <table className="min-w-full border-collapse text-xs">
+                    <thead className="bg-gray-100">
                       <tr>
-                        <th className="px-3 py-3 text-left font-medium text-gray-700">VCS</th>
-                        <th className="px-3 py-3 text-left font-medium text-gray-700">Block</th>
-                        <th className="px-3 py-3 text-left font-medium text-gray-700">Lot</th>
-                        <th className="px-3 py-3 text-left font-medium text-gray-700">Qual</th>
-                        <th className="px-3 py-3 text-left font-medium text-gray-700">Type/Use</th>
-                        <th className="px-3 py-3 text-right font-medium text-gray-700">SFLA</th>
-                        <th className="px-3 py-3 text-right font-medium text-gray-700">Comps Found</th>
-                        <th className="px-3 py-3 text-right font-medium text-gray-700">Top 5</th>
-                        <th className="px-3 py-3 text-right font-medium text-gray-700">Projected Value</th>
+                        {/* Subject Property Info */}
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">VCS</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Block</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Lot</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Qual</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Location</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">TypeUse</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Style</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-right font-semibold bg-yellow-50">Current Asmt</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-right font-semibold bg-green-50">New Asmt</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-right font-semibold bg-blue-50">%Change</th>
+                        {/* Comparable Columns */}
+                        {[1, 2, 3, 4, 5].map(num => (
+                          <th key={num} colSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold bg-blue-50">
+                            Comparable {num}
+                          </th>
+                        ))}
+                      </tr>
+                      <tr>
+                        {/* Sub-headers for each comparable */}
+                        {[1, 2, 3, 4, 5].map(num => (
+                          <React.Fragment key={num}>
+                            <th className="border border-gray-300 px-2 py-1 text-center text-xs font-medium">BLQ</th>
+                            <th className="border border-gray-300 px-2 py-1 text-center text-xs font-medium">Adjusted Value</th>
+                          </React.Fragment>
+                        ))}
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {evaluationResults.map((result, idx) => (
-                        <tr key={idx} className="hover:bg-gray-50">
-                          <td className="px-3 py-3 text-gray-700">
-                            {result.subject.property_vcs}
-                            {result.hasSubjectSale && (
-                              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                                Subj Sale
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-3 font-medium text-gray-900">{result.subject.property_block}</td>
-                          <td className="px-3 py-3 font-medium text-gray-900">{result.subject.property_lot}</td>
-                          <td className="px-3 py-3 text-gray-700">{result.subject.property_qualifier || '-'}</td>
-                          <td className="px-3 py-3 text-gray-700">{result.subject.asset_type_use}</td>
-                          <td className="px-3 py-3 text-right text-gray-700">{result.subject.asset_sfla?.toLocaleString()}</td>
-                          <td className="px-3 py-3 text-right text-gray-700">{result.totalFound}</td>
-                          <td className="px-3 py-3 text-right font-semibold text-blue-700">
-                            {result.comparables.length}
-                          </td>
-                          <td className="px-3 py-3 text-right font-bold text-green-700">
-                            {result.projectedAssessment
-                              ? `$${result.projectedAssessment.toLocaleString()}`
-                              : '-'
-                            }
-                          </td>
-                        </tr>
-                      ))}
+                    <tbody className="bg-white">
+                      {evaluationResults.map((result, idx) => {
+                        // Decode Type Use and Style codes
+                        const typeUseDecoded = codeDefinitions
+                          ? interpretCodes.getTypeName(result.subject, codeDefinitions, vendorType)
+                          : result.subject.asset_type_use;
+                        const styleDecoded = codeDefinitions
+                          ? interpretCodes.getDesignName(result.subject, codeDefinitions, vendorType)
+                          : result.subject.asset_design_style;
+
+                        // Format decoded values with code
+                        const typeUseDisplay = typeUseDecoded && typeUseDecoded !== result.subject.asset_type_use
+                          ? `${result.subject.asset_type_use}-${typeUseDecoded}`
+                          : result.subject.asset_type_use || '';
+                        const styleDisplay = styleDecoded && styleDecoded !== result.subject.asset_design_style
+                          ? `${result.subject.asset_design_style}-${styleDecoded}`
+                          : result.subject.asset_design_style || '';
+
+                        return (
+                          <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            {/* Subject Property Info */}
+                            <td className="border border-gray-300 px-2 py-2 text-sm">{result.subject.property_vcs}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-sm font-medium">{result.subject.property_block}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-sm font-medium">{result.subject.property_lot}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-sm">{result.subject.property_qualifier || ''}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-xs max-w-xs truncate">{result.subject.property_location || ''}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-xs">{typeUseDisplay}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-xs">{styleDisplay}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-right text-sm font-semibold bg-yellow-50">
+                              ${(result.subject.values_mod_total || result.subject.values_cama_total || 0).toLocaleString()}
+                            </td>
+                            <td
+                              className="border border-gray-300 px-2 py-2 text-right text-sm font-bold bg-green-50 text-green-700 cursor-pointer hover:underline"
+                              onClick={() => {
+                                setSelectedPropertyForDetail(result);
+                                setActiveSubTab('detailed');
+                              }}
+                              title="Click to view detailed analysis"
+                            >
+                              {result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-'}
+                            </td>
+                            <td className="border border-gray-300 px-2 py-2 text-right text-sm font-semibold bg-blue-50">
+                              {(() => {
+                                const currentAsmt = result.subject.values_mod_total || result.subject.values_cama_total || 0;
+                                const newAsmt = result.projectedAssessment;
+                                if (!newAsmt || currentAsmt === 0) return '-';
+                                const changePercent = ((newAsmt - currentAsmt) / currentAsmt) * 100;
+                                const color = changePercent > 0 ? 'text-green-700' : changePercent < 0 ? 'text-red-700' : 'text-gray-700';
+                                return (
+                                  <span className={color}>
+                                    {changePercent > 0 ? '+' : ''}{changePercent.toFixed(2)}%
+                                  </span>
+                                );
+                              })()}
+                            </td>
+                            {/* Comparables 1-5 */}
+                            {[0, 1, 2, 3, 4].map(compIdx => {
+                              const comp = result.comparables[compIdx];
+                              if (!comp) {
+                                return (
+                                  <React.Fragment key={compIdx}>
+                                    <td className="border border-gray-300 px-2 py-2 text-center text-xs text-red-600 font-semibold">NO COMPS</td>
+                                    <td className="border border-gray-300 px-2 py-2 text-center text-xs text-red-600 font-semibold">$0</td>
+                                  </React.Fragment>
+                                );
+                              }
+                              // Format BLQ with / separator and preserve full values
+                              const blqFormatted = `${comp.property_block}/${comp.property_lot}${comp.property_qualifier && comp.property_qualifier !== 'NONE' ? `/${comp.property_qualifier}` : ''}`;
+
+                              return (
+                                <React.Fragment key={compIdx}>
+                                  <td className="border border-gray-300 px-2 py-2 text-center text-xs">
+                                    {blqFormatted}
+                                  </td>
+                                  <td className="border border-gray-300 px-2 py-2 text-right text-xs font-semibold">
+                                    ${Math.round(comp.adjustedPrice || 0).toLocaleString()}
+                                  </td>
+                                </React.Fragment>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -2060,7 +2375,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                       Math.abs(comp.adjustmentPercent) < 15 ? 'text-yellow-700' :
                                       'text-red-700'
                                     }`}>
-                                      {comp.adjustmentPercent >= 0 ? '+' : ''}{comp.adjustmentPercent?.toFixed(2)}%
+                                      {comp.adjustmentPercent >= 0 ? '+' : ''}{comp.adjustmentPercent?.toFixed(0)}%
                                     </span>
                                   </td>
                                   <td className="px-3 py-2 text-right font-semibold text-gray-900">
@@ -2086,12 +2401,862 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
         {/* DETAILED TAB */}
         {activeSubTab === 'detailed' && (
-          <div className="bg-white border border-gray-300 rounded-lg p-12 text-center">
-            <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Detailed Analysis</h3>
-            <p className="text-sm text-gray-600">
-              Per-property detailed comparable analysis will appear here
-            </p>
+          <div className="space-y-6">
+            {!selectedPropertyForDetail && !evaluationResults ? (
+              <div className="bg-white border border-gray-300 rounded-lg p-12 text-center">
+                <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">No Property Selected</h3>
+                <p className="text-sm text-gray-600">
+                  Run an evaluation from the Search tab, then click on a "New Asmt" value to view detailed analysis.
+                </p>
+              </div>
+            ) : (
+              (() => {
+                // Use selected property or first evaluation result
+                const result = selectedPropertyForDetail || (evaluationResults && evaluationResults[0]);
+
+                if (!result) {
+                  return (
+                    <div className="bg-white border border-gray-300 rounded-lg p-12 text-center">
+                      <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">No Data Available</h3>
+                      <p className="text-sm text-gray-600">Run an evaluation to see detailed analysis.</p>
+                    </div>
+                  );
+                }
+
+                const subject = result.subject;
+                const comps = result.comparables || [];
+
+                return (
+                  <div>
+                    {/* Header */}
+                    <div className="bg-white border border-gray-300 rounded-lg p-6 mb-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h3 className="text-xl font-bold text-gray-900">Detailed Appraisal Analysis</h3>
+                          <p className="text-sm text-gray-600 mt-1">
+                            Subject: <span className="font-semibold">{subject.property_vcs}</span> | Block {subject.property_block} | Lot {subject.property_lot}
+                          </p>
+                        </div>
+                        {evaluationResults && evaluationResults.length > 1 && (
+                          <select
+                            value={evaluationResults.indexOf(result)}
+                            onChange={(e) => {
+                              setSelectedPropertyForDetail(evaluationResults[parseInt(e.target.value)]);
+                            }}
+                            className="px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                          >
+                            {evaluationResults.map((r, idx) => (
+                              <option key={idx} value={idx}>
+                                {r.subject.property_block}-{r.subject.property_lot} | {r.subject.property_location}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+
+                      {/* Comparable Manager Grid */}
+                      <div className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden mb-4">
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full text-xs">
+                            <thead>
+                              <tr className="bg-gray-100">
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700"></th>
+                                <th className="px-3 py-2 text-center font-semibold bg-yellow-50">Subject</th>
+                                {[1, 2, 3, 4, 5].map((num) => {
+                                  const comp = comps[num - 1];
+                                  const bgColor = comp?.isSubjectSale ? 'bg-green-50' : 'bg-blue-50';
+                                  return (
+                                    <th key={num} className={`px-3 py-2 text-center font-semibold ${bgColor} border-l border-gray-300`}>
+                                      Comparable {num}
+                                      {comp?.isSubjectSale && <span className="block text-xs text-green-700 font-semibold">(Subject Sale)</span>}
+                                    </th>
+                                  );
+                                })}
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white">
+                              {/* Town Code */}
+                              <tr className="border-t border-gray-200">
+                                <td className="px-3 py-2 font-medium text-gray-700">Town Code</td>
+                                <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                  {jobData?.ccdd || 'N/A'}
+                                </td>
+                                {renderCompCells(comps, (comp) => (
+                                  <span className="font-semibold">{jobData?.ccdd || 'N/A'}</span>
+                                ))}
+                              </tr>
+                              {/* Block */}
+                              <tr className="border-t border-gray-200">
+                                <td className="px-3 py-2 font-medium text-gray-700">Block</td>
+                                <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                  {subject.property_block}
+                                </td>
+                                {renderCompCells(comps, (comp) => (
+                                  <span className="font-semibold">{comp.property_block}</span>
+                                ))}
+                              </tr>
+                              {/* Lot */}
+                              <tr className="border-t border-gray-200">
+                                <td className="px-3 py-2 font-medium text-gray-700">Lot</td>
+                                <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                  {subject.property_lot}
+                                </td>
+                                {renderCompCells(comps, (comp) => (
+                                  <span className="font-semibold">{comp.property_lot}</span>
+                                ))}
+                              </tr>
+                              {/* Qual */}
+                              <tr className="border-t border-gray-200">
+                                <td className="px-3 py-2 font-medium text-gray-700">Qual</td>
+                                <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                  {subject.property_qualifier || '-'}
+                                </td>
+                                {renderCompCells(comps, (comp) => (
+                                  <span className="font-semibold">{comp.property_qualifier || '-'}</span>
+                                ))}
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-t border-gray-300">
+                          <div className="flex items-center gap-3">
+                            <button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium text-sm">
+                              Evaluate
+                            </button>
+                            <button className="px-4 py-2 bg-blue-700 text-white rounded hover:bg-blue-800 font-medium text-sm">
+                              Evaluate and update
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 font-medium text-sm">
+                              Export pdf
+                            </button>
+                            <button className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 font-medium text-sm">
+                              Clear Comps
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Summary Stats */}
+                      <div className="grid grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
+                        <div>
+                          <div className="text-xs text-gray-600">Current Assessment</div>
+                          <div className="text-lg font-bold text-gray-900">
+                            ${(subject.values_mod_total || subject.values_cama_total || 0).toLocaleString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-600">New Assessment</div>
+                          <div className="text-lg font-bold text-green-700">
+                            {result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : 'N/A'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-600">Change</div>
+                          <div className="text-lg font-bold">
+                            {(() => {
+                              const current = subject.values_mod_total || subject.values_cama_total || 0;
+                              const projected = result.projectedAssessment;
+                              if (!projected || current === 0) return 'N/A';
+                              const changePercent = ((projected - current) / current) * 100;
+                              const color = changePercent > 0 ? 'text-green-700' : changePercent < 0 ? 'text-red-700' : 'text-gray-700';
+                              return (
+                                <span className={color}>
+                                  {changePercent > 0 ? '+' : ''}{changePercent.toFixed(0)}%
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-600">Comparables Found</div>
+                          <div className="text-lg font-bold text-blue-700">{comps.length} / 5</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {comps.length === 0 ? (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-8 text-center">
+                        <p className="text-yellow-900 font-semibold mb-2">No Comparables Found</p>
+                        <p className="text-sm text-yellow-700">
+                          Adjust your search criteria to find matching properties.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Appraisal Grid */}
+                        <div className="bg-white border border-gray-300 rounded-lg overflow-hidden mb-6">
+                          <div className="bg-blue-600 px-4 py-3">
+                            <h4 className="font-semibold text-white">Comparable Sales Appraisal Grid</h4>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full text-xs border-collapse">
+                              <thead>
+                                <tr className="bg-gray-100 border-b-2 border-gray-300">
+                                  <th className="sticky left-0 z-10 bg-gray-100 px-3 py-3 text-left font-semibold text-gray-700 border-r-2 border-gray-300">
+                                    Attribute
+                                  </th>
+                                  <th className="px-3 py-3 text-center font-semibold bg-yellow-50">
+                                    Subject<br/>
+                                    <span className="font-normal text-xs text-gray-600">
+                                      {subject.property_block}/{subject.property_lot}
+                                    </span>
+                                  </th>
+                                  {[1, 2, 3, 4, 5].map((compNum) => {
+                                    const comp = comps[compNum - 1];
+                                    const bgColor = comp?.isSubjectSale ? 'bg-green-50' : 'bg-blue-50';
+                                    return (
+                                      <th key={compNum} className={`px-3 py-3 text-center font-semibold ${bgColor} border-l border-gray-300`}>
+                                        Comparable {compNum}<br/>
+                                        {comp && (
+                                          <span className="font-normal text-xs text-gray-600">
+                                            {comp.property_block}/{comp.property_lot}
+                                          </span>
+                                        )}
+                                        {comp?.isSubjectSale && (
+                                          <span className="block text-xs text-green-700 font-semibold mt-1">(Subject Sale)</span>
+                                        )}
+                                      </th>
+                                    );
+                                  })}
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white">
+                                {/* VCS */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    VCS
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold text-xs">{subject.property_vcs || 'N/A'}</td>
+                                  {renderCompCells(comps, (comp) => <span className="font-semibold text-xs">{comp.property_vcs || 'N/A'}</span>)}
+                                </tr>
+
+                                {/* Block/Lot/Qual */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Block/Lot/Qual
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold text-xs">
+                                    {subject.property_block}/{subject.property_lot}/{subject.property_qualifier || ''}
+                                  </td>
+                                  {renderCompCells(comps, (comp) => <span className="font-semibold text-xs">{comp.property_block}/{comp.property_lot}/{comp.property_qualifier || ''}</span>)}
+                                </tr>
+
+                                {/* Location */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Location
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.property_location || 'N/A'}</td>
+                                  {renderCompCells(comps, (comp) => <span className="text-xs">{comp.property_location || 'N/A'}</span>)}
+                                </tr>
+
+                                {/* Prev. Assessment */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Prev. Assessment
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                    ${(subject.values_mod_total || subject.values_cama_total || 0).toLocaleString()}
+                                  </td>
+                                  {renderCompCells(comps, (comp) => <span className="font-semibold">${(comp.values_mod_total || comp.values_cama_total || 0).toLocaleString()}</span>)}
+                                </tr>
+
+                                {/* Property Class */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Property Class
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.property_class || 'N/A'}</td>
+                                  {renderCompCells(comps, (comp) => <span className="text-xs">{comp.property_class || 'N/A'}</span>)}
+                                </tr>
+
+                                {/* Building Class */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Building Class
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">
+                                    {subject.asset_building_class ? `${subject.asset_building_class} (QUALITY ${subject.asset_building_class})` : 'N/A'}
+                                  </td>
+                                  {renderCompCells(comps, (comp) => (
+                                    <span className="text-xs">{comp.asset_building_class ? `${comp.asset_building_class} (QUALITY ${comp.asset_building_class})` : 'N/A'}</span>
+                                  ))}
+                                </tr>
+
+                                {/* Style Code */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Style Code
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">
+                                    {subject.asset_design_style ? (
+                                      codeDefinitions ? interpretCodes.getDesignName(subject, codeDefinitions, vendorType)
+                                        ? `${subject.asset_design_style} (${interpretCodes.getDesignName(subject, codeDefinitions, vendorType)})`
+                                        : subject.asset_design_style
+                                      : subject.asset_design_style
+                                    ) : 'N/A'}
+                                  </td>
+                                  {renderCompCells(comps, (comp) => (
+                                    <span className="text-xs">
+                                      {comp.asset_design_style ? (
+                                        codeDefinitions ? interpretCodes.getDesignName(comp, codeDefinitions, vendorType)
+                                          ? `${comp.asset_design_style} (${interpretCodes.getDesignName(comp, codeDefinitions, vendorType)})`
+                                          : comp.asset_design_style
+                                        : comp.asset_design_style
+                                      ) : 'N/A'}
+                                    </span>
+                                  ))}
+                                </tr>
+
+                                {/* Type/Use Code */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Type/Use Code
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">
+                                    {subject.asset_type_use ? (
+                                      codeDefinitions ? interpretCodes.getTypeName(subject, codeDefinitions, vendorType)
+                                        ? `${subject.asset_type_use} (${interpretCodes.getTypeName(subject, codeDefinitions, vendorType)})`
+                                        : subject.asset_type_use
+                                      : subject.asset_type_use
+                                    ) : 'N/A'}
+                                  </td>
+                                  {renderCompCells(comps, (comp) => (
+                                    <span className="text-xs">
+                                      {comp.asset_type_use ? (
+                                        codeDefinitions ? interpretCodes.getTypeName(comp, codeDefinitions, vendorType)
+                                          ? `${comp.asset_type_use} (${interpretCodes.getTypeName(comp, codeDefinitions, vendorType)})`
+                                          : comp.asset_type_use
+                                        : comp.asset_type_use
+                                      ) : 'N/A'}
+                                    </span>
+                                  ))}
+                                </tr>
+
+                                {/* Story Height Code */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Story Height Code
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_story_height || 'N/A'}</td>
+                                  {renderCompCells(comps, (comp) => <span className="text-xs">{comp.asset_story_height || 'N/A'}</span>)}
+                                </tr>
+
+                                {/* View Code */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    View Code
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_view || 'N/A'}</td>
+                                  {renderCompCells(comps, (comp) => <span className="text-xs">{comp.asset_view || 'N/A'}</span>)}
+                                </tr>
+
+                                {/* Sales Code */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Sales Code
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.sales_nu || '0'}</td>
+                                  {renderCompCells(comps, (comp) => <span className="text-xs">{comp.sales_nu || '0'}</span>)}
+                                </tr>
+
+                                {/* Sales Date */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Sales Date
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.sales_date || 'N/A'}</td>
+                                  {renderCompCells(comps, (comp) => <span className="text-xs">{comp.sales_date || 'N/A'}</span>)}
+                                </tr>
+
+                                {/* Sales Price */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Sales Price
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                    {subject.sales_price ? `$${subject.sales_price.toLocaleString()}` : 'N/A'}
+                                  </td>
+                                  {renderCompCells(comps, (comp) => <span className="font-semibold">${comp.sales_price?.toLocaleString() || 'N/A'}</span>)}
+                                </tr>
+
+                                {/* Lot Size (SF) */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Lot Size (SF)
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                    {(subject.market_manual_lot_sf || subject.asset_lot_sf)?.toLocaleString() || 'N/A'}
+                                  </td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const lotSF = comp.market_manual_lot_sf || comp.asset_lot_sf;
+                                    const adj = comp.adjustments?.find(a => a.name?.includes('Lot Size (SF)'));
+                                    return (
+                                      <div>
+                                        <div className="font-semibold">{lotSF?.toLocaleString() || 'N/A'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Lot Size (Front Foot) */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Lot Size (FF)
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                    {subject.asset_lot_frontage?.toLocaleString() || 'N/A'}
+                                  </td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name?.includes('Lot Size (FF)'));
+                                    return (
+                                      <div>
+                                        <div className="font-semibold">{comp.asset_lot_frontage?.toLocaleString() || 'N/A'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Lot Size (Acre) */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Lot Size (Acre)
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                    {(subject.market_manual_lot_acre || subject.asset_lot_acre)?.toLocaleString() || 'N/A'}
+                                  </td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const lotAcre = comp.market_manual_lot_acre || comp.asset_lot_acre;
+                                    const adj = comp.adjustments?.find(a => a.name?.includes('Lot Size (Acre)'));
+                                    return (
+                                      <div>
+                                        <div className="font-semibold">{lotAcre?.toLocaleString() || 'N/A'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Liveable Area */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Liveable Area
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">{subject.asset_sfla?.toLocaleString() || 'N/A'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name === 'Living Area (Sq Ft)');
+                                    return (
+                                      <div>
+                                        <div className="font-semibold">{comp.asset_sfla?.toLocaleString() || 'N/A'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Year Built */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Year Built
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">{subject.asset_year_built || 'N/A'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name === 'Year Built');
+                                    return (
+                                      <div>
+                                        <div className="font-semibold">{comp.asset_year_built || 'N/A'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* # Bathrooms */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    # Bathrooms
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">{subject.total_baths_calculated || 'N/A'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name === 'Bathrooms');
+                                    return (
+                                      <div>
+                                        <div className="font-semibold">{comp.total_baths_calculated || 'N/A'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Basement Area */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Basement Area
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_basement ? 'Yes' : 'No'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name === 'Basement');
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_basement ? 'Yes' : 'No'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Fin. Bsmt. Area */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Fin. Bsmt. Area
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_fin_basement ? 'Yes' : 'No'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name?.includes('Finished Basement'));
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_fin_basement ? 'Yes' : 'No'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* # Bedrooms */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    # Bedrooms
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">{subject.asset_bedrooms || 'N/A'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name === 'Bedrooms');
+                                    return (
+                                      <div>
+                                        <div className="font-semibold">{comp.asset_bedrooms || 'N/A'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* AC Area */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    AC Area
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_ac ? 'Yes' : 'No'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name === 'AC');
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_ac ? 'Yes' : 'No'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* # Fireplaces */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    # Fireplaces
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">{subject.asset_fireplaces || 'N/A'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name === 'Fireplaces');
+                                    return (
+                                      <div>
+                                        <div className="font-semibold">{comp.asset_fireplaces || 'N/A'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Garage Area (Per Car) */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Garage Area (Per Car)
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_garage ? `${subject.asset_garage} car` : 'None'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name === 'Garage');
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_garage ? `${comp.asset_garage} car` : 'None'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Det. Garage Area (Per Car) */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Det. Garage Area (Per Car)
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_det_garage ? `${subject.asset_det_garage} car` : 'None'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name?.includes('Det Garage') || a.name?.includes('Det. Garage'));
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_det_garage ? `${comp.asset_det_garage} car` : 'None'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Deck Area */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Deck Area
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_deck ? 'Yes' : 'No'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name === 'Deck');
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_deck ? 'Yes' : 'No'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Patio Area */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Patio Area
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_patio ? 'Yes' : 'No'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name === 'Patio');
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_patio ? 'Yes' : 'No'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Open Porch Area */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Open Porch Area
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_open_porch ? 'Yes' : 'No'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name?.includes('Open Porch'));
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_open_porch ? 'Yes' : 'No'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Encl Porch Area */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Encl Porch Area
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_encl_porch ? 'Yes' : 'No'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name?.includes('Enclosed Porch') || a.name?.includes('Encl Porch'));
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_encl_porch ? 'Yes' : 'No'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Pool Area */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Pool Area
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_pool ? 'Yes' : 'No'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name === 'Pool');
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_pool ? 'Yes' : 'No'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Condition */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Condition
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                    {subject.asset_condition || subject.asset_ext_condition || 'N/A'}
+                                  </td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const condition = comp.asset_condition || comp.asset_ext_condition;
+                                    const adj = comp.adjustments?.find(a => a.name?.toLowerCase().includes('condition'));
+                                    return (
+                                      <div>
+                                        <div className="font-semibold">{condition || 'N/A'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Net Adjustment (matches PDF format) */}
+                                <tr className="border-b-2 border-gray-400">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-3 font-bold text-gray-900 border-r-2 border-gray-300">
+                                    Net Adjustment
+                                  </td>
+                                  <td className="px-3 py-3 text-center bg-yellow-50">-</td>
+                                  {renderCompCells(comps, (comp) => (
+                                    <div className={`font-bold ${comp.totalAdjustment > 0 ? 'text-green-700' : comp.totalAdjustment < 0 ? 'text-red-700' : 'text-gray-700'}`}>
+                                      {comp.totalAdjustment > 0 ? '+' : ''}${comp.totalAdjustment?.toLocaleString() || '0'} ({comp.adjustmentPercent > 0 ? '+' : ''}{comp.adjustmentPercent?.toFixed(0) || '0'}%)
+                                    </div>
+                                  ))}
+                                </tr>
+
+                                {/* Adjusted Valuation (final row with projected assessment) */}
+                                <tr className="border-b-4 border-gray-400">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-4 font-bold text-gray-900 border-r-2 border-gray-300 text-lg">
+                                    Adjusted Valuation
+                                  </td>
+                                  <td className="px-3 py-4 text-center bg-yellow-50">
+                                    {result.projectedAssessment && (
+                                      <div>
+                                        <div className="text-xl font-bold text-green-700">
+                                          ${result.projectedAssessment.toLocaleString()}
+                                        </div>
+                                        <div className="text-sm font-semibold text-green-600">
+                                          {(() => {
+                                            const current = subject.values_mod_total || subject.values_cama_total || 0;
+                                            if (current === 0) return '';
+                                            const changePercent = ((result.projectedAssessment - current) / current) * 100;
+                                            return `(${changePercent > 0 ? '+' : ''}${changePercent.toFixed(0)}%)`;
+                                          })()}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </td>
+                                  {renderCompCells(comps, (comp) => (
+                                    <div className="font-bold text-gray-700">
+                                      ${Math.round(comp.adjustedPrice || 0).toLocaleString()}
+                                    </div>
+                                  ))}
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {comps.length > 0 && comps.length < 3 && (
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mt-6">
+                            <h4 className="font-semibold text-blue-900 mb-2">Limited Comparables</h4>
+                            <p className="text-sm text-blue-700">
+                              This property has {comps.length} comparable{comps.length !== 1 ? 's' : ''}.
+                              For higher confidence, consider broadening search criteria to find 3-5 comparables.
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })()
+            )}
           </div>
         )}
       </div>
