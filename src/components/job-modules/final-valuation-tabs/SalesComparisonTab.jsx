@@ -2830,6 +2830,300 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                   })}
                                 </tr>
 
+                                {/* Basement Area */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Basement Area
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_basement ? 'Yes' : 'No'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name === 'Basement');
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_basement ? 'Yes' : 'No'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Fin. Bsmt. Area */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Fin. Bsmt. Area
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_fin_basement ? 'Yes' : 'No'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name?.includes('Finished Basement'));
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_fin_basement ? 'Yes' : 'No'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* # Bedrooms */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    # Bedrooms
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">{subject.asset_bedrooms || 'N/A'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name === 'Bedrooms');
+                                    return (
+                                      <div>
+                                        <div className="font-semibold">{comp.asset_bedrooms || 'N/A'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* AC Area */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    AC Area
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_ac ? 'Yes' : 'No'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name === 'AC');
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_ac ? 'Yes' : 'No'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* # Fireplaces */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    # Fireplaces
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">{subject.asset_fireplaces || 'N/A'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name === 'Fireplaces');
+                                    return (
+                                      <div>
+                                        <div className="font-semibold">{comp.asset_fireplaces || 'N/A'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Garage Area (Per Car) */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Garage Area (Per Car)
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_garage ? `${subject.asset_garage} car` : 'None'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name === 'Garage');
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_garage ? `${comp.asset_garage} car` : 'None'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Det. Garage Area (Per Car) */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Det. Garage Area (Per Car)
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_det_garage ? `${subject.asset_det_garage} car` : 'None'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name?.includes('Det Garage') || a.name?.includes('Det. Garage'));
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_det_garage ? `${comp.asset_det_garage} car` : 'None'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Deck Area */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Deck Area
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_deck ? 'Yes' : 'No'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name === 'Deck');
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_deck ? 'Yes' : 'No'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Patio Area */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Patio Area
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_patio ? 'Yes' : 'No'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name === 'Patio');
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_patio ? 'Yes' : 'No'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Open Porch Area */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Open Porch Area
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_open_porch ? 'Yes' : 'No'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name?.includes('Open Porch'));
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_open_porch ? 'Yes' : 'No'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Encl Porch Area */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Encl Porch Area
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_encl_porch ? 'Yes' : 'No'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name?.includes('Enclosed Porch') || a.name?.includes('Encl Porch'));
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_encl_porch ? 'Yes' : 'No'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Pool Area */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Pool Area
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_pool ? 'Yes' : 'No'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name === 'Pool');
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_pool ? 'Yes' : 'No'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Ext. Condition */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Ext. Condition
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_ext_condition || 'N/A'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name?.includes('Exterior Condition'));
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_ext_condition || 'N/A'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
+                                {/* Int. Condition */}
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                    Int. Condition
+                                  </td>
+                                  <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_int_condition || 'N/A'}</td>
+                                  {renderCompCells(comps, (comp) => {
+                                    const adj = comp.adjustments?.find(a => a.name?.includes('Interior Condition'));
+                                    return (
+                                      <div>
+                                        <div className="text-xs">{comp.asset_int_condition || 'N/A'}</div>
+                                        {adj && adj.amount !== 0 && (
+                                          <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                            {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </tr>
+
                                 {/* Other adjustments */}
                                 {adjustmentGrid.map((adjDef, adjIdx) => {
                                   // Skip already shown attributes
