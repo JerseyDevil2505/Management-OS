@@ -2374,7 +2374,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                       Math.abs(comp.adjustmentPercent) < 15 ? 'text-yellow-700' :
                                       'text-red-700'
                                     }`}>
-                                      {comp.adjustmentPercent >= 0 ? '+' : ''}{comp.adjustmentPercent?.toFixed(2)}%
+                                      {comp.adjustmentPercent >= 0 ? '+' : ''}{comp.adjustmentPercent?.toFixed(0)}%
                                     </span>
                                   </td>
                                   <td className="px-3 py-2 text-right font-semibold text-gray-900">
@@ -2769,8 +2769,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                 </tr>
 
                                 {/* Sales Price */}
-                                <tr className="border-b hover:bg-gray-50 bg-green-50">
-                                  <td className="sticky left-0 z-10 bg-green-50 px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                                <tr className="border-b hover:bg-gray-50">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
                                     Sales Price
                                   </td>
                                   <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
@@ -3190,8 +3190,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                 </tr>
 
                                 {/* Net Adjustment (matches PDF format) */}
-                                <tr className="bg-gray-100 border-b-2 border-gray-400">
-                                  <td className="sticky left-0 z-10 bg-gray-100 px-3 py-3 font-bold text-gray-900 border-r-2 border-gray-300">
+                                <tr className="border-b-2 border-gray-400">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-3 font-bold text-gray-900 border-r-2 border-gray-300">
                                     Net Adjustment
                                   </td>
                                   <td className="px-3 py-3 text-center bg-yellow-50">-</td>
@@ -3203,8 +3203,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                 </tr>
 
                                 {/* Adjusted Valuation (final row with projected assessment) */}
-                                <tr className="bg-yellow-100 border-b-4 border-yellow-500">
-                                  <td className="sticky left-0 z-10 bg-yellow-100 px-3 py-4 font-bold text-gray-900 border-r-2 border-gray-300 text-lg">
+                                <tr className="border-b-4 border-gray-400">
+                                  <td className="sticky left-0 z-10 bg-white px-3 py-4 font-bold text-gray-900 border-r-2 border-gray-300 text-lg">
                                     Adjusted Valuation
                                   </td>
                                   <td className="px-3 py-4 text-center bg-yellow-50">
