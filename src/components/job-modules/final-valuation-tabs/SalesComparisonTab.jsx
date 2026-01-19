@@ -505,9 +505,39 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         if (i > 0 && i % BATCH_SIZE === 0) {
           await new Promise(resolve => setTimeout(resolve, 0));
         }
+        // Debug: Log first property's matching process
+        const isFirstProperty = i === 0;
+        if (isFirstProperty) {
+          console.log(`\n🔍 DEBUG: Matching comps for first subject property:`);
+          console.log(`   Subject: ${subject.property_block}-${subject.property_lot}`);
+          console.log(`   VCS: ${subject.property_vcs}, Type: ${subject.asset_type_use}`);
+          console.log(`   Year Built: ${subject.asset_year_built}, SFLA: ${subject.asset_sfla}`);
+          console.log(`   Eligible sales pool: ${eligibleSales.length}`);
+        }
+
+        let debugFilters = {
+          self: 0,
+          salesCodes: 0,
+          salesDate: 0,
+          vcs: 0,
+          neighborhood: 0,
+          yearBuilt: 0,
+          size: 0,
+          zone: 0,
+          buildingClass: 0,
+          typeUse: 0,
+          style: 0,
+          storyHeight: 0,
+          view: 0,
+          passed: 0
+        };
+
         const matchingComps = eligibleSales.filter(comp => {
           // Exclude self
-          if (comp.property_composite_key === subject.property_composite_key) return false;
+          if (comp.property_composite_key === subject.property_composite_key) {
+            if (isFirstProperty) debugFilters.self++;
+            return false;
+          }
 
           // Sales codes filter (normalize blank, '00', '0' to '')
           if (compFilters.salesCodes.length > 0) {
