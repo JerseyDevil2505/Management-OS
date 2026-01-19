@@ -738,32 +738,25 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
       console.log(`💾 Saved ${results.length} evaluations to database`);
 
-      // Set results BEFORE showing alert to ensure UI updates
+      // Set results and immediately scroll to them
       setEvaluationResults(results);
-      console.log(`✨ Results set! Results array has ${results.length} properties.`);
 
-      // Force a brief pause to allow React to update
-      await new Promise(resolve => setTimeout(resolve, 50));
-
-      // Show summary
+      // Calculate summary stats for console logging
       const successful = results.filter(r => r.comparables.length >= 3).length;
       const needsMoreComps = results.filter(r => r.comparables.length > 0 && r.comparables.length < 3).length;
       const noComps = results.filter(r => r.comparables.length === 0).length;
 
-      alert(
-        `Evaluation Complete!\n\n` +
-        `✅ ${successful} properties with 3-5 comps (ready to value)\n` +
-        `⚠️ ${needsMoreComps} properties with 1-2 comps (need more comps)\n` +
-        `❌ ${noComps} properties with 0 comps (no matches found)\n\n` +
-        `Scroll down to see detailed results.`
-      );
+      console.log(`✅ Evaluation Complete!`);
+      console.log(`   - ${successful} properties with 3-5 comps (ready to value)`);
+      console.log(`   - ${needsMoreComps} properties with 1-2 comps (need more comps)`);
+      console.log(`   - ${noComps} properties with 0 comps (no matches found)`);
 
-      // Auto-scroll to results after a brief delay to allow rendering
+      // Auto-scroll to results immediately
       setTimeout(() => {
         if (resultsRef.current) {
           resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
-      }, 200);
+      }, 100);
 
     } catch (error) {
       console.error('❌ Error during evaluation:', error);
