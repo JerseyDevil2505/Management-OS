@@ -3124,45 +3124,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                   })}
                                 </tr>
 
-                                {/* Other adjustments */}
-                                {adjustmentGrid.map((adjDef, adjIdx) => {
-                                  // Skip already shown attributes
-                                  if (['Living Area (Sq Ft)', 'Year Built', 'Bathrooms'].includes(adjDef.adjustment_name)) {
-                                    return null;
-                                  }
-
-                                  // Only show if at least one comp has non-zero adjustment
-                                  const hasAdjustments = comps.some(comp => {
-                                    const adj = comp.adjustments?.find(a => a.name === adjDef.adjustment_name);
-                                    return adj && adj.amount !== 0;
-                                  });
-
-                                  if (!hasAdjustments) return null;
-
-                                  return (
-                                    <tr key={adjIdx} className="border-b hover:bg-gray-50">
-                                      <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                                        {adjDef.adjustment_name}
-                                      </td>
-                                      <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">-</td>
-                                      {comps.map((comp, idx) => {
-                                        const adj = comp.adjustments?.find(a => a.name === adjDef.adjustment_name);
-                                        return (
-                                          <td key={idx} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300">
-                                            {adj && adj.amount !== 0 ? (
-                                              <div className={`text-xs font-semibold ${adj.amount > 0 ? 'text-green-700' : adj.amount < 0 ? 'text-red-700' : 'text-gray-500'}`}>
-                                                {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
-                                              </div>
-                                            ) : (
-                                              <span className="text-gray-400">$0</span>
-                                            )}
-                                          </td>
-                                        );
-                                      })}
-                                    </tr>
-                                  );
-                                })}
-
                                 {/* Net Adjustment (matches PDF format) */}
                                 <tr className="bg-gray-100 border-b-2 border-gray-400">
                                   <td className="sticky left-0 z-10 bg-gray-100 px-3 py-3 font-bold text-gray-900 border-r-2 border-gray-300">
