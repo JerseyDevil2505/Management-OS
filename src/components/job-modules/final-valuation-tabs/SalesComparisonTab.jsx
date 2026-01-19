@@ -1910,48 +1910,70 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                   </div>
                 </div>
 
-                {/* Results Table */}
+                {/* Results Table - Legacy Format */}
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead className="bg-gray-50">
+                  <table className="min-w-full border-collapse text-xs">
+                    <thead className="bg-gray-100">
                       <tr>
-                        <th className="px-3 py-3 text-left font-medium text-gray-700">VCS</th>
-                        <th className="px-3 py-3 text-left font-medium text-gray-700">Block</th>
-                        <th className="px-3 py-3 text-left font-medium text-gray-700">Lot</th>
-                        <th className="px-3 py-3 text-left font-medium text-gray-700">Qual</th>
-                        <th className="px-3 py-3 text-left font-medium text-gray-700">Type/Use</th>
-                        <th className="px-3 py-3 text-right font-medium text-gray-700">SFLA</th>
-                        <th className="px-3 py-3 text-right font-medium text-gray-700">Comps Found</th>
-                        <th className="px-3 py-3 text-right font-medium text-gray-700">Top 5</th>
-                        <th className="px-3 py-3 text-right font-medium text-gray-700">Projected Value</th>
+                        {/* Subject Property Info */}
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">VCS</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Block</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Lot</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Qual</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Location</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">TypeUse</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Style</th>
+                        {/* Comparable Columns */}
+                        {[1, 2, 3, 4, 5].map(num => (
+                          <th key={num} colSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold bg-blue-50">
+                            Comparable {num}
+                          </th>
+                        ))}
+                      </tr>
+                      <tr>
+                        {/* Sub-headers for each comparable */}
+                        {[1, 2, 3, 4, 5].map(num => (
+                          <React.Fragment key={num}>
+                            <th className="border border-gray-300 px-2 py-1 text-center text-xs font-medium">BLQ</th>
+                            <th className="border border-gray-300 px-2 py-1 text-center text-xs font-medium">Adjusted Value</th>
+                          </React.Fragment>
+                        ))}
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-white">
                       {evaluationResults.map((result, idx) => (
-                        <tr key={idx} className="hover:bg-gray-50">
-                          <td className="px-3 py-3 text-gray-700">
-                            {result.subject.property_vcs}
-                            {result.hasSubjectSale && (
-                              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                                Subj Sale
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-3 font-medium text-gray-900">{result.subject.property_block}</td>
-                          <td className="px-3 py-3 font-medium text-gray-900">{result.subject.property_lot}</td>
-                          <td className="px-3 py-3 text-gray-700">{result.subject.property_qualifier || '-'}</td>
-                          <td className="px-3 py-3 text-gray-700">{result.subject.asset_type_use}</td>
-                          <td className="px-3 py-3 text-right text-gray-700">{result.subject.asset_sfla?.toLocaleString()}</td>
-                          <td className="px-3 py-3 text-right text-gray-700">{result.totalFound}</td>
-                          <td className="px-3 py-3 text-right font-semibold text-blue-700">
-                            {result.comparables.length}
-                          </td>
-                          <td className="px-3 py-3 text-right font-bold text-green-700">
-                            {result.projectedAssessment
-                              ? `$${result.projectedAssessment.toLocaleString()}`
-                              : '-'
+                        <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          {/* Subject Property Info */}
+                          <td className="border border-gray-300 px-2 py-2 text-sm">{result.subject.property_vcs}</td>
+                          <td className="border border-gray-300 px-2 py-2 text-sm font-medium">{result.subject.property_block}</td>
+                          <td className="border border-gray-300 px-2 py-2 text-sm font-medium">{result.subject.property_lot}</td>
+                          <td className="border border-gray-300 px-2 py-2 text-sm">{result.subject.property_qualifier || ''}</td>
+                          <td className="border border-gray-300 px-2 py-2 text-xs max-w-xs truncate">{result.subject.property_location || ''}</td>
+                          <td className="border border-gray-300 px-2 py-2 text-sm">{result.subject.asset_type_use || ''}</td>
+                          <td className="border border-gray-300 px-2 py-2 text-sm">{result.subject.asset_design_style || ''}</td>
+                          {/* Comparables 1-5 */}
+                          {[0, 1, 2, 3, 4].map(compIdx => {
+                            const comp = result.comparables[compIdx];
+                            if (!comp) {
+                              return (
+                                <React.Fragment key={compIdx}>
+                                  <td className="border border-gray-300 px-2 py-2 text-center text-xs text-red-600 font-semibold">NO COMPS</td>
+                                  <td className="border border-gray-300 px-2 py-2 text-center text-xs text-red-600 font-semibold">$0</td>
+                                </React.Fragment>
+                              );
                             }
-                          </td>
+                            return (
+                              <React.Fragment key={compIdx}>
+                                <td className="border border-gray-300 px-2 py-2 text-center text-xs">
+                                  {comp.property_block} {comp.property_lot}
+                                  {comp.property_qualifier && comp.property_qualifier !== 'NONE' ? ` ${comp.property_qualifier}` : ''}
+                                </td>
+                                <td className="border border-gray-300 px-2 py-2 text-right text-xs font-semibold">
+                                  ${Math.round(comp.adjustedPrice || 0).toLocaleString()}
+                                </td>
+                              </React.Fragment>
+                            );
+                          })}
                         </tr>
                       ))}
                     </tbody>
