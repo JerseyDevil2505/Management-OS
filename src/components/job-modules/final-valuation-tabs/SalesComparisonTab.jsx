@@ -73,6 +73,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   const [adjustmentGrid, setAdjustmentGrid] = useState([]);
   const [customBrackets, setCustomBrackets] = useState([]);
   const [minCompsForSuccess, setMinCompsForSuccess] = useState(3); // User-selectable threshold
+  const [selectedPropertyForDetail, setSelectedPropertyForDetail] = useState(null); // For detailed tab
 
   const vendorType = jobData?.vendor_type || 'BRT';
 
