@@ -1927,6 +1927,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                         <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Location</th>
                         <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">TypeUse</th>
                         <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Style</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-right font-semibold bg-yellow-50">Current Asmt</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-right font-semibold bg-green-50">New Asmt</th>
                         {/* Comparable Columns */}
                         {[1, 2, 3, 4, 5].map(num => (
                           <th key={num} colSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold bg-blue-50">
@@ -1945,41 +1947,67 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                       </tr>
                     </thead>
                     <tbody className="bg-white">
-                      {evaluationResults.map((result, idx) => (
-                        <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                          {/* Subject Property Info */}
-                          <td className="border border-gray-300 px-2 py-2 text-sm">{result.subject.property_vcs}</td>
-                          <td className="border border-gray-300 px-2 py-2 text-sm font-medium">{result.subject.property_block}</td>
-                          <td className="border border-gray-300 px-2 py-2 text-sm font-medium">{result.subject.property_lot}</td>
-                          <td className="border border-gray-300 px-2 py-2 text-sm">{result.subject.property_qualifier || ''}</td>
-                          <td className="border border-gray-300 px-2 py-2 text-xs max-w-xs truncate">{result.subject.property_location || ''}</td>
-                          <td className="border border-gray-300 px-2 py-2 text-sm">{result.subject.asset_type_use || ''}</td>
-                          <td className="border border-gray-300 px-2 py-2 text-sm">{result.subject.asset_design_style || ''}</td>
-                          {/* Comparables 1-5 */}
-                          {[0, 1, 2, 3, 4].map(compIdx => {
-                            const comp = result.comparables[compIdx];
-                            if (!comp) {
+                      {evaluationResults.map((result, idx) => {
+                        // Decode Type Use and Style codes
+                        const typeUseDecoded = codeDefinitions
+                          ? interpretCodes.getTypeName(result.subject, codeDefinitions, vendorType)
+                          : result.subject.asset_type_use;
+                        const styleDecoded = codeDefinitions
+                          ? interpretCodes.getDesignName(result.subject, codeDefinitions, vendorType)
+                          : result.subject.asset_design_style;
+
+                        // Format decoded values with code
+                        const typeUseDisplay = typeUseDecoded && typeUseDecoded !== result.subject.asset_type_use
+                          ? `${result.subject.asset_type_use}-${typeUseDecoded}`
+                          : result.subject.asset_type_use || '';
+                        const styleDisplay = styleDecoded && styleDecoded !== result.subject.asset_design_style
+                          ? `${result.subject.asset_design_style}-${styleDecoded}`
+                          : result.subject.asset_design_style || '';
+
+                        return (
+                          <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            {/* Subject Property Info */}
+                            <td className="border border-gray-300 px-2 py-2 text-sm">{result.subject.property_vcs}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-sm font-medium">{result.subject.property_block}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-sm font-medium">{result.subject.property_lot}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-sm">{result.subject.property_qualifier || ''}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-xs max-w-xs truncate">{result.subject.property_location || ''}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-xs">{typeUseDisplay}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-xs">{styleDisplay}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-right text-sm font-semibold bg-yellow-50">
+                              ${(result.subject.values_mod_total || result.subject.values_cama_total || 0).toLocaleString()}
+                            </td>
+                            <td className="border border-gray-300 px-2 py-2 text-right text-sm font-bold bg-green-50 text-green-700">
+                              {result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-'}
+                            </td>
+                            {/* Comparables 1-5 */}
+                            {[0, 1, 2, 3, 4].map(compIdx => {
+                              const comp = result.comparables[compIdx];
+                              if (!comp) {
+                                return (
+                                  <React.Fragment key={compIdx}>
+                                    <td className="border border-gray-300 px-2 py-2 text-center text-xs text-red-600 font-semibold">NO COMPS</td>
+                                    <td className="border border-gray-300 px-2 py-2 text-center text-xs text-red-600 font-semibold">$0</td>
+                                  </React.Fragment>
+                                );
+                              }
+                              // Format BLQ with / separator and preserve full values
+                              const blqFormatted = `${comp.property_block}/${comp.property_lot}${comp.property_qualifier && comp.property_qualifier !== 'NONE' ? `/${comp.property_qualifier}` : ''}`;
+
                               return (
                                 <React.Fragment key={compIdx}>
-                                  <td className="border border-gray-300 px-2 py-2 text-center text-xs text-red-600 font-semibold">NO COMPS</td>
-                                  <td className="border border-gray-300 px-2 py-2 text-center text-xs text-red-600 font-semibold">$0</td>
+                                  <td className="border border-gray-300 px-2 py-2 text-center text-xs">
+                                    {blqFormatted}
+                                  </td>
+                                  <td className="border border-gray-300 px-2 py-2 text-right text-xs font-semibold">
+                                    ${Math.round(comp.adjustedPrice || 0).toLocaleString()}
+                                  </td>
                                 </React.Fragment>
                               );
-                            }
-                            return (
-                              <React.Fragment key={compIdx}>
-                                <td className="border border-gray-300 px-2 py-2 text-center text-xs">
-                                  {comp.property_block} {comp.property_lot}
-                                  {comp.property_qualifier && comp.property_qualifier !== 'NONE' ? ` ${comp.property_qualifier}` : ''}
-                                </td>
-                                <td className="border border-gray-300 px-2 py-2 text-right text-xs font-semibold">
-                                  ${Math.round(comp.adjustedPrice || 0).toLocaleString()}
-                                </td>
-                              </React.Fragment>
-                            );
-                          })}
-                        </tr>
-                      ))}
+                            })}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
