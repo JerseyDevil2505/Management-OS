@@ -745,6 +745,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
       console.log(`✅ Database save complete`);
 
+      // Update progress: Rendering results
+      setEvaluationProgress({ current: subjects.length + 1, total: subjects.length + 1 });
+      console.log(`📊 Rendering results table...`);
+
       // Set results and immediately scroll to them
       setEvaluationResults(results);
 
@@ -1852,14 +1856,18 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                 {isEvaluating && evaluationProgress.total > 0 && (
                   <div className="mt-4">
                     <div className="flex items-center justify-between text-sm font-semibold text-blue-700 mb-2">
-                      <span>Evaluating {evaluationProgress.current} of {evaluationProgress.total} properties</span>
+                      <span>
+                        {evaluationProgress.current > evaluationProgress.total - 1
+                          ? 'Saving and rendering results...'
+                          : `Evaluating ${evaluationProgress.current} of ${evaluationProgress.total} properties`}
+                      </span>
                       <span>{Math.round((evaluationProgress.current / evaluationProgress.total) * 100)}% Complete</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-3 shadow-inner">
                       <div
                         className="bg-blue-600 h-3 rounded-full transition-all duration-150 ease-out"
                         style={{
-                          width: `${(evaluationProgress.current / evaluationProgress.total) * 100}%`
+                          width: `${Math.min(100, (evaluationProgress.current / evaluationProgress.total) * 100)}%`
                         }}
                       ></div>
                     </div>
