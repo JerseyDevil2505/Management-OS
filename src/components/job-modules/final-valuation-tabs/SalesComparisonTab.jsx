@@ -900,6 +900,17 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       // Use default bracket
       const bracketIndex = getPriceBracketIndex(comp.values_norm_time);
       adjustmentValue = adjustmentDef[`bracket_${bracketIndex}`] || 0;
+
+      // Debug first property only
+      if (!window._adjDebugLogged && adjustmentDef.adjustment_id === 'living_area') {
+        console.log(`📐 Adjustment Debug (${adjustmentDef.adjustment_name}):`);
+        console.log(`   - Selected bracket filter: ${compFilters.adjustmentBracket}`);
+        console.log(`   - Bracket index: ${bracketIndex}`);
+        console.log(`   - Looking for: bracket_${bracketIndex}`);
+        console.log(`   - Adjustment value: ${adjustmentValue}`);
+        console.log(`   - Adjustment grid entry:`, adjustmentDef);
+        window._adjDebugLogged = true;
+      }
     }
 
     if (adjustmentValue === 0) return 0; // No adjustment needed
