@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { supabase } from '../../../lib/supabaseClient';
+import { supabase, interpretCodes, getRawDataForJob } from '../../../lib/supabaseClient';
 import { Search, X, Upload, Sliders, FileText, Check } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
@@ -8,6 +8,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
   const resultsRef = React.useRef(null);
+  const [codeDefinitions, setCodeDefinitions] = useState(null);
   
   // ==================== SUBJECT PROPERTIES STATE ====================
   const [subjectVCS, setSubjectVCS] = useState([]);
