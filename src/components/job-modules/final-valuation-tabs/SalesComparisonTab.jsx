@@ -77,21 +77,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
   const vendorType = jobData?.vendor_type || 'BRT';
 
-  // Helper function to format attribute values with inline adjustments (for Detailed tab)
-  const formatAttributeWithAdjustment = (compValue, adjAmount, showDiff = null, suffix = '') => {
-    if (!compValue && compValue !== 0) return 'N/A';
-
-    return (
-      <div className="text-center">
-        <div className="font-semibold">{typeof compValue === 'number' ? compValue.toLocaleString() : compValue}{suffix}</div>
-        {adjAmount && adjAmount !== 0 && (
-          <div className={`text-xs font-bold mt-1 ${adjAmount > 0 ? 'text-green-700' : 'text-red-700'}`}>
-            {adjAmount > 0 ? '+' : ''}${adjAmount.toLocaleString()}
-            {showDiff && <div className="text-xs text-gray-600">({showDiff})</div>}
-          </div>
-        )}
-      </div>
-    );
+  // Helper function to render comp cells (shows all 5 even if empty)
+  const renderCompCells = (comps, renderFunc) => {
+    return [1, 2, 3, 4, 5].map((compNum) => {
+      const comp = comps[compNum - 1];
+      return (
+        <td key={compNum} className="px-3 py-2 text-center bg-blue-50 border-l border-gray-300">
+          {comp ? renderFunc(comp, compNum - 1) : <span className="text-gray-400">-</span>}
+        </td>
+      );
+    });
   };
 
   // ==================== SALES CODE NORMALIZATION ====================
