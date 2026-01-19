@@ -613,34 +613,78 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
           // Type/Use filter
           if (compFilters.sameTypeUse) {
-            if (comp.asset_type_use !== subject.asset_type_use) return false;
+            if (comp.asset_type_use !== subject.asset_type_use) {
+              if (isFirstProperty) debugFilters.typeUse++;
+              return false;
+            }
           } else if (compFilters.typeUse.length > 0) {
-            if (!compFilters.typeUse.includes(comp.asset_type_use)) return false;
+            if (!compFilters.typeUse.includes(comp.asset_type_use)) {
+              if (isFirstProperty) debugFilters.typeUse++;
+              return false;
+            }
           }
 
           // Style filter
           if (compFilters.sameStyle) {
-            if (comp.asset_design_style !== subject.asset_design_style) return false;
+            if (comp.asset_design_style !== subject.asset_design_style) {
+              if (isFirstProperty) debugFilters.style++;
+              return false;
+            }
           } else if (compFilters.style.length > 0) {
-            if (!compFilters.style.includes(comp.asset_design_style)) return false;
+            if (!compFilters.style.includes(comp.asset_design_style)) {
+              if (isFirstProperty) debugFilters.style++;
+              return false;
+            }
           }
 
           // Story height filter
           if (compFilters.sameStoryHeight) {
-            if (comp.asset_story_height !== subject.asset_story_height) return false;
+            if (comp.asset_story_height !== subject.asset_story_height) {
+              if (isFirstProperty) debugFilters.storyHeight++;
+              return false;
+            }
           } else if (compFilters.storyHeight.length > 0) {
-            if (!compFilters.storyHeight.includes(comp.asset_story_height)) return false;
+            if (!compFilters.storyHeight.includes(comp.asset_story_height)) {
+              if (isFirstProperty) debugFilters.storyHeight++;
+              return false;
+            }
           }
 
           // View filter
           if (compFilters.sameView) {
-            if (comp.asset_view !== subject.asset_view) return false;
+            if (comp.asset_view !== subject.asset_view) {
+              if (isFirstProperty) debugFilters.view++;
+              return false;
+            }
           } else if (compFilters.view.length > 0) {
-            if (!compFilters.view.includes(comp.asset_view)) return false;
+            if (!compFilters.view.includes(comp.asset_view)) {
+              if (isFirstProperty) debugFilters.view++;
+              return false;
+            }
           }
 
+          if (isFirstProperty) debugFilters.passed++;
           return true;
         });
+
+        // Log debug results for first property
+        if (isFirstProperty) {
+          console.log(`\n📊 Filter Results:`);
+          console.log(`   ❌ Excluded (self): ${debugFilters.self}`);
+          console.log(`   ❌ Failed sales codes: ${debugFilters.salesCodes}`);
+          console.log(`   ❌ Failed sales date: ${debugFilters.salesDate}`);
+          console.log(`   ❌ Failed VCS: ${debugFilters.vcs}`);
+          console.log(`   ❌ Failed neighborhood: ${debugFilters.neighborhood}`);
+          console.log(`   ❌ Failed year built: ${debugFilters.yearBuilt}`);
+          console.log(`   ❌ Failed size (SFLA): ${debugFilters.size}`);
+          console.log(`   ❌ Failed zone: ${debugFilters.zone}`);
+          console.log(`   ❌ Failed building class: ${debugFilters.buildingClass}`);
+          console.log(`   ❌ Failed type/use: ${debugFilters.typeUse}`);
+          console.log(`   ❌ Failed style: ${debugFilters.style}`);
+          console.log(`   ❌ Failed story height: ${debugFilters.storyHeight}`);
+          console.log(`   ❌ Failed view: ${debugFilters.view}`);
+          console.log(`   ✅ Passed initial filters: ${debugFilters.passed}`);
+        }
 
         // Calculate adjustments for each comparable
         const compsWithAdjustments = matchingComps.map(comp => {
