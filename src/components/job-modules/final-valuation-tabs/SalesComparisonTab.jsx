@@ -72,6 +72,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   const [evaluationResults, setEvaluationResults] = useState(null);
   const [adjustmentGrid, setAdjustmentGrid] = useState([]);
   const [customBrackets, setCustomBrackets] = useState([]);
+  const [minCompsForSuccess, setMinCompsForSuccess] = useState(3); // User-selectable threshold
 
   const vendorType = jobData?.vendor_type || 'BRT';
 
@@ -302,10 +303,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   const handleSetAsideSuccessful = async () => {
     if (!evaluationResults) return;
 
-    const successful = evaluationResults.filter(r => r.comparables.length >= 3);
+    const successful = evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess);
 
     if (successful.length === 0) {
-      alert('No properties with 3+ comparables to set aside');
+      alert(`No properties with ${minCompsForSuccess}+ comparables to set aside`);
       return;
     }
 
@@ -327,7 +328,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       alert(`${successful.length} properties set aside successfully. ${remainingResults.length} properties remain for re-evaluation.`);
 
       // Update results to show only remaining
-      setEvaluationResults(remainingResults);
+      setEvaluationResults(remainingResults.length > 0 ? remainingResults : null);
 
     } catch (error) {
       console.error('Error setting aside properties:', error);
@@ -446,10 +447,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       }
 
       // Log adjustment configuration
+      const bracketLabel = compFilters.adjustmentBracket === 'auto' ? 'auto' :
+        compFilters.adjustmentBracket?.startsWith('bracket_') ?
+        CME_BRACKETS[parseInt(compFilters.adjustmentBracket.replace('bracket_', ''))]?.label || compFilters.adjustmentBracket :
+        compFilters.adjustmentBracket;
+
       console.log(`📊 Adjustment Configuration:`);
       console.log(`   - Grid entries: ${adjustmentGrid.length}`);
-      console.log(`   - Selected bracket: ${compFilters.adjustmentBracket}`);
+      console.log(`   - Selected bracket: ${compFilters.adjustmentBracket} (${bracketLabel})`);
       console.log(`   - Custom brackets: ${customBrackets.length}`);
+
+      if (adjustmentGrid.length === 0) {
+        console.warn(`⚠️  WARNING: No adjustment grid entries found!`);
+        console.warn(`   All adjustments will be $0. Configure adjustments in the Adjustments tab first.`);
+      }
 
       // Note: Evaluation can proceed even without adjustment grid - comps will have $0 adjustments
       // This allows users to see comp matches before setting up adjustments
@@ -1903,17 +1914,54 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
             {/* INLINE RESULTS - Show directly below search filters */}
             {evaluationResults && (
               <div ref={resultsRef} className="mt-6 bg-white border border-gray-300 rounded-lg p-4">
+                {/* Summary Statistics */}
+                <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <span className="font-semibold text-gray-700">Total Evaluated:</span>
+                      <span className="ml-2 text-gray-900">{evaluationResults.length} properties</span>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-red-700">No Comparables:</span>
+                      <span className="ml-2 text-red-900 font-bold">
+                        {evaluationResults.filter(r => r.comparables.length === 0).length} of {evaluationResults.length}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-green-700">With {minCompsForSuccess}+ Comps:</span>
+                      <span className="ml-2 text-green-900 font-bold">
+                        {evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess).length} of {evaluationResults.length}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900">
-                    Evaluation Results: {evaluationResults.length} properties
+                    Evaluation Results
                   </h3>
-                  <div className="flex gap-3">
+                  <div className="flex items-center gap-3">
+                    {/* Minimum Comps Selector */}
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-medium text-gray-700">Min Comps:</label>
+                      <select
+                        value={minCompsForSuccess}
+                        onChange={(e) => setMinCompsForSuccess(parseInt(e.target.value))}
+                        className="px-3 py-1.5 border border-gray-300 rounded text-sm"
+                      >
+                        <option value="1">1+</option>
+                        <option value="2">2+</option>
+                        <option value="3">3+</option>
+                        <option value="4">4+</option>
+                        <option value="5">5</option>
+                      </select>
+                    </div>
                     <button
                       onClick={handleSetAsideSuccessful}
-                      disabled={!evaluationResults || evaluationResults.filter(r => r.comparables.length >= 3).length === 0}
+                      disabled={!evaluationResults || evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess).length === 0}
                       className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                     >
-                      Set Aside Successful ({evaluationResults ? evaluationResults.filter(r => r.comparables.length >= 3).length : 0})
+                      Set Aside ({evaluationResults ? evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess).length : 0})
                     </button>
                     <button
                       onClick={handleApplyToFinalRoster}
@@ -1940,6 +1988,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                         <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Style</th>
                         <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-right font-semibold bg-yellow-50">Current Asmt</th>
                         <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-right font-semibold bg-green-50">New Asmt</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-right font-semibold bg-blue-50">%Change</th>
                         {/* Comparable Columns */}
                         {[1, 2, 3, 4, 5].map(num => (
                           <th key={num} colSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold bg-blue-50">
@@ -1988,8 +2037,26 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                             <td className="border border-gray-300 px-2 py-2 text-right text-sm font-semibold bg-yellow-50">
                               ${(result.subject.values_mod_total || result.subject.values_cama_total || 0).toLocaleString()}
                             </td>
-                            <td className="border border-gray-300 px-2 py-2 text-right text-sm font-bold bg-green-50 text-green-700">
+                            <td
+                              className="border border-gray-300 px-2 py-2 text-right text-sm font-bold bg-green-50 text-green-700 cursor-pointer hover:underline"
+                              onClick={() => setActiveSubTab('detailed')}
+                              title="Click to view detailed analysis"
+                            >
                               {result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-'}
+                            </td>
+                            <td className="border border-gray-300 px-2 py-2 text-right text-sm font-semibold bg-blue-50">
+                              {(() => {
+                                const currentAsmt = result.subject.values_mod_total || result.subject.values_cama_total || 0;
+                                const newAsmt = result.projectedAssessment;
+                                if (!newAsmt || currentAsmt === 0) return '-';
+                                const changePercent = ((newAsmt - currentAsmt) / currentAsmt) * 100;
+                                const color = changePercent > 0 ? 'text-green-700' : changePercent < 0 ? 'text-red-700' : 'text-gray-700';
+                                return (
+                                  <span className={color}>
+                                    {changePercent > 0 ? '+' : ''}{changePercent.toFixed(2)}%
+                                  </span>
+                                );
+                              })()}
                             </td>
                             {/* Comparables 1-5 */}
                             {[0, 1, 2, 3, 4].map(compIdx => {
