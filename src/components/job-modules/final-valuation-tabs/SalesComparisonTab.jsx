@@ -2485,7 +2485,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                               const color = changePercent > 0 ? 'text-green-700' : changePercent < 0 ? 'text-red-700' : 'text-gray-700';
                               return (
                                 <span className={color}>
-                                  {changePercent > 0 ? '+' : ''}{changePercent.toFixed(2)}%
+                                  {changePercent > 0 ? '+' : ''}{changePercent.toFixed(0)}%
                                 </span>
                               );
                             })()}
@@ -2525,17 +2525,22 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                                       {subject.property_block}/{subject.property_lot}
                                     </span>
                                   </th>
-                                  {comps.map((comp, idx) => (
-                                    <th key={idx} className="px-3 py-3 text-center font-semibold bg-blue-50 border-l border-gray-300">
-                                      Comp #{comp.rank}<br/>
-                                      <span className="font-normal text-xs text-gray-600">
-                                        {comp.property_block}/{comp.property_lot}
-                                      </span>
-                                      {comp.isSubjectSale && (
-                                        <span className="block text-xs text-green-700 font-semibold mt-1">(Subject Sale)</span>
-                                      )}
-                                    </th>
-                                  ))}
+                                  {[1, 2, 3, 4, 5].map((compNum) => {
+                                    const comp = comps[compNum - 1];
+                                    return (
+                                      <th key={compNum} className="px-3 py-3 text-center font-semibold bg-blue-50 border-l border-gray-300">
+                                        Comparable {compNum}<br/>
+                                        {comp && (
+                                          <span className="font-normal text-xs text-gray-600">
+                                            {comp.property_block}/{comp.property_lot}
+                                          </span>
+                                        )}
+                                        {comp?.isSubjectSale && (
+                                          <span className="block text-xs text-green-700 font-semibold mt-1">(Subject Sale)</span>
+                                        )}
+                                      </th>
+                                    );
+                                  })}
                                 </tr>
                               </thead>
                               <tbody className="bg-white">
