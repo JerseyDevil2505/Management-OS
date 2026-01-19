@@ -100,6 +100,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
     if (jobData?.id) {
       loadAdjustmentGrid();
       loadCustomBrackets();
+      loadCodeDefinitions();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id]);
@@ -131,6 +132,17 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       setCustomBrackets(data || []);
     } catch (error) {
       console.error('Error loading custom brackets:', error);
+    }
+  };
+
+  const loadCodeDefinitions = async () => {
+    try {
+      const rawData = await getRawDataForJob(jobData.id);
+      if (rawData?.codeDefinitions || rawData?.parsed_code_definitions) {
+        setCodeDefinitions(rawData.codeDefinitions || rawData.parsed_code_definitions);
+      }
+    } catch (error) {
+      console.error('Error loading code definitions:', error);
     }
   };
 
