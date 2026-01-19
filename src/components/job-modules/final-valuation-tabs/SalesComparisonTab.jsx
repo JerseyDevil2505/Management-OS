@@ -2455,6 +2455,87 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                         )}
                       </div>
 
+                      {/* Comparable Manager Grid */}
+                      <div className="bg-white border-2 border-gray-300 rounded-lg overflow-hidden mb-4">
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full text-xs">
+                            <thead>
+                              <tr className="bg-gray-100">
+                                <th className="px-3 py-2 text-left font-semibold text-gray-700"></th>
+                                <th className="px-3 py-2 text-center font-semibold bg-yellow-50">Subject</th>
+                                {[1, 2, 3, 4, 5].map((num) => (
+                                  <th key={num} className="px-3 py-2 text-center font-semibold bg-blue-50 border-l border-gray-300">
+                                    Comparable {num}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white">
+                              {/* Town Code */}
+                              <tr className="border-t border-gray-200">
+                                <td className="px-3 py-2 font-medium text-gray-700">Town Code</td>
+                                <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                  {jobData?.ccdd || 'N/A'}
+                                </td>
+                                {renderCompCells(comps, (comp) => (
+                                  <span className="font-semibold">{jobData?.ccdd || 'N/A'}</span>
+                                ))}
+                              </tr>
+                              {/* Block */}
+                              <tr className="border-t border-gray-200">
+                                <td className="px-3 py-2 font-medium text-gray-700">Block</td>
+                                <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                  {subject.property_block}
+                                </td>
+                                {renderCompCells(comps, (comp) => (
+                                  <span className="font-semibold">{comp.property_block}</span>
+                                ))}
+                              </tr>
+                              {/* Lot */}
+                              <tr className="border-t border-gray-200">
+                                <td className="px-3 py-2 font-medium text-gray-700">Lot</td>
+                                <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                  {subject.property_lot}
+                                </td>
+                                {renderCompCells(comps, (comp) => (
+                                  <span className="font-semibold">{comp.property_lot}</span>
+                                ))}
+                              </tr>
+                              {/* Qual */}
+                              <tr className="border-t border-gray-200">
+                                <td className="px-3 py-2 font-medium text-gray-700">Qual</td>
+                                <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
+                                  {subject.property_qualifier || '-'}
+                                </td>
+                                {renderCompCells(comps, (comp) => (
+                                  <span className="font-semibold">{comp.property_qualifier || '-'}</span>
+                                ))}
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-t border-gray-300">
+                          <div className="flex items-center gap-3">
+                            <button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium text-sm">
+                              Evaluate
+                            </button>
+                            <button className="px-4 py-2 bg-blue-700 text-white rounded hover:bg-blue-800 font-medium text-sm">
+                              Evaluate and update
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 font-medium text-sm">
+                              Export pdf
+                            </button>
+                            <button className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 font-medium text-sm">
+                              Clear Comps
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
                       {/* Summary Stats */}
                       <div className="grid grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
                         <div>
