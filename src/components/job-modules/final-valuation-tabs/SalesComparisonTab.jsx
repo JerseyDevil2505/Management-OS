@@ -1866,35 +1866,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
             {/* INLINE RESULTS - Show directly below search filters */}
             {evaluationResults && (
-              <div ref={resultsRef} className="mt-8 bg-white border border-gray-300 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                  Evaluation Results
-                </h3>
-                <div className="grid grid-cols-3 gap-4 mb-6">
-                  <div className="bg-blue-50 rounded-lg p-4">
-                    <div className="text-sm text-gray-600">Total Subjects</div>
-                    <div className="text-2xl font-bold text-blue-900">{evaluationResults.length}</div>
-                  </div>
-                  <div className="bg-green-50 rounded-lg p-4">
-                    <div className="text-sm text-gray-600">Successfully Valued (3+ Comps)</div>
-                    <div className="text-2xl font-bold text-green-900">
-                      {evaluationResults.filter(r => r.comparables.length >= 3).length}
-                    </div>
-                  </div>
-                  <div className="bg-orange-50 rounded-lg p-4">
-                    <div className="text-sm text-gray-600">Needs More Comps (&lt;3)</div>
-                    <div className="text-2xl font-bold text-orange-900">
-                      {evaluationResults.filter(r => r.comparables.length < 3).length}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-300">
-                  <div className="text-sm text-gray-600">
-                    <strong>Iterative Workflow:</strong> Set aside successfully valued properties (3-5 comps found),
-                    then re-run the engine with loosened criteria for remaining properties.
-                  </div>
+              <div ref={resultsRef} className="mt-6 bg-white border border-gray-300 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Evaluation Results: {evaluationResults.length} properties
+                  </h3>
                   <div className="flex gap-3">
                     <button
                       onClick={handleSetAsideSuccessful}
