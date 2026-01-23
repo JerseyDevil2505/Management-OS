@@ -2669,6 +2669,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                 jobData={jobData}
                 codeDefinitions={codeDefinitions}
                 vendorType={vendorType}
+                adjustmentGrid={adjustmentGrid}
               />
             )}
           </div>
