@@ -111,8 +111,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
   // Helper: Get bedroom count from property
   const getBedroomTotal = (property) => {
-    // TODO: Find bedroom field from OverallAnalysisTab implementation
-    return property.bedroom_total || null;
+    return property.asset_bedrooms || null;
   };
 
   // Helper: Get max card number
