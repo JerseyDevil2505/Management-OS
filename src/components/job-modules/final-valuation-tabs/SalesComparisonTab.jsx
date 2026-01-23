@@ -1335,32 +1335,45 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
     }
   };
 
-  // Helper: Get numeric rank for condition codes
-  const getConditionRank = (conditionCode) => {
-    if (!conditionCode) return 3; // Default to Average
+  // Helper: Get numeric rank for condition codes based on user configuration
+  const getConditionRank = (conditionCode, configType) => {
+    if (!conditionCode) return 0; // No condition code
 
+    // Check if attribute condition config exists
+    const conditionConfig = jobData?.attribute_condition_config;
+    if (!conditionConfig || !conditionConfig[configType]) {
+      console.error(`⚠️  Condition configuration not found for ${configType}. Please configure in Market Analysis → Attribute Cards.`);
+      throw new Error(`Condition hierarchy not configured. Please configure ${configType} condition rankings in Market Analysis → Attribute Cards.`);
+    }
+
+    const config = conditionConfig[configType];
     const code = conditionCode.toUpperCase().trim();
+    const baseline = config.baseline?.toUpperCase().trim();
+    const betterCodes = (config.better || []).map(c => c.toUpperCase().trim());
+    const worseCodes = (config.worse || []).map(c => c.toUpperCase().trim());
 
-    // Common condition code mappings (adjust based on your vendor codes)
-    const conditionHierarchy = {
-      'E': 5,    // Excellent
-      'EX': 5,   // Excellent
-      'EXC': 5,  // Excellent
-      'G': 4,    // Good
-      'GD': 4,   // Good
-      'GOOD': 4,
-      'A': 3,    // Average
-      'AV': 3,   // Average
-      'AVG': 3,  // Average
-      'F': 2,    // Fair
-      'FR': 2,   // Fair
-      'FAIR': 2,
-      'P': 1,    // Poor
-      'PR': 1,   // Poor
-      'POOR': 1
-    };
+    // Rank based on configuration:
+    // Better codes = positive rank (higher is better)
+    // Baseline = 0
+    // Worse codes = negative rank (lower is worse)
 
-    return conditionHierarchy[code] || 3; // Default to Average if unknown
+    if (code === baseline) {
+      return 0; // Baseline
+    } else if (betterCodes.includes(code)) {
+      // Better codes get positive ranks based on their position
+      // First better code = +1, second = +2, etc.
+      const index = betterCodes.indexOf(code);
+      return (index + 1);
+    } else if (worseCodes.includes(code)) {
+      // Worse codes get negative ranks based on their position
+      // First worse code = -1, second = -2, etc.
+      const index = worseCodes.indexOf(code);
+      return -(index + 1);
+    } else {
+      // Unknown code - default to baseline
+      console.warn(`⚠️  Unknown condition code "${code}" for ${configType}, defaulting to baseline`);
+      return 0;
+    }
   };
 
   // ==================== RENDER ====================
