@@ -1112,14 +1112,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         break;
 
       case 'bedrooms':
-        // BRT: Count category 11, Micro: use bedrooms column
-        if (vendorType === 'BRT') {
-          subjectValue = countBRTItems(subject, ['11']);
-          compValue = countBRTItems(comp, ['11']);
-        } else {
-          subjectValue = readMicroValue(subject, 'bedrooms') || 0;
-          compValue = readMicroValue(comp, 'bedrooms') || 0;
-        }
+        // Use standardized asset_bedrooms column for both vendors
+        subjectValue = subject.asset_bedrooms || 0;
+        compValue = comp.asset_bedrooms || 0;
         break;
 
       case 'bathrooms':
