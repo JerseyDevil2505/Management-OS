@@ -583,7 +583,20 @@ export class MicrosystemsUpdater {
       //          asset_zoning, values_norm_size, values_norm_time
       //          (moved to property_market_analysis table)
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
-      
+
+      // Normalized amenity area fields (extracted from Microsystems columns)
+      fireplace_count: this.extractFireplaceCount(rawRecord),
+      basement_area: this.extractBasementArea(rawRecord),
+      fin_basement_area: this.extractFinBasementArea(rawRecord),
+      garage_area: this.extractGarageArea(rawRecord),
+      deck_area: this.extractDeckArea(rawRecord),
+      patio_area: this.extractPatioArea(rawRecord),
+      open_porch_area: this.extractOpenPorchArea(rawRecord),
+      enclosed_porch_area: this.extractEnclosedPorchArea(rawRecord),
+      det_garage_area: this.extractDetGarageArea(rawRecord),
+      pool_area: this.extractPoolArea(rawRecord),
+      ac_area: this.extractAcArea(rawRecord),
+
       // Processing metadata
       processed_at: new Date().toISOString(),
       is_new_since_last_upload: false, // UPSERT operation
