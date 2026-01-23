@@ -804,11 +804,22 @@ const SalesReviewTab = ({
 
   // Handle include/exclude override
   const handleIncludeToggle = async (property, value) => {
+    console.log('🔘 Toggle override:', {
+      property: property.property_location,
+      propertyId: property.id,
+      value,
+      currentOverrides: Object.keys(includeOverrides).length
+    });
+
     // Update local state immediately
-    setIncludeOverrides(prev => ({
-      ...prev,
-      [property.id]: value
-    }));
+    setIncludeOverrides(prev => {
+      const newState = {
+        ...prev,
+        [property.id]: value
+      };
+      console.log('📊 New overrides count:', Object.keys(newState).length);
+      return newState;
+    });
 
     // Save to database (property_market_analysis table)
     try {
@@ -824,6 +835,7 @@ const SalesReviewTab = ({
         });
 
       if (error) throw error;
+      console.log('✅ Override saved to database');
     } catch (error) {
       console.error('Error saving include override:', error);
       alert(`Failed to save: ${error.message}`);
@@ -1295,12 +1307,17 @@ const SalesReviewTab = ({
             <button
               onClick={handleClearNormalization}
               disabled={isClearing || selectedProperties.size === 0}
+              style={{
+                backgroundColor: selectedProperties.size > 0 ? '#ea580c' : '#d1d5db',
+                color: selectedProperties.size > 0 ? 'white' : '#4b5563',
+                opacity: isClearing ? 0.5 : 1
+              }}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded transition-colors ${
                 selectedProperties.size > 0
-                  ? 'bg-orange-600 text-white hover:bg-orange-700'
-                  : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-              } ${isClearing ? 'opacity-50 cursor-wait' : ''}`}
-              title={selectedProperties.size === 0 ? 'Select properties with normalization to clear' : `Clear normalization for ${selectedProperties.size} selected ${selectedProperties.size === 1 ? 'property' : 'properties'}`}
+                  ? 'hover:bg-orange-700'
+                  : 'cursor-not-allowed'
+              }`}
+              title={selectedProperties.size === 0 ? 'Select properties with checkboxes to clear their normalized values' : `Clear normalization for ${selectedProperties.size} selected ${selectedProperties.size === 1 ? 'property' : 'properties'}`}
             >
               <X className="w-4 h-4" />
               Clear Normalization {selectedProperties.size > 0 ? `(${selectedProperties.size})` : ''}

@@ -111,8 +111,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
   // Helper: Get bedroom count from property
   const getBedroomTotal = (property) => {
-    // TODO: Find bedroom field from OverallAnalysisTab implementation
-    return property.bedroom_total || null;
+    return property.asset_bedrooms || null;
   };
 
   // Helper: Get max card number
@@ -875,10 +874,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'MOD IV': property.property_m4_class || '',
         'CAMA': property.property_cama_class || '',
         'Check': { f: `IF(Q${rowNum}=R${rowNum},"TRUE","FALSE")` },
-        'Info By': (() => {
-          const padded = padBRTCode(property.inspection_info_by);
-          return padded ? { v: String(padded), t: 's' } : '';
-        })(),
+        'Info By': property.inspection_info_by ? { v: String(property.inspection_info_by), t: 's' } : '',
         'VCS': property.property_vcs || '',
         'Exempt Facility': property.property_facility || '',
         'Special': calc.specialNotes || '',
@@ -897,10 +893,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Test': { f: `IF(AND(AF${rowNum}<>"",BL${rowNum}<>""),IF(BL${rowNum}>=AF${rowNum},"TRUE","FALSE"),"")` },
         'Design': padBRTCode(property.asset_design_style),
         'Bedroom Total': getBedroomTotal(property) || '',
-        'Story Height': (() => {
-          const padded = padBRTCode(property.asset_story_height);
-          return padded ? { v: String(padded), t: 's' } : '';
-        })(),
+        'Story Height': property.asset_story_height ? { v: String(property.asset_story_height), t: 's' } : '',
         'SFLA': mainSFLA || '',
         'Total SFLA': { f: `G${rowNum}+AL${rowNum}` }, // Formula: Card SF + SFLA
         'Exterior': padBRTCode(property.asset_ext_cond),

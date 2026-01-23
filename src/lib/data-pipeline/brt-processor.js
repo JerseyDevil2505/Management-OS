@@ -557,7 +557,7 @@ export class BRTProcessor {
       values_repl_cost: this.parseNumeric(rawRecord.REPLCOSTNEW),
       
       // Inspection fields
-      inspection_info_by: this.parseInteger(rawRecord.INFOBY),
+      inspection_info_by: this.preserveStringValue(rawRecord.INFOBY),
       inspection_list_by: rawRecord.LISTBY,
       inspection_list_date: this.parseDate(rawRecord.LISTDT),
       inspection_measure_by: rawRecord.MEASUREBY,
@@ -581,6 +581,7 @@ export class BRTProcessor {
       asset_view: rawRecord.VIEW,
       asset_year_built: this.parseInteger(rawRecord.YEARBUILT),
       asset_effective_age: this.parseInteger(rawRecord.EFFAGE),  // BRT: EFFAGE is already a year (e.g., 1950)
+      asset_bedrooms: this.parseInteger(rawRecord.BEDTOT),
 
       // Special tax district codes (BRT: EXEMPT_SPECIAL_TAXCODE1-4)
       special_tax_code_1: this.preserveStringValue(rawRecord.EXEMPT_SPECIAL_TAXCODE1),
@@ -607,7 +608,20 @@ export class BRTProcessor {
       //          asset_zoning, values_norm_size, values_norm_time
       //          (moved to property_market_analysis table)
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
-      
+
+      // Normalized amenity area fields (extracted from BRT codes)
+      fireplace_count: this.extractFireplaceCount(rawRecord),
+      basement_area: this.extractBasementArea(rawRecord),
+      fin_basement_area: this.extractFinBasementArea(rawRecord),
+      garage_area: this.extractAttachedItemsAreaByKeyword(rawRecord, ['GAR']),
+      deck_area: this.extractAttachedItemsAreaByKeyword(rawRecord, ['DECK']),
+      patio_area: this.extractAttachedItemsAreaByKeyword(rawRecord, ['PATIO']),
+      open_porch_area: this.extractAttachedItemsAreaByKeyword(rawRecord, ['OPEN']),
+      enclosed_porch_area: this.extractAttachedItemsAreaByKeyword(rawRecord, ['ENCL', 'SCREEN', 'SCRN']),
+      det_garage_area: this.extractDetachedItemsAreaByKeyword(rawRecord, ['GAR']),
+      pool_area: this.extractDetachedItemsAreaByKeyword(rawRecord, ['POOL']),
+      ac_area: this.extractAcArea(rawRecord),
+
       // Processing metadata
       processed_at: new Date().toISOString(),
       is_new_since_last_upload: true,
@@ -862,6 +876,119 @@ export class BRTProcessor {
     const twoFix = this.parseNumeric(rawRecord.PLUMBING2FIX) || 0;
     const adjustedTotal = bathTot - twoFix + (twoFix * 0.5);
     return adjustedTotal > 0 ? adjustedTotal : null;
+  }
+
+  /**
+   * Extract fireplace count (sum of FIREPLACECNT_1 and FIREPLACECNT_2)
+   */
+  extractFireplaceCount(rawRecord) {
+    const count1 = this.parseInteger(rawRecord.FIREPLACECNT_1) || 0;
+    const count2 = this.parseInteger(rawRecord.FIREPLACECNT_2) || 0;
+    const total = count1 + count2;
+    return total > 0 ? total : null;
+  }
+
+  /**
+   * Extract basement area from FLA_BSMNT
+   */
+  extractBasementArea(rawRecord) {
+    return this.parseNumeric(rawRecord.FLA_BSMNT);
+  }
+
+  /**
+   * Extract finished basement area
+   * BSMTNFINISHAREA_1 and BSMTFINISHAREA_2 can be:
+   * - If < 1 (e.g., 0.9) = percentage of basement floor area
+   * - If >= 1 = actual square footage
+   */
+  extractFinBasementArea(rawRecord) {
+    const basementArea = this.parseNumeric(rawRecord.FLA_BSMNT) || 0;
+    const finish1 = this.parseNumeric(rawRecord.BSMTNFINISHAREA_1) || 0;
+    const finish2 = this.parseNumeric(rawRecord.BSMTNFINISHAREA_2) || 0;
+
+    let totalFinished = 0;
+
+    // Handle finish area 1
+    if (finish1 > 0) {
+      if (finish1 < 1) {
+        // It's a percentage
+        totalFinished += basementArea * finish1;
+      } else {
+        // It's actual SF
+        totalFinished += finish1;
+      }
+    }
+
+    // Handle finish area 2
+    if (finish2 > 0) {
+      if (finish2 < 1) {
+        // It's a percentage
+        totalFinished += basementArea * finish2;
+      } else {
+        // It's actual SF
+        totalFinished += finish2;
+      }
+    }
+
+    return totalFinished > 0 ? Math.round(totalFinished) : null;
+  }
+
+  /**
+   * Extract area for attached items by keyword
+   * Searches ATTACHEDCODE_1 through ATTACHEDCODE_15 for codes matching keyword
+   * and sums corresponding ATTACHEDAREA_1 through ATTACHEDAREA_15
+   */
+  extractAttachedItemsAreaByKeyword(rawRecord, keywords) {
+    let totalArea = 0;
+
+    for (let i = 1; i <= 15; i++) {
+      const code = this.preserveStringValue(rawRecord[`ATTACHEDCODE_${i}`]);
+      const area = this.parseNumeric(rawRecord[`ATTACHEDAREA_${i}`]) || 0;
+
+      if (code && area > 0) {
+        const codeUpper = code.toUpperCase();
+        const matchesKeyword = keywords.some(keyword => codeUpper.includes(keyword));
+        if (matchesKeyword) {
+          totalArea += area;
+        }
+      }
+    }
+
+    return totalArea > 0 ? Math.round(totalArea) : null;
+  }
+
+  /**
+   * Extract area for detached items by keyword
+   * Searches DETACHEDCODE_1 through DETACHEDCODE_11 for codes matching keyword
+   * and sums corresponding DETACHEDDCSIZE_1 through DETACHEDDCSIZE_11
+   */
+  extractDetachedItemsAreaByKeyword(rawRecord, keywords) {
+    let totalArea = 0;
+
+    for (let i = 1; i <= 11; i++) {
+      const code = this.preserveStringValue(rawRecord[`DETACHEDCODE_${i}`]);
+      const area = this.parseNumeric(rawRecord[`DETACHEDDCSIZE_${i}`]) || 0;
+
+      if (code && area > 0) {
+        const codeUpper = code.toUpperCase();
+        const matchesKeyword = keywords.some(keyword => codeUpper.includes(keyword));
+        if (matchesKeyword) {
+          totalArea += area;
+        }
+      }
+    }
+
+    return totalArea > 0 ? Math.round(totalArea) : null;
+  }
+
+  /**
+   * Extract AC area from ACAREA_1 and ACAREA_2
+   */
+  extractAcArea(rawRecord) {
+    const area1 = this.parseNumeric(rawRecord.ACAREA_1) || 0;
+    const area2 = this.parseNumeric(rawRecord.ACAREA_2) || 0;
+    const total = area1 + area2;
+    return total > 0 ? Math.round(total) : null;
   }
 
   calculateOwnerCsZ(rawRecord) {
