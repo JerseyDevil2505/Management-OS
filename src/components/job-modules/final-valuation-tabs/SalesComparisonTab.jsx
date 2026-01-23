@@ -2664,58 +2664,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
             {/* Results Section (if evaluation has been run) */}
             {manualEvaluationResult && (
-              <div className="bg-white border border-gray-300 rounded-lg p-6">
-                <h4 className="text-lg font-semibold text-gray-900 mb-4">Evaluation Results</h4>
-                
-                {/* Summary Stats */}
-                <div className="grid grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg mb-6">
-                  <div>
-                    <div className="text-xs text-gray-600">Current Assessment</div>
-                    <div className="text-lg font-bold text-gray-900">
-                      ${(manualEvaluationResult.subject.values_mod_total || manualEvaluationResult.subject.values_cama_total || 0).toLocaleString()}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-gray-600">New Assessment</div>
-                    <div className="text-lg font-bold text-green-700">
-                      {manualEvaluationResult.projectedAssessment ? `$${manualEvaluationResult.projectedAssessment.toLocaleString()}` : 'N/A'}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-gray-600">Change</div>
-                    <div className="text-lg font-bold">
-                      {(() => {
-                        const current = manualEvaluationResult.subject.values_mod_total || manualEvaluationResult.subject.values_cama_total || 0;
-                        const projected = manualEvaluationResult.projectedAssessment;
-                        if (!projected || current === 0) return 'N/A';
-                        const changePercent = ((projected - current) / current) * 100;
-                        const color = changePercent > 0 ? 'text-green-700' : changePercent < 0 ? 'text-red-700' : 'text-gray-700';
-                        return (
-                          <span className={color}>
-                            {changePercent > 0 ? '+' : ''}{changePercent.toFixed(0)}%
-                          </span>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-gray-600">Comparables Found</div>
-                    <div className="text-lg font-bold text-blue-700">{manualEvaluationResult.comparables.length} / 5</div>
-                  </div>
-                </div>
-
-                {/* Detailed appraisal grid would go here (abbreviated for now) */}
-                <div className="text-sm text-gray-600">
-                  <p className="font-semibold">Subject: {manualEvaluationResult.subject.property_location}</p>
-                  <p>Block/Lot/Qual: {manualEvaluationResult.subject.property_block}/{manualEvaluationResult.subject.property_lot}/{manualEvaluationResult.subject.property_qualifier || '-'}</p>
-                  {manualEvaluationResult.comparables.length === 0 && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mt-4">
-                      <p className="text-yellow-900 font-semibold">No comparables found</p>
-                      <p className="text-sm text-yellow-700">Make sure the properties entered exist in this job and have valid sales data.</p>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <DetailedAppraisalGrid
+                result={manualEvaluationResult}
+                jobData={jobData}
+                codeDefinitions={codeDefinitions}
+                vendorType={vendorType}
+              />
             )}
           </div>
         )}
