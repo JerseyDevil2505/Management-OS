@@ -379,13 +379,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         return;
       }
 
-      const subjectKey = manualSubject.qualifier
-        ? `${manualSubject.block}-${manualSubject.lot}-${manualSubject.qualifier}`
-        : `${manualSubject.block}-${manualSubject.lot}`;
-      const subject = properties.find(p => p.property_composite_key === subjectKey);
+      // Find subject by block, lot, qualifier (not by composite key)
+      const subject = properties.find(p =>
+        p.property_block === manualSubject.block &&
+        p.property_lot === manualSubject.lot &&
+        (p.property_qualifier || '') === (manualSubject.qualifier || '')
+      );
 
       if (!subject) {
-        alert(`Subject property not found: ${subjectKey}\n\nMake sure the property exists in this job.`);
+        alert(`Subject property not found: Block ${manualSubject.block}, Lot ${manualSubject.lot}${manualSubject.qualifier ? `, Qual ${manualSubject.qualifier}` : ''}\n\nMake sure the property exists in this job.`);
         setIsManualEvaluating(false);
         return;
       }
@@ -394,10 +396,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       const fetchedComps = [];
       for (const compEntry of manualComps) {
         if (compEntry.block && compEntry.lot) {
-          const compKey = compEntry.qualifier
-            ? `${compEntry.block}-${compEntry.lot}-${compEntry.qualifier}`
-            : `${compEntry.block}-${compEntry.lot}`;
-          const comp = properties.find(p => p.property_composite_key === compKey);
+          const comp = properties.find(p =>
+            p.property_block === compEntry.block &&
+            p.property_lot === compEntry.lot &&
+            (p.property_qualifier || '') === (compEntry.qualifier || '')
+          );
 
           if (comp && comp.sales_date && comp.values_norm_time) {
             // Calculate adjustments
