@@ -1287,15 +1287,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         break;
 
       case 'exterior_condition':
-        // Define condition hierarchy: Excellent(5) > Good(4) > Average(3) > Fair(2) > Poor(1)
-        subjectValue = getConditionRank(subject.asset_ext_cond);
-        compValue = getConditionRank(comp.asset_ext_cond);
+        // Use user-configured condition hierarchy from Attribute Cards
+        subjectValue = getConditionRank(subject.asset_ext_cond, 'exterior');
+        compValue = getConditionRank(comp.asset_ext_cond, 'exterior');
         break;
 
       case 'interior_condition':
-        // Define condition hierarchy: Excellent(5) > Good(4) > Average(3) > Fair(2) > Poor(1)
-        subjectValue = getConditionRank(subject.asset_int_cond);
-        compValue = getConditionRank(comp.asset_int_cond);
+        // Use user-configured condition hierarchy from Attribute Cards
+        subjectValue = getConditionRank(subject.asset_int_cond, 'interior');
+        compValue = getConditionRank(comp.asset_int_cond, 'interior');
         break;
 
       case 'fireplaces':
