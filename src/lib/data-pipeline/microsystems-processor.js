@@ -443,6 +443,7 @@ export class MicrosystemsProcessor {
       asset_view: null, // Not available in Microsystems
       asset_year_built: this.parseInteger(rawRecord['Year Built']),
       asset_effective_age: this.calculateEffectiveYear(rawRecord['Effective Age'], yearPriorToDueYear),  // Microsystems: Convert age to year
+      asset_bedrooms: this.parseInteger(rawRecord['Total Bedrms']),
 
       // Special tax district codes (Microsystems: Sp Tax Cd1 and Sp Tax Cd2)
       special_tax_code_1: rawRecord['Sp Tax Cd1'] || null,
