@@ -1286,6 +1286,29 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         compValue = comp.asset_year_built || 0;
         break;
 
+      case 'exterior_condition':
+        // Define condition hierarchy: Excellent(5) > Good(4) > Average(3) > Fair(2) > Poor(1)
+        subjectValue = getConditionRank(subject.asset_ext_cond);
+        compValue = getConditionRank(comp.asset_ext_cond);
+        break;
+
+      case 'interior_condition':
+        // Define condition hierarchy: Excellent(5) > Good(4) > Average(3) > Fair(2) > Poor(1)
+        subjectValue = getConditionRank(subject.asset_int_cond);
+        compValue = getConditionRank(comp.asset_int_cond);
+        break;
+
+      case 'fireplaces':
+        subjectValue = subject.fireplace_count || subject.asset_fireplaces || 0;
+        compValue = comp.fireplace_count || comp.asset_fireplaces || 0;
+        break;
+
+      case 'ac':
+        // Use area if available, otherwise boolean
+        subjectValue = subject.ac_area || (subject.asset_ac ? 1 : 0);
+        compValue = comp.ac_area || (comp.asset_ac ? 1 : 0);
+        break;
+
       default:
         return 0; // Unknown attribute
     }
@@ -1302,11 +1325,42 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         return difference * adjustmentValue;
 
       case 'percent':
+        // Percent adjustment based on comp sale price
+        // Positive difference (subject better) = add to comp price
+        // Negative difference (comp better) = subtract from comp price
         return (comp.values_norm_time || 0) * (adjustmentValue / 100) * Math.sign(difference);
 
       default:
         return 0;
     }
+  };
+
+  // Helper: Get numeric rank for condition codes
+  const getConditionRank = (conditionCode) => {
+    if (!conditionCode) return 3; // Default to Average
+
+    const code = conditionCode.toUpperCase().trim();
+
+    // Common condition code mappings (adjust based on your vendor codes)
+    const conditionHierarchy = {
+      'E': 5,    // Excellent
+      'EX': 5,   // Excellent
+      'EXC': 5,  // Excellent
+      'G': 4,    // Good
+      'GD': 4,   // Good
+      'GOOD': 4,
+      'A': 3,    // Average
+      'AV': 3,   // Average
+      'AVG': 3,  // Average
+      'F': 2,    // Fair
+      'FR': 2,   // Fair
+      'FAIR': 2,
+      'P': 1,    // Poor
+      'PR': 1,   // Poor
+      'POOR': 1
+    };
+
+    return conditionHierarchy[code] || 3; // Default to Average if unknown
   };
 
   // ==================== RENDER ====================
