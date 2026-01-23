@@ -804,11 +804,22 @@ const SalesReviewTab = ({
 
   // Handle include/exclude override
   const handleIncludeToggle = async (property, value) => {
+    console.log('🔘 Toggle override:', {
+      property: property.property_location,
+      propertyId: property.id,
+      value,
+      currentOverrides: Object.keys(includeOverrides).length
+    });
+
     // Update local state immediately
-    setIncludeOverrides(prev => ({
-      ...prev,
-      [property.id]: value
-    }));
+    setIncludeOverrides(prev => {
+      const newState = {
+        ...prev,
+        [property.id]: value
+      };
+      console.log('📊 New overrides count:', Object.keys(newState).length);
+      return newState;
+    });
 
     // Save to database (property_market_analysis table)
     try {
@@ -824,6 +835,7 @@ const SalesReviewTab = ({
         });
 
       if (error) throw error;
+      console.log('✅ Override saved to database');
     } catch (error) {
       console.error('Error saving include override:', error);
       alert(`Failed to save: ${error.message}`);
