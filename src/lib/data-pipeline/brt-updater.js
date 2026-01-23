@@ -1084,6 +1084,109 @@ export class BRTUpdater {
     return adjustedTotal > 0 ? adjustedTotal : null;
   }
 
+  /**
+   * Extract fireplace count (sum of FIREPLACECNT_1 and FIREPLACECNT_2)
+   */
+  extractFireplaceCount(rawRecord) {
+    const count1 = this.parseInteger(rawRecord.FIREPLACECNT_1) || 0;
+    const count2 = this.parseInteger(rawRecord.FIREPLACECNT_2) || 0;
+    const total = count1 + count2;
+    return total > 0 ? total : null;
+  }
+
+  /**
+   * Extract basement area from FLA_BSMNT
+   */
+  extractBasementArea(rawRecord) {
+    return this.parseNumeric(rawRecord.FLA_BSMNT);
+  }
+
+  /**
+   * Extract finished basement area
+   * BSMTNFINISHAREA_1 and BSMTFINISHAREA_2 can be:
+   * - If < 1 (e.g., 0.9) = percentage of basement floor area
+   * - If >= 1 = actual square footage
+   */
+  extractFinBasementArea(rawRecord) {
+    const basementArea = this.parseNumeric(rawRecord.FLA_BSMNT) || 0;
+    const finish1 = this.parseNumeric(rawRecord.BSMTNFINISHAREA_1) || 0;
+    const finish2 = this.parseNumeric(rawRecord.BSMTNFINISHAREA_2) || 0;
+
+    let totalFinished = 0;
+
+    // Handle finish area 1
+    if (finish1 > 0) {
+      if (finish1 < 1) {
+        // It's a percentage
+        totalFinished += basementArea * finish1;
+      } else {
+        // It's actual SF
+        totalFinished += finish1;
+      }
+    }
+
+    // Handle finish area 2
+    if (finish2 > 0) {
+      if (finish2 < 1) {
+        // It's a percentage
+        totalFinished += basementArea * finish2;
+      } else {
+        // It's actual SF
+        totalFinished += finish2;
+      }
+    }
+
+    return totalFinished > 0 ? Math.round(totalFinished) : null;
+  }
+
+  /**
+   * Extract area for attached items by keyword
+   * Searches ATTACHEDCODE_1 through ATTACHEDCODE_15 for codes matching keyword
+   * and sums corresponding ATTACHEDAREA_1 through ATTACHEDAREA_15
+   */
+  extractAttachedItemsAreaByKeyword(rawRecord, keywords) {
+    let totalArea = 0;
+
+    for (let i = 1; i <= 15; i++) {
+      const code = this.preserveStringValue(rawRecord[`ATTACHEDCODE_${i}`]);
+      const area = this.parseNumeric(rawRecord[`ATTACHEDAREA_${i}`]) || 0;
+
+      if (code && area > 0) {
+        const codeUpper = code.toUpperCase();
+        const matchesKeyword = keywords.some(keyword => codeUpper.includes(keyword));
+        if (matchesKeyword) {
+          totalArea += area;
+        }
+      }
+    }
+
+    return totalArea > 0 ? Math.round(totalArea) : null;
+  }
+
+  /**
+   * Extract area for detached items by keyword
+   * Searches DETACHEDCODE_1 through DETACHEDCODE_11 for codes matching keyword
+   * and sums corresponding DETACHEDDCSIZE_1 through DETACHEDDCSIZE_11
+   */
+  extractDetachedItemsAreaByKeyword(rawRecord, keywords) {
+    let totalArea = 0;
+
+    for (let i = 1; i <= 11; i++) {
+      const code = this.preserveStringValue(rawRecord[`DETACHEDCODE_${i}`]);
+      const area = this.parseNumeric(rawRecord[`DETACHEDDCSIZE_${i}`]) || 0;
+
+      if (code && area > 0) {
+        const codeUpper = code.toUpperCase();
+        const matchesKeyword = keywords.some(keyword => codeUpper.includes(keyword));
+        if (matchesKeyword) {
+          totalArea += area;
+        }
+      }
+    }
+
+    return totalArea > 0 ? Math.round(totalArea) : null;
+  }
+
   calculateOwnerCsZ(rawRecord) {
     const city = rawRecord.OWNER_CITYSTATE || '';
     const zip = rawRecord.OWNER_ZIP || '';
