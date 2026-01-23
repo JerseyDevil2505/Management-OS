@@ -665,7 +665,7 @@ export class BRTUpdater {
       values_repl_cost: this.parseNumeric(rawRecord.REPLCOSTNEW),
       
       // Inspection fields
-      inspection_info_by: this.parseInteger(rawRecord.INFOBY),
+      inspection_info_by: this.preserveStringValue(rawRecord.INFOBY),
       inspection_list_by: rawRecord.LISTBY,
       inspection_list_date: this.parseDate(rawRecord.LISTDT),
       inspection_measure_by: rawRecord.MEASUREBY,
@@ -684,7 +684,7 @@ export class BRTUpdater {
       asset_lot_sf: this.calculateLotSquareFeet(rawRecord),
       asset_neighborhood: rawRecord.NBHD,
       asset_sfla: this.parseNumeric(rawRecord.SFLA_TOTAL),
-      asset_story_height: this.parseStoryHeight(rawRecord.STORYHGT),  // Extract numeric portion from alphanumeric values like "2A"
+      asset_story_height: this.preserveStringValue(rawRecord.STORYHGT),  // Preserve original value ("2A", "1.5", "3S", etc.)
       asset_type_use: rawRecord.TYPEUSE,
       asset_view: rawRecord.VIEW,
       asset_year_built: this.parseInteger(rawRecord.YEARBUILT),
