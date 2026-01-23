@@ -88,19 +88,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
   const vendorType = jobData?.vendor_type || 'BRT';
 
-  // Helper function to render comp cells (shows all 5 even if empty)
-  const renderCompCells = (comps, renderFunc) => {
-    return [1, 2, 3, 4, 5].map((compNum) => {
-      const comp = comps[compNum - 1];
-      const bgColor = comp?.isSubjectSale ? 'bg-green-50' : 'bg-blue-50';
-      return (
-        <td key={compNum} className={`px-3 py-2 text-center ${bgColor} border-l border-gray-300`}>
-          {comp ? renderFunc(comp, compNum - 1) : <span className="text-gray-400">-</span>}
-        </td>
-      );
-    });
-  };
-
   // ==================== SALES CODE NORMALIZATION ====================
   const normalizeSalesCode = useCallback((code) => {
     if (code === null || code === undefined || code === '' || code === '00') return '';
