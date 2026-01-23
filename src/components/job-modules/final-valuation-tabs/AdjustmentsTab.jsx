@@ -702,7 +702,34 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         });
       }
 
-      alert(`Code configuration saved!${newAdjustments.length > 0 ? ` ${newAdjustments.length} new adjustment row(s) added to grid.` : ''}`);
+      // CRITICAL: Recalculate amenity areas for all properties using new code mappings
+      console.log('🔄 Triggering database recalculation with new code mappings...');
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const recalcResponse = await fetch(
+        `${supabase.supabaseUrl}/functions/v1/recalculate-amenities`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`
+          },
+          body: JSON.stringify({
+            jobId: jobData.id,
+            codeConfig: codeConfig
+          })
+        }
+      );
+
+      if (!recalcResponse.ok) {
+        const errorData = await recalcResponse.json();
+        throw new Error(`Recalculation failed: ${errorData.error}`);
+      }
+
+      const recalcResult = await recalcResponse.json();
+      console.log('✅ Recalculation complete:', recalcResult);
+
+      alert(`Code configuration saved and ${recalcResult.updatedCount} properties updated!${newAdjustments.length > 0 ? ` ${newAdjustments.length} new adjustment row(s) added to grid.` : ''}\n\nAmenity areas have been recalculated using your custom code mappings.`);
 
       // Dismiss auto-populate notice and reset flag after saving
       setShowAutoPopulateNotice(false);
