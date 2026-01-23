@@ -385,13 +385,27 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     {
       id: 'ext_condition',
       label: 'Ext Condition',
-      render: (prop) => prop.asset_ext_condition || prop.asset_exterior_condition || 'N/A',
+      render: (prop) => {
+        if (!prop.asset_ext_cond) return 'N/A';
+        if (codeDefinitions) {
+          const name = interpretCodes.getExteriorConditionName(prop, codeDefinitions, vendorType);
+          return name ? `${prop.asset_ext_cond} (${name})` : prop.asset_ext_cond;
+        }
+        return prop.asset_ext_cond;
+      },
       adjustmentName: 'Exterior Condition'
     },
     {
       id: 'int_condition',
       label: 'Int Condition',
-      render: (prop) => prop.asset_int_condition || prop.asset_interior_condition || 'N/A',
+      render: (prop) => {
+        if (!prop.asset_int_cond) return 'N/A';
+        if (codeDefinitions) {
+          const name = interpretCodes.getInteriorConditionName(prop, codeDefinitions, vendorType);
+          return name ? `${prop.asset_int_cond} (${name})` : prop.asset_int_cond;
+        }
+        return prop.asset_int_cond;
+      },
       adjustmentName: 'Interior Condition'
     }
   ];
