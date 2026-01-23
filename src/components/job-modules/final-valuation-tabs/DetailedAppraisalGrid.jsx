@@ -1,7 +1,7 @@
 import React from 'react';
 import { interpretCodes } from '../../../lib/supabaseClient';
 
-const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType }) => {
+const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [] }) => {
   const subject = result.subject;
   const comps = result.comparables || [];
 
@@ -17,6 +17,242 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType })
       );
     });
   };
+
+  // Helper to get adjustment for a specific attribute
+  const getAdjustment = (comp, attributeName) => {
+    return comp.adjustments?.find(a => 
+      a.name === attributeName || 
+      a.name?.toLowerCase().includes(attributeName.toLowerCase())
+    );
+  };
+
+  // Define attribute order as specified by user
+  const ATTRIBUTE_ORDER = [
+    { 
+      id: 'vcs', 
+      label: 'VCS',
+      render: (prop) => `${prop.property_block}/${prop.property_lot}/${prop.property_qualifier || ''}`,
+      adjustmentName: null // No adjustment for VCS
+    },
+    {
+      id: 'location',
+      label: 'Location',
+      render: (prop) => prop.property_location || 'N/A',
+      adjustmentName: null
+    },
+    {
+      id: 'prev_assessment',
+      label: 'Prev Assessment',
+      render: (prop) => {
+        const value = prop.values_cama_total || prop.values_mod_total || 0;
+        return value ? `$${value.toLocaleString()}` : 'N/A';
+      },
+      adjustmentName: null
+    },
+    {
+      id: 'property_class',
+      label: 'Property Class',
+      render: (prop) => prop.property_class || 'N/A',
+      adjustmentName: null
+    },
+    {
+      id: 'building_class',
+      label: 'Building Class',
+      render: (prop) => prop.asset_building_class || 'N/A',
+      adjustmentName: null
+    },
+    {
+      id: 'style_code',
+      label: 'Style Code',
+      render: (prop) => {
+        if (!prop.asset_design_style) return 'N/A';
+        if (codeDefinitions) {
+          const name = interpretCodes.getDesignName(prop, codeDefinitions, vendorType);
+          return name ? `${prop.asset_design_style} (${name})` : prop.asset_design_style;
+        }
+        return prop.asset_design_style;
+      },
+      adjustmentName: null
+    },
+    {
+      id: 'type_use_code',
+      label: 'Type Use Code',
+      render: (prop) => {
+        if (!prop.asset_type_use) return 'N/A';
+        if (codeDefinitions) {
+          const name = interpretCodes.getTypeName(prop, codeDefinitions, vendorType);
+          return name ? `${prop.asset_type_use} (${name})` : prop.asset_type_use;
+        }
+        return prop.asset_type_use;
+      },
+      adjustmentName: null
+    },
+    {
+      id: 'story_height_code',
+      label: 'Story Height Code',
+      render: (prop) => prop.asset_stories || 'N/A',
+      adjustmentName: null
+    },
+    {
+      id: 'view_code',
+      label: 'View Code',
+      render: (prop) => prop.asset_view_code || 'N/A',
+      adjustmentName: null
+    },
+    {
+      id: 'sales_code',
+      label: 'Sales Code',
+      render: (prop) => prop.sales_nu || '0',
+      adjustmentName: null
+    },
+    {
+      id: 'sales_date',
+      label: 'Sales Date',
+      render: (prop) => prop.sales_date || 'N/A',
+      adjustmentName: null
+    },
+    {
+      id: 'sales_price',
+      label: 'Sales Price',
+      render: (prop) => prop.sales_price ? `$${prop.sales_price.toLocaleString()}` : 'N/A',
+      adjustmentName: null,
+      bold: true
+    },
+    {
+      id: 'lot_size_ff',
+      label: 'Lot Size (FF)',
+      render: (prop) => (prop.market_manual_lot_ff || prop.asset_lot_ff)?.toLocaleString() || 'N/A',
+      adjustmentName: 'Lot Size (FF)'
+    },
+    {
+      id: 'lot_size_sf',
+      label: 'Lot Size (SF)',
+      render: (prop) => (prop.market_manual_lot_sf || prop.asset_lot_sf)?.toLocaleString() || 'N/A',
+      adjustmentName: 'Lot Size (SF)',
+      bold: true
+    },
+    {
+      id: 'lot_size_acre',
+      label: 'Lot Size (Acre)',
+      render: (prop) => {
+        const acres = prop.market_manual_lot_acre || prop.asset_lot_acre;
+        return acres ? acres.toFixed(2) : 'N/A';
+      },
+      adjustmentName: 'Lot Size (Acre)'
+    },
+    {
+      id: 'liveable_area',
+      label: 'Liveable Area',
+      render: (prop) => prop.asset_sfla?.toLocaleString() || 'N/A',
+      adjustmentName: 'Living Area (Sq Ft)',
+      bold: true
+    },
+    {
+      id: 'year_built',
+      label: 'Year Built',
+      render: (prop) => prop.asset_year_built || 'N/A',
+      adjustmentName: 'Year Built',
+      bold: true
+    },
+    {
+      id: 'basement_area',
+      label: 'Basement Area',
+      render: (prop) => prop.asset_basement ? 'Yes' : 'No',
+      adjustmentName: 'Basement'
+    },
+    {
+      id: 'fin_bsmt_area',
+      label: 'Fin Bsmt Area',
+      render: (prop) => prop.asset_fin_basement ? 'Yes' : 'No',
+      adjustmentName: 'Finished Basement'
+    },
+    {
+      id: 'bathrooms',
+      label: '# Bathrooms',
+      render: (prop) => prop.total_baths_calculated || 'N/A',
+      adjustmentName: 'Bathrooms',
+      bold: true
+    },
+    {
+      id: 'bedrooms',
+      label: '# Bedrooms',
+      render: (prop) => prop.asset_bedrooms || 'N/A',
+      adjustmentName: 'Bedrooms',
+      bold: true
+    },
+    {
+      id: 'ac_area',
+      label: 'AC Area',
+      render: (prop) => prop.asset_ac ? 'Yes' : 'No',
+      adjustmentName: 'AC'
+    },
+    {
+      id: 'fireplaces',
+      label: '# Fireplaces',
+      render: (prop) => prop.asset_fireplaces || '0',
+      adjustmentName: 'Fireplaces'
+    },
+    {
+      id: 'garage_area',
+      label: 'Garage Area (Per Car)',
+      render: (prop) => prop.asset_garage ? `${prop.asset_garage} car` : 'None',
+      adjustmentName: 'Garage'
+    },
+    {
+      id: 'det_garage_area',
+      label: 'Det Garage Area (Per Car)',
+      render: (prop) => prop.asset_det_garage ? `${prop.asset_det_garage} car` : 'None',
+      adjustmentName: 'Det Garage'
+    },
+    {
+      id: 'deck_area',
+      label: 'Deck Area',
+      render: (prop) => prop.asset_deck ? 'Yes' : 'No',
+      adjustmentName: 'Deck'
+    },
+    {
+      id: 'patio_area',
+      label: 'Patio Area',
+      render: (prop) => prop.asset_patio ? 'Yes' : 'No',
+      adjustmentName: 'Patio'
+    },
+    {
+      id: 'pool_area',
+      label: 'Pool Area',
+      render: (prop) => prop.asset_pool ? 'Yes' : 'No',
+      adjustmentName: 'Pool'
+    },
+    {
+      id: 'ext_condition',
+      label: 'Ext Condition',
+      render: (prop) => prop.asset_ext_condition || 'N/A',
+      adjustmentName: 'Exterior Condition'
+    },
+    {
+      id: 'int_condition',
+      label: 'Int Condition',
+      render: (prop) => prop.asset_int_condition || 'N/A',
+      adjustmentName: 'Interior Condition'
+    }
+  ];
+
+  // Get dynamic attributes from adjustmentGrid (exclude default ones)
+  const dynamicAttributes = adjustmentGrid
+    .filter(adj => !adj.is_default)
+    .map(adj => ({
+      id: adj.adjustment_id,
+      label: adj.adjustment_name,
+      render: (prop) => {
+        // Try to find corresponding property data
+        // This will need custom logic based on your data structure
+        return 'N/A'; // Placeholder - will need property-specific rendering
+      },
+      adjustmentName: adj.adjustment_name,
+      isDynamic: true
+    }));
+
+  // Combine static and dynamic attributes
+  const allAttributes = [...ATTRIBUTE_ORDER, ...dynamicAttributes];
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
@@ -57,343 +293,99 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType })
             </tr>
           </thead>
           <tbody className="bg-white">
-            {/* Block/Lot/Qual */}
-            <tr className="border-b hover:bg-gray-50">
-              <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
-              <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                Block/Lot/Qual
-              </td>
-              <td className="px-3 py-2 text-center bg-yellow-50 font-semibold text-xs">
-                {subject.property_block}/{subject.property_lot}/{subject.property_qualifier || ''}
-              </td>
-              {renderCompCells((comp) => <span className="font-semibold text-xs">{comp.property_block}/{comp.property_lot}/{comp.property_qualifier || ''}</span>)}
-            </tr>
-
-            {/* Location */}
-            <tr className="border-b hover:bg-gray-50">
-              <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
-              <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                Location
-              </td>
-              <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.property_location || 'N/A'}</td>
-              {renderCompCells((comp) => <span className="text-xs">{comp.property_location || 'N/A'}</span>)}
-            </tr>
-
-            {/* Building Code */}
-            <tr className="border-b hover:bg-gray-50">
-              <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
-              <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                Building Class
-              </td>
-              <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_building_class || 'N/A'}</td>
-              {renderCompCells((comp) => <span className="text-xs">{comp.asset_building_class || 'N/A'}</span>)}
-            </tr>
-
-            {/* Type/Use */}
-            <tr className="border-b hover:bg-gray-50">
-              <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
-              <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                Type/Use Code
-              </td>
-              <td className="px-3 py-2 text-center bg-yellow-50 text-xs">
-                {subject.asset_type_use ? (
-                  codeDefinitions ? interpretCodes.getTypeName(subject, codeDefinitions, vendorType)
-                    ? `${subject.asset_type_use} (${interpretCodes.getTypeName(subject, codeDefinitions, vendorType)})`
-                    : subject.asset_type_use
-                  : subject.asset_type_use
-                ) : 'N/A'}
-              </td>
-              {renderCompCells((comp) => (
-                <span className="text-xs">
-                  {comp.asset_type_use ? (
-                    codeDefinitions ? interpretCodes.getTypeName(comp, codeDefinitions, vendorType)
-                      ? `${comp.asset_type_use} (${interpretCodes.getTypeName(comp, codeDefinitions, vendorType)})`
-                      : comp.asset_type_use
-                    : comp.asset_type_use
-                  ) : 'N/A'}
-                </span>
-              ))}
-            </tr>
-
-            {/* Style Code */}
-            <tr className="border-b hover:bg-gray-50">
-              <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
-              <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                Style Code
-              </td>
-              <td className="px-3 py-2 text-center bg-yellow-50 text-xs">
-                {subject.asset_design_style ? (
-                  codeDefinitions ? interpretCodes.getDesignName(subject, codeDefinitions, vendorType)
-                    ? `${subject.asset_design_style} (${interpretCodes.getDesignName(subject, codeDefinitions, vendorType)})`
-                    : subject.asset_design_style
-                  : subject.asset_design_style
-                ) : 'N/A'}
-              </td>
-              {renderCompCells((comp) => (
-                <span className="text-xs">
-                  {comp.asset_design_style ? (
-                    codeDefinitions ? interpretCodes.getDesignName(comp, codeDefinitions, vendorType)
-                      ? `${comp.asset_design_style} (${interpretCodes.getDesignName(comp, codeDefinitions, vendorType)})`
-                      : comp.asset_design_style
-                    : comp.asset_design_style
-                  ) : 'N/A'}
-                </span>
-              ))}
-            </tr>
-
-            {/* Sales Code */}
-            <tr className="border-b hover:bg-gray-50">
-              <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
-              <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                Sale Code
-              </td>
-              <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.sales_nu || '0'}</td>
-              {renderCompCells((comp) => <span className="text-xs">{comp.sales_nu || '0'}</span>)}
-            </tr>
-
-            {/* Sales Date */}
-            <tr className="border-b hover:bg-gray-50">
-              <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
-              <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                Sale Date
-              </td>
-              <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.sales_date || 'N/A'}</td>
-              {renderCompCells((comp) => <span className="text-xs">{comp.sales_date || 'N/A'}</span>)}
-            </tr>
-
-            {/* Sales Price */}
-            <tr className="border-b hover:bg-gray-50">
-              <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
-              <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                Sale Price
-              </td>
-              <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
-                {subject.sales_price ? `$${subject.sales_price.toLocaleString()}` : 'N/A'}
-              </td>
-              {renderCompCells((comp) => <span className="font-semibold">${comp.sales_price?.toLocaleString() || 'N/A'}</span>)}
-            </tr>
-
-            {/* Lot Size (SF) */}
-            <tr className="border-b hover:bg-gray-50">
-              <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
-              <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                Lot Area Area
-              </td>
-              <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">
-                {(subject.market_manual_lot_sf || subject.asset_lot_sf)?.toLocaleString() || 'N/A'}
-              </td>
-              {renderCompCells((comp) => {
-                const lotSF = comp.market_manual_lot_sf || comp.asset_lot_sf;
-                const adj = comp.adjustments?.find(a => a.name?.includes('Lot Size (SF)'));
-                return (
-                  <div>
-                    <div className="font-semibold">{lotSF?.toLocaleString() || 'N/A'}</div>
-                    {adj && adj.amount !== 0 && (
-                      <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                        {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </tr>
-
-            {/* Liveable Area */}
-            <tr className="border-b hover:bg-gray-50">
-              <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
-              <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                Liveable Area
-              </td>
-              <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">{subject.asset_sfla?.toLocaleString() || 'N/A'}</td>
-              {renderCompCells((comp) => {
-                const adj = comp.adjustments?.find(a => a.name === 'Living Area (Sq Ft)');
-                return (
-                  <div>
-                    <div className="font-semibold">{comp.asset_sfla?.toLocaleString() || 'N/A'}</div>
-                    {adj && adj.amount !== 0 && (
-                      <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                        {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </tr>
-
-            {/* Year Built */}
-            <tr className="border-b hover:bg-gray-50">
-              <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
-              <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                Year Built
-              </td>
-              <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">{subject.asset_year_built || 'N/A'}</td>
-              {renderCompCells((comp) => {
-                const adj = comp.adjustments?.find(a => a.name === 'Year Built');
-                return (
-                  <div>
-                    <div className="font-semibold">{comp.asset_year_built || 'N/A'}</div>
-                    {adj && adj.amount !== 0 && (
-                      <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                        {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </tr>
-
-            {/* Bedrooms */}
-            <tr className="border-b hover:bg-gray-50">
-              <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
-              <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                Bedrooms
-              </td>
-              <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">{subject.asset_bedrooms || 'N/A'}</td>
-              {renderCompCells((comp) => {
-                const adj = comp.adjustments?.find(a => a.name === 'Bedrooms');
-                return (
-                  <div>
-                    <div className="font-semibold">{comp.asset_bedrooms || 'N/A'}</div>
-                    {adj && adj.amount !== 0 && (
-                      <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                        {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </tr>
-
-            {/* Bathrooms */}
-            <tr className="border-b hover:bg-gray-50">
-              <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
-              <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                Full Bathroom
-              </td>
-              <td className="px-3 py-2 text-center bg-yellow-50 font-semibold">{subject.total_baths_calculated || 'N/A'}</td>
-              {renderCompCells((comp) => {
-                const adj = comp.adjustments?.find(a => a.name === 'Bathrooms');
-                return (
-                  <div>
-                    <div className="font-semibold">{comp.total_baths_calculated || 'N/A'}</div>
-                    {adj && adj.amount !== 0 && (
-                      <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                        {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </tr>
-
-            {/* Garage */}
-            <tr className="border-b hover:bg-gray-50">
-              <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
-              <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                Garage Size
-              </td>
-              <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_garage ? `${subject.asset_garage} car` : 'None'}</td>
-              {renderCompCells((comp) => {
-                const adj = comp.adjustments?.find(a => a.name === 'Garage');
-                return (
-                  <div>
-                    <div className="text-xs">{comp.asset_garage ? `${comp.asset_garage} car` : 'None'}</div>
-                    {adj && adj.amount !== 0 && (
-                      <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                        {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </tr>
-
-            {/* Basement */}
-            <tr className="border-b hover:bg-gray-50">
-              <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
-              <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                Basement Area
-              </td>
-              <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_basement ? 'Yes' : 'No'}</td>
-              {renderCompCells((comp) => {
-                const adj = comp.adjustments?.find(a => a.name === 'Basement');
-                return (
-                  <div>
-                    <div className="text-xs">{comp.asset_basement ? 'Yes' : 'No'}</div>
-                    {adj && adj.amount !== 0 && (
-                      <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                        {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </tr>
-
-            {/* Finished Basement */}
-            <tr className="border-b hover:bg-gray-50">
-              <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
-              <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
-                Fin. Bsmt. Area
-              </td>
-              <td className="px-3 py-2 text-center bg-yellow-50 text-xs">{subject.asset_fin_basement ? 'Yes' : 'No'}</td>
-              {renderCompCells((comp) => {
-                const adj = comp.adjustments?.find(a => a.name?.includes('Finished Basement'));
-                return (
-                  <div>
-                    <div className="text-xs">{comp.asset_fin_basement ? 'Yes' : 'No'}</div>
-                    {adj && adj.amount !== 0 && (
-                      <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                        {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </tr>
+            {/* Render all attributes in order */}
+            {allAttributes.map((attr) => (
+              <tr key={attr.id} className="border-b hover:bg-gray-50">
+                <td className="px-2 py-2">
+                  <input type="checkbox" className="rounded" />
+                </td>
+                <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
+                  {attr.label}
+                  {attr.isDynamic && (
+                    <span className="ml-2 text-xs text-purple-600">(Custom)</span>
+                  )}
+                </td>
+                <td className={`px-3 py-2 text-center bg-yellow-50 ${attr.bold ? 'font-semibold' : 'text-xs'}`}>
+                  {attr.render(subject)}
+                </td>
+                {renderCompCells((comp) => {
+                  const value = attr.render(comp);
+                  const adj = attr.adjustmentName ? getAdjustment(comp, attr.adjustmentName) : null;
+                  
+                  return (
+                    <div>
+                      <div className={attr.bold ? 'font-semibold' : 'text-xs'}>{value}</div>
+                      {adj && adj.amount !== 0 && (
+                        <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                          {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </tr>
+            ))}
 
             {/* Net Adjustment */}
-            <tr className="border-b-2 border-gray-400">
+            <tr className="border-b-2 border-gray-400 bg-gray-50">
               <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
-              <td className="sticky left-0 z-10 bg-white px-3 py-3 font-bold text-gray-900 border-r-2 border-gray-300">
+              <td className="sticky left-0 z-10 bg-gray-50 px-3 py-3 font-bold text-gray-900 border-r-2 border-gray-300">
                 Net Adjustment
               </td>
               <td className="px-3 py-3 text-center bg-yellow-50">-</td>
               {renderCompCells((comp) => (
                 <div className={`font-bold ${comp.totalAdjustment > 0 ? 'text-green-700' : comp.totalAdjustment < 0 ? 'text-red-700' : 'text-gray-700'}`}>
-                  {comp.totalAdjustment > 0 ? '+' : ''}${comp.totalAdjustment?.toLocaleString() || '0'} ({comp.adjustmentPercent > 0 ? '+' : ''}{comp.adjustmentPercent?.toFixed(0) || '0'}%)
+                  {comp.totalAdjustment > 0 ? '+' : ''}${comp.totalAdjustment?.toLocaleString() || '0'}
+                  <div className="text-xs mt-1">
+                    ({comp.adjustmentPercent > 0 ? '+' : ''}{comp.adjustmentPercent?.toFixed(0) || '0'}%)
+                  </div>
                 </div>
               ))}
             </tr>
 
             {/* Adjusted Valuation */}
-            <tr className="border-b-4 border-gray-400">
+            <tr className="border-b-4 border-gray-400 bg-blue-50">
               <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
-              <td className="sticky left-0 z-10 bg-white px-3 py-4 font-bold text-gray-900 border-r-2 border-gray-300 text-lg">
+              <td className="sticky left-0 z-10 bg-blue-50 px-3 py-4 font-bold text-gray-900 border-r-2 border-gray-300 text-base">
                 Adjusted Valuation
               </td>
-              <td className="px-3 py-4 text-center bg-yellow-50">
+              <td className="px-3 py-4 text-center bg-yellow-100">
                 {result.projectedAssessment && (
                   <div>
-                    <div className="text-xl font-bold text-green-700">
+                    <div className="text-lg font-bold text-green-700">
                       ${result.projectedAssessment.toLocaleString()}
                     </div>
-                    <div className="text-sm font-semibold text-green-600">
+                    <div className="text-sm font-semibold text-green-600 mt-1">
                       {(() => {
                         const current = subject.values_mod_total || subject.values_cama_total || 0;
                         if (current === 0) return '';
                         const changePercent = ((result.projectedAssessment - current) / current) * 100;
-                        return `(${changePercent > 0 ? '+' : ''}${changePercent.toFixed(0)}%)`;
+                        const isCloserToZero = Math.abs(changePercent) < 5;
+                        return (
+                          <span className={isCloserToZero ? 'text-green-700' : 'text-orange-600'}>
+                            ({changePercent > 0 ? '+' : ''}{changePercent.toFixed(1)}%)
+                          </span>
+                        );
                       })()}
                     </div>
                   </div>
                 )}
               </td>
-              {renderCompCells((comp) => (
-                <div className="font-bold text-gray-700">
-                  ${Math.round(comp.adjustedPrice || 0).toLocaleString()}
-                </div>
-              ))}
+              {renderCompCells((comp) => {
+                const absAdjPercent = Math.abs(comp.adjustmentPercent || 0);
+                const isCloserToZero = absAdjPercent < 10; // Closer to 0% is better
+                
+                return (
+                  <div>
+                    <div className="text-base font-bold text-gray-900">
+                      ${Math.round(comp.adjustedPrice || 0).toLocaleString()}
+                    </div>
+                    <div className={`text-sm font-semibold mt-1 ${isCloserToZero ? 'text-green-600' : 'text-orange-600'}`}>
+                      ({comp.adjustmentPercent > 0 ? '+' : ''}{comp.adjustmentPercent?.toFixed(0) || '0'}% adj)
+                    </div>
+                  </div>
+                );
+              })}
             </tr>
           </tbody>
         </table>
