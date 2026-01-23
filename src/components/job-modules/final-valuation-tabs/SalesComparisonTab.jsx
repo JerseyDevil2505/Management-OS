@@ -3,6 +3,7 @@ import { supabase, interpretCodes, getRawDataForJob } from '../../../lib/supabas
 import { Search, X, Upload, Sliders, FileText, Check } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
+import DetailedAppraisalGrid from './DetailedAppraisalGrid';
 
 const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) => {
   // ==================== NESTED TAB STATE ====================
