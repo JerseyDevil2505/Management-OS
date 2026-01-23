@@ -557,7 +557,7 @@ export class BRTProcessor {
       values_repl_cost: this.parseNumeric(rawRecord.REPLCOSTNEW),
       
       // Inspection fields
-      inspection_info_by: this.parseInteger(rawRecord.INFOBY),
+      inspection_info_by: this.preserveStringValue(rawRecord.INFOBY),
       inspection_list_by: rawRecord.LISTBY,
       inspection_list_date: this.parseDate(rawRecord.LISTDT),
       inspection_measure_by: rawRecord.MEASUREBY,
