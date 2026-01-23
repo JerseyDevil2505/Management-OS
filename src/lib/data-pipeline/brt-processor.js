@@ -981,6 +981,16 @@ export class BRTProcessor {
     return totalArea > 0 ? Math.round(totalArea) : null;
   }
 
+  /**
+   * Extract AC area from ACAREA_1 and ACAREA_2
+   */
+  extractAcArea(rawRecord) {
+    const area1 = this.parseNumeric(rawRecord.ACAREA_1) || 0;
+    const area2 = this.parseNumeric(rawRecord.ACAREA_2) || 0;
+    const total = area1 + area2;
+    return total > 0 ? Math.round(total) : null;
+  }
+
   calculateOwnerCsZ(rawRecord) {
     const city = rawRecord.OWNER_CITYSTATE || '';
     const zip = rawRecord.OWNER_ZIP || '';
