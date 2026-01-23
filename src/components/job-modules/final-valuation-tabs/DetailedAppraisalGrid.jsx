@@ -247,7 +247,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     {
       id: 'fireplaces',
       label: '# Fireplaces',
-      render: (prop) => prop.asset_fireplaces || '0',
+      render: (prop) => {
+        // Use new fireplace_count column if available (sum of FIREPLACECNT_1 and FIREPLACECNT_2 for BRT)
+        if (prop.fireplace_count !== undefined && prop.fireplace_count !== null) {
+          return prop.fireplace_count;
+        }
+        return prop.asset_fireplaces || '0';
+      },
       adjustmentName: 'Fireplaces'
     },
     {
