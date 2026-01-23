@@ -1306,21 +1306,21 @@ const SalesReviewTab = ({
             </button>
             <button
               onClick={handleClearNormalization}
-              disabled={isClearing || Object.keys(includeOverrides).length === 0}
+              disabled={isClearing || selectedProperties.size === 0}
               style={{
-                backgroundColor: Object.keys(includeOverrides).length > 0 ? '#ea580c' : '#d1d5db',
-                color: Object.keys(includeOverrides).length > 0 ? 'white' : '#4b5563',
+                backgroundColor: selectedProperties.size > 0 ? '#ea580c' : '#d1d5db',
+                color: selectedProperties.size > 0 ? 'white' : '#4b5563',
                 opacity: isClearing ? 0.5 : 1
               }}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded transition-colors ${
-                Object.keys(includeOverrides).length > 0
+                selectedProperties.size > 0
                   ? 'hover:bg-orange-700'
                   : 'cursor-not-allowed'
               }`}
-              title={Object.keys(includeOverrides).length === 0 ? 'Make manual CME selections (✓/✗) to enable' : `Clear ${Object.keys(includeOverrides).length} manual CME ${Object.keys(includeOverrides).length === 1 ? 'selection' : 'selections'}`}
+              title={selectedProperties.size === 0 ? 'Select properties with checkboxes to clear their normalized values' : `Clear normalization for ${selectedProperties.size} selected ${selectedProperties.size === 1 ? 'property' : 'properties'}`}
             >
               <X className="w-4 h-4" />
-              Clear Normalization {Object.keys(includeOverrides).length > 0 ? `(${Object.keys(includeOverrides).length})` : ''}
+              Clear Normalization {selectedProperties.size > 0 ? `(${selectedProperties.size})` : ''}
             </button>
           </div>
         </div>
