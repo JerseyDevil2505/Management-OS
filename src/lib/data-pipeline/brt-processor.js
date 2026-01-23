@@ -620,7 +620,7 @@ export class BRTProcessor {
       enclosed_porch_area: this.extractAttachedItemsAreaByKeyword(rawRecord, ['ENCL', 'SCREEN', 'SCRN']),
       det_garage_area: this.extractDetachedItemsAreaByKeyword(rawRecord, ['GAR']),
       pool_area: this.extractDetachedItemsAreaByKeyword(rawRecord, ['POOL']),
-      ac_area: this.extractAttachedItemsAreaByKeyword(rawRecord, ['AC', 'AIR']),
+      ac_area: this.extractAcArea(rawRecord),
 
       // Processing metadata
       processed_at: new Date().toISOString(),
