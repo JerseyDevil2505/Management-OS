@@ -689,6 +689,7 @@ export class BRTUpdater {
       asset_view: rawRecord.VIEW,
       asset_year_built: this.parseInteger(rawRecord.YEARBUILT),
       asset_effective_age: this.parseInteger(rawRecord.EFFAGE),  // BRT: EFFAGE is already a year (e.g., 1950)
+      asset_bedrooms: this.parseInteger(rawRecord.BEDTOT),
 
       // Special tax district codes (BRT: EXEMPT_SPECIAL_TAXCODE1-4)
       special_tax_code_1: this.preserveStringValue(rawRecord.EXEMPT_SPECIAL_TAXCODE1),
