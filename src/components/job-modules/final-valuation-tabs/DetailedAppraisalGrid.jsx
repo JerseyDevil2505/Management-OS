@@ -26,13 +26,43 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     );
   };
 
+  // Helper to count BRT items by category codes
+  const countBRTItems = (property, categoryCodes) => {
+    if (vendorType !== 'BRT' || !property.raw_brt_items) return 0;
+    try {
+      const items = JSON.parse(property.raw_brt_items);
+      return items.filter(item => categoryCodes.includes(item.category)).length;
+    } catch {
+      return 0;
+    }
+  };
+
+  // Helper to get BRT item area by category codes
+  const getBRTItemArea = (property, categoryCodes) => {
+    if (vendorType !== 'BRT' || !property.raw_brt_items) return 0;
+    try {
+      const items = JSON.parse(property.raw_brt_items);
+      const matchingItems = items.filter(item => categoryCodes.includes(item.category));
+      return matchingItems.reduce((sum, item) => sum + (parseFloat(item.area) || 0), 0);
+    } catch {
+      return 0;
+    }
+  };
+
   // Define attribute order as specified by user
   const ATTRIBUTE_ORDER = [
     { 
       id: 'vcs', 
       label: 'VCS',
-      render: (prop) => `${prop.property_block}/${prop.property_lot}/${prop.property_qualifier || ''}`,
+      render: (prop) => `${prop.property_block}/${prop.property_lot}${prop.property_qualifier ? '/' + prop.property_qualifier : ''}`,
       adjustmentName: null // No adjustment for VCS
+    },
+    {
+      id: 'block_lot_qual',
+      label: 'Block/Lot/Qualifier',
+      render: (prop) => `${prop.property_block}/${prop.property_lot}${prop.property_qualifier ? '/' + prop.property_qualifier : ''}`,
+      adjustmentName: null,
+      bold: true
     },
     {
       id: 'location',
@@ -44,15 +74,16 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       id: 'prev_assessment',
       label: 'Prev Assessment',
       render: (prop) => {
-        const value = prop.values_cama_total || prop.values_mod_total || 0;
+        const value = prop.values_mod4_total || prop.values_mod_total || prop.values_cama_total || 0;
         return value ? `$${value.toLocaleString()}` : 'N/A';
       },
-      adjustmentName: null
+      adjustmentName: null,
+      bold: true
     },
     {
       id: 'property_class',
       label: 'Property Class',
-      render: (prop) => prop.property_class || 'N/A',
+      render: (prop) => prop.property_class || prop.asset_property_class || 'N/A',
       adjustmentName: null
     },
     {
@@ -90,19 +121,19 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     {
       id: 'story_height_code',
       label: 'Story Height Code',
-      render: (prop) => prop.asset_stories || 'N/A',
+      render: (prop) => prop.asset_stories || prop.asset_story_height || 'N/A',
       adjustmentName: null
     },
     {
       id: 'view_code',
       label: 'View Code',
-      render: (prop) => prop.asset_view_code || 'N/A',
+      render: (prop) => prop.asset_view || prop.asset_view_code || 'N/A',
       adjustmentName: null
     },
     {
       id: 'sales_code',
       label: 'Sales Code',
-      render: (prop) => prop.sales_nu || '0',
+      render: (prop) => prop.sales_nu || prop.sales_code || '0',
       adjustmentName: null
     },
     {
@@ -121,7 +152,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     {
       id: 'lot_size_ff',
       label: 'Lot Size (FF)',
-      render: (prop) => (prop.market_manual_lot_ff || prop.asset_lot_ff)?.toLocaleString() || 'N/A',
+      render: (prop) => (prop.market_manual_lot_ff || prop.asset_lot_ff || prop.asset_lot_frontage)?.toLocaleString() || 'N/A',
       adjustmentName: 'Lot Size (FF)'
     },
     {
@@ -157,19 +188,41 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     {
       id: 'basement_area',
       label: 'Basement Area',
-      render: (prop) => prop.asset_basement ? 'Yes' : 'No',
+      render: (prop) => {
+        // Check if basement_area column exists (future)
+        if (prop.basement_area !== undefined) {
+          return prop.basement_area > 0 ? `${prop.basement_area.toLocaleString()} SF` : 'None';
+        }
+        // Fallback to boolean check
+        if (vendorType === 'BRT') {
+          return prop.asset_basement || prop.brt_basement ? 'Yes' : 'None';
+        } else {
+          return prop.asset_basement ? 'Yes' : 'None';
+        }
+      },
       adjustmentName: 'Basement'
     },
     {
       id: 'fin_bsmt_area',
       label: 'Fin Bsmt Area',
-      render: (prop) => prop.asset_fin_basement ? 'Yes' : 'No',
+      render: (prop) => {
+        // Check if fin_basement_area column exists (future)
+        if (prop.fin_basement_area !== undefined) {
+          return prop.fin_basement_area > 0 ? `${prop.fin_basement_area.toLocaleString()} SF` : 'None';
+        }
+        // Fallback to boolean check
+        if (vendorType === 'BRT') {
+          return prop.asset_fin_basement || prop.brt_fin_basement ? 'Yes' : 'None';
+        } else {
+          return prop.asset_fin_basement ? 'Yes' : 'None';
+        }
+      },
       adjustmentName: 'Finished Basement'
     },
     {
       id: 'bathrooms',
       label: '# Bathrooms',
-      render: (prop) => prop.total_baths_calculated || 'N/A',
+      render: (prop) => prop.total_baths_calculated || prop.asset_bathrooms || 'N/A',
       adjustmentName: 'Bathrooms',
       bold: true
     },
@@ -183,7 +236,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     {
       id: 'ac_area',
       label: 'AC Area',
-      render: (prop) => prop.asset_ac ? 'Yes' : 'No',
+      render: (prop) => {
+        if (prop.ac_area !== undefined) {
+          return prop.ac_area > 0 ? `${prop.ac_area.toLocaleString()} SF` : 'None';
+        }
+        return prop.asset_ac ? 'Yes' : 'None';
+      },
       adjustmentName: 'AC'
     },
     {
@@ -195,43 +253,139 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     {
       id: 'garage_area',
       label: 'Garage Area (Per Car)',
-      render: (prop) => prop.asset_garage ? `${prop.asset_garage} car` : 'None',
+      render: (prop) => {
+        // Check if garage_area column exists (future)
+        if (prop.garage_area !== undefined) {
+          return prop.garage_area > 0 ? `${prop.garage_area.toLocaleString()} SF` : 'None';
+        }
+        // Fallback
+        if (vendorType === 'BRT') {
+          const count = countBRTItems(prop, ['11']); // Category 11 is attached items including garage
+          return count > 0 ? `${count} car` : 'None';
+        } else {
+          return prop.asset_garage ? `${prop.asset_garage} car` : 'None';
+        }
+      },
       adjustmentName: 'Garage'
     },
     {
       id: 'det_garage_area',
       label: 'Det Garage Area (Per Car)',
-      render: (prop) => prop.asset_det_garage ? `${prop.asset_det_garage} car` : 'None',
+      render: (prop) => {
+        // Check if det_garage_area column exists (future)
+        if (prop.det_garage_area !== undefined) {
+          return prop.det_garage_area > 0 ? `${prop.det_garage_area.toLocaleString()} SF` : 'None';
+        }
+        // Fallback
+        if (vendorType === 'BRT') {
+          const count = countBRTItems(prop, ['15']); // Category 15 is detached items
+          return count > 0 ? `${count} car` : 'None';
+        } else {
+          return prop.asset_det_garage ? `${prop.asset_det_garage} car` : 'None';
+        }
+      },
       adjustmentName: 'Det Garage'
     },
     {
       id: 'deck_area',
       label: 'Deck Area',
-      render: (prop) => prop.asset_deck ? 'Yes' : 'No',
+      render: (prop) => {
+        // Check if deck_area column exists (future)
+        if (prop.deck_area !== undefined) {
+          return prop.deck_area > 0 ? `${prop.deck_area.toLocaleString()} SF` : 'None';
+        }
+        // Fallback
+        if (vendorType === 'BRT') {
+          const area = getBRTItemArea(prop, ['11']); // Approximate - need specific deck codes
+          return area > 0 ? `${area.toLocaleString()} SF` : 'None';
+        } else {
+          return prop.asset_deck ? 'Yes' : 'None';
+        }
+      },
       adjustmentName: 'Deck'
     },
     {
       id: 'patio_area',
       label: 'Patio Area',
-      render: (prop) => prop.asset_patio ? 'Yes' : 'No',
+      render: (prop) => {
+        // Check if patio_area column exists (future)
+        if (prop.patio_area !== undefined) {
+          return prop.patio_area > 0 ? `${prop.patio_area.toLocaleString()} SF` : 'None';
+        }
+        // Fallback
+        if (vendorType === 'BRT') {
+          const area = getBRTItemArea(prop, ['11']); // Approximate - need specific patio codes
+          return area > 0 ? `${area.toLocaleString()} SF` : 'None';
+        } else {
+          return prop.asset_patio ? 'Yes' : 'None';
+        }
+      },
       adjustmentName: 'Patio'
+    },
+    {
+      id: 'open_porch_area',
+      label: 'Open Porch Area',
+      render: (prop) => {
+        // Check if open_porch_area column exists (future)
+        if (prop.open_porch_area !== undefined) {
+          return prop.open_porch_area > 0 ? `${prop.open_porch_area.toLocaleString()} SF` : 'None';
+        }
+        // Fallback
+        if (vendorType === 'BRT') {
+          const area = getBRTItemArea(prop, ['11']); // Approximate - need specific open porch codes
+          return area > 0 ? `${area.toLocaleString()} SF` : 'None';
+        } else {
+          return prop.asset_open_porch ? 'Yes' : 'None';
+        }
+      },
+      adjustmentName: 'Open Porch'
+    },
+    {
+      id: 'enclosed_porch_area',
+      label: 'Enclosed Porch Area',
+      render: (prop) => {
+        // Check if enclosed_porch_area column exists (future)
+        if (prop.enclosed_porch_area !== undefined) {
+          return prop.enclosed_porch_area > 0 ? `${prop.enclosed_porch_area.toLocaleString()} SF` : 'None';
+        }
+        // Fallback
+        if (vendorType === 'BRT') {
+          const area = getBRTItemArea(prop, ['11']); // Approximate - need specific enclosed porch codes
+          return area > 0 ? `${area.toLocaleString()} SF` : 'None';
+        } else {
+          return prop.asset_enclosed_porch ? 'Yes' : 'None';
+        }
+      },
+      adjustmentName: 'Enclosed Porch'
     },
     {
       id: 'pool_area',
       label: 'Pool Area',
-      render: (prop) => prop.asset_pool ? 'Yes' : 'No',
+      render: (prop) => {
+        // Check if pool_area column exists (future)
+        if (prop.pool_area !== undefined) {
+          return prop.pool_area > 0 ? `${prop.pool_area.toLocaleString()} SF` : 'None';
+        }
+        // Fallback
+        if (vendorType === 'BRT') {
+          const area = getBRTItemArea(prop, ['15']); // Category 15 includes pools
+          return area > 0 ? `${area.toLocaleString()} SF` : 'None';
+        } else {
+          return prop.asset_pool ? 'Yes' : 'None';
+        }
+      },
       adjustmentName: 'Pool'
     },
     {
       id: 'ext_condition',
       label: 'Ext Condition',
-      render: (prop) => prop.asset_ext_condition || 'N/A',
+      render: (prop) => prop.asset_ext_condition || prop.asset_exterior_condition || 'N/A',
       adjustmentName: 'Exterior Condition'
     },
     {
       id: 'int_condition',
       label: 'Int Condition',
-      render: (prop) => prop.asset_int_condition || 'N/A',
+      render: (prop) => prop.asset_int_condition || prop.asset_interior_condition || 'N/A',
       adjustmentName: 'Interior Condition'
     }
   ];
@@ -243,7 +397,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       id: adj.adjustment_id,
       label: adj.adjustment_name,
       render: (prop) => {
-        // Try to find corresponding property data
+        // For dynamic attributes, try to find corresponding property data
         // This will need custom logic based on your data structure
         return 'N/A'; // Placeholder - will need property-specific rendering
       },
@@ -268,22 +422,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 Attribute
               </th>
               <th className="px-3 py-3 text-center font-semibold bg-yellow-50">
-                Subject<br/>
-                <span className="font-normal text-xs text-gray-600">
-                  {subject.property_block}/{subject.property_lot}
-                </span>
+                Subject
               </th>
               {[1, 2, 3, 4, 5].map((compNum) => {
                 const comp = comps[compNum - 1];
                 const bgColor = comp?.isSubjectSale ? 'bg-green-50' : 'bg-blue-50';
                 return (
                   <th key={compNum} className={`px-3 py-3 text-center font-semibold ${bgColor} border-l border-gray-300`}>
-                    Comparable {compNum}<br/>
-                    {comp && (
-                      <span className="font-normal text-xs text-gray-600">
-                        {comp.property_block}/{comp.property_lot}
-                      </span>
-                    )}
+                    Comparable {compNum}
                     {comp?.isSubjectSale && (
                       <span className="block text-xs text-green-700 font-semibold mt-1">(Subject Sale)</span>
                     )}
