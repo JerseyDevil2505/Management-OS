@@ -2546,6 +2546,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                           onChange={(e) => setManualSubject(prev => ({ ...prev, block: e.target.value }))}
                           className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs"
                           placeholder="Block"
+                          tabIndex={1}
                         />
                       </td>
                       {manualComps.map((comp, idx) => (
@@ -2560,6 +2561,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                             }}
                             className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs"
                             placeholder="Block"
+                            tabIndex={4 + (idx * 3)}
                           />
                         </td>
                       ))}
@@ -2575,6 +2577,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                           onChange={(e) => setManualSubject(prev => ({ ...prev, lot: e.target.value }))}
                           className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs"
                           placeholder="Lot"
+                          tabIndex={2}
                         />
                       </td>
                       {manualComps.map((comp, idx) => (
@@ -2589,6 +2592,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                             }}
                             className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs"
                             placeholder="Lot"
+                            tabIndex={5 + (idx * 3)}
                           />
                         </td>
                       ))}
@@ -2604,6 +2608,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                           onChange={(e) => setManualSubject(prev => ({ ...prev, qualifier: e.target.value }))}
                           className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs"
                           placeholder="Qual"
+                          tabIndex={3}
                         />
                       </td>
                       {manualComps.map((comp, idx) => (
@@ -2618,6 +2623,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                             }}
                             className="w-full px-2 py-1 border border-gray-300 rounded text-center text-xs"
                             placeholder="Qual"
+                            tabIndex={6 + (idx * 3)}
                           />
                         </td>
                       ))}
