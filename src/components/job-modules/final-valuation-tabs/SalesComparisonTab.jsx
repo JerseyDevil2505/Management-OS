@@ -73,7 +73,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   const [adjustmentGrid, setAdjustmentGrid] = useState([]);
   const [customBrackets, setCustomBrackets] = useState([]);
   const [minCompsForSuccess, setMinCompsForSuccess] = useState(3); // User-selectable threshold
-  const [selectedPropertyForDetail, setSelectedPropertyForDetail] = useState(null); // For detailed tab
 
   // Manual entry state for detailed tab
   const [manualSubject, setManualSubject] = useState({ block: '', lot: '', qualifier: '' });
