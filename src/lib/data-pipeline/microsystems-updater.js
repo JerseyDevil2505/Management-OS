@@ -997,12 +997,137 @@ export class MicrosystemsUpdater {
   }
 
   /**
+   * Extract fireplace count from Microsystems fields
+   * Sum of: Fireplace 1 Story Stack, Fp 1 And Half Sty, Fp 2 Sty, Fp Same Stack, Fp Heatilator
+   */
+  extractFireplaceCount(rawRecord) {
+    let total = 0;
+    total += this.parseInteger(rawRecord['Fireplace 1 Story Stack']) || 0;
+    total += this.parseInteger(rawRecord['Fp 1 And Half Sty']) || 0;
+    total += this.parseInteger(rawRecord['Fp 2 Sty']) || 0;
+    total += this.parseInteger(rawRecord['Fp Same Stack']) || 0;
+    total += this.parseInteger(rawRecord['Fp Heatilator']) || 0;
+    return total > 0 ? total : null;
+  }
+
+  /**
+   * Extract basement area from Basement field
+   */
+  extractBasementArea(rawRecord) {
+    return this.parseNumeric(rawRecord['Basement']);
+  }
+
+  /**
+   * Extract finished basement area from Bsmt Finish Sq Ft
+   * If value contains %, it's a percentage of total basement area
+   */
+  extractFinBasementArea(rawRecord) {
+    const basementArea = this.parseNumeric(rawRecord['Basement']) || 0;
+    const finishValue = rawRecord['Bsmt Finish Sq Ft'];
+
+    if (!finishValue || finishValue.trim() === '') return null;
+
+    // Check if it's a percentage
+    if (finishValue.includes('%')) {
+      const percentage = parseFloat(finishValue.replace('%', '').trim());
+      if (!isNaN(percentage) && basementArea > 0) {
+        return Math.round(basementArea * (percentage / 100));
+      }
+    } else {
+      // It's actual square footage
+      const sqft = this.parseNumeric(finishValue);
+      return sqft;
+    }
+
+    return null;
+  }
+
+  /**
+   * Extract deck area
+   */
+  extractDeckArea(rawRecord) {
+    return this.parseNumeric(rawRecord['Deck']);
+  }
+
+  /**
+   * Extract patio area (sum of Patio and Terr)
+   */
+  extractPatioArea(rawRecord) {
+    const patio = this.parseNumeric(rawRecord['Patio']) || 0;
+    const terr = this.parseNumeric(rawRecord['Terr']) || 0;
+    const total = patio + terr;
+    return total > 0 ? total : null;
+  }
+
+  /**
+   * Extract open porch area (sum of Op, Bi Op, Bi Op2, Bi Gp, and Porch)
+   */
+  extractOpenPorchArea(rawRecord) {
+    let total = 0;
+    total += this.parseNumeric(rawRecord['Op']) || 0;
+    total += this.parseNumeric(rawRecord['Bi Op']) || 0;
+    total += this.parseNumeric(rawRecord['Bi Op2']) || 0;
+    total += this.parseNumeric(rawRecord['Bi Gp']) || 0;
+    total += this.parseNumeric(rawRecord['Porch']) || 0;
+    return total > 0 ? total : null;
+  }
+
+  /**
+   * Extract enclosed porch area (sum of Ep and Bi Ep)
+   */
+  extractEnclosedPorchArea(rawRecord) {
+    const ep = this.parseNumeric(rawRecord['Ep']) || 0;
+    const biEp = this.parseNumeric(rawRecord['Bi Ep']) || 0;
+    const total = ep + biEp;
+    return total > 0 ? total : null;
+  }
+
+  /**
+   * Extract garage area (sum of Attgar, Attgar2, Bi Ga, Big, Big2, Big3)
+   */
+  extractGarageArea(rawRecord) {
+    let total = 0;
+    total += this.parseNumeric(rawRecord['Attgar']) || 0;
+    total += this.parseNumeric(rawRecord['Attgar2']) || 0;
+    total += this.parseNumeric(rawRecord['Bi Ga']) || 0;
+    total += this.parseNumeric(rawRecord['Big']) || 0;
+    total += this.parseNumeric(rawRecord['Big2']) || 0;
+    total += this.parseNumeric(rawRecord['Big3']) || 0;
+    return total > 0 ? total : null;
+  }
+
+  /**
+   * Extract detached garage area
+   * TODO: User mentioned this is tricky - may need configuration
+   */
+  extractDetGarageArea(rawRecord) {
+    // Placeholder for now - may need to be configured
+    return null;
+  }
+
+  /**
+   * Extract pool area
+   * TODO: User mentioned detached items are tricky - may need configuration
+   */
+  extractPoolArea(rawRecord) {
+    // Placeholder for now - may need to be configured
+    return null;
+  }
+
+  /**
+   * Extract AC area from AC Sf field
+   */
+  extractAcArea(rawRecord) {
+    return this.parseNumeric(rawRecord['AC Sf']);
+  }
+
+  /**
    * Calculate lot frontage - sum of Front Ft1, Front Ft2, Front Ft3
    */
   calculateLotFrontage(rawRecord) {
     let totalFrontage = 0;
     let hasValues = false;
-    
+
     const frontFt1 = this.parseNumeric(rawRecord['Front Ft1']);
     const frontFt2 = this.parseNumeric(rawRecord['Front Ft2']);
     const frontFt3 = this.parseNumeric(rawRecord['Front Ft3']);
