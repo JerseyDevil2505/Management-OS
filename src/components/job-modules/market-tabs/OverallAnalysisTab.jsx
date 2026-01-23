@@ -1152,9 +1152,9 @@ const OverallAnalysisTab = ({
       else if (designUpper.includes('STUDIO')) bedrooms = 'STUDIO';
 
       // 2) Synchronous property field fallbacks (common fields)
+      // Use direct column access (populated by processors/updaters)
       if (bedrooms === 'Unknown') {
-        const candidate = p.asset_bedrooms || p.asset_bedroom_count || p.bedrooms || p.bedrm || p.bed_total || p.BEDTOT || null;
-        const n = parseInt(candidate);
+        const n = parseInt(p.asset_bedrooms);
         if (!isNaN(n)) {
           if (n === 0) bedrooms = 'STUDIO';
           else bedrooms = `${n}BED`;
