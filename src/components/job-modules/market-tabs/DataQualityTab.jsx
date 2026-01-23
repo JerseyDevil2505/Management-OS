@@ -1305,29 +1305,16 @@ const generateQCFormPDF = () => {
     
     // BEDROOM COUNT VALIDATION
     if ((m4Class === '2' || m4Class === '3A') && buildingClass > 10) {
-      if (vendor === 'BRT') {
-        const bedTotal = await interpretCodes.getRawDataValue(property, 'bedrooms', vendor);
-        if (!bedTotal || parseInt(bedTotal) === 0) {
-          results.rooms.push({
-            check: 'zero_bedrooms',
-            severity: 'warning',
-            property_key: property.property_composite_key,
-            message: 'Residential property has zero bedrooms',
-            details: property
-          });
-        }
-      } else if (vendor === 'Microsystems') {
-        const totalBeds = await interpretCodes.getBedroomRoomSum(property, vendor);
-        
-        if (totalBeds === 0) {
-          results.rooms.push({
-            check: 'zero_bedrooms',
-            severity: 'warning',
-            property_key: property.property_composite_key,
-            message: 'Residential property has zero bedrooms',
-            details: property
-          });
-        }
+      // Use direct column access instead of async lookup
+      const bedrooms = property.asset_bedrooms;
+      if (!bedrooms || bedrooms === 0) {
+        results.rooms.push({
+          check: 'zero_bedrooms',
+          severity: 'warning',
+          property_key: property.property_composite_key,
+          message: 'Residential property has zero bedrooms',
+          details: property
+        });
       }
     }
     
