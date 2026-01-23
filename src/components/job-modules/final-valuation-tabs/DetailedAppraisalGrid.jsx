@@ -419,9 +419,21 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       id: adj.adjustment_id,
       label: adj.adjustment_name,
       render: (prop) => {
-        // For dynamic attributes, try to find corresponding property data
-        // This will need custom logic based on your data structure
-        return 'N/A'; // Placeholder - will need property-specific rendering
+        // Map adjustment_id to property column
+        const columnMap = {
+          'barn': 'barn_area',
+          'stable': 'stable_area',
+          'pole_barn': 'pole_barn_area'
+        };
+
+        // Check if this is a known attribute with a column
+        const columnName = columnMap[adj.adjustment_id];
+        if (columnName && prop[columnName] !== undefined && prop[columnName] !== null) {
+          return prop[columnName] > 0 ? `${prop[columnName].toLocaleString()} SF` : 'None';
+        }
+
+        // For miscellaneous items and others, show N/A for now
+        return 'N/A';
       },
       adjustmentName: adj.adjustment_name,
       isDynamic: true
