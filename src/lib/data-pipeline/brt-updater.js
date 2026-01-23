@@ -716,7 +716,19 @@ export class BRTUpdater {
       //          asset_zoning, values_norm_size, values_norm_time
       //          (moved to property_market_analysis table)
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
-      
+
+      // Normalized amenity area fields (extracted from BRT codes)
+      fireplace_count: this.extractFireplaceCount(rawRecord),
+      basement_area: this.extractBasementArea(rawRecord),
+      fin_basement_area: this.extractFinBasementArea(rawRecord),
+      garage_area: this.extractAttachedItemsAreaByKeyword(rawRecord, ['GAR']),
+      deck_area: this.extractAttachedItemsAreaByKeyword(rawRecord, ['DECK']),
+      patio_area: this.extractAttachedItemsAreaByKeyword(rawRecord, ['PATIO']),
+      open_porch_area: this.extractAttachedItemsAreaByKeyword(rawRecord, ['OPEN']),
+      enclosed_porch_area: this.extractAttachedItemsAreaByKeyword(rawRecord, ['ENCL', 'SCREEN', 'SCRN']),
+      det_garage_area: this.extractDetachedItemsAreaByKeyword(rawRecord, ['GAR']),
+      pool_area: this.extractDetachedItemsAreaByKeyword(rawRecord, ['POOL']),
+
       // Processing metadata
       processed_at: new Date().toISOString(),
       is_new_since_last_upload: false, // CHANGED: false for updates
