@@ -75,6 +75,18 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   const [minCompsForSuccess, setMinCompsForSuccess] = useState(3); // User-selectable threshold
   const [selectedPropertyForDetail, setSelectedPropertyForDetail] = useState(null); // For detailed tab
 
+  // Manual entry state for detailed tab
+  const [manualSubject, setManualSubject] = useState({ block: '', lot: '', qualifier: '' });
+  const [manualComps, setManualComps] = useState([
+    { block: '', lot: '', qualifier: '' },
+    { block: '', lot: '', qualifier: '' },
+    { block: '', lot: '', qualifier: '' },
+    { block: '', lot: '', qualifier: '' },
+    { block: '', lot: '', qualifier: '' }
+  ]);
+  const [manualEvaluationResult, setManualEvaluationResult] = useState(null);
+  const [isManualEvaluating, setIsManualEvaluating] = useState(false);
+
   const vendorType = jobData?.vendor_type || 'BRT';
 
   // Helper function to render comp cells (shows all 5 even if empty)
