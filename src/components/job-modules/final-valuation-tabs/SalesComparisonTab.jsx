@@ -379,7 +379,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         return;
       }
 
-      const subjectKey = `${manualSubject.block}-${manualSubject.lot}-${manualSubject.qualifier || ''}`;
+      const subjectKey = manualSubject.qualifier
+        ? `${manualSubject.block}-${manualSubject.lot}-${manualSubject.qualifier}`
+        : `${manualSubject.block}-${manualSubject.lot}`;
       const subject = properties.find(p => p.property_composite_key === subjectKey);
 
       if (!subject) {
@@ -392,7 +394,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       const fetchedComps = [];
       for (const compEntry of manualComps) {
         if (compEntry.block && compEntry.lot) {
-          const compKey = `${compEntry.block}-${compEntry.lot}-${compEntry.qualifier || ''}`;
+          const compKey = compEntry.qualifier
+            ? `${compEntry.block}-${compEntry.lot}-${compEntry.qualifier}`
+            : `${compEntry.block}-${compEntry.lot}`;
           const comp = properties.find(p => p.property_composite_key === compKey);
 
           if (comp && comp.sales_date && comp.values_norm_time) {
