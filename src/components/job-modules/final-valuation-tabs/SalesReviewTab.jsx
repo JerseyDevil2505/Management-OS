@@ -1295,11 +1295,16 @@ const SalesReviewTab = ({
             <button
               onClick={handleClearNormalization}
               disabled={isClearing || Object.keys(includeOverrides).length === 0}
+              style={{
+                backgroundColor: Object.keys(includeOverrides).length > 0 ? '#ea580c' : '#d1d5db',
+                color: Object.keys(includeOverrides).length > 0 ? 'white' : '#4b5563',
+                opacity: isClearing ? 0.5 : 1
+              }}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded transition-colors ${
                 Object.keys(includeOverrides).length > 0
-                  ? 'bg-orange-600 text-white hover:bg-orange-700'
-                  : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-              } ${isClearing ? 'opacity-50 cursor-wait' : ''}`}
+                  ? 'hover:bg-orange-700'
+                  : 'cursor-not-allowed'
+              }`}
               title={Object.keys(includeOverrides).length === 0 ? 'Make manual CME selections (✓/✗) to enable' : `Clear ${Object.keys(includeOverrides).length} manual CME ${Object.keys(includeOverrides).length === 1 ? 'selection' : 'selections'}`}
             >
               <X className="w-4 h-4" />
