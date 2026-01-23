@@ -237,9 +237,11 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       id: 'ac_area',
       label: 'AC Area',
       render: (prop) => {
-        if (prop.ac_area !== undefined) {
+        // Use new ac_area column if available
+        if (prop.ac_area !== undefined && prop.ac_area !== null) {
           return prop.ac_area > 0 ? `${prop.ac_area.toLocaleString()} SF` : 'None';
         }
+        // Fallback to boolean indicator
         return prop.asset_ac ? 'Yes' : 'None';
       },
       adjustmentName: 'AC'
