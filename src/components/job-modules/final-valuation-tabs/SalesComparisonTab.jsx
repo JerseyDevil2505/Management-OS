@@ -381,6 +381,112 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
     }
   };
 
+  // ==================== MANUAL BLQ EVALUATION (DETAILED TAB) ====================
+  const handleManualEvaluate = async () => {
+    setIsManualEvaluating(true);
+
+    try {
+      // Fetch subject property
+      if (!manualSubject.block || !manualSubject.lot) {
+        alert('Please enter Block and Lot for the subject property');
+        setIsManualEvaluating(false);
+        return;
+      }
+
+      const subjectKey = `${manualSubject.block}-${manualSubject.lot}-${manualSubject.qualifier || ''}`;
+      const subject = properties.find(p => p.property_composite_key === subjectKey);
+
+      if (!subject) {
+        alert(`Subject property not found: ${subjectKey}\n\nMake sure the property exists in this job.`);
+        setIsManualEvaluating(false);
+        return;
+      }
+
+      // Fetch comparables
+      const fetchedComps = [];
+      for (const compEntry of manualComps) {
+        if (compEntry.block && compEntry.lot) {
+          const compKey = `${compEntry.block}-${compEntry.lot}-${compEntry.qualifier || ''}`;
+          const comp = properties.find(p => p.property_composite_key === compKey);
+
+          if (comp && comp.sales_date && comp.values_norm_time) {
+            // Calculate adjustments
+            const { adjustments, totalAdjustment, adjustedPrice, adjustmentPercent } =
+              calculateAllAdjustments(subject, comp);
+
+            const grossAdjustment = adjustments.reduce((sum, adj) => sum + Math.abs(adj.amount), 0);
+            const grossAdjustmentPercent = comp.values_norm_time > 0
+              ? (grossAdjustment / comp.values_norm_time) * 100
+              : 0;
+
+            fetchedComps.push({
+              ...comp,
+              adjustments,
+              totalAdjustment,
+              grossAdjustment,
+              grossAdjustmentPercent,
+              adjustedPrice,
+              adjustmentPercent,
+              rank: fetchedComps.length + 1,
+              weight: 0 // Will be calculated below
+            });
+          }
+        }
+      }
+
+      // Calculate weights and projected assessment
+      let projectedAssessment = null;
+      let confidenceScore = 0;
+
+      if (fetchedComps.length >= 1) {
+        const totalInverseAdjPct = fetchedComps.reduce((sum, comp) => {
+          return sum + (1 / (Math.abs(comp.adjustmentPercent) + 1));
+        }, 0);
+
+        fetchedComps.forEach(comp => {
+          comp.weight = (1 / (Math.abs(comp.adjustmentPercent) + 1)) / totalInverseAdjPct;
+        });
+
+        projectedAssessment = fetchedComps.reduce((sum, comp) => {
+          return sum + (comp.adjustedPrice * comp.weight);
+        }, 0);
+
+        const avgAdjPct = fetchedComps.reduce((sum, c) => sum + Math.abs(c.adjustmentPercent), 0) / fetchedComps.length;
+        confidenceScore = Math.max(0, Math.min(100,
+          (fetchedComps.length / 5) * 100 - (avgAdjPct * 2)
+        ));
+      }
+
+      setManualEvaluationResult({
+        subject,
+        comparables: fetchedComps,
+        projectedAssessment: projectedAssessment ? Math.round(projectedAssessment) : null,
+        confidenceScore: Math.round(confidenceScore),
+        hasSubjectSale: false
+      });
+
+      console.log(`✅ Manual evaluation complete: ${fetchedComps.length} comps found`);
+
+    } catch (error) {
+      console.error('Error in manual evaluation:', error);
+      alert(`Evaluation failed: ${error.message}`);
+    } finally {
+      setIsManualEvaluating(false);
+    }
+  };
+
+  const handleClearManualComps = () => {
+    setManualSubject({ block: '', lot: '', qualifier: '' });
+    setManualComps([
+      { block: '', lot: '', qualifier: '' },
+      { block: '', lot: '', qualifier: '' },
+      { block: '', lot: '', qualifier: '' },
+      { block: '', lot: '', qualifier: '' },
+      { block: '', lot: '', qualifier: '' }
+    ]);
+    setManualEvaluationResult(null);
+  };
+
   // ==================== APPLY TO FINAL ROSTER ====================
   const handleApplyToFinalRoster = async () => {
     if (!evaluationResults) return;
