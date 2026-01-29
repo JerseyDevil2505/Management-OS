@@ -380,34 +380,33 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         console.log(`✅ Microsystems detached items (680): ${categoryCodes['15'].length} codes`);
 
         // Category 39: Miscellaneous items from prefixes 590, 591, 592, 593
+        // Use Map to deduplicate codes that appear in multiple prefixes
+        const miscCodesMap = new Map();
         ['590', '591', '592', '593'].forEach(prefix => {
           const miscCodes = codeDefinitions.field_codes[prefix] || {};
           Object.entries(miscCodes).forEach(([code, data]) => {
-            if (data.description) {
-              categoryCodes['39'].push({
-                code: code,
-                description: data.description.trim()
-              });
+            if (data.description && !miscCodesMap.has(code)) {
+              miscCodesMap.set(code, data.description.trim());
             }
           });
+        });
+        miscCodesMap.forEach((description, code) => {
+          categoryCodes['39'].push({ code, description });
         });
         console.log(`✅ Microsystems miscellaneous (590-593): ${categoryCodes['39'].length} codes`);
 
         // Categories 62 & 63: Land adjustments from table 220
+        // Use Map to deduplicate, then add to both positive and negative
+        const landCodesMap = new Map();
         const landCodes = codeDefinitions.field_codes['220'] || {};
         Object.entries(landCodes).forEach(([code, data]) => {
-          if (data.description) {
-            // Determine if positive or negative based on description or code patterns
-            // For now, add to both categories - user can configure which to use
-            categoryCodes['62'].push({
-              code: code,
-              description: data.description.trim()
-            });
-            categoryCodes['63'].push({
-              code: code,
-              description: data.description.trim()
-            });
+          if (data.description && !landCodesMap.has(code)) {
+            landCodesMap.set(code, data.description.trim());
           }
+        });
+        landCodesMap.forEach((description, code) => {
+          categoryCodes['62'].push({ code, description });
+          categoryCodes['63'].push({ code, description });
         });
         console.log(`✅ Microsystems land adjustments (220): ${categoryCodes['62'].length} codes`);
       }
