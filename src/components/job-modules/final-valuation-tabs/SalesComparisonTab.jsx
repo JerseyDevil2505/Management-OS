@@ -398,11 +398,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       const fetchedComps = [];
       for (const compEntry of manualComps) {
         if (compEntry.block && compEntry.lot) {
-          const comp = properties.find(p =>
-            p.property_block === compEntry.block &&
-            p.property_lot === compEntry.lot &&
-            (p.property_qualifier || '') === (compEntry.qualifier || '')
-          );
+          const comp = properties.find(p => {
+            const blockMatch = (p.property_block || '').trim().toUpperCase() === compEntry.block.trim().toUpperCase();
+            const lotMatch = (p.property_lot || '').trim().toUpperCase() === compEntry.lot.trim().toUpperCase();
+            const qualMatch = (p.property_qualifier || '').trim().toUpperCase() === (compEntry.qualifier || '').trim().toUpperCase();
+            return blockMatch && lotMatch && qualMatch;
+          });
 
           if (comp && comp.sales_date && comp.values_norm_time) {
             // Calculate adjustments
