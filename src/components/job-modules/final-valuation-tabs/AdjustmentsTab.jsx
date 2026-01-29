@@ -762,34 +762,41 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         });
       }
 
-      // CRITICAL: Recalculate amenity areas for all properties using new code mappings
-      console.log('🔄 Triggering database recalculation with new code mappings...');
+      // CRITICAL: Recalculate amenity areas for BRT properties using new code mappings
+      // For Microsystems, amenities are extracted from columns, not BRT item codes
+      let recalcMessage = '';
+      if (vendorType === 'BRT') {
+        console.log('🔄 Triggering database recalculation with new code mappings...');
 
-      const { data: { session } } = await supabase.auth.getSession();
-      const recalcResponse = await fetch(
-        `${supabase.supabaseUrl}/functions/v1/recalculate-amenities`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}`
-          },
-          body: JSON.stringify({
-            jobId: jobData.id,
-            codeConfig: codeConfig
-          })
+        const { data: { session } } = await supabase.auth.getSession();
+        const recalcResponse = await fetch(
+          `${supabase.supabaseUrl}/functions/v1/recalculate-amenities`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session?.access_token}`
+            },
+            body: JSON.stringify({
+              jobId: jobData.id,
+              codeConfig: codeConfig
+            })
+          }
+        );
+
+        if (!recalcResponse.ok) {
+          const errorData = await recalcResponse.json().catch(() => ({}));
+          throw new Error(`Recalculation failed: ${errorData.error || 'Edge function error'}`);
         }
-      );
 
-      if (!recalcResponse.ok) {
-        const errorData = await recalcResponse.json();
-        throw new Error(`Recalculation failed: ${errorData.error}`);
+        const recalcResult = await recalcResponse.json();
+        console.log('✅ Recalculation complete:', recalcResult);
+        recalcMessage = `\n\n${recalcResult.updatedCount} properties updated with new code mappings.`;
+      } else {
+        console.log('ℹ️ Microsystems vendor - amenities extracted from columns, no recalculation needed');
       }
 
-      const recalcResult = await recalcResponse.json();
-      console.log('✅ Recalculation complete:', recalcResult);
-
-      alert(`Code configuration saved and ${recalcResult.updatedCount} properties updated!${newAdjustments.length > 0 ? ` ${newAdjustments.length} new adjustment row(s) added to grid.` : ''}\n\nAmenity areas have been recalculated using your custom code mappings.`);
+      alert(`Code configuration saved!${newAdjustments.length > 0 ? ` ${newAdjustments.length} new adjustment row(s) added to grid.` : ''}${recalcMessage}`);
 
       // Dismiss auto-populate notice and reset flag after saving
       setShowAutoPopulateNotice(false);
