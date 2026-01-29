@@ -108,6 +108,11 @@ const AnalyticsTab = ({ jobData, properties }) => {
       if (prop.sales_date && prop.values_norm_time && prop.values_norm_time > 0) {
         const salesPeriod = getSalesPeriod(prop.sales_date);
 
+        // Track counts
+        if (salesPeriod === 'CSP') cspCount++;
+        if (salesPeriod === 'PSP') pspCount++;
+        if (salesPeriod === 'HSP') hspCount++;
+
         // Push all sales data, even if assessed is 0
         if (salesPeriod === 'HSP') {
           group.hspSales.push({ assessed: newTotal, sale: prop.values_norm_time });
