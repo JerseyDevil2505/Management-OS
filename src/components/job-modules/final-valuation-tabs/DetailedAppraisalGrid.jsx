@@ -20,10 +20,25 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
   // Helper to get adjustment for a specific attribute
   const getAdjustment = (comp, attributeName) => {
-    return comp.adjustments?.find(a => 
-      a.name === attributeName || 
+    return comp.adjustments?.find(a =>
+      a.name === attributeName ||
       a.name?.toLowerCase().includes(attributeName.toLowerCase())
     );
+  };
+
+  // Helper to get adjustment definition from adjustmentGrid
+  const getAdjustmentDef = (adjustmentName) => {
+    if (!adjustmentName || !adjustmentGrid) return null;
+    return adjustmentGrid.find(adj =>
+      adj.adjustment_name === adjustmentName ||
+      adj.adjustment_name?.toLowerCase().includes(adjustmentName.toLowerCase())
+    );
+  };
+
+  // Helper to check if adjustment is flat type
+  const isAdjustmentFlat = (adjustmentName) => {
+    const adjDef = getAdjustmentDef(adjustmentName);
+    return adjDef?.adjustment_type === 'flat';
   };
 
   // Helper to count BRT items by category codes
