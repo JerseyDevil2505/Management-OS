@@ -515,6 +515,16 @@ const SalesReviewTab = ({
       const assessedValue = useProjectedAssessment ? prop.values_cama_total : prop.values_mod_total;
       const ratioValue = useProjectedAssessment ? prop.salesRatioCama : prop.salesRatio;
 
+      // Debug: Log all properties contributing to projected average
+      if (useProjectedAssessment && ratioValue !== null && ratioValue !== undefined) {
+        console.log(`🔢 VCS ${vcs} - Block ${prop.property_block} Lot ${prop.property_lot}:`, {
+          values_cama_total: prop.values_cama_total,
+          values_norm_time: prop.values_norm_time,
+          salesRatioCama: ratioValue?.toFixed(1) + '%',
+          property_location: prop.property_location
+        });
+      }
+
       if (assessedValue) groups[vcs].assessedSum += assessedValue;
       if (ratioValue !== null && ratioValue !== undefined) {
         groups[vcs].salesRatioSum += ratioValue;
