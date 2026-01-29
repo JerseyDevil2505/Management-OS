@@ -1365,7 +1365,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                                     value={attrValue.value}
                                     onChange={(e) => handleCustomBracketValueChange(adj.adjustment_id, 'value', e.target.value)}
                                     className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                                    step={attrValue.type === 'per_sqft' ? '0.01' : attrValue.type === 'percent' ? '1' : '100'}
+                                    step={attrValue.type === 'per_sqft' ? '0.01' : attrValue.type === 'percent' ? '1' : attrValue.type === 'count' ? '1' : '100'}
                                   />
                                 </td>
                                 <td className="px-4 py-2">
