@@ -532,7 +532,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 <td className={`px-3 py-2 text-center bg-yellow-50 ${attr.bold ? 'font-semibold' : 'text-xs'}`}>
                   {attr.render(subject)}
                 </td>
-                {renderCompCells((comp) => {
+                {renderCompCells((comp, idx) => {
                   let value = attr.render(comp);
                   const adj = attr.adjustmentName ? getAdjustment(comp, attr.adjustmentName) : null;
 
@@ -552,6 +552,17 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       }
                     } else if (typeof rawValue === 'number') {
                       hasValue = rawValue > 0;
+                    }
+
+                    // Debug log first comp only
+                    if (idx === 0 && !window._detailedDebugLogged) {
+                      console.log(`🔍 YES/NONE Debug for ${attr.adjustmentName}:`, {
+                        rawValue,
+                        hasValue,
+                        finalValue: hasValue ? 'YES' : 'NONE',
+                        isFlat: isAdjustmentFlat(attr.adjustmentName),
+                        isCount: isAdjustmentCount(attr.adjustmentName)
+                      });
                     }
 
                     value = hasValue ? 'YES' : 'NONE';
