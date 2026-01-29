@@ -1238,7 +1238,12 @@ getInteriorConditionName: function(property, codeDefinitions, vendorType) {
   getStoryHeight: async function(property, codeDefinitions, vendorType) {
     if (!property) return null;
 
-    // First check source file data for the original text value
+    // NEW: First check asset_story_height column (now preserved as text with values like "2A", "1.5", etc.)
+    if (property.asset_story_height) {
+      return property.asset_story_height;
+    }
+
+    // Fallback: Check source file data for the original text value
     if (property.job_id && property.property_composite_key) {
       const rawData = await getRawDataForProperty(property.job_id, property.property_composite_key);
       if (rawData) {

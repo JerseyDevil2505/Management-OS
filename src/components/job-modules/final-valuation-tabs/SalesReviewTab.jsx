@@ -7,7 +7,9 @@ import {
   ChevronDown,
   ChevronRight,
   Check,
-  X
+  X,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 
@@ -48,6 +50,29 @@ const SalesReviewTab = ({
 }) => {
   const vendorType = jobData?.vendor_type || jobData?.vendor_source || 'BRT';
   const parsedCodeDefinitions = useMemo(() => jobData?.parsed_code_definitions || {}, [jobData?.parsed_code_definitions]);
+
+  // ==================== SORTABLE HEADER COMPONENT ====================
+
+  const SortableHeader = ({ sortKey, label, align = 'left', sortConfig, onSort }) => {
+    const isSorted = sortConfig.key === sortKey;
+    const alignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
+
+    return (
+      <th
+        className={`px-3 py-3 ${alignClass} font-medium text-gray-700 cursor-pointer hover:bg-gray-100 select-none`}
+        onClick={() => onSort(sortKey)}
+      >
+        <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : ''}`}>
+          <span>{label}</span>
+          {isSorted && (
+            sortConfig.direction === 'asc'
+              ? <ArrowUp className="w-4 h-4" />
+              : <ArrowDown className="w-4 h-4" />
+          )}
+        </div>
+      </th>
+    );
+  };
 
   // ==================== SALES NU CODE NORMALIZATION ====================
 
@@ -103,6 +128,7 @@ const SalesReviewTab = ({
   const [showCodesNotMeanings, setShowCodesNotMeanings] = useState(true); // Default to codes
   const [fontSize, setFontSize] = useState(12); // Adjustable font size
   const [sortConfig, setSortConfig] = useState({ key: 'sales_date', direction: 'desc' });
+  const [useProjectedAssessment, setUseProjectedAssessment] = useState(false); // Toggle for Current vs Projected
   
   // Filters
   const [dateRange, setDateRange] = useState({ start: '', end: '' }); // Empty by default - don't filter by date initially
@@ -186,6 +212,9 @@ const SalesReviewTab = ({
 
     loadIncludeOverrides();
   }, [jobData?.id, properties]);
+
+  // Note: Projected assessments use values_cama_total from property_records (already in props)
+  // No need to load final_valuation_data separately
 
   // ==================== COMPUTED DATA ====================
   
@@ -431,7 +460,7 @@ const SalesReviewTab = ({
       totalPrice: 0,
       totalNormPrice: 0,
       sflaSum: 0,
-      ageSum: 0,
+      yearBuiltSum: 0,
       yearBuiltCount: 0,
       assessedSum: 0,
       salesRatioSum: 0,
@@ -448,7 +477,7 @@ const SalesReviewTab = ({
           totalPrice: 0,
           totalNormPrice: 0,
           sflaSum: 0,
-          ageSum: 0,
+          yearBuiltSum: 0,
           yearBuiltCount: 0,
           assessedSum: 0,
           salesRatioSum: 0,
@@ -462,15 +491,29 @@ const SalesReviewTab = ({
       if (prop.values_norm_time) groups[vcs].totalNormPrice += prop.values_norm_time;
       if (prop.asset_sfla) groups[vcs].sflaSum += prop.asset_sfla;
       if (prop.asset_year_built) {
-        const currentYear = new Date().getFullYear();
-        groups[vcs].ageSum += currentYear - prop.asset_year_built;
+        groups[vcs].yearBuiltSum += prop.asset_year_built;
         groups[vcs].yearBuiltCount++;
       }
-      if (prop.values_mod_total) groups[vcs].assessedSum += prop.values_mod_total;
-      if (prop.salesRatio !== null && prop.salesRatio !== undefined) {
-        groups[vcs].salesRatioSum += prop.salesRatio;
+
+      // Use projected (CAMA) or current (MOD) assessment based on toggle
+      const assessedValue = useProjectedAssessment ? prop.values_cama_total : prop.values_mod_total;
+      const ratioValue = useProjectedAssessment ? prop.salesRatioCama : prop.salesRatio;
+
+      // Debug: Log all properties contributing to projected average
+      if (useProjectedAssessment && ratioValue !== null && ratioValue !== undefined) {
+        console.log(`🔢 VCS ${vcs} - Block ${prop.property_block} Lot ${prop.property_lot}:`, {
+          values_cama_total: prop.values_cama_total,
+          values_norm_time: prop.values_norm_time,
+          salesRatioCama: ratioValue?.toFixed(1) + '%',
+          property_location: prop.property_location
+        });
+      }
+
+      if (assessedValue) groups[vcs].assessedSum += assessedValue;
+      if (ratioValue !== null && ratioValue !== undefined) {
+        groups[vcs].salesRatioSum += ratioValue;
         groups[vcs].salesRatioCount++;
-        groups[vcs].salesRatios.push(prop.salesRatio);
+        groups[vcs].salesRatios.push(ratioValue);
       }
 
       // Add to overall totals
@@ -479,20 +522,20 @@ const SalesReviewTab = ({
       if (prop.values_norm_time) overallTotals.totalNormPrice += prop.values_norm_time;
       if (prop.asset_sfla) overallTotals.sflaSum += prop.asset_sfla;
       if (prop.asset_year_built) {
-        const currentYear = new Date().getFullYear();
-        overallTotals.ageSum += currentYear - prop.asset_year_built;
+        overallTotals.yearBuiltSum += prop.asset_year_built;
         overallTotals.yearBuiltCount++;
       }
-      if (prop.values_mod_total) overallTotals.assessedSum += prop.values_mod_total;
-      if (prop.salesRatio !== null && prop.salesRatio !== undefined) {
-        overallTotals.salesRatioSum += prop.salesRatio;
+      if (assessedValue) overallTotals.assessedSum += assessedValue;
+      if (ratioValue !== null && ratioValue !== undefined) {
+        overallTotals.salesRatioSum += ratioValue;
         overallTotals.salesRatioCount++;
-        overallTotals.salesRatios.push(prop.salesRatio);
+        overallTotals.salesRatios.push(ratioValue);
       }
     });
 
     const analytics = Object.entries(groups).map(([vcs, data]) => {
-      const avgSalesRatio = data.salesRatioCount > 0 ? data.salesRatioSum / data.salesRatioCount : 0;
+      // Use weighted mean: (Total Assessed / Total Sales) × 100
+      const avgSalesRatio = data.totalNormPrice > 0 ? (data.assessedSum / data.totalNormPrice) * 100 : 0;
 
       // Calculate COD (Coefficient of Deviation) - NJ Formula
       // COD = (Average Absolute Deviation / Mean Assessment-Sales Ratio) × 100%
@@ -505,12 +548,11 @@ const SalesReviewTab = ({
 
       // Calculate PRD (Price-Related Differential) - NJ Formula
       // PRD = Mean Assessment Ratio / Weighted Mean Assessment Ratio
-      // Weighted Mean = Sum(Assessed Values) / Sum(Sale Prices)
+      // Mean Ratio = average of individual ratios, Weighted Mean = avgSalesRatio (already calculated above)
       let prd = 0;
-      if (data.salesRatios.length > 0 && data.totalNormPrice > 0 && data.assessedSum > 0) {
-        const meanRatio = avgSalesRatio / 100; // Convert from percentage
-        const weightedMeanRatio = (data.assessedSum / data.totalNormPrice);
-        prd = weightedMeanRatio > 0 ? meanRatio / weightedMeanRatio : 0;
+      if (data.salesRatioCount > 0 && avgSalesRatio > 0) {
+        const meanRatio = data.salesRatioSum / data.salesRatioCount; // Average of individual ratios
+        prd = meanRatio / avgSalesRatio; // Divide by weighted mean
       }
 
       return {
@@ -518,9 +560,9 @@ const SalesReviewTab = ({
         count: data.count,
         avgPrice: data.count > 0 ? data.totalPrice / data.count : 0,
         avgNormPrice: data.count > 0 ? data.totalNormPrice / data.count : 0,
-        avgSFLA: data.sflaSum > 0 ? data.sflaSum / data.count : 0,
+        avgSFLA: data.sflaSum > 0 ? Math.round(data.sflaSum / data.count) : 0,
         avgPPSF: data.count > 0 && data.sflaSum > 0 ? data.totalPrice / data.sflaSum : 0,
-        avgAge: data.yearBuiltCount > 0 ? data.ageSum / data.yearBuiltCount : 0,
+        avgYearBuilt: data.yearBuiltCount > 0 ? Math.round(data.yearBuiltSum / data.yearBuiltCount) : 0,
         avgAssessed: data.count > 0 ? data.assessedSum / data.count : 0,
         avgSalesRatio,
         cod,
@@ -529,18 +571,28 @@ const SalesReviewTab = ({
     }).sort((a, b) => a.vcs.localeCompare(b.vcs));
 
     // Calculate overall summary row
-    const avgSalesRatio = overallTotals.salesRatioCount > 0 ? overallTotals.salesRatioSum / overallTotals.salesRatioCount : 0;
+    // Use weighted mean: (Total Assessed / Total Sales) × 100
+    const avgSalesRatio = overallTotals.totalNormPrice > 0 ? (overallTotals.assessedSum / overallTotals.totalNormPrice) * 100 : 0;
+
+    console.log('🎯 VCS Analytics Calculation:', {
+      mode: useProjectedAssessment ? 'PROJECTED' : 'CURRENT',
+      totalAssessed: overallTotals.assessedSum,
+      totalNormSales: overallTotals.totalNormPrice,
+      calculatedRatio: avgSalesRatio.toFixed(1) + '%',
+      propertyCount: overallTotals.count
+    });
     let cod = 0;
     if (overallTotals.salesRatios.length > 0 && avgSalesRatio > 0) {
       const absoluteDeviations = overallTotals.salesRatios.map(ratio => Math.abs(ratio - avgSalesRatio));
       const avgAbsoluteDeviation = absoluteDeviations.reduce((a, b) => a + b, 0) / overallTotals.salesRatios.length;
       cod = (avgAbsoluteDeviation / avgSalesRatio) * 100;
     }
+    // Calculate PRD (Price-Related Differential) - NJ Formula
+    // PRD = Mean Ratio / Weighted Mean Ratio
     let prd = 0;
-    if (overallTotals.salesRatios.length > 0 && overallTotals.totalNormPrice > 0 && overallTotals.assessedSum > 0) {
-      const meanRatio = avgSalesRatio / 100;
-      const weightedMeanRatio = (overallTotals.assessedSum / overallTotals.totalNormPrice);
-      prd = weightedMeanRatio > 0 ? meanRatio / weightedMeanRatio : 0;
+    if (overallTotals.salesRatioCount > 0 && avgSalesRatio > 0) {
+      const meanRatio = overallTotals.salesRatioSum / overallTotals.salesRatioCount; // Average of individual ratios
+      prd = meanRatio / avgSalesRatio; // Divide by weighted mean
     }
 
     const summary = {
@@ -548,17 +600,31 @@ const SalesReviewTab = ({
       count: overallTotals.count,
       avgPrice: overallTotals.count > 0 ? overallTotals.totalPrice / overallTotals.count : 0,
       avgNormPrice: overallTotals.count > 0 ? overallTotals.totalNormPrice / overallTotals.count : 0,
-      avgSFLA: overallTotals.sflaSum > 0 ? overallTotals.sflaSum / overallTotals.count : 0,
+      avgSFLA: overallTotals.sflaSum > 0 ? Math.round(overallTotals.sflaSum / overallTotals.count) : 0,
       avgPPSF: overallTotals.count > 0 && overallTotals.sflaSum > 0 ? overallTotals.totalPrice / overallTotals.sflaSum : 0,
-      avgAge: overallTotals.yearBuiltCount > 0 ? overallTotals.ageSum / overallTotals.yearBuiltCount : 0,
+      avgYearBuilt: overallTotals.yearBuiltCount > 0 ? Math.round(overallTotals.yearBuiltSum / overallTotals.yearBuiltCount) : 0,
       avgAssessed: overallTotals.count > 0 ? overallTotals.assessedSum / overallTotals.count : 0,
       avgSalesRatio,
       cod,
       prd
     };
 
+    // Debug: Summary of projected average calculation
+    if (useProjectedAssessment && overallTotals.totalNormPrice > 0) {
+      console.log('📊 PROJECTED AVERAGE CALCULATION SUMMARY:', {
+        mode: 'Projected (CAMA)',
+        total_properties_with_sales: overallTotals.count,
+        total_assessed: overallTotals.assessedSum.toLocaleString(),
+        total_norm_sales: overallTotals.totalNormPrice.toLocaleString(),
+        calculated_average: avgSalesRatio.toFixed(1) + '%',
+        formula: `(${overallTotals.assessedSum.toLocaleString()} / ${overallTotals.totalNormPrice.toLocaleString()}) × 100 = ${avgSalesRatio.toFixed(1)}%`,
+        COD: cod.toFixed(2),
+        PRD: prd.toFixed(3)
+      });
+    }
+
     return { analytics, summary };
-  }, [filteredProperties]);
+  }, [filteredProperties, useProjectedAssessment]);
 
   const styleAnalytics = useMemo(() => {
     const groups = {};
@@ -804,11 +870,22 @@ const SalesReviewTab = ({
 
   // Handle include/exclude override
   const handleIncludeToggle = async (property, value) => {
+    console.log('🔘 Toggle override:', {
+      property: property.property_location,
+      propertyId: property.id,
+      value,
+      currentOverrides: Object.keys(includeOverrides).length
+    });
+
     // Update local state immediately
-    setIncludeOverrides(prev => ({
-      ...prev,
-      [property.id]: value
-    }));
+    setIncludeOverrides(prev => {
+      const newState = {
+        ...prev,
+        [property.id]: value
+      };
+      console.log('📊 New overrides count:', Object.keys(newState).length);
+      return newState;
+    });
 
     // Save to database (property_market_analysis table)
     try {
@@ -824,6 +901,7 @@ const SalesReviewTab = ({
         });
 
       if (error) throw error;
+      console.log('✅ Override saved to database');
     } catch (error) {
       console.error('Error saving include override:', error);
       alert(`Failed to save: ${error.message}`);
@@ -1057,8 +1135,34 @@ const SalesReviewTab = ({
             {expandedSections.vcs ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
           </button>
           {expandedSections.vcs && (
-            <div className="px-4 pb-4 overflow-x-auto">
-              <table className="min-w-full text-sm">
+            <div className="px-4 pb-4">
+              {/* Assessment Type Toggle */}
+              <div className="mb-3 flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">Assessment Data:</label>
+                <button
+                  onClick={() => setUseProjectedAssessment(false)}
+                  className={`px-3 py-1 text-sm rounded-l border ${
+                    !useProjectedAssessment
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  Current
+                </button>
+                <button
+                  onClick={() => setUseProjectedAssessment(true)}
+                  className={`px-3 py-1 text-sm rounded-r border-t border-r border-b ${
+                    useProjectedAssessment
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  Projected
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b">
                     <th className="text-left py-2 px-2">VCS</th>
@@ -1067,8 +1171,8 @@ const SalesReviewTab = ({
                     <th className="text-right py-2 px-2">Avg Norm Price</th>
                     <th className="text-right py-2 px-2">Avg SFLA</th>
                     <th className="text-right py-2 px-2">Avg PPSF</th>
-                    <th className="text-right py-2 px-2">Avg Age</th>
-                    <th className="text-right py-2 px-2">Avg Assessed</th>
+                    <th className="text-right py-2 px-2">Avg Year Built</th>
+                    <th className="text-right py-2 px-2">Avg Assessed{useProjectedAssessment ? ' (Projected)' : ''}</th>
                     <th className="text-right py-2 px-2">Avg Ratio</th>
                     <th className="text-right py-2 px-2">COD</th>
                     <th className="text-right py-2 px-2">PRD</th>
@@ -1080,9 +1184,9 @@ const SalesReviewTab = ({
                     <td className="py-2 px-2 text-right">{vcsAnalytics.summary.count}</td>
                     <td className="py-2 px-2 text-right">{formatCurrency(vcsAnalytics.summary.avgPrice)}</td>
                     <td className="py-2 px-2 text-right">{formatCurrency(vcsAnalytics.summary.avgNormPrice)}</td>
-                    <td className="py-2 px-2 text-right">{formatNumber(vcsAnalytics.summary.avgSFLA)}</td>
+                    <td className="py-2 px-2 text-right">{vcsAnalytics.summary.avgSFLA}</td>
                     <td className="py-2 px-2 text-right">{formatCurrency(vcsAnalytics.summary.avgPPSF)}</td>
-                    <td className="py-2 px-2 text-right">{vcsAnalytics.summary.avgAge.toFixed(1)}</td>
+                    <td className="py-2 px-2 text-right">{vcsAnalytics.summary.avgYearBuilt || '-'}</td>
                     <td className="py-2 px-2 text-right">{formatCurrency(vcsAnalytics.summary.avgAssessed)}</td>
                     <td className="py-2 px-2 text-right">{formatPercent(vcsAnalytics.summary.avgSalesRatio)}</td>
                     <td className="py-2 px-2 text-right">{vcsAnalytics.summary.cod.toFixed(2)}</td>
@@ -1094,9 +1198,9 @@ const SalesReviewTab = ({
                       <td className="py-2 px-2 text-right">{row.count}</td>
                       <td className="py-2 px-2 text-right">{formatCurrency(row.avgPrice)}</td>
                       <td className="py-2 px-2 text-right">{formatCurrency(row.avgNormPrice)}</td>
-                      <td className="py-2 px-2 text-right">{formatNumber(row.avgSFLA)}</td>
+                      <td className="py-2 px-2 text-right">{row.avgSFLA}</td>
                       <td className="py-2 px-2 text-right">{formatCurrency(row.avgPPSF)}</td>
-                      <td className="py-2 px-2 text-right">{row.avgAge.toFixed(1)}</td>
+                      <td className="py-2 px-2 text-right">{row.avgYearBuilt || '-'}</td>
                       <td className="py-2 px-2 text-right">{formatCurrency(row.avgAssessed)}</td>
                       <td className="py-2 px-2 text-right">{formatPercent(row.avgSalesRatio)}</td>
                       <td className="py-2 px-2 text-right">{row.cod.toFixed(2)}</td>
@@ -1104,7 +1208,8 @@ const SalesReviewTab = ({
                     </tr>
                   ))}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -1295,12 +1400,17 @@ const SalesReviewTab = ({
             <button
               onClick={handleClearNormalization}
               disabled={isClearing || selectedProperties.size === 0}
+              style={{
+                backgroundColor: selectedProperties.size > 0 ? '#ea580c' : '#d1d5db',
+                color: selectedProperties.size > 0 ? 'white' : '#4b5563',
+                opacity: isClearing ? 0.5 : 1
+              }}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded transition-colors ${
                 selectedProperties.size > 0
-                  ? 'bg-orange-600 text-white hover:bg-orange-700'
-                  : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-              } ${isClearing ? 'opacity-50 cursor-wait' : ''}`}
-              title={selectedProperties.size === 0 ? 'Select properties with normalization to clear' : `Clear normalization for ${selectedProperties.size} selected ${selectedProperties.size === 1 ? 'property' : 'properties'}`}
+                  ? 'hover:bg-orange-700'
+                  : 'cursor-not-allowed'
+              }`}
+              title={selectedProperties.size === 0 ? 'Select properties with checkboxes to clear their normalized values' : `Clear normalization for ${selectedProperties.size} selected ${selectedProperties.size === 1 ? 'property' : 'properties'}`}
             >
               <X className="w-4 h-4" />
               Clear Normalization {selectedProperties.size > 0 ? `(${selectedProperties.size})` : ''}
@@ -1689,8 +1799,11 @@ const SalesReviewTab = ({
             <div className="text-sm text-gray-600">Crnt Avg Sales Ratio</div>
             <div className="text-2xl font-bold text-gray-900">
               {(() => {
-                const ratios = filteredProperties.filter(p => p.salesRatio !== null).map(p => p.salesRatio);
-                const avg = ratios.length > 0 ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 0;
+                // Use weighted mean: (Total Assessed / Total Sales) × 100
+                const props = filteredProperties.filter(p => p.values_mod_total && p.values_norm_time && p.values_norm_time > 0);
+                const totalAssessed = props.reduce((sum, p) => sum + (p.values_mod_total || 0), 0);
+                const totalSales = props.reduce((sum, p) => sum + (p.values_norm_time || 0), 0);
+                const avg = totalSales > 0 ? (totalAssessed / totalSales) * 100 : 0;
                 return formatPercent(avg);
               })()}
             </div>
@@ -1699,8 +1812,11 @@ const SalesReviewTab = ({
             <div className="text-sm text-purple-700">Prop Avg Sales Ratio</div>
             <div className="text-2xl font-bold text-purple-900">
               {(() => {
-                const ratios = filteredProperties.filter(p => p.salesRatioCama !== null).map(p => p.salesRatioCama);
-                const avg = ratios.length > 0 ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 0;
+                // Use weighted mean: (Total Assessed / Total Sales) × 100
+                const props = filteredProperties.filter(p => p.values_cama_total && p.values_norm_time && p.values_norm_time > 0);
+                const totalAssessed = props.reduce((sum, p) => sum + (p.values_cama_total || 0), 0);
+                const totalSales = props.reduce((sum, p) => sum + (p.values_norm_time || 0), 0);
+                const avg = totalSales > 0 ? (totalAssessed / totalSales) * 100 : 0;
                 return formatPercent(avg);
               })()}
             </div>
@@ -1728,33 +1844,33 @@ const SalesReviewTab = ({
                   />
                 </th>
                 <th className="px-3 py-3 text-center font-medium text-gray-700">Include</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_vcs')}>VCS</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_block')}>Block</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_lot')}>Lot</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_qualifier')}>Qual</th>
+                <SortableHeader sortKey="property_vcs" label="VCS" align="left" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="property_block" label="Block" align="left" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="property_lot" label="Lot" align="left" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="property_qualifier" label="Qual" align="left" sortConfig={sortConfig} onSort={handleSort} />
                 <th className="px-3 py-3 text-left font-medium text-gray-700">Package</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_location')}>Address</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_m4_class')}>Prop Class</th>
-                <th className="px-3 py-3 text-right font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('values_mod_total')}>Current Asmt</th>
-                <th className="px-3 py-3 text-center font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('periodCode')}>Code</th>
+                <SortableHeader sortKey="property_location" label="Address" align="left" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="property_m4_class" label="Prop Class" align="left" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="values_mod_total" label="Current Asmt" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="periodCode" label="Code" align="center" sortConfig={sortConfig} onSort={handleSort} />
                 <th className="px-3 py-3 text-right font-medium text-gray-700">Lot Front</th>
                 <th className="px-3 py-3 text-right font-medium text-gray-700">Lot Acre</th>
                 <th className="px-3 py-3 text-right font-medium text-gray-700">Lot SF</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700">Type</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700">Class</th>
+                <SortableHeader sortKey="asset_type_use" label="Type" align="left" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="asset_building_class" label="Class" align="left" sortConfig={sortConfig} onSort={handleSort} />
                 <th className="px-3 py-3 text-left font-medium text-gray-700">Design</th>
                 <th className="px-3 py-3 text-left font-medium text-gray-700">Ext Cond</th>
                 <th className="px-3 py-3 text-left font-medium text-gray-700">Int Cond</th>
-                <th className="px-3 py-3 text-right font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('asset_year_built')}>Yr Built</th>
-                <th className="px-3 py-3 text-right font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('asset_sfla')}>SFLA</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('sales_date')}>Sale Date</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700">NU</th>
-                <th className="px-3 py-3 text-right font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('sales_price')}>Sale Price</th>
+                <SortableHeader sortKey="asset_year_built" label="Yr Built" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="asset_sfla" label="SFLA" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="sales_date" label="Sale Date" align="left" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="sales_nu" label="NU" align="left" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="sales_price" label="Sale Price" align="right" sortConfig={sortConfig} onSort={handleSort} />
                 <th className="px-3 py-3 text-right font-medium text-gray-700">Price/SF</th>
                 <th className="px-3 py-3 text-center font-medium text-gray-700">Normalize</th>
-                <th className="px-3 py-3 text-right font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('values_norm_time')}>Norm Price</th>
+                <SortableHeader sortKey="values_norm_time" label="Norm Price" align="right" sortConfig={sortConfig} onSort={handleSort} />
                 <th className="px-3 py-3 text-right font-medium text-gray-700">Norm $/SF</th>
-                <th className="px-3 py-3 text-right font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('salesRatio')}>Sales Ratio</th>
+                <SortableHeader sortKey="salesRatio" label="Sales Ratio" align="right" sortConfig={sortConfig} onSort={handleSort} />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">

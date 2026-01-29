@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Download, Save, Plus, Trash2 } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
@@ -37,35 +37,42 @@ const AnalyticsTab = ({ jobData, properties }) => {
     return endYear - 1;
   }, [jobData?.end_date]);
 
-  // Determine sales period for a property
-  const getSalesPeriod = (salesDate) => {
-    if (!salesDate) return null;
-    
-    const saleDate = new Date(salesDate);
-    const assessmentYear = parseInt(jobData.end_date.substring(0, 4));
+  // Determine sales period for a property - MATCH SalesReviewTab logic exactly
+  const getSalesPeriod = useCallback((salesDate) => {
+    if (!salesDate || !jobData?.end_date) return null;
+
+    const sale = new Date(salesDate);
+    const assessmentYear = new Date(jobData.end_date).getFullYear();
 
     // CSP (Current Sale Period): 10/1 of prior year → 12/31 of assessment year
     // For assessment date 1/1/2026 (stored as 12/31/2025): 10/1/2024 → 12/31/2025
-    const cspStart = new Date(assessmentYear - 1, 9, 1);
-    const cspEnd = new Date(assessmentYear, 11, 31);
+    const cspStart = new Date(assessmentYear - 1, 9, 1);  // Oct 1 of prior year
+    const cspEnd = new Date(assessmentYear, 11, 31);       // Dec 31 of assessment year
 
     // PSP (Prior Sale Period): 10/1 of two years prior → 9/30 of prior year
-    const pspStart = new Date(assessmentYear - 2, 9, 1);
-    const pspEnd = new Date(assessmentYear - 1, 8, 30);
+    // For assessment date 1/1/2026: 10/1/2023 → 9/30/2024
+    const pspStart = new Date(assessmentYear - 2, 9, 1);   // Oct 1 of two years prior
+    const pspEnd = new Date(assessmentYear - 1, 8, 30);    // Sep 30 of prior year
 
     // HSP (Historical Sale Period): 10/1 of three years prior → 9/30 of two years prior
-    const hspStart = new Date(assessmentYear - 3, 9, 1);
-    const hspEnd = new Date(assessmentYear - 2, 8, 30);
-    
-    if (saleDate >= cspStart && saleDate <= cspEnd) return 'CSP';
-    if (saleDate >= pspStart && saleDate <= pspEnd) return 'PSP';
-    if (saleDate >= hspStart && saleDate <= hspEnd) return 'HSP';
-    return null;
-  };
+    // For assessment date 1/1/2026: 10/1/2022 → 9/30/2023
+    const hspStart = new Date(assessmentYear - 3, 9, 1);   // Oct 1 of three years prior
+    const hspEnd = new Date(assessmentYear - 2, 8, 30);    // Sep 30 of two years prior
+
+    if (sale >= cspStart && sale <= cspEnd) return 'CSP';
+    if (sale >= pspStart && sale <= pspEnd) return 'PSP';
+    if (sale >= hspStart && sale <= hspEnd) return 'HSP';
+    return ''; // Blank instead of 'OTHER'
+  }, [jobData?.end_date]);
 
   // Calculate VCS analytics
   const vcsAnalytics = useMemo(() => {
     const vcsGroups = {};
+
+    console.log('🔍 AnalyticsTab - Total properties:', properties.length);
+    let cspCount = 0;
+    let pspCount = 0;
+    let hspCount = 0;
 
     properties.forEach(prop => {
       // Prefer new_vcs (updated assignments) over property_vcs (original from file)
@@ -99,35 +106,48 @@ const AnalyticsTab = ({ jobData, properties }) => {
       group.newLandTotal += newLand;
       group.newTotalValue += newTotal;
       
-      // Sales ratios by period
-      if (prop.sales_date && prop.values_norm_time && newTotal > 0) {
+      // Sales ratios by period - include sales even if newTotal is 0 (will be filtered in display)
+      if (prop.sales_date && prop.values_norm_time && prop.values_norm_time > 0) {
         const salesPeriod = getSalesPeriod(prop.sales_date);
-        const ratio = (newTotal / prop.values_norm_time) * 100;
-        
+
+        // Track counts
+        if (salesPeriod === 'CSP') cspCount++;
+        if (salesPeriod === 'PSP') pspCount++;
+        if (salesPeriod === 'HSP') hspCount++;
+
+        // Push all sales data, even if assessed is 0
         if (salesPeriod === 'HSP') {
-          group.hspSales.push(ratio);
+          group.hspSales.push({ assessed: newTotal, sale: prop.values_norm_time });
         } else if (salesPeriod === 'PSP') {
-          group.pspSales.push(ratio);
+          group.pspSales.push({ assessed: newTotal, sale: prop.values_norm_time });
         } else if (salesPeriod === 'CSP') {
-          group.cspSales.push(ratio);
+          group.cspSales.push({ assessed: newTotal, sale: prop.values_norm_time });
         }
       }
     });
-    
+
+    console.log('📊 AnalyticsTab Period Counts:', {
+      CSP: cspCount,
+      PSP: pspCount,
+      HSP: hspCount,
+      jobEndDate: jobData?.end_date
+    });
+
     // Calculate percentages and averages
     const results = Object.entries(vcsGroups).map(([vcs, data]) => {
       const oldLandPct = data.oldTotalValue > 0 ? (data.oldLandTotal / data.oldTotalValue) * 100 : 0;
       const newLandPct = data.newTotalValue > 0 ? (data.newLandTotal / data.newTotalValue) * 100 : 0;
       const delta = newLandPct - oldLandPct;
       
-      const avgHSP = data.hspSales.length > 0 
-        ? data.hspSales.reduce((a, b) => a + b, 0) / data.hspSales.length 
+      // Use weighted mean: (Total Assessed / Total Sales) × 100
+      const avgHSP = data.hspSales.length > 0
+        ? (data.hspSales.reduce((sum, s) => sum + s.assessed, 0) / data.hspSales.reduce((sum, s) => sum + s.sale, 0)) * 100
         : null;
-      const avgPSP = data.pspSales.length > 0 
-        ? data.pspSales.reduce((a, b) => a + b, 0) / data.pspSales.length 
+      const avgPSP = data.pspSales.length > 0
+        ? (data.pspSales.reduce((sum, s) => sum + s.assessed, 0) / data.pspSales.reduce((sum, s) => sum + s.sale, 0)) * 100
         : null;
-      const avgCSP = data.cspSales.length > 0 
-        ? data.cspSales.reduce((a, b) => a + b, 0) / data.cspSales.length 
+      const avgCSP = data.cspSales.length > 0
+        ? (data.cspSales.reduce((sum, s) => sum + s.assessed, 0) / data.cspSales.reduce((sum, s) => sum + s.sale, 0)) * 100
         : null;
       
       return {
@@ -158,9 +178,16 @@ const AnalyticsTab = ({ jobData, properties }) => {
     const allPSP = Object.values(vcsGroups).flatMap(g => g.pspSales);
     const allCSP = Object.values(vcsGroups).flatMap(g => g.cspSales);
     
-    const avgHSP = allHSP.length > 0 ? allHSP.reduce((a, b) => a + b, 0) / allHSP.length : null;
-    const avgPSP = allPSP.length > 0 ? allPSP.reduce((a, b) => a + b, 0) / allPSP.length : null;
-    const avgCSP = allCSP.length > 0 ? allCSP.reduce((a, b) => a + b, 0) / allCSP.length : null;
+    // Use weighted mean for totals: (Total Assessed / Total Sales) × 100
+    const avgHSP = allHSP.length > 0
+      ? (allHSP.reduce((sum, s) => sum + s.assessed, 0) / allHSP.reduce((sum, s) => sum + s.sale, 0)) * 100
+      : null;
+    const avgPSP = allPSP.length > 0
+      ? (allPSP.reduce((sum, s) => sum + s.assessed, 0) / allPSP.reduce((sum, s) => sum + s.sale, 0)) * 100
+      : null;
+    const avgCSP = allCSP.length > 0
+      ? (allCSP.reduce((sum, s) => sum + s.assessed, 0) / allCSP.reduce((sum, s) => sum + s.sale, 0)) * 100
+      : null;
     
     return {
       data: results,

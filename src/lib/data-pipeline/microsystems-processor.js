@@ -443,6 +443,7 @@ export class MicrosystemsProcessor {
       asset_view: null, // Not available in Microsystems
       asset_year_built: this.parseInteger(rawRecord['Year Built']),
       asset_effective_age: this.calculateEffectiveYear(rawRecord['Effective Age'], yearPriorToDueYear),  // Microsystems: Convert age to year
+      asset_bedrooms: this.parseInteger(rawRecord['Total Bedrms']),
 
       // Special tax district codes (Microsystems: Sp Tax Cd1 and Sp Tax Cd2)
       special_tax_code_1: rawRecord['Sp Tax Cd1'] || null,
@@ -455,7 +456,20 @@ export class MicrosystemsProcessor {
       //          asset_zoning, values_norm_size, values_norm_time
       //          (moved to property_market_analysis table)
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
-      
+
+      // Normalized amenity area fields (extracted from Microsystems columns)
+      fireplace_count: this.extractFireplaceCount(rawRecord),
+      basement_area: this.extractBasementArea(rawRecord),
+      fin_basement_area: this.extractFinBasementArea(rawRecord),
+      garage_area: this.extractGarageArea(rawRecord),
+      deck_area: this.extractDeckArea(rawRecord),
+      patio_area: this.extractPatioArea(rawRecord),
+      open_porch_area: this.extractOpenPorchArea(rawRecord),
+      enclosed_porch_area: this.extractEnclosedPorchArea(rawRecord),
+      det_garage_area: this.extractDetGarageArea(rawRecord),
+      pool_area: this.extractPoolArea(rawRecord),
+      ac_area: this.extractAcArea(rawRecord),
+
       // Processing metadata
       processed_at: new Date().toISOString(),
       is_new_since_last_upload: true,
@@ -766,6 +780,131 @@ export class MicrosystemsProcessor {
     // Single fixture not counted
     
     return total > 0 ? total : null;
+  }
+
+  /**
+   * Extract fireplace count from Microsystems fields
+   * Sum of: Fireplace 1 Story Stack, Fp 1 And Half Sty, Fp 2 Sty, Fp Same Stack, Fp Heatilator
+   */
+  extractFireplaceCount(rawRecord) {
+    let total = 0;
+    total += this.parseInteger(rawRecord['Fireplace 1 Story Stack']) || 0;
+    total += this.parseInteger(rawRecord['Fp 1 And Half Sty']) || 0;
+    total += this.parseInteger(rawRecord['Fp 2 Sty']) || 0;
+    total += this.parseInteger(rawRecord['Fp Same Stack']) || 0;
+    total += this.parseInteger(rawRecord['Fp Heatilator']) || 0;
+    return total > 0 ? total : null;
+  }
+
+  /**
+   * Extract basement area from Basement field
+   */
+  extractBasementArea(rawRecord) {
+    return this.parseNumeric(rawRecord['Basement']);
+  }
+
+  /**
+   * Extract finished basement area from Bsmt Finish Sq Ft
+   * If value contains %, it's a percentage of total basement area
+   */
+  extractFinBasementArea(rawRecord) {
+    const basementArea = this.parseNumeric(rawRecord['Basement']) || 0;
+    const finishValue = rawRecord['Bsmt Finish Sq Ft'];
+
+    if (!finishValue || finishValue.trim() === '') return null;
+
+    // Check if it's a percentage
+    if (finishValue.includes('%')) {
+      const percentage = parseFloat(finishValue.replace('%', '').trim());
+      if (!isNaN(percentage) && basementArea > 0) {
+        return Math.round(basementArea * (percentage / 100));
+      }
+    } else {
+      // It's actual square footage
+      const sqft = this.parseNumeric(finishValue);
+      return sqft;
+    }
+
+    return null;
+  }
+
+  /**
+   * Extract deck area
+   */
+  extractDeckArea(rawRecord) {
+    return this.parseNumeric(rawRecord['Deck']);
+  }
+
+  /**
+   * Extract patio area (sum of Patio and Terr)
+   */
+  extractPatioArea(rawRecord) {
+    const patio = this.parseNumeric(rawRecord['Patio']) || 0;
+    const terr = this.parseNumeric(rawRecord['Terr']) || 0;
+    const total = patio + terr;
+    return total > 0 ? total : null;
+  }
+
+  /**
+   * Extract open porch area (sum of Op, Bi Op, Bi Op2, Bi Gp, and Porch)
+   */
+  extractOpenPorchArea(rawRecord) {
+    let total = 0;
+    total += this.parseNumeric(rawRecord['Op']) || 0;
+    total += this.parseNumeric(rawRecord['Bi Op']) || 0;
+    total += this.parseNumeric(rawRecord['Bi Op2']) || 0;
+    total += this.parseNumeric(rawRecord['Bi Gp']) || 0;
+    total += this.parseNumeric(rawRecord['Porch']) || 0;
+    return total > 0 ? total : null;
+  }
+
+  /**
+   * Extract enclosed porch area (sum of Ep and Bi Ep)
+   */
+  extractEnclosedPorchArea(rawRecord) {
+    const ep = this.parseNumeric(rawRecord['Ep']) || 0;
+    const biEp = this.parseNumeric(rawRecord['Bi Ep']) || 0;
+    const total = ep + biEp;
+    return total > 0 ? total : null;
+  }
+
+  /**
+   * Extract garage area (sum of Attgar, Attgar2, Bi Ga, Big, Big2, Big3)
+   */
+  extractGarageArea(rawRecord) {
+    let total = 0;
+    total += this.parseNumeric(rawRecord['Attgar']) || 0;
+    total += this.parseNumeric(rawRecord['Attgar2']) || 0;
+    total += this.parseNumeric(rawRecord['Bi Ga']) || 0;
+    total += this.parseNumeric(rawRecord['Big']) || 0;
+    total += this.parseNumeric(rawRecord['Big2']) || 0;
+    total += this.parseNumeric(rawRecord['Big3']) || 0;
+    return total > 0 ? total : null;
+  }
+
+  /**
+   * Extract detached garage area
+   * TODO: User mentioned this is tricky - may need configuration
+   */
+  extractDetGarageArea(rawRecord) {
+    // Placeholder for now - may need to be configured
+    return null;
+  }
+
+  /**
+   * Extract pool area
+   * TODO: User mentioned detached items are tricky - may need configuration
+   */
+  extractPoolArea(rawRecord) {
+    // Placeholder for now - may need to be configured
+    return null;
+  }
+
+  /**
+   * Extract AC area from AC Sf field
+   */
+  extractAcArea(rawRecord) {
+    return this.parseNumeric(rawRecord['AC Sf']);
   }
 
   /**

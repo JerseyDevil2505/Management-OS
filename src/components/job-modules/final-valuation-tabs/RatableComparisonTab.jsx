@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calculator, Download, FileSpreadsheet, Save } from 'lucide-react';
+import { Calculator, Download, FileSpreadsheet, Save, Edit } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 
@@ -34,6 +34,9 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
     bufferForLoss: 0
   });
 
+  // State to store projected_6_override values per property
+  const [projected6Overrides, setProjected6Overrides] = useState({});
+
   // Initialize local state from jobData
   useEffect(() => {
     if (jobData) {
@@ -64,6 +67,34 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
       setHasUnsavedChanges(false);
     }
   }, [jobData?.id]); // Reset when job changes
+
+  // Load projected_6_override values from final_valuation_data
+  useEffect(() => {
+    if (!jobData?.id) return;
+
+    const loadOverrides = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('final_valuation_data')
+          .select('property_composite_key, projected_6_override')
+          .eq('job_id', jobData.id)
+          .not('projected_6_override', 'is', null);
+
+        if (error) throw error;
+
+        // Convert array to map by property_composite_key
+        const overridesMap = {};
+        (data || []).forEach(item => {
+          overridesMap[item.property_composite_key] = item.projected_6_override;
+        });
+        setProjected6Overrides(overridesMap);
+      } catch (error) {
+        console.error('Error loading projected_6_override values:', error);
+      }
+    };
+
+    loadOverrides();
+  }, [jobData?.id]);
 
   // Calculate years for ratable comparison
   const yearPriorToDueYear = useMemo(() => {
@@ -225,7 +256,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
       '3A': { count: 0, total: 0 },
       '3B': { count: 0, total: 0 },
       '4ABC': { count: 0, total: 0 },
-      '6ABC': { count: 0, total: 0 }
+      '6ABC': { count: 0, total: 0, overrideCount: 0 }
     };
 
     const consolidated = consolidateProperties(properties);
@@ -253,10 +284,20 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
         summary['4ABC'].count++;
         summary['4ABC'].total += camaTotal;
       } else if (['6A', '6B'].includes(propertyClass)) {
-        // For personal property (6A,B,C), use land * (imp/100) instead of land + imp
-        const land = property.values_cama_land || 0;
-        const imp = property.values_cama_improvement || 0;
-        const personalPropertyValue = land * (imp / 100);
+        // Check for manual override first
+        const override = projected6Overrides[property.property_composite_key];
+
+        let personalPropertyValue;
+        if (override !== null && override !== undefined) {
+          // Use the override value
+          personalPropertyValue = parseFloat(override) || 0;
+          summary['6ABC'].overrideCount++;
+        } else {
+          // Calculate using standard formula: land * (imp/100)
+          const land = property.values_cama_land || 0;
+          const imp = property.values_cama_improvement || 0;
+          personalPropertyValue = land * (imp / 100);
+        }
 
         summary['6ABC'].count++;
         summary['6ABC'].total += personalPropertyValue;
@@ -267,7 +308,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
     const totalTotal = Object.values(summary).reduce((sum, item) => sum + item.total, 0);
 
     return { ...summary, totalCount, totalTotal };
-  }, [properties, vendorType]);
+  }, [properties, vendorType, projected6Overrides]);
 
   // Handle local state changes for current year
   const handleLocalCurrentYearChange = (field, value) => {
@@ -281,6 +322,40 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
     const numValue = parseFloat(value.replace(/[,$]/g, '')) || 0;
     setLocalRateCalc(prev => ({ ...prev, [field]: numValue }));
     setHasUnsavedChanges(true);
+  };
+
+  // Save override value for a specific property
+  const handleSaveOverride = async (propertyKey, overrideValue) => {
+    try {
+      const numValue = overrideValue !== null && overrideValue !== ''
+        ? parseFloat(String(overrideValue).replace(/[,$]/g, ''))
+        : null;
+
+      const { error } = await supabase
+        .from('final_valuation_data')
+        .upsert({
+          job_id: jobData.id,
+          property_composite_key: propertyKey,
+          projected_6_override: numValue,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'job_id,property_composite_key'
+        });
+
+      if (error) throw error;
+
+      // Update local state
+      setProjected6Overrides(prev => ({
+        ...prev,
+        [propertyKey]: numValue
+      }));
+
+      return true;
+    } catch (error) {
+      console.error('Error saving override:', error);
+      alert('Error saving override: ' + error.message);
+      return false;
+    }
   };
 
   // Manual save function
@@ -412,7 +487,8 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
 
   const subTabs = [
     { id: 'comparison', label: 'Ratable Comparison', icon: FileSpreadsheet },
-    { id: 'rate-calc', label: 'Rate Calculator', icon: Calculator }
+    { id: 'rate-calc', label: 'Rate Calculator', icon: Calculator },
+    { id: 'class-6-overrides', label: 'Class 6 Overrides', icon: Edit }
   ];
 
   return (
@@ -765,16 +841,23 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   </div>
 
                   {/* Class 6A,B,C */}
-                  <div className="grid grid-cols-4 gap-2 items-center">
-                    <div className="text-sm font-medium py-1">6A,B,C</div>
-                    <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">{formatCount(projectedRatableBase['6ABC'].count)}</div>
-                    <div className="text-sm text-right px-2 py-1 h-7 flex flex-col items-end justify-center">
-                      <div>{formatAvgAsmt(projectedRatableBase['6ABC'].total)}</div>
-                      {formatDelta(projectedRatableBase['6ABC'].total, previousProjected.class_6_total)}
+                  <div className="space-y-1">
+                    <div className="grid grid-cols-4 gap-2 items-center">
+                      <div className="text-sm font-medium py-1">6A,B,C</div>
+                      <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">{formatCount(projectedRatableBase['6ABC'].count)}</div>
+                      <div className="text-sm text-right px-2 py-1 h-7 flex flex-col items-end justify-center">
+                        <div>{formatAvgAsmt(projectedRatableBase['6ABC'].total)}</div>
+                        {formatDelta(projectedRatableBase['6ABC'].total, previousProjected.class_6_total)}
+                      </div>
+                      <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">
+                        {formatPercentChange(projectedRatableBase['6ABC'].total, localCurrentYear.class_6_total)}
+                      </div>
                     </div>
-                    <div className="text-sm text-right px-2 py-1 h-7 flex items-center justify-end">
-                      {formatPercentChange(projectedRatableBase['6ABC'].total, localCurrentYear.class_6_total)}
-                    </div>
+                    {projectedRatableBase['6ABC'].overrideCount > 0 && (
+                      <div className="text-xs text-purple-600 pl-4 italic">
+                        ⓘ {projectedRatableBase['6ABC'].overrideCount} {projectedRatableBase['6ABC'].overrideCount === 1 ? 'property has' : 'properties have'} manual overrides
+                      </div>
+                    )}
                   </div>
 
                   {/* Total */}
@@ -815,7 +898,7 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
           {/* Rate Calculator */}
           <div className="bg-white rounded-lg border border-gray-300 p-6">
             <h3 className="text-lg font-bold text-gray-900 mb-6">Tax Rate Calculator</h3>
-            
+
             {/* Budget and Current Rate Inputs */}
             <div className="grid grid-cols-2 gap-6 mb-8">
               <div>
@@ -845,23 +928,23 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
             {/* Class Breakdown */}
             <div className="space-y-4">
               <h4 className="text-sm font-semibold text-gray-700">Projected Ratables by Class</h4>
-              
+
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="font-medium text-gray-700">Class 1's</div>
                 <div className="text-right font-semibold">{formatAvgAsmt(projectedRatableBase['1'].total)}</div>
-                
+
                 <div className="font-medium text-gray-700">Class 2's</div>
                 <div className="text-right font-semibold">{formatAvgAsmt(projectedRatableBase['2'].total)}</div>
-                
+
                 <div className="font-medium text-gray-700">Class 3A's</div>
                 <div className="text-right font-semibold">{formatAvgAsmt(projectedRatableBase['3A'].total)}</div>
-                
+
                 <div className="font-medium text-gray-700">Class 3B's</div>
                 <div className="text-right font-semibold">{formatAvgAsmt(projectedRatableBase['3B'].total)}</div>
-                
+
                 <div className="font-medium text-gray-700">Class 4A,B,C</div>
                 <div className="text-right font-semibold">{formatAvgAsmt(projectedRatableBase['4ABC'].total)}</div>
-                
+
                 <div className="font-medium text-gray-700">6A,B,C</div>
                 <div className="text-right font-semibold">{formatAvgAsmt(projectedRatableBase['6ABC'].total)}</div>
               </div>
@@ -908,6 +991,116 @@ const RatableComparisonTab = ({ jobData, properties, onUpdateJobCache }) => {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeSubTab === 'class-6-overrides' && (
+        <div className="space-y-4">
+          {/* Summary Card */}
+          <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Class 6 Personal Property Overrides</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Manually override projected values for Class 6A/6B/6C personal property.
+              By default, values are calculated as: <span className="font-mono font-semibold">Land × (Improvement ÷ 100)</span>
+            </p>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-white rounded-lg p-4 border border-gray-300">
+                <div className="text-sm text-gray-600">Total Class 6 Properties</div>
+                <div className="text-2xl font-bold text-purple-600">{projectedRatableBase['6ABC'].count}</div>
+              </div>
+              <div className="bg-white rounded-lg p-4 border border-gray-300">
+                <div className="text-sm text-gray-600">Properties with Overrides</div>
+                <div className="text-2xl font-bold text-pink-600">{projectedRatableBase['6ABC'].overrideCount || 0}</div>
+              </div>
+              <div className="bg-white rounded-lg p-4 border border-gray-300">
+                <div className="text-sm text-gray-600">Total Projected Value</div>
+                <div className="text-2xl font-bold text-blue-600">{formatAvgAsmt(projectedRatableBase['6ABC'].total)}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Class 6 Properties Table */}
+          <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Block</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Lot</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Qualifier</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Location</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Class</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-700">CAMA Land</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-700">CAMA Imp (%)</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-700 bg-blue-50">Calculated Value</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-700 bg-purple-50">Override Value</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-700 bg-green-50">Final Value</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {properties
+                    .filter(p => ['6A', '6B'].includes(p.property_cama_class) && p.property_facility !== 'EXEMPT')
+                    .map((property) => {
+                      const land = property.values_cama_land || 0;
+                      const imp = property.values_cama_improvement || 0;
+                      const calculatedValue = land * (imp / 100);
+                      const override = projected6Overrides[property.property_composite_key];
+                      const finalValue = override !== null && override !== undefined ? override : calculatedValue;
+                      const hasOverride = override !== null && override !== undefined;
+
+                      return (
+                        <tr key={property.property_composite_key} className={hasOverride ? 'bg-purple-50' : 'hover:bg-gray-50'}>
+                          <td className="px-4 py-3 text-gray-900">{property.property_block}</td>
+                          <td className="px-4 py-3 text-gray-900">{property.property_lot}</td>
+                          <td className="px-4 py-3 text-gray-600">{property.property_qualifier || '-'}</td>
+                          <td className="px-4 py-3 text-gray-600 max-w-xs truncate">{property.property_location || '-'}</td>
+                          <td className="px-4 py-3 font-semibold text-purple-700">{property.property_cama_class}</td>
+                          <td className="px-4 py-3 text-right text-gray-900">{formatAvgAsmt(land)}</td>
+                          <td className="px-4 py-3 text-right text-gray-900">{imp.toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-blue-600 bg-blue-50">
+                            {formatAvgAsmt(calculatedValue)}
+                          </td>
+                          <td className="px-4 py-3 text-right bg-purple-50">
+                            <input
+                              type="text"
+                              defaultValue={override !== null && override !== undefined ? formatAvgAsmt(override).replace('$', '') : ''}
+                              placeholder="Optional override"
+                              className="w-full px-2 py-1 border border-purple-300 rounded text-right text-sm"
+                              onBlur={(e) => {
+                                const value = e.target.value.trim();
+                                if (value === '') {
+                                  handleSaveOverride(property.property_composite_key, null);
+                                } else {
+                                  const numValue = parseFloat(value.replace(/[,$]/g, ''));
+                                  if (!isNaN(numValue)) {
+                                    handleSaveOverride(property.property_composite_key, numValue);
+                                  }
+                                }
+                              }}
+                            />
+                          </td>
+                          <td className="px-4 py-3 text-right font-bold text-green-700 bg-green-50">
+                            {formatAvgAsmt(finalValue)}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {hasOverride && (
+                              <button
+                                onClick={() => handleSaveOverride(property.property_composite_key, null)}
+                                className="text-red-600 hover:text-red-800 text-xs font-semibold"
+                                title="Clear override"
+                              >
+                                Clear
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

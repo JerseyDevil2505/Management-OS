@@ -3,16 +3,18 @@ import { supabase, getRawDataForJob } from '../../../lib/supabaseClient';
 import { Save, Plus, Trash2, Settings, X } from 'lucide-react';
 
 const AdjustmentsTab = ({ jobData = {} }) => {
-  const [activeSubTab, setActiveSubTab] = useState('config');
+  const [activeSubTab, setActiveSubTab] = useState('adjustments');
   const [adjustments, setAdjustments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showCustomModal, setShowCustomModal] = useState(false);
-  const [customAdjustment, setCustomAdjustment] = useState({
+  const [showAutoPopulateNotice, setShowAutoPopulateNotice] = useState(false);
+  const [wasReset, setWasReset] = useState(false); // Track if config was reset due to table changes
+  const [customBracket, setCustomBracket] = useState({
     name: '',
-    type: 'flat',
-    values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    attributeValues: {} // Will hold { lot_size_ff: { value: 0, type: 'flat' }, ... }
   });
+  const [customBrackets, setCustomBrackets] = useState([]); // Load from DB
   
   // Structure: maps attribute -> array of codes
   const [codeConfig, setCodeConfig] = useState({
@@ -56,10 +58,16 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
   // Default adjustment attributes with sample values based on image
   const DEFAULT_ADJUSTMENTS = [
-    { id: 'lot_size', name: 'Lot Size', type: 'flat', isDefault: true, category: 'physical',
+    { id: 'lot_size_ff', name: 'Lot Size (FF)', type: 'flat', isDefault: true, category: 'physical',
+      values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+    { id: 'lot_size_sf', name: 'Lot Size (SF)', type: 'flat', isDefault: true, category: 'physical',
+      values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+    { id: 'lot_size_acre', name: 'Lot Size (Acre)', type: 'flat', isDefault: true, category: 'physical',
       values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
     { id: 'living_area', name: 'Living Area (Sq Ft)', type: 'per_sqft', isDefault: true, category: 'physical',
       values: [20, 30, 35, 40, 45, 50, 60, 85, 100, 130] },
+    { id: 'year_built', name: 'Year Built', type: 'flat', isDefault: true, category: 'physical',
+      values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
     { id: 'basement', name: 'Basement', type: 'flat', isDefault: true, category: 'physical',
       values: [7500, 10000, 15000, 15000, 20000, 25000, 30000, 40000, 45000, 60000] },
     { id: 'finished_basement', name: 'Finished Basement', type: 'flat', isDefault: true, category: 'physical',
@@ -113,13 +121,43 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     { id: 'land_negative', name: 'Negative Land', category: '63' }
   ];
 
-  // Load adjustments from database
+  // Load adjustments and custom brackets from database
   useEffect(() => {
     if (!jobData?.id) return;
     loadAdjustments();
-    loadCodeConfig();
     loadAvailableCodes();
+    loadCodeConfig(); // Load after available codes are fetched
+    loadCustomBrackets();
   }, [jobData?.id]);
+
+  const loadCustomBrackets = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('job_custom_brackets')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .order('sort_order');
+
+      if (error) throw error;
+      setCustomBrackets(data || []);
+    } catch (error) {
+      console.error('Error loading custom brackets:', error);
+    }
+  };
+
+  // Auto-populate config after codes are loaded (if no saved config exists)
+  useEffect(() => {
+    // Only auto-populate if:
+    // 1. Available codes have been loaded
+    // 2. Config is still empty (no saved settings)
+    const codesLoaded = Object.values(availableCodes).some(arr => arr.length > 0);
+    const configEmpty = Object.values(codeConfig).every(arr => arr.length === 0);
+
+    if (codesLoaded && configEmpty && !isLoadingCodes) {
+      console.log('🚀 Triggering auto-populate after codes loaded');
+      autoPopulateCodeConfig();
+    }
+  }, [availableCodes, isLoadingCodes]);
 
   const loadAdjustments = async () => {
     try {
@@ -179,7 +217,8 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         'adjustment_codes_pole_barn',
         'adjustment_codes_miscellaneous',
         'adjustment_codes_land_positive',
-        'adjustment_codes_land_negative'
+        'adjustment_codes_land_negative',
+        'adjustment_codes_version' // Track code definition version
       ];
 
       const { data, error } = await supabase
@@ -190,20 +229,97 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
       if (error && error.code !== 'PGRST116') throw error;
 
-      if (data && data.length > 0) {
+      // Generate current version hash from available codes
+      const currentVersion = generateCodeVersion(availableCodes);
+
+      // Check if saved version matches current version
+      const savedVersion = data?.find(s => s.setting_key === 'adjustment_codes_version')?.setting_value;
+
+      if (data && data.length > 0 && savedVersion === currentVersion) {
+        // User has saved settings AND version matches - load them
         const newConfig = { ...codeConfig };
         data.forEach(setting => {
           const attributeId = setting.setting_key.replace('adjustment_codes_', '');
-          try {
-            newConfig[attributeId] = setting.setting_value ? JSON.parse(setting.setting_value) : [];
-          } catch (e) {
-            newConfig[attributeId] = [];
+          if (attributeId !== 'version') {
+            try {
+              newConfig[attributeId] = setting.setting_value ? JSON.parse(setting.setting_value) : [];
+            } catch (e) {
+              newConfig[attributeId] = [];
+            }
           }
         });
         setCodeConfig(newConfig);
+      } else {
+        // No saved settings OR version mismatch (code table changed) - re-auto-populate
+        if (savedVersion && savedVersion !== currentVersion) {
+          console.log('🔄 Code definitions changed - re-auto-populating adjustment codes...');
+          setWasReset(true); // Flag that this was a reset due to table changes
+        } else {
+          console.log('🔍 Auto-populating adjustment codes based on keywords...');
+          setWasReset(false);
+        }
+        autoPopulateCodeConfig();
       }
     } catch (error) {
       console.error('Error loading code config:', error);
+    }
+  };
+
+  // Generate a simple hash/version string from available codes
+  const generateCodeVersion = (codes) => {
+    // Create a string representation of all code counts per category
+    const versionString = Object.keys(codes)
+      .sort()
+      .map(cat => `${cat}:${codes[cat].length}`)
+      .join('|');
+    return versionString || 'v0';
+  };
+
+  const autoPopulateCodeConfig = () => {
+    // Wait for available codes to be loaded first
+    if (Object.values(availableCodes).every(arr => arr.length === 0)) {
+      console.log('⏳ Waiting for codes to load before auto-populating...');
+      return;
+    }
+
+    const newConfig = { ...codeConfig };
+
+    // Auto-populate rules for static attributes
+    const autoPopulateRules = {
+      // Attached items (category '11')
+      garage: { category: '11', keywords: ['GAR'] },
+      deck: { category: '11', keywords: ['DECK'] },
+      patio: { category: '11', keywords: ['PATIO'] },
+      open_porch: { category: '11', keywords: ['OPEN'] },
+      enclosed_porch: { category: '11', keywords: ['ENCL', 'SCREEN', 'SCRN'] },
+
+      // Detached items (category '15')
+      det_garage: { category: '15', keywords: ['GAR'] },
+      pool: { category: '15', keywords: ['POOL'] }
+    };
+
+    Object.keys(autoPopulateRules).forEach(attributeId => {
+      const rule = autoPopulateRules[attributeId];
+      const codesInCategory = availableCodes[rule.category] || [];
+
+      // Find codes matching any of the keywords
+      const matchingCodes = codesInCategory.filter(codeObj => {
+        const descUpper = codeObj.description.toUpperCase();
+        return rule.keywords.some(keyword => descUpper.includes(keyword));
+      }).map(codeObj => codeObj.code);
+
+      if (matchingCodes.length > 0) {
+        newConfig[attributeId] = matchingCodes;
+        console.log(`✅ Auto-populated ${attributeId}: ${matchingCodes.join(', ')}`);
+      }
+    });
+
+    setCodeConfig(newConfig);
+
+    // Show user notification about auto-population
+    if (Object.values(newConfig).some(arr => arr.length > 0)) {
+      console.log('💡 Codes auto-populated. Review and save configuration to persist changes.');
+      setShowAutoPopulateNotice(true);
     }
   };
 
@@ -336,50 +452,85 @@ const AdjustmentsTab = ({ jobData = {} }) => {
   };
 
   const handleAddCustomAdjustment = () => {
-    setShowCustomModal(true);
-    setCustomAdjustment({
-      name: '',
-      type: 'flat',
-      values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    // Initialize attribute values from ALL current adjustments (default + dynamic)
+    const initialValues = {};
+    adjustments.forEach(adj => {
+      initialValues[adj.adjustment_id] = {
+        value: 0,
+        type: adj.adjustment_type // Use the adjustment type for each attribute
+      };
     });
+
+    setCustomBracket({
+      name: '',
+      attributeValues: initialValues
+    });
+    setShowCustomModal(true);
   };
 
-  const handleSaveCustomAdjustment = () => {
-    if (!customAdjustment.name.trim()) {
-      alert('Please enter an adjustment name');
+  const handleSaveCustomAdjustment = async () => {
+    if (!customBracket.name.trim()) {
+      alert('Please enter a bracket name');
       return;
     }
 
-    const newAdj = {
-      job_id: jobData.id,
-      adjustment_id: `custom_${Date.now()}`,
-      adjustment_name: customAdjustment.name,
-      adjustment_type: customAdjustment.type,
-      category: 'custom',
-      is_default: false,
-      sort_order: adjustments.length,
-      bracket_0: customAdjustment.values[0],
-      bracket_1: customAdjustment.values[1],
-      bracket_2: customAdjustment.values[2],
-      bracket_3: customAdjustment.values[3],
-      bracket_4: customAdjustment.values[4],
-      bracket_5: customAdjustment.values[5],
-      bracket_6: customAdjustment.values[6],
-      bracket_7: customAdjustment.values[7],
-      bracket_8: customAdjustment.values[8],
-      bracket_9: customAdjustment.values[9]
-    };
+    try {
+      const bracketId = `custom_${Date.now()}`;
+      const maxSortOrder = Math.max(...customBrackets.map(b => b.sort_order || 0), 0);
 
-    setAdjustments(prev => [...prev, newAdj]);
-    setShowCustomModal(false);
+      const { error } = await supabase
+        .from('job_custom_brackets')
+        .insert({
+          job_id: jobData.id,
+          bracket_id: bracketId,
+          bracket_name: customBracket.name,
+          adjustment_values: customBracket.attributeValues,
+          sort_order: maxSortOrder + 1
+        });
+
+      if (error) throw error;
+
+      // Reload custom brackets
+      await loadCustomBrackets();
+      setShowCustomModal(false);
+      alert('Custom bracket created successfully!');
+    } catch (error) {
+      console.error('Error saving custom bracket:', error);
+      alert(`Failed to save: ${error.message}`);
+    }
   };
 
-  const handleCustomValueChange = (bracketIndex, value) => {
-    setCustomAdjustment(prev => {
-      const newValues = [...prev.values];
-      newValues[bracketIndex] = parseFloat(value) || 0;
-      return { ...prev, values: newValues };
-    });
+  const handleCustomBracketValueChange = (attributeId, field, value) => {
+    setCustomBracket(prev => ({
+      ...prev,
+      attributeValues: {
+        ...prev.attributeValues,
+        [attributeId]: {
+          ...prev.attributeValues[attributeId],
+          [field]: field === 'value' ? (parseFloat(value) || 0) : value
+        }
+      }
+    }));
+  };
+
+  const handleDeleteCustomBracket = async (bracketId) => {
+    if (!window.confirm('Delete this custom bracket? This cannot be undone.')) return;
+
+    try {
+      const { error } = await supabase
+        .from('job_custom_brackets')
+        .delete()
+        .eq('job_id', jobData.id)
+        .eq('bracket_id', bracketId);
+
+      if (error) throw error;
+
+      setCustomBrackets(prev => prev.filter(b => b.bracket_id !== bracketId));
+      alert('Custom bracket deleted successfully');
+    } catch (error) {
+      console.error('Error deleting custom bracket:', error);
+      alert(`Failed to delete: ${error.message}`);
+    }
   };
 
   const handleDeleteAdjustment = async (adjustmentId) => {
@@ -434,6 +585,14 @@ const AdjustmentsTab = ({ jobData = {} }) => {
           setting_key: `adjustment_codes_${attributeId}`,
           setting_value: JSON.stringify(codeConfig[attributeId])
         }));
+
+      // Add version hash to detect future code table changes
+      const currentVersion = generateCodeVersion(availableCodes);
+      settings.push({
+        job_id: jobData.id,
+        setting_key: 'adjustment_codes_version',
+        setting_value: currentVersion
+      });
 
       const { error: settingsError } = await supabase
         .from('job_settings')
@@ -543,7 +702,38 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         });
       }
 
-      alert(`Code configuration saved!${newAdjustments.length > 0 ? ` ${newAdjustments.length} new adjustment row(s) added to grid.` : ''}`);
+      // CRITICAL: Recalculate amenity areas for all properties using new code mappings
+      console.log('🔄 Triggering database recalculation with new code mappings...');
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const recalcResponse = await fetch(
+        `${supabase.supabaseUrl}/functions/v1/recalculate-amenities`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`
+          },
+          body: JSON.stringify({
+            jobId: jobData.id,
+            codeConfig: codeConfig
+          })
+        }
+      );
+
+      if (!recalcResponse.ok) {
+        const errorData = await recalcResponse.json();
+        throw new Error(`Recalculation failed: ${errorData.error}`);
+      }
+
+      const recalcResult = await recalcResponse.json();
+      console.log('✅ Recalculation complete:', recalcResult);
+
+      alert(`Code configuration saved and ${recalcResult.updatedCount} properties updated!${newAdjustments.length > 0 ? ` ${newAdjustments.length} new adjustment row(s) added to grid.` : ''}\n\nAmenity areas have been recalculated using your custom code mappings.`);
+
+      // Dismiss auto-populate notice and reset flag after saving
+      setShowAutoPopulateNotice(false);
+      setWasReset(false);
 
       // Optionally switch to adjustment grid tab to show new rows
       if (newAdjustments.length > 0) {
@@ -603,10 +793,66 @@ const AdjustmentsTab = ({ jobData = {} }) => {
           <div className="mb-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Adjustment Code Configuration</h3>
             <p className="text-sm text-gray-600">
-              Assign BRT codes to each adjustment attribute. Static attributes are always visible in the adjustment grid. 
+              Assign BRT codes to each adjustment attribute. Static attributes are always visible in the adjustment grid.
               Dynamic attributes will only appear in the grid after codes are assigned and saved.
             </p>
           </div>
+
+          {/* Auto-populate Notification */}
+          {showAutoPopulateNotice && (
+            <div className={`mb-6 rounded-lg p-4 ${
+              wasReset
+                ? 'bg-yellow-50 border border-yellow-200'
+                : 'bg-blue-50 border border-blue-200'
+            }`}>
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <Settings className={`w-5 h-5 ${wasReset ? 'text-yellow-600' : 'text-blue-600'}`} />
+                </div>
+                <div className="flex-1">
+                  <h4 className={`text-sm font-semibold mb-1 ${wasReset ? 'text-yellow-900' : 'text-blue-900'}`}>
+                    {wasReset ? 'Configuration Reset - Code Table Changed' : 'Codes Auto-Populated'}
+                  </h4>
+                  <p className={`text-sm mb-2 ${wasReset ? 'text-yellow-800' : 'text-blue-800'}`}>
+                    {wasReset ? (
+                      <>
+                        The BRT code table has been updated since your last configuration.
+                        Adjustment codes have been <strong>re-auto-populated</strong> based on keyword matching
+                        (Garage: GAR | Deck: DECK | Patio: PATIO | Open Porch: OPEN | Enclosed Porch: ENCL/SCREEN | Pool: POOL).
+                        Review the new selections and save to update your configuration.
+                      </>
+                    ) : (
+                      <>
+                        Adjustment codes have been automatically assigned based on keyword matching
+                        (Garage: GAR | Deck: DECK | Patio: PATIO | Open Porch: OPEN | Enclosed Porch: ENCL/SCREEN | Pool: POOL).
+                        Review the selections below and click "Save Configuration" to persist your changes.
+                      </>
+                    )}
+                  </p>
+                  <button
+                    onClick={() => setShowAutoPopulateNotice(false)}
+                    className={`text-sm font-medium ${
+                      wasReset
+                        ? 'text-yellow-700 hover:text-yellow-900'
+                        : 'text-blue-700 hover:text-blue-900'
+                    }`}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+                <button
+                  onClick={() => setShowAutoPopulateNotice(false)}
+                  className={`flex-shrink-0 ${
+                    wasReset
+                      ? 'text-yellow-400 hover:text-yellow-600'
+                      : 'text-blue-400 hover:text-blue-600'
+                  }`}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          )}
 
           {isLoadingCodes ? (
             <div className="flex items-center justify-center py-12">
@@ -802,7 +1048,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                 className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 border border-gray-300"
               >
                 <Plus className="w-4 h-4" />
-                Add Custom
+                Create Custom Bracket
               </button>
               <button
                 onClick={handleSaveAdjustments}
@@ -823,13 +1069,33 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                   <th className="sticky left-0 z-10 bg-gray-50 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
                     Attribute
                   </th>
+                  {/* Default Brackets */}
                   {CME_BRACKETS.map((bracket, idx) => (
                     <th
-                      key={idx}
+                      key={`default-${idx}`}
                       className="px-3 py-3 text-center text-xs font-medium uppercase tracking-wider"
                       style={{ backgroundColor: bracket.color, color: bracket.textColor }}
                     >
                       {bracket.shortLabel}
+                    </th>
+                  ))}
+                  {/* Custom Brackets */}
+                  {customBrackets.map((customBracket, idx) => (
+                    <th
+                      key={`custom-${customBracket.bracket_id}`}
+                      className="px-3 py-3 text-center text-xs font-medium uppercase tracking-wider bg-purple-100 text-purple-900 border-l-2 border-purple-300"
+                      title="Custom Bracket"
+                    >
+                      <div className="flex items-center justify-center gap-2">
+                        <span>{customBracket.bracket_name}</span>
+                        <button
+                          onClick={() => handleDeleteCustomBracket(customBracket.bracket_id)}
+                          className="text-purple-600 hover:text-purple-800"
+                          title="Delete custom bracket"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
                     </th>
                   ))}
                   <th className="sticky right-0 z-10 bg-gray-50 px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-l border-gray-200">
@@ -843,9 +1109,10 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                     <td className="sticky left-0 z-10 bg-white px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-gray-200">
                       {adj.adjustment_name}
                     </td>
+                    {/* Default Bracket Values */}
                     {CME_BRACKETS.map((bracket, bIdx) => (
                       <td
-                        key={bIdx}
+                        key={`default-${bIdx}`}
                         className="px-2 py-2 text-center"
                         style={{ backgroundColor: `${bracket.color}33` }}
                       >
@@ -858,6 +1125,23 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                         />
                       </td>
                     ))}
+                    {/* Custom Bracket Values */}
+                    {customBrackets.map((customBracket) => {
+                      const customValue = customBracket.adjustment_values?.[adj.adjustment_id] || { value: 0, type: adj.adjustment_type };
+                      return (
+                        <td
+                          key={`custom-${customBracket.bracket_id}`}
+                          className="px-2 py-2 text-center bg-purple-50 border-l-2 border-purple-300"
+                        >
+                          <div className="text-sm font-medium text-gray-900">
+                            {customValue.value || 0}
+                            <span className="text-xs text-gray-500 ml-1">
+                              {customValue.type === 'flat' ? '$' : customValue.type === 'per_sqft' ? '$/SF' : '%'}
+                            </span>
+                          </div>
+                        </td>
+                      );
+                    })}
                     <td className="sticky right-0 z-10 bg-white px-2 py-2 text-center border-l border-gray-200">
                       <div className="flex items-center justify-center gap-2">
                         <select
@@ -899,90 +1183,134 @@ const AdjustmentsTab = ({ jobData = {} }) => {
             </ul>
           </div>
 
-          {/* Custom Adjustment Modal */}
+          {/* Create Custom Bracket Modal */}
           {showCustomModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-                <div className="px-6 py-4 border-b flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-gray-900">Create Custom Adjustment</h3>
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[85vh] flex flex-col">
+                {/* Fixed Header */}
+                <div className="px-6 py-4 border-b flex items-center justify-between flex-shrink-0">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Create Custom Adjustment Bracket</h3>
+                    <p className="text-sm text-gray-600 mt-1">Define a custom price bracket column</p>
+                  </div>
                   <button
                     onClick={() => setShowCustomModal(false)}
-                    className="text-gray-400 hover:text-gray-600"
+                    className="text-gray-400 hover:text-gray-600 ml-4 flex-shrink-0"
+                    title="Close"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-6 h-6" />
                   </button>
                 </div>
 
-                <div className="p-6 space-y-6">
-                  {/* Adjustment Name */}
+                {/* Scrollable Content */}
+                <div className="p-6 space-y-6 overflow-y-auto flex-1">
+                  {/* Bracket Name */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Adjustment Name
+                      Bracket Name
                     </label>
                     <input
                       type="text"
-                      value={customAdjustment.name}
-                      onChange={(e) => setCustomAdjustment(prev => ({ ...prev, name: e.target.value }))}
-                      className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., Barn, Stable, Modern Kitchen, Land Adjustment"
+                      value={customBracket.name}
+                      onChange={(e) => setCustomBracket(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                      placeholder="e.g., $150K-$250K Custom, Luxury Properties, etc."
                     />
                   </div>
 
-                  {/* Adjustment Type */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Adjustment Type
-                    </label>
-                    <select
-                      value={customAdjustment.type}
-                      onChange={(e) => setCustomAdjustment(prev => ({ ...prev, type: e.target.value }))}
-                      className="px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="flat">Flat ($) - Fixed dollar amount</option>
-                      <option value="per_sqft">Per SF ($/SF) - Per square foot</option>
-                      <option value="percent">Percent (%) - Percentage-based</option>
-                    </select>
-                  </div>
+                  {/* Info Note */}
+                  {!adjustments.some(adj => !adj.is_default) && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <p className="text-sm text-blue-800">
+                        <strong>Tip:</strong> To add more attributes like Barn, Pole Barn, or Land Adjustments,
+                        go to the <strong>Configuration</strong> tab, assign codes, and save.
+                        They'll appear here automatically.
+                      </p>
+                    </div>
+                  )}
 
-                  {/* Bracket Values */}
+                  {/* Attribute Values Table */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-3">
-                      Adjustment Values by Price Bracket
-                    </label>
-                    <div className="grid grid-cols-2 gap-4">
-                      {CME_BRACKETS.map((bracket, idx) => (
-                        <div key={idx} className="flex items-center gap-3">
-                          <div
-                            className="px-3 py-2 rounded text-xs font-medium flex-shrink-0"
-                            style={{ backgroundColor: bracket.color, color: bracket.textColor, minWidth: '140px' }}
-                          >
-                            {bracket.shortLabel}
-                          </div>
-                          <input
-                            type="number"
-                            value={customAdjustment.values[idx]}
-                            onChange={(e) => handleCustomValueChange(idx, e.target.value)}
-                            className="flex-1 px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
-                            step={customAdjustment.type === 'per_sqft' ? '0.01' : customAdjustment.type === 'percent' ? '1' : '100'}
-                          />
-                        </div>
-                      ))}
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Adjustment Values by Attribute ({adjustments.length} attributes)
+                      </label>
+                      {adjustments.some(adj => !adj.is_default) && (
+                        <span className="text-xs text-purple-600 font-medium">
+                          Includes dynamic attributes
+                        </span>
+                      )}
+                    </div>
+                    <div className="border rounded-lg overflow-hidden max-h-96 overflow-y-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50 sticky top-0">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Attribute
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Value
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Type
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {adjustments.map(adj => {
+                            const attrValue = customBracket.attributeValues[adj.adjustment_id] || { value: 0, type: adj.adjustment_type };
+                            return (
+                              <tr key={adj.adjustment_id} className="hover:bg-gray-50">
+                                <td className="px-4 py-2 text-sm font-medium text-gray-900 whitespace-nowrap">
+                                  {adj.adjustment_name}
+                                  {!adj.is_default && (
+                                    <span className="ml-2 text-xs text-purple-600 font-normal">(Custom)</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-2">
+                                  <input
+                                    type="number"
+                                    value={attrValue.value}
+                                    onChange={(e) => handleCustomBracketValueChange(adj.adjustment_id, 'value', e.target.value)}
+                                    className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                    step={attrValue.type === 'per_sqft' ? '0.01' : attrValue.type === 'percent' ? '1' : '100'}
+                                  />
+                                </td>
+                                <td className="px-4 py-2">
+                                  <select
+                                    value={attrValue.type}
+                                    onChange={(e) => handleCustomBracketValueChange(adj.adjustment_id, 'type', e.target.value)}
+                                    className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                  >
+                                    <option value="flat">Flat ($)</option>
+                                    <option value="per_sqft">Per SF ($/SF)</option>
+                                    {(adj.adjustment_type === 'percent' || adj.adjustment_type === 'flat_or_percent') && (
+                                      <option value="percent">Percent (%)</option>
+                                    )}
+                                  </select>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </div>
 
-                <div className="px-6 py-4 border-t flex justify-end gap-3">
+                {/* Fixed Footer */}
+                <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-3 flex-shrink-0">
                   <button
                     onClick={() => setShowCustomModal(false)}
-                    className="px-4 py-2 border rounded text-gray-700 hover:bg-gray-50"
+                    className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-100 bg-white font-medium"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSaveCustomAdjustment}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
                   >
-                    Save Adjustment
+                    Save Custom Bracket
                   </button>
                 </div>
               </div>
