@@ -216,32 +216,8 @@ const SalesReviewTab = ({
     loadIncludeOverrides();
   }, [jobData?.id, properties]);
 
-  // Load final valuation data for projected assessments
-  useEffect(() => {
-    const loadFinalValuationData = async () => {
-      if (!jobData?.id) return;
-
-      try {
-        const { data, error } = await supabase
-          .from('final_valuation_data')
-          .select('property_composite_key, projected_total')
-          .eq('job_id', jobData.id);
-
-        if (error) throw error;
-
-        // Convert to map by composite_key
-        const dataMap = {};
-        (data || []).forEach(item => {
-          dataMap[item.property_composite_key] = item.projected_total;
-        });
-        setFinalValuationData(dataMap);
-      } catch (error) {
-        console.error('Error loading final valuation data:', error);
-      }
-    };
-
-    loadFinalValuationData();
-  }, [jobData?.id]);
+  // Note: Projected assessments use values_cama_total from property_records (already in props)
+  // No need to load final_valuation_data separately
 
   // ==================== COMPUTED DATA ====================
   
@@ -273,11 +249,8 @@ const SalesReviewTab = ({
         ? (prop.values_cama_total / prop.values_norm_time) * 100
         : null;
 
-      // Projected sales ratio (uses projected_total from final_valuation_data)
-      const projected_total = finalValuationData[prop.property_composite_key] || null;
-      const projectedSalesRatio = prop.values_norm_time && prop.values_norm_time > 0 && projected_total
-        ? (projected_total / prop.values_norm_time) * 100
-        : null;
+      // Note: salesRatioCama is already calculated above using values_cama_total
+      // No need for separate projectedSalesRatio calculation
 
       // Code interpretations
       const typeUseName = interpretCodes.getTypeName?.(prop, parsedCodeDefinitions, vendorType);
@@ -530,9 +503,9 @@ const SalesReviewTab = ({
         groups[vcs].yearBuiltCount++;
       }
 
-      // Use projected or current assessment based on toggle
-      const assessedValue = useProjectedAssessment ? (prop.projected_total || prop.values_mod_total) : prop.values_mod_total;
-      const ratioValue = useProjectedAssessment ? prop.projectedSalesRatio : prop.salesRatio;
+      // Use projected (CAMA) or current (MOD) assessment based on toggle
+      const assessedValue = useProjectedAssessment ? prop.values_cama_total : prop.values_mod_total;
+      const ratioValue = useProjectedAssessment ? prop.salesRatioCama : prop.salesRatio;
 
       if (assessedValue) groups[vcs].assessedSum += assessedValue;
       if (ratioValue !== null && ratioValue !== undefined) {
