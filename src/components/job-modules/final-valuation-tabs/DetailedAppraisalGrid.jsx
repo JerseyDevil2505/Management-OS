@@ -38,13 +38,36 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   // Helper to check if adjustment is flat type (YES/NONE display)
   const isAdjustmentFlat = (adjustmentName) => {
     const adjDef = getAdjustmentDef(adjustmentName);
-    return adjDef?.adjustment_type === 'flat';
+
+    // If adjustment definition exists, use it
+    if (adjDef) {
+      return adjDef.adjustment_type === 'flat';
+    }
+
+    // Fallback: Common amenities that are typically flat adjustments
+    const flatAmenities = [
+      'Garage', 'Det Garage', 'Deck', 'Patio', 'Open Porch', 'Enclosed Porch',
+      'Pool', 'Basement', 'Finished Basement', 'AC'
+    ];
+    return flatAmenities.some(amenity =>
+      adjustmentName?.toLowerCase().includes(amenity.toLowerCase())
+    );
   };
 
   // Helper to check if adjustment is count type (show numeric value)
   const isAdjustmentCount = (adjustmentName) => {
     const adjDef = getAdjustmentDef(adjustmentName);
-    return adjDef?.adjustment_type === 'count';
+
+    // If adjustment definition exists, use it
+    if (adjDef) {
+      return adjDef.adjustment_type === 'count';
+    }
+
+    // Fallback: Common count adjustments
+    const countAmenities = ['Bathrooms', 'Bedrooms', 'Fireplaces'];
+    return countAmenities.some(amenity =>
+      adjustmentName?.toLowerCase().includes(amenity.toLowerCase())
+    );
   };
 
   // Helper to count BRT items by category codes
