@@ -555,6 +555,48 @@ export class MicrosystemsProcessor {
   }
 
   /**
+   * Load code configuration from job_settings to categorize detached items
+   */
+  async loadCodeConfiguration(jobId) {
+    try {
+      const { data, error } = await supabase
+        .from('job_settings')
+        .select('setting_key, setting_value')
+        .eq('job_id', jobId)
+        .in('setting_key', [
+          'adjustment_codes_det_garage',
+          'adjustment_codes_pool',
+          'adjustment_codes_barn',
+          'adjustment_codes_stable',
+          'adjustment_codes_pole_barn'
+        ]);
+
+      if (error) {
+        console.log('⚠️ No code configuration found - detached items will not be categorized');
+        this.codeConfig = {};
+        return;
+      }
+
+      // Parse saved configuration
+      const config = {};
+      (data || []).forEach(setting => {
+        const attributeId = setting.setting_key.replace('adjustment_codes_', '');
+        try {
+          config[attributeId] = setting.setting_value ? JSON.parse(setting.setting_value) : [];
+        } catch (e) {
+          config[attributeId] = [];
+        }
+      });
+
+      this.codeConfig = config;
+      console.log('✅ Loaded code configuration for detached items:', this.codeConfig);
+    } catch (error) {
+      console.error('Error loading code configuration:', error);
+      this.codeConfig = {};
+    }
+  }
+
+  /**
    * ENHANCED: Process complete file and store in database with code file integration
    * UPDATED: Single table insertion only - no more dual-table complexity
    * NEW: Integrates code file storage in jobs table
