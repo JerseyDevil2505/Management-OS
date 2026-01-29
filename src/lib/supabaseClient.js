@@ -1050,6 +1050,18 @@ brtParsedStructureMap: {
 
     if (!code || code.trim() === '') return null;
 
+    // Debug logging for story height
+    if (fieldName === 'asset_story_height' && !window._storyHeightDebugLogged) {
+      console.log('🔍 Story Height Lookup Debug:', {
+        fieldName,
+        prefix,
+        codeFromProperty: code,
+        propertyBlock: property.property_block,
+        propertyLot: property.property_lot
+      });
+      window._storyHeightDebugLogged = true;
+    }
+
     // FIXED: Only look up codes within the correct prefix category to prevent cross-contamination
     const fieldCodes = codeDefinitions.field_codes;
     if (!fieldCodes || !fieldCodes[prefix]) {
