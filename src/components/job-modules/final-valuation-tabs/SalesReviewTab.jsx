@@ -573,6 +573,14 @@ const SalesReviewTab = ({
     // Calculate overall summary row
     // Use weighted mean: (Total Assessed / Total Sales) × 100
     const avgSalesRatio = overallTotals.totalNormPrice > 0 ? (overallTotals.assessedSum / overallTotals.totalNormPrice) * 100 : 0;
+
+    console.log('🎯 VCS Analytics Calculation:', {
+      mode: useProjectedAssessment ? 'PROJECTED' : 'CURRENT',
+      totalAssessed: overallTotals.assessedSum,
+      totalNormSales: overallTotals.totalNormPrice,
+      calculatedRatio: avgSalesRatio.toFixed(1) + '%',
+      propertyCount: overallTotals.count
+    });
     let cod = 0;
     if (overallTotals.salesRatios.length > 0 && avgSalesRatio > 0) {
       const absoluteDeviations = overallTotals.salesRatios.map(ratio => Math.abs(ratio - avgSalesRatio));
