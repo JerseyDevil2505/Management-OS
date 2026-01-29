@@ -615,6 +615,21 @@ const SalesReviewTab = ({
       prd
     };
 
+    // Debug: Summary of projected average calculation
+    if (useProjectedAssessment && overallTotals.salesRatioCount > 0) {
+      console.log('📊 PROJECTED AVERAGE CALCULATION SUMMARY:', {
+        mode: 'Projected (CAMA)',
+        total_properties_with_ratios: overallTotals.salesRatioCount,
+        sum_of_all_ratios: overallTotals.salesRatioSum.toFixed(2),
+        calculated_average: avgSalesRatio.toFixed(1) + '%',
+        formula: `${overallTotals.salesRatioSum.toFixed(2)} / ${overallTotals.salesRatioCount} = ${avgSalesRatio.toFixed(1)}%`,
+        total_assessed: overallTotals.assessedSum.toLocaleString(),
+        total_norm_sales: overallTotals.totalNormPrice.toLocaleString(),
+        COD: cod.toFixed(2),
+        PRD: prd.toFixed(3)
+      });
+    }
+
     return { analytics, summary };
   }, [filteredProperties, useProjectedAssessment]);
 
