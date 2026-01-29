@@ -539,30 +539,60 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   // For flat adjustments (not count), show YES/NONE instead of SF values
                   // Count adjustments (bathrooms, bedrooms, fireplaces) show the numeric value
                   if (attr.adjustmentName && isAdjustmentFlat(attr.adjustmentName) && !isAdjustmentCount(attr.adjustmentName)) {
-                    const rawValue = attr.render(comp);
-                    let hasValue = false;
+                    // Get raw property value based on attribute id
+                    let rawPropertyValue = null;
 
-                    if (typeof rawValue === 'string') {
-                      const lower = rawValue.toLowerCase();
-                      // Check for "yes" or numeric values > 0 (excluding "none" and "n/a")
-                      if (lower.includes('yes') ||
-                          (!lower.includes('none') && !lower.includes('n/a') && rawValue.match(/\d+/))) {
-                        const numMatch = rawValue.match(/\d+/);
-                        hasValue = numMatch ? parseInt(numMatch[0]) > 0 : lower.includes('yes');
-                      }
-                    } else if (typeof rawValue === 'number') {
-                      hasValue = rawValue > 0;
+                    switch(attr.id) {
+                      case 'garage_area':
+                        rawPropertyValue = comp.garage_area;
+                        break;
+                      case 'det_garage_area':
+                        rawPropertyValue = comp.det_garage_area;
+                        break;
+                      case 'deck_area':
+                        rawPropertyValue = comp.deck_area;
+                        break;
+                      case 'patio_area':
+                        rawPropertyValue = comp.patio_area;
+                        break;
+                      case 'open_porch_area':
+                        rawPropertyValue = comp.open_porch_area;
+                        break;
+                      case 'enclosed_porch_area':
+                        rawPropertyValue = comp.enclosed_porch_area;
+                        break;
+                      case 'pool_area':
+                        rawPropertyValue = comp.pool_area;
+                        break;
+                      case 'basement_area':
+                        rawPropertyValue = comp.basement_area;
+                        break;
+                      case 'fin_bsmt_area':
+                        rawPropertyValue = comp.fin_basement_area;
+                        break;
+                      case 'ac_area':
+                        rawPropertyValue = comp.ac_area;
+                        break;
+                      default:
+                        // Fallback to checking rendered value
+                        rawPropertyValue = value;
                     }
+
+                    // Check if has value
+                    const hasValue = rawPropertyValue !== null &&
+                                    rawPropertyValue !== undefined &&
+                                    rawPropertyValue > 0;
 
                     // Debug log first comp only
                     if (idx === 0 && attr.id === 'deck_area' && !window._detailedDebugLogged) {
                       console.log(`🔍 YES/NONE Debug for ${attr.adjustmentName}:`, {
-                        rawValue,
+                        attrId: attr.id,
+                        rawPropertyValue,
                         hasValue,
                         finalValue: hasValue ? 'YES' : 'NONE',
                         isFlat: isAdjustmentFlat(attr.adjustmentName),
                         isCount: isAdjustmentCount(attr.adjustmentName),
-                        adjustmentGrid: adjustmentGrid?.length || 0
+                        comp: comp
                       });
                       window._detailedDebugLogged = true;
                     }
