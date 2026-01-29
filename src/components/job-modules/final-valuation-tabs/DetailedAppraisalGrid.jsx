@@ -565,9 +565,15 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   let value = attr.render(comp);
                   const adj = attr.adjustmentName ? getAdjustment(comp, attr.adjustmentName) : null;
 
-                  // For flat adjustments (not count), show YES/NONE instead of SF values
-                  // Count adjustments (bathrooms, bedrooms, fireplaces) show the numeric value
-                  if (attr.adjustmentName && isAdjustmentFlat(attr.adjustmentName) && !isAdjustmentCount(attr.adjustmentName)) {
+                  // ONLY apply YES/NONE to specific amenity area attributes
+                  // Exclude: lot sizes, year built, count fields (bathrooms, bedrooms, fireplaces)
+                  const amenityAreaIds = [
+                    'garage_area', 'det_garage_area', 'deck_area', 'patio_area',
+                    'open_porch_area', 'enclosed_porch_area', 'pool_area',
+                    'basement_area', 'fin_bsmt_area', 'ac_area'
+                  ];
+
+                  if (amenityAreaIds.includes(attr.id)) {
                     // Get raw property value based on attribute id
                     let rawPropertyValue = null;
 
@@ -602,29 +608,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       case 'ac_area':
                         rawPropertyValue = comp.ac_area;
                         break;
-                      default:
-                        // Fallback to checking rendered value
-                        rawPropertyValue = value;
                     }
 
                     // Check if has value
                     const hasValue = rawPropertyValue !== null &&
                                     rawPropertyValue !== undefined &&
                                     rawPropertyValue > 0;
-
-                    // Debug log first comp only
-                    if (idx === 0 && attr.id === 'deck_area' && !window._detailedDebugLogged) {
-                      console.log(`🔍 YES/NONE Debug for ${attr.adjustmentName}:`, {
-                        attrId: attr.id,
-                        rawPropertyValue,
-                        hasValue,
-                        finalValue: hasValue ? 'YES' : 'NONE',
-                        isFlat: isAdjustmentFlat(attr.adjustmentName),
-                        isCount: isAdjustmentCount(attr.adjustmentName),
-                        comp: comp
-                      });
-                      window._detailedDebugLogged = true;
-                    }
 
                     value = hasValue ? 'YES' : 'NONE';
                   }
