@@ -273,6 +273,12 @@ const SalesReviewTab = ({
         ? (prop.values_cama_total / prop.values_norm_time) * 100
         : null;
 
+      // Projected sales ratio (uses projected_total from final_valuation_data)
+      const projected_total = finalValuationData[prop.property_composite_key] || null;
+      const projectedSalesRatio = prop.values_norm_time && prop.values_norm_time > 0 && projected_total
+        ? (projected_total / prop.values_norm_time) * 100
+        : null;
+
       // Code interpretations
       const typeUseName = interpretCodes.getTypeName?.(prop, parsedCodeDefinitions, vendorType);
       const designName = interpretCodes.getDesignName?.(prop, parsedCodeDefinitions, vendorType);
