@@ -1013,14 +1013,14 @@ export class BRTProcessor {
 
   /**
    * Extract finished basement area
-   * BSMTNFINISHAREA_1 and BSMTFINISHAREA_2 can be:
+   * BSMNTFINISHAREA_1 and BSMNTFINISHAREA_2 can be:
    * - If < 1 (e.g., 0.9) = percentage of basement floor area
    * - If >= 1 = actual square footage
    */
   extractFinBasementArea(rawRecord) {
     const basementArea = this.parseNumeric(rawRecord.FLA_BSMNT) || 0;
-    const finish1 = this.parseNumeric(rawRecord.BSMTNFINISHAREA_1) || 0;
-    const finish2 = this.parseNumeric(rawRecord.BSMTNFINISHAREA_2) || 0;
+    const finish1 = this.parseNumeric(rawRecord.BSMNTFINISHAREA_1) || 0;
+    const finish2 = this.parseNumeric(rawRecord.BSMNTFINISHAREA_2) || 0;
 
     let totalFinished = 0;
 
