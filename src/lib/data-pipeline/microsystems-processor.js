@@ -1010,12 +1010,22 @@ export class MicrosystemsProcessor {
 
   /**
    * Extract pool area by summing items with pool codes
-   * For now, returns null - will be calculated from detached items + code config
+   * Uses code configuration to identify which codes are pools
    */
   extractPoolArea(rawRecord) {
-    // This will be calculated dynamically based on code configuration
-    // Store detached items in raw_detached_items field instead
-    return null;
+    const detachedItems = this.extractDetachedItems(rawRecord);
+    const poolCodes = this.codeConfig.pool || [];
+
+    if (poolCodes.length === 0 || detachedItems.length === 0) {
+      return null;
+    }
+
+    // Sum areas for items matching pool codes
+    const totalArea = detachedItems
+      .filter(item => poolCodes.includes(item.code))
+      .reduce((sum, item) => sum + item.area, 0);
+
+    return totalArea > 0 ? totalArea : null;
   }
 
   /**
