@@ -320,13 +320,22 @@ The `sql/` folder contains database optimization scripts:
 
 **Component Line Count Updates:**
 
-| Component | Previous | Updated | Notes |
-|-----------|----------|---------|-------|
-| LandValuationTab.jsx | 4,400 | ~10,000 | THE ABSOLUTE LARGEST! |
-| AttributeCardsTab.jsx | Not listed | ~2,500 | Now documented |
-| CostValuationTab.jsx | Not listed | ~800 | Now documented |
-| PreValuationTab.jsx | Not listed | 3,726 | Now documented |
-| DataQualityTab.jsx | Not listed | 2,651 | Now documented |
+| Component | Lines | Module | Notes |
+|-----------|-------|--------|-------|
+| LandValuationTab.jsx | ~10,000 | Market Analysis | THE ABSOLUTE LARGEST! |
+| ProductionTracker.jsx | 4,400+ | Job Container | Analytics engine |
+| PreValuationTab.jsx | 3,726 | Market Analysis | Normalization workflows |
+| SalesComparisonTab.jsx | 2,812 | Final Valuation | CME comparable search |
+| DataQualityTab.jsx | 2,651 | Market Analysis | Data validation |
+| AttributeCardsTab.jsx | ~2,500 | Market Analysis | Condition items + cards |
+| SalesReviewTab.jsx | 1,879 | Final Valuation | Sales history review |
+| MarketDataTab.jsx | 1,551 | Final Valuation | Effective age calc |
+| AdjustmentsTab.jsx | 1,325 | Final Valuation | CME adjustment grid |
+| RatableComparisonTab.jsx | 1,112 | Final Valuation | Tax rate impact |
+| OverallAnalysisTab.jsx | ~1,000 | Market Analysis | Block mapping |
+| CostValuationTab.jsx | ~800 | Market Analysis | New construction + CCF |
+| DetailedAppraisalGrid.jsx | 577 | Final Valuation | Manual appraisal |
+| AnalyticsTab.jsx | 441 | Final Valuation | Final recommendations |
 
 **Public Assets:**
 
