@@ -1799,8 +1799,11 @@ const SalesReviewTab = ({
             <div className="text-sm text-gray-600">Crnt Avg Sales Ratio</div>
             <div className="text-2xl font-bold text-gray-900">
               {(() => {
-                const ratios = filteredProperties.filter(p => p.salesRatio !== null).map(p => p.salesRatio);
-                const avg = ratios.length > 0 ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 0;
+                // Use weighted mean: (Total Assessed / Total Sales) × 100
+                const props = filteredProperties.filter(p => p.values_mod_total && p.values_norm_time && p.values_norm_time > 0);
+                const totalAssessed = props.reduce((sum, p) => sum + (p.values_mod_total || 0), 0);
+                const totalSales = props.reduce((sum, p) => sum + (p.values_norm_time || 0), 0);
+                const avg = totalSales > 0 ? (totalAssessed / totalSales) * 100 : 0;
                 return formatPercent(avg);
               })()}
             </div>
@@ -1809,8 +1812,11 @@ const SalesReviewTab = ({
             <div className="text-sm text-purple-700">Prop Avg Sales Ratio</div>
             <div className="text-2xl font-bold text-purple-900">
               {(() => {
-                const ratios = filteredProperties.filter(p => p.salesRatioCama !== null).map(p => p.salesRatioCama);
-                const avg = ratios.length > 0 ? ratios.reduce((a, b) => a + b, 0) / ratios.length : 0;
+                // Use weighted mean: (Total Assessed / Total Sales) × 100
+                const props = filteredProperties.filter(p => p.values_cama_total && p.values_norm_time && p.values_norm_time > 0);
+                const totalAssessed = props.reduce((sum, p) => sum + (p.values_cama_total || 0), 0);
+                const totalSales = props.reduce((sum, p) => sum + (p.values_norm_time || 0), 0);
+                const avg = totalSales > 0 ? (totalAssessed / totalSales) * 100 : 0;
                 return formatPercent(avg);
               })()}
             </div>
