@@ -748,6 +748,20 @@ export const interpretCodes = {
 | rate_calc_budget | decimal(15,2) | **NEW** - Tax rate calculator budget input |
 | rate_calc_current_rate | decimal(6,3) | **NEW** - Tax rate calculator current rate input |
 | rate_calc_buffer_for_loss | decimal(5,2) | **NEW** - Tax rate calculator buffer for loss % |
+| previous_projected_class_1_count | integer | **NEW** - Previous file's projected Class 1 count (delta tracking) |
+| previous_projected_class_1_total | bigint | **NEW** - Previous file's projected Class 1 total (delta tracking) |
+| previous_projected_class_2_count | integer | **NEW** - Previous file's projected Class 2 count (delta tracking) |
+| previous_projected_class_2_total | bigint | **NEW** - Previous file's projected Class 2 total (delta tracking) |
+| previous_projected_class_3a_count | integer | **NEW** - Previous file's projected Class 3A count (delta tracking) |
+| previous_projected_class_3a_total | bigint | **NEW** - Previous file's projected Class 3A total (delta tracking) |
+| previous_projected_class_3b_count | integer | **NEW** - Previous file's projected Class 3B count (delta tracking) |
+| previous_projected_class_3b_total | bigint | **NEW** - Previous file's projected Class 3B total (delta tracking) |
+| previous_projected_class_4_count | integer | **NEW** - Previous file's projected Class 4 count (delta tracking) |
+| previous_projected_class_4_total | bigint | **NEW** - Previous file's projected Class 4 total (delta tracking) |
+| previous_projected_class_6_count | integer | **NEW** - Previous file's projected Class 6 count (delta tracking) |
+| previous_projected_class_6_total | bigint | **NEW** - Previous file's projected Class 6 total (delta tracking) |
+| previous_projected_total_count | integer | **NEW** - Previous file's total property count (delta tracking) |
+| previous_projected_total_total | bigint | **NEW** - Previous file's total ratable base (delta tracking) |
 | source_file_name | text | |
 | source_file_status | character varying | |
 | source_file_uploaded_at | timestamp with time zone | |
