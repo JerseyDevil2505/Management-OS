@@ -7,7 +7,9 @@ import {
   ChevronDown,
   ChevronRight,
   Check,
-  X
+  X,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 
