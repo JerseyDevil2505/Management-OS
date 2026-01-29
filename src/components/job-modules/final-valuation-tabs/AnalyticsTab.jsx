@@ -99,19 +99,16 @@ const AnalyticsTab = ({ jobData, properties }) => {
       group.newLandTotal += newLand;
       group.newTotalValue += newTotal;
       
-      // Sales ratios by period - count ALL sales, not just those with projected values
-      if (prop.sales_date && prop.values_norm_time && prop.values_norm_time > 0) {
+      // Sales ratios by period - count ALL sales, even without projected values
+      if (prop.sales_date && prop.values_norm_time && prop.values_norm_time > 0 && newTotal > 0) {
         const salesPeriod = getSalesPeriod(prop.sales_date);
-        const ratio = newTotal > 0 ? (newTotal / prop.values_norm_time) * 100 : null;
 
-        if (ratio !== null) {
-          if (salesPeriod === 'HSP') {
-            group.hspSales.push({ assessed: newTotal, sale: prop.values_norm_time });
-          } else if (salesPeriod === 'PSP') {
-            group.pspSales.push({ assessed: newTotal, sale: prop.values_norm_time });
-          } else if (salesPeriod === 'CSP') {
-            group.cspSales.push({ assessed: newTotal, sale: prop.values_norm_time });
-          }
+        if (salesPeriod === 'HSP') {
+          group.hspSales.push({ assessed: newTotal, sale: prop.values_norm_time });
+        } else if (salesPeriod === 'PSP') {
+          group.pspSales.push({ assessed: newTotal, sale: prop.values_norm_time });
+        } else if (salesPeriod === 'CSP') {
+          group.cspSales.push({ assessed: newTotal, sale: prop.values_norm_time });
         }
       }
     });
