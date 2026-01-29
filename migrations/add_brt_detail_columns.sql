@@ -1,0 +1,154 @@
+-- Add BRT detached structure detail columns
+-- DETACHEDCODE_1 through 11, DETACHEDDCSIZE_1 through 11, DETACHEDNC_1 through 11
+ALTER TABLE property_records
+  ADD COLUMN IF NOT EXISTS detachedcode_1 TEXT,
+  ADD COLUMN IF NOT EXISTS detacheddcsize_1 NUMERIC,
+  ADD COLUMN IF NOT EXISTS detachednc_1 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS detachedcode_2 TEXT,
+  ADD COLUMN IF NOT EXISTS detacheddcsize_2 NUMERIC,
+  ADD COLUMN IF NOT EXISTS detachednc_2 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS detachedcode_3 TEXT,
+  ADD COLUMN IF NOT EXISTS detacheddcsize_3 NUMERIC,
+  ADD COLUMN IF NOT EXISTS detachednc_3 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS detachedcode_4 TEXT,
+  ADD COLUMN IF NOT EXISTS detacheddcsize_4 NUMERIC,
+  ADD COLUMN IF NOT EXISTS detachednc_4 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS detachedcode_5 TEXT,
+  ADD COLUMN IF NOT EXISTS detacheddcsize_5 NUMERIC,
+  ADD COLUMN IF NOT EXISTS detachednc_5 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS detachedcode_6 TEXT,
+  ADD COLUMN IF NOT EXISTS detacheddcsize_6 NUMERIC,
+  ADD COLUMN IF NOT EXISTS detachednc_6 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS detachedcode_7 TEXT,
+  ADD COLUMN IF NOT EXISTS detacheddcsize_7 NUMERIC,
+  ADD COLUMN IF NOT EXISTS detachednc_7 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS detachedcode_8 TEXT,
+  ADD COLUMN IF NOT EXISTS detacheddcsize_8 NUMERIC,
+  ADD COLUMN IF NOT EXISTS detachednc_8 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS detachedcode_9 TEXT,
+  ADD COLUMN IF NOT EXISTS detacheddcsize_9 NUMERIC,
+  ADD COLUMN IF NOT EXISTS detachednc_9 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS detachedcode_10 TEXT,
+  ADD COLUMN IF NOT EXISTS detacheddcsize_10 NUMERIC,
+  ADD COLUMN IF NOT EXISTS detachednc_10 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS detachedcode_11 TEXT,
+  ADD COLUMN IF NOT EXISTS detacheddcsize_11 NUMERIC,
+  ADD COLUMN IF NOT EXISTS detachednc_11 NUMERIC;
+
+-- Add BRT attached structure detail columns (decks, patios, porches)
+-- ATTACHEDCODE_1 through 15, ATTACHEDAREA_1 through 15
+ALTER TABLE property_records
+  ADD COLUMN IF NOT EXISTS attachedcode_1 TEXT,
+  ADD COLUMN IF NOT EXISTS attachedarea_1 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS attachedcode_2 TEXT,
+  ADD COLUMN IF NOT EXISTS attachedarea_2 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS attachedcode_3 TEXT,
+  ADD COLUMN IF NOT EXISTS attachedarea_3 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS attachedcode_4 TEXT,
+  ADD COLUMN IF NOT EXISTS attachedarea_4 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS attachedcode_5 TEXT,
+  ADD COLUMN IF NOT EXISTS attachedarea_5 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS attachedcode_6 TEXT,
+  ADD COLUMN IF NOT EXISTS attachedarea_6 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS attachedcode_7 TEXT,
+  ADD COLUMN IF NOT EXISTS attachedarea_7 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS attachedcode_8 TEXT,
+  ADD COLUMN IF NOT EXISTS attachedarea_8 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS attachedcode_9 TEXT,
+  ADD COLUMN IF NOT EXISTS attachedarea_9 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS attachedcode_10 TEXT,
+  ADD COLUMN IF NOT EXISTS attachedarea_10 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS attachedcode_11 TEXT,
+  ADD COLUMN IF NOT EXISTS attachedarea_11 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS attachedcode_12 TEXT,
+  ADD COLUMN IF NOT EXISTS attachedarea_12 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS attachedcode_13 TEXT,
+  ADD COLUMN IF NOT EXISTS attachedarea_13 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS attachedcode_14 TEXT,
+  ADD COLUMN IF NOT EXISTS attachedarea_14 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS attachedcode_15 TEXT,
+  ADD COLUMN IF NOT EXISTS attachedarea_15 NUMERIC;
+
+-- Add BRT miscellaneous items
+-- MISC_1 through 5, MISCNUM_1 through 5
+ALTER TABLE property_records
+  ADD COLUMN IF NOT EXISTS misc_1_brt TEXT,
+  ADD COLUMN IF NOT EXISTS miscnum_1 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS misc_2_brt TEXT,
+  ADD COLUMN IF NOT EXISTS miscnum_2 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS misc_3_brt TEXT,
+  ADD COLUMN IF NOT EXISTS miscnum_3 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS misc_4_brt TEXT,
+  ADD COLUMN IF NOT EXISTS miscnum_4 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS misc_5_brt TEXT,
+  ADD COLUMN IF NOT EXISTS miscnum_5 NUMERIC;
+
+-- Add BRT positive land adjustments
+-- LANDFFCOND_1 through 6, LANDURCOND_1 through 6
+ALTER TABLE property_records
+  ADD COLUMN IF NOT EXISTS landffcond_1 TEXT,
+  ADD COLUMN IF NOT EXISTS landurcond_1 TEXT,
+  
+  ADD COLUMN IF NOT EXISTS landffcond_2 TEXT,
+  ADD COLUMN IF NOT EXISTS landurcond_2 TEXT,
+  
+  ADD COLUMN IF NOT EXISTS landffcond_3 TEXT,
+  ADD COLUMN IF NOT EXISTS landurcond_3 TEXT,
+  
+  ADD COLUMN IF NOT EXISTS landffcond_4 TEXT,
+  ADD COLUMN IF NOT EXISTS landurcond_4 TEXT,
+  
+  ADD COLUMN IF NOT EXISTS landffcond_5 TEXT,
+  ADD COLUMN IF NOT EXISTS landurcond_5 TEXT,
+  
+  ADD COLUMN IF NOT EXISTS landffcond_6 TEXT,
+  ADD COLUMN IF NOT EXISTS landurcond_6 TEXT;
+
+-- Add BRT negative land adjustments
+-- LANDFFINFL_1 through 6, LANDURINFL_1 through 6
+ALTER TABLE property_records
+  ADD COLUMN IF NOT EXISTS landffinfl_1 TEXT,
+  ADD COLUMN IF NOT EXISTS landurinfl_1 TEXT,
+  
+  ADD COLUMN IF NOT EXISTS landffinfl_2 TEXT,
+  ADD COLUMN IF NOT EXISTS landurinfl_2 TEXT,
+  
+  ADD COLUMN IF NOT EXISTS landffinfl_3 TEXT,
+  ADD COLUMN IF NOT EXISTS landurinfl_3 TEXT,
+  
+  ADD COLUMN IF NOT EXISTS landffinfl_4 TEXT,
+  ADD COLUMN IF NOT EXISTS landurinfl_4 TEXT,
+  
+  ADD COLUMN IF NOT EXISTS landffinfl_5 TEXT,
+  ADD COLUMN IF NOT EXISTS landurinfl_5 TEXT,
+  
+  ADD COLUMN IF NOT EXISTS landffinfl_6 TEXT,
+  ADD COLUMN IF NOT EXISTS landurinfl_6 TEXT;
