@@ -1038,7 +1038,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                             <td className="py-3 px-4">
                               {isDisabled ? (
                                 <div className="text-xs text-gray-500 italic">
-                                  Not applicable for Microsystems
+                                  Extracted from source file columns
                                 </div>
                               ) : (
                                 <div className="space-y-2">
