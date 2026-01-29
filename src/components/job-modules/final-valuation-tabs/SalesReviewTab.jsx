@@ -585,9 +585,9 @@ const SalesReviewTab = ({
         count: data.count,
         avgPrice: data.count > 0 ? data.totalPrice / data.count : 0,
         avgNormPrice: data.count > 0 ? data.totalNormPrice / data.count : 0,
-        avgSFLA: data.sflaSum > 0 ? data.sflaSum / data.count : 0,
+        avgSFLA: data.sflaSum > 0 ? Math.round(data.sflaSum / data.count) : 0,
         avgPPSF: data.count > 0 && data.sflaSum > 0 ? data.totalPrice / data.sflaSum : 0,
-        avgAge: data.yearBuiltCount > 0 ? data.ageSum / data.yearBuiltCount : 0,
+        avgYearBuilt: data.yearBuiltCount > 0 ? Math.round(data.yearBuiltSum / data.yearBuiltCount) : 0,
         avgAssessed: data.count > 0 ? data.assessedSum / data.count : 0,
         avgSalesRatio,
         cod,
@@ -615,9 +615,9 @@ const SalesReviewTab = ({
       count: overallTotals.count,
       avgPrice: overallTotals.count > 0 ? overallTotals.totalPrice / overallTotals.count : 0,
       avgNormPrice: overallTotals.count > 0 ? overallTotals.totalNormPrice / overallTotals.count : 0,
-      avgSFLA: overallTotals.sflaSum > 0 ? overallTotals.sflaSum / overallTotals.count : 0,
+      avgSFLA: overallTotals.sflaSum > 0 ? Math.round(overallTotals.sflaSum / overallTotals.count) : 0,
       avgPPSF: overallTotals.count > 0 && overallTotals.sflaSum > 0 ? overallTotals.totalPrice / overallTotals.sflaSum : 0,
-      avgAge: overallTotals.yearBuiltCount > 0 ? overallTotals.ageSum / overallTotals.yearBuiltCount : 0,
+      avgYearBuilt: overallTotals.yearBuiltCount > 0 ? Math.round(overallTotals.yearBuiltSum / overallTotals.yearBuiltCount) : 0,
       avgAssessed: overallTotals.count > 0 ? overallTotals.assessedSum / overallTotals.count : 0,
       avgSalesRatio,
       cod,
@@ -625,7 +625,7 @@ const SalesReviewTab = ({
     };
 
     return { analytics, summary };
-  }, [filteredProperties]);
+  }, [filteredProperties, useProjectedAssessment]);
 
   const styleAnalytics = useMemo(() => {
     const groups = {};
