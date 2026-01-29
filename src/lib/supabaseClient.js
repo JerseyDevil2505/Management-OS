@@ -1193,6 +1193,21 @@ getBRTValue: function(property, codeDefinitions, fieldName) {
     return viewCode;
   },
 
+  getStoryHeightName: function(property, codeDefinitions, vendorType) {
+    if (!property || !codeDefinitions) return null;
+
+    const storyCode = property.asset_story_height || property.asset_stories;
+    if (!storyCode || storyCode.toString().trim() === '') return null;
+
+    if (vendorType === 'Microsystems') {
+      return this.getMicrosystemsValue(property, codeDefinitions, 'asset_stories');
+    } else if (vendorType === 'BRT') {
+      return this.getBRTValue(property, codeDefinitions, 'asset_stories');
+    }
+
+    return storyCode;
+  },
+
   // Check if a field is empty (handles spaces, null, undefined, and BRT's "00")
   isFieldEmpty: function(value) {
     if (!value) return true;
