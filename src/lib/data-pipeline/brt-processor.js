@@ -14,9 +14,12 @@ export class BRTProcessor {
     this.vcsLookups = new Map();
     this.headers = [];
     this.isTabSeparated = false;
-    
+
     // Store all parsed code sections for database storage
     this.allCodeSections = {};
+
+    // Store code configuration for categorizing items
+    this.codeConfig = {};
   }
 
   /**
