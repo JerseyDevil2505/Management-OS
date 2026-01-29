@@ -5,6 +5,25 @@ import { Save, Plus, Trash2, Settings, X } from 'lucide-react';
 const AdjustmentsTab = ({ jobData = {} }) => {
   const vendorType = jobData?.vendor_type || 'BRT';
   const [activeSubTab, setActiveSubTab] = useState('adjustments');
+
+  // Helper: Format adjustment names to title case for misc/land adjustments
+  const formatAdjustmentName = (name, adjustmentId) => {
+    // Check if it's a dynamic adjustment (misc or land)
+    const isDynamic = adjustmentId.includes('miscellaneous_') ||
+                      adjustmentId.includes('land_positive_') ||
+                      adjustmentId.includes('land_negative_');
+
+    if (isDynamic && name) {
+      // Convert to title case
+      return name
+        .toLowerCase()
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    }
+
+    return name;
+  };
   const [adjustments, setAdjustments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
