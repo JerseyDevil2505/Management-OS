@@ -690,10 +690,17 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
                 if (!existingAdj) {
                   maxSortOrder += 1;
+                  // Convert description to title case (lowercase first, then capitalize each word)
+                  const titleCaseName = codeObj.description
+                    .toLowerCase()
+                    .split(' ')
+                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                    .join(' ');
+
                   newAdjustments.push({
                     job_id: jobData.id,
                     adjustment_id: adjustmentId,
-                    adjustment_name: codeObj.description,
+                    adjustment_name: titleCaseName,
                     adjustment_type: 'flat',
                     category: 'amenity',
                     is_default: false,
@@ -1371,9 +1378,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                                     <option value="flat">Flat ($)</option>
                                     <option value="per_sqft">Per SF ($/SF)</option>
                                     <option value="count">Count (#)</option>
-                                    {(adj.adjustment_type === 'percent' || adj.adjustment_type === 'flat_or_percent') && (
-                                      <option value="percent">Percent (%)</option>
-                                    )}
+                                    <option value="percent">Percent (%)</option>
                                   </select>
                                 </td>
                               </tr>
