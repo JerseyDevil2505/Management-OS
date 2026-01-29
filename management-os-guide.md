@@ -775,6 +775,7 @@ export const interpretCodes = {
 | total_properties | integer | |
 | totalcommercial | integer | |
 | totalresidential | integer | |
+| unit_rate_config | jsonb | **NEW** - Unit rate configuration for land valuation |
 | updated_at | timestamp with time zone | |
 | validation_status | text | **NEW** - Moved from property_records |
 | vendor_detection | jsonb | |
