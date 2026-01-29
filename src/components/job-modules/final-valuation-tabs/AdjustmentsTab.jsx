@@ -123,15 +123,13 @@ const AdjustmentsTab = ({ jobData = {} }) => {
   ];
 
   // Helper: Check if attribute should be disabled for Microsystems
-  // For Microsystems, these attributes are extracted from columns, not BRT codes
+  // For Microsystems, ONLY attached items are extracted from columns, not codes
   const isAttributeDisabledForMicrosystems = (attributeId) => {
     if (vendorType !== 'Microsystems') return false;
-    const microsystemsColumnAttributes = [
-      'garage', 'deck', 'patio', 'open_porch', 'enclosed_porch',
-      'det_garage', 'pool', 'barn', 'pole_barn', 'stable',
-      'miscellaneous', 'land_positive', 'land_negative'
+    const attachedItemsFromColumns = [
+      'garage', 'deck', 'patio', 'open_porch', 'enclosed_porch'
     ];
-    return microsystemsColumnAttributes.includes(attributeId);
+    return attachedItemsFromColumns.includes(attributeId);
   };
 
   // Load adjustments and custom brackets from database
