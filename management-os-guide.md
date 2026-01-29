@@ -6030,6 +6030,50 @@ Adjustments grid configured in separate tab:
 - Performance optimized for 1,000+ subject properties
 - Progress tracking essential for large evaluations
 
+---
+
+### 🚧 **CME_NEEDS_WORK_JAN2025** - Sales Comparison Issues to Address
+
+**SEARCHPHRASE for quick find: CME_NEEDS_WORK_JAN2025**
+
+**Priority Items for Next Session:**
+
+**1. ATTRIBUTE DATA VERIFICATION (CRITICAL):**
+- **Issue**: Attributes showing up in adjustment grid (decks, patios, pools, garages, etc.) need verification at individual Block-Lot level
+- **Action Required**:
+  - Check specific Block-Lot combinations in database vs what's displayed in CME grid
+  - Verify data is coming from correct source (property_records vs raw fields)
+  - Ensure Microsystems attribute mapping is correct (garage_area, pool_area, deck_area, etc.)
+  - Cross-reference with property detail views to confirm accuracy
+- **Files**: SalesComparisonTab.jsx, DetailedAppraisalGrid.jsx
+- **Database**: property_records table - attribute fields
+
+**2. PROGRESS BAR REALISM (UX):**
+- **Issue**: Evaluation progress bar jumps to 99% instantly, not realistic
+- **Current Behavior**: Bar hits 99% in ~1 second regardless of property count
+- **Desired Behavior**: Progressive real-time updates as evaluation proceeds:
+  - Find comparables (Phase 1)
+  - Calculate adjustments (Phase 2)
+  - Rank and select best comps (Phase 3)
+  - Save results (Phase 4)
+- **Action Required**: Implement true progress tracking with status updates per property
+- **Files**: SalesComparisonTab.jsx - Evaluate sub-tab
+- **Implementation**: Use state updates in evaluation loop, possibly with batching for performance
+
+**3. ADJUSTMENT CALCULATION VERIFICATION (POST-DATA FIX):**
+- **Issue**: Once attribute data is verified correct, need to validate adjustment calculations
+- **Action Required**:
+  - Manual spot-check of adjustment math
+  - Verify bracket-based adjustment values applying correctly
+  - Confirm total adjustments, net adjustments, gross adjustments formulas
+  - Test edge cases (missing attributes, zero values, etc.)
+- **Dependencies**: Complete Item #1 first
+- **Files**: DetailedAppraisalGrid.jsx, SalesComparisonTab.jsx
+
+**Status**: Ready for investigation - Microsystems jobs showing issues, BRT appears functional
+
+---
+
 ### AdjustmentsTab.jsx - CME Adjustment Grid Configuration ⚙️
 
 **Scale**: 1,325 lines of adjustment grid management
