@@ -216,6 +216,33 @@ const SalesReviewTab = ({
     loadIncludeOverrides();
   }, [jobData?.id, properties]);
 
+  // Load final valuation data for projected assessments
+  useEffect(() => {
+    const loadFinalValuationData = async () => {
+      if (!jobData?.id) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('final_valuation_data')
+          .select('property_composite_key, projected_total')
+          .eq('job_id', jobData.id);
+
+        if (error) throw error;
+
+        // Convert to map by composite_key
+        const dataMap = {};
+        (data || []).forEach(item => {
+          dataMap[item.property_composite_key] = item.projected_total;
+        });
+        setFinalValuationData(dataMap);
+      } catch (error) {
+        console.error('Error loading final valuation data:', error);
+      }
+    };
+
+    loadFinalValuationData();
+  }, [jobData?.id]);
+
   // ==================== COMPUTED DATA ====================
   
   const enrichedProperties = useMemo(() => {
