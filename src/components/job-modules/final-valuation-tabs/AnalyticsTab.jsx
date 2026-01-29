@@ -37,31 +37,33 @@ const AnalyticsTab = ({ jobData, properties }) => {
     return endYear - 1;
   }, [jobData?.end_date]);
 
-  // Determine sales period for a property
-  const getSalesPeriod = (salesDate) => {
-    if (!salesDate) return null;
-    
-    const saleDate = new Date(salesDate);
-    const assessmentYear = parseInt(jobData.end_date.substring(0, 4));
+  // Determine sales period for a property - MATCH SalesReviewTab logic exactly
+  const getSalesPeriod = useCallback((salesDate) => {
+    if (!salesDate || !jobData?.end_date) return null;
+
+    const sale = new Date(salesDate);
+    const assessmentYear = new Date(jobData.end_date).getFullYear();
 
     // CSP (Current Sale Period): 10/1 of prior year → 12/31 of assessment year
     // For assessment date 1/1/2026 (stored as 12/31/2025): 10/1/2024 → 12/31/2025
-    const cspStart = new Date(assessmentYear - 1, 9, 1);
-    const cspEnd = new Date(assessmentYear, 11, 31);
+    const cspStart = new Date(assessmentYear - 1, 9, 1);  // Oct 1 of prior year
+    const cspEnd = new Date(assessmentYear, 11, 31);       // Dec 31 of assessment year
 
     // PSP (Prior Sale Period): 10/1 of two years prior → 9/30 of prior year
-    const pspStart = new Date(assessmentYear - 2, 9, 1);
-    const pspEnd = new Date(assessmentYear - 1, 8, 30);
+    // For assessment date 1/1/2026: 10/1/2023 → 9/30/2024
+    const pspStart = new Date(assessmentYear - 2, 9, 1);   // Oct 1 of two years prior
+    const pspEnd = new Date(assessmentYear - 1, 8, 30);    // Sep 30 of prior year
 
     // HSP (Historical Sale Period): 10/1 of three years prior → 9/30 of two years prior
-    const hspStart = new Date(assessmentYear - 3, 9, 1);
-    const hspEnd = new Date(assessmentYear - 2, 8, 30);
-    
-    if (saleDate >= cspStart && saleDate <= cspEnd) return 'CSP';
-    if (saleDate >= pspStart && saleDate <= pspEnd) return 'PSP';
-    if (saleDate >= hspStart && saleDate <= hspEnd) return 'HSP';
-    return null;
-  };
+    // For assessment date 1/1/2026: 10/1/2022 → 9/30/2023
+    const hspStart = new Date(assessmentYear - 3, 9, 1);   // Oct 1 of three years prior
+    const hspEnd = new Date(assessmentYear - 2, 8, 30);    // Sep 30 of two years prior
+
+    if (sale >= cspStart && sale <= cspEnd) return 'CSP';
+    if (sale >= pspStart && sale <= pspEnd) return 'PSP';
+    if (sale >= hspStart && sale <= hspEnd) return 'HSP';
+    return ''; // Blank instead of 'OTHER'
+  }, [jobData?.end_date]);
 
   // Calculate VCS analytics
   const vcsAnalytics = useMemo(() => {
