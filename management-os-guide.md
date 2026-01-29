@@ -992,6 +992,7 @@ export const interpretCodes = {
 | final_method_used | text | 'market_data' or 'cme' |
 | final_recommended_value | numeric | Final value recommendation |
 | final_notes | text | Additional notes |
+| projected_6_override | numeric | **NEW** - Manual override for Class 6 projected values |
 | created_at | timestamp with time zone | |
 | updated_at | timestamp with time zone | |
 
