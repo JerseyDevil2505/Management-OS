@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
-import { jobService, propertyService, supabase, preservedFieldsHandler } from '../../lib/supabaseClient';
+import { jobService, propertyService, supabase, preservedFieldsHandler, interpretCodes } from '../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
 const FileUploadButton = ({
