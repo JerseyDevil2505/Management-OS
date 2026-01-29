@@ -990,12 +990,22 @@ export class MicrosystemsProcessor {
 
   /**
    * Extract detached garage area by summing items with garage codes
-   * For now, returns null - will be calculated from detached items + code config
+   * Uses code configuration to identify which codes are garages
    */
   extractDetGarageArea(rawRecord) {
-    // This will be calculated dynamically based on code configuration
-    // Store detached items in raw_detached_items field instead
-    return null;
+    const detachedItems = this.extractDetachedItems(rawRecord);
+    const garageCodes = this.codeConfig.det_garage || [];
+
+    if (garageCodes.length === 0 || detachedItems.length === 0) {
+      return null;
+    }
+
+    // Sum areas for items matching garage codes
+    const totalArea = detachedItems
+      .filter(item => garageCodes.includes(item.code))
+      .reduce((sum, item) => sum + item.area, 0);
+
+    return totalArea > 0 ? totalArea : null;
   }
 
   /**
