@@ -51,10 +51,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
   // Define attribute order as specified by user
   const ATTRIBUTE_ORDER = [
-    { 
-      id: 'vcs', 
+    {
+      id: 'vcs',
       label: 'VCS',
-      render: (prop) => `${prop.property_block}/${prop.property_lot}${prop.property_qualifier ? '/' + prop.property_qualifier : ''}`,
+      render: (prop) => prop.new_vcs || prop.property_vcs || 'N/A',
       adjustmentName: null // No adjustment for VCS
     },
     {
