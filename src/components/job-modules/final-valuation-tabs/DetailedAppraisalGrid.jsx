@@ -35,10 +35,16 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     );
   };
 
-  // Helper to check if adjustment is flat type
+  // Helper to check if adjustment is flat type (YES/NONE display)
   const isAdjustmentFlat = (adjustmentName) => {
     const adjDef = getAdjustmentDef(adjustmentName);
     return adjDef?.adjustment_type === 'flat';
+  };
+
+  // Helper to check if adjustment is count type (show numeric value)
+  const isAdjustmentCount = (adjustmentName) => {
+    const adjDef = getAdjustmentDef(adjustmentName);
+    return adjDef?.adjustment_type === 'count';
   };
 
   // Helper to count BRT items by category codes
@@ -98,7 +104,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     {
       id: 'property_class',
       label: 'Property Class',
-      render: (prop) => prop.property_class || prop.asset_property_class || 'N/A',
+      render: (prop) => prop.property_m4_class || prop.property_cama_class || 'N/A',
       adjustmentName: null
     },
     {
@@ -507,8 +513,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   let value = attr.render(comp);
                   const adj = attr.adjustmentName ? getAdjustment(comp, attr.adjustmentName) : null;
 
-                  // For flat adjustments, show YES/NONE instead of SF values
-                  if (attr.adjustmentName && isAdjustmentFlat(attr.adjustmentName)) {
+                  // For flat adjustments (not count), show YES/NONE instead of SF values
+                  // Count adjustments (bathrooms, bedrooms, fireplaces) show the numeric value
+                  if (attr.adjustmentName && isAdjustmentFlat(attr.adjustmentName) && !isAdjustmentCount(attr.adjustmentName)) {
                     const rawValue = attr.render(comp);
                     let hasValue = false;
 
