@@ -2744,13 +2744,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
             {/* Results Section (if evaluation has been run) */}
             {manualEvaluationResult && (
-              <DetailedAppraisalGrid
-                result={manualEvaluationResult}
-                jobData={jobData}
-                codeDefinitions={codeDefinitions}
-                vendorType={vendorType}
-                adjustmentGrid={adjustmentGrid}
-              />
+              <div ref={detailedResultsRef}>
+                <DetailedAppraisalGrid
+                  result={manualEvaluationResult}
+                  jobData={jobData}
+                  codeDefinitions={codeDefinitions}
+                  vendorType={vendorType}
+                  adjustmentGrid={adjustmentGrid}
+                />
+              </div>
             )}
           </div>
         )}
