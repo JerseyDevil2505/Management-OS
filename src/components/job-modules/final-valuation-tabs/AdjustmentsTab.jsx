@@ -992,7 +992,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                                     {codes
                                       .filter(code => !selectedCodes.includes(code.code))
                                       .map(code => (
-                                        <option key={code.code} value={code.code}>
+                                        <option key={`${attr.id}-${code.code}`} value={code.code}>
                                           {code.code} - {code.description}
                                         </option>
                                       ))}
@@ -1079,7 +1079,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                                     {codes
                                       .filter(code => !selectedCodes.includes(code.code))
                                       .map(code => (
-                                        <option key={code.code} value={code.code}>
+                                        <option key={`${attr.id}-${code.code}`} value={code.code}>
                                           {code.code} - {code.description}
                                         </option>
                                       ))}
