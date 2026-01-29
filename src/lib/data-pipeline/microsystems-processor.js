@@ -1098,6 +1098,66 @@ export class MicrosystemsProcessor {
   }
 
   /**
+   * Extract barn area by summing items with barn codes
+   * Uses code configuration to identify which codes are barns
+   */
+  extractBarnArea(rawRecord) {
+    const detachedItems = this.extractDetachedItems(rawRecord);
+    const barnCodes = this.codeConfig.barn || [];
+
+    if (barnCodes.length === 0 || detachedItems.length === 0) {
+      return null;
+    }
+
+    // Sum areas for items matching barn codes
+    const totalArea = detachedItems
+      .filter(item => barnCodes.includes(item.code))
+      .reduce((sum, item) => sum + item.area, 0);
+
+    return totalArea > 0 ? totalArea : null;
+  }
+
+  /**
+   * Extract stable area by summing items with stable codes
+   * Uses code configuration to identify which codes are stables
+   */
+  extractStableArea(rawRecord) {
+    const detachedItems = this.extractDetachedItems(rawRecord);
+    const stableCodes = this.codeConfig.stable || [];
+
+    if (stableCodes.length === 0 || detachedItems.length === 0) {
+      return null;
+    }
+
+    // Sum areas for items matching stable codes
+    const totalArea = detachedItems
+      .filter(item => stableCodes.includes(item.code))
+      .reduce((sum, item) => sum + item.area, 0);
+
+    return totalArea > 0 ? totalArea : null;
+  }
+
+  /**
+   * Extract pole barn area by summing items with pole barn codes
+   * Uses code configuration to identify which codes are pole barns
+   */
+  extractPoleBarnArea(rawRecord) {
+    const detachedItems = this.extractDetachedItems(rawRecord);
+    const poleBarnCodes = this.codeConfig.pole_barn || [];
+
+    if (poleBarnCodes.length === 0 || detachedItems.length === 0) {
+      return null;
+    }
+
+    // Sum areas for items matching pole barn codes
+    const totalArea = detachedItems
+      .filter(item => poleBarnCodes.includes(item.code))
+      .reduce((sum, item) => sum + item.area, 0);
+
+    return totalArea > 0 ? totalArea : null;
+  }
+
+  /**
    * Extract AC area from AC Sf field
    * If value contains %, it's a percentage of SFLA
    */
