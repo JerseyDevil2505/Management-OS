@@ -314,7 +314,11 @@ const handleCodeFileUpdate = async () => {
     } else {
       throw new Error('Unsupported vendor type');
     }
-    
+
+    // Clear cached data for this job to ensure fresh code definitions are loaded
+    interpretCodes.clearRawDataCache(job.id);
+    console.log(`🗑️ Cleared cache for job ${job.id} after code file update`);
+
     // Only update date stamp if we successfully got here
     const processedDate = new Date().toISOString();
     setLastCodeProcessedDate(processedDate);
