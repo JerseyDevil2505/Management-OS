@@ -740,7 +740,7 @@ export const interpretCodes = {
 | percent_billed | numeric | |
 | priority | text | |
 | project_start_date | date | **NEW** - Moved from property_records |
-| project_type | text | **REMOVED** - No longer in schema |
+| project_type | text | Project classification field (still exists in schema) |
 | raw_file_content | text | **NEW** - Consolidated raw data storage |
 | raw_file_parsed_at | timestamp with time zone | **NEW** - Parsing timestamp |
 | raw_file_rows_count | integer | **NEW** - Row count tracking |
