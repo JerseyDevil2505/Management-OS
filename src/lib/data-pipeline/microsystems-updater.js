@@ -17,10 +17,13 @@ export class MicrosystemsUpdater {
   constructor() {
     this.codeLookups = new Map();
     this.headers = [];
-    
+
     // Store all parsed codes for database storage
     this.allCodes = {};
     this.categories = {};
+
+    // Store code configuration for categorizing detached items
+    this.codeConfig = {};
   }
 
   /**
@@ -598,10 +601,79 @@ export class MicrosystemsUpdater {
       enclosed_porch_area: this.extractEnclosedPorchArea(rawRecord),
       det_garage_area: this.extractDetGarageArea(rawRecord),
       pool_area: this.extractPoolArea(rawRecord),
+      barn_area: this.extractBarnArea(rawRecord),
+      stable_area: this.extractStableArea(rawRecord),
+      pole_barn_area: this.extractPoleBarnArea(rawRecord),
       ac_area: this.extractAcArea(rawRecord),
 
-      // Store raw detached items for code-based categorization
-      raw_detached_items: JSON.stringify(this.extractDetachedItems(rawRecord)),
+      // Detached Item Code1-4 with dimensions and depreciation
+      detached_item_code1: rawRecord['Detached Item Code1'] || null,
+      width1: this.parseNumeric(rawRecord['Width1']),
+      depth1: this.parseNumeric(rawRecord['Depth1']),
+      physical_depr1: this.parseNumeric(rawRecord['Physical Depr1']),
+      functional_depr1: this.parseNumeric(rawRecord['Functional Depr1']),
+      locationl_depr1: this.parseNumeric(rawRecord['Locationl Depr1']),
+
+      detached_item_code2: rawRecord['Detached Item Code2'] || null,
+      width2: this.parseNumeric(rawRecord['Width2']),
+      depth2: this.parseNumeric(rawRecord['Depth2']),
+      physical_depr2: this.parseNumeric(rawRecord['Physical Depr2']),
+      functional_depr2: this.parseNumeric(rawRecord['Functional Depr2']),
+      locationl_depr2: this.parseNumeric(rawRecord['Locationl Depr2']),
+
+      detached_item_code3: rawRecord['Detached Item Code3'] || null,
+      width3: this.parseNumeric(rawRecord['Width3']),
+      depth3: this.parseNumeric(rawRecord['Depth3']),
+      physical_depr3: this.parseNumeric(rawRecord['Physical Depr3']),
+      functional_depr3: this.parseNumeric(rawRecord['Functional Depr3']),
+      locationl_depr3: this.parseNumeric(rawRecord['Locationl Depr3']),
+
+      detached_item_code4: rawRecord['Detached Item Code4'] || null,
+      width4: this.parseNumeric(rawRecord['Width4']),
+      depth4: this.parseNumeric(rawRecord['Depth4']),
+      physical_depr4: this.parseNumeric(rawRecord['Physical Depr4']),
+      functional_depr4: this.parseNumeric(rawRecord['Functional Depr4']),
+      locationl_depr4: this.parseNumeric(rawRecord['Locationl Depr4']),
+
+      // Detachedbuilding1-4 with dimensions and depreciation
+      detachedbuilding1: rawRecord['Detachedbuilding1'] || null,
+      widthn1: this.parseNumeric(rawRecord['Widthn1']),
+      depthn1: this.parseNumeric(rawRecord['Depthn1']),
+      pysical1: this.parseNumeric(rawRecord['Pysical1']),
+      functional1: this.parseNumeric(rawRecord['Functional1']),
+      location_economic1: this.parseNumeric(rawRecord['Location Economic1']),
+
+      detachedbuilding2: rawRecord['Detachedbuilding2'] || null,
+      widthn2: this.parseNumeric(rawRecord['Widthn2']),
+      depthn2: this.parseNumeric(rawRecord['Depthn2']),
+      pysical2: this.parseNumeric(rawRecord['Pysical2']),
+      functional2: this.parseNumeric(rawRecord['Functional2']),
+      location_economic2: this.parseNumeric(rawRecord['Location Economic2']),
+
+      detachedbuilding3: rawRecord['Detachedbuilding3'] || null,
+      widthn3: this.parseNumeric(rawRecord['Widthn3']),
+      depthn3: this.parseNumeric(rawRecord['Depthn3']),
+      pysical3: this.parseNumeric(rawRecord['Pysical3']),
+      functional3: this.parseNumeric(rawRecord['Functional3']),
+      location_economic3: this.parseNumeric(rawRecord['Location Economic3']),
+
+      detachedbuilding4: rawRecord['Detachedbuilding4'] || null,
+      widthn4: this.parseNumeric(rawRecord['Widthn4']),
+      depthn4: this.parseNumeric(rawRecord['Depthn4']),
+      pysical4: this.parseNumeric(rawRecord['Pysical4']),
+      functional4: this.parseNumeric(rawRecord['Functional4']),
+      location_economic4: this.parseNumeric(rawRecord['Location Economic4']),
+
+      // Miscellaneous items
+      misc_item_1: rawRecord['Misc Item 1'] || null,
+      misc_item_2: rawRecord['Misc Item 2'] || null,
+      misc_item_3: rawRecord['Misc Item 3'] || null,
+
+      // Land adjustment reasons
+      overall_adj_reason1: rawRecord['Overall Adj Reason1'] || null,
+      overall_adj_reason2: rawRecord['Overall Adj Reason2'] || null,
+      overall_adj_reason3: rawRecord['Overall Adj Reason3'] || null,
+      overall_adj_reason4: rawRecord['Overall Adj Reason4'] || null,
 
       // Processing metadata
       processed_at: new Date().toISOString(),
