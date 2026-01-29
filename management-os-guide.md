@@ -766,6 +766,8 @@ export const interpretCodes = {
 | source_file_status | character varying | |
 | source_file_uploaded_at | timestamp with time zone | |
 | source_file_version_id | uuid | |
+| source_file_version | text | **NEW** - Text version identifier for source file |
+| staged_unit_rate_config | jsonb | **NEW** - Staged unit rate configuration (pending changes) |
 | start_date | date | |
 | state | character varying | |
 | status | text | |
