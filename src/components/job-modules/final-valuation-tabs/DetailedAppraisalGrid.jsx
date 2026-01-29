@@ -533,8 +533,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   {(() => {
                     let value = attr.render(subject);
 
-                    // Apply same YES/NONE logic to subject
-                    if (attr.adjustmentName && isAdjustmentFlat(attr.adjustmentName) && !isAdjustmentCount(attr.adjustmentName)) {
+                    // ONLY apply YES/NONE to specific amenity area attributes
+                    const amenityAreaIds = [
+                      'garage_area', 'det_garage_area', 'deck_area', 'patio_area',
+                      'open_porch_area', 'enclosed_porch_area', 'pool_area',
+                      'basement_area', 'fin_bsmt_area', 'ac_area'
+                    ];
+
+                    if (amenityAreaIds.includes(attr.id)) {
                       let rawPropertyValue = null;
 
                       switch(attr.id) {
@@ -548,7 +554,6 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                         case 'basement_area': rawPropertyValue = subject.basement_area; break;
                         case 'fin_bsmt_area': rawPropertyValue = subject.fin_basement_area; break;
                         case 'ac_area': rawPropertyValue = subject.ac_area; break;
-                        default: rawPropertyValue = value;
                       }
 
                       const hasValue = rawPropertyValue !== null &&
