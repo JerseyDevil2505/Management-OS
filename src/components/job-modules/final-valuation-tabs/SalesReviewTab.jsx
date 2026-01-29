@@ -534,7 +534,8 @@ const SalesReviewTab = ({
     });
 
     const analytics = Object.entries(groups).map(([vcs, data]) => {
-      const avgSalesRatio = data.salesRatioCount > 0 ? data.salesRatioSum / data.salesRatioCount : 0;
+      // Use weighted mean: (Total Assessed / Total Sales) × 100
+      const avgSalesRatio = data.totalNormPrice > 0 ? (data.assessedSum / data.totalNormPrice) * 100 : 0;
 
       // Calculate COD (Coefficient of Deviation) - NJ Formula
       // COD = (Average Absolute Deviation / Mean Assessment-Sales Ratio) × 100%
@@ -571,7 +572,8 @@ const SalesReviewTab = ({
     }).sort((a, b) => a.vcs.localeCompare(b.vcs));
 
     // Calculate overall summary row
-    const avgSalesRatio = overallTotals.salesRatioCount > 0 ? overallTotals.salesRatioSum / overallTotals.salesRatioCount : 0;
+    // Use weighted mean: (Total Assessed / Total Sales) × 100
+    const avgSalesRatio = overallTotals.totalNormPrice > 0 ? (overallTotals.assessedSum / overallTotals.totalNormPrice) * 100 : 0;
     let cod = 0;
     if (overallTotals.salesRatios.length > 0 && avgSalesRatio > 0) {
       const absoluteDeviations = overallTotals.salesRatios.map(ratio => Math.abs(ratio - avgSalesRatio));
@@ -600,15 +602,14 @@ const SalesReviewTab = ({
     };
 
     // Debug: Summary of projected average calculation
-    if (useProjectedAssessment && overallTotals.salesRatioCount > 0) {
+    if (useProjectedAssessment && overallTotals.totalNormPrice > 0) {
       console.log('📊 PROJECTED AVERAGE CALCULATION SUMMARY:', {
         mode: 'Projected (CAMA)',
-        total_properties_with_ratios: overallTotals.salesRatioCount,
-        sum_of_all_ratios: overallTotals.salesRatioSum.toFixed(2),
-        calculated_average: avgSalesRatio.toFixed(1) + '%',
-        formula: `${overallTotals.salesRatioSum.toFixed(2)} / ${overallTotals.salesRatioCount} = ${avgSalesRatio.toFixed(1)}%`,
+        total_properties_with_sales: overallTotals.count,
         total_assessed: overallTotals.assessedSum.toLocaleString(),
         total_norm_sales: overallTotals.totalNormPrice.toLocaleString(),
+        calculated_average: avgSalesRatio.toFixed(1) + '%',
+        formula: `(${overallTotals.assessedSum.toLocaleString()} / ${overallTotals.totalNormPrice.toLocaleString()}) × 100 = ${avgSalesRatio.toFixed(1)}%`,
         COD: cod.toFixed(2),
         PRD: prd.toFixed(3)
       });
