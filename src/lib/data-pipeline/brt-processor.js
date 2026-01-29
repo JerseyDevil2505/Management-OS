@@ -612,17 +612,20 @@ export class BRTProcessor {
       //          (moved to property_market_analysis table)
       total_baths_calculated: this.calculateTotalBaths(rawRecord),
 
-      // Normalized amenity area fields (extracted from BRT codes)
+      // Normalized amenity area fields (extracted from BRT codes using configuration)
       fireplace_count: this.extractFireplaceCount(rawRecord),
       basement_area: this.extractBasementArea(rawRecord),
       fin_basement_area: this.extractFinBasementArea(rawRecord),
-      garage_area: this.extractAttachedItemsAreaByKeyword(rawRecord, ['GAR']),
-      deck_area: this.extractAttachedItemsAreaByKeyword(rawRecord, ['DECK']),
-      patio_area: this.extractAttachedItemsAreaByKeyword(rawRecord, ['PATIO']),
-      open_porch_area: this.extractAttachedItemsAreaByKeyword(rawRecord, ['OPEN']),
-      enclosed_porch_area: this.extractAttachedItemsAreaByKeyword(rawRecord, ['ENCL', 'SCREEN', 'SCRN']),
-      det_garage_area: this.extractDetachedItemsAreaByKeyword(rawRecord, ['GAR']),
-      pool_area: this.extractDetachedItemsAreaByKeyword(rawRecord, ['POOL']),
+      garage_area: this.extractGarageAreaFromConfig(rawRecord),
+      deck_area: this.extractDeckAreaFromConfig(rawRecord),
+      patio_area: this.extractPatioAreaFromConfig(rawRecord),
+      open_porch_area: this.extractOpenPorchAreaFromConfig(rawRecord),
+      enclosed_porch_area: this.extractEnclosedPorchAreaFromConfig(rawRecord),
+      det_garage_area: this.extractDetGarageAreaFromConfig(rawRecord),
+      pool_area: this.extractPoolAreaFromConfig(rawRecord),
+      barn_area: this.extractBarnAreaFromConfig(rawRecord),
+      stable_area: this.extractStableAreaFromConfig(rawRecord),
+      pole_barn_area: this.extractPoleBarnAreaFromConfig(rawRecord),
       ac_area: this.extractAcArea(rawRecord),
 
       // BRT Detached structure detail columns (DETACHEDCODE_1-11, DETACHEDDCSIZE_1-11, DETACHEDNC_1-11)
