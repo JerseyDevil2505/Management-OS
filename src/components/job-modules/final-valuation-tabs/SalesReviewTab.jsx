@@ -1136,8 +1136,34 @@ const SalesReviewTab = ({
             {expandedSections.vcs ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
           </button>
           {expandedSections.vcs && (
-            <div className="px-4 pb-4 overflow-x-auto">
-              <table className="min-w-full text-sm">
+            <div className="px-4 pb-4">
+              {/* Assessment Type Toggle */}
+              <div className="mb-3 flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">Assessment Data:</label>
+                <button
+                  onClick={() => setUseProjectedAssessment(false)}
+                  className={`px-3 py-1 text-sm rounded-l border ${
+                    !useProjectedAssessment
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  Current
+                </button>
+                <button
+                  onClick={() => setUseProjectedAssessment(true)}
+                  className={`px-3 py-1 text-sm rounded-r border-t border-r border-b ${
+                    useProjectedAssessment
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  Projected
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b">
                     <th className="text-left py-2 px-2">VCS</th>
@@ -1147,7 +1173,7 @@ const SalesReviewTab = ({
                     <th className="text-right py-2 px-2">Avg SFLA</th>
                     <th className="text-right py-2 px-2">Avg PPSF</th>
                     <th className="text-right py-2 px-2">Avg Year Built</th>
-                    <th className="text-right py-2 px-2">Avg Assessed {useProjectedAssessment && '(Projected)'}</th>
+                    <th className="text-right py-2 px-2">Avg Assessed{useProjectedAssessment ? ' (Projected)' : ''}</th>
                     <th className="text-right py-2 px-2">Avg Ratio</th>
                     <th className="text-right py-2 px-2">COD</th>
                     <th className="text-right py-2 px-2">PRD</th>
@@ -1183,7 +1209,8 @@ const SalesReviewTab = ({
                     </tr>
                   ))}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           )}
         </div>
