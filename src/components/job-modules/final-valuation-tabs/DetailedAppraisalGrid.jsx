@@ -510,11 +510,20 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   // For flat adjustments, show YES/NONE instead of SF values
                   if (attr.adjustmentName && isAdjustmentFlat(attr.adjustmentName)) {
                     const rawValue = attr.render(comp);
-                    // Check if value contains a number > 0 or "Yes"
-                    const hasValue = (typeof rawValue === 'string' &&
-                                     (rawValue.toLowerCase().includes('yes') ||
-                                      rawValue.match(/\d+/) && parseInt(rawValue.match(/\d+/)[0]) > 0)) ||
-                                     (typeof rawValue === 'number' && rawValue > 0);
+                    let hasValue = false;
+
+                    if (typeof rawValue === 'string') {
+                      const lower = rawValue.toLowerCase();
+                      // Check for "yes" or numeric values > 0 (excluding "none" and "n/a")
+                      if (lower.includes('yes') ||
+                          (!lower.includes('none') && !lower.includes('n/a') && rawValue.match(/\d+/))) {
+                        const numMatch = rawValue.match(/\d+/);
+                        hasValue = numMatch ? parseInt(numMatch[0]) > 0 : lower.includes('yes');
+                      }
+                    } else if (typeof rawValue === 'number') {
+                      hasValue = rawValue > 0;
+                    }
+
                     value = hasValue ? 'YES' : 'NONE';
                   }
 
