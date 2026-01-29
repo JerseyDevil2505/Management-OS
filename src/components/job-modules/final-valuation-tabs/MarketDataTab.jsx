@@ -463,7 +463,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
       // Use CAMA total from data file
       const camaTotal = property.values_cama_total || 0;
-      const propertyClass = property.property_cama_class || '';
+      // Use property_m4_class (works for both BRT and Microsystems)
+      const propertyClass = property.property_m4_class || '';
 
       if (summary[propertyClass]) {
         summary[propertyClass].count++;
