@@ -9,6 +9,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
   const resultsRef = React.useRef(null);
+  const detailedResultsRef = React.useRef(null);
   const [codeDefinitions, setCodeDefinitions] = useState(null);
   
   // ==================== SUBJECT PROPERTIES STATE ====================
