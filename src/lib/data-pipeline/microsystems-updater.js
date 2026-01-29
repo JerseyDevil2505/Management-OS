@@ -779,6 +779,9 @@ export class MicrosystemsUpdater {
         console.log('⏭️ Step 2 skipped: No code file provided');
       }
 
+      // Load code configuration for categorizing detached items
+      await this.loadCodeConfiguration(jobId);
+
       // Fetch job data to calculate yearPriorToDueYear for effective age conversion
       let yearPriorToDueYear = null;
       try {
