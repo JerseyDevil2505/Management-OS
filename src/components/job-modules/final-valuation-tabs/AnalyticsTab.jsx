@@ -99,17 +99,19 @@ const AnalyticsTab = ({ jobData, properties }) => {
       group.newLandTotal += newLand;
       group.newTotalValue += newTotal;
       
-      // Sales ratios by period
-      if (prop.sales_date && prop.values_norm_time && newTotal > 0) {
+      // Sales ratios by period - count ALL sales, not just those with projected values
+      if (prop.sales_date && prop.values_norm_time && prop.values_norm_time > 0) {
         const salesPeriod = getSalesPeriod(prop.sales_date);
-        const ratio = (newTotal / prop.values_norm_time) * 100;
-        
-        if (salesPeriod === 'HSP') {
-          group.hspSales.push(ratio);
-        } else if (salesPeriod === 'PSP') {
-          group.pspSales.push(ratio);
-        } else if (salesPeriod === 'CSP') {
-          group.cspSales.push(ratio);
+        const ratio = newTotal > 0 ? (newTotal / prop.values_norm_time) * 100 : null;
+
+        if (ratio !== null) {
+          if (salesPeriod === 'HSP') {
+            group.hspSales.push({ assessed: newTotal, sale: prop.values_norm_time });
+          } else if (salesPeriod === 'PSP') {
+            group.pspSales.push({ assessed: newTotal, sale: prop.values_norm_time });
+          } else if (salesPeriod === 'CSP') {
+            group.cspSales.push({ assessed: newTotal, sale: prop.values_norm_time });
+          }
         }
       }
     });
@@ -120,14 +122,15 @@ const AnalyticsTab = ({ jobData, properties }) => {
       const newLandPct = data.newTotalValue > 0 ? (data.newLandTotal / data.newTotalValue) * 100 : 0;
       const delta = newLandPct - oldLandPct;
       
-      const avgHSP = data.hspSales.length > 0 
-        ? data.hspSales.reduce((a, b) => a + b, 0) / data.hspSales.length 
+      // Use weighted mean: (Total Assessed / Total Sales) × 100
+      const avgHSP = data.hspSales.length > 0
+        ? (data.hspSales.reduce((sum, s) => sum + s.assessed, 0) / data.hspSales.reduce((sum, s) => sum + s.sale, 0)) * 100
         : null;
-      const avgPSP = data.pspSales.length > 0 
-        ? data.pspSales.reduce((a, b) => a + b, 0) / data.pspSales.length 
+      const avgPSP = data.pspSales.length > 0
+        ? (data.pspSales.reduce((sum, s) => sum + s.assessed, 0) / data.pspSales.reduce((sum, s) => sum + s.sale, 0)) * 100
         : null;
-      const avgCSP = data.cspSales.length > 0 
-        ? data.cspSales.reduce((a, b) => a + b, 0) / data.cspSales.length 
+      const avgCSP = data.cspSales.length > 0
+        ? (data.cspSales.reduce((sum, s) => sum + s.assessed, 0) / data.cspSales.reduce((sum, s) => sum + s.sale, 0)) * 100
         : null;
       
       return {
@@ -158,9 +161,16 @@ const AnalyticsTab = ({ jobData, properties }) => {
     const allPSP = Object.values(vcsGroups).flatMap(g => g.pspSales);
     const allCSP = Object.values(vcsGroups).flatMap(g => g.cspSales);
     
-    const avgHSP = allHSP.length > 0 ? allHSP.reduce((a, b) => a + b, 0) / allHSP.length : null;
-    const avgPSP = allPSP.length > 0 ? allPSP.reduce((a, b) => a + b, 0) / allPSP.length : null;
-    const avgCSP = allCSP.length > 0 ? allCSP.reduce((a, b) => a + b, 0) / allCSP.length : null;
+    // Use weighted mean for totals: (Total Assessed / Total Sales) × 100
+    const avgHSP = allHSP.length > 0
+      ? (allHSP.reduce((sum, s) => sum + s.assessed, 0) / allHSP.reduce((sum, s) => sum + s.sale, 0)) * 100
+      : null;
+    const avgPSP = allPSP.length > 0
+      ? (allPSP.reduce((sum, s) => sum + s.assessed, 0) / allPSP.reduce((sum, s) => sum + s.sale, 0)) * 100
+      : null;
+    const avgCSP = allCSP.length > 0
+      ? (allCSP.reduce((sum, s) => sum + s.assessed, 0) / allCSP.reduce((sum, s) => sum + s.sale, 0)) * 100
+      : null;
     
     return {
       data: results,
