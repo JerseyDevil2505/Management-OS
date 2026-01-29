@@ -310,6 +310,8 @@ const SalesReviewTab = ({
         normPricePerSF,
         salesRatio,
         salesRatioCama,
+        projected_total,
+        projectedSalesRatio,
         typeUseName,
         designName,
         exteriorCondName,
@@ -324,7 +326,7 @@ const SalesReviewTab = ({
         isIncluded
       };
     });
-  }, [properties, jobData?.end_date, parsedCodeDefinitions, vendorType, getPeriodClassification, normalizeSalesNuCode, includeOverrides]);
+  }, [properties, jobData?.end_date, parsedCodeDefinitions, vendorType, getPeriodClassification, normalizeSalesNuCode, includeOverrides, finalValuationData]);
 
   // Filtered properties
   const filteredProperties = useMemo(() => {
