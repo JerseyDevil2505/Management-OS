@@ -324,10 +324,13 @@ export class MicrosystemsUpdater {
             // Example: "140R   9999" → suffix="R"
             suffix = afterPrefix.charAt(0);
           } else {
-            // Other codes: extract letters until space or number
+            // Other codes: extract letters OR numbers (with decimals) until space
             // Example: "520CL  9999" → suffix="CL"
-            const match = afterPrefix.match(/^[A-Z]+/);
-            suffix = match ? match[0] : afterPrefix.charAt(0);
+            // Example: "5101.5  9999" → suffix="1.5"
+            // Example: "5101  9999" → suffix="1"
+            const letterMatch = afterPrefix.match(/^[A-Z]+/);
+            const numberMatch = afterPrefix.match(/^[\d.]+/);
+            suffix = letterMatch ? letterMatch[0] : (numberMatch ? numberMatch[0] : afterPrefix.charAt(0));
           }
         }
         
