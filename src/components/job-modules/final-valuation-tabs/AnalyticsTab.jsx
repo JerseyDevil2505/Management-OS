@@ -99,10 +99,11 @@ const AnalyticsTab = ({ jobData, properties }) => {
       group.newLandTotal += newLand;
       group.newTotalValue += newTotal;
       
-      // Sales ratios by period - count ALL sales, even without projected values
-      if (prop.sales_date && prop.values_norm_time && prop.values_norm_time > 0 && newTotal > 0) {
+      // Sales ratios by period - include sales even if newTotal is 0 (will be filtered in display)
+      if (prop.sales_date && prop.values_norm_time && prop.values_norm_time > 0) {
         const salesPeriod = getSalesPeriod(prop.sales_date);
 
+        // Push all sales data, even if assessed is 0
         if (salesPeriod === 'HSP') {
           group.hspSales.push({ assessed: newTotal, sale: prop.values_norm_time });
         } else if (salesPeriod === 'PSP') {
