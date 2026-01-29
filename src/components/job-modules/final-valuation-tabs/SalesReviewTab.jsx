@@ -143,9 +143,6 @@ const SalesReviewTab = ({
   // Include/Exclude state for CME tool
   const [includeOverrides, setIncludeOverrides] = useState({}); // propertyId -> true/false/null
 
-  // Final valuation data for projected assessments
-  const [finalValuationData, setFinalValuationData] = useState({});
-
   // Selection state for clearing normalization
   const [selectedProperties, setSelectedProperties] = useState(new Set()); // Set of property IDs
   const [isClearing, setIsClearing] = useState(false);
