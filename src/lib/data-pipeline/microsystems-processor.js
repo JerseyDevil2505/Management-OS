@@ -16,10 +16,13 @@ export class MicrosystemsProcessor {
   constructor() {
     this.codeLookups = new Map();
     this.headers = [];
-    
+
     // Store all parsed codes for database storage
     this.allCodes = {};
     this.categories = {};
+
+    // Store code configuration for categorizing detached items
+    this.codeConfig = {};
   }
 
   /**
