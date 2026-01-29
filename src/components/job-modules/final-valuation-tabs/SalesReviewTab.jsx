@@ -51,6 +51,29 @@ const SalesReviewTab = ({
   const vendorType = jobData?.vendor_type || jobData?.vendor_source || 'BRT';
   const parsedCodeDefinitions = useMemo(() => jobData?.parsed_code_definitions || {}, [jobData?.parsed_code_definitions]);
 
+  // ==================== SORTABLE HEADER COMPONENT ====================
+
+  const SortableHeader = ({ sortKey, label, align = 'left', sortConfig, onSort }) => {
+    const isSorted = sortConfig.key === sortKey;
+    const alignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
+
+    return (
+      <th
+        className={`px-3 py-3 ${alignClass} font-medium text-gray-700 cursor-pointer hover:bg-gray-100 select-none`}
+        onClick={() => onSort(sortKey)}
+      >
+        <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : ''}`}>
+          <span>{label}</span>
+          {isSorted && (
+            sortConfig.direction === 'asc'
+              ? <ArrowUp className="w-4 h-4" />
+              : <ArrowDown className="w-4 h-4" />
+          )}
+        </div>
+      </th>
+    );
+  };
+
   // ==================== SALES NU CODE NORMALIZATION ====================
 
   const normalizeSalesNuCode = useCallback((nuCode) => {
