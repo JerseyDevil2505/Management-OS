@@ -980,55 +980,64 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                       {DYNAMIC_ATTRIBUTES.map(attr => {
                         const codes = getCodesForAttribute(attr.id, attr.category);
                         const selectedCodes = codeConfig[attr.id] || [];
+                        const isDisabled = isAttributeDisabledForMicrosystems(attr.id);
 
                         return (
-                          <tr key={attr.id} className="border-b hover:bg-gray-50">
-                            <td className="py-3 px-4 font-medium text-gray-900">{attr.name}</td>
+                          <tr key={attr.id} className={`border-b ${isDisabled ? 'bg-gray-50' : 'hover:bg-gray-50'}`}>
+                            <td className={`py-3 px-4 font-medium ${isDisabled ? 'text-gray-400' : 'text-gray-900'}`}>
+                              {attr.name}
+                            </td>
                             <td className="py-3 px-4">
-                              <div className="space-y-2">
-                                {/* Selected codes as chips */}
-                                {selectedCodes.length > 0 && (
-                                  <div className="flex flex-wrap gap-2 mb-2">
-                                    {selectedCodes.map(codeVal => {
-                                      const codeObj = codes.find(c => c.code === codeVal);
-                                      return (
-                                        <span
-                                          key={codeVal}
-                                          className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium"
-                                        >
-                                          {codeVal} - {codeObj?.description || 'Unknown'}
-                                          <button
-                                            onClick={() => handleCodeToggle(attr.id, codeVal)}
-                                            className="ml-1 text-green-600 hover:text-green-800"
+                              {isDisabled ? (
+                                <div className="text-xs text-gray-500 italic">
+                                  Not applicable for Microsystems
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {/* Selected codes as chips */}
+                                  {selectedCodes.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mb-2">
+                                      {selectedCodes.map(codeVal => {
+                                        const codeObj = codes.find(c => c.code === codeVal);
+                                        return (
+                                          <span
+                                            key={codeVal}
+                                            className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium"
                                           >
-                                            <X className="w-3 h-3" />
-                                          </button>
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                )}
+                                            {codeVal} - {codeObj?.description || 'Unknown'}
+                                            <button
+                                              onClick={() => handleCodeToggle(attr.id, codeVal)}
+                                              className="ml-1 text-green-600 hover:text-green-800"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
 
-                                {/* Dropdown to add codes */}
-                                <select
-                                  value=""
-                                  onChange={(e) => {
-                                    if (e.target.value) {
-                                      handleCodeToggle(attr.id, e.target.value);
-                                    }
-                                  }}
-                                  className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 text-sm"
-                                >
-                                  <option value="">-- Add Code --</option>
-                                  {codes
-                                    .filter(code => !selectedCodes.includes(code.code))
-                                    .map(code => (
-                                      <option key={code.code} value={code.code}>
-                                        {code.code} - {code.description}
-                                      </option>
-                                    ))}
-                                </select>
-                              </div>
+                                  {/* Dropdown to add codes */}
+                                  <select
+                                    value=""
+                                    onChange={(e) => {
+                                      if (e.target.value) {
+                                        handleCodeToggle(attr.id, e.target.value);
+                                      }
+                                    }}
+                                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 text-sm"
+                                  >
+                                    <option value="">-- Add Code --</option>
+                                    {codes
+                                      .filter(code => !selectedCodes.includes(code.code))
+                                      .map(code => (
+                                        <option key={code.code} value={code.code}>
+                                          {code.code} - {code.description}
+                                        </option>
+                                      ))}
+                                  </select>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         );
