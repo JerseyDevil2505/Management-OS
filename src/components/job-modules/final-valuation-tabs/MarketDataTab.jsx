@@ -432,12 +432,12 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       }
     });
 
-    // Return array of consolidated properties
+    // Return array of consolidated properties (main cards only)
     return Object.values(grouped).map(group => ({
       ...group.mainCard,
       _maxCard: group.maxCard,
       _totalCardSF: group.totalCardSF
-    })).filter(p => p.property_composite_key); // Filter out any null mainCards
+    })).filter(p => p && p.property_composite_key); // Filter out any null mainCards
   };
 
   // Calculate summary by class for all properties (consolidated)
@@ -463,7 +463,8 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
 
       // Use CAMA total from data file
       const camaTotal = property.values_cama_total || 0;
-      const propertyClass = property.property_cama_class || '';
+      // Use property_m4_class (works for both BRT and Microsystems)
+      const propertyClass = property.property_m4_class || '';
 
       if (summary[propertyClass]) {
         summary[propertyClass].count++;
