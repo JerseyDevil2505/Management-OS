@@ -1337,6 +1337,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       case 'per_sqft':
         return difference * adjustmentValue;
 
+      case 'count':
+        // Count adjustment: multiply difference by $ per count (e.g., $5,000 per bedroom)
+        return difference * adjustmentValue;
+
       case 'percent':
         // Percent adjustment based on comp sale price
         // Positive difference (subject better) = add to comp price
