@@ -962,7 +962,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                                         const codeObj = codes.find(c => c.code === codeVal);
                                         return (
                                           <span
-                                            key={codeVal}
+                                            key={`${attr.id}-${codeVal}`}
                                             className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium"
                                           >
                                             {codeVal} - {codeObj?.description || 'Unknown'}
