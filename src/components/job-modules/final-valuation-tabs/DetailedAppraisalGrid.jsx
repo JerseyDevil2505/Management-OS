@@ -165,7 +165,15 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     {
       id: 'story_height_code',
       label: 'Story Height Code',
-      render: (prop) => prop.asset_stories || prop.asset_story_height || 'N/A',
+      render: (prop) => {
+        const code = prop.asset_stories || prop.asset_story_height;
+        if (!code) return 'N/A';
+        if (codeDefinitions) {
+          const name = interpretCodes.getStoryHeightName(prop, codeDefinitions, vendorType);
+          return name ? `${code} (${name})` : code;
+        }
+        return code;
+      },
       adjustmentName: null
     },
     {
