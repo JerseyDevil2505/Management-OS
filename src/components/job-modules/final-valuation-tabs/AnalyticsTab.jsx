@@ -123,7 +123,14 @@ const AnalyticsTab = ({ jobData, properties }) => {
         }
       }
     });
-    
+
+    console.log('📊 AnalyticsTab Period Counts:', {
+      CSP: cspCount,
+      PSP: pspCount,
+      HSP: hspCount,
+      jobEndDate: jobData?.end_date
+    });
+
     // Calculate percentages and averages
     const results = Object.entries(vcsGroups).map(([vcs, data]) => {
       const oldLandPct = data.oldTotalValue > 0 ? (data.oldLandTotal / data.oldTotalValue) * 100 : 0;
