@@ -1201,6 +1201,247 @@ export class BRTProcessor {
   getSectionCodes(sectionName) {
     return this.allCodeSections[sectionName] || {};
   }
+
+  /**
+   * Load code configuration from job_settings to categorize items
+   */
+  async loadCodeConfiguration(jobId) {
+    try {
+      const { data, error } = await supabase
+        .from('job_settings')
+        .select('setting_key, setting_value')
+        .eq('job_id', jobId)
+        .in('setting_key', [
+          'adjustment_codes_det_garage',
+          'adjustment_codes_pool',
+          'adjustment_codes_barn',
+          'adjustment_codes_stable',
+          'adjustment_codes_pole_barn',
+          'adjustment_codes_garage',
+          'adjustment_codes_deck',
+          'adjustment_codes_patio',
+          'adjustment_codes_open_porch',
+          'adjustment_codes_enclosed_porch'
+        ]);
+
+      if (error) {
+        console.log('⚠️ No code configuration found - items will use keyword fallback');
+        this.codeConfig = {};
+        return;
+      }
+
+      // Parse saved configuration
+      const config = {};
+      (data || []).forEach(setting => {
+        const attributeId = setting.setting_key.replace('adjustment_codes_', '');
+        try {
+          config[attributeId] = setting.setting_value ? JSON.parse(setting.setting_value) : [];
+        } catch (e) {
+          config[attributeId] = [];
+        }
+      });
+
+      this.codeConfig = config;
+      console.log('✅ Loaded code configuration for BRT items:', this.codeConfig);
+    } catch (error) {
+      console.error('Error loading code configuration:', error);
+      this.codeConfig = {};
+    }
+  }
+
+  /**
+   * Extract garage area from attached items using code configuration
+   */
+  extractGarageAreaFromConfig(rawRecord) {
+    const garageCodes = this.codeConfig?.garage || [];
+    if (garageCodes.length === 0) {
+      return this.extractAttachedItemsAreaByKeyword(rawRecord, ['GAR']);
+    }
+
+    let totalArea = 0;
+    for (let i = 1; i <= 15; i++) {
+      const code = this.preserveStringValue(rawRecord[`ATTACHEDCODE_${i}`]);
+      const area = this.parseNumeric(rawRecord[`ATTACHEDAREA_${i}`]) || 0;
+      if (code && area > 0 && garageCodes.includes(code)) {
+        totalArea += area;
+      }
+    }
+    return totalArea > 0 ? Math.round(totalArea) : null;
+  }
+
+  /**
+   * Extract deck area from attached items using code configuration
+   */
+  extractDeckAreaFromConfig(rawRecord) {
+    const deckCodes = this.codeConfig?.deck || [];
+    if (deckCodes.length === 0) {
+      return this.extractAttachedItemsAreaByKeyword(rawRecord, ['DECK']);
+    }
+
+    let totalArea = 0;
+    for (let i = 1; i <= 15; i++) {
+      const code = this.preserveStringValue(rawRecord[`ATTACHEDCODE_${i}`]);
+      const area = this.parseNumeric(rawRecord[`ATTACHEDAREA_${i}`]) || 0;
+      if (code && area > 0 && deckCodes.includes(code)) {
+        totalArea += area;
+      }
+    }
+    return totalArea > 0 ? Math.round(totalArea) : null;
+  }
+
+  /**
+   * Extract patio area from attached items using code configuration
+   */
+  extractPatioAreaFromConfig(rawRecord) {
+    const patioCodes = this.codeConfig?.patio || [];
+    if (patioCodes.length === 0) {
+      return this.extractAttachedItemsAreaByKeyword(rawRecord, ['PATIO']);
+    }
+
+    let totalArea = 0;
+    for (let i = 1; i <= 15; i++) {
+      const code = this.preserveStringValue(rawRecord[`ATTACHEDCODE_${i}`]);
+      const area = this.parseNumeric(rawRecord[`ATTACHEDAREA_${i}`]) || 0;
+      if (code && area > 0 && patioCodes.includes(code)) {
+        totalArea += area;
+      }
+    }
+    return totalArea > 0 ? Math.round(totalArea) : null;
+  }
+
+  /**
+   * Extract open porch area from attached items using code configuration
+   */
+  extractOpenPorchAreaFromConfig(rawRecord) {
+    const openPorchCodes = this.codeConfig?.open_porch || [];
+    if (openPorchCodes.length === 0) {
+      return this.extractAttachedItemsAreaByKeyword(rawRecord, ['OPEN']);
+    }
+
+    let totalArea = 0;
+    for (let i = 1; i <= 15; i++) {
+      const code = this.preserveStringValue(rawRecord[`ATTACHEDCODE_${i}`]);
+      const area = this.parseNumeric(rawRecord[`ATTACHEDAREA_${i}`]) || 0;
+      if (code && area > 0 && openPorchCodes.includes(code)) {
+        totalArea += area;
+      }
+    }
+    return totalArea > 0 ? Math.round(totalArea) : null;
+  }
+
+  /**
+   * Extract enclosed porch area from attached items using code configuration
+   */
+  extractEnclosedPorchAreaFromConfig(rawRecord) {
+    const enclosedPorchCodes = this.codeConfig?.enclosed_porch || [];
+    if (enclosedPorchCodes.length === 0) {
+      return this.extractAttachedItemsAreaByKeyword(rawRecord, ['ENCL', 'SCREEN', 'SCRN']);
+    }
+
+    let totalArea = 0;
+    for (let i = 1; i <= 15; i++) {
+      const code = this.preserveStringValue(rawRecord[`ATTACHEDCODE_${i}`]);
+      const area = this.parseNumeric(rawRecord[`ATTACHEDAREA_${i}`]) || 0;
+      if (code && area > 0 && enclosedPorchCodes.includes(code)) {
+        totalArea += area;
+      }
+    }
+    return totalArea > 0 ? Math.round(totalArea) : null;
+  }
+
+  /**
+   * Extract detached garage area from detached items using code configuration
+   */
+  extractDetGarageAreaFromConfig(rawRecord) {
+    const detGarageCodes = this.codeConfig?.det_garage || [];
+    if (detGarageCodes.length === 0) {
+      return this.extractDetachedItemsAreaByKeyword(rawRecord, ['GAR']);
+    }
+
+    let totalArea = 0;
+    for (let i = 1; i <= 11; i++) {
+      const code = this.preserveStringValue(rawRecord[`DETACHEDCODE_${i}`]);
+      const area = this.parseNumeric(rawRecord[`DETACHEDDCSIZE_${i}`]) || 0;
+      if (code && area > 0 && detGarageCodes.includes(code)) {
+        totalArea += area;
+      }
+    }
+    return totalArea > 0 ? Math.round(totalArea) : null;
+  }
+
+  /**
+   * Extract pool area from detached items using code configuration
+   */
+  extractPoolAreaFromConfig(rawRecord) {
+    const poolCodes = this.codeConfig?.pool || [];
+    if (poolCodes.length === 0) {
+      return this.extractDetachedItemsAreaByKeyword(rawRecord, ['POOL']);
+    }
+
+    let totalArea = 0;
+    for (let i = 1; i <= 11; i++) {
+      const code = this.preserveStringValue(rawRecord[`DETACHEDCODE_${i}`]);
+      const area = this.parseNumeric(rawRecord[`DETACHEDDCSIZE_${i}`]) || 0;
+      if (code && area > 0 && poolCodes.includes(code)) {
+        totalArea += area;
+      }
+    }
+    return totalArea > 0 ? Math.round(totalArea) : null;
+  }
+
+  /**
+   * Extract barn area from detached items using code configuration
+   */
+  extractBarnAreaFromConfig(rawRecord) {
+    const barnCodes = this.codeConfig?.barn || [];
+    if (barnCodes.length === 0) return null;
+
+    let totalArea = 0;
+    for (let i = 1; i <= 11; i++) {
+      const code = this.preserveStringValue(rawRecord[`DETACHEDCODE_${i}`]);
+      const area = this.parseNumeric(rawRecord[`DETACHEDDCSIZE_${i}`]) || 0;
+      if (code && area > 0 && barnCodes.includes(code)) {
+        totalArea += area;
+      }
+    }
+    return totalArea > 0 ? Math.round(totalArea) : null;
+  }
+
+  /**
+   * Extract stable area from detached items using code configuration
+   */
+  extractStableAreaFromConfig(rawRecord) {
+    const stableCodes = this.codeConfig?.stable || [];
+    if (stableCodes.length === 0) return null;
+
+    let totalArea = 0;
+    for (let i = 1; i <= 11; i++) {
+      const code = this.preserveStringValue(rawRecord[`DETACHEDCODE_${i}`]);
+      const area = this.parseNumeric(rawRecord[`DETACHEDDCSIZE_${i}`]) || 0;
+      if (code && area > 0 && stableCodes.includes(code)) {
+        totalArea += area;
+      }
+    }
+    return totalArea > 0 ? Math.round(totalArea) : null;
+  }
+
+  /**
+   * Extract pole barn area from detached items using code configuration
+   */
+  extractPoleBarnAreaFromConfig(rawRecord) {
+    const poleBarnCodes = this.codeConfig?.pole_barn || [];
+    if (poleBarnCodes.length === 0) return null;
+
+    let totalArea = 0;
+    for (let i = 1; i <= 11; i++) {
+      const code = this.preserveStringValue(rawRecord[`DETACHEDCODE_${i}`]);
+      const area = this.parseNumeric(rawRecord[`DETACHEDDCSIZE_${i}`]) || 0;
+      if (code && area > 0 && poleBarnCodes.includes(code)) {
+        totalArea += area;
+      }
+    }
+    return totalArea > 0 ? Math.round(totalArea) : null;
+  }
 }
 
 export const brtProcessor = new BRTProcessor();
