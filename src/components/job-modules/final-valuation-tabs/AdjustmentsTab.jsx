@@ -788,39 +788,36 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         });
       }
 
-      // CRITICAL: Recalculate amenity areas for BRT properties using new code mappings
-      // For Microsystems, amenities are extracted from columns, not BRT item codes
+      // CRITICAL: Recalculate amenity areas using new code mappings
+      // Both BRT and Microsystems now need recategorization for detached/misc/land items
       let recalcMessage = '';
-      if (vendorType === 'BRT') {
-        console.log('🔄 Triggering database recalculation with new code mappings...');
+      console.log(`🔄 Triggering database recategorization for ${vendorType}...`);
 
-        const { data: { session } } = await supabase.auth.getSession();
-        const recalcResponse = await fetch(
-          `${supabase.supabaseUrl}/functions/v1/recalculate-amenities`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session?.access_token}`
-            },
-            body: JSON.stringify({
-              jobId: jobData.id,
-              codeConfig: codeConfig
-            })
-          }
-        );
-
-        if (!recalcResponse.ok) {
-          const errorData = await recalcResponse.json().catch(() => ({}));
-          throw new Error(`Recalculation failed: ${errorData.error || 'Edge function error'}`);
+      const { data: { session } } = await supabase.auth.getSession();
+      const recalcResponse = await fetch(
+        `${supabase.supabaseUrl}/functions/v1/recalculate-amenities`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`
+          },
+          body: JSON.stringify({
+            jobId: jobData.id,
+            vendorType: vendorType,
+            codeConfig: codeConfig
+          })
         }
+      );
 
-        const recalcResult = await recalcResponse.json();
-        console.log('✅ Recalculation complete:', recalcResult);
-        recalcMessage = `\n\n${recalcResult.updatedCount} properties updated with new code mappings.`;
-      } else {
-        console.log('ℹ️ Microsystems vendor - amenities extracted from columns, no recalculation needed');
+      if (!recalcResponse.ok) {
+        const errorData = await recalcResponse.json().catch(() => ({}));
+        throw new Error(`Recalculation failed: ${errorData.error || 'Edge function error'}`);
       }
+
+      const recalcResult = await recalcResponse.json();
+      console.log('✅ Recategorization complete:', recalcResult);
+      recalcMessage = `\n\n${recalcResult.updatedCount} properties updated with new code mappings.`;
 
       alert(`Code configuration saved!${newAdjustments.length > 0 ? ` ${newAdjustments.length} new adjustment row(s) added to grid.` : ''}${recalcMessage}`);
 
