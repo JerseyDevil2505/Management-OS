@@ -530,7 +530,36 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   )}
                 </td>
                 <td className={`px-3 py-2 text-center bg-yellow-50 ${attr.bold ? 'font-semibold' : 'text-xs'}`}>
-                  {attr.render(subject)}
+                  {(() => {
+                    let value = attr.render(subject);
+
+                    // Apply same YES/NONE logic to subject
+                    if (attr.adjustmentName && isAdjustmentFlat(attr.adjustmentName) && !isAdjustmentCount(attr.adjustmentName)) {
+                      let rawPropertyValue = null;
+
+                      switch(attr.id) {
+                        case 'garage_area': rawPropertyValue = subject.garage_area; break;
+                        case 'det_garage_area': rawPropertyValue = subject.det_garage_area; break;
+                        case 'deck_area': rawPropertyValue = subject.deck_area; break;
+                        case 'patio_area': rawPropertyValue = subject.patio_area; break;
+                        case 'open_porch_area': rawPropertyValue = subject.open_porch_area; break;
+                        case 'enclosed_porch_area': rawPropertyValue = subject.enclosed_porch_area; break;
+                        case 'pool_area': rawPropertyValue = subject.pool_area; break;
+                        case 'basement_area': rawPropertyValue = subject.basement_area; break;
+                        case 'fin_bsmt_area': rawPropertyValue = subject.fin_basement_area; break;
+                        case 'ac_area': rawPropertyValue = subject.ac_area; break;
+                        default: rawPropertyValue = value;
+                      }
+
+                      const hasValue = rawPropertyValue !== null &&
+                                      rawPropertyValue !== undefined &&
+                                      rawPropertyValue > 0;
+
+                      value = hasValue ? 'YES' : 'NONE';
+                    }
+
+                    return value;
+                  })()}
                 </td>
                 {renderCompCells((comp, idx) => {
                   let value = attr.render(comp);
