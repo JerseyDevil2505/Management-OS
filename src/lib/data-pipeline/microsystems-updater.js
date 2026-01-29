@@ -1134,9 +1134,27 @@ export class MicrosystemsUpdater {
 
   /**
    * Extract AC area from AC Sf field
+   * If value contains %, it's a percentage of SFLA
    */
   extractAcArea(rawRecord) {
-    return this.parseNumeric(rawRecord['AC Sf']);
+    const sfla = this.parseNumeric(rawRecord['Livable Area']) || 0;
+    const acValue = rawRecord['AC Sf'];
+
+    if (!acValue || acValue.trim() === '') return null;
+
+    // Check if it's a percentage
+    if (acValue.includes('%')) {
+      const percentage = parseFloat(acValue.replace('%', '').trim());
+      if (!isNaN(percentage) && sfla > 0) {
+        return Math.round(sfla * (percentage / 100));
+      }
+    } else {
+      // It's actual square footage
+      const sqft = this.parseNumeric(acValue);
+      return sqft;
+    }
+
+    return null;
   }
 
   /**
