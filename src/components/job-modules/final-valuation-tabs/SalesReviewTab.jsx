@@ -246,6 +246,19 @@ const SalesReviewTab = ({
         ? (prop.values_cama_total / prop.values_norm_time) * 100
         : null;
 
+      // Debug projected ratio for Block 1 Lot 3.01
+      if (prop.property_block === '1' && prop.property_lot === '3.01') {
+        console.log('🔍 Projected Ratio Debug for Block 1 Lot 3.01:', {
+          property_composite_key: prop.property_composite_key,
+          values_cama_total: prop.values_cama_total,
+          values_mod_total: prop.values_mod_total,
+          values_norm_time: prop.values_norm_time,
+          salesRatio_current: salesRatio,
+          salesRatioCama_projected: salesRatioCama,
+          calculation: `(${prop.values_cama_total} / ${prop.values_norm_time}) * 100 = ${salesRatioCama}`
+        });
+      }
+
       // Note: salesRatioCama is already calculated above using values_cama_total
       // No need for separate projectedSalesRatio calculation
 
