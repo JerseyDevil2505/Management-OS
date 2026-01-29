@@ -555,14 +555,16 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     }
 
                     // Debug log first comp only
-                    if (idx === 0 && !window._detailedDebugLogged) {
+                    if (idx === 0 && attr.id === 'deck_area' && !window._detailedDebugLogged) {
                       console.log(`🔍 YES/NONE Debug for ${attr.adjustmentName}:`, {
                         rawValue,
                         hasValue,
                         finalValue: hasValue ? 'YES' : 'NONE',
                         isFlat: isAdjustmentFlat(attr.adjustmentName),
-                        isCount: isAdjustmentCount(attr.adjustmentName)
+                        isCount: isAdjustmentCount(attr.adjustmentName),
+                        adjustmentGrid: adjustmentGrid?.length || 0
                       });
+                      window._detailedDebugLogged = true;
                     }
 
                     value = hasValue ? 'YES' : 'NONE';
