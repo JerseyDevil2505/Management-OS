@@ -128,6 +128,7 @@ const SalesReviewTab = ({
   const [showCodesNotMeanings, setShowCodesNotMeanings] = useState(true); // Default to codes
   const [fontSize, setFontSize] = useState(12); // Adjustable font size
   const [sortConfig, setSortConfig] = useState({ key: 'sales_date', direction: 'desc' });
+  const [useProjectedAssessment, setUseProjectedAssessment] = useState(false); // Toggle for Current vs Projected
   
   // Filters
   const [dateRange, setDateRange] = useState({ start: '', end: '' }); // Empty by default - don't filter by date initially
