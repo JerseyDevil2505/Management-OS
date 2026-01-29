@@ -1200,7 +1200,7 @@ getBRTValue: function(property, codeDefinitions, fieldName) {
     if (!storyCode || storyCode.toString().trim() === '') return null;
 
     if (vendorType === 'Microsystems') {
-      return this.getMicrosystemsValue(property, codeDefinitions, 'asset_stories');
+      return this.getMicrosystemsValue(property, codeDefinitions, 'asset_story_height');
     } else if (vendorType === 'BRT') {
       return this.getBRTValue(property, codeDefinitions, 'asset_stories');
     }
