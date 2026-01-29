@@ -354,59 +354,109 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       const codeDefinitions = job.parsed_code_definitions;
       console.log('📊 Code definitions structure:', codeDefinitions);
 
-      const sections = codeDefinitions.sections || codeDefinitions || {};
-      console.log('📂 Available sections:', Object.keys(sections));
-
       // Extract codes from specific categories WITHIN the Residential section
       const categoryCodes = {
-        '11': [], // Attached items (garage, deck, patio, open porch, enclosed porch)
+        '11': [], // Attached items (garage, deck, patio, open porch, enclosed porch) - BRT only
         '15': [], // Detached items (det garage, pools, barn, stable, pole barn)
         '39': [], // Miscellaneous items
         '62': [], // Positive land adjustments
         '63': []  // Negative land adjustments
       };
 
-      // BRT codes are nested: sections.Residential contains parent keys that have KEYs like "11", "15", etc.
-      const residentialSection = sections.Residential || sections.residential || {};
-      console.log('🏠 Residential section keys:', Object.keys(residentialSection));
+      // MICROSYSTEMS: Load from field_codes with specific prefixes
+      if (vendorType === 'Microsystems' && codeDefinitions.field_codes) {
+        console.log('📂 Microsystems field_codes available:', Object.keys(codeDefinitions.field_codes));
 
-      // Search through Residential section to find categories by their KEY property
-      Object.keys(residentialSection).forEach(parentKey => {
-        const parentSection = residentialSection[parentKey];
+        // Category 15: Detached items from prefix 680
+        const detachedCodes = codeDefinitions.field_codes['680'] || {};
+        Object.entries(detachedCodes).forEach(([code, data]) => {
+          if (data.description) {
+            categoryCodes['15'].push({
+              code: code,
+              description: data.description.trim()
+            });
+          }
+        });
+        console.log(`✅ Microsystems detached items (680): ${categoryCodes['15'].length} codes`);
 
-        // Check if this parent section has a KEY property matching our category numbers
-        const categoryKey = parentSection?.KEY || parentSection?.key;
-
-        if (categoryKey && categoryCodes.hasOwnProperty(categoryKey)) {
-          console.log(`🎯 Found category ${categoryKey} at parent key "${parentKey}"`);
-
-          // Now extract codes from the MAP within this category
-          const categoryMap = parentSection.MAP || parentSection.map || {};
-
-          Object.keys(categoryMap).forEach(codeKey => {
-            const codeItem = categoryMap[codeKey];
-            let description = '';
-
-            // Extract description from DATA.VALUE
-            if (codeItem?.DATA?.VALUE) {
-              description = codeItem.DATA.VALUE;
-            } else if (codeItem?.VALUE) {
-              description = codeItem.VALUE;
-            } else if (typeof codeItem === 'string') {
-              description = codeItem;
-            }
-
-            if (description && codeKey !== 'KEY' && codeKey !== 'DATA' && codeKey !== 'MAP') {
-              categoryCodes[categoryKey].push({
-                code: codeKey,
-                description: description.trim()
+        // Category 39: Miscellaneous items from prefixes 590, 591, 592, 593
+        ['590', '591', '592', '593'].forEach(prefix => {
+          const miscCodes = codeDefinitions.field_codes[prefix] || {};
+          Object.entries(miscCodes).forEach(([code, data]) => {
+            if (data.description) {
+              categoryCodes['39'].push({
+                code: code,
+                description: data.description.trim()
               });
             }
           });
+        });
+        console.log(`✅ Microsystems miscellaneous (590-593): ${categoryCodes['39'].length} codes`);
 
-          console.log(`✅ Category ${categoryKey} loaded ${categoryCodes[categoryKey].length} codes`);
-        }
-      });
+        // Categories 62 & 63: Land adjustments from table 220
+        const landCodes = codeDefinitions.field_codes['220'] || {};
+        Object.entries(landCodes).forEach(([code, data]) => {
+          if (data.description) {
+            // Determine if positive or negative based on description or code patterns
+            // For now, add to both categories - user can configure which to use
+            categoryCodes['62'].push({
+              code: code,
+              description: data.description.trim()
+            });
+            categoryCodes['63'].push({
+              code: code,
+              description: data.description.trim()
+            });
+          }
+        });
+        console.log(`✅ Microsystems land adjustments (220): ${categoryCodes['62'].length} codes`);
+      }
+      // BRT: Load from sections.Residential
+      else {
+        const sections = codeDefinitions.sections || codeDefinitions || {};
+        console.log('📂 Available sections:', Object.keys(sections));
+
+        const residentialSection = sections.Residential || sections.residential || {};
+        console.log('🏠 Residential section keys:', Object.keys(residentialSection));
+
+        // Search through Residential section to find categories by their KEY property
+        Object.keys(residentialSection).forEach(parentKey => {
+          const parentSection = residentialSection[parentKey];
+
+          // Check if this parent section has a KEY property matching our category numbers
+          const categoryKey = parentSection?.KEY || parentSection?.key;
+
+          if (categoryKey && categoryCodes.hasOwnProperty(categoryKey)) {
+            console.log(`🎯 Found category ${categoryKey} at parent key "${parentKey}"`);
+
+            // Now extract codes from the MAP within this category
+            const categoryMap = parentSection.MAP || parentSection.map || {};
+
+            Object.keys(categoryMap).forEach(codeKey => {
+              const codeItem = categoryMap[codeKey];
+              let description = '';
+
+              // Extract description from DATA.VALUE
+              if (codeItem?.DATA?.VALUE) {
+                description = codeItem.DATA.VALUE;
+              } else if (codeItem?.VALUE) {
+                description = codeItem.VALUE;
+              } else if (typeof codeItem === 'string') {
+                description = codeItem;
+              }
+
+              if (description && codeKey !== 'KEY' && codeKey !== 'DATA' && codeKey !== 'MAP') {
+                categoryCodes[categoryKey].push({
+                  code: codeKey,
+                  description: description.trim()
+                });
+              }
+            });
+
+            console.log(`✅ Category ${categoryKey} loaded ${categoryCodes[categoryKey].length} codes`);
+          }
+        });
+      }
 
       // Sort by code numerically
       Object.keys(categoryCodes).forEach(cat => {
