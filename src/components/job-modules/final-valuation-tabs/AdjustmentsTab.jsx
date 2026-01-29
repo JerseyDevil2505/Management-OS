@@ -1218,7 +1218,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                 {adjustments.map((adj) => (
                   <tr key={adj.adjustment_id} className="hover:bg-gray-50">
                     <td className="sticky left-0 z-10 bg-white px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-gray-200">
-                      {adj.adjustment_name}
+                      {formatAdjustmentName(adj.adjustment_name, adj.adjustment_id)}
                     </td>
                     {/* Default Bracket Values */}
                     {CME_BRACKETS.map((bracket, bIdx) => (
