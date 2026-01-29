@@ -1245,9 +1245,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                           <option value="flat">Flat ($)</option>
                           <option value="per_sqft">Per SF ($/SF)</option>
                           <option value="count">Count (#)</option>
-                          {(adj.adjustment_type === 'percent' || adj.adjustment_type === 'flat_or_percent') && (
-                            <option value="percent">Percent (%)</option>
-                          )}
+                          <option value="percent">Percent (%)</option>
                         </select>
                         {!adj.is_default && (
                           <button
