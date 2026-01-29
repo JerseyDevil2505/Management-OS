@@ -296,7 +296,7 @@ const SalesReviewTab = ({
         isIncluded
       };
     });
-  }, [properties, jobData?.end_date, parsedCodeDefinitions, vendorType, getPeriodClassification, normalizeSalesNuCode, includeOverrides, finalValuationData]);
+  }, [properties, jobData?.end_date, parsedCodeDefinitions, vendorType, getPeriodClassification, normalizeSalesNuCode, includeOverrides]);
 
   // Filtered properties
   const filteredProperties = useMemo(() => {
