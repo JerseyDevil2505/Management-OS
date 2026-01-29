@@ -1050,18 +1050,6 @@ brtParsedStructureMap: {
 
     if (!code || code.trim() === '') return null;
 
-    // Debug logging for story height
-    if (fieldName === 'asset_story_height' && !window._storyHeightDebugLogged) {
-      console.log('🔍 Story Height Lookup Debug:', {
-        fieldName,
-        prefix,
-        codeFromProperty: code,
-        propertyBlock: property.property_block,
-        propertyLot: property.property_lot
-      });
-      window._storyHeightDebugLogged = true;
-    }
-
     // FIXED: Only look up codes within the correct prefix category to prevent cross-contamination
     const fieldCodes = codeDefinitions.field_codes;
     if (!fieldCodes || !fieldCodes[prefix]) {
@@ -1071,6 +1059,24 @@ brtParsedStructureMap: {
     // Look up the code ONLY within the correct prefix category
     const categoryData = fieldCodes[prefix];
     const cleanCode = code.trim().toUpperCase();
+
+    // Debug logging for story height
+    if (fieldName === 'asset_story_height' && !window._storyHeightDebugLogged) {
+      console.log('🔍 Story Height Lookup Debug:', {
+        fieldName,
+        prefix,
+        codeFromProperty: code,
+        cleanCode,
+        propertyBlock: property.property_block,
+        propertyLot: property.property_lot,
+        availableCodesInCategory: Object.keys(categoryData),
+        sampleCategoryData: Object.entries(categoryData).slice(0, 5).map(([k, v]) => ({
+          code: k,
+          description: v.description
+        }))
+      });
+      window._storyHeightDebugLogged = true;
+    }
 
     // First try exact match
     if (categoryData[cleanCode] && categoryData[cleanCode].description) {
