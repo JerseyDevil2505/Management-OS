@@ -697,6 +697,7 @@ export const interpretCodes = {
 | assessor_email | text | |
 | assessor_name | text | |
 | assigned_has_commercial | boolean | |
+| attribute_condition_config | jsonb | **NEW** - Attribute condition configuration for AttributeCardsTab |
 | billing_setup_complete | boolean | |
 | ccdd_code | character varying | |
 | client_name | text | |
