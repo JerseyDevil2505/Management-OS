@@ -1770,33 +1770,33 @@ const SalesReviewTab = ({
                   />
                 </th>
                 <th className="px-3 py-3 text-center font-medium text-gray-700">Include</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_vcs')}>VCS</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_block')}>Block</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_lot')}>Lot</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_qualifier')}>Qual</th>
+                <SortableHeader sortKey="property_vcs" label="VCS" align="left" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="property_block" label="Block" align="left" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="property_lot" label="Lot" align="left" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="property_qualifier" label="Qual" align="left" sortConfig={sortConfig} onSort={handleSort} />
                 <th className="px-3 py-3 text-left font-medium text-gray-700">Package</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_location')}>Address</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('property_m4_class')}>Prop Class</th>
-                <th className="px-3 py-3 text-right font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('values_mod_total')}>Current Asmt</th>
-                <th className="px-3 py-3 text-center font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('periodCode')}>Code</th>
+                <SortableHeader sortKey="property_location" label="Address" align="left" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="property_m4_class" label="Prop Class" align="left" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="values_mod_total" label="Current Asmt" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="periodCode" label="Code" align="center" sortConfig={sortConfig} onSort={handleSort} />
                 <th className="px-3 py-3 text-right font-medium text-gray-700">Lot Front</th>
                 <th className="px-3 py-3 text-right font-medium text-gray-700">Lot Acre</th>
                 <th className="px-3 py-3 text-right font-medium text-gray-700">Lot SF</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700">Type</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700">Class</th>
+                <SortableHeader sortKey="asset_type_use" label="Type" align="left" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="asset_building_class" label="Class" align="left" sortConfig={sortConfig} onSort={handleSort} />
                 <th className="px-3 py-3 text-left font-medium text-gray-700">Design</th>
                 <th className="px-3 py-3 text-left font-medium text-gray-700">Ext Cond</th>
                 <th className="px-3 py-3 text-left font-medium text-gray-700">Int Cond</th>
-                <th className="px-3 py-3 text-right font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('asset_year_built')}>Yr Built</th>
-                <th className="px-3 py-3 text-right font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('asset_sfla')}>SFLA</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('sales_date')}>Sale Date</th>
-                <th className="px-3 py-3 text-left font-medium text-gray-700">NU</th>
-                <th className="px-3 py-3 text-right font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('sales_price')}>Sale Price</th>
+                <SortableHeader sortKey="asset_year_built" label="Yr Built" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="asset_sfla" label="SFLA" align="right" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="sales_date" label="Sale Date" align="left" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="sales_nu" label="NU" align="left" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHeader sortKey="sales_price" label="Sale Price" align="right" sortConfig={sortConfig} onSort={handleSort} />
                 <th className="px-3 py-3 text-right font-medium text-gray-700">Price/SF</th>
                 <th className="px-3 py-3 text-center font-medium text-gray-700">Normalize</th>
-                <th className="px-3 py-3 text-right font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('values_norm_time')}>Norm Price</th>
+                <SortableHeader sortKey="values_norm_time" label="Norm Price" align="right" sortConfig={sortConfig} onSort={handleSort} />
                 <th className="px-3 py-3 text-right font-medium text-gray-700">Norm $/SF</th>
-                <th className="px-3 py-3 text-right font-medium text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('salesRatio')}>Sales Ratio</th>
+                <SortableHeader sortKey="salesRatio" label="Sales Ratio" align="right" sortConfig={sortConfig} onSort={handleSort} />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
