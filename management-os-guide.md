@@ -1071,6 +1071,99 @@ export const interpretCodes = {
 
 **Purpose:** Stores adjustment grid values used in the Sales Comparison (CME) tab. Each adjustment attribute has values for 10 price brackets, allowing differentiated adjustments based on property value ranges. System includes default adjustments (Living Area, Basement, Garage, etc.) and supports user-defined custom adjustments.
 
+#### **job_custom_brackets** ⚠️ NEW TABLE (January 2025)
+**Component:** SalesComparisonTab.jsx (Final Valuation) - Custom CME price brackets
+
+| Column | Data Type | Notes |
+|--------|-----------|-------|
+| id | uuid | Primary key |
+| job_id | uuid | Foreign key to jobs |
+| bracket_id | text | Custom bracket identifier |
+| bracket_name | text | Display name for bracket |
+| sort_order | integer | Display order |
+| adjustment_values | jsonb | JSONB object with adjustment values |
+| created_at | timestamp with time zone | |
+| updated_at | timestamp with time zone | |
+
+**Unique Constraint:** (job_id, bracket_id)
+
+**Purpose:** Stores custom price bracket definitions for CME analysis when default 10 brackets don't fit market conditions. Allows job-specific bracket ranges and custom adjustment configurations.
+
+#### **job_settings** ⚠️ NEW TABLE (January 2025)
+**Component:** Various - Generic key-value settings storage
+
+| Column | Data Type | Notes |
+|--------|-----------|-------|
+| id | uuid | Primary key |
+| job_id | uuid | Foreign key to jobs |
+| setting_key | text | Setting identifier |
+| setting_value | text | Setting value (string format) |
+| created_at | timestamp with time zone | |
+| updated_at | timestamp with time zone | |
+
+**Unique Constraint:** (job_id, setting_key)
+
+**Purpose:** Generic key-value store for job-specific configuration settings that don't warrant dedicated columns. Allows flexible setting storage without schema changes.
+
+#### **job_cme_evaluations** ⚠️ LEGACY TABLE
+**Component:** Early CME prototype (superseded by final_valuation_data)
+
+| Column | Data Type | Notes |
+|--------|-----------|-------|
+| id | uuid | Primary key |
+| job_id | uuid | Foreign key to jobs |
+| evaluation_run_id | uuid | Batch evaluation identifier |
+| subject_property_id | uuid | Property being evaluated |
+| subject_pams | text | Property identifier string |
+| subject_address | text | Property address |
+| search_criteria | jsonb | Filter criteria used |
+| comparables | jsonb | Array of comparable properties |
+| projected_assessment | numeric | Estimated value |
+| weighted_average_price | numeric | Average of comps |
+| confidence_score | numeric | Quality metric |
+| status | text | 'pending', 'completed', 'failed' |
+| notes | text | Evaluation notes |
+| created_by | uuid | User who ran evaluation |
+| created_at | timestamp with time zone | |
+| updated_at | timestamp with time zone | |
+
+**Status:** LEGACY - Early prototype. Current system uses final_valuation_data table. May contain historical data but not actively used.
+
+**Purpose:** Original CME evaluation storage before consolidation into final_valuation_data. Preserved for historical reference.
+
+#### **analytics_runs** ⚠️ NEW TABLE (January 2025)
+**Component:** ProductionTracker.jsx - Analytics history tracking
+
+| Column | Data Type | Notes |
+|--------|-----------|-------|
+| id | uuid | Primary key |
+| job_id | uuid | Foreign key to jobs |
+| run_name | text | Descriptive name for run |
+| run_data | jsonb | Complete analytics snapshot |
+| created_at | timestamp with time zone | When analytics were generated |
+
+**Purpose:** Stores historical analytics run data from ProductionTracker. Enables comparison over time and audit trail of inspection/pricing analytics. The run_data JSONB contains complete snapshot including inspector stats, validation reports, and workflow metrics.
+
+**JSONB Structure (run_data):**
+```javascript
+{
+  totalRecords: number,
+  validInspections: number,
+  jobEntryRate: number,
+  jobRefusalRate: number,
+  commercialCompletePercent: number,
+  pricingCompletePercent: number,
+  inspectorBreakdown: [{
+    inspector: string,
+    totalAssigned: number,
+    completed: number,
+    // ... more stats
+  }],
+  validationReport: { /* ... */ },
+  timestamp: ISO8601 string
+}
+```
+
 #### **property_records** ⚠️ MAJOR SCHEMA CHANGES
 **Components:** Created in `AdminJobManagement.jsx`, Updated by `FileUploadButton.jsx`, Used by multiple components
 
