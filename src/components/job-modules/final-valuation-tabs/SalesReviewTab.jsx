@@ -548,12 +548,11 @@ const SalesReviewTab = ({
 
       // Calculate PRD (Price-Related Differential) - NJ Formula
       // PRD = Mean Assessment Ratio / Weighted Mean Assessment Ratio
-      // Weighted Mean = Sum(Assessed Values) / Sum(Sale Prices)
+      // Mean Ratio = average of individual ratios, Weighted Mean = avgSalesRatio (already calculated above)
       let prd = 0;
-      if (data.salesRatios.length > 0 && data.totalNormPrice > 0 && data.assessedSum > 0) {
-        const meanRatio = avgSalesRatio / 100; // Convert from percentage
-        const weightedMeanRatio = (data.assessedSum / data.totalNormPrice);
-        prd = weightedMeanRatio > 0 ? meanRatio / weightedMeanRatio : 0;
+      if (data.salesRatioCount > 0 && avgSalesRatio > 0) {
+        const meanRatio = data.salesRatioSum / data.salesRatioCount; // Average of individual ratios
+        prd = meanRatio / avgSalesRatio; // Divide by weighted mean
       }
 
       return {
@@ -580,11 +579,12 @@ const SalesReviewTab = ({
       const avgAbsoluteDeviation = absoluteDeviations.reduce((a, b) => a + b, 0) / overallTotals.salesRatios.length;
       cod = (avgAbsoluteDeviation / avgSalesRatio) * 100;
     }
+    // Calculate PRD (Price-Related Differential) - NJ Formula
+    // PRD = Mean Ratio / Weighted Mean Ratio
     let prd = 0;
-    if (overallTotals.salesRatios.length > 0 && overallTotals.totalNormPrice > 0 && overallTotals.assessedSum > 0) {
-      const meanRatio = avgSalesRatio / 100;
-      const weightedMeanRatio = (overallTotals.assessedSum / overallTotals.totalNormPrice);
-      prd = weightedMeanRatio > 0 ? meanRatio / weightedMeanRatio : 0;
+    if (overallTotals.salesRatioCount > 0 && avgSalesRatio > 0) {
+      const meanRatio = overallTotals.salesRatioSum / overallTotals.salesRatioCount; // Average of individual ratios
+      prd = meanRatio / avgSalesRatio; // Divide by weighted mean
     }
 
     const summary = {
