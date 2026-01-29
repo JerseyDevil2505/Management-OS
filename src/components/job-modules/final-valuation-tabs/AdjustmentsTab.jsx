@@ -1373,7 +1373,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                             return (
                               <tr key={adj.adjustment_id} className="hover:bg-gray-50">
                                 <td className="px-4 py-2 text-sm font-medium text-gray-900 whitespace-nowrap">
-                                  {adj.adjustment_name}
+                                  {formatAdjustmentName(adj.adjustment_name, adj.adjustment_id)}
                                   {!adj.is_default && (
                                     <span className="ml-2 text-xs text-purple-600 font-normal">(Custom)</span>
                                   )}
