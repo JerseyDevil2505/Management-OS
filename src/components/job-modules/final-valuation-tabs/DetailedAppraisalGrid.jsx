@@ -179,7 +179,15 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     {
       id: 'view_code',
       label: 'View Code',
-      render: (prop) => prop.asset_view || prop.asset_view_code || 'N/A',
+      render: (prop) => {
+        const code = prop.asset_view || prop.asset_view_code;
+        if (!code) return 'N/A';
+        if (codeDefinitions) {
+          const name = interpretCodes.getViewName(prop, codeDefinitions, vendorType);
+          return name ? `${code} (${name})` : code;
+        }
+        return code;
+      },
       adjustmentName: null
     },
     {
