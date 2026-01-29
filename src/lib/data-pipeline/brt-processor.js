@@ -830,6 +830,9 @@ export class BRTProcessor {
         await this.processCodeFile(codeFileContent, jobId);
       }
 
+      // Load code configuration for categorizing items
+      await this.loadCodeConfiguration(jobId);
+
       const records = this.parseSourceFile(sourceFileContent);
       
       // Calculate property totals BEFORE processing
