@@ -163,10 +163,19 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
     try {
       const rawData = await getRawDataForJob(jobData.id);
       if (rawData?.codeDefinitions || rawData?.parsed_code_definitions) {
-        setCodeDefinitions(rawData.codeDefinitions || rawData.parsed_code_definitions);
+        const codes = rawData.codeDefinitions || rawData.parsed_code_definitions;
+        setCodeDefinitions(codes);
+        console.log('✅ Loaded code definitions:', {
+          totalCodes: codes.summary?.total_codes,
+          parsedAt: codes.summary?.parsed_at,
+          parsingMethod: codes.summary?.parsing_method,
+          storyHeightCodes: codes.field_codes?.['510'] ? Object.keys(codes.field_codes['510']) : 'N/A'
+        });
+      } else {
+        console.warn('⚠️ No code definitions found for job');
       }
     } catch (error) {
-      console.error('Error loading code definitions:', error);
+      console.error('❌ Error loading code definitions:', error);
     }
   };
 
