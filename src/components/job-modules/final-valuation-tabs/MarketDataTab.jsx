@@ -432,12 +432,30 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
       }
     });
 
-    // Return array of consolidated properties
-    return Object.values(grouped).map(group => ({
-      ...group.mainCard,
-      _maxCard: group.maxCard,
-      _totalCardSF: group.totalCardSF
-    })).filter(p => p.property_composite_key); // Filter out any null mainCards
+    // Return array of consolidated properties with summed values
+    return Object.values(grouped).map(group => {
+      if (!group.mainCard) return null;
+
+      // Sum CAMA values across all cards (main + additional)
+      let totalCamaLand = group.mainCard.values_cama_land || 0;
+      let totalCamaImprovement = group.mainCard.values_cama_improvement || 0;
+      let totalCamaTotal = group.mainCard.values_cama_total || 0;
+
+      group.additionalCards.forEach(card => {
+        totalCamaLand += card.values_cama_land || 0;
+        totalCamaImprovement += card.values_cama_improvement || 0;
+        totalCamaTotal += card.values_cama_total || 0;
+      });
+
+      return {
+        ...group.mainCard,
+        values_cama_land: totalCamaLand,
+        values_cama_improvement: totalCamaImprovement,
+        values_cama_total: totalCamaTotal,
+        _maxCard: group.maxCard,
+        _totalCardSF: group.totalCardSF
+      };
+    }).filter(p => p && p.property_composite_key); // Filter out any null mainCards
   };
 
   // Calculate summary by class for all properties (consolidated)
