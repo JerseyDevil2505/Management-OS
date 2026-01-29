@@ -793,6 +793,7 @@ export class MicrosystemsProcessor {
     total += this.parseInteger(rawRecord['Fp 2 Sty']) || 0;
     total += this.parseInteger(rawRecord['Fp Same Stack']) || 0;
     total += this.parseInteger(rawRecord['Fp Heatilator']) || 0;
+    total += this.parseInteger(rawRecord['Fp Freestanding']) || 0;
     return total > 0 ? total : null;
   }
 
