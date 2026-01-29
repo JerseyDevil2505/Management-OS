@@ -888,20 +888,72 @@ export class MicrosystemsProcessor {
   }
 
   /**
-   * Extract detached garage area
-   * TODO: User mentioned this is tricky - may need configuration
+   * Extract all detached items from 8 slots (Detached Item Code1-4 + Detachedbuilding1-4)
+   * Returns array of {code, area} objects
+   */
+  extractDetachedItems(rawRecord) {
+    const items = [];
+
+    // Detached Item Code1-4 (use Width/Depth or Sq Ft)
+    for (let i = 1; i <= 4; i++) {
+      const code = rawRecord[`Detached Item Code${i}`];
+      if (!code || code.trim() === '') continue;
+
+      // Try Sq Ft first, then calculate from Width × Depth
+      let area = this.parseNumeric(rawRecord[`Sq Ft${i}`]);
+      if (!area) {
+        const width = this.parseNumeric(rawRecord[`Width${i}`]);
+        const depth = this.parseNumeric(rawRecord[`Depth${i}`]);
+        if (width && depth) {
+          area = width * depth;
+        }
+      }
+
+      if (area && area > 0) {
+        items.push({ code: code.trim(), area });
+      }
+    }
+
+    // Detachedbuilding1-4 (use Widthn/Depthn or Area)
+    for (let i = 1; i <= 4; i++) {
+      const code = rawRecord[`Detachedbuilding${i}`];
+      if (!code || code.trim() === '') continue;
+
+      // Try Area first, then calculate from Widthn × Depthn
+      let area = this.parseNumeric(rawRecord[`Area${i}`]);
+      if (!area) {
+        const width = this.parseNumeric(rawRecord[`Widthn${i}`]);
+        const depth = this.parseNumeric(rawRecord[`Depthn${i}`]);
+        if (width && depth) {
+          area = width * depth;
+        }
+      }
+
+      if (area && area > 0) {
+        items.push({ code: code.trim(), area });
+      }
+    }
+
+    return items;
+  }
+
+  /**
+   * Extract detached garage area by summing items with garage codes
+   * For now, returns null - will be calculated from detached items + code config
    */
   extractDetGarageArea(rawRecord) {
-    // Placeholder for now - may need to be configured
+    // This will be calculated dynamically based on code configuration
+    // Store detached items in raw_detached_items field instead
     return null;
   }
 
   /**
-   * Extract pool area
-   * TODO: User mentioned detached items are tricky - may need configuration
+   * Extract pool area by summing items with pool codes
+   * For now, returns null - will be calculated from detached items + code config
    */
   extractPoolArea(rawRecord) {
-    // Placeholder for now - may need to be configured
+    // This will be calculated dynamically based on code configuration
+    // Store detached items in raw_detached_items field instead
     return null;
   }
 
