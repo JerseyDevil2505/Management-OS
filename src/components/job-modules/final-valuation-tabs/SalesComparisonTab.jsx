@@ -380,12 +380,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         return;
       }
 
-      // Find subject by block, lot, qualifier (not by composite key)
-      const subject = properties.find(p =>
-        p.property_block === manualSubject.block &&
-        p.property_lot === manualSubject.lot &&
-        (p.property_qualifier || '') === (manualSubject.qualifier || '')
-      );
+      // Find subject by block, lot, qualifier (normalize for comparison)
+      const subject = properties.find(p => {
+        const blockMatch = (p.property_block || '').trim().toUpperCase() === manualSubject.block.trim().toUpperCase();
+        const lotMatch = (p.property_lot || '').trim().toUpperCase() === manualSubject.lot.trim().toUpperCase();
+        const qualMatch = (p.property_qualifier || '').trim().toUpperCase() === (manualSubject.qualifier || '').trim().toUpperCase();
+        return blockMatch && lotMatch && qualMatch;
+      });
 
       if (!subject) {
         alert(`Subject property not found: Block ${manualSubject.block}, Lot ${manualSubject.lot}${manualSubject.qualifier ? `, Qual ${manualSubject.qualifier}` : ''}\n\nMake sure the property exists in this job.`);
