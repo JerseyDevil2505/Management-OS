@@ -1074,7 +1074,19 @@ brtParsedStructureMap: {
 
     // First try exact match
     if (categoryData[cleanCode] && categoryData[cleanCode].description) {
-      return categoryData[cleanCode].description;
+      const result = categoryData[cleanCode].description;
+
+      // Debug logging for story height
+      if (fieldName === 'asset_story_height' && !window._storyHeightResultLogged) {
+        console.log('✅ Story Height Found (exact match):', {
+          cleanCode,
+          result,
+          categoryDataKeys: Object.keys(categoryData).slice(0, 10)
+        });
+        window._storyHeightResultLogged = true;
+      }
+
+      return result;
     }
 
     // If not found, try looking for codes that might have the prefix stripped
@@ -1091,7 +1103,19 @@ brtParsedStructureMap: {
     const lookupKey = `${prefix}${paddedCode}9999`;
 
     if (flatLookup[lookupKey]) {
-      return flatLookup[lookupKey];
+      const result = flatLookup[lookupKey];
+
+      // Debug logging for story height
+      if (fieldName === 'asset_story_height' && !window._storyHeightResultLogged) {
+        console.log('✅ Story Height Found (flat_lookup):', {
+          cleanCode,
+          lookupKey,
+          result
+        });
+        window._storyHeightResultLogged = true;
+      }
+
+      return result;
     }
 
     // Return original code if no valid description found in the correct category
