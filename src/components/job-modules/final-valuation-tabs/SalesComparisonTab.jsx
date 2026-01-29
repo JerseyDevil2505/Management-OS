@@ -170,12 +170,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
     }
   };
 
-  // Reload adjustment grid when returning to search tab (in case it was updated in Adjustments tab)
+  // Reload adjustment grid and code definitions when returning to search tab (in case they were updated)
   useEffect(() => {
     if (activeSubTab === 'search' && jobData?.id) {
-      console.log('🔄 Switched to Search tab - reloading adjustment grid...');
+      console.log('🔄 Switched to Search tab - reloading adjustment grid and code definitions...');
       loadAdjustmentGrid();
       loadCustomBrackets();
+      loadCodeDefinitions();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSubTab, jobData?.id]);
