@@ -67,6 +67,11 @@ const AnalyticsTab = ({ jobData, properties }) => {
   const vcsAnalytics = useMemo(() => {
     const vcsGroups = {};
 
+    console.log('🔍 AnalyticsTab - Total properties:', properties.length);
+    let cspCount = 0;
+    let pspCount = 0;
+    let hspCount = 0;
+
     properties.forEach(prop => {
       // Prefer new_vcs (updated assignments) over property_vcs (original from file)
       const vcs = prop.new_vcs || prop.property_vcs || 'Unknown';
