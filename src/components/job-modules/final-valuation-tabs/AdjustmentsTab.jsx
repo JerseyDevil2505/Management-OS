@@ -1228,7 +1228,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                           <div className="text-sm font-medium text-gray-900">
                             {customValue.value || 0}
                             <span className="text-xs text-gray-500 ml-1">
-                              {customValue.type === 'flat' ? '$' : customValue.type === 'per_sqft' ? '$/SF' : '%'}
+                              {customValue.type === 'flat' ? '$' : customValue.type === 'per_sqft' ? '$/SF' : customValue.type === 'count' ? '#' : '%'}
                             </span>
                           </div>
                         </td>
