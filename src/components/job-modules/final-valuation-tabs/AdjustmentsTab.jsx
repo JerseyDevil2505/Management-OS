@@ -3,6 +3,7 @@ import { supabase, getRawDataForJob } from '../../../lib/supabaseClient';
 import { Save, Plus, Trash2, Settings, X } from 'lucide-react';
 
 const AdjustmentsTab = ({ jobData = {} }) => {
+  const vendorType = jobData?.vendor_type || 'BRT';
   const [activeSubTab, setActiveSubTab] = useState('adjustments');
   const [adjustments, setAdjustments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -120,6 +121,18 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     { id: 'land_positive', name: 'Positive Land', category: '62' },
     { id: 'land_negative', name: 'Negative Land', category: '63' }
   ];
+
+  // Helper: Check if attribute should be disabled for Microsystems
+  // For Microsystems, these attributes are extracted from columns, not BRT codes
+  const isAttributeDisabledForMicrosystems = (attributeId) => {
+    if (vendorType !== 'Microsystems') return false;
+    const microsystemsColumnAttributes = [
+      'garage', 'deck', 'patio', 'open_porch', 'enclosed_porch',
+      'det_garage', 'pool', 'barn', 'pole_barn', 'stable',
+      'miscellaneous', 'land_positive', 'land_negative'
+    ];
+    return microsystemsColumnAttributes.includes(attributeId);
+  };
 
   // Load adjustments and custom brackets from database
   useEffect(() => {
