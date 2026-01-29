@@ -1270,7 +1270,8 @@ const AdjustmentsTab = ({ jobData = {} }) => {
             <ul className="text-sm text-gray-700 space-y-1">
               <li><strong>Flat ($)</strong> - Fixed dollar amount adjustment</li>
               <li><strong>Per SF ($/SF)</strong> - Adjustment per square foot (e.g., Living Area)</li>
-              <li><strong>Percent (%)</strong> - Percentage-based adjustment (available for Condition)</li>
+              <li><strong>Count (#)</strong> - Adjustment based on quantity (e.g., number of fireplaces)</li>
+              <li><strong>Percent (%)</strong> - Percentage-based adjustment (e.g., condition, land adjustments)</li>
             </ul>
           </div>
 
