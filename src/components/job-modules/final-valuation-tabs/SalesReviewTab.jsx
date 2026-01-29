@@ -495,7 +495,7 @@ const SalesReviewTab = ({
       totalPrice: 0,
       totalNormPrice: 0,
       sflaSum: 0,
-      ageSum: 0,
+      yearBuiltSum: 0,
       yearBuiltCount: 0,
       assessedSum: 0,
       salesRatioSum: 0,
@@ -512,7 +512,7 @@ const SalesReviewTab = ({
           totalPrice: 0,
           totalNormPrice: 0,
           sflaSum: 0,
-          ageSum: 0,
+          yearBuiltSum: 0,
           yearBuiltCount: 0,
           assessedSum: 0,
           salesRatioSum: 0,
@@ -526,15 +526,19 @@ const SalesReviewTab = ({
       if (prop.values_norm_time) groups[vcs].totalNormPrice += prop.values_norm_time;
       if (prop.asset_sfla) groups[vcs].sflaSum += prop.asset_sfla;
       if (prop.asset_year_built) {
-        const currentYear = new Date().getFullYear();
-        groups[vcs].ageSum += currentYear - prop.asset_year_built;
+        groups[vcs].yearBuiltSum += prop.asset_year_built;
         groups[vcs].yearBuiltCount++;
       }
-      if (prop.values_mod_total) groups[vcs].assessedSum += prop.values_mod_total;
-      if (prop.salesRatio !== null && prop.salesRatio !== undefined) {
-        groups[vcs].salesRatioSum += prop.salesRatio;
+
+      // Use projected or current assessment based on toggle
+      const assessedValue = useProjectedAssessment ? (prop.projected_total || prop.values_mod_total) : prop.values_mod_total;
+      const ratioValue = useProjectedAssessment ? prop.projectedSalesRatio : prop.salesRatio;
+
+      if (assessedValue) groups[vcs].assessedSum += assessedValue;
+      if (ratioValue !== null && ratioValue !== undefined) {
+        groups[vcs].salesRatioSum += ratioValue;
         groups[vcs].salesRatioCount++;
-        groups[vcs].salesRatios.push(prop.salesRatio);
+        groups[vcs].salesRatios.push(ratioValue);
       }
 
       // Add to overall totals
@@ -543,15 +547,14 @@ const SalesReviewTab = ({
       if (prop.values_norm_time) overallTotals.totalNormPrice += prop.values_norm_time;
       if (prop.asset_sfla) overallTotals.sflaSum += prop.asset_sfla;
       if (prop.asset_year_built) {
-        const currentYear = new Date().getFullYear();
-        overallTotals.ageSum += currentYear - prop.asset_year_built;
+        overallTotals.yearBuiltSum += prop.asset_year_built;
         overallTotals.yearBuiltCount++;
       }
-      if (prop.values_mod_total) overallTotals.assessedSum += prop.values_mod_total;
-      if (prop.salesRatio !== null && prop.salesRatio !== undefined) {
-        overallTotals.salesRatioSum += prop.salesRatio;
+      if (assessedValue) overallTotals.assessedSum += assessedValue;
+      if (ratioValue !== null && ratioValue !== undefined) {
+        overallTotals.salesRatioSum += ratioValue;
         overallTotals.salesRatioCount++;
-        overallTotals.salesRatios.push(prop.salesRatio);
+        overallTotals.salesRatios.push(ratioValue);
       }
     });
 
