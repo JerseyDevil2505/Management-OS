@@ -473,6 +473,9 @@ export class MicrosystemsProcessor {
       pool_area: this.extractPoolArea(rawRecord),
       ac_area: this.extractAcArea(rawRecord),
 
+      // Store raw detached items for code-based categorization
+      raw_detached_items: JSON.stringify(this.extractDetachedItems(rawRecord)),
+
       // Processing metadata
       processed_at: new Date().toISOString(),
       is_new_since_last_upload: true,
