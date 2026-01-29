@@ -911,7 +911,7 @@ export class MicrosystemsProcessor {
    */
   extractAcArea(rawRecord) {
     const sfla = this.parseNumeric(rawRecord['Livable Area']) || 0;
-    const acValue = rawRecord['AC Sf'];
+    const acValue = rawRecord['Ac Sf'];
 
     if (!acValue || acValue.trim() === '') return null;
 
