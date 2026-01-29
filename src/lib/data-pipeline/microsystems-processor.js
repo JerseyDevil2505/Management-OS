@@ -875,6 +875,7 @@ export class MicrosystemsProcessor {
     let total = 0;
     total += this.parseNumeric(rawRecord['Attgar']) || 0;
     total += this.parseNumeric(rawRecord['Attgar2']) || 0;
+    total += this.parseNumeric(rawRecord['Basmtgar']) || 0;
     total += this.parseNumeric(rawRecord['Bi Ga']) || 0;
     total += this.parseNumeric(rawRecord['Big']) || 0;
     total += this.parseNumeric(rawRecord['Big2']) || 0;
