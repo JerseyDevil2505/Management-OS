@@ -1099,23 +1099,31 @@ brtParsedStructureMap: {
 
     // Fallback to flat_lookup only as last resort, but verify it belongs to the right category
     const flatLookup = codeDefinitions.flat_lookup || {};
-    const paddedCode = cleanCode.padEnd(4);
-    const lookupKey = `${prefix}${paddedCode}9999`;
 
-    if (flatLookup[lookupKey]) {
-      const result = flatLookup[lookupKey];
+    // Try multiple lookup patterns for Microsystems
+    const lookupPatterns = [
+      `${prefix}${cleanCode}9999`,           // Direct: "51019999"
+      `${prefix}${cleanCode.padEnd(4)}9999`, // Padded: "5101   9999"
+      `${prefix}${cleanCode.padStart(4, '0')}9999`, // Zero-padded: "510000019999"
+    ];
 
-      // Debug logging for story height
-      if (fieldName === 'asset_story_height' && !window._storyHeightResultLogged) {
-        console.log('✅ Story Height Found (flat_lookup):', {
-          cleanCode,
-          lookupKey,
-          result
-        });
-        window._storyHeightResultLogged = true;
+    for (const lookupKey of lookupPatterns) {
+      if (flatLookup[lookupKey]) {
+        const result = flatLookup[lookupKey];
+
+        // Debug logging for story height
+        if (fieldName === 'asset_story_height' && !window._storyHeightResultLogged) {
+          console.log('✅ Story Height Found (flat_lookup):', {
+            cleanCode,
+            lookupKey,
+            result,
+            allPatternsTried: lookupPatterns
+          });
+          window._storyHeightResultLogged = true;
+        }
+
+        return result;
       }
-
-      return result;
     }
 
     // Return original code if no valid description found in the correct category
