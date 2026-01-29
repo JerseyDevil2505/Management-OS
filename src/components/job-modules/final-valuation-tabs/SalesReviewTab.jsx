@@ -280,8 +280,6 @@ const SalesReviewTab = ({
         normPricePerSF,
         salesRatio,
         salesRatioCama,
-        projected_total,
-        projectedSalesRatio,
         typeUseName,
         designName,
         exteriorCondName,
