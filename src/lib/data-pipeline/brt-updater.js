@@ -902,7 +902,10 @@ export class BRTUpdater {
       } else {
         console.log('⏭️ Step 2 skipped: No code file provided');
       }
-      
+
+      // Load code configuration for categorizing items
+      await this.loadCodeConfiguration(jobId);
+
       console.log('📝 Step 3: Parsing source file...');
       const records = this.parseSourceFile(sourceFileContent);
       console.log(`✅ Step 3 completed: Parsed ${records.length} records from source file`);
