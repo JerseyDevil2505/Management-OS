@@ -1286,22 +1286,102 @@ export class MicrosystemsUpdater {
 
   /**
    * Extract detached garage area by summing items with garage codes
-   * For now, returns null - will be calculated from detached items + code config
+   * Uses code configuration to identify which codes are garages
    */
   extractDetGarageArea(rawRecord) {
-    // This will be calculated dynamically based on code configuration
-    // Store detached items in raw_detached_items field instead
-    return null;
+    const detachedItems = this.extractDetachedItems(rawRecord);
+    const garageCodes = this.codeConfig.det_garage || [];
+
+    if (garageCodes.length === 0 || detachedItems.length === 0) {
+      return null;
+    }
+
+    // Sum areas for items matching garage codes
+    const totalArea = detachedItems
+      .filter(item => garageCodes.includes(item.code))
+      .reduce((sum, item) => sum + item.area, 0);
+
+    return totalArea > 0 ? totalArea : null;
   }
 
   /**
    * Extract pool area by summing items with pool codes
-   * For now, returns null - will be calculated from detached items + code config
+   * Uses code configuration to identify which codes are pools
    */
   extractPoolArea(rawRecord) {
-    // This will be calculated dynamically based on code configuration
-    // Store detached items in raw_detached_items field instead
-    return null;
+    const detachedItems = this.extractDetachedItems(rawRecord);
+    const poolCodes = this.codeConfig.pool || [];
+
+    if (poolCodes.length === 0 || detachedItems.length === 0) {
+      return null;
+    }
+
+    // Sum areas for items matching pool codes
+    const totalArea = detachedItems
+      .filter(item => poolCodes.includes(item.code))
+      .reduce((sum, item) => sum + item.area, 0);
+
+    return totalArea > 0 ? totalArea : null;
+  }
+
+  /**
+   * Extract barn area by summing items with barn codes
+   * Uses code configuration to identify which codes are barns
+   */
+  extractBarnArea(rawRecord) {
+    const detachedItems = this.extractDetachedItems(rawRecord);
+    const barnCodes = this.codeConfig.barn || [];
+
+    if (barnCodes.length === 0 || detachedItems.length === 0) {
+      return null;
+    }
+
+    // Sum areas for items matching barn codes
+    const totalArea = detachedItems
+      .filter(item => barnCodes.includes(item.code))
+      .reduce((sum, item) => sum + item.area, 0);
+
+    return totalArea > 0 ? totalArea : null;
+  }
+
+  /**
+   * Extract stable area by summing items with stable codes
+   * Uses code configuration to identify which codes are stables
+   */
+  extractStableArea(rawRecord) {
+    const detachedItems = this.extractDetachedItems(rawRecord);
+    const stableCodes = this.codeConfig.stable || [];
+
+    if (stableCodes.length === 0 || detachedItems.length === 0) {
+      return null;
+    }
+
+    // Sum areas for items matching stable codes
+    const totalArea = detachedItems
+      .filter(item => stableCodes.includes(item.code))
+      .reduce((sum, item) => sum + item.area, 0);
+
+    return totalArea > 0 ? totalArea : null;
+  }
+
+  /**
+   * Extract pole barn area by summing items with pole barn codes
+   * Uses code configuration to identify which codes are pole barns
+   */
+  extractPoleBarnArea(rawRecord) {
+    const detachedItems = this.extractDetachedItems(rawRecord);
+    const poleBarnCodes = this.codeConfig.pole_barn || [];
+
+    if (poleBarnCodes.length === 0 || detachedItems.length === 0) {
+      return null;
+    }
+
+    // Sum areas for items matching pole barn codes
+    const totalArea = detachedItems
+      .filter(item => poleBarnCodes.includes(item.code))
+      .reduce((sum, item) => sum + item.area, 0);
+
+    return totalArea > 0 ? totalArea : null;
   }
 
   /**
