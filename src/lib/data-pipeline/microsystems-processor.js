@@ -620,6 +620,9 @@ export class MicrosystemsProcessor {
         await this.processCodeFile(codeFileContent, jobId);
       }
 
+      // Load code configuration for categorizing detached items
+      await this.loadCodeConfiguration(jobId);
+
       // Fetch job data to calculate yearPriorToDueYear for effective age conversion
       let yearPriorToDueYear = null;
       try {
