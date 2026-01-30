@@ -1382,19 +1382,35 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         break;
 
       case 'exterior_condition':
-        // Translate condition code to full name (e.g., "G" → "GOOD")
-        // Then rank using user-configured hierarchy from Attribute Cards
-        const subjectExtCondName = translateConditionCode(subject.asset_ext_cond);
-        const compExtCondName = translateConditionCode(comp.asset_ext_cond);
+        // Translate condition code to full name using code table (BRT) or simple mapping (Microsystems)
+        let subjectExtCondName = interpretCodes.getExteriorConditionName(subject, codeDefinitions, vendorType);
+        let compExtCondName = interpretCodes.getExteriorConditionName(comp, codeDefinitions, vendorType);
+
+        // Fallback for Microsystems if code definitions not loaded: use simple mapping
+        if (!subjectExtCondName && vendorType === 'Microsystems') {
+          subjectExtCondName = translateConditionCode(subject.asset_ext_cond);
+        }
+        if (!compExtCondName && vendorType === 'Microsystems') {
+          compExtCondName = translateConditionCode(comp.asset_ext_cond);
+        }
+
         subjectValue = getConditionRank(subjectExtCondName, 'exterior');
         compValue = getConditionRank(compExtCondName, 'exterior');
         break;
 
       case 'interior_condition':
-        // Translate condition code to full name (e.g., "G" → "GOOD")
-        // Then rank using user-configured hierarchy from Attribute Cards
-        const subjectIntCondName = translateConditionCode(subject.asset_int_cond);
-        const compIntCondName = translateConditionCode(comp.asset_int_cond);
+        // Translate condition code to full name using code table (BRT) or simple mapping (Microsystems)
+        let subjectIntCondName = interpretCodes.getInteriorConditionName(subject, codeDefinitions, vendorType);
+        let compIntCondName = interpretCodes.getInteriorConditionName(comp, codeDefinitions, vendorType);
+
+        // Fallback for Microsystems if code definitions not loaded: use simple mapping
+        if (!subjectIntCondName && vendorType === 'Microsystems') {
+          subjectIntCondName = translateConditionCode(subject.asset_int_cond);
+        }
+        if (!compIntCondName && vendorType === 'Microsystems') {
+          compIntCondName = translateConditionCode(comp.asset_int_cond);
+        }
+
         subjectValue = getConditionRank(subjectIntCondName, 'interior');
         compValue = getConditionRank(compIntCondName, 'interior');
         break;
