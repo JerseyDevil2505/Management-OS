@@ -187,9 +187,16 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     if (!jobData?.id) return;
     loadAdjustments();
     loadAvailableCodes();
-    loadCodeConfig(); // Load after available codes are fetched
     loadCustomBrackets();
   }, [jobData?.id]);
+
+  // Load code config AFTER available codes are loaded (to prevent timing issues)
+  useEffect(() => {
+    const codesLoaded = Object.values(availableCodes).some(arr => arr.length > 0);
+    if (jobData?.id && codesLoaded && !isLoadingCodes) {
+      loadCodeConfig();
+    }
+  }, [jobData?.id, availableCodes, isLoadingCodes]);
 
   const loadCustomBrackets = async () => {
     try {
@@ -205,20 +212,6 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       console.error('Error loading custom brackets:', error);
     }
   };
-
-  // Auto-populate config after codes are loaded (if no saved config exists)
-  useEffect(() => {
-    // Only auto-populate if:
-    // 1. Available codes have been loaded
-    // 2. Config is still empty (no saved settings)
-    const codesLoaded = Object.values(availableCodes).some(arr => arr.length > 0);
-    const configEmpty = Object.values(codeConfig).every(arr => arr.length === 0);
-
-    if (codesLoaded && configEmpty && !isLoadingCodes) {
-      console.log('🚀 Triggering auto-populate after codes loaded');
-      autoPopulateCodeConfig();
-    }
-  }, [availableCodes, isLoadingCodes]);
 
   const loadAdjustments = async () => {
     try {
