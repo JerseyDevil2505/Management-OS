@@ -1483,25 +1483,47 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
       default:
         // Handle dynamic adjustments (miscellaneous, land_positive, land_negative)
-        // These are stored in the 'miscellaneous' column as comma-separated codes
-        if (adjustmentDef.adjustment_id.startsWith('miscellaneous_')) {
-          const code = adjustmentDef.adjustment_id.replace('miscellaneous_', '');
-          const subjectMisc = (subject.miscellaneous || '').split(',').map(c => c.trim());
-          const compMisc = (comp.miscellaneous || '').split(',').map(c => c.trim());
-          subjectValue = subjectMisc.includes(code) ? 1 : 0;
-          compValue = compMisc.includes(code) ? 1 : 0;
-        } else if (adjustmentDef.adjustment_id.startsWith('land_positive_')) {
-          const code = adjustmentDef.adjustment_id.replace('land_positive_', '');
-          const subjectLand = (subject.land_positive || '').split(',').map(c => c.trim());
-          const compLand = (comp.land_positive || '').split(',').map(c => c.trim());
-          subjectValue = subjectLand.includes(code) ? 1 : 0;
-          compValue = compLand.includes(code) ? 1 : 0;
-        } else if (adjustmentDef.adjustment_id.startsWith('land_negative_')) {
-          const code = adjustmentDef.adjustment_id.replace('land_negative_', '');
-          const subjectLand = (subject.land_negative || '').split(',').map(c => c.trim());
-          const compLand = (comp.land_negative || '').split(',').map(c => c.trim());
-          subjectValue = subjectLand.includes(code) ? 1 : 0;
-          compValue = compLand.includes(code) ? 1 : 0;
+        // CNET APPROACH: Check raw code columns at runtime against saved configuration
+        if (adjustmentDef.adjustment_id.startsWith('miscellaneous_') ||
+            adjustmentDef.adjustment_id.startsWith('land_positive_') ||
+            adjustmentDef.adjustment_id.startsWith('land_negative_')) {
+
+          const code = adjustmentDef.adjustment_id.replace(/^(miscellaneous|land_positive|land_negative)_/, '');
+
+          // Helper: Check if code exists in property's raw detached code columns
+          const hasCode = (property) => {
+            if (vendorType === 'Microsystems') {
+              // Check detached_item_code1-4 and detachedbuilding1-4
+              for (let i = 1; i <= 4; i++) {
+                const itemCode = property[`detached_item_code${i}`];
+                const buildingCode = property[`detachedbuilding${i}`];
+                // Normalize codes (remove leading zeros)
+                const normalizedItem = itemCode ? String(itemCode).replace(/^0+/, '') || '0' : null;
+                const normalizedBuilding = buildingCode ? String(buildingCode).replace(/^0+/, '') || '0' : null;
+                const normalizedTarget = String(code).replace(/^0+/, '') || '0';
+
+                if (normalizedItem === normalizedTarget || normalizedBuilding === normalizedTarget) {
+                  return true;
+                }
+              }
+            } else {
+              // BRT: Check detachedcode_1-11
+              for (let i = 1; i <= 11; i++) {
+                const detachedCode = property[`detachedcode_${i}`];
+                if (detachedCode) {
+                  const normalized = String(detachedCode).replace(/^0+/, '') || '0';
+                  const normalizedTarget = String(code).replace(/^0+/, '') || '0';
+                  if (normalized === normalizedTarget) {
+                    return true;
+                  }
+                }
+              }
+            }
+            return false;
+          };
+
+          subjectValue = hasCode(subject) ? 1 : 0;
+          compValue = hasCode(comp) ? 1 : 0;
         } else {
           return 0; // Unknown attribute
         }
