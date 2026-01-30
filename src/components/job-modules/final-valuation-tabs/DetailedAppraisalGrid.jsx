@@ -120,10 +120,18 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   // Helper to get adjustment definition from adjustmentGrid
   const getAdjustmentDef = (adjustmentName) => {
     if (!adjustmentName || !adjustmentGrid) return null;
-    return adjustmentGrid.find(adj =>
-      adj.adjustment_name === adjustmentName ||
-      adj.adjustment_name?.toLowerCase().includes(adjustmentName.toLowerCase())
-    );
+
+    // First try exact match
+    let match = adjustmentGrid.find(adj => adj.adjustment_name === adjustmentName);
+    if (match) return match;
+
+    // Then try case-insensitive exact match
+    const lowerName = adjustmentName.toLowerCase();
+    match = adjustmentGrid.find(adj => adj.adjustment_name?.toLowerCase() === lowerName);
+    if (match) return match;
+
+    // No substring matching
+    return null;
   };
 
   // Helper to check if adjustment is flat type (YES/NONE display)
