@@ -184,6 +184,9 @@ Deno.serve(async (req: Request) => {
         update.barn_area = barnArea > 0 ? barnArea : null;
         update.stable_area = stableArea > 0 ? stableArea : null;
         update.pole_barn_area = poleBarnArea > 0 ? poleBarnArea : null;
+        update.miscellaneous = miscFound.length > 0 ? miscFound.join(',') : null;
+        update.land_positive = landPosFound.length > 0 ? landPosFound.join(',') : null;
+        update.land_negative = landNegFound.length > 0 ? landNegFound.join(',') : null;
         hasUpdates = true;
 
       } else if (vendorType === 'BRT') {
