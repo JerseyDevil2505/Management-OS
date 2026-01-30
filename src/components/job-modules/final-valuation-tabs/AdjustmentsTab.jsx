@@ -714,25 +714,37 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
 
   const handleSaveCodeConfig = async () => {
     try {
-      // Save code configuration settings
-      const settings = Object.keys(codeConfig)
-        .filter(attributeId => codeConfig[attributeId] && codeConfig[attributeId].length > 0) // Only save if codes are selected
-        .map(attributeId => ({
-          job_id: jobData.id,
-          setting_key: `adjustment_codes_${attributeId}`,
-          setting_value: JSON.stringify(codeConfig[attributeId])
-        }));
+      // Separate settings into those with values and those to delete
+      const settingsToSave = [];
+      const settingsToDelete = [];
+
+      Object.keys(codeConfig).forEach(attributeId => {
+        const codes = codeConfig[attributeId] || [];
+        const settingKey = `adjustment_codes_${attributeId}`;
+
+        if (codes.length > 0) {
+          // Has codes - save them
+          settingsToSave.push({
+            job_id: jobData.id,
+            setting_key: settingKey,
+            setting_value: JSON.stringify(codes)
+          });
+        } else {
+          // Empty array - delete the setting to clear old values
+          settingsToDelete.push(settingKey);
+        }
+      });
 
       // Add version hash to detect future code table changes
       const currentVersion = generateCodeVersion(availableCodes);
-      settings.push({
+      settingsToSave.push({
         job_id: jobData.id,
         setting_key: 'adjustment_codes_version',
         setting_value: currentVersion
       });
 
       // Add garage thresholds
-      settings.push(
+      settingsToSave.push(
         {
           job_id: jobData.id,
           setting_key: 'garage_threshold_one_car_max',
@@ -750,11 +762,28 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
         }
       );
 
-      const { error: settingsError } = await supabase
-        .from('job_settings')
-        .upsert(settings, { onConflict: 'job_id,setting_key' });
+      // Save settings that have values
+      if (settingsToSave.length > 0) {
+        const { error: settingsError } = await supabase
+          .from('job_settings')
+          .upsert(settingsToSave, { onConflict: 'job_id,setting_key' });
 
-      if (settingsError) throw settingsError;
+        if (settingsError) throw settingsError;
+      }
+
+      // Delete settings for empty arrays
+      if (settingsToDelete.length > 0) {
+        console.log('🗑️ Deleting empty configuration settings:', settingsToDelete);
+        const { error: deleteError } = await supabase
+          .from('job_settings')
+          .delete()
+          .eq('job_id', jobData.id)
+          .in('setting_key', settingsToDelete);
+
+        if (deleteError) {
+          console.error('Error deleting empty settings:', deleteError);
+        }
+      }
 
       // For dynamic attributes with selected codes, create/update adjustment rows
       const attributeLabels = {
