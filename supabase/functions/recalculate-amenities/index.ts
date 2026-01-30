@@ -201,6 +201,9 @@ Deno.serve(async (req: Request) => {
         const patioCodes = codeConfig.patio || [];
         const openPorchCodes = codeConfig.open_porch || [];
         const enclosedPorchCodes = codeConfig.enclosed_porch || [];
+        const miscCodes = codeConfig.miscellaneous || [];
+        const landPosCodes = codeConfig.land_positive || [];
+        const landNegCodes = codeConfig.land_negative || [];
 
         let detGarageArea = 0;
         let poolArea = 0;
@@ -212,6 +215,9 @@ Deno.serve(async (req: Request) => {
         let patioArea = 0;
         let openPorchArea = 0;
         let enclosedPorchArea = 0;
+        const miscFound: string[] = [];
+        const landPosFound: string[] = [];
+        const landNegFound: string[] = [];
 
         // Process detached items (detachedcode_1-11)
         for (let i = 1; i <= 11; i++) {
