@@ -183,11 +183,17 @@ const AdjustmentsTab = ({ jobData = {} }) => {
   };
 
   // Load adjustments and custom brackets from database
+  // DEFERRED: Wait briefly to avoid interfering with initial property batch loading
   useEffect(() => {
     if (!jobData?.id) return;
-    loadAdjustments();
-    loadAvailableCodes();
-    loadCustomBrackets();
+
+    const timer = setTimeout(() => {
+      loadAdjustments();
+      loadAvailableCodes();
+      loadCustomBrackets();
+    }, 500); // Small delay to let property loading start first
+
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id]);
 
