@@ -102,10 +102,19 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
   // Helper to get adjustment for a specific attribute
   const getAdjustment = (comp, attributeName) => {
-    return comp.adjustments?.find(a =>
-      a.name === attributeName ||
-      a.name?.toLowerCase().includes(attributeName.toLowerCase())
-    );
+    if (!attributeName || !comp.adjustments) return null;
+
+    // First try exact match
+    let match = comp.adjustments.find(a => a.name === attributeName);
+    if (match) return match;
+
+    // Then try case-insensitive exact match
+    const lowerName = attributeName.toLowerCase();
+    match = comp.adjustments.find(a => a.name?.toLowerCase() === lowerName);
+    if (match) return match;
+
+    // No substring matching - too risky (e.g., "AC" matches "Lot Size (ACre)")
+    return null;
   };
 
   // Helper to get adjustment definition from adjustmentGrid
