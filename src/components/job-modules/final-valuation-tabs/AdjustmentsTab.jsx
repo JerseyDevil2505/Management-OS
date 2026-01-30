@@ -1357,41 +1357,21 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
                     // For dynamic adjustments, only show if configuration has been saved
                     // Check if this adjustment has corresponding codes in codeConfig
-                    const isDynamic = adj.adjustment_id.includes('miscellaneous_') ||
+                    const isDynamic = adj.adjustment_id.includes('barn_') ||
+                                    adj.adjustment_id.includes('pole_barn_') ||
+                                    adj.adjustment_id.includes('stable_') ||
+                                    adj.adjustment_id.includes('miscellaneous_') ||
                                     adj.adjustment_id.includes('land_positive_') ||
-                                    adj.adjustment_id.includes('land_negative_') ||
-                                    ['barn', 'stable', 'pole_barn'].includes(adj.adjustment_id);
+                                    adj.adjustment_id.includes('land_negative_');
 
                     if (isDynamic) {
-                      // Check if codes are saved for this attribute type
-                      if (adj.adjustment_id.includes('miscellaneous_')) {
-                        const code = adj.adjustment_id.replace('miscellaneous_', '');
-                        const isConfigured = (codeConfig.miscellaneous || []).includes(code);
+                      // Check if codes are saved for this attribute type (all create per-code rows now)
+                      const match = adj.adjustment_id.match(/^(barn|pole_barn|stable|miscellaneous|land_positive|land_negative)_(.+)$/);
+                      if (match) {
+                        const [, type, code] = match;
+                        const isConfigured = (codeConfig[type] || []).includes(code);
                         if (!isConfigured) {
-                          console.log(`⚠️ Hiding ${adj.adjustment_id} - code "${code}" not in saved configuration`);
-                        }
-                        return isConfigured;
-                      }
-                      if (adj.adjustment_id.includes('land_positive_')) {
-                        const code = adj.adjustment_id.replace('land_positive_', '');
-                        const isConfigured = (codeConfig.land_positive || []).includes(code);
-                        if (!isConfigured) {
-                          console.log(`⚠️ Hiding ${adj.adjustment_id} - code "${code}" not in saved configuration`);
-                        }
-                        return isConfigured;
-                      }
-                      if (adj.adjustment_id.includes('land_negative_')) {
-                        const code = adj.adjustment_id.replace('land_negative_', '');
-                        const isConfigured = (codeConfig.land_negative || []).includes(code);
-                        if (!isConfigured) {
-                          console.log(`⚠️ Hiding ${adj.adjustment_id} - code "${code}" not in saved configuration`);
-                        }
-                        return isConfigured;
-                      }
-                      if (['barn', 'stable', 'pole_barn'].includes(adj.adjustment_id)) {
-                        const isConfigured = (codeConfig[adj.adjustment_id] || []).length > 0;
-                        if (!isConfigured) {
-                          console.log(`⚠️ Hiding ${adj.adjustment_id} - no codes in saved configuration`);
+                          console.log(`⚠️ Hiding ${adj.adjustment_id} - code "${code}" not in ${type} configuration`);
                         }
                         return isConfigured;
                       }
