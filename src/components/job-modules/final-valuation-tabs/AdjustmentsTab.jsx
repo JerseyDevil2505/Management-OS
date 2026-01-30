@@ -1334,7 +1334,41 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {adjustments.map((adj) => (
+                {adjustments
+                  .filter((adj) => {
+                    // Always show default adjustments
+                    if (adj.is_default) return true;
+
+                    // For dynamic adjustments, only show if configuration has been saved
+                    // Check if this adjustment has corresponding codes in codeConfig
+                    const isDynamic = adj.adjustment_id.includes('miscellaneous_') ||
+                                    adj.adjustment_id.includes('land_positive_') ||
+                                    adj.adjustment_id.includes('land_negative_') ||
+                                    ['barn', 'stable', 'pole_barn'].includes(adj.adjustment_id);
+
+                    if (isDynamic) {
+                      // Check if codes are saved for this attribute type
+                      if (adj.adjustment_id.includes('miscellaneous_')) {
+                        const code = adj.adjustment_id.replace('miscellaneous_', '');
+                        return (codeConfig.miscellaneous || []).includes(code);
+                      }
+                      if (adj.adjustment_id.includes('land_positive_')) {
+                        const code = adj.adjustment_id.replace('land_positive_', '');
+                        return (codeConfig.land_positive || []).includes(code);
+                      }
+                      if (adj.adjustment_id.includes('land_negative_')) {
+                        const code = adj.adjustment_id.replace('land_negative_', '');
+                        return (codeConfig.land_negative || []).includes(code);
+                      }
+                      if (['barn', 'stable', 'pole_barn'].includes(adj.adjustment_id)) {
+                        return (codeConfig[adj.adjustment_id] || []).length > 0;
+                      }
+                    }
+
+                    // Show any other custom adjustments (user-created)
+                    return true;
+                  })
+                  .map((adj) => (
                   <tr key={adj.adjustment_id} className="hover:bg-gray-50">
                     <td className="sticky left-0 z-10 bg-white px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-gray-200">
                       {formatAdjustmentName(adj.adjustment_name, adj.adjustment_id)}
