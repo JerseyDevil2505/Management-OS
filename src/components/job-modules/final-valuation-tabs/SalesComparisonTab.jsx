@@ -1490,20 +1490,19 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
           const code = adjustmentDef.adjustment_id.replace(/^(miscellaneous|land_positive|land_negative)_/, '');
 
-          // Helper: Check if code exists in property's raw detached code columns
+          // Helper: Check if code exists in property's raw code columns
           const hasCode = (property) => {
             if (vendorType === 'Microsystems') {
-              // Check detached_item_code1-4 and detachedbuilding1-4
+              // Microsystems stores land/misc codes in overall_adj_reason1-4
               for (let i = 1; i <= 4; i++) {
-                const itemCode = property[`detached_item_code${i}`];
-                const buildingCode = property[`detachedbuilding${i}`];
-                // Normalize codes (remove leading zeros)
-                const normalizedItem = itemCode ? String(itemCode).replace(/^0+/, '') || '0' : null;
-                const normalizedBuilding = buildingCode ? String(buildingCode).replace(/^0+/, '') || '0' : null;
-                const normalizedTarget = String(code).replace(/^0+/, '') || '0';
-
-                if (normalizedItem === normalizedTarget || normalizedBuilding === normalizedTarget) {
-                  return true;
+                const reasonCode = property[`overall_adj_reason${i}`];
+                if (reasonCode) {
+                  // Normalize codes (remove leading zeros and trim)
+                  const normalized = String(reasonCode).trim().replace(/^0+/, '') || '0';
+                  const normalizedTarget = String(code).trim().replace(/^0+/, '') || '0';
+                  if (normalized.toUpperCase() === normalizedTarget.toUpperCase()) {
+                    return true;
+                  }
                 }
               }
             } else {
