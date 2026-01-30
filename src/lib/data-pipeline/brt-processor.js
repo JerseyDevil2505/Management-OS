@@ -1296,7 +1296,7 @@ export class BRTProcessor {
     for (let i = 1; i <= 15; i++) {
       const code = this.preserveStringValue(rawRecord[`ATTACHEDCODE_${i}`]);
       const area = this.parseNumeric(rawRecord[`ATTACHEDAREA_${i}`]) || 0;
-      if (code && area > 0 && garageCodes.includes(code)) {
+      if (code && area > 0 && this.codeMatches(code, garageCodes)) {
         totalArea += area;
       }
     }
