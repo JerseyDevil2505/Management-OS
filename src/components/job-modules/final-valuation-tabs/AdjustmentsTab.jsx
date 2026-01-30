@@ -830,6 +830,48 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         }
       });
 
+      // DELETE adjustment rows for codes that were removed from configuration
+      const rowsToDelete = [];
+      adjustments.forEach(adj => {
+        if (!adj.is_default) {
+          // Check if this is a dynamic adjustment row
+          const isDynamicRow = adj.adjustment_id.startsWith('miscellaneous_') ||
+                               adj.adjustment_id.startsWith('land_positive_') ||
+                               adj.adjustment_id.startsWith('land_negative_');
+
+          if (isDynamicRow) {
+            // Extract the type and code from adjustment_id
+            const match = adj.adjustment_id.match(/^(miscellaneous|land_positive|land_negative)_(.+)$/);
+            if (match) {
+              const [, type, code] = match;
+              const selectedCodes = codeConfig[type] || [];
+
+              // If this code is NOT in the current config, mark for deletion
+              if (!selectedCodes.includes(code)) {
+                rowsToDelete.push(adj.adjustment_id);
+              }
+            }
+          }
+        }
+      });
+
+      // Delete orphaned rows from database
+      if (rowsToDelete.length > 0) {
+        console.log('🗑️ Deleting removed adjustment rows:', rowsToDelete);
+        const { error: deleteError } = await supabase
+          .from('job_adjustment_grid')
+          .delete()
+          .eq('job_id', jobData.id)
+          .in('adjustment_id', rowsToDelete);
+
+        if (deleteError) {
+          console.error('Error deleting adjustment rows:', deleteError);
+        } else {
+          // Update local state to remove deleted rows
+          setAdjustments(prev => prev.filter(adj => !rowsToDelete.includes(adj.adjustment_id)));
+        }
+      }
+
       // Save new adjustment rows to database
       if (newAdjustments.length > 0) {
         const { error: adjError } = await supabase
