@@ -1482,13 +1482,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         break;
 
       default:
-        // Handle dynamic adjustments (miscellaneous, land_positive, land_negative)
+        // Handle dynamic adjustments (detached items, miscellaneous, land adjustments)
         // CNET APPROACH: Check raw code columns at runtime against saved configuration
-        if (adjustmentDef.adjustment_id.startsWith('miscellaneous_') ||
+        if (adjustmentDef.adjustment_id.startsWith('barn_') ||
+            adjustmentDef.adjustment_id.startsWith('pole_barn_') ||
+            adjustmentDef.adjustment_id.startsWith('stable_') ||
+            adjustmentDef.adjustment_id.startsWith('miscellaneous_') ||
             adjustmentDef.adjustment_id.startsWith('land_positive_') ||
             adjustmentDef.adjustment_id.startsWith('land_negative_')) {
 
-          const code = adjustmentDef.adjustment_id.replace(/^(miscellaneous|land_positive|land_negative)_/, '');
+          const code = adjustmentDef.adjustment_id.replace(/^(barn|pole_barn|stable|miscellaneous|land_positive|land_negative)_/, '');
 
           // Helper: Check if code exists in property's raw code columns
           const hasCode = (property) => {
@@ -1498,34 +1501,39 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
             if (vendorType === 'Microsystems') {
               // MICROSYSTEMS COLUMN MAPPING:
-              // - Miscellaneous codes (pole barns, etc.) → detached_item_code1-4, detachedbuilding1-4, misc_item_1-3
-              // - Land positive/negative codes → overall_adj_reason1-4
+              // - Detached items (barn, pole_barn, stable) → detached_item_code1-4, detachedbuilding1-4
+              // - Miscellaneous items → misc_item_1-3
+              // - Land positive/negative → overall_adj_reason1-4
 
-              if (adjustmentDef.adjustment_id.startsWith('miscellaneous_')) {
-                // Check detached_item_code1-4
+              if (adjustmentDef.adjustment_id.startsWith('barn_') ||
+                  adjustmentDef.adjustment_id.startsWith('pole_barn_') ||
+                  adjustmentDef.adjustment_id.startsWith('stable_')) {
+                // Detached items: check detached_item_code1-4, detachedbuilding1-4
                 for (let i = 1; i <= 4; i++) {
                   const itemCode = property[`detached_item_code${i}`];
                   if (itemCode && normalizeCode(itemCode) === targetCode) {
                     return true;
                   }
                 }
-                // Check detachedbuilding1-4
                 for (let i = 1; i <= 4; i++) {
                   const buildingCode = property[`detachedbuilding${i}`];
                   if (buildingCode && normalizeCode(buildingCode) === targetCode) {
                     return true;
                   }
                 }
-                // Check misc_item_1-3
+              }
+              else if (adjustmentDef.adjustment_id.startsWith('miscellaneous_')) {
+                // Miscellaneous items: check misc_item_1-3 ONLY
                 for (let i = 1; i <= 3; i++) {
                   const miscCode = property[`misc_item_${i}`];
                   if (miscCode && normalizeCode(miscCode) === targetCode) {
                     return true;
                   }
                 }
-              } else if (adjustmentDef.adjustment_id.startsWith('land_positive_') ||
-                         adjustmentDef.adjustment_id.startsWith('land_negative_')) {
-                // Check overall_adj_reason1-4 for land adjustments
+              }
+              else if (adjustmentDef.adjustment_id.startsWith('land_positive_') ||
+                       adjustmentDef.adjustment_id.startsWith('land_negative_')) {
+                // Land adjustments: check overall_adj_reason1-4
                 for (let i = 1; i <= 4; i++) {
                   const reasonCode = property[`overall_adj_reason${i}`];
                   if (reasonCode && normalizeCode(reasonCode) === targetCode) {
