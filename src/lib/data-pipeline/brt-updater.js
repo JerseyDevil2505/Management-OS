@@ -1667,6 +1667,31 @@ export class BRTUpdater {
   }
 
   /**
+   * Helper to check if a raw code matches any configured codes
+   * Handles both formats: "02" matches "2 - CONC PATIO" or just "2"
+   */
+  codeMatches(rawCode, configuredCodes) {
+    if (!rawCode || !configuredCodes || configuredCodes.length === 0) {
+      return false;
+    }
+
+    // Normalize raw code: remove leading zeros and trim
+    const normalizedRaw = String(rawCode).replace(/^0+/, '') || '0';
+
+    return configuredCodes.some(configCode => {
+      if (!configCode) return false;
+
+      // Extract just the code portion before " - " if it exists
+      const codePart = String(configCode).split(' - ')[0].trim();
+
+      // Normalize configured code: remove leading zeros
+      const normalizedConfig = codePart.replace(/^0+/, '') || '0';
+
+      return normalizedRaw === normalizedConfig;
+    });
+  }
+
+  /**
    * Load code configuration from job_settings to categorize items
    */
   async loadCodeConfiguration(jobId) {
