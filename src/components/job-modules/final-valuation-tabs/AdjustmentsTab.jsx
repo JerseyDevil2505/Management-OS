@@ -908,7 +908,15 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       const summary = messages.length > 0 ? `\n\n${messages.join(', ')}.` : '';
 
       // Reload adjustments from database to ensure UI matches actual state
-      await loadAdjustments();
+      const { data: reloadedAdj } = await supabase
+        .from('job_adjustment_grid')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .order('sort_order');
+
+      if (reloadedAdj) {
+        setAdjustments(reloadedAdj);
+      }
 
       alert(`Code configuration saved!${summary}\n\n✓ Dynamic adjustments are now active and will be applied during evaluations.`);
 
