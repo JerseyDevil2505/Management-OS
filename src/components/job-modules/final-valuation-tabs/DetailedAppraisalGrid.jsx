@@ -1,9 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { interpretCodes, supabase } from '../../../lib/supabaseClient';
 
-const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [] }) => {
+const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [] }) => {
   const subject = result.subject;
   const comps = result.comparables || [];
+
+  // Determine which bracket is being used
+  const getBracketLabel = () => {
+    if (!compFilters) return 'Auto';
+
+    const selectedBracket = compFilters.adjustmentBracket;
+
+    if (selectedBracket === 'auto') {
+      // Show the auto-determined bracket based on subject's value
+      const subjectValue = subject.values_norm_time || subject.sales_price || subject.values_mod_total || subject.values_cama_total || 0;
+      const bracketIndex = cmeBrackets.findIndex(b => subjectValue >= b.min && subjectValue <= b.max);
+      if (bracketIndex >= 0 && cmeBrackets[bracketIndex]) {
+        return `Auto (${cmeBrackets[bracketIndex].label})`;
+      }
+      return 'Auto';
+    } else if (selectedBracket && selectedBracket.startsWith('bracket_')) {
+      // User selected a specific bracket
+      const bracketIndex = parseInt(selectedBracket.replace('bracket_', ''));
+      if (cmeBrackets[bracketIndex]) {
+        return cmeBrackets[bracketIndex].label;
+      }
+    } else if (selectedBracket && selectedBracket.startsWith('custom_')) {
+      return 'Custom Bracket';
+    }
+
+    return 'Unknown';
+  };
 
   // Load garage thresholds from job settings
   const [garageThresholds, setGarageThresholds] = useState({
