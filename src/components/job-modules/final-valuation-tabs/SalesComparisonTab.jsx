@@ -1449,18 +1449,22 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   };
 
   // Helper: Get numeric rank for condition codes based on user configuration
-  const getConditionRank = (conditionCode, configType) => {
-    if (!conditionCode) return 0; // No condition code
+  const getConditionRank = (conditionName, configType) => {
+    // Handle null/undefined/empty condition name
+    if (!conditionName || conditionName.trim() === '') {
+      console.warn(`⚠️  No condition name provided for ${configType}, defaulting to baseline (0)`);
+      return 0; // No condition name, default to baseline
+    }
 
     // Check if attribute condition config exists
     const conditionConfig = jobData?.attribute_condition_config;
     if (!conditionConfig || !conditionConfig[configType]) {
       console.error(`⚠️  Condition configuration not found for ${configType}. Please configure in Market Analysis → Attribute Cards.`);
-      throw new Error(`Condition hierarchy not configured. Please configure ${configType} condition rankings in Market Analysis → Attribute Cards.`);
+      return 0; // Return baseline instead of throwing error to prevent evaluation from breaking
     }
 
     const config = conditionConfig[configType];
-    const code = conditionCode.toUpperCase().trim();
+    const code = conditionName.toUpperCase().trim();
     const baseline = config.baseline?.toUpperCase().trim();
     const betterCodes = (config.better || []).map(c => c.toUpperCase().trim());
     const worseCodes = (config.worse || []).map(c => c.toUpperCase().trim());
