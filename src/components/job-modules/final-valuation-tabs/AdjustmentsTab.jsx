@@ -265,7 +265,9 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         setAdjustments(defaultData);
       }
     } catch (error) {
-      console.error('Error loading adjustments:', error);
+      // Silent error handling - don't interfere with job loading
+      console.warn('⚠️ Adjustments loading error (non-critical):', error.message || error);
+      setAdjustments([]); // Set empty array on error
     } finally {
       setIsLoading(false);
     }
