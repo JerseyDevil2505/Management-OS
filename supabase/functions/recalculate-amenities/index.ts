@@ -69,12 +69,18 @@ Deno.serve(async (req: Request) => {
         const barnCodes = codeConfig.barn || [];
         const stableCodes = codeConfig.stable || [];
         const poleBarnCodes = codeConfig.pole_barn || [];
+        const miscCodes = codeConfig.miscellaneous || [];
+        const landPosCodes = codeConfig.land_positive || [];
+        const landNegCodes = codeConfig.land_negative || [];
 
         let detGarageArea = 0;
         let poolArea = 0;
         let barnArea = 0;
         let stableArea = 0;
         let poleBarnArea = 0;
+        const miscFound: string[] = [];
+        const landPosFound: string[] = [];
+        const landNegFound: string[] = [];
 
         // Process detached_item_code1-4
         for (let i = 1; i <= 4; i++) {
