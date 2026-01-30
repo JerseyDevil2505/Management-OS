@@ -1384,8 +1384,17 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       case 'exterior_condition':
         // Use user-configured condition hierarchy from Attribute Cards
         // Translate condition code to full name (e.g., "G" → "GOOD")
-        const subjectExtCondName = interpretCodes.getExteriorConditionName(subject, codeDefinitions, vendorType);
-        const compExtCondName = interpretCodes.getExteriorConditionName(comp, codeDefinitions, vendorType);
+        let subjectExtCondName = interpretCodes.getExteriorConditionName(subject, codeDefinitions, vendorType);
+        let compExtCondName = interpretCodes.getExteriorConditionName(comp, codeDefinitions, vendorType);
+
+        // Fallback: If code definitions don't provide translation, use simple mapping
+        if (!subjectExtCondName && subject.asset_ext_cond) {
+          subjectExtCondName = translateConditionCode(subject.asset_ext_cond);
+        }
+        if (!compExtCondName && comp.asset_ext_cond) {
+          compExtCondName = translateConditionCode(comp.asset_ext_cond);
+        }
+
         subjectValue = getConditionRank(subjectExtCondName, 'exterior');
         compValue = getConditionRank(compExtCondName, 'exterior');
         break;
@@ -1393,8 +1402,17 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       case 'interior_condition':
         // Use user-configured condition hierarchy from Attribute Cards
         // Translate condition code to full name (e.g., "G" → "GOOD")
-        const subjectIntCondName = interpretCodes.getInteriorConditionName(subject, codeDefinitions, vendorType);
-        const compIntCondName = interpretCodes.getInteriorConditionName(comp, codeDefinitions, vendorType);
+        let subjectIntCondName = interpretCodes.getInteriorConditionName(subject, codeDefinitions, vendorType);
+        let compIntCondName = interpretCodes.getInteriorConditionName(comp, codeDefinitions, vendorType);
+
+        // Fallback: If code definitions don't provide translation, use simple mapping
+        if (!subjectIntCondName && subject.asset_int_cond) {
+          subjectIntCondName = translateConditionCode(subject.asset_int_cond);
+        }
+        if (!compIntCondName && comp.asset_int_cond) {
+          compIntCondName = translateConditionCode(comp.asset_int_cond);
+        }
+
         subjectValue = getConditionRank(subjectIntCondName, 'interior');
         compValue = getConditionRank(compIntCondName, 'interior');
         break;
