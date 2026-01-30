@@ -751,7 +751,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       <div className={attr.bold ? 'font-semibold' : 'text-xs'}>{value}</div>
                       {adj && adj.amount !== 0 && (
                         <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                          {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                          {adj.amount > 0 ? '+' : ''}${Math.round(adj.amount).toLocaleString()}
                         </div>
                       )}
                     </div>
@@ -769,7 +769,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               <td className="px-3 py-3 text-center bg-yellow-50">-</td>
               {renderCompCells((comp) => (
                 <div className={`font-bold ${comp.totalAdjustment > 0 ? 'text-green-700' : comp.totalAdjustment < 0 ? 'text-red-700' : 'text-gray-700'}`}>
-                  {comp.totalAdjustment > 0 ? '+' : ''}${comp.totalAdjustment?.toLocaleString() || '0'}
+                  {comp.totalAdjustment > 0 ? '+' : ''}${Math.round(comp.totalAdjustment || 0).toLocaleString()}
                   <div className="text-xs mt-1">
                     ({comp.adjustmentPercent > 0 ? '+' : ''}{comp.adjustmentPercent?.toFixed(0) || '0'}%)
                   </div>
