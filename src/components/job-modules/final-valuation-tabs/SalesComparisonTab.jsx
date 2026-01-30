@@ -1466,6 +1466,23 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
     }
   };
 
+  // Helper: Translate single-letter condition codes to full names
+  const translateConditionCode = (code) => {
+    if (!code) return null;
+    const normalized = code.trim().toUpperCase();
+
+    // Standard condition code mappings (vendor-agnostic)
+    const conditionMap = {
+      'E': 'EXCELLENT',
+      'G': 'GOOD',
+      'A': 'AVERAGE',
+      'F': 'FAIR',
+      'P': 'POOR'
+    };
+
+    return conditionMap[normalized] || null;
+  };
+
   // Helper: Get numeric rank for condition codes based on user configuration
   const getConditionRank = (conditionName, configType) => {
     // Handle null/undefined/empty condition name
