@@ -1382,37 +1382,19 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         break;
 
       case 'exterior_condition':
-        // Use user-configured condition hierarchy from Attribute Cards
         // Translate condition code to full name (e.g., "G" → "GOOD")
-        let subjectExtCondName = interpretCodes.getExteriorConditionName(subject, codeDefinitions, vendorType);
-        let compExtCondName = interpretCodes.getExteriorConditionName(comp, codeDefinitions, vendorType);
-
-        // Fallback: If code definitions don't provide translation, use simple mapping
-        if (!subjectExtCondName && subject.asset_ext_cond) {
-          subjectExtCondName = translateConditionCode(subject.asset_ext_cond);
-        }
-        if (!compExtCondName && comp.asset_ext_cond) {
-          compExtCondName = translateConditionCode(comp.asset_ext_cond);
-        }
-
+        // Then rank using user-configured hierarchy from Attribute Cards
+        const subjectExtCondName = translateConditionCode(subject.asset_ext_cond);
+        const compExtCondName = translateConditionCode(comp.asset_ext_cond);
         subjectValue = getConditionRank(subjectExtCondName, 'exterior');
         compValue = getConditionRank(compExtCondName, 'exterior');
         break;
 
       case 'interior_condition':
-        // Use user-configured condition hierarchy from Attribute Cards
         // Translate condition code to full name (e.g., "G" → "GOOD")
-        let subjectIntCondName = interpretCodes.getInteriorConditionName(subject, codeDefinitions, vendorType);
-        let compIntCondName = interpretCodes.getInteriorConditionName(comp, codeDefinitions, vendorType);
-
-        // Fallback: If code definitions don't provide translation, use simple mapping
-        if (!subjectIntCondName && subject.asset_int_cond) {
-          subjectIntCondName = translateConditionCode(subject.asset_int_cond);
-        }
-        if (!compIntCondName && comp.asset_int_cond) {
-          compIntCondName = translateConditionCode(comp.asset_int_cond);
-        }
-
+        // Then rank using user-configured hierarchy from Attribute Cards
+        const subjectIntCondName = translateConditionCode(subject.asset_int_cond);
+        const compIntCondName = translateConditionCode(comp.asset_int_cond);
         subjectValue = getConditionRank(subjectIntCondName, 'interior');
         compValue = getConditionRank(compIntCondName, 'interior');
         break;
