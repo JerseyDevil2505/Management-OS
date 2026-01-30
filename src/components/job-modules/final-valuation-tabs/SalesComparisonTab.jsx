@@ -141,6 +141,39 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
     loadGarageThresholds();
   }, [jobData?.id]);
 
+  // Load code configuration on mount
+  useEffect(() => {
+    const loadCodeConfig = async () => {
+      if (!jobData?.id) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('job_settings')
+          .select('setting_key, setting_value')
+          .eq('job_id', jobData.id)
+          .in('setting_key', ['adjustment_codes_miscellaneous', 'adjustment_codes_land_positive', 'adjustment_codes_land_negative']);
+
+        if (error || !data) return;
+
+        const newConfig = { ...codeConfig };
+        data.forEach(setting => {
+          const key = setting.setting_key.replace('adjustment_codes_', '');
+          try {
+            newConfig[key] = setting.setting_value ? JSON.parse(setting.setting_value) : [];
+          } catch (e) {
+            newConfig[key] = [];
+          }
+        });
+        setCodeConfig(newConfig);
+        console.log('✅ Loaded code configuration:', newConfig);
+      } catch (error) {
+        console.error('Error loading code configuration:', error);
+      }
+    };
+
+    loadCodeConfig();
+  }, [jobData?.id]);
+
   // ==================== SALES CODE NORMALIZATION ====================
   const normalizeSalesCode = useCallback((code) => {
     if (code === null || code === undefined || code === '' || code === '00') return '';
