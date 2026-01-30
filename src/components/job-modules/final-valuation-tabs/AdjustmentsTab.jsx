@@ -855,11 +855,11 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         });
       }
 
-      // Configuration saved - will be applied to future data uploads
+      // Configuration saved - applies immediately to CME evaluations
       console.log('✅ Code configuration saved successfully');
-      console.log('📌 Note: Configuration will be applied when data file is next uploaded');
+      console.log('📌 Dynamic adjustments will now work in CME evaluations');
 
-      alert(`Code configuration saved!${newAdjustments.length > 0 ? ` ${newAdjustments.length} new adjustment row(s) added to grid.` : ''}\n\n✓ Configuration will be applied on next data upload.`);
+      alert(`Code configuration saved!${newAdjustments.length > 0 ? ` ${newAdjustments.length} new adjustment row(s) added to grid.` : ''}\n\n✓ Dynamic adjustments are now active and will be applied during evaluations.`);
 
       // Dismiss auto-populate notice and reset flag after saving
       setShowAutoPopulateNotice(false);
