@@ -1683,6 +1683,85 @@ LEFT JOIN employees e ON ja.employee_id = e.id;
 
 ---
 
+### ✅ COMPLETED: CME Attribute Display & Garage Per-Car Categorization (January 2025)
+
+**Context:** Implementation of comprehensive attribute extraction system for Sales Comparison (CME) with configurable garage categorization based on square footage thresholds.
+
+**Key Accomplishments:**
+
+1. **Attribute Extraction System**:
+   - ✅ **97 detail columns extracted** for BRT vendor (attached/detached items, misc items, land adjustments)
+   - ✅ **Code configuration system** - Auto-loads from job_settings during file processing
+   - ✅ **Smart code matching** - `codeMatches()` helper handles leading zeros and descriptions ("02" matches "2 - CONC PATIO")
+   - ✅ **Dimension-based fallback** - Calculates area from width × depth when direct area unavailable
+   - ✅ **Percentage value handling** - Converts "100%" to actual value by multiplying with SFLA
+
+2. **Code Configuration Loading**:
+   - ✅ **Processor integration** - brt-processor.js loads configuration automatically
+   - ✅ **Updater integration** - brt-updater.js mirrors processor pattern for UPSERT operations
+   - ✅ **Edge Function sync** - recalculate-amenities function uses same codeMatches() logic
+   - ✅ **9 extraction methods** added: garage, deck, patio, open_porch, enclosed_porch, det_garage, pool, barn, stable, pole_barn
+   - ✅ **Bug fixes**: Finished basement field name (BSMNTFINISHAREA → BSMNTFINISHAREA), clearRawDataCache location fix
+
+3. **Garage Per-Car Categorization System**:
+   - ✅ **Configurable thresholds** (default: 1-399=ONE CAR, 400-799=TWO CAR, 800-999=THREE CAR, 1000+=MULTI CAR)
+   - ✅ **UI display format** - Shows "TWO CAR (650 SF)" instead of raw square footage
+   - ✅ **Category-based adjustments** - Adjustment = category_difference × adjustment_value
+     - Example: Subject ONE CAR (cat 1), Comp TWO CAR (cat 2) → -1 category → -$10,000
+     - Example: Subject MULTI CAR (cat 4), Comp TWO CAR (cat 2) → +2 category → +$20,000
+   - ✅ **Configuration UI** - AdjustmentsTab includes threshold editor with real-time category range display
+   - ✅ **State management** - Garage thresholds loaded from job_settings in multiple components
+   - ✅ **Adjustment type** - Changed default from 'flat' to 'count' for both garage and det_garage
+
+4. **DetailedAppraisalGrid Display Fix**:
+   - ✅ **Removed YES/NONE override** - Garage area now displays category + SF format
+   - ✅ **No Edge Function needed** - Display change only, data already populated from processors
+   - ✅ **Preserved YES/NONE** for other amenities (deck, patio, pool, etc.)
+
+**Files Modified:**
+- `src/lib/data-pipeline/brt-processor.js` - Added code config loading, codeMatches(), 9 extraction methods
+- `src/lib/data-pipeline/brt-updater.js` - Mirrored processor changes for UPSERT operations
+- `src/components/job-modules/final-valuation-tabs/AdjustmentsTab.jsx` - Garage threshold configuration UI
+- `src/components/job-modules/final-valuation-tabs/DetailedAppraisalGrid.jsx` - Category display for garage area
+- `src/components/job-modules/final-valuation-tabs/SalesComparisonTab.jsx` - Category-based adjustment calculation
+- `src/components/job-modules/FileUploadButton.jsx` - Fixed clearRawDataCache bug
+- `supabase/functions/recalculate-amenities/index.ts` - Added codeMatches() helper
+
+**Database Changes:**
+- Added 97 new columns to property_records table (see schema documentation)
+- Added job_settings entries for garage thresholds: garage_threshold_one_car_max, garage_threshold_two_car_max, garage_threshold_three_car_max
+
+**Code Pattern Established:**
+```javascript
+// Smart code matching (handles "02" matching "2 - CONC PATIO")
+codeMatches(rawCode, configuredCodes) {
+  const normalizedRaw = String(rawCode).replace(/^0+/, '') || '0';
+  return configuredCodes.some(configCode => {
+    const codePart = String(configCode).split(' - ')[0].trim();
+    const normalizedConfig = codePart.replace(/^0+/, '') || '0';
+    return normalizedRaw === normalizedConfig;
+  });
+}
+
+// Garage category conversion
+getGarageCategory(sqft, thresholds) {
+  if (!sqft || sqft === 0) return 0; // NONE
+  if (sqft <= thresholds.one_car_max) return 1; // ONE CAR
+  if (sqft <= thresholds.two_car_max) return 2; // TWO CAR
+  if (sqft <= thresholds.three_car_max) return 3; // THREE CAR
+  return 4; // MULTI CAR
+}
+```
+
+**Next Session Priorities:**
+1. ✅ Verify adjustment calculation logic works correctly (category differences)
+2. 🎯 Add modal with Edge Function to edit attributes on-the-fly
+3. 🎯 End-to-end testing of garage categorization workflow
+
+**Status:** ✅ **COMPLETE** - All attribute extraction and garage categorization implemented. Ready for testing.
+
+---
+
 ### ✅ COMPLETED: Final Valuation Component Implementation (January 2025)
 
 **Context:** Comprehensive final valuation system with Market Data Approach, CME (Comparative Market Evaluation), and Tax Rate Impact Analysis
