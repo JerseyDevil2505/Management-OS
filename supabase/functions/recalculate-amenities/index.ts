@@ -223,8 +223,37 @@ Deno.serve(async (req: Request) => {
         for (let i = 1; i <= 11; i++) {
           const code = property[`detachedcode_${i}`];
           const area = property[`detacheddcsize_${i}`];
-          
-          if (!code || !area || area <= 0) continue;
+
+          if (!code) continue;
+
+          // Check for miscellaneous codes (no area needed)
+          if (codeMatches(code, miscCodes)) {
+            const normalizedCode = String(code).replace(/^0+/, '') || '0';
+            if (!miscFound.includes(normalizedCode)) {
+              miscFound.push(normalizedCode);
+            }
+            continue;
+          }
+
+          // Check for land adjustment codes (no area needed)
+          if (codeMatches(code, landPosCodes)) {
+            const normalizedCode = String(code).replace(/^0+/, '') || '0';
+            if (!landPosFound.includes(normalizedCode)) {
+              landPosFound.push(normalizedCode);
+            }
+            continue;
+          }
+
+          if (codeMatches(code, landNegCodes)) {
+            const normalizedCode = String(code).replace(/^0+/, '') || '0';
+            if (!landNegFound.includes(normalizedCode)) {
+              landNegFound.push(normalizedCode);
+            }
+            continue;
+          }
+
+          // For area-based attributes, require area > 0
+          if (!area || area <= 0) continue;
 
           if (codeMatches(code, detGarageCodes)) detGarageArea += area;
           else if (codeMatches(code, poolCodes)) poolArea += area;
