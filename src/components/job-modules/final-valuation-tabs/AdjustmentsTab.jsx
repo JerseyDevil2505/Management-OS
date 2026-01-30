@@ -279,17 +279,29 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       if (data && data.length > 0 && savedVersion === currentVersion) {
         // User has saved settings AND version matches - load them
         const newConfig = { ...codeConfig };
+        const newThresholds = { ...garageThresholds };
+
         data.forEach(setting => {
-          const attributeId = setting.setting_key.replace('adjustment_codes_', '');
-          if (attributeId !== 'version') {
-            try {
-              newConfig[attributeId] = setting.setting_value ? JSON.parse(setting.setting_value) : [];
-            } catch (e) {
-              newConfig[attributeId] = [];
+          // Handle garage thresholds
+          if (setting.setting_key.startsWith('garage_threshold_')) {
+            const thresholdKey = setting.setting_key.replace('garage_threshold_', '');
+            newThresholds[thresholdKey] = parseInt(setting.setting_value, 10) || garageThresholds[thresholdKey];
+          }
+          // Handle code configuration
+          else {
+            const attributeId = setting.setting_key.replace('adjustment_codes_', '');
+            if (attributeId !== 'version') {
+              try {
+                newConfig[attributeId] = setting.setting_value ? JSON.parse(setting.setting_value) : [];
+              } catch (e) {
+                newConfig[attributeId] = [];
+              }
             }
           }
         });
+
         setCodeConfig(newConfig);
+        setGarageThresholds(newThresholds);
       } else {
         // No saved settings OR version mismatch (code table changed) - re-auto-populate
         if (savedVersion && savedVersion !== currentVersion) {
