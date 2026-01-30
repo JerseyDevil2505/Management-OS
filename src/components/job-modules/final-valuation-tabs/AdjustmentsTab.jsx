@@ -1415,6 +1415,11 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
                     // Always show default adjustments
                     if (adj.is_default) return true;
 
+                    // HIDE OLD LEGACY rows (barn, pole_barn, stable without code suffix)
+                    if (adj.adjustment_id === 'barn' || adj.adjustment_id === 'pole_barn' || adj.adjustment_id === 'stable') {
+                      return false;
+                    }
+
                     // For dynamic adjustments, only show if configuration has been saved
                     // Check if this adjustment has corresponding codes in codeConfig
                     const isDynamic = adj.adjustment_id.includes('barn_') ||
