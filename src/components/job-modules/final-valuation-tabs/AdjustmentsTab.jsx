@@ -259,6 +259,12 @@ const AdjustmentsTab = ({ jobData = {} }) => {
   };
 
   const loadCodeConfig = async () => {
+    // Safety check: Don't run if availableCodes isn't ready
+    if (!availableCodes || Object.keys(availableCodes).length === 0) {
+      console.log('⏳ Skipping loadCodeConfig - availableCodes not yet loaded');
+      return;
+    }
+
     try {
       const settingKeys = [
         'adjustment_codes_garage',
