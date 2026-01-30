@@ -182,36 +182,36 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     return attachedItemsFromColumns.includes(attributeId);
   };
 
-  // Load adjustments and custom brackets from database
-  // DEFERRED: Wait briefly to avoid interfering with initial property batch loading
-  useEffect(() => {
-    if (!jobData?.id) return;
+  // CRITICAL FIX: Only load data when this component is actually being used
+  // This prevents interference with initial job property loading
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
+  useEffect(() => {
+    // Don't auto-load - wait for user interaction or explicit trigger
+    if (!jobData?.id || hasLoadedOnce) return;
+
+    // Only load if we're being displayed (add a small delay to be safe)
     const timer = setTimeout(() => {
+      setHasLoadedOnce(true);
       loadAdjustments();
       loadAvailableCodes();
       loadCustomBrackets();
-    }, 500); // Small delay to let property loading start first
+    }, 3000); // Wait 3 seconds after job loads
 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id]);
 
-  // Load code config AFTER available codes are loaded (to prevent timing issues)
-  // DEFERRED: Wait 2 seconds to avoid interfering with initial property batch loading
+  // Load code config AFTER available codes are loaded
   useEffect(() => {
-    if (!jobData?.id || !availableCodes || isLoadingCodes) return;
+    if (!jobData?.id || !availableCodes || isLoadingCodes || !hasLoadedOnce) return;
 
     const codesLoaded = Object.values(availableCodes).some(arr => arr && arr.length > 0);
     if (codesLoaded) {
-      const timer = setTimeout(() => {
-        loadCodeConfig();
-      }, 2000); // Defer by 2 seconds to allow property batches to complete
-
-      return () => clearTimeout(timer);
+      loadCodeConfig();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobData?.id, availableCodes, isLoadingCodes]);
+  }, [jobData?.id, availableCodes, isLoadingCodes, hasLoadedOnce]);
 
   const loadCustomBrackets = async () => {
     try {
