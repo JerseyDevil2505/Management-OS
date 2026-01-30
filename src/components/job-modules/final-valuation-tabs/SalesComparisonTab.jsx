@@ -1258,14 +1258,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         break;
 
       case 'garage':
-        // BRT: Count category 15, Micro: use garage column
-        if (vendorType === 'BRT') {
-          subjectValue = countBRTItems(subject, ['15']);
-          compValue = countBRTItems(comp, ['15']);
-        } else {
-          subjectValue = readMicroValue(subject, 'garage') || 0;
-          compValue = readMicroValue(comp, 'garage') || 0;
-        }
+        // Use garage_area column and convert to category (0=NONE, 1=ONE CAR, 2=TWO CAR, 3=THREE CAR, 4=MULTI CAR)
+        subjectValue = getGarageCategory(subject.garage_area || 0);
+        compValue = getGarageCategory(comp.garage_area || 0);
+        break;
+
+      case 'det_garage':
+        // Use det_garage_area column and convert to category (0=NONE, 1=ONE CAR, 2=TWO CAR, 3=THREE CAR, 4=MULTI CAR)
+        subjectValue = getGarageCategory(subject.det_garage_area || 0);
+        compValue = getGarageCategory(comp.det_garage_area || 0);
         break;
 
       case 'basement':
