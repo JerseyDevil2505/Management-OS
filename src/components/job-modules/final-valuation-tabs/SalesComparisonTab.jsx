@@ -1426,8 +1426,46 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         compValue = (comp.ac_area && comp.ac_area > 0) ? 1 : 0;
         break;
 
+      case 'barn':
+        subjectValue = (subject.barn_area && subject.barn_area > 0) ? 1 : 0;
+        compValue = (comp.barn_area && comp.barn_area > 0) ? 1 : 0;
+        break;
+
+      case 'stable':
+        subjectValue = (subject.stable_area && subject.stable_area > 0) ? 1 : 0;
+        compValue = (comp.stable_area && comp.stable_area > 0) ? 1 : 0;
+        break;
+
+      case 'pole_barn':
+        subjectValue = (subject.pole_barn_area && subject.pole_barn_area > 0) ? 1 : 0;
+        compValue = (comp.pole_barn_area && comp.pole_barn_area > 0) ? 1 : 0;
+        break;
+
       default:
-        return 0; // Unknown attribute
+        // Handle dynamic adjustments (miscellaneous, land_positive, land_negative)
+        // These are stored in the 'miscellaneous' column as comma-separated codes
+        if (adjustmentDef.adjustment_id.startsWith('miscellaneous_')) {
+          const code = adjustmentDef.adjustment_id.replace('miscellaneous_', '');
+          const subjectMisc = (subject.miscellaneous || '').split(',').map(c => c.trim());
+          const compMisc = (comp.miscellaneous || '').split(',').map(c => c.trim());
+          subjectValue = subjectMisc.includes(code) ? 1 : 0;
+          compValue = compMisc.includes(code) ? 1 : 0;
+        } else if (adjustmentDef.adjustment_id.startsWith('land_positive_')) {
+          const code = adjustmentDef.adjustment_id.replace('land_positive_', '');
+          const subjectLand = (subject.land_positive || '').split(',').map(c => c.trim());
+          const compLand = (comp.land_positive || '').split(',').map(c => c.trim());
+          subjectValue = subjectLand.includes(code) ? 1 : 0;
+          compValue = compLand.includes(code) ? 1 : 0;
+        } else if (adjustmentDef.adjustment_id.startsWith('land_negative_')) {
+          const code = adjustmentDef.adjustment_id.replace('land_negative_', '');
+          const subjectLand = (subject.land_negative || '').split(',').map(c => c.trim());
+          const compLand = (comp.land_negative || '').split(',').map(c => c.trim());
+          subjectValue = subjectLand.includes(code) ? 1 : 0;
+          compValue = compLand.includes(code) ? 1 : 0;
+        } else {
+          return 0; // Unknown attribute
+        }
+        break;
     }
 
     const difference = subjectValue - compValue;
@@ -1441,7 +1479,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         if (adjustmentDef.adjustment_id.includes('lot_size')) {
           // Lot size: multiply difference by rate per unit
           return difference * adjustmentValue;
-        } else {
+        }
+        // Check if this is a land_negative adjustment - automatically negate the value
+        else if (adjustmentDef.adjustment_id.startsWith('land_negative_')) {
+          // Land negative: always subtract the value (enter positive amounts in grid, we negate automatically)
+          return difference > 0 ? -adjustmentValue : (difference < 0 ? adjustmentValue : 0);
+        }
+        else {
           // Boolean amenities: binary adjustment (has it or doesn't)
           return difference > 0 ? adjustmentValue : (difference < 0 ? -adjustmentValue : 0);
         }
