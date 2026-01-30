@@ -907,6 +907,9 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
       const summary = messages.length > 0 ? `\n\n${messages.join(', ')}.` : '';
 
+      // Reload adjustments from database to ensure UI matches actual state
+      await loadAdjustments();
+
       alert(`Code configuration saved!${summary}\n\n✓ Dynamic adjustments are now active and will be applied during evaluations.`);
 
       // Dismiss auto-populate notice and reset flag after saving
@@ -914,7 +917,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       setWasReset(false);
 
       // Optionally switch to adjustment grid tab to show new rows
-      if (newAdjustments.length > 0) {
+      if (newAdjustments.length > 0 || rowsToDelete.length > 0) {
         setActiveSubTab('adjustments');
       }
     } catch (error) {
