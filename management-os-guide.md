@@ -1218,6 +1218,186 @@ export const interpretCodes = {
 | asset_view | text | |
 | asset_year_built | integer | |
 | asset_zoning | text | **REMOVED** - Moved to property_market_analysis |
+| ac_area | numeric | **NEW** - Air conditioning area in square feet (CME attribute) |
+| barn_area | numeric | **NEW** - Barn area in square feet (CME attribute) |
+| basement_area | numeric | **NEW** - Basement area in square feet (CME attribute) |
+| deck_area | numeric | **NEW** - Deck area in square feet (CME attribute) |
+| det_garage_area | numeric | **NEW** - Detached garage area in square feet (CME attribute) |
+| enclosed_porch_area | numeric | **NEW** - Enclosed porch area in square feet (CME attribute) |
+| fin_basement_area | numeric | **NEW** - Finished basement area in square feet (CME attribute) |
+| fireplace_count | integer | **NEW** - Number of fireplaces (CME attribute) |
+| fireplaces | numeric | **NEW** - Fireplace count/area (CME attribute) |
+| garage_area | numeric | **NEW** - Attached garage area in square feet (CME attribute) |
+| open_porch_area | numeric | **NEW** - Open porch area in square feet (CME attribute) |
+| patio_area | numeric | **NEW** - Patio area in square feet (CME attribute) |
+| pole_barn_area | numeric | **NEW** - Pole barn area in square feet (CME attribute) |
+| pool_area | numeric | **NEW** - Pool area in square feet (CME attribute) |
+| stable_area | numeric | **NEW** - Stable area in square feet (CME attribute) |
+| attachedcode_1 | text | **NEW** - BRT attached item code 1 |
+| attachedcode_2 | text | **NEW** - BRT attached item code 2 |
+| attachedcode_3 | text | **NEW** - BRT attached item code 3 |
+| attachedcode_4 | text | **NEW** - BRT attached item code 4 |
+| attachedcode_5 | text | **NEW** - BRT attached item code 5 |
+| attachedcode_6 | text | **NEW** - BRT attached item code 6 |
+| attachedcode_7 | text | **NEW** - BRT attached item code 7 |
+| attachedcode_8 | text | **NEW** - BRT attached item code 8 |
+| attachedcode_9 | text | **NEW** - BRT attached item code 9 |
+| attachedcode_10 | text | **NEW** - BRT attached item code 10 |
+| attachedcode_11 | text | **NEW** - BRT attached item code 11 |
+| attachedcode_12 | text | **NEW** - BRT attached item code 12 |
+| attachedcode_13 | text | **NEW** - BRT attached item code 13 |
+| attachedcode_14 | text | **NEW** - BRT attached item code 14 |
+| attachedcode_15 | text | **NEW** - BRT attached item code 15 |
+| attachedarea_1 | numeric | **NEW** - BRT attached item area 1 |
+| attachedarea_2 | numeric | **NEW** - BRT attached item area 2 |
+| attachedarea_3 | numeric | **NEW** - BRT attached item area 3 |
+| attachedarea_4 | numeric | **NEW** - BRT attached item area 4 |
+| attachedarea_5 | numeric | **NEW** - BRT attached item area 5 |
+| attachedarea_6 | numeric | **NEW** - BRT attached item area 6 |
+| attachedarea_7 | numeric | **NEW** - BRT attached item area 7 |
+| attachedarea_8 | numeric | **NEW** - BRT attached item area 8 |
+| attachedarea_9 | numeric | **NEW** - BRT attached item area 9 |
+| attachedarea_10 | numeric | **NEW** - BRT attached item area 10 |
+| attachedarea_11 | numeric | **NEW** - BRT attached item area 11 |
+| attachedarea_12 | numeric | **NEW** - BRT attached item area 12 |
+| attachedarea_13 | numeric | **NEW** - BRT attached item area 13 |
+| attachedarea_14 | numeric | **NEW** - BRT attached item area 14 |
+| attachedarea_15 | numeric | **NEW** - BRT attached item area 15 |
+| detachedcode_1 | text | **NEW** - BRT detached item code 1 |
+| detachedcode_2 | text | **NEW** - BRT detached item code 2 |
+| detachedcode_3 | text | **NEW** - BRT detached item code 3 |
+| detachedcode_4 | text | **NEW** - BRT detached item code 4 |
+| detachedcode_5 | text | **NEW** - BRT detached item code 5 |
+| detachedcode_6 | text | **NEW** - BRT detached item code 6 |
+| detachedcode_7 | text | **NEW** - BRT detached item code 7 |
+| detachedcode_8 | text | **NEW** - BRT detached item code 8 |
+| detachedcode_9 | text | **NEW** - BRT detached item code 9 |
+| detachedcode_10 | text | **NEW** - BRT detached item code 10 |
+| detachedcode_11 | text | **NEW** - BRT detached item code 11 |
+| detacheddcsize_1 | numeric | **NEW** - BRT detached item size 1 |
+| detacheddcsize_2 | numeric | **NEW** - BRT detached item size 2 |
+| detacheddcsize_3 | numeric | **NEW** - BRT detached item size 3 |
+| detacheddcsize_4 | numeric | **NEW** - BRT detached item size 4 |
+| detacheddcsize_5 | numeric | **NEW** - BRT detached item size 5 |
+| detacheddcsize_6 | numeric | **NEW** - BRT detached item size 6 |
+| detacheddcsize_7 | numeric | **NEW** - BRT detached item size 7 |
+| detacheddcsize_8 | numeric | **NEW** - BRT detached item size 8 |
+| detacheddcsize_9 | numeric | **NEW** - BRT detached item size 9 |
+| detacheddcsize_10 | numeric | **NEW** - BRT detached item size 10 |
+| detacheddcsize_11 | numeric | **NEW** - BRT detached item size 11 |
+| detachednc_1 | numeric | **NEW** - BRT detached item count 1 |
+| detachednc_2 | numeric | **NEW** - BRT detached item count 2 |
+| detachednc_3 | numeric | **NEW** - BRT detached item count 3 |
+| detachednc_4 | numeric | **NEW** - BRT detached item count 4 |
+| detachednc_5 | numeric | **NEW** - BRT detached item count 5 |
+| detachednc_6 | numeric | **NEW** - BRT detached item count 6 |
+| detachednc_7 | numeric | **NEW** - BRT detached item count 7 |
+| detachednc_8 | numeric | **NEW** - BRT detached item count 8 |
+| detachednc_9 | numeric | **NEW** - BRT detached item count 9 |
+| detachednc_10 | numeric | **NEW** - BRT detached item count 10 |
+| detachednc_11 | numeric | **NEW** - BRT detached item count 11 |
+| detached_item_code1 | text | **NEW** - Microsystems detached item code 1 |
+| detached_item_code2 | text | **NEW** - Microsystems detached item code 2 |
+| detached_item_code3 | text | **NEW** - Microsystems detached item code 3 |
+| detached_item_code4 | text | **NEW** - Microsystems detached item code 4 |
+| detachedbuilding1 | text | **NEW** - Microsystems detached building code 1 |
+| detachedbuilding2 | text | **NEW** - Microsystems detached building code 2 |
+| detachedbuilding3 | text | **NEW** - Microsystems detached building code 3 |
+| detachedbuilding4 | text | **NEW** - Microsystems detached building code 4 |
+| depth1 | numeric | **NEW** - Microsystems detached item depth 1 |
+| depth2 | numeric | **NEW** - Microsystems detached item depth 2 |
+| depth3 | numeric | **NEW** - Microsystems detached item depth 3 |
+| depth4 | numeric | **NEW** - Microsystems detached item depth 4 |
+| depthn1 | numeric | **NEW** - Microsystems detached building depth 1 |
+| depthn2 | numeric | **NEW** - Microsystems detached building depth 2 |
+| depthn3 | numeric | **NEW** - Microsystems detached building depth 3 |
+| depthn4 | numeric | **NEW** - Microsystems detached building depth 4 |
+| width1 | numeric | **NEW** - Microsystems detached item width 1 |
+| width2 | numeric | **NEW** - Microsystems detached item width 2 |
+| width3 | numeric | **NEW** - Microsystems detached item width 3 |
+| width4 | numeric | **NEW** - Microsystems detached item width 4 |
+| widthn1 | numeric | **NEW** - Microsystems detached building width 1 |
+| widthn2 | numeric | **NEW** - Microsystems detached building width 2 |
+| widthn3 | numeric | **NEW** - Microsystems detached building width 3 |
+| widthn4 | numeric | **NEW** - Microsystems detached building width 4 |
+| misc_1_brt | text | **NEW** - BRT miscellaneous item 1 |
+| misc_2_brt | text | **NEW** - BRT miscellaneous item 2 |
+| misc_3_brt | text | **NEW** - BRT miscellaneous item 3 |
+| misc_4_brt | text | **NEW** - BRT miscellaneous item 4 |
+| misc_5_brt | text | **NEW** - BRT miscellaneous item 5 |
+| misc_item_1 | text | **NEW** - Microsystems miscellaneous item 1 |
+| misc_item_2 | text | **NEW** - Microsystems miscellaneous item 2 |
+| misc_item_3 | text | **NEW** - Microsystems miscellaneous item 3 |
+| miscnum_1 | numeric | **NEW** - BRT miscellaneous item count 1 |
+| miscnum_2 | numeric | **NEW** - BRT miscellaneous item count 2 |
+| miscnum_3 | numeric | **NEW** - BRT miscellaneous item count 3 |
+| miscnum_4 | numeric | **NEW** - BRT miscellaneous item count 4 |
+| miscnum_5 | numeric | **NEW** - BRT miscellaneous item count 5 |
+| landffcond_1 | text | **NEW** - BRT land favorable condition 1 |
+| landffcond_2 | text | **NEW** - BRT land favorable condition 2 |
+| landffcond_3 | text | **NEW** - BRT land favorable condition 3 |
+| landffcond_4 | text | **NEW** - BRT land favorable condition 4 |
+| landffcond_5 | text | **NEW** - BRT land favorable condition 5 |
+| landffcond_6 | text | **NEW** - BRT land favorable condition 6 |
+| landffinfl_1 | text | **NEW** - BRT land unfavorable influence 1 |
+| landffinfl_2 | text | **NEW** - BRT land unfavorable influence 2 |
+| landffinfl_3 | text | **NEW** - BRT land unfavorable influence 3 |
+| landffinfl_4 | text | **NEW** - BRT land unfavorable influence 4 |
+| landffinfl_5 | text | **NEW** - BRT land unfavorable influence 5 |
+| landffinfl_6 | text | **NEW** - BRT land unfavorable influence 6 |
+| landur_1 | text | **NEW** - Microsystems land use code 1 (lowercase variant) |
+| landur_2 | text | **NEW** - Microsystems land use code 2 (lowercase variant) |
+| landur_3 | text | **NEW** - Microsystems land use code 3 (lowercase variant) |
+| landur_4 | text | **NEW** - Microsystems land use code 4 (lowercase variant) |
+| landur_5 | text | **NEW** - Microsystems land use code 5 (lowercase variant) |
+| landur_6 | text | **NEW** - Microsystems land use code 6 (lowercase variant) |
+| landurcond_1 | text | **NEW** - BRT land urban condition 1 |
+| landurcond_2 | text | **NEW** - BRT land urban condition 2 |
+| landurcond_3 | text | **NEW** - BRT land urban condition 3 |
+| landurcond_4 | text | **NEW** - BRT land urban condition 4 |
+| landurcond_5 | text | **NEW** - BRT land urban condition 5 |
+| landurcond_6 | text | **NEW** - BRT land urban condition 6 |
+| landurinfl_1 | text | **NEW** - BRT land urban influence 1 |
+| landurinfl_2 | text | **NEW** - BRT land urban influence 2 |
+| landurinfl_3 | text | **NEW** - BRT land urban influence 3 |
+| landurinfl_4 | text | **NEW** - BRT land urban influence 4 |
+| landurinfl_5 | text | **NEW** - BRT land urban influence 5 |
+| landurinfl_6 | text | **NEW** - BRT land urban influence 6 |
+| landurunits_1 | numeric | **NEW** - Microsystems land use units 1 (lowercase variant) |
+| landurunits_2 | numeric | **NEW** - Microsystems land use units 2 (lowercase variant) |
+| landurunits_3 | numeric | **NEW** - Microsystems land use units 3 (lowercase variant) |
+| landurunits_4 | numeric | **NEW** - Microsystems land use units 4 (lowercase variant) |
+| landurunits_5 | numeric | **NEW** - Microsystems land use units 5 (lowercase variant) |
+| landurunits_6 | numeric | **NEW** - Microsystems land use units 6 (lowercase variant) |
+| functional1 | numeric | **NEW** - Functional item 1 |
+| functional2 | numeric | **NEW** - Functional item 2 |
+| functional3 | numeric | **NEW** - Functional item 3 |
+| functional4 | numeric | **NEW** - Functional item 4 |
+| functional_depr1 | numeric | **NEW** - Functional depreciation 1 |
+| functional_depr2 | numeric | **NEW** - Functional depreciation 2 |
+| functional_depr3 | numeric | **NEW** - Functional depreciation 3 |
+| functional_depr4 | numeric | **NEW** - Functional depreciation 4 |
+| location_economic1 | numeric | **NEW** - Location economic factor 1 |
+| location_economic2 | numeric | **NEW** - Location economic factor 2 |
+| location_economic3 | numeric | **NEW** - Location economic factor 3 |
+| location_economic4 | numeric | **NEW** - Location economic factor 4 |
+| locationl_depr1 | numeric | **NEW** - Locational depreciation 1 |
+| locationl_depr2 | numeric | **NEW** - Locational depreciation 2 |
+| locationl_depr3 | numeric | **NEW** - Locational depreciation 3 |
+| locationl_depr4 | numeric | **NEW** - Locational depreciation 4 |
+| physical_depr1 | numeric | **NEW** - Physical depreciation 1 |
+| physical_depr2 | numeric | **NEW** - Physical depreciation 2 |
+| physical_depr3 | numeric | **NEW** - Physical depreciation 3 |
+| physical_depr4 | numeric | **NEW** - Physical depreciation 4 |
+| pysical1 | numeric | **NEW** - Physical item 1 (note: typo in schema, likely should be "physical") |
+| pysical2 | numeric | **NEW** - Physical item 2 (note: typo in schema) |
+| pysical3 | numeric | **NEW** - Physical item 3 (note: typo in schema) |
+| pysical4 | numeric | **NEW** - Physical item 4 (note: typo in schema) |
+| overall_adj_reason1 | text | **NEW** - Overall adjustment reason 1 |
+| overall_adj_reason2 | text | **NEW** - Overall adjustment reason 2 |
+| overall_adj_reason3 | text | **NEW** - Overall adjustment reason 3 |
+| overall_adj_reason4 | text | **NEW** - Overall adjustment reason 4 |
+| raw_detached_items | text | **NEW** - Raw detached items text field |
 | special_tax_code_1 | text | **NEW** - Special tax district code 1 (BRT: EXEMPT_SPECIAL_TAXCODE1, Micro: Sp Tax Cd1) |
 | special_tax_code_2 | text | **NEW** - Special tax district code 2 (BRT: EXEMPT_SPECIAL_TAXCODE2, Micro: Sp Tax Cd2) |
 | special_tax_code_3 | text | **NEW** - Special tax district code 3 (BRT: EXEMPT_SPECIAL_TAXCODE3, Micro: N/A) |
