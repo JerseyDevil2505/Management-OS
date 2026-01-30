@@ -1,9 +1,64 @@
-import React from 'react';
-import { interpretCodes } from '../../../lib/supabaseClient';
+import React, { useState, useEffect } from 'react';
+import { interpretCodes, supabase } from '../../../lib/supabaseClient';
 
 const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [] }) => {
   const subject = result.subject;
   const comps = result.comparables || [];
+
+  // Load garage thresholds from job settings
+  const [garageThresholds, setGarageThresholds] = useState({
+    one_car_max: 399,
+    two_car_max: 799,
+    three_car_max: 999
+  });
+
+  useEffect(() => {
+    const loadGarageThresholds = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('job_settings')
+          .select('setting_key, setting_value')
+          .eq('job_id', jobData.id)
+          .in('setting_key', ['garage_threshold_one_car_max', 'garage_threshold_two_car_max', 'garage_threshold_three_car_max']);
+
+        if (error || !data) return;
+
+        const newThresholds = { ...garageThresholds };
+        data.forEach(setting => {
+          const key = setting.setting_key.replace('garage_threshold_', '');
+          newThresholds[key] = parseInt(setting.setting_value, 10) || garageThresholds[key];
+        });
+        setGarageThresholds(newThresholds);
+      } catch (error) {
+        console.error('Error loading garage thresholds:', error);
+      }
+    };
+
+    if (jobData?.id) {
+      loadGarageThresholds();
+    }
+  }, [jobData?.id]);
+
+  // Garage category helpers
+  const getGarageCategory = (sqft) => {
+    if (!sqft || sqft === 0) return 0; // NONE
+    if (sqft <= garageThresholds.one_car_max) return 1; // ONE CAR
+    if (sqft <= garageThresholds.two_car_max) return 2; // TWO CAR
+    if (sqft <= garageThresholds.three_car_max) return 3; // THREE CAR
+    return 4; // MULTI CAR
+  };
+
+  const getGarageCategoryLabel = (category) => {
+    const labels = ['NONE', 'ONE CAR', 'TWO CAR', 'THREE CAR', 'MULTI CAR'];
+    return labels[category] || 'NONE';
+  };
+
+  const getGarageDisplayText = (sqft) => {
+    if (!sqft || sqft === 0) return 'None';
+    const category = getGarageCategory(sqft);
+    const label = getGarageCategoryLabel(category);
+    return `${label} (${sqft.toLocaleString()} SF)`;
+  };
 
   // Helper to render comp cells (shows all 5 even if empty)
   const renderCompCells = (renderFunc) => {
