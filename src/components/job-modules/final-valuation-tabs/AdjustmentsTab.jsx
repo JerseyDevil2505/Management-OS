@@ -853,36 +853,43 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         });
       }
 
-      // CRITICAL: Recalculate amenity areas using new code mappings
+      // OPTIONAL: Recalculate amenity areas using new code mappings
       // Both BRT and Microsystems now need recategorization for detached/misc/land items
+      // This is optional - configuration will save even if recalculation fails
       let recalcMessage = '';
-      console.log(`🔄 Triggering database recategorization for ${vendorType}...`);
 
-      const { data: { session } } = await supabase.auth.getSession();
-      const recalcResponse = await fetch(
-        `${supabase.supabaseUrl}/functions/v1/recalculate-amenities`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}`
-          },
-          body: JSON.stringify({
-            jobId: jobData.id,
-            vendorType: vendorType,
-            codeConfig: codeConfig
-          })
+      try {
+        console.log(`🔄 Triggering database recategorization for ${vendorType}...`);
+
+        const { data: { session } } = await supabase.auth.getSession();
+        const recalcResponse = await fetch(
+          `${supabase.supabaseUrl}/functions/v1/recalculate-amenities`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session?.access_token}`
+            },
+            body: JSON.stringify({
+              jobId: jobData.id,
+              vendorType: vendorType,
+              codeConfig: codeConfig
+            })
+          }
+        );
+
+        if (!recalcResponse.ok) {
+          const errorData = await recalcResponse.json().catch(() => ({}));
+          throw new Error(`Recalculation failed: ${errorData.error || 'Edge function error'}`);
         }
-      );
 
-      if (!recalcResponse.ok) {
-        const errorData = await recalcResponse.json().catch(() => ({}));
-        throw new Error(`Recalculation failed: ${errorData.error || 'Edge function error'}`);
+        const recalcResult = await recalcResponse.json();
+        console.log('✅ Recategorization complete:', recalcResult);
+        recalcMessage = `\n\n${recalcResult.updatedCount} properties updated with new code mappings.`;
+      } catch (recalcError) {
+        console.error('⚠️ Recalculation failed (non-blocking):', recalcError);
+        recalcMessage = '\n\n⚠️ Property recategorization failed. You may need to re-upload the data file to apply code mappings.';
       }
-
-      const recalcResult = await recalcResponse.json();
-      console.log('✅ Recategorization complete:', recalcResult);
-      recalcMessage = `\n\n${recalcResult.updatedCount} properties updated with new code mappings.`;
 
       alert(`Code configuration saved!${newAdjustments.length > 0 ? ` ${newAdjustments.length} new adjustment row(s) added to grid.` : ''}${recalcMessage}`);
 
