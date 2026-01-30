@@ -628,6 +628,11 @@ export class BRTProcessor {
       pole_barn_area: this.extractPoleBarnAreaFromConfig(rawRecord),
       ac_area: this.extractAcArea(rawRecord),
 
+      // Dynamic adjustments from code configuration
+      miscellaneous: this.extractMiscellaneousFromConfig(rawRecord),
+      land_positive: this.extractLandPositiveFromConfig(rawRecord),
+      land_negative: this.extractLandNegativeFromConfig(rawRecord),
+
       // BRT Detached structure detail columns (DETACHEDCODE_1-11, DETACHEDDCSIZE_1-11, DETACHEDNC_1-11)
       detachedcode_1: this.preserveStringValue(rawRecord.DETACHEDCODE_1),
       detacheddcsize_1: this.parseNumeric(rawRecord.DETACHEDDCSIZE_1),
