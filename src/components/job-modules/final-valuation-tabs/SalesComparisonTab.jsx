@@ -1314,24 +1314,51 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         break;
 
       case 'basement':
-        if (vendorType === 'Microsystems') {
-          subjectValue = readMicroValue(subject, 'basement') || 0;
-          compValue = readMicroValue(comp, 'basement') || 0;
-        }
+        // Use basement_area column (exists for both BRT and Microsystems)
+        subjectValue = subject.basement_area > 0 ? 1 : 0;
+        compValue = comp.basement_area > 0 ? 1 : 0;
+        break;
+
+      case 'finished_basement':
+        // Use fin_basement_area column
+        subjectValue = subject.fin_basement_area > 0 ? 1 : 0;
+        compValue = comp.fin_basement_area > 0 ? 1 : 0;
         break;
 
       case 'deck':
-        if (vendorType === 'Microsystems') {
-          subjectValue = readMicroValue(subject, 'deck') || 0;
-          compValue = readMicroValue(comp, 'deck') || 0;
-        }
+        // Use deck_area column (exists for both vendors)
+        subjectValue = subject.deck_area > 0 ? 1 : 0;
+        compValue = comp.deck_area > 0 ? 1 : 0;
         break;
 
       case 'patio':
-        if (vendorType === 'Microsystems') {
-          subjectValue = readMicroValue(subject, 'patio') || 0;
-          compValue = readMicroValue(comp, 'patio') || 0;
-        }
+        // Use patio_area column
+        subjectValue = subject.patio_area > 0 ? 1 : 0;
+        compValue = comp.patio_area > 0 ? 1 : 0;
+        break;
+
+      case 'pool':
+        // Use pool_area column
+        subjectValue = subject.pool_area > 0 ? 1 : 0;
+        compValue = comp.pool_area > 0 ? 1 : 0;
+        break;
+
+      case 'open_porch':
+        // Use open_porch_area column
+        subjectValue = subject.open_porch_area > 0 ? 1 : 0;
+        compValue = comp.open_porch_area > 0 ? 1 : 0;
+        break;
+
+      case 'enclosed_porch':
+        // Use enclosed_porch_area column
+        subjectValue = subject.enclosed_porch_area > 0 ? 1 : 0;
+        compValue = comp.enclosed_porch_area > 0 ? 1 : 0;
+        break;
+
+      case 'pole_barn':
+        // Use pole_barn_area column
+        subjectValue = subject.pole_barn_area > 0 ? 1 : 0;
+        compValue = comp.pole_barn_area > 0 ? 1 : 0;
         break;
 
       case 'lot_size_ff':
@@ -1372,9 +1399,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         break;
 
       case 'ac':
-        // Use area if available, otherwise boolean
-        subjectValue = subject.ac_area || (subject.asset_ac ? 1 : 0);
-        compValue = comp.ac_area || (comp.asset_ac ? 1 : 0);
+        // AC is a boolean (YES/NO) adjustment based on ac_area > 0
+        subjectValue = (subject.ac_area && subject.ac_area > 0) ? 1 : 0;
+        compValue = (comp.ac_area && comp.ac_area > 0) ? 1 : 0;
         break;
 
       default:
@@ -1387,7 +1414,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
     // Rule: Subject Better = ADD to comp price; Comp Better = SUBTRACT from comp price
     switch (adjustmentType) {
       case 'flat':
-        return difference > 0 ? adjustmentValue : (difference < 0 ? -adjustmentValue : 0);
+        // Flat adjustments handle lot sizes (multiply by difference) AND boolean items (binary yes/no)
+        // Check if this is a lot size adjustment that should multiply by difference
+        if (adjustmentDef.adjustment_id.includes('lot_size')) {
+          // Lot size: multiply difference by rate per unit
+          return difference * adjustmentValue;
+        } else {
+          // Boolean amenities: binary adjustment (has it or doesn't)
+          return difference > 0 ? adjustmentValue : (difference < 0 ? -adjustmentValue : 0);
+        }
 
       case 'per_sqft':
         return difference * adjustmentValue;
