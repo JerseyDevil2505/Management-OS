@@ -588,8 +588,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         // Check if this property has the code
         const hasCode = () => {
           if (vendorType === 'Microsystems') {
-            // Land positive/negative: check overall_adj_reason1-4
+            // MICROSYSTEMS COLUMN MAPPING:
+            // - Detached items (barn, pole_barn, stable) → detached_item_code1-4, detachedbuilding1-4
+            // - Miscellaneous items → misc_item_1-3
+            // - Land adjustments (positive/negative) → overall_adj_reason1-4
+
             if (adj.adjustment_id.startsWith('land_positive_') || adj.adjustment_id.startsWith('land_negative_')) {
+              // Land adjustments: check overall_adj_reason1-4
               for (let i = 1; i <= 4; i++) {
                 const reasonCode = prop[`overall_adj_reason${i}`];
                 if (reasonCode && normalizeCode(reasonCode) === targetCode) {
@@ -597,8 +602,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 }
               }
             }
-            // Miscellaneous: check detached_item_code1-4, detachedbuilding1-4, misc_item_1-3
-            else if (adj.adjustment_id.startsWith('miscellaneous_')) {
+            else if (adj.adjustment_id.startsWith('barn_') || adj.adjustment_id.startsWith('pole_barn_') || adj.adjustment_id.startsWith('stable_')) {
+              // Detached items: check detached_item_code1-4, detachedbuilding1-4
               for (let i = 1; i <= 4; i++) {
                 const itemCode = prop[`detached_item_code${i}`];
                 if (itemCode && normalizeCode(itemCode) === targetCode) {
@@ -611,6 +616,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   return true;
                 }
               }
+            }
+            else if (adj.adjustment_id.startsWith('miscellaneous_')) {
+              // Miscellaneous items: check misc_item_1-3 ONLY
               for (let i = 1; i <= 3; i++) {
                 const miscCode = prop[`misc_item_${i}`];
                 if (miscCode && normalizeCode(miscCode) === targetCode) {
