@@ -345,7 +345,9 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         autoPopulateCodeConfig();
       }
     } catch (error) {
-      console.error('Error loading code config:', error);
+      // Silent error handling - don't interfere with job loading
+      console.warn('⚠️ Code config loading error (non-critical):', error.message || error);
+      // Don't throw or set error state - this is optional configuration data
     }
   };
 
