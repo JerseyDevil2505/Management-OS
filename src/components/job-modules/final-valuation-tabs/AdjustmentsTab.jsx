@@ -256,7 +256,10 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         'adjustment_codes_miscellaneous',
         'adjustment_codes_land_positive',
         'adjustment_codes_land_negative',
-        'adjustment_codes_version' // Track code definition version
+        'adjustment_codes_version', // Track code definition version
+        'garage_threshold_one_car_max',
+        'garage_threshold_two_car_max',
+        'garage_threshold_three_car_max'
       ];
 
       const { data, error } = await supabase
