@@ -90,11 +90,11 @@ Deno.serve(async (req: Request) => {
           }
 
           if (area > 0) {
-            if (detGarageCodes.includes(code)) detGarageArea += area;
-            else if (poolCodes.includes(code)) poolArea += area;
-            else if (barnCodes.includes(code)) barnArea += area;
-            else if (stableCodes.includes(code)) stableArea += area;
-            else if (poleBarnCodes.includes(code)) poleBarnArea += area;
+            if (codeMatches(code, detGarageCodes)) detGarageArea += area;
+            else if (codeMatches(code, poolCodes)) poolArea += area;
+            else if (codeMatches(code, barnCodes)) barnArea += area;
+            else if (codeMatches(code, stableCodes)) stableArea += area;
+            else if (codeMatches(code, poleBarnCodes)) poleBarnArea += area;
           }
         }
 
@@ -112,11 +112,11 @@ Deno.serve(async (req: Request) => {
           }
 
           if (area > 0) {
-            if (detGarageCodes.includes(code)) detGarageArea += area;
-            else if (poolCodes.includes(code)) poolArea += area;
-            else if (barnCodes.includes(code)) barnArea += area;
-            else if (stableCodes.includes(code)) stableArea += area;
-            else if (poleBarnCodes.includes(code)) poleBarnArea += area;
+            if (codeMatches(code, detGarageCodes)) detGarageArea += area;
+            else if (codeMatches(code, poolCodes)) poolArea += area;
+            else if (codeMatches(code, barnCodes)) barnArea += area;
+            else if (codeMatches(code, stableCodes)) stableArea += area;
+            else if (codeMatches(code, poleBarnCodes)) poleBarnArea += area;
           }
         }
 
@@ -159,11 +159,11 @@ Deno.serve(async (req: Request) => {
           
           if (!code || !area || area <= 0) continue;
 
-          if (detGarageCodes.includes(code)) detGarageArea += area;
-          else if (poolCodes.includes(code)) poolArea += area;
-          else if (barnCodes.includes(code)) barnArea += area;
-          else if (stableCodes.includes(code)) stableArea += area;
-          else if (poleBarnCodes.includes(code)) poleBarnArea += area;
+          if (codeMatches(code, detGarageCodes)) detGarageArea += area;
+          else if (codeMatches(code, poolCodes)) poolArea += area;
+          else if (codeMatches(code, barnCodes)) barnArea += area;
+          else if (codeMatches(code, stableCodes)) stableArea += area;
+          else if (codeMatches(code, poleBarnCodes)) poleBarnArea += area;
         }
 
         // Process attached items (attachedcode_1-15)
@@ -173,11 +173,11 @@ Deno.serve(async (req: Request) => {
           
           if (!code || !area || area <= 0) continue;
 
-          if (garageCodes.includes(code)) garageArea += area;
-          else if (deckCodes.includes(code)) deckArea += area;
-          else if (patioCodes.includes(code)) patioArea += area;
-          else if (openPorchCodes.includes(code)) openPorchArea += area;
-          else if (enclosedPorchCodes.includes(code)) enclosedPorchArea += area;
+          if (codeMatches(code, garageCodes)) garageArea += area;
+          else if (codeMatches(code, deckCodes)) deckArea += area;
+          else if (codeMatches(code, patioCodes)) patioArea += area;
+          else if (codeMatches(code, openPorchCodes)) openPorchArea += area;
+          else if (codeMatches(code, enclosedPorchCodes)) enclosedPorchArea += area;
         }
 
         // Set update values
