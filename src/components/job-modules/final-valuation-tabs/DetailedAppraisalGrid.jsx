@@ -57,13 +57,19 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         });
         setGarageThresholds(newThresholds);
       } catch (error) {
-        console.error('Error loading garage thresholds:', error);
+        // Silent error handling - don't interfere with job loading
+        console.warn('⚠️ Garage thresholds loading error (non-critical):', error.message || error);
       }
     };
 
     if (jobData?.id) {
-      loadGarageThresholds();
+      // Defer slightly to avoid interfering with initial property batch loading
+      const timer = setTimeout(() => {
+        loadGarageThresholds();
+      }, 1000);
+      return () => clearTimeout(timer);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id]);
 
   // Garage category helpers
