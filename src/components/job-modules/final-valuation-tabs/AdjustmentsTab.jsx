@@ -896,7 +896,13 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       console.log('✅ Code configuration saved successfully');
       console.log('📌 Dynamic adjustments will now work in CME evaluations');
 
-      alert(`Code configuration saved!${newAdjustments.length > 0 ? ` ${newAdjustments.length} new adjustment row(s) added to grid.` : ''}\n\n✓ Dynamic adjustments are now active and will be applied during evaluations.`);
+      const messages = [];
+      if (newAdjustments.length > 0) messages.push(`${newAdjustments.length} new adjustment row(s) added`);
+      if (rowsToDelete.length > 0) messages.push(`${rowsToDelete.length} adjustment row(s) removed`);
+
+      const summary = messages.length > 0 ? `\n\n${messages.join(', ')}.` : '';
+
+      alert(`Code configuration saved!${summary}\n\n✓ Dynamic adjustments are now active and will be applied during evaluations.`);
 
       // Dismiss auto-populate notice and reset flag after saving
       setShowAutoPopulateNotice(false);
