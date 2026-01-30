@@ -547,7 +547,9 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       console.log('📦 Final categoryCodes:', categoryCodes);
       setAvailableCodes(categoryCodes);
     } catch (error) {
-      console.error('Error loading available codes:', error);
+      // Silent error handling - don't interfere with job loading
+      console.warn('⚠️ Available codes loading error (non-critical):', error.message || error);
+      setAvailableCodes({}); // Set empty object on error
     } finally {
       setIsLoadingCodes(false);
     }
