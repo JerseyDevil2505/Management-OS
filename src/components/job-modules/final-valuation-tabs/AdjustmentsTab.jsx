@@ -747,7 +747,8 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       };
 
       // Attributes that create individual rows per code (using code description as name)
-      const individualRowAttributes = ['miscellaneous', 'land_positive', 'land_negative'];
+      // Detached items (barn, pole_barn, stable), miscellaneous, and land adjustments all create one row per code
+      const individualRowAttributes = ['barn', 'pole_barn', 'stable', 'miscellaneous', 'land_positive', 'land_negative'];
 
       const newAdjustments = [];
       let maxSortOrder = Math.max(...adjustments.map(a => a.sort_order || 0), 0);
@@ -834,14 +835,17 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       const rowsToDelete = [];
       adjustments.forEach(adj => {
         if (!adj.is_default) {
-          // Check if this is a dynamic adjustment row
-          const isDynamicRow = adj.adjustment_id.startsWith('miscellaneous_') ||
+          // Check if this is a dynamic adjustment row (detached items, miscellaneous, or land adjustments)
+          const isDynamicRow = adj.adjustment_id.startsWith('barn_') ||
+                               adj.adjustment_id.startsWith('pole_barn_') ||
+                               adj.adjustment_id.startsWith('stable_') ||
+                               adj.adjustment_id.startsWith('miscellaneous_') ||
                                adj.adjustment_id.startsWith('land_positive_') ||
                                adj.adjustment_id.startsWith('land_negative_');
 
           if (isDynamicRow) {
             // Extract the type and code from adjustment_id
-            const match = adj.adjustment_id.match(/^(miscellaneous|land_positive|land_negative)_(.+)$/);
+            const match = adj.adjustment_id.match(/^(barn|pole_barn|stable|miscellaneous|land_positive|land_negative)_(.+)$/);
             if (match) {
               const [, type, code] = match;
               const selectedCodes = codeConfig[type] || [];
@@ -849,6 +853,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
               // If this code is NOT in the current config, mark for deletion
               if (!selectedCodes.includes(code)) {
                 rowsToDelete.push(adj.adjustment_id);
+                console.log(`🗑️ Marking for deletion: ${adj.adjustment_id} (code "${code}" not in ${type} config)`);
               }
             }
           }
