@@ -1350,18 +1350,34 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                       // Check if codes are saved for this attribute type
                       if (adj.adjustment_id.includes('miscellaneous_')) {
                         const code = adj.adjustment_id.replace('miscellaneous_', '');
-                        return (codeConfig.miscellaneous || []).includes(code);
+                        const isConfigured = (codeConfig.miscellaneous || []).includes(code);
+                        if (!isConfigured) {
+                          console.log(`⚠️ Hiding ${adj.adjustment_id} - code "${code}" not in saved configuration`);
+                        }
+                        return isConfigured;
                       }
                       if (adj.adjustment_id.includes('land_positive_')) {
                         const code = adj.adjustment_id.replace('land_positive_', '');
-                        return (codeConfig.land_positive || []).includes(code);
+                        const isConfigured = (codeConfig.land_positive || []).includes(code);
+                        if (!isConfigured) {
+                          console.log(`⚠️ Hiding ${adj.adjustment_id} - code "${code}" not in saved configuration`);
+                        }
+                        return isConfigured;
                       }
                       if (adj.adjustment_id.includes('land_negative_')) {
                         const code = adj.adjustment_id.replace('land_negative_', '');
-                        return (codeConfig.land_negative || []).includes(code);
+                        const isConfigured = (codeConfig.land_negative || []).includes(code);
+                        if (!isConfigured) {
+                          console.log(`⚠️ Hiding ${adj.adjustment_id} - code "${code}" not in saved configuration`);
+                        }
+                        return isConfigured;
                       }
                       if (['barn', 'stable', 'pole_barn'].includes(adj.adjustment_id)) {
-                        return (codeConfig[adj.adjustment_id] || []).length > 0;
+                        const isConfigured = (codeConfig[adj.adjustment_id] || []).length > 0;
+                        if (!isConfigured) {
+                          console.log(`⚠️ Hiding ${adj.adjustment_id} - no codes in saved configuration`);
+                        }
+                        return isConfigured;
                       }
                     }
 
