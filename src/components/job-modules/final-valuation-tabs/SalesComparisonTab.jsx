@@ -1383,14 +1383,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
       case 'exterior_condition':
         // Use user-configured condition hierarchy from Attribute Cards
-        subjectValue = getConditionRank(subject.asset_ext_cond, 'exterior');
-        compValue = getConditionRank(comp.asset_ext_cond, 'exterior');
+        // Translate condition code to full name (e.g., "G" → "GOOD")
+        const subjectExtCondName = interpretCodes.getExteriorConditionName(subject, codeDefinitions, vendorType);
+        const compExtCondName = interpretCodes.getExteriorConditionName(comp, codeDefinitions, vendorType);
+        subjectValue = getConditionRank(subjectExtCondName, 'exterior');
+        compValue = getConditionRank(compExtCondName, 'exterior');
         break;
 
       case 'interior_condition':
         // Use user-configured condition hierarchy from Attribute Cards
-        subjectValue = getConditionRank(subject.asset_int_cond, 'interior');
-        compValue = getConditionRank(comp.asset_int_cond, 'interior');
+        // Translate condition code to full name (e.g., "G" → "GOOD")
+        const subjectIntCondName = interpretCodes.getInteriorConditionName(subject, codeDefinitions, vendorType);
+        const compIntCondName = interpretCodes.getInteriorConditionName(comp, codeDefinitions, vendorType);
+        subjectValue = getConditionRank(subjectIntCondName, 'interior');
+        compValue = getConditionRank(compIntCondName, 'interior');
         break;
 
       case 'fireplaces':
