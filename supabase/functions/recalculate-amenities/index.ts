@@ -135,7 +135,33 @@ Deno.serve(async (req: Request) => {
           const code = property[`detachedbuilding${i}`];
           if (!code) continue;
 
-          // Calculate area from widthn/depthn
+          // Check for miscellaneous codes first
+          if (codeMatches(code, miscCodes)) {
+            const normalizedCode = String(code).replace(/^0+/, '') || '0';
+            if (!miscFound.includes(normalizedCode)) {
+              miscFound.push(normalizedCode);
+            }
+            continue;
+          }
+
+          // Check for land adjustment codes
+          if (codeMatches(code, landPosCodes)) {
+            const normalizedCode = String(code).replace(/^0+/, '') || '0';
+            if (!landPosFound.includes(normalizedCode)) {
+              landPosFound.push(normalizedCode);
+            }
+            continue;
+          }
+
+          if (codeMatches(code, landNegCodes)) {
+            const normalizedCode = String(code).replace(/^0+/, '') || '0';
+            if (!landNegFound.includes(normalizedCode)) {
+              landNegFound.push(normalizedCode);
+            }
+            continue;
+          }
+
+          // Calculate area from widthn/depthn for area-based attributes
           let area = 0;
           const width = property[`widthn${i}`];
           const depth = property[`depthn${i}`];
