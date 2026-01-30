@@ -811,6 +811,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
             if (!existingAdj) {
               maxSortOrder += 1;
               newAdjustments.push({
+                id: crypto.randomUUID(),
                 job_id: jobData.id,
                 adjustment_id: attr.id,
                 adjustment_name: attributeLabels[attr.id] || attr.name,
