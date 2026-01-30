@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
 
-const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) => {
+const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, isJobContainerLoading = false }) => {
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
   const resultsRef = React.useRef(null);
@@ -139,13 +139,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       }
     };
 
-    // Defer to avoid interfering with initial property batch loading
-    const timer = setTimeout(() => {
+    // Wait for property loading to complete before loading settings
+    if (!isJobContainerLoading) {
       loadGarageThresholds();
-    }, 1000);
-    return () => clearTimeout(timer);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobData?.id]);
+  }, [jobData?.id, isJobContainerLoading]);
 
   // Load code configuration on mount
   useEffect(() => {
@@ -178,13 +177,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       }
     };
 
-    // Defer to avoid interfering with initial property batch loading
-    const timer = setTimeout(() => {
+    // Wait for property loading to complete before loading settings
+    if (!isJobContainerLoading) {
       loadCodeConfig();
-    }, 1500);
-    return () => clearTimeout(timer);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobData?.id]);
+  }, [jobData?.id, isJobContainerLoading]);
 
   // ==================== SALES CODE NORMALIZATION ====================
   const normalizeSalesCode = useCallback((code) => {
