@@ -643,8 +643,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           return hasCode() ? 'YES' : 'NONE';
         }
 
-        // Miscellaneous adjustments (pole barn, etc.): show YES/NONE if detected, or check area columns
-        if (adj.adjustment_id.startsWith('miscellaneous_')) {
+        // Detached items (pole barn, barn, stable): show YES/NONE if detected, with area if available
+        if (adj.adjustment_id.startsWith('barn_') || adj.adjustment_id.startsWith('pole_barn_') || adj.adjustment_id.startsWith('stable_')) {
           // Debug logging for Block 1 Lot 3.02
           if (prop.property_block === '1' && prop.property_lot === '3.02') {
             console.log(`🔍 Checking ${adj.adjustment_name} (${adj.adjustment_id}) for Block 1 Lot 3.02`);
@@ -673,6 +673,11 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             return 'YES';
           }
           return 'NONE';
+        }
+
+        // Miscellaneous items: show YES/NONE (binary)
+        if (adj.adjustment_id.startsWith('miscellaneous_')) {
+          return hasCode() ? 'YES' : 'NONE';
         }
 
         // Legacy: For non-coded dynamic adjustments with area columns
