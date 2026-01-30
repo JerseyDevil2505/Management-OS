@@ -70,6 +70,29 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     // Anything above three_car_max is MULTI CAR
   });
 
+  // Helper: Convert garage square footage to category number
+  const getGarageCategory = (sqft, thresholds = garageThresholds) => {
+    if (!sqft || sqft === 0) return 0; // NONE
+    if (sqft <= thresholds.one_car_max) return 1; // ONE CAR
+    if (sqft <= thresholds.two_car_max) return 2; // TWO CAR
+    if (sqft <= thresholds.three_car_max) return 3; // THREE CAR
+    return 4; // MULTI CAR
+  };
+
+  // Helper: Convert category number to display label
+  const getGarageCategoryLabel = (category) => {
+    const labels = ['NONE', 'ONE CAR', 'TWO CAR', 'THREE CAR', 'MULTI CAR'];
+    return labels[category] || 'NONE';
+  };
+
+  // Helper: Get garage display text with category and SF
+  const getGarageDisplayText = (sqft, thresholds = garageThresholds) => {
+    if (!sqft || sqft === 0) return 'None';
+    const category = getGarageCategory(sqft, thresholds);
+    const label = getGarageCategoryLabel(category);
+    return `${label} (${sqft.toLocaleString()} SF)`;
+  };
+
   // CME Price Brackets (matching OverallAnalysisTab)
   const CME_BRACKETS = [
     { min: 0, max: 99999, label: 'up to $99,999', shortLabel: '$0-$99,999', color: '#FF9999', textColor: 'black' },
