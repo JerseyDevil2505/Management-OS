@@ -578,20 +578,96 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       id: adj.adjustment_id,
       label: adj.adjustment_name,
       render: (prop) => {
-        // Map adjustment_id to property column
+        // Helper to normalize code for comparison
+        const normalizeCode = (c) => String(c).trim().replace(/^0+/, '').toUpperCase() || '0';
+
+        // Extract code from adjustment_id (e.g., "land_negative_BS" -> "BS")
+        const code = adj.adjustment_id.replace(/^(miscellaneous|land_positive|land_negative)_/, '');
+        const targetCode = normalizeCode(code);
+
+        // Check if this property has the code
+        const hasCode = () => {
+          if (vendorType === 'Microsystems') {
+            // Land positive/negative: check overall_adj_reason1-4
+            if (adj.adjustment_id.startsWith('land_positive_') || adj.adjustment_id.startsWith('land_negative_')) {
+              for (let i = 1; i <= 4; i++) {
+                const reasonCode = prop[`overall_adj_reason${i}`];
+                if (reasonCode && normalizeCode(reasonCode) === targetCode) {
+                  return true;
+                }
+              }
+            }
+            // Miscellaneous: check detached_item_code1-4, detachedbuilding1-4, misc_item_1-3
+            else if (adj.adjustment_id.startsWith('miscellaneous_')) {
+              for (let i = 1; i <= 4; i++) {
+                const itemCode = prop[`detached_item_code${i}`];
+                if (itemCode && normalizeCode(itemCode) === targetCode) {
+                  return true;
+                }
+              }
+              for (let i = 1; i <= 4; i++) {
+                const buildingCode = prop[`detachedbuilding${i}`];
+                if (buildingCode && normalizeCode(buildingCode) === targetCode) {
+                  return true;
+                }
+              }
+              for (let i = 1; i <= 3; i++) {
+                const miscCode = prop[`misc_item_${i}`];
+                if (miscCode && normalizeCode(miscCode) === targetCode) {
+                  return true;
+                }
+              }
+            }
+          } else {
+            // BRT: Check detachedcode_1-11 for all dynamic adjustments
+            for (let i = 1; i <= 11; i++) {
+              const detachedCode = prop[`detachedcode_${i}`];
+              if (detachedCode && normalizeCode(detachedCode) === targetCode) {
+                return true;
+              }
+            }
+          }
+          return false;
+        };
+
+        // Land adjustments: show YES/NONE (binary)
+        if (adj.adjustment_id.startsWith('land_positive_') || adj.adjustment_id.startsWith('land_negative_')) {
+          return hasCode() ? 'YES' : 'NONE';
+        }
+
+        // Miscellaneous adjustments (pole barn, etc.): show YES/NONE if detected, or check area columns
+        if (adj.adjustment_id.startsWith('miscellaneous_')) {
+          // First check if code exists in raw columns
+          if (hasCode()) {
+            // Try to get area from common column mappings
+            const areaColumnMap = {
+              'PBAR': 'pole_barn_area',
+              'BARN': 'barn_area',
+              'STBL': 'stable_area',
+              'SHED': 'shed_area'
+            };
+
+            const areaColumn = areaColumnMap[code.toUpperCase()];
+            if (areaColumn && prop[areaColumn] !== undefined && prop[areaColumn] !== null && prop[areaColumn] > 0) {
+              return `YES (${prop[areaColumn].toLocaleString()} SF)`;
+            }
+            return 'YES';
+          }
+          return 'NONE';
+        }
+
+        // Legacy: For non-coded dynamic adjustments with area columns
         const columnMap = {
           'barn': 'barn_area',
           'stable': 'stable_area',
           'pole_barn': 'pole_barn_area'
         };
 
-        // Check if this is a known attribute with a column
         const columnName = columnMap[adj.adjustment_id];
         if (columnName && prop[columnName] !== undefined && prop[columnName] !== null) {
-          return prop[columnName] > 0 ? `${prop[columnName].toLocaleString()} SF` : 'None';
+          return prop[columnName] > 0 ? `YES (${prop[columnName].toLocaleString()} SF)` : 'NONE';
         }
 
-        // For miscellaneous items and others, show N/A for now
         return 'N/A';
       },
       adjustmentName: adj.adjustment_name,
