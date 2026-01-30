@@ -605,8 +605,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     let value = attr.render(subject);
 
                     // ONLY apply YES/NONE to specific amenity area attributes
+                    // Exclude garage_area and det_garage_area as they use category display (ONE CAR, TWO CAR, etc.)
                     const amenityAreaIds = [
-                      'garage_area', 'det_garage_area', 'deck_area', 'patio_area',
+                      'deck_area', 'patio_area',
                       'open_porch_area', 'enclosed_porch_area', 'pool_area',
                       'basement_area', 'fin_bsmt_area', 'ac_area'
                     ];
