@@ -182,36 +182,25 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     return attachedItemsFromColumns.includes(attributeId);
   };
 
-  // CRITICAL FIX: Only load data when this component is actually being used
-  // This prevents interference with initial job property loading
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  // TEMPORARY: All database loading DISABLED to prevent interference with job loading
+  // This will be re-enabled after confirming it's not causing the batch loading error
 
+  /*
   useEffect(() => {
-    // Don't auto-load - wait for user interaction or explicit trigger
-    if (!jobData?.id || hasLoadedOnce) return;
-
-    // Only load if we're being displayed (add a small delay to be safe)
-    const timer = setTimeout(() => {
-      setHasLoadedOnce(true);
-      loadAdjustments();
-      loadAvailableCodes();
-      loadCustomBrackets();
-    }, 3000); // Wait 3 seconds after job loads
-
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!jobData?.id) return;
+    loadAdjustments();
+    loadAvailableCodes();
+    loadCustomBrackets();
   }, [jobData?.id]);
 
-  // Load code config AFTER available codes are loaded
   useEffect(() => {
-    if (!jobData?.id || !availableCodes || isLoadingCodes || !hasLoadedOnce) return;
-
+    if (!jobData?.id || !availableCodes || isLoadingCodes) return;
     const codesLoaded = Object.values(availableCodes).some(arr => arr && arr.length > 0);
     if (codesLoaded) {
       loadCodeConfig();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobData?.id, availableCodes, isLoadingCodes, hasLoadedOnce]);
+  }, [jobData?.id, availableCodes, isLoadingCodes]);
+  */
 
   const loadCustomBrackets = async () => {
     try {
