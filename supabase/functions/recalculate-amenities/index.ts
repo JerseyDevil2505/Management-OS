@@ -1,5 +1,28 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
+// Helper to check if a raw code matches any configured codes
+// Handles both formats: "02" matches "2 - CONC PATIO" or just "2"
+function codeMatches(rawCode: string | null, configuredCodes: string[]): boolean {
+  if (!rawCode || !configuredCodes || configuredCodes.length === 0) {
+    return false;
+  }
+
+  // Normalize raw code: remove leading zeros and trim
+  const normalizedRaw = String(rawCode).replace(/^0+/, '') || '0';
+
+  return configuredCodes.some(configCode => {
+    if (!configCode) return false;
+
+    // Extract just the code portion before " - " if it exists
+    const codePart = String(configCode).split(' - ')[0].trim();
+
+    // Normalize configured code: remove leading zeros
+    const normalizedConfig = codePart.replace(/^0+/, '') || '0';
+
+    return normalizedRaw === normalizedConfig;
+  });
+}
+
 Deno.serve(async (req: Request) => {
   try {
     // Parse request body
