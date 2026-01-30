@@ -637,6 +637,17 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
         // Miscellaneous adjustments (pole barn, etc.): show YES/NONE if detected, or check area columns
         if (adj.adjustment_id.startsWith('miscellaneous_')) {
+          // Debug logging for Block 1 Lot 3.02
+          if (prop.property_block === '1' && prop.property_lot === '3.02') {
+            console.log(`🔍 Checking ${adj.adjustment_name} (${adj.adjustment_id}) for Block 1 Lot 3.02`);
+            console.log('  Code to find:', targetCode);
+            console.log('  detached_item_code1:', prop.detached_item_code1);
+            console.log('  detached_item_code2:', prop.detached_item_code2);
+            console.log('  detached_item_code3:', prop.detached_item_code3);
+            console.log('  detached_item_code4:', prop.detached_item_code4);
+            console.log('  hasCode():', hasCode());
+          }
+
           // First check if code exists in raw columns
           if (hasCode()) {
             // Try to get area from common column mappings
