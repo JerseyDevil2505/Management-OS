@@ -224,7 +224,9 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       if (error) throw error;
       setCustomBrackets(data || []);
     } catch (error) {
-      console.error('Error loading custom brackets:', error);
+      // Silent error handling - don't interfere with job loading
+      console.warn('⚠️ Custom brackets loading error (non-critical):', error.message || error);
+      setCustomBrackets([]); // Set empty array on error
     }
   };
 
