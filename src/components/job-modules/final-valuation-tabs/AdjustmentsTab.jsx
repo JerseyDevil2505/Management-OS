@@ -182,25 +182,33 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     return attachedItemsFromColumns.includes(attributeId);
   };
 
-  // TEMPORARY: All database loading DISABLED to prevent interference with job loading
-  // This will be re-enabled after confirming it's not causing the batch loading error
-
-  /*
+  // Load adjustments and custom brackets - DEFERRED to avoid interfering with property batch loading
   useEffect(() => {
     if (!jobData?.id) return;
-    loadAdjustments();
-    loadAvailableCodes();
-    loadCustomBrackets();
+
+    const timer = setTimeout(() => {
+      loadAdjustments();
+      loadAvailableCodes();
+      loadCustomBrackets();
+    }, 2000); // Wait 2 seconds after job loads
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id]);
 
+  // Load code config AFTER available codes are loaded
   useEffect(() => {
     if (!jobData?.id || !availableCodes || isLoadingCodes) return;
+
     const codesLoaded = Object.values(availableCodes).some(arr => arr && arr.length > 0);
     if (codesLoaded) {
-      loadCodeConfig();
+      const timer = setTimeout(() => {
+        loadCodeConfig();
+      }, 500);
+      return () => clearTimeout(timer);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id, availableCodes, isLoadingCodes]);
-  */
 
   const loadCustomBrackets = async () => {
     try {
