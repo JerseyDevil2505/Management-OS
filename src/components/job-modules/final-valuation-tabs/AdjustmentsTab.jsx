@@ -261,9 +261,9 @@ const AdjustmentsTab = ({ jobData = {} }) => {
   };
 
   const loadCodeConfig = async () => {
-    // Safety check: Don't run if availableCodes isn't ready
-    if (!availableCodes || Object.keys(availableCodes).length === 0) {
-      console.log('⏳ Skipping loadCodeConfig - availableCodes not yet loaded');
+    // Safety check: Don't run if availableCodes isn't ready or jobData is missing
+    if (!jobData?.id || !availableCodes || typeof availableCodes !== 'object') {
+      console.log('⏳ Skipping loadCodeConfig - prerequisites not ready');
       return;
     }
 
