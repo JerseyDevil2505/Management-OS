@@ -587,7 +587,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
       <div className="bg-blue-600 px-4 py-3">
-        <h4 className="font-semibold text-white">Detailed Evaluation</h4>
+        <div className="flex items-center justify-between">
+          <h4 className="font-semibold text-white">Detailed Evaluation</h4>
+          <div className="text-sm text-blue-100">
+            <span className="font-medium">Adjustment Bracket:</span>{' '}
+            <span className="font-semibold text-white">{getBracketLabel()}</span>
+          </div>
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full text-xs border-collapse">
