@@ -90,6 +90,50 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
   const vendorType = jobData?.vendor_type || 'BRT';
 
+  // ==================== GARAGE THRESHOLDS ====================
+  const [garageThresholds, setGarageThresholds] = useState({
+    one_car_max: 399,
+    two_car_max: 799,
+    three_car_max: 999
+  });
+
+  // Helper: Convert garage square footage to category number
+  const getGarageCategory = useCallback((sqft) => {
+    if (!sqft || sqft === 0) return 0; // NONE
+    if (sqft <= garageThresholds.one_car_max) return 1; // ONE CAR
+    if (sqft <= garageThresholds.two_car_max) return 2; // TWO CAR
+    if (sqft <= garageThresholds.three_car_max) return 3; // THREE CAR
+    return 4; // MULTI CAR
+  }, [garageThresholds]);
+
+  // Load garage thresholds on mount
+  useEffect(() => {
+    const loadGarageThresholds = async () => {
+      if (!jobData?.id) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('job_settings')
+          .select('setting_key, setting_value')
+          .eq('job_id', jobData.id)
+          .in('setting_key', ['garage_threshold_one_car_max', 'garage_threshold_two_car_max', 'garage_threshold_three_car_max']);
+
+        if (error || !data) return;
+
+        const newThresholds = { ...garageThresholds };
+        data.forEach(setting => {
+          const key = setting.setting_key.replace('garage_threshold_', '');
+          newThresholds[key] = parseInt(setting.setting_value, 10) || garageThresholds[key];
+        });
+        setGarageThresholds(newThresholds);
+      } catch (error) {
+        console.error('Error loading garage thresholds:', error);
+      }
+    };
+
+    loadGarageThresholds();
+  }, [jobData?.id]);
+
   // ==================== SALES CODE NORMALIZATION ====================
   const normalizeSalesCode = useCallback((code) => {
     if (code === null || code === undefined || code === '' || code === '00') return '';
