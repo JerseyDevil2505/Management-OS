@@ -814,15 +814,16 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
                 const adjustmentId = `${attr.id}_${codeValue}`;
                 const existingAdj = adjustments.find(adj => adj.adjustment_id === adjustmentId);
 
-                if (!existingAdj) {
-                  maxSortOrder += 1;
-                  // Convert description to title case (lowercase first, then capitalize each word)
-                  const titleCaseName = codeObj.description
-                    .toLowerCase()
-                    .split(' ')
-                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                    .join(' ');
+                // Convert description to title case (lowercase first, then capitalize each word)
+                const titleCaseName = codeObj.description
+                  .toLowerCase()
+                  .split(' ')
+                  .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                  .join(' ');
 
+                if (!existingAdj) {
+                  // Create new adjustment row
+                  maxSortOrder += 1;
                   newAdjustments.push({
                     id: crypto.randomUUID(),
                     job_id: jobData.id,
@@ -842,6 +843,12 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
                     bracket_7: 0,
                     bracket_8: 0,
                     bracket_9: 0
+                  });
+                } else if (existingAdj.adjustment_name !== titleCaseName) {
+                  // Update existing adjustment if name changed (e.g., "BUSY STREET" -> "Busy Street")
+                  newAdjustments.push({
+                    ...existingAdj,
+                    adjustment_name: titleCaseName
                   });
                 }
               }
