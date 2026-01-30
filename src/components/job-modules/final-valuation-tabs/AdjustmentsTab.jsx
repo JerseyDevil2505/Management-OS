@@ -192,12 +192,17 @@ const AdjustmentsTab = ({ jobData = {} }) => {
   }, [jobData?.id]);
 
   // Load code config AFTER available codes are loaded (to prevent timing issues)
+  // DEFERRED: Wait 2 seconds to avoid interfering with initial property batch loading
   useEffect(() => {
     if (!jobData?.id || !availableCodes || isLoadingCodes) return;
 
     const codesLoaded = Object.values(availableCodes).some(arr => arr && arr.length > 0);
     if (codesLoaded) {
-      loadCodeConfig();
+      const timer = setTimeout(() => {
+        loadCodeConfig();
+      }, 2000); // Defer by 2 seconds to allow property batches to complete
+
+      return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id, availableCodes, isLoadingCodes]);
