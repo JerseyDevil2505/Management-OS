@@ -953,6 +953,56 @@ const AdjustmentsTab = ({ jobData = {} }) => {
             </p>
           </div>
 
+          {/* Garage Per-Car Thresholds */}
+          <div className="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <h4 className="text-sm font-semibold text-gray-900 mb-3">Garage Per-Car Thresholds (Square Feet)</h4>
+            <p className="text-xs text-gray-600 mb-3">
+              Configure how garage square footage is categorized into car count categories. These thresholds apply to both attached garages and detached garages.
+            </p>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  One Car Maximum
+                </label>
+                <input
+                  type="number"
+                  value={garageThresholds.one_car_max}
+                  onChange={(e) => setGarageThresholds(prev => ({ ...prev, one_car_max: parseInt(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">1-{garageThresholds.one_car_max} SF = ONE CAR</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Two Car Maximum
+                </label>
+                <input
+                  type="number"
+                  value={garageThresholds.two_car_max}
+                  onChange={(e) => setGarageThresholds(prev => ({ ...prev, two_car_max: parseInt(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">{garageThresholds.one_car_max + 1}-{garageThresholds.two_car_max} SF = TWO CAR</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Three Car Maximum
+                </label>
+                <input
+                  type="number"
+                  value={garageThresholds.three_car_max}
+                  onChange={(e) => setGarageThresholds(prev => ({ ...prev, three_car_max: parseInt(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">{garageThresholds.two_car_max + 1}-{garageThresholds.three_car_max} SF = THREE CAR</p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-600 mt-3">
+              <strong>Note:</strong> Garages over {garageThresholds.three_car_max} SF are categorized as <strong>MULTI CAR</strong>.
+              Category differences are multiplied by the adjustment value (e.g., ONE CAR to TWO CAR = 1 step × adjustment amount).
+            </p>
+          </div>
+
           {/* Auto-populate Notification */}
           {showAutoPopulateNotice && (
             <div className={`mb-6 rounded-lg p-4 ${
