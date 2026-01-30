@@ -90,6 +90,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
   const vendorType = jobData?.vendor_type || 'BRT';
 
+  // ==================== CODE CONFIGURATION ====================
+  const [codeConfig, setCodeConfig] = useState({
+    miscellaneous: [],
+    land_positive: [],
+    land_negative: []
+  });
+
   // ==================== GARAGE THRESHOLDS ====================
   const [garageThresholds, setGarageThresholds] = useState({
     one_car_max: 399,
