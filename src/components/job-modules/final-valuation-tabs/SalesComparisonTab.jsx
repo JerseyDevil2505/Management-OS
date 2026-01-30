@@ -1492,29 +1492,53 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
           // Helper: Check if code exists in property's raw code columns
           const hasCode = (property) => {
+            // Normalize function for code comparison
+            const normalizeCode = (c) => String(c).trim().replace(/^0+/, '').toUpperCase() || '0';
+            const targetCode = normalizeCode(code);
+
             if (vendorType === 'Microsystems') {
-              // Microsystems stores land/misc codes in overall_adj_reason1-4
-              for (let i = 1; i <= 4; i++) {
-                const reasonCode = property[`overall_adj_reason${i}`];
-                if (reasonCode) {
-                  // Normalize codes (remove leading zeros and trim)
-                  const normalized = String(reasonCode).trim().replace(/^0+/, '') || '0';
-                  const normalizedTarget = String(code).trim().replace(/^0+/, '') || '0';
-                  if (normalized.toUpperCase() === normalizedTarget.toUpperCase()) {
+              // MICROSYSTEMS COLUMN MAPPING:
+              // - Miscellaneous codes (pole barns, etc.) → detached_item_code1-4, detachedbuilding1-4, misc_item_1-3
+              // - Land positive/negative codes → overall_adj_reason1-4
+
+              if (adjustmentDef.adjustment_id.startsWith('miscellaneous_')) {
+                // Check detached_item_code1-4
+                for (let i = 1; i <= 4; i++) {
+                  const itemCode = property[`detached_item_code${i}`];
+                  if (itemCode && normalizeCode(itemCode) === targetCode) {
+                    return true;
+                  }
+                }
+                // Check detachedbuilding1-4
+                for (let i = 1; i <= 4; i++) {
+                  const buildingCode = property[`detachedbuilding${i}`];
+                  if (buildingCode && normalizeCode(buildingCode) === targetCode) {
+                    return true;
+                  }
+                }
+                // Check misc_item_1-3
+                for (let i = 1; i <= 3; i++) {
+                  const miscCode = property[`misc_item_${i}`];
+                  if (miscCode && normalizeCode(miscCode) === targetCode) {
+                    return true;
+                  }
+                }
+              } else if (adjustmentDef.adjustment_id.startsWith('land_positive_') ||
+                         adjustmentDef.adjustment_id.startsWith('land_negative_')) {
+                // Check overall_adj_reason1-4 for land adjustments
+                for (let i = 1; i <= 4; i++) {
+                  const reasonCode = property[`overall_adj_reason${i}`];
+                  if (reasonCode && normalizeCode(reasonCode) === targetCode) {
                     return true;
                   }
                 }
               }
             } else {
-              // BRT: Check detachedcode_1-11
+              // BRT: Check detachedcode_1-11 for all dynamic adjustments
               for (let i = 1; i <= 11; i++) {
                 const detachedCode = property[`detachedcode_${i}`];
-                if (detachedCode) {
-                  const normalized = String(detachedCode).replace(/^0+/, '') || '0';
-                  const normalizedTarget = String(code).replace(/^0+/, '') || '0';
-                  if (normalized === normalizedTarget) {
-                    return true;
-                  }
+                if (detachedCode && normalizeCode(detachedCode) === targetCode) {
+                  return true;
                 }
               }
             }
