@@ -1751,7 +1751,7 @@ export class BRTUpdater {
     for (let i = 1; i <= 15; i++) {
       const code = this.preserveStringValue(rawRecord[`ATTACHEDCODE_${i}`]);
       const area = this.parseNumeric(rawRecord[`ATTACHEDAREA_${i}`]) || 0;
-      if (code && area > 0 && garageCodes.includes(code)) {
+      if (code && area > 0 && this.codeMatches(code, garageCodes)) {
         totalArea += area;
       }
     }
@@ -1771,7 +1771,7 @@ export class BRTUpdater {
     for (let i = 1; i <= 15; i++) {
       const code = this.preserveStringValue(rawRecord[`ATTACHEDCODE_${i}`]);
       const area = this.parseNumeric(rawRecord[`ATTACHEDAREA_${i}`]) || 0;
-      if (code && area > 0 && deckCodes.includes(code)) {
+      if (code && area > 0 && this.codeMatches(code, deckCodes)) {
         totalArea += area;
       }
     }
@@ -1791,7 +1791,7 @@ export class BRTUpdater {
     for (let i = 1; i <= 15; i++) {
       const code = this.preserveStringValue(rawRecord[`ATTACHEDCODE_${i}`]);
       const area = this.parseNumeric(rawRecord[`ATTACHEDAREA_${i}`]) || 0;
-      if (code && area > 0 && patioCodes.includes(code)) {
+      if (code && area > 0 && this.codeMatches(code, patioCodes)) {
         totalArea += area;
       }
     }
@@ -1811,7 +1811,7 @@ export class BRTUpdater {
     for (let i = 1; i <= 15; i++) {
       const code = this.preserveStringValue(rawRecord[`ATTACHEDCODE_${i}`]);
       const area = this.parseNumeric(rawRecord[`ATTACHEDAREA_${i}`]) || 0;
-      if (code && area > 0 && openPorchCodes.includes(code)) {
+      if (code && area > 0 && this.codeMatches(code, openPorchCodes)) {
         totalArea += area;
       }
     }
@@ -1831,7 +1831,7 @@ export class BRTUpdater {
     for (let i = 1; i <= 15; i++) {
       const code = this.preserveStringValue(rawRecord[`ATTACHEDCODE_${i}`]);
       const area = this.parseNumeric(rawRecord[`ATTACHEDAREA_${i}`]) || 0;
-      if (code && area > 0 && enclosedPorchCodes.includes(code)) {
+      if (code && area > 0 && this.codeMatches(code, enclosedPorchCodes)) {
         totalArea += area;
       }
     }
@@ -1851,7 +1851,7 @@ export class BRTUpdater {
     for (let i = 1; i <= 11; i++) {
       const code = this.preserveStringValue(rawRecord[`DETACHEDCODE_${i}`]);
       const area = this.parseNumeric(rawRecord[`DETACHEDDCSIZE_${i}`]) || 0;
-      if (code && area > 0 && detGarageCodes.includes(code)) {
+      if (code && area > 0 && this.codeMatches(code, detGarageCodes)) {
         totalArea += area;
       }
     }
@@ -1871,7 +1871,7 @@ export class BRTUpdater {
     for (let i = 1; i <= 11; i++) {
       const code = this.preserveStringValue(rawRecord[`DETACHEDCODE_${i}`]);
       const area = this.parseNumeric(rawRecord[`DETACHEDDCSIZE_${i}`]) || 0;
-      if (code && area > 0 && poolCodes.includes(code)) {
+      if (code && area > 0 && this.codeMatches(code, poolCodes)) {
         totalArea += area;
       }
     }
@@ -1889,7 +1889,7 @@ export class BRTUpdater {
     for (let i = 1; i <= 11; i++) {
       const code = this.preserveStringValue(rawRecord[`DETACHEDCODE_${i}`]);
       const area = this.parseNumeric(rawRecord[`DETACHEDDCSIZE_${i}`]) || 0;
-      if (code && area > 0 && barnCodes.includes(code)) {
+      if (code && area > 0 && this.codeMatches(code, barnCodes)) {
         totalArea += area;
       }
     }
@@ -1907,7 +1907,7 @@ export class BRTUpdater {
     for (let i = 1; i <= 11; i++) {
       const code = this.preserveStringValue(rawRecord[`DETACHEDCODE_${i}`]);
       const area = this.parseNumeric(rawRecord[`DETACHEDDCSIZE_${i}`]) || 0;
-      if (code && area > 0 && stableCodes.includes(code)) {
+      if (code && area > 0 && this.codeMatches(code, stableCodes)) {
         totalArea += area;
       }
     }
@@ -1925,7 +1925,7 @@ export class BRTUpdater {
     for (let i = 1; i <= 11; i++) {
       const code = this.preserveStringValue(rawRecord[`DETACHEDCODE_${i}`]);
       const area = this.parseNumeric(rawRecord[`DETACHEDDCSIZE_${i}`]) || 0;
-      if (code && area > 0 && poleBarnCodes.includes(code)) {
+      if (code && area > 0 && this.codeMatches(code, poleBarnCodes)) {
         totalArea += area;
       }
     }
