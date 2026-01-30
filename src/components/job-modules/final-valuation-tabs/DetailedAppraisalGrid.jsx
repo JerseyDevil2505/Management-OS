@@ -377,9 +377,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       id: 'garage_area',
       label: 'Garage Area (Per Car)',
       render: (prop) => {
-        // Check if garage_area column exists (future)
-        if (prop.garage_area !== undefined) {
-          return prop.garage_area > 0 ? `${prop.garage_area.toLocaleString()} SF` : 'None';
+        // Use garage_area column with category display
+        if (prop.garage_area !== undefined && prop.garage_area !== null) {
+          return getGarageDisplayText(prop.garage_area);
         }
         // Fallback
         if (vendorType === 'BRT') {
@@ -395,9 +395,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       id: 'det_garage_area',
       label: 'Det Garage Area (Per Car)',
       render: (prop) => {
-        // Check if det_garage_area column exists (future)
-        if (prop.det_garage_area !== undefined) {
-          return prop.det_garage_area > 0 ? `${prop.det_garage_area.toLocaleString()} SF` : 'None';
+        // Use det_garage_area column with category display
+        if (prop.det_garage_area !== undefined && prop.det_garage_area !== null) {
+          return getGarageDisplayText(prop.det_garage_area);
         }
         // Fallback
         if (vendorType === 'BRT') {
