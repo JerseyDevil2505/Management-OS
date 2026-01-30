@@ -153,7 +153,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       if (!jobData?.id) return;
 
       try {
-        const { data, error } = await supabase
+        const { data, error} = await supabase
           .from('job_settings')
           .select('setting_key, setting_value')
           .eq('job_id', jobData.id)
@@ -173,11 +173,17 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         setCodeConfig(newConfig);
         console.log('✅ Loaded code configuration:', newConfig);
       } catch (error) {
-        console.error('Error loading code configuration:', error);
+        // Silent error handling - don't interfere with job loading
+        console.warn('⚠️ Code config loading error (non-critical):', error.message || error);
       }
     };
 
-    loadCodeConfig();
+    // Defer to avoid interfering with initial property batch loading
+    const timer = setTimeout(() => {
+      loadCodeConfig();
+    }, 1500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id]);
 
   // ==================== SALES CODE NORMALIZATION ====================
