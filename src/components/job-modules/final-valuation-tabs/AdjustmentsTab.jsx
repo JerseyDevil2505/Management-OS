@@ -193,8 +193,10 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
   // Load code config AFTER available codes are loaded (to prevent timing issues)
   useEffect(() => {
-    const codesLoaded = Object.values(availableCodes).some(arr => arr.length > 0);
-    if (jobData?.id && codesLoaded && !isLoadingCodes) {
+    if (!jobData?.id || !availableCodes || isLoadingCodes) return;
+
+    const codesLoaded = Object.values(availableCodes).some(arr => arr && arr.length > 0);
+    if (codesLoaded) {
       loadCodeConfig();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
