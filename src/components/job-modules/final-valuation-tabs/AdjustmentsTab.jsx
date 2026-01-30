@@ -62,6 +62,14 @@ const AdjustmentsTab = ({ jobData = {} }) => {
   });
   const [isLoadingCodes, setIsLoadingCodes] = useState(false);
 
+  // Garage per-car thresholds
+  const [garageThresholds, setGarageThresholds] = useState({
+    one_car_max: 399,
+    two_car_max: 799,
+    three_car_max: 999
+    // Anything above three_car_max is MULTI CAR
+  });
+
   // CME Price Brackets (matching OverallAnalysisTab)
   const CME_BRACKETS = [
     { min: 0, max: 99999, label: 'up to $99,999', shortLabel: '$0-$99,999', color: '#FF9999', textColor: 'black' },
