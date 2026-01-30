@@ -87,7 +87,33 @@ Deno.serve(async (req: Request) => {
           const code = property[`detached_item_code${i}`];
           if (!code) continue;
 
-          // Calculate area from width/depth or use direct value
+          // Check for miscellaneous codes first (no area calculation needed)
+          if (codeMatches(code, miscCodes)) {
+            const normalizedCode = String(code).replace(/^0+/, '') || '0';
+            if (!miscFound.includes(normalizedCode)) {
+              miscFound.push(normalizedCode);
+            }
+            continue;
+          }
+
+          // Check for land adjustment codes (no area calculation needed)
+          if (codeMatches(code, landPosCodes)) {
+            const normalizedCode = String(code).replace(/^0+/, '') || '0';
+            if (!landPosFound.includes(normalizedCode)) {
+              landPosFound.push(normalizedCode);
+            }
+            continue;
+          }
+
+          if (codeMatches(code, landNegCodes)) {
+            const normalizedCode = String(code).replace(/^0+/, '') || '0';
+            if (!landNegFound.includes(normalizedCode)) {
+              landNegFound.push(normalizedCode);
+            }
+            continue;
+          }
+
+          // Calculate area from width/depth for area-based attributes
           let area = 0;
           const width = property[`width${i}`];
           const depth = property[`depth${i}`];
