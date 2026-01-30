@@ -188,6 +188,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     loadAdjustments();
     loadAvailableCodes();
     loadCustomBrackets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id]);
 
   // Load code config AFTER available codes are loaded (to prevent timing issues)
@@ -196,6 +197,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     if (jobData?.id && codesLoaded && !isLoadingCodes) {
       loadCodeConfig();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id, availableCodes, isLoadingCodes]);
 
   const loadCustomBrackets = async () => {
