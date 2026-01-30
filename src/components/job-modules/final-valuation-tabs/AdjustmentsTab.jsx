@@ -888,6 +888,13 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
       const rowsToDelete = [];
       adjustments.forEach(adj => {
         if (!adj.is_default) {
+          // Delete OLD LEGACY rows (barn, pole_barn, stable without code suffix)
+          if (adj.adjustment_id === 'barn' || adj.adjustment_id === 'pole_barn' || adj.adjustment_id === 'stable') {
+            rowsToDelete.push(adj.adjustment_id);
+            console.log(`🗑️ Marking LEGACY row for deletion: ${adj.adjustment_id} (replaced by per-code rows)`);
+            return;
+          }
+
           // Check if this is a dynamic adjustment row (detached items, miscellaneous, or land adjustments)
           const isDynamicRow = adj.adjustment_id.startsWith('barn_') ||
                                adj.adjustment_id.startsWith('pole_barn_') ||
