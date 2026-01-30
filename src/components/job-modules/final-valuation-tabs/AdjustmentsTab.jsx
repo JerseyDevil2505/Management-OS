@@ -182,33 +182,26 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
     return attachedItemsFromColumns.includes(attributeId);
   };
 
-  // Load adjustments and custom brackets - DEFERRED to avoid interfering with property batch loading
+  // Load adjustments and custom brackets - WAIT for property loading to complete
   useEffect(() => {
-    if (!jobData?.id) return;
+    if (!jobData?.id || isJobContainerLoading) return;
 
-    const timer = setTimeout(() => {
-      loadAdjustments();
-      loadAvailableCodes();
-      loadCustomBrackets();
-    }, 2000); // Wait 2 seconds after job loads
-
-    return () => clearTimeout(timer);
+    loadAdjustments();
+    loadAvailableCodes();
+    loadCustomBrackets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobData?.id]);
+  }, [jobData?.id, isJobContainerLoading]);
 
   // Load code config AFTER available codes are loaded
   useEffect(() => {
-    if (!jobData?.id || !availableCodes || isLoadingCodes) return;
+    if (!jobData?.id || isJobContainerLoading || !availableCodes || isLoadingCodes) return;
 
     const codesLoaded = Object.values(availableCodes).some(arr => arr && arr.length > 0);
     if (codesLoaded) {
-      const timer = setTimeout(() => {
-        loadCodeConfig();
-      }, 500);
-      return () => clearTimeout(timer);
+      loadCodeConfig();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobData?.id, availableCodes, isLoadingCodes]);
+  }, [jobData?.id, isJobContainerLoading, availableCodes, isLoadingCodes]);
 
   const loadCustomBrackets = async () => {
     try {
