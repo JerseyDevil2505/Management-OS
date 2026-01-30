@@ -719,6 +719,25 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         setting_value: currentVersion
       });
 
+      // Add garage thresholds
+      settings.push(
+        {
+          job_id: jobData.id,
+          setting_key: 'garage_threshold_one_car_max',
+          setting_value: String(garageThresholds.one_car_max)
+        },
+        {
+          job_id: jobData.id,
+          setting_key: 'garage_threshold_two_car_max',
+          setting_value: String(garageThresholds.two_car_max)
+        },
+        {
+          job_id: jobData.id,
+          setting_key: 'garage_threshold_three_car_max',
+          setting_value: String(garageThresholds.three_car_max)
+        }
+      );
+
       const { error: settingsError } = await supabase
         .from('job_settings')
         .upsert(settings, { onConflict: 'job_id,setting_key' });
