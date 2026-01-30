@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase, getRawDataForJob } from '../../../lib/supabaseClient';
 import { Save, Plus, Trash2, Settings, X } from 'lucide-react';
 
-const AdjustmentsTab = ({ jobData = {} }) => {
+const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
   const vendorType = jobData?.vendor_type || 'BRT';
   const [activeSubTab, setActiveSubTab] = useState('adjustments');
 
@@ -182,14 +182,26 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     return attachedItemsFromColumns.includes(attributeId);
   };
 
-  // Load adjustments and custom brackets from database
+  // Load adjustments and custom brackets - WAIT for property loading to complete
   useEffect(() => {
-    if (!jobData?.id) return;
+    if (!jobData?.id || isJobContainerLoading) return;
+
     loadAdjustments();
     loadAvailableCodes();
-    loadCodeConfig(); // Load after available codes are fetched
     loadCustomBrackets();
-  }, [jobData?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobData?.id, isJobContainerLoading]);
+
+  // Load code config AFTER available codes are loaded
+  useEffect(() => {
+    if (!jobData?.id || isJobContainerLoading || !availableCodes || isLoadingCodes) return;
+
+    const codesLoaded = Object.values(availableCodes).some(arr => arr && arr.length > 0);
+    if (codesLoaded) {
+      loadCodeConfig();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobData?.id, isJobContainerLoading, availableCodes, isLoadingCodes]);
 
   const loadCustomBrackets = async () => {
     try {
@@ -202,23 +214,11 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       if (error) throw error;
       setCustomBrackets(data || []);
     } catch (error) {
-      console.error('Error loading custom brackets:', error);
+      // Silent error handling - don't interfere with job loading
+      console.warn('⚠️ Custom brackets loading error (non-critical):', error.message || error);
+      setCustomBrackets([]); // Set empty array on error
     }
   };
-
-  // Auto-populate config after codes are loaded (if no saved config exists)
-  useEffect(() => {
-    // Only auto-populate if:
-    // 1. Available codes have been loaded
-    // 2. Config is still empty (no saved settings)
-    const codesLoaded = Object.values(availableCodes).some(arr => arr.length > 0);
-    const configEmpty = Object.values(codeConfig).every(arr => arr.length === 0);
-
-    if (codesLoaded && configEmpty && !isLoadingCodes) {
-      console.log('🚀 Triggering auto-populate after codes loaded');
-      autoPopulateCodeConfig();
-    }
-  }, [availableCodes, isLoadingCodes]);
 
   const loadAdjustments = async () => {
     try {
@@ -257,13 +257,21 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         setAdjustments(defaultData);
       }
     } catch (error) {
-      console.error('Error loading adjustments:', error);
+      // Silent error handling - don't interfere with job loading
+      console.warn('⚠️ Adjustments loading error (non-critical):', error.message || error);
+      setAdjustments([]); // Set empty array on error
     } finally {
       setIsLoading(false);
     }
   };
 
   const loadCodeConfig = async () => {
+    // Safety check: Don't run if availableCodes isn't ready or jobData is missing
+    if (!jobData?.id || !availableCodes || typeof availableCodes !== 'object') {
+      console.log('⏳ Skipping loadCodeConfig - prerequisites not ready');
+      return;
+    }
+
     try {
       const settingKeys = [
         'adjustment_codes_garage',
@@ -337,7 +345,9 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         autoPopulateCodeConfig();
       }
     } catch (error) {
-      console.error('Error loading code config:', error);
+      // Silent error handling - don't interfere with job loading
+      console.warn('⚠️ Code config loading error (non-critical):', error.message || error);
+      // Don't throw or set error state - this is optional configuration data
     }
   };
 
@@ -537,7 +547,9 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       console.log('📦 Final categoryCodes:', categoryCodes);
       setAvailableCodes(categoryCodes);
     } catch (error) {
-      console.error('Error loading available codes:', error);
+      // Silent error handling - don't interfere with job loading
+      console.warn('⚠️ Available codes loading error (non-critical):', error.message || error);
+      setAvailableCodes({}); // Set empty object on error
     } finally {
       setIsLoadingCodes(false);
     }
@@ -702,25 +714,37 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
   const handleSaveCodeConfig = async () => {
     try {
-      // Save code configuration settings
-      const settings = Object.keys(codeConfig)
-        .filter(attributeId => codeConfig[attributeId] && codeConfig[attributeId].length > 0) // Only save if codes are selected
-        .map(attributeId => ({
-          job_id: jobData.id,
-          setting_key: `adjustment_codes_${attributeId}`,
-          setting_value: JSON.stringify(codeConfig[attributeId])
-        }));
+      // Separate settings into those with values and those to delete
+      const settingsToSave = [];
+      const settingsToDelete = [];
+
+      Object.keys(codeConfig).forEach(attributeId => {
+        const codes = codeConfig[attributeId] || [];
+        const settingKey = `adjustment_codes_${attributeId}`;
+
+        if (codes.length > 0) {
+          // Has codes - save them
+          settingsToSave.push({
+            job_id: jobData.id,
+            setting_key: settingKey,
+            setting_value: JSON.stringify(codes)
+          });
+        } else {
+          // Empty array - delete the setting to clear old values
+          settingsToDelete.push(settingKey);
+        }
+      });
 
       // Add version hash to detect future code table changes
       const currentVersion = generateCodeVersion(availableCodes);
-      settings.push({
+      settingsToSave.push({
         job_id: jobData.id,
         setting_key: 'adjustment_codes_version',
         setting_value: currentVersion
       });
 
       // Add garage thresholds
-      settings.push(
+      settingsToSave.push(
         {
           job_id: jobData.id,
           setting_key: 'garage_threshold_one_car_max',
@@ -738,11 +762,28 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         }
       );
 
-      const { error: settingsError } = await supabase
-        .from('job_settings')
-        .upsert(settings, { onConflict: 'job_id,setting_key' });
+      // Save settings that have values
+      if (settingsToSave.length > 0) {
+        const { error: settingsError } = await supabase
+          .from('job_settings')
+          .upsert(settingsToSave, { onConflict: 'job_id,setting_key' });
 
-      if (settingsError) throw settingsError;
+        if (settingsError) throw settingsError;
+      }
+
+      // Delete settings for empty arrays
+      if (settingsToDelete.length > 0) {
+        console.log('🗑️ Deleting empty configuration settings:', settingsToDelete);
+        const { error: deleteError } = await supabase
+          .from('job_settings')
+          .delete()
+          .eq('job_id', jobData.id)
+          .in('setting_key', settingsToDelete);
+
+        if (deleteError) {
+          console.error('Error deleting empty settings:', deleteError);
+        }
+      }
 
       // For dynamic attributes with selected codes, create/update adjustment rows
       const attributeLabels = {
@@ -752,7 +793,8 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       };
 
       // Attributes that create individual rows per code (using code description as name)
-      const individualRowAttributes = ['miscellaneous', 'land_positive', 'land_negative'];
+      // Detached items (barn, pole_barn, stable), miscellaneous, and land adjustments all create one row per code
+      const individualRowAttributes = ['barn', 'pole_barn', 'stable', 'miscellaneous', 'land_positive', 'land_negative'];
 
       const newAdjustments = [];
       let maxSortOrder = Math.max(...adjustments.map(a => a.sort_order || 0), 0);
@@ -772,16 +814,18 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                 const adjustmentId = `${attr.id}_${codeValue}`;
                 const existingAdj = adjustments.find(adj => adj.adjustment_id === adjustmentId);
 
-                if (!existingAdj) {
-                  maxSortOrder += 1;
-                  // Convert description to title case (lowercase first, then capitalize each word)
-                  const titleCaseName = codeObj.description
-                    .toLowerCase()
-                    .split(' ')
-                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                    .join(' ');
+                // Convert description to title case (lowercase first, then capitalize each word)
+                const titleCaseName = codeObj.description
+                  .toLowerCase()
+                  .split(' ')
+                  .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                  .join(' ');
 
+                if (!existingAdj) {
+                  // Create new adjustment row
+                  maxSortOrder += 1;
                   newAdjustments.push({
+                    id: crypto.randomUUID(),
                     job_id: jobData.id,
                     adjustment_id: adjustmentId,
                     adjustment_name: titleCaseName,
@@ -800,6 +844,12 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                     bracket_8: 0,
                     bracket_9: 0
                   });
+                } else if (existingAdj.adjustment_name !== titleCaseName) {
+                  // Update existing adjustment if name changed (e.g., "BUSY STREET" -> "Busy Street")
+                  newAdjustments.push({
+                    ...existingAdj,
+                    adjustment_name: titleCaseName
+                  });
                 }
               }
             });
@@ -810,6 +860,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
             if (!existingAdj) {
               maxSortOrder += 1;
               newAdjustments.push({
+                id: crypto.randomUUID(),
                 job_id: jobData.id,
                 adjustment_id: attr.id,
                 adjustment_name: attributeLabels[attr.id] || attr.name,
@@ -833,6 +884,59 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         }
       });
 
+      // DELETE adjustment rows for codes that were removed from configuration
+      const rowsToDelete = [];
+      adjustments.forEach(adj => {
+        if (!adj.is_default) {
+          // Delete OLD LEGACY rows (barn, pole_barn, stable without code suffix)
+          if (adj.adjustment_id === 'barn' || adj.adjustment_id === 'pole_barn' || adj.adjustment_id === 'stable') {
+            rowsToDelete.push(adj.adjustment_id);
+            console.log(`🗑️ Marking LEGACY row for deletion: ${adj.adjustment_id} (replaced by per-code rows)`);
+            return;
+          }
+
+          // Check if this is a dynamic adjustment row (detached items, miscellaneous, or land adjustments)
+          const isDynamicRow = adj.adjustment_id.startsWith('barn_') ||
+                               adj.adjustment_id.startsWith('pole_barn_') ||
+                               adj.adjustment_id.startsWith('stable_') ||
+                               adj.adjustment_id.startsWith('miscellaneous_') ||
+                               adj.adjustment_id.startsWith('land_positive_') ||
+                               adj.adjustment_id.startsWith('land_negative_');
+
+          if (isDynamicRow) {
+            // Extract the type and code from adjustment_id
+            const match = adj.adjustment_id.match(/^(barn|pole_barn|stable|miscellaneous|land_positive|land_negative)_(.+)$/);
+            if (match) {
+              const [, type, code] = match;
+              const selectedCodes = codeConfig[type] || [];
+
+              // If this code is NOT in the current config, mark for deletion
+              if (!selectedCodes.includes(code)) {
+                rowsToDelete.push(adj.adjustment_id);
+                console.log(`🗑️ Marking for deletion: ${adj.adjustment_id} (code "${code}" not in ${type} config)`);
+              }
+            }
+          }
+        }
+      });
+
+      // Delete orphaned rows from database
+      if (rowsToDelete.length > 0) {
+        console.log('🗑️ Deleting removed adjustment rows:', rowsToDelete);
+        const { error: deleteError } = await supabase
+          .from('job_adjustment_grid')
+          .delete()
+          .eq('job_id', jobData.id)
+          .in('adjustment_id', rowsToDelete);
+
+        if (deleteError) {
+          console.error('Error deleting adjustment rows:', deleteError);
+        } else {
+          // Update local state to remove deleted rows
+          setAdjustments(prev => prev.filter(adj => !rowsToDelete.includes(adj.adjustment_id)));
+        }
+      }
+
       // Save new adjustment rows to database
       if (newAdjustments.length > 0) {
         const { error: adjError } = await supabase
@@ -853,45 +957,24 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         });
       }
 
-      // CRITICAL: Recalculate amenity areas using new code mappings
-      // Both BRT and Microsystems now need recategorization for detached/misc/land items
-      let recalcMessage = '';
-      console.log(`🔄 Triggering database recategorization for ${vendorType}...`);
+      // Configuration saved - applies immediately to CME evaluations
+      console.log('✅ Code configuration saved successfully');
+      console.log('📌 Dynamic adjustments will now work in CME evaluations');
 
-      const { data: { session } } = await supabase.auth.getSession();
-      const recalcResponse = await fetch(
-        `${supabase.supabaseUrl}/functions/v1/recalculate-amenities`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}`
-          },
-          body: JSON.stringify({
-            jobId: jobData.id,
-            vendorType: vendorType,
-            codeConfig: codeConfig
-          })
-        }
-      );
+      const messages = [];
+      if (newAdjustments.length > 0) messages.push(`${newAdjustments.length} new adjustment row(s) added`);
+      if (rowsToDelete.length > 0) messages.push(`${rowsToDelete.length} adjustment row(s) removed`);
 
-      if (!recalcResponse.ok) {
-        const errorData = await recalcResponse.json().catch(() => ({}));
-        throw new Error(`Recalculation failed: ${errorData.error || 'Edge function error'}`);
-      }
+      const summary = messages.length > 0 ? `\n\n${messages.join(', ')}.` : '';
 
-      const recalcResult = await recalcResponse.json();
-      console.log('✅ Recategorization complete:', recalcResult);
-      recalcMessage = `\n\n${recalcResult.updatedCount} properties updated with new code mappings.`;
-
-      alert(`Code configuration saved!${newAdjustments.length > 0 ? ` ${newAdjustments.length} new adjustment row(s) added to grid.` : ''}${recalcMessage}`);
+      alert(`Code configuration saved!${summary}\n\n✓ Dynamic adjustments are now active and will be applied during evaluations.\n\nRefresh the page to see changes in the adjustment grid.`);
 
       // Dismiss auto-populate notice and reset flag after saving
       setShowAutoPopulateNotice(false);
       setWasReset(false);
 
       // Optionally switch to adjustment grid tab to show new rows
-      if (newAdjustments.length > 0) {
+      if (newAdjustments.length > 0 || rowsToDelete.length > 0) {
         setActiveSubTab('adjustments');
       }
     } catch (error) {
@@ -1327,7 +1410,42 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {adjustments.map((adj) => (
+                {adjustments
+                  .filter((adj) => {
+                    // Always show default adjustments
+                    if (adj.is_default) return true;
+
+                    // HIDE OLD LEGACY rows (barn, pole_barn, stable without code suffix)
+                    if (adj.adjustment_id === 'barn' || adj.adjustment_id === 'pole_barn' || adj.adjustment_id === 'stable') {
+                      return false;
+                    }
+
+                    // For dynamic adjustments, only show if configuration has been saved
+                    // Check if this adjustment has corresponding codes in codeConfig
+                    const isDynamic = adj.adjustment_id.includes('barn_') ||
+                                    adj.adjustment_id.includes('pole_barn_') ||
+                                    adj.adjustment_id.includes('stable_') ||
+                                    adj.adjustment_id.includes('miscellaneous_') ||
+                                    adj.adjustment_id.includes('land_positive_') ||
+                                    adj.adjustment_id.includes('land_negative_');
+
+                    if (isDynamic) {
+                      // Check if codes are saved for this attribute type (all create per-code rows now)
+                      const match = adj.adjustment_id.match(/^(barn|pole_barn|stable|miscellaneous|land_positive|land_negative)_(.+)$/);
+                      if (match) {
+                        const [, type, code] = match;
+                        const isConfigured = (codeConfig[type] || []).includes(code);
+                        if (!isConfigured) {
+                          console.log(`⚠️ Hiding ${adj.adjustment_id} - code "${code}" not in ${type} configuration`);
+                        }
+                        return isConfigured;
+                      }
+                    }
+
+                    // Show any other custom adjustments (user-created)
+                    return true;
+                  })
+                  .map((adj) => (
                   <tr key={adj.adjustment_id} className="hover:bg-gray-50">
                     <td className="sticky left-0 z-10 bg-white px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-gray-200">
                       {formatAdjustmentName(adj.adjustment_name, adj.adjustment_id)}

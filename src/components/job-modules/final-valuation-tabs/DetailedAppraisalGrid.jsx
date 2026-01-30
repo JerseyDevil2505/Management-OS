@@ -1,9 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { interpretCodes, supabase } from '../../../lib/supabaseClient';
 
-const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [] }) => {
+const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false }) => {
   const subject = result.subject;
   const comps = result.comparables || [];
+
+  // Determine which bracket is being used
+  const getBracketLabel = () => {
+    if (!compFilters) return 'Auto';
+
+    const selectedBracket = compFilters.adjustmentBracket;
+
+    if (selectedBracket === 'auto') {
+      // Show the auto-determined bracket based on subject's value
+      const subjectValue = subject.values_norm_time || subject.sales_price || subject.values_mod_total || subject.values_cama_total || 0;
+      const bracketIndex = cmeBrackets.findIndex(b => subjectValue >= b.min && subjectValue <= b.max);
+      if (bracketIndex >= 0 && cmeBrackets[bracketIndex]) {
+        return `Auto (${cmeBrackets[bracketIndex].label})`;
+      }
+      return 'Auto';
+    } else if (selectedBracket && selectedBracket.startsWith('bracket_')) {
+      // User selected a specific bracket
+      const bracketIndex = parseInt(selectedBracket.replace('bracket_', ''));
+      if (cmeBrackets[bracketIndex]) {
+        return cmeBrackets[bracketIndex].label;
+      }
+    } else if (selectedBracket && selectedBracket.startsWith('custom_')) {
+      return 'Custom Bracket';
+    }
+
+    return 'Unknown';
+  };
 
   // Load garage thresholds from job settings
   const [garageThresholds, setGarageThresholds] = useState({
@@ -30,14 +57,17 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         });
         setGarageThresholds(newThresholds);
       } catch (error) {
-        console.error('Error loading garage thresholds:', error);
+        // Silent error handling - don't interfere with job loading
+        console.warn('⚠️ Garage thresholds loading error (non-critical):', error.message || error);
       }
     };
 
-    if (jobData?.id) {
+    // Wait for property loading to complete before loading settings
+    if (jobData?.id && !isJobContainerLoading) {
       loadGarageThresholds();
     }
-  }, [jobData?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobData?.id, isJobContainerLoading]);
 
   // Garage category helpers
   const getGarageCategory = (sqft) => {
@@ -75,19 +105,36 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
   // Helper to get adjustment for a specific attribute
   const getAdjustment = (comp, attributeName) => {
-    return comp.adjustments?.find(a =>
-      a.name === attributeName ||
-      a.name?.toLowerCase().includes(attributeName.toLowerCase())
-    );
+    if (!attributeName || !comp.adjustments) return null;
+
+    // First try exact match
+    let match = comp.adjustments.find(a => a.name === attributeName);
+    if (match) return match;
+
+    // Then try case-insensitive exact match
+    const lowerName = attributeName.toLowerCase();
+    match = comp.adjustments.find(a => a.name?.toLowerCase() === lowerName);
+    if (match) return match;
+
+    // No substring matching - too risky (e.g., "AC" matches "Lot Size (ACre)")
+    return null;
   };
 
   // Helper to get adjustment definition from adjustmentGrid
   const getAdjustmentDef = (adjustmentName) => {
     if (!adjustmentName || !adjustmentGrid) return null;
-    return adjustmentGrid.find(adj =>
-      adj.adjustment_name === adjustmentName ||
-      adj.adjustment_name?.toLowerCase().includes(adjustmentName.toLowerCase())
-    );
+
+    // First try exact match
+    let match = adjustmentGrid.find(adj => adj.adjustment_name === adjustmentName);
+    if (match) return match;
+
+    // Then try case-insensitive exact match
+    const lowerName = adjustmentName.toLowerCase();
+    match = adjustmentGrid.find(adj => adj.adjustment_name?.toLowerCase() === lowerName);
+    if (match) return match;
+
+    // No substring matching
+    return null;
   };
 
   // Helper to check if adjustment is flat type (YES/NONE display)
@@ -532,22 +579,122 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     .filter(adj => !adj.is_default)
     .map(adj => ({
       id: adj.adjustment_id,
-      label: adj.adjustment_name,
+      label: adj.adjustment_name, // Use the ACTUAL adjustment name from grid (already title-cased)
       render: (prop) => {
-        // Map adjustment_id to property column
+        // Helper to normalize code for comparison
+        const normalizeCode = (c) => String(c).trim().replace(/^0+/, '').toUpperCase() || '0';
+
+        // Extract code from adjustment_id (e.g., "pole_barn_PBAR" -> "PBAR")
+        const code = adj.adjustment_id.replace(/^(barn|pole_barn|stable|miscellaneous|land_positive|land_negative)_/, '');
+        const targetCode = normalizeCode(code);
+
+        // Check if this property has the code
+        const hasCode = () => {
+          if (vendorType === 'Microsystems') {
+            // MICROSYSTEMS COLUMN MAPPING:
+            // - Detached items (barn, pole_barn, stable) → detached_item_code1-4, detachedbuilding1-4
+            // - Miscellaneous items → misc_item_1-3
+            // - Land adjustments (positive/negative) → overall_adj_reason1-4
+
+            if (adj.adjustment_id.startsWith('land_positive_') || adj.adjustment_id.startsWith('land_negative_')) {
+              // Land adjustments: check overall_adj_reason1-4
+              for (let i = 1; i <= 4; i++) {
+                const reasonCode = prop[`overall_adj_reason${i}`];
+                if (reasonCode && normalizeCode(reasonCode) === targetCode) {
+                  return true;
+                }
+              }
+            }
+            else if (adj.adjustment_id.startsWith('barn_') || adj.adjustment_id.startsWith('pole_barn_') || adj.adjustment_id.startsWith('stable_')) {
+              // Detached items: check detached_item_code1-4, detachedbuilding1-4
+              for (let i = 1; i <= 4; i++) {
+                const itemCode = prop[`detached_item_code${i}`];
+                if (itemCode && normalizeCode(itemCode) === targetCode) {
+                  return true;
+                }
+              }
+              for (let i = 1; i <= 4; i++) {
+                const buildingCode = prop[`detachedbuilding${i}`];
+                if (buildingCode && normalizeCode(buildingCode) === targetCode) {
+                  return true;
+                }
+              }
+            }
+            else if (adj.adjustment_id.startsWith('miscellaneous_')) {
+              // Miscellaneous items: check misc_item_1-3 ONLY
+              for (let i = 1; i <= 3; i++) {
+                const miscCode = prop[`misc_item_${i}`];
+                if (miscCode && normalizeCode(miscCode) === targetCode) {
+                  return true;
+                }
+              }
+            }
+          } else {
+            // BRT: Check detachedcode_1-11 for all dynamic adjustments
+            for (let i = 1; i <= 11; i++) {
+              const detachedCode = prop[`detachedcode_${i}`];
+              if (detachedCode && normalizeCode(detachedCode) === targetCode) {
+                return true;
+              }
+            }
+          }
+          return false;
+        };
+
+        // Land adjustments: show YES/NONE (binary)
+        if (adj.adjustment_id.startsWith('land_positive_') || adj.adjustment_id.startsWith('land_negative_')) {
+          return hasCode() ? 'YES' : 'NONE';
+        }
+
+        // Detached items (pole barn, barn, stable): show YES/NONE if detected, with area if available
+        if (adj.adjustment_id.startsWith('barn_') || adj.adjustment_id.startsWith('pole_barn_') || adj.adjustment_id.startsWith('stable_')) {
+          // Debug logging for Block 1 Lot 3.02
+          if (prop.property_block === '1' && prop.property_lot === '3.02') {
+            console.log(`🔍 Checking ${adj.adjustment_name} (${adj.adjustment_id}) for Block 1 Lot 3.02`);
+            console.log('  Code to find:', targetCode);
+            console.log('  detached_item_code1:', prop.detached_item_code1);
+            console.log('  detached_item_code2:', prop.detached_item_code2);
+            console.log('  detached_item_code3:', prop.detached_item_code3);
+            console.log('  detached_item_code4:', prop.detached_item_code4);
+            console.log('  hasCode():', hasCode());
+          }
+
+          // First check if code exists in raw columns
+          if (hasCode()) {
+            // Try to get area from common column mappings
+            const areaColumnMap = {
+              'PBAR': 'pole_barn_area',
+              'BARN': 'barn_area',
+              'STBL': 'stable_area',
+              'SHED': 'shed_area'
+            };
+
+            const areaColumn = areaColumnMap[code.toUpperCase()];
+            if (areaColumn && prop[areaColumn] !== undefined && prop[areaColumn] !== null && prop[areaColumn] > 0) {
+              return `YES (${prop[areaColumn].toLocaleString()} SF)`;
+            }
+            return 'YES';
+          }
+          return 'NONE';
+        }
+
+        // Miscellaneous items: show YES/NONE (binary)
+        if (adj.adjustment_id.startsWith('miscellaneous_')) {
+          return hasCode() ? 'YES' : 'NONE';
+        }
+
+        // Legacy: For non-coded dynamic adjustments with area columns
         const columnMap = {
           'barn': 'barn_area',
           'stable': 'stable_area',
           'pole_barn': 'pole_barn_area'
         };
 
-        // Check if this is a known attribute with a column
         const columnName = columnMap[adj.adjustment_id];
         if (columnName && prop[columnName] !== undefined && prop[columnName] !== null) {
-          return prop[columnName] > 0 ? `${prop[columnName].toLocaleString()} SF` : 'None';
+          return prop[columnName] > 0 ? `YES (${prop[columnName].toLocaleString()} SF)` : 'NONE';
         }
 
-        // For miscellaneous items and others, show N/A for now
         return 'N/A';
       },
       adjustmentName: adj.adjustment_name,
@@ -560,7 +707,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
       <div className="bg-blue-600 px-4 py-3">
-        <h4 className="font-semibold text-white">Detailed Evaluation</h4>
+        <div className="flex items-center justify-between">
+          <h4 className="font-semibold text-white">Detailed Evaluation</h4>
+          <div className="text-sm text-blue-100">
+            <span className="font-medium">Adjustment Bracket:</span>{' '}
+            <span className="font-semibold text-white">{getBracketLabel()}</span>
+          </div>
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full text-xs border-collapse">
@@ -701,7 +854,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       <div className={attr.bold ? 'font-semibold' : 'text-xs'}>{value}</div>
                       {adj && adj.amount !== 0 && (
                         <div className={`text-xs font-bold mt-1 ${adj.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                          {adj.amount > 0 ? '+' : ''}${adj.amount.toLocaleString()}
+                          {adj.amount > 0 ? '+' : ''}${Math.round(adj.amount).toLocaleString()}
                         </div>
                       )}
                     </div>
@@ -719,7 +872,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               <td className="px-3 py-3 text-center bg-yellow-50">-</td>
               {renderCompCells((comp) => (
                 <div className={`font-bold ${comp.totalAdjustment > 0 ? 'text-green-700' : comp.totalAdjustment < 0 ? 'text-red-700' : 'text-gray-700'}`}>
-                  {comp.totalAdjustment > 0 ? '+' : ''}${comp.totalAdjustment?.toLocaleString() || '0'}
+                  {comp.totalAdjustment > 0 ? '+' : ''}${Math.round(comp.totalAdjustment || 0).toLocaleString()}
                   <div className="text-xs mt-1">
                     ({comp.adjustmentPercent > 0 ? '+' : ''}{comp.adjustmentPercent?.toFixed(0) || '0'}%)
                   </div>

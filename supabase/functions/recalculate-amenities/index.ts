@@ -69,19 +69,51 @@ Deno.serve(async (req: Request) => {
         const barnCodes = codeConfig.barn || [];
         const stableCodes = codeConfig.stable || [];
         const poleBarnCodes = codeConfig.pole_barn || [];
+        const miscCodes = codeConfig.miscellaneous || [];
+        const landPosCodes = codeConfig.land_positive || [];
+        const landNegCodes = codeConfig.land_negative || [];
 
         let detGarageArea = 0;
         let poolArea = 0;
         let barnArea = 0;
         let stableArea = 0;
         let poleBarnArea = 0;
+        const miscFound: string[] = [];
+        const landPosFound: string[] = [];
+        const landNegFound: string[] = [];
 
         // Process detached_item_code1-4
         for (let i = 1; i <= 4; i++) {
           const code = property[`detached_item_code${i}`];
           if (!code) continue;
 
-          // Calculate area from width/depth or use direct value
+          // Check for miscellaneous codes first (no area calculation needed)
+          if (codeMatches(code, miscCodes)) {
+            const normalizedCode = String(code).replace(/^0+/, '') || '0';
+            if (!miscFound.includes(normalizedCode)) {
+              miscFound.push(normalizedCode);
+            }
+            continue;
+          }
+
+          // Check for land adjustment codes (no area calculation needed)
+          if (codeMatches(code, landPosCodes)) {
+            const normalizedCode = String(code).replace(/^0+/, '') || '0';
+            if (!landPosFound.includes(normalizedCode)) {
+              landPosFound.push(normalizedCode);
+            }
+            continue;
+          }
+
+          if (codeMatches(code, landNegCodes)) {
+            const normalizedCode = String(code).replace(/^0+/, '') || '0';
+            if (!landNegFound.includes(normalizedCode)) {
+              landNegFound.push(normalizedCode);
+            }
+            continue;
+          }
+
+          // Calculate area from width/depth for area-based attributes
           let area = 0;
           const width = property[`width${i}`];
           const depth = property[`depth${i}`];
@@ -103,7 +135,33 @@ Deno.serve(async (req: Request) => {
           const code = property[`detachedbuilding${i}`];
           if (!code) continue;
 
-          // Calculate area from widthn/depthn
+          // Check for miscellaneous codes first
+          if (codeMatches(code, miscCodes)) {
+            const normalizedCode = String(code).replace(/^0+/, '') || '0';
+            if (!miscFound.includes(normalizedCode)) {
+              miscFound.push(normalizedCode);
+            }
+            continue;
+          }
+
+          // Check for land adjustment codes
+          if (codeMatches(code, landPosCodes)) {
+            const normalizedCode = String(code).replace(/^0+/, '') || '0';
+            if (!landPosFound.includes(normalizedCode)) {
+              landPosFound.push(normalizedCode);
+            }
+            continue;
+          }
+
+          if (codeMatches(code, landNegCodes)) {
+            const normalizedCode = String(code).replace(/^0+/, '') || '0';
+            if (!landNegFound.includes(normalizedCode)) {
+              landNegFound.push(normalizedCode);
+            }
+            continue;
+          }
+
+          // Calculate area from widthn/depthn for area-based attributes
           let area = 0;
           const width = property[`widthn${i}`];
           const depth = property[`depthn${i}`];
@@ -126,6 +184,9 @@ Deno.serve(async (req: Request) => {
         update.barn_area = barnArea > 0 ? barnArea : null;
         update.stable_area = stableArea > 0 ? stableArea : null;
         update.pole_barn_area = poleBarnArea > 0 ? poleBarnArea : null;
+        update.miscellaneous = miscFound.length > 0 ? miscFound.join(',') : null;
+        update.land_positive = landPosFound.length > 0 ? landPosFound.join(',') : null;
+        update.land_negative = landNegFound.length > 0 ? landNegFound.join(',') : null;
         hasUpdates = true;
 
       } else if (vendorType === 'BRT') {
@@ -140,6 +201,9 @@ Deno.serve(async (req: Request) => {
         const patioCodes = codeConfig.patio || [];
         const openPorchCodes = codeConfig.open_porch || [];
         const enclosedPorchCodes = codeConfig.enclosed_porch || [];
+        const miscCodes = codeConfig.miscellaneous || [];
+        const landPosCodes = codeConfig.land_positive || [];
+        const landNegCodes = codeConfig.land_negative || [];
 
         let detGarageArea = 0;
         let poolArea = 0;
@@ -151,13 +215,45 @@ Deno.serve(async (req: Request) => {
         let patioArea = 0;
         let openPorchArea = 0;
         let enclosedPorchArea = 0;
+        const miscFound: string[] = [];
+        const landPosFound: string[] = [];
+        const landNegFound: string[] = [];
 
         // Process detached items (detachedcode_1-11)
         for (let i = 1; i <= 11; i++) {
           const code = property[`detachedcode_${i}`];
           const area = property[`detacheddcsize_${i}`];
-          
-          if (!code || !area || area <= 0) continue;
+
+          if (!code) continue;
+
+          // Check for miscellaneous codes (no area needed)
+          if (codeMatches(code, miscCodes)) {
+            const normalizedCode = String(code).replace(/^0+/, '') || '0';
+            if (!miscFound.includes(normalizedCode)) {
+              miscFound.push(normalizedCode);
+            }
+            continue;
+          }
+
+          // Check for land adjustment codes (no area needed)
+          if (codeMatches(code, landPosCodes)) {
+            const normalizedCode = String(code).replace(/^0+/, '') || '0';
+            if (!landPosFound.includes(normalizedCode)) {
+              landPosFound.push(normalizedCode);
+            }
+            continue;
+          }
+
+          if (codeMatches(code, landNegCodes)) {
+            const normalizedCode = String(code).replace(/^0+/, '') || '0';
+            if (!landNegFound.includes(normalizedCode)) {
+              landNegFound.push(normalizedCode);
+            }
+            continue;
+          }
+
+          // For area-based attributes, require area > 0
+          if (!area || area <= 0) continue;
 
           if (codeMatches(code, detGarageCodes)) detGarageArea += area;
           else if (codeMatches(code, poolCodes)) poolArea += area;
@@ -191,6 +287,9 @@ Deno.serve(async (req: Request) => {
         update.patio_area = patioArea > 0 ? patioArea : null;
         update.open_porch_area = openPorchArea > 0 ? openPorchArea : null;
         update.enclosed_porch_area = enclosedPorchArea > 0 ? enclosedPorchArea : null;
+        update.miscellaneous = miscFound.length > 0 ? miscFound.join(',') : null;
+        update.land_positive = landPosFound.length > 0 ? landPosFound.join(',') : null;
+        update.land_negative = landNegFound.length > 0 ? landNegFound.join(',') : null;
         hasUpdates = true;
       }
 

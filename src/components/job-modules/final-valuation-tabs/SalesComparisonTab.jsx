@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
 
-const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) => {
+const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, isJobContainerLoading = false }) => {
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
   const resultsRef = React.useRef(null);
@@ -90,6 +90,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
   const vendorType = jobData?.vendor_type || 'BRT';
 
+  // ==================== CODE CONFIGURATION ====================
+  const [codeConfig, setCodeConfig] = useState({
+    miscellaneous: [],
+    land_positive: [],
+    land_negative: []
+  });
+
   // ==================== GARAGE THRESHOLDS ====================
   const [garageThresholds, setGarageThresholds] = useState({
     one_car_max: 399,
@@ -127,12 +134,55 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         });
         setGarageThresholds(newThresholds);
       } catch (error) {
-        console.error('Error loading garage thresholds:', error);
+        // Silent error handling - don't interfere with job loading
+        console.warn('⚠️ Garage thresholds loading error (non-critical):', error.message || error);
       }
     };
 
-    loadGarageThresholds();
-  }, [jobData?.id]);
+    // Wait for property loading to complete before loading settings
+    if (!isJobContainerLoading) {
+      loadGarageThresholds();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobData?.id, isJobContainerLoading]);
+
+  // Load code configuration on mount
+  useEffect(() => {
+    const loadCodeConfig = async () => {
+      if (!jobData?.id) return;
+
+      try {
+        const { data, error} = await supabase
+          .from('job_settings')
+          .select('setting_key, setting_value')
+          .eq('job_id', jobData.id)
+          .in('setting_key', ['adjustment_codes_miscellaneous', 'adjustment_codes_land_positive', 'adjustment_codes_land_negative']);
+
+        if (error || !data) return;
+
+        const newConfig = { ...codeConfig };
+        data.forEach(setting => {
+          const key = setting.setting_key.replace('adjustment_codes_', '');
+          try {
+            newConfig[key] = setting.setting_value ? JSON.parse(setting.setting_value) : [];
+          } catch (e) {
+            newConfig[key] = [];
+          }
+        });
+        setCodeConfig(newConfig);
+        console.log('✅ Loaded code configuration:', newConfig);
+      } catch (error) {
+        // Silent error handling - don't interfere with job loading
+        console.warn('⚠️ Code config loading error (non-critical):', error.message || error);
+      }
+    };
+
+    // Wait for property loading to complete before loading settings
+    if (!isJobContainerLoading) {
+      loadCodeConfig();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobData?.id, isJobContainerLoading]);
 
   // ==================== SALES CODE NORMALIZATION ====================
   const normalizeSalesCode = useCallback((code) => {
@@ -1314,24 +1364,51 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         break;
 
       case 'basement':
-        if (vendorType === 'Microsystems') {
-          subjectValue = readMicroValue(subject, 'basement') || 0;
-          compValue = readMicroValue(comp, 'basement') || 0;
-        }
+        // Use basement_area column (exists for both BRT and Microsystems)
+        subjectValue = subject.basement_area > 0 ? 1 : 0;
+        compValue = comp.basement_area > 0 ? 1 : 0;
+        break;
+
+      case 'finished_basement':
+        // Use fin_basement_area column
+        subjectValue = subject.fin_basement_area > 0 ? 1 : 0;
+        compValue = comp.fin_basement_area > 0 ? 1 : 0;
         break;
 
       case 'deck':
-        if (vendorType === 'Microsystems') {
-          subjectValue = readMicroValue(subject, 'deck') || 0;
-          compValue = readMicroValue(comp, 'deck') || 0;
-        }
+        // Use deck_area column (exists for both vendors)
+        subjectValue = subject.deck_area > 0 ? 1 : 0;
+        compValue = comp.deck_area > 0 ? 1 : 0;
         break;
 
       case 'patio':
-        if (vendorType === 'Microsystems') {
-          subjectValue = readMicroValue(subject, 'patio') || 0;
-          compValue = readMicroValue(comp, 'patio') || 0;
-        }
+        // Use patio_area column
+        subjectValue = subject.patio_area > 0 ? 1 : 0;
+        compValue = comp.patio_area > 0 ? 1 : 0;
+        break;
+
+      case 'pool':
+        // Use pool_area column
+        subjectValue = subject.pool_area > 0 ? 1 : 0;
+        compValue = comp.pool_area > 0 ? 1 : 0;
+        break;
+
+      case 'open_porch':
+        // Use open_porch_area column
+        subjectValue = subject.open_porch_area > 0 ? 1 : 0;
+        compValue = comp.open_porch_area > 0 ? 1 : 0;
+        break;
+
+      case 'enclosed_porch':
+        // Use enclosed_porch_area column
+        subjectValue = subject.enclosed_porch_area > 0 ? 1 : 0;
+        compValue = comp.enclosed_porch_area > 0 ? 1 : 0;
+        break;
+
+      case 'pole_barn':
+        // Use pole_barn_area column
+        subjectValue = subject.pole_barn_area > 0 ? 1 : 0;
+        compValue = comp.pole_barn_area > 0 ? 1 : 0;
         break;
 
       case 'lot_size_ff':
@@ -1355,15 +1432,37 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         break;
 
       case 'exterior_condition':
-        // Use user-configured condition hierarchy from Attribute Cards
-        subjectValue = getConditionRank(subject.asset_ext_cond, 'exterior');
-        compValue = getConditionRank(comp.asset_ext_cond, 'exterior');
+        // Translate condition code to full name using code table (BRT) or simple mapping (Microsystems)
+        let subjectExtCondName = interpretCodes.getExteriorConditionName(subject, codeDefinitions, vendorType);
+        let compExtCondName = interpretCodes.getExteriorConditionName(comp, codeDefinitions, vendorType);
+
+        // Fallback for Microsystems if code definitions not loaded: use simple mapping
+        if (!subjectExtCondName && vendorType === 'Microsystems') {
+          subjectExtCondName = translateConditionCode(subject.asset_ext_cond);
+        }
+        if (!compExtCondName && vendorType === 'Microsystems') {
+          compExtCondName = translateConditionCode(comp.asset_ext_cond);
+        }
+
+        subjectValue = getConditionRank(subjectExtCondName, 'exterior');
+        compValue = getConditionRank(compExtCondName, 'exterior');
         break;
 
       case 'interior_condition':
-        // Use user-configured condition hierarchy from Attribute Cards
-        subjectValue = getConditionRank(subject.asset_int_cond, 'interior');
-        compValue = getConditionRank(comp.asset_int_cond, 'interior');
+        // Translate condition code to full name using code table (BRT) or simple mapping (Microsystems)
+        let subjectIntCondName = interpretCodes.getInteriorConditionName(subject, codeDefinitions, vendorType);
+        let compIntCondName = interpretCodes.getInteriorConditionName(comp, codeDefinitions, vendorType);
+
+        // Fallback for Microsystems if code definitions not loaded: use simple mapping
+        if (!subjectIntCondName && vendorType === 'Microsystems') {
+          subjectIntCondName = translateConditionCode(subject.asset_int_cond);
+        }
+        if (!compIntCondName && vendorType === 'Microsystems') {
+          compIntCondName = translateConditionCode(comp.asset_int_cond);
+        }
+
+        subjectValue = getConditionRank(subjectIntCondName, 'interior');
+        compValue = getConditionRank(compIntCondName, 'interior');
         break;
 
       case 'fireplaces':
@@ -1372,13 +1471,104 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         break;
 
       case 'ac':
-        // Use area if available, otherwise boolean
-        subjectValue = subject.ac_area || (subject.asset_ac ? 1 : 0);
-        compValue = comp.ac_area || (comp.asset_ac ? 1 : 0);
+        // AC is a boolean (YES/NO) adjustment based on ac_area > 0
+        subjectValue = (subject.ac_area && subject.ac_area > 0) ? 1 : 0;
+        compValue = (comp.ac_area && comp.ac_area > 0) ? 1 : 0;
+        break;
+
+      case 'barn':
+        subjectValue = (subject.barn_area && subject.barn_area > 0) ? 1 : 0;
+        compValue = (comp.barn_area && comp.barn_area > 0) ? 1 : 0;
+        break;
+
+      case 'stable':
+        subjectValue = (subject.stable_area && subject.stable_area > 0) ? 1 : 0;
+        compValue = (comp.stable_area && comp.stable_area > 0) ? 1 : 0;
+        break;
+
+      case 'pole_barn':
+        subjectValue = (subject.pole_barn_area && subject.pole_barn_area > 0) ? 1 : 0;
+        compValue = (comp.pole_barn_area && comp.pole_barn_area > 0) ? 1 : 0;
         break;
 
       default:
-        return 0; // Unknown attribute
+        // Handle dynamic adjustments (detached items, miscellaneous, land adjustments)
+        // CNET APPROACH: Check raw code columns at runtime against saved configuration
+        if (adjustmentDef.adjustment_id.startsWith('barn_') ||
+            adjustmentDef.adjustment_id.startsWith('pole_barn_') ||
+            adjustmentDef.adjustment_id.startsWith('stable_') ||
+            adjustmentDef.adjustment_id.startsWith('miscellaneous_') ||
+            adjustmentDef.adjustment_id.startsWith('land_positive_') ||
+            adjustmentDef.adjustment_id.startsWith('land_negative_')) {
+
+          const code = adjustmentDef.adjustment_id.replace(/^(barn|pole_barn|stable|miscellaneous|land_positive|land_negative)_/, '');
+
+          // Helper: Check if code exists in property's raw code columns
+          const hasCode = (property) => {
+            // Normalize function for code comparison
+            const normalizeCode = (c) => String(c).trim().replace(/^0+/, '').toUpperCase() || '0';
+            const targetCode = normalizeCode(code);
+
+            if (vendorType === 'Microsystems') {
+              // MICROSYSTEMS COLUMN MAPPING:
+              // - Detached items (barn, pole_barn, stable) → detached_item_code1-4, detachedbuilding1-4
+              // - Miscellaneous items → misc_item_1-3
+              // - Land positive/negative → overall_adj_reason1-4
+
+              if (adjustmentDef.adjustment_id.startsWith('barn_') ||
+                  adjustmentDef.adjustment_id.startsWith('pole_barn_') ||
+                  adjustmentDef.adjustment_id.startsWith('stable_')) {
+                // Detached items: check detached_item_code1-4, detachedbuilding1-4
+                for (let i = 1; i <= 4; i++) {
+                  const itemCode = property[`detached_item_code${i}`];
+                  if (itemCode && normalizeCode(itemCode) === targetCode) {
+                    return true;
+                  }
+                }
+                for (let i = 1; i <= 4; i++) {
+                  const buildingCode = property[`detachedbuilding${i}`];
+                  if (buildingCode && normalizeCode(buildingCode) === targetCode) {
+                    return true;
+                  }
+                }
+              }
+              else if (adjustmentDef.adjustment_id.startsWith('miscellaneous_')) {
+                // Miscellaneous items: check misc_item_1-3 ONLY
+                for (let i = 1; i <= 3; i++) {
+                  const miscCode = property[`misc_item_${i}`];
+                  if (miscCode && normalizeCode(miscCode) === targetCode) {
+                    return true;
+                  }
+                }
+              }
+              else if (adjustmentDef.adjustment_id.startsWith('land_positive_') ||
+                       adjustmentDef.adjustment_id.startsWith('land_negative_')) {
+                // Land adjustments: check overall_adj_reason1-4
+                for (let i = 1; i <= 4; i++) {
+                  const reasonCode = property[`overall_adj_reason${i}`];
+                  if (reasonCode && normalizeCode(reasonCode) === targetCode) {
+                    return true;
+                  }
+                }
+              }
+            } else {
+              // BRT: Check detachedcode_1-11 for all dynamic adjustments
+              for (let i = 1; i <= 11; i++) {
+                const detachedCode = property[`detachedcode_${i}`];
+                if (detachedCode && normalizeCode(detachedCode) === targetCode) {
+                  return true;
+                }
+              }
+            }
+            return false;
+          };
+
+          subjectValue = hasCode(subject) ? 1 : 0;
+          compValue = hasCode(comp) ? 1 : 0;
+        } else {
+          return 0; // Unknown attribute
+        }
+        break;
     }
 
     const difference = subjectValue - compValue;
@@ -1387,7 +1577,21 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
     // Rule: Subject Better = ADD to comp price; Comp Better = SUBTRACT from comp price
     switch (adjustmentType) {
       case 'flat':
-        return difference > 0 ? adjustmentValue : (difference < 0 ? -adjustmentValue : 0);
+        // Flat adjustments handle lot sizes (multiply by difference) AND boolean items (binary yes/no)
+        // Check if this is a lot size adjustment that should multiply by difference
+        if (adjustmentDef.adjustment_id.includes('lot_size')) {
+          // Lot size: multiply difference by rate per unit
+          return difference * adjustmentValue;
+        }
+        // Check if this is a land_negative adjustment - automatically negate the value
+        else if (adjustmentDef.adjustment_id.startsWith('land_negative_')) {
+          // Land negative: always subtract the value (enter positive amounts in grid, we negate automatically)
+          return difference > 0 ? -adjustmentValue : (difference < 0 ? adjustmentValue : 0);
+        }
+        else {
+          // Boolean amenities: binary adjustment (has it or doesn't)
+          return difference > 0 ? adjustmentValue : (difference < 0 ? -adjustmentValue : 0);
+        }
 
       case 'per_sqft':
         return difference * adjustmentValue;
@@ -1407,19 +1611,40 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
     }
   };
 
+  // Helper: Translate single-letter condition codes to full names
+  const translateConditionCode = (code) => {
+    if (!code) return null;
+    const normalized = code.trim().toUpperCase();
+
+    // Standard condition code mappings (vendor-agnostic)
+    const conditionMap = {
+      'E': 'EXCELLENT',
+      'G': 'GOOD',
+      'A': 'AVERAGE',
+      'F': 'FAIR',
+      'P': 'POOR'
+    };
+
+    return conditionMap[normalized] || null;
+  };
+
   // Helper: Get numeric rank for condition codes based on user configuration
-  const getConditionRank = (conditionCode, configType) => {
-    if (!conditionCode) return 0; // No condition code
+  const getConditionRank = (conditionName, configType) => {
+    // Handle null/undefined/empty condition name
+    if (!conditionName || conditionName.trim() === '') {
+      console.warn(`⚠️  No condition name provided for ${configType}, defaulting to baseline (0)`);
+      return 0; // No condition name, default to baseline
+    }
 
     // Check if attribute condition config exists
     const conditionConfig = jobData?.attribute_condition_config;
     if (!conditionConfig || !conditionConfig[configType]) {
       console.error(`⚠️  Condition configuration not found for ${configType}. Please configure in Market Analysis → Attribute Cards.`);
-      throw new Error(`Condition hierarchy not configured. Please configure ${configType} condition rankings in Market Analysis → Attribute Cards.`);
+      return 0; // Return baseline instead of throwing error to prevent evaluation from breaking
     }
 
     const config = conditionConfig[configType];
-    const code = conditionCode.toUpperCase().trim();
+    const code = conditionName.toUpperCase().trim();
     const baseline = config.baseline?.toUpperCase().trim();
     const betterCodes = (config.better || []).map(c => c.toUpperCase().trim());
     const worseCodes = (config.worse || []).map(c => c.toUpperCase().trim());
@@ -2810,6 +3035,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
                   codeDefinitions={codeDefinitions}
                   vendorType={vendorType}
                   adjustmentGrid={adjustmentGrid}
+                  compFilters={compFilters}
+                  cmeBrackets={CME_BRACKETS}
+                  isJobContainerLoading={isJobContainerLoading}
                 />
               </div>
             )}
