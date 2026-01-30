@@ -9,6 +9,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
   const resultsRef = React.useRef(null);
+  const detailedResultsRef = React.useRef(null);
   const [codeDefinitions, setCodeDefinitions] = useState(null);
   
   // ==================== SUBJECT PROPERTIES STATE ====================
@@ -89,6 +90,50 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
   const vendorType = jobData?.vendor_type || 'BRT';
 
+  // ==================== GARAGE THRESHOLDS ====================
+  const [garageThresholds, setGarageThresholds] = useState({
+    one_car_max: 399,
+    two_car_max: 799,
+    three_car_max: 999
+  });
+
+  // Helper: Convert garage square footage to category number
+  const getGarageCategory = useCallback((sqft) => {
+    if (!sqft || sqft === 0) return 0; // NONE
+    if (sqft <= garageThresholds.one_car_max) return 1; // ONE CAR
+    if (sqft <= garageThresholds.two_car_max) return 2; // TWO CAR
+    if (sqft <= garageThresholds.three_car_max) return 3; // THREE CAR
+    return 4; // MULTI CAR
+  }, [garageThresholds]);
+
+  // Load garage thresholds on mount
+  useEffect(() => {
+    const loadGarageThresholds = async () => {
+      if (!jobData?.id) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('job_settings')
+          .select('setting_key, setting_value')
+          .eq('job_id', jobData.id)
+          .in('setting_key', ['garage_threshold_one_car_max', 'garage_threshold_two_car_max', 'garage_threshold_three_car_max']);
+
+        if (error || !data) return;
+
+        const newThresholds = { ...garageThresholds };
+        data.forEach(setting => {
+          const key = setting.setting_key.replace('garage_threshold_', '');
+          newThresholds[key] = parseInt(setting.setting_value, 10) || garageThresholds[key];
+        });
+        setGarageThresholds(newThresholds);
+      } catch (error) {
+        console.error('Error loading garage thresholds:', error);
+      }
+    };
+
+    loadGarageThresholds();
+  }, [jobData?.id]);
+
   // ==================== SALES CODE NORMALIZATION ====================
   const normalizeSalesCode = useCallback((code) => {
     if (code === null || code === undefined || code === '' || code === '00') return '';
@@ -162,19 +207,29 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
     try {
       const rawData = await getRawDataForJob(jobData.id);
       if (rawData?.codeDefinitions || rawData?.parsed_code_definitions) {
-        setCodeDefinitions(rawData.codeDefinitions || rawData.parsed_code_definitions);
+        const codes = rawData.codeDefinitions || rawData.parsed_code_definitions;
+        setCodeDefinitions(codes);
+        console.log('✅ Loaded code definitions:', {
+          totalCodes: codes.summary?.total_codes,
+          parsedAt: codes.summary?.parsed_at,
+          parsingMethod: codes.summary?.parsing_method,
+          storyHeightCodes: codes.field_codes?.['510'] ? Object.keys(codes.field_codes['510']) : 'N/A'
+        });
+      } else {
+        console.warn('⚠️ No code definitions found for job');
       }
     } catch (error) {
-      console.error('Error loading code definitions:', error);
+      console.error('❌ Error loading code definitions:', error);
     }
   };
 
-  // Reload adjustment grid when returning to search tab (in case it was updated in Adjustments tab)
+  // Reload adjustment grid and code definitions when switching tabs (in case they were updated)
   useEffect(() => {
-    if (activeSubTab === 'search' && jobData?.id) {
-      console.log('🔄 Switched to Search tab - reloading adjustment grid...');
+    if ((activeSubTab === 'search' || activeSubTab === 'detailed') && jobData?.id) {
+      console.log(`🔄 Switched to ${activeSubTab} tab - reloading adjustment grid and code definitions...`);
       loadAdjustmentGrid();
       loadCustomBrackets();
+      loadCodeDefinitions();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSubTab, jobData?.id]);
@@ -380,12 +435,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         return;
       }
 
-      // Find subject by block, lot, qualifier (not by composite key)
-      const subject = properties.find(p =>
-        p.property_block === manualSubject.block &&
-        p.property_lot === manualSubject.lot &&
-        (p.property_qualifier || '') === (manualSubject.qualifier || '')
-      );
+      // Find subject by block, lot, qualifier (normalize for comparison)
+      const subject = properties.find(p => {
+        const blockMatch = (p.property_block || '').trim().toUpperCase() === manualSubject.block.trim().toUpperCase();
+        const lotMatch = (p.property_lot || '').trim().toUpperCase() === manualSubject.lot.trim().toUpperCase();
+        const qualMatch = (p.property_qualifier || '').trim().toUpperCase() === (manualSubject.qualifier || '').trim().toUpperCase();
+        return blockMatch && lotMatch && qualMatch;
+      });
 
       if (!subject) {
         alert(`Subject property not found: Block ${manualSubject.block}, Lot ${manualSubject.lot}${manualSubject.qualifier ? `, Qual ${manualSubject.qualifier}` : ''}\n\nMake sure the property exists in this job.`);
@@ -397,11 +453,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       const fetchedComps = [];
       for (const compEntry of manualComps) {
         if (compEntry.block && compEntry.lot) {
-          const comp = properties.find(p =>
-            p.property_block === compEntry.block &&
-            p.property_lot === compEntry.lot &&
-            (p.property_qualifier || '') === (compEntry.qualifier || '')
-          );
+          const comp = properties.find(p => {
+            const blockMatch = (p.property_block || '').trim().toUpperCase() === compEntry.block.trim().toUpperCase();
+            const lotMatch = (p.property_lot || '').trim().toUpperCase() === compEntry.lot.trim().toUpperCase();
+            const qualMatch = (p.property_qualifier || '').trim().toUpperCase() === (compEntry.qualifier || '').trim().toUpperCase();
+            return blockMatch && lotMatch && qualMatch;
+          });
 
           if (comp && comp.sales_date && comp.values_norm_time) {
             // Calculate adjustments
@@ -460,6 +517,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
       });
 
       console.log(`✅ Manual evaluation complete: ${fetchedComps.length} comps found`);
+
+      // Auto-scroll to results after a short delay to allow rendering
+      setTimeout(() => {
+        if (detailedResultsRef.current) {
+          detailedResultsRef.current.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          });
+        }
+      }, 100);
 
     } catch (error) {
       console.error('Error in manual evaluation:', error);
@@ -1235,14 +1302,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         break;
 
       case 'garage':
-        // BRT: Count category 15, Micro: use garage column
-        if (vendorType === 'BRT') {
-          subjectValue = countBRTItems(subject, ['15']);
-          compValue = countBRTItems(comp, ['15']);
-        } else {
-          subjectValue = readMicroValue(subject, 'garage') || 0;
-          compValue = readMicroValue(comp, 'garage') || 0;
-        }
+        // Use garage_area column and convert to category (0=NONE, 1=ONE CAR, 2=TWO CAR, 3=THREE CAR, 4=MULTI CAR)
+        subjectValue = getGarageCategory(subject.garage_area || 0);
+        compValue = getGarageCategory(comp.garage_area || 0);
+        break;
+
+      case 'det_garage':
+        // Use det_garage_area column and convert to category (0=NONE, 1=ONE CAR, 2=TWO CAR, 3=THREE CAR, 4=MULTI CAR)
+        subjectValue = getGarageCategory(subject.det_garage_area || 0);
+        compValue = getGarageCategory(comp.det_garage_area || 0);
         break;
 
       case 'basement':
@@ -1322,6 +1390,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
         return difference > 0 ? adjustmentValue : (difference < 0 ? -adjustmentValue : 0);
 
       case 'per_sqft':
+        return difference * adjustmentValue;
+
+      case 'count':
+        // Count adjustment: multiply difference by $ per count (e.g., $5,000 per bedroom)
         return difference * adjustmentValue;
 
       case 'percent':
@@ -2731,13 +2803,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache }) 
 
             {/* Results Section (if evaluation has been run) */}
             {manualEvaluationResult && (
-              <DetailedAppraisalGrid
-                result={manualEvaluationResult}
-                jobData={jobData}
-                codeDefinitions={codeDefinitions}
-                vendorType={vendorType}
-                adjustmentGrid={adjustmentGrid}
-              />
+              <div ref={detailedResultsRef}>
+                <DetailedAppraisalGrid
+                  result={manualEvaluationResult}
+                  jobData={jobData}
+                  codeDefinitions={codeDefinitions}
+                  vendorType={vendorType}
+                  adjustmentGrid={adjustmentGrid}
+                />
+              </div>
             )}
           </div>
         )}

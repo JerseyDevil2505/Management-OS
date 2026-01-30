@@ -3,7 +3,27 @@ import { supabase, getRawDataForJob } from '../../../lib/supabaseClient';
 import { Save, Plus, Trash2, Settings, X } from 'lucide-react';
 
 const AdjustmentsTab = ({ jobData = {} }) => {
+  const vendorType = jobData?.vendor_type || 'BRT';
   const [activeSubTab, setActiveSubTab] = useState('adjustments');
+
+  // Helper: Format adjustment names to title case for misc/land adjustments
+  const formatAdjustmentName = (name, adjustmentId) => {
+    // Check if it's a dynamic adjustment (misc or land)
+    const isDynamic = adjustmentId.includes('miscellaneous_') ||
+                      adjustmentId.includes('land_positive_') ||
+                      adjustmentId.includes('land_negative_');
+
+    if (isDynamic && name) {
+      // Convert to title case
+      return name
+        .toLowerCase()
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    }
+
+    return name;
+  };
   const [adjustments, setAdjustments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -41,6 +61,37 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     '63': []  // Negative land adjustments
   });
   const [isLoadingCodes, setIsLoadingCodes] = useState(false);
+
+  // Garage per-car thresholds
+  const [garageThresholds, setGarageThresholds] = useState({
+    one_car_max: 399,
+    two_car_max: 799,
+    three_car_max: 999
+    // Anything above three_car_max is MULTI CAR
+  });
+
+  // Helper: Convert garage square footage to category number
+  const getGarageCategory = (sqft, thresholds = garageThresholds) => {
+    if (!sqft || sqft === 0) return 0; // NONE
+    if (sqft <= thresholds.one_car_max) return 1; // ONE CAR
+    if (sqft <= thresholds.two_car_max) return 2; // TWO CAR
+    if (sqft <= thresholds.three_car_max) return 3; // THREE CAR
+    return 4; // MULTI CAR
+  };
+
+  // Helper: Convert category number to display label
+  const getGarageCategoryLabel = (category) => {
+    const labels = ['NONE', 'ONE CAR', 'TWO CAR', 'THREE CAR', 'MULTI CAR'];
+    return labels[category] || 'NONE';
+  };
+
+  // Helper: Get garage display text with category and SF
+  const getGarageDisplayText = (sqft, thresholds = garageThresholds) => {
+    if (!sqft || sqft === 0) return 'None';
+    const category = getGarageCategory(sqft, thresholds);
+    const label = getGarageCategoryLabel(category);
+    return `${label} (${sqft.toLocaleString()} SF)`;
+  };
 
   // CME Price Brackets (matching OverallAnalysisTab)
   const CME_BRACKETS = [
@@ -80,9 +131,9 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       values: [1000, 2500, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000] },
     { id: 'fireplaces', name: 'Fireplaces', type: 'flat', isDefault: true, category: 'physical',
       values: [500, 1000, 2500, 2500, 2500, 2500, 2500, 2500, 2500, 2500] },
-    { id: 'garage', name: 'Garage', type: 'flat', isDefault: true, category: 'physical',
+    { id: 'garage', name: 'Garage', type: 'count', isDefault: true, category: 'physical',
       values: [2500, 5000, 7500, 7500, 7500, 10000, 15000, 25000, 35000, 40000] },
-    { id: 'det_garage', name: 'Det Garage', type: 'flat', isDefault: true, category: 'physical',
+    { id: 'det_garage', name: 'Det Garage', type: 'count', isDefault: true, category: 'physical',
       values: [1250, 2500, 3450, 3450, 3450, 5000, 7500, 12500, 17500, 20000] },
     { id: 'deck', name: 'Deck', type: 'flat', isDefault: true, category: 'amenity',
       values: [1000, 1500, 2000, 3500, 3500, 5000, 10000, 20000, 30000, 35000] },
@@ -120,6 +171,16 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     { id: 'land_positive', name: 'Positive Land', category: '62' },
     { id: 'land_negative', name: 'Negative Land', category: '63' }
   ];
+
+  // Helper: Check if attribute should be disabled for Microsystems
+  // For Microsystems, ONLY attached items are extracted from columns, not codes
+  const isAttributeDisabledForMicrosystems = (attributeId) => {
+    if (vendorType !== 'Microsystems') return false;
+    const attachedItemsFromColumns = [
+      'garage', 'deck', 'patio', 'open_porch', 'enclosed_porch'
+    ];
+    return attachedItemsFromColumns.includes(attributeId);
+  };
 
   // Load adjustments and custom brackets from database
   useEffect(() => {
@@ -218,7 +279,10 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         'adjustment_codes_miscellaneous',
         'adjustment_codes_land_positive',
         'adjustment_codes_land_negative',
-        'adjustment_codes_version' // Track code definition version
+        'adjustment_codes_version', // Track code definition version
+        'garage_threshold_one_car_max',
+        'garage_threshold_two_car_max',
+        'garage_threshold_three_car_max'
       ];
 
       const { data, error } = await supabase
@@ -238,17 +302,29 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       if (data && data.length > 0 && savedVersion === currentVersion) {
         // User has saved settings AND version matches - load them
         const newConfig = { ...codeConfig };
+        const newThresholds = { ...garageThresholds };
+
         data.forEach(setting => {
-          const attributeId = setting.setting_key.replace('adjustment_codes_', '');
-          if (attributeId !== 'version') {
-            try {
-              newConfig[attributeId] = setting.setting_value ? JSON.parse(setting.setting_value) : [];
-            } catch (e) {
-              newConfig[attributeId] = [];
+          // Handle garage thresholds
+          if (setting.setting_key.startsWith('garage_threshold_')) {
+            const thresholdKey = setting.setting_key.replace('garage_threshold_', '');
+            newThresholds[thresholdKey] = parseInt(setting.setting_value, 10) || garageThresholds[thresholdKey];
+          }
+          // Handle code configuration
+          else {
+            const attributeId = setting.setting_key.replace('adjustment_codes_', '');
+            if (attributeId !== 'version') {
+              try {
+                newConfig[attributeId] = setting.setting_value ? JSON.parse(setting.setting_value) : [];
+              } catch (e) {
+                newConfig[attributeId] = [];
+              }
             }
           }
         });
+
         setCodeConfig(newConfig);
+        setGarageThresholds(newThresholds);
       } else {
         // No saved settings OR version mismatch (code table changed) - re-auto-populate
         if (savedVersion && savedVersion !== currentVersion) {
@@ -343,59 +419,108 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       const codeDefinitions = job.parsed_code_definitions;
       console.log('📊 Code definitions structure:', codeDefinitions);
 
-      const sections = codeDefinitions.sections || codeDefinitions || {};
-      console.log('📂 Available sections:', Object.keys(sections));
-
       // Extract codes from specific categories WITHIN the Residential section
       const categoryCodes = {
-        '11': [], // Attached items (garage, deck, patio, open porch, enclosed porch)
+        '11': [], // Attached items (garage, deck, patio, open porch, enclosed porch) - BRT only
         '15': [], // Detached items (det garage, pools, barn, stable, pole barn)
         '39': [], // Miscellaneous items
         '62': [], // Positive land adjustments
         '63': []  // Negative land adjustments
       };
 
-      // BRT codes are nested: sections.Residential contains parent keys that have KEYs like "11", "15", etc.
-      const residentialSection = sections.Residential || sections.residential || {};
-      console.log('🏠 Residential section keys:', Object.keys(residentialSection));
+      // MICROSYSTEMS: Load from field_codes with specific prefixes
+      if (vendorType === 'Microsystems' && codeDefinitions.field_codes) {
+        console.log('📂 Microsystems field_codes available:', Object.keys(codeDefinitions.field_codes));
 
-      // Search through Residential section to find categories by their KEY property
-      Object.keys(residentialSection).forEach(parentKey => {
-        const parentSection = residentialSection[parentKey];
+        // Category 15: Detached items from prefix 680
+        const detachedCodes = codeDefinitions.field_codes['680'] || {};
+        Object.entries(detachedCodes).forEach(([code, data]) => {
+          if (data.description) {
+            categoryCodes['15'].push({
+              code: code,
+              description: data.description.trim()
+            });
+          }
+        });
+        console.log(`✅ Microsystems detached items (680): ${categoryCodes['15'].length} codes`);
 
-        // Check if this parent section has a KEY property matching our category numbers
-        const categoryKey = parentSection?.KEY || parentSection?.key;
-
-        if (categoryKey && categoryCodes.hasOwnProperty(categoryKey)) {
-          console.log(`🎯 Found category ${categoryKey} at parent key "${parentKey}"`);
-
-          // Now extract codes from the MAP within this category
-          const categoryMap = parentSection.MAP || parentSection.map || {};
-
-          Object.keys(categoryMap).forEach(codeKey => {
-            const codeItem = categoryMap[codeKey];
-            let description = '';
-
-            // Extract description from DATA.VALUE
-            if (codeItem?.DATA?.VALUE) {
-              description = codeItem.DATA.VALUE;
-            } else if (codeItem?.VALUE) {
-              description = codeItem.VALUE;
-            } else if (typeof codeItem === 'string') {
-              description = codeItem;
-            }
-
-            if (description && codeKey !== 'KEY' && codeKey !== 'DATA' && codeKey !== 'MAP') {
-              categoryCodes[categoryKey].push({
-                code: codeKey,
-                description: description.trim()
-              });
+        // Category 39: Miscellaneous items from prefixes 590, 591, 592, 593
+        // Use Map to deduplicate codes that appear in multiple prefixes
+        const miscCodesMap = new Map();
+        ['590', '591', '592', '593'].forEach(prefix => {
+          const miscCodes = codeDefinitions.field_codes[prefix] || {};
+          Object.entries(miscCodes).forEach(([code, data]) => {
+            if (data.description && !miscCodesMap.has(code)) {
+              miscCodesMap.set(code, data.description.trim());
             }
           });
+        });
+        miscCodesMap.forEach((description, code) => {
+          categoryCodes['39'].push({ code, description });
+        });
+        console.log(`✅ Microsystems miscellaneous (590-593): ${categoryCodes['39'].length} codes`);
 
-          console.log(`✅ Category ${categoryKey} loaded ${categoryCodes[categoryKey].length} codes`);
-        }
-      });
+        // Categories 62 & 63: Land adjustments from table 220
+        // Use Map to deduplicate, then add to both positive and negative
+        const landCodesMap = new Map();
+        const landCodes = codeDefinitions.field_codes['220'] || {};
+        Object.entries(landCodes).forEach(([code, data]) => {
+          if (data.description && !landCodesMap.has(code)) {
+            landCodesMap.set(code, data.description.trim());
+          }
+        });
+        landCodesMap.forEach((description, code) => {
+          categoryCodes['62'].push({ code, description });
+          categoryCodes['63'].push({ code, description });
+        });
+        console.log(`✅ Microsystems land adjustments (220): ${categoryCodes['62'].length} codes`);
+      }
+      // BRT: Load from sections.Residential
+      else {
+        const sections = codeDefinitions.sections || codeDefinitions || {};
+        console.log('📂 Available sections:', Object.keys(sections));
+
+        const residentialSection = sections.Residential || sections.residential || {};
+        console.log('🏠 Residential section keys:', Object.keys(residentialSection));
+
+        // Search through Residential section to find categories by their KEY property
+        Object.keys(residentialSection).forEach(parentKey => {
+          const parentSection = residentialSection[parentKey];
+
+          // Check if this parent section has a KEY property matching our category numbers
+          const categoryKey = parentSection?.KEY || parentSection?.key;
+
+          if (categoryKey && categoryCodes.hasOwnProperty(categoryKey)) {
+            console.log(`🎯 Found category ${categoryKey} at parent key "${parentKey}"`);
+
+            // Now extract codes from the MAP within this category
+            const categoryMap = parentSection.MAP || parentSection.map || {};
+
+            Object.keys(categoryMap).forEach(codeKey => {
+              const codeItem = categoryMap[codeKey];
+              let description = '';
+
+              // Extract description from DATA.VALUE
+              if (codeItem?.DATA?.VALUE) {
+                description = codeItem.DATA.VALUE;
+              } else if (codeItem?.VALUE) {
+                description = codeItem.VALUE;
+              } else if (typeof codeItem === 'string') {
+                description = codeItem;
+              }
+
+              if (description && codeKey !== 'KEY' && codeKey !== 'DATA' && codeKey !== 'MAP') {
+                categoryCodes[categoryKey].push({
+                  code: codeKey,
+                  description: description.trim()
+                });
+              }
+            });
+
+            console.log(`✅ Category ${categoryKey} loaded ${categoryCodes[categoryKey].length} codes`);
+          }
+        });
+      }
 
       // Sort by code numerically
       Object.keys(categoryCodes).forEach(cat => {
@@ -594,6 +719,25 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         setting_value: currentVersion
       });
 
+      // Add garage thresholds
+      settings.push(
+        {
+          job_id: jobData.id,
+          setting_key: 'garage_threshold_one_car_max',
+          setting_value: String(garageThresholds.one_car_max)
+        },
+        {
+          job_id: jobData.id,
+          setting_key: 'garage_threshold_two_car_max',
+          setting_value: String(garageThresholds.two_car_max)
+        },
+        {
+          job_id: jobData.id,
+          setting_key: 'garage_threshold_three_car_max',
+          setting_value: String(garageThresholds.three_car_max)
+        }
+      );
+
       const { error: settingsError } = await supabase
         .from('job_settings')
         .upsert(settings, { onConflict: 'job_id,setting_key' });
@@ -630,10 +774,17 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
                 if (!existingAdj) {
                   maxSortOrder += 1;
+                  // Convert description to title case (lowercase first, then capitalize each word)
+                  const titleCaseName = codeObj.description
+                    .toLowerCase()
+                    .split(' ')
+                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                    .join(' ');
+
                   newAdjustments.push({
                     job_id: jobData.id,
                     adjustment_id: adjustmentId,
-                    adjustment_name: codeObj.description,
+                    adjustment_name: titleCaseName,
                     adjustment_type: 'flat',
                     category: 'amenity',
                     is_default: false,
@@ -702,8 +853,10 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         });
       }
 
-      // CRITICAL: Recalculate amenity areas for all properties using new code mappings
-      console.log('🔄 Triggering database recalculation with new code mappings...');
+      // CRITICAL: Recalculate amenity areas using new code mappings
+      // Both BRT and Microsystems now need recategorization for detached/misc/land items
+      let recalcMessage = '';
+      console.log(`🔄 Triggering database recategorization for ${vendorType}...`);
 
       const { data: { session } } = await supabase.auth.getSession();
       const recalcResponse = await fetch(
@@ -716,20 +869,22 @@ const AdjustmentsTab = ({ jobData = {} }) => {
           },
           body: JSON.stringify({
             jobId: jobData.id,
+            vendorType: vendorType,
             codeConfig: codeConfig
           })
         }
       );
 
       if (!recalcResponse.ok) {
-        const errorData = await recalcResponse.json();
-        throw new Error(`Recalculation failed: ${errorData.error}`);
+        const errorData = await recalcResponse.json().catch(() => ({}));
+        throw new Error(`Recalculation failed: ${errorData.error || 'Edge function error'}`);
       }
 
       const recalcResult = await recalcResponse.json();
-      console.log('✅ Recalculation complete:', recalcResult);
+      console.log('✅ Recategorization complete:', recalcResult);
+      recalcMessage = `\n\n${recalcResult.updatedCount} properties updated with new code mappings.`;
 
-      alert(`Code configuration saved and ${recalcResult.updatedCount} properties updated!${newAdjustments.length > 0 ? ` ${newAdjustments.length} new adjustment row(s) added to grid.` : ''}\n\nAmenity areas have been recalculated using your custom code mappings.`);
+      alert(`Code configuration saved!${newAdjustments.length > 0 ? ` ${newAdjustments.length} new adjustment row(s) added to grid.` : ''}${recalcMessage}`);
 
       // Dismiss auto-populate notice and reset flag after saving
       setShowAutoPopulateNotice(false);
@@ -795,6 +950,56 @@ const AdjustmentsTab = ({ jobData = {} }) => {
             <p className="text-sm text-gray-600">
               Assign BRT codes to each adjustment attribute. Static attributes are always visible in the adjustment grid.
               Dynamic attributes will only appear in the grid after codes are assigned and saved.
+            </p>
+          </div>
+
+          {/* Garage Per-Car Thresholds */}
+          <div className="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <h4 className="text-sm font-semibold text-gray-900 mb-3">Garage Per-Car Thresholds (Square Feet)</h4>
+            <p className="text-xs text-gray-600 mb-3">
+              Configure how garage square footage is categorized into car count categories. These thresholds apply to both attached garages and detached garages.
+            </p>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  One Car Maximum
+                </label>
+                <input
+                  type="number"
+                  value={garageThresholds.one_car_max}
+                  onChange={(e) => setGarageThresholds(prev => ({ ...prev, one_car_max: parseInt(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">1-{garageThresholds.one_car_max} SF = ONE CAR</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Two Car Maximum
+                </label>
+                <input
+                  type="number"
+                  value={garageThresholds.two_car_max}
+                  onChange={(e) => setGarageThresholds(prev => ({ ...prev, two_car_max: parseInt(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">{garageThresholds.one_car_max + 1}-{garageThresholds.two_car_max} SF = TWO CAR</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Three Car Maximum
+                </label>
+                <input
+                  type="number"
+                  value={garageThresholds.three_car_max}
+                  onChange={(e) => setGarageThresholds(prev => ({ ...prev, three_car_max: parseInt(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">{garageThresholds.two_car_max + 1}-{garageThresholds.three_car_max} SF = THREE CAR</p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-600 mt-3">
+              <strong>Note:</strong> Garages over {garageThresholds.three_car_max} SF are categorized as <strong>MULTI CAR</strong>.
+              Category differences are multiplied by the adjustment value (e.g., ONE CAR to TWO CAR = 1 step × adjustment amount).
             </p>
           </div>
 
@@ -880,55 +1085,64 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                       {STATIC_ATTRIBUTES.map(attr => {
                         const codes = getCodesForAttribute(attr.id, attr.category);
                         const selectedCodes = codeConfig[attr.id] || [];
+                        const isDisabled = isAttributeDisabledForMicrosystems(attr.id);
 
                         return (
-                          <tr key={attr.id} className="border-b hover:bg-gray-50">
-                            <td className="py-3 px-4 font-medium text-gray-900">{attr.name}</td>
+                          <tr key={attr.id} className={`border-b ${isDisabled ? 'bg-gray-50' : 'hover:bg-gray-50'}`}>
+                            <td className={`py-3 px-4 font-medium ${isDisabled ? 'text-gray-400' : 'text-gray-900'}`}>
+                              {attr.name}
+                            </td>
                             <td className="py-3 px-4">
-                              <div className="space-y-2">
-                                {/* Selected codes as chips */}
-                                {selectedCodes.length > 0 && (
-                                  <div className="flex flex-wrap gap-2 mb-2">
-                                    {selectedCodes.map(codeVal => {
-                                      const codeObj = codes.find(c => c.code === codeVal);
-                                      return (
-                                        <span
-                                          key={codeVal}
-                                          className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium"
-                                        >
-                                          {codeVal} - {codeObj?.description || 'Unknown'}
-                                          <button
-                                            onClick={() => handleCodeToggle(attr.id, codeVal)}
-                                            className="ml-1 text-blue-600 hover:text-blue-800"
+                              {isDisabled ? (
+                                <div className="text-xs text-gray-500 italic">
+                                  Extracted from source file columns
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {/* Selected codes as chips */}
+                                  {selectedCodes.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mb-2">
+                                      {selectedCodes.map(codeVal => {
+                                        const codeObj = codes.find(c => c.code === codeVal);
+                                        return (
+                                          <span
+                                            key={`${attr.id}-${codeVal}`}
+                                            className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium"
                                           >
-                                            <X className="w-3 h-3" />
-                                          </button>
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                )}
+                                            {codeVal} - {codeObj?.description || 'Unknown'}
+                                            <button
+                                              onClick={() => handleCodeToggle(attr.id, codeVal)}
+                                              className="ml-1 text-blue-600 hover:text-blue-800"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
 
-                                {/* Dropdown to add codes */}
-                                <select
-                                  value=""
-                                  onChange={(e) => {
-                                    if (e.target.value) {
-                                      handleCodeToggle(attr.id, e.target.value);
-                                    }
-                                  }}
-                                  className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 text-sm"
-                                >
-                                  <option value="">-- Add Code --</option>
-                                  {codes
-                                    .filter(code => !selectedCodes.includes(code.code))
-                                    .map(code => (
-                                      <option key={code.code} value={code.code}>
-                                        {code.code} - {code.description}
-                                      </option>
-                                    ))}
-                                </select>
-                              </div>
+                                  {/* Dropdown to add codes */}
+                                  <select
+                                    value=""
+                                    onChange={(e) => {
+                                      if (e.target.value) {
+                                        handleCodeToggle(attr.id, e.target.value);
+                                      }
+                                    }}
+                                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 text-sm"
+                                  >
+                                    <option value="">-- Add Code --</option>
+                                    {codes
+                                      .filter(code => !selectedCodes.includes(code.code))
+                                      .map(code => (
+                                        <option key={`${attr.id}-${code.code}`} value={code.code}>
+                                          {code.code} - {code.description}
+                                        </option>
+                                      ))}
+                                  </select>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         );
@@ -958,55 +1172,64 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                       {DYNAMIC_ATTRIBUTES.map(attr => {
                         const codes = getCodesForAttribute(attr.id, attr.category);
                         const selectedCodes = codeConfig[attr.id] || [];
+                        const isDisabled = isAttributeDisabledForMicrosystems(attr.id);
 
                         return (
-                          <tr key={attr.id} className="border-b hover:bg-gray-50">
-                            <td className="py-3 px-4 font-medium text-gray-900">{attr.name}</td>
+                          <tr key={attr.id} className={`border-b ${isDisabled ? 'bg-gray-50' : 'hover:bg-gray-50'}`}>
+                            <td className={`py-3 px-4 font-medium ${isDisabled ? 'text-gray-400' : 'text-gray-900'}`}>
+                              {attr.name}
+                            </td>
                             <td className="py-3 px-4">
-                              <div className="space-y-2">
-                                {/* Selected codes as chips */}
-                                {selectedCodes.length > 0 && (
-                                  <div className="flex flex-wrap gap-2 mb-2">
-                                    {selectedCodes.map(codeVal => {
-                                      const codeObj = codes.find(c => c.code === codeVal);
-                                      return (
-                                        <span
-                                          key={codeVal}
-                                          className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium"
-                                        >
-                                          {codeVal} - {codeObj?.description || 'Unknown'}
-                                          <button
-                                            onClick={() => handleCodeToggle(attr.id, codeVal)}
-                                            className="ml-1 text-green-600 hover:text-green-800"
+                              {isDisabled ? (
+                                <div className="text-xs text-gray-500 italic">
+                                  Extracted from source file columns
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {/* Selected codes as chips */}
+                                  {selectedCodes.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mb-2">
+                                      {selectedCodes.map(codeVal => {
+                                        const codeObj = codes.find(c => c.code === codeVal);
+                                        return (
+                                          <span
+                                            key={`${attr.id}-${codeVal}`}
+                                            className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium"
                                           >
-                                            <X className="w-3 h-3" />
-                                          </button>
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                )}
+                                            {codeVal} - {codeObj?.description || 'Unknown'}
+                                            <button
+                                              onClick={() => handleCodeToggle(attr.id, codeVal)}
+                                              className="ml-1 text-green-600 hover:text-green-800"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
 
-                                {/* Dropdown to add codes */}
-                                <select
-                                  value=""
-                                  onChange={(e) => {
-                                    if (e.target.value) {
-                                      handleCodeToggle(attr.id, e.target.value);
-                                    }
-                                  }}
-                                  className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 text-sm"
-                                >
-                                  <option value="">-- Add Code --</option>
-                                  {codes
-                                    .filter(code => !selectedCodes.includes(code.code))
-                                    .map(code => (
-                                      <option key={code.code} value={code.code}>
-                                        {code.code} - {code.description}
-                                      </option>
-                                    ))}
-                                </select>
-                              </div>
+                                  {/* Dropdown to add codes */}
+                                  <select
+                                    value=""
+                                    onChange={(e) => {
+                                      if (e.target.value) {
+                                        handleCodeToggle(attr.id, e.target.value);
+                                      }
+                                    }}
+                                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 text-sm"
+                                  >
+                                    <option value="">-- Add Code --</option>
+                                    {codes
+                                      .filter(code => !selectedCodes.includes(code.code))
+                                      .map(code => (
+                                        <option key={`${attr.id}-${code.code}`} value={code.code}>
+                                          {code.code} - {code.description}
+                                        </option>
+                                      ))}
+                                  </select>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         );
@@ -1107,7 +1330,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                 {adjustments.map((adj) => (
                   <tr key={adj.adjustment_id} className="hover:bg-gray-50">
                     <td className="sticky left-0 z-10 bg-white px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-gray-200">
-                      {adj.adjustment_name}
+                      {formatAdjustmentName(adj.adjustment_name, adj.adjustment_id)}
                     </td>
                     {/* Default Bracket Values */}
                     {CME_BRACKETS.map((bracket, bIdx) => (
@@ -1121,7 +1344,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                           value={adj[`bracket_${bIdx}`] || 0}
                           onChange={(e) => handleAdjustmentChange(adj.adjustment_id, bIdx, e.target.value)}
                           className="w-20 px-2 py-1 text-sm text-center border rounded focus:ring-2 focus:ring-blue-500"
-                          step={adj.adjustment_type === 'per_sqft' ? '0.01' : '100'}
+                          step={adj.adjustment_type === 'per_sqft' ? '0.01' : adj.adjustment_type === 'percent' ? '1' : adj.adjustment_type === 'count' ? '1' : '100'}
                         />
                       </td>
                     ))}
@@ -1136,7 +1359,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                           <div className="text-sm font-medium text-gray-900">
                             {customValue.value || 0}
                             <span className="text-xs text-gray-500 ml-1">
-                              {customValue.type === 'flat' ? '$' : customValue.type === 'per_sqft' ? '$/SF' : '%'}
+                              {customValue.type === 'flat' ? '$' : customValue.type === 'per_sqft' ? '$/SF' : customValue.type === 'count' ? '#' : '%'}
                             </span>
                           </div>
                         </td>
@@ -1152,9 +1375,8 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                         >
                           <option value="flat">Flat ($)</option>
                           <option value="per_sqft">Per SF ($/SF)</option>
-                          {(adj.adjustment_type === 'percent' || adj.adjustment_type === 'flat_or_percent') && (
-                            <option value="percent">Percent (%)</option>
-                          )}
+                          <option value="count">Count (#)</option>
+                          <option value="percent">Percent (%)</option>
                         </select>
                         {!adj.is_default && (
                           <button
@@ -1179,7 +1401,8 @@ const AdjustmentsTab = ({ jobData = {} }) => {
             <ul className="text-sm text-gray-700 space-y-1">
               <li><strong>Flat ($)</strong> - Fixed dollar amount adjustment</li>
               <li><strong>Per SF ($/SF)</strong> - Adjustment per square foot (e.g., Living Area)</li>
-              <li><strong>Percent (%)</strong> - Percentage-based adjustment (available for Condition)</li>
+              <li><strong>Count (#)</strong> - Adjustment based on quantity (e.g., number of fireplaces)</li>
+              <li><strong>Percent (%)</strong> - Percentage-based adjustment (e.g., condition, land adjustments)</li>
             </ul>
           </div>
 
@@ -1262,7 +1485,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                             return (
                               <tr key={adj.adjustment_id} className="hover:bg-gray-50">
                                 <td className="px-4 py-2 text-sm font-medium text-gray-900 whitespace-nowrap">
-                                  {adj.adjustment_name}
+                                  {formatAdjustmentName(adj.adjustment_name, adj.adjustment_id)}
                                   {!adj.is_default && (
                                     <span className="ml-2 text-xs text-purple-600 font-normal">(Custom)</span>
                                   )}
@@ -1273,7 +1496,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                                     value={attrValue.value}
                                     onChange={(e) => handleCustomBracketValueChange(adj.adjustment_id, 'value', e.target.value)}
                                     className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                                    step={attrValue.type === 'per_sqft' ? '0.01' : attrValue.type === 'percent' ? '1' : '100'}
+                                    step={attrValue.type === 'per_sqft' ? '0.01' : attrValue.type === 'percent' ? '1' : attrValue.type === 'count' ? '1' : '100'}
                                   />
                                 </td>
                                 <td className="px-4 py-2">
@@ -1284,9 +1507,8 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                                   >
                                     <option value="flat">Flat ($)</option>
                                     <option value="per_sqft">Per SF ($/SF)</option>
-                                    {(adj.adjustment_type === 'percent' || adj.adjustment_type === 'flat_or_percent') && (
-                                      <option value="percent">Percent (%)</option>
-                                    )}
+                                    <option value="count">Count (#)</option>
+                                    <option value="percent">Percent (%)</option>
                                   </select>
                                 </td>
                               </tr>

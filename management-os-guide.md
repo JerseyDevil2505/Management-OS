@@ -1218,6 +1218,186 @@ export const interpretCodes = {
 | asset_view | text | |
 | asset_year_built | integer | |
 | asset_zoning | text | **REMOVED** - Moved to property_market_analysis |
+| ac_area | numeric | **NEW** - Air conditioning area in square feet (CME attribute) |
+| barn_area | numeric | **NEW** - Barn area in square feet (CME attribute) |
+| basement_area | numeric | **NEW** - Basement area in square feet (CME attribute) |
+| deck_area | numeric | **NEW** - Deck area in square feet (CME attribute) |
+| det_garage_area | numeric | **NEW** - Detached garage area in square feet (CME attribute) |
+| enclosed_porch_area | numeric | **NEW** - Enclosed porch area in square feet (CME attribute) |
+| fin_basement_area | numeric | **NEW** - Finished basement area in square feet (CME attribute) |
+| fireplace_count | integer | **NEW** - Number of fireplaces (CME attribute) |
+| fireplaces | numeric | **NEW** - Fireplace count/area (CME attribute) |
+| garage_area | numeric | **NEW** - Attached garage area in square feet (CME attribute) |
+| open_porch_area | numeric | **NEW** - Open porch area in square feet (CME attribute) |
+| patio_area | numeric | **NEW** - Patio area in square feet (CME attribute) |
+| pole_barn_area | numeric | **NEW** - Pole barn area in square feet (CME attribute) |
+| pool_area | numeric | **NEW** - Pool area in square feet (CME attribute) |
+| stable_area | numeric | **NEW** - Stable area in square feet (CME attribute) |
+| attachedcode_1 | text | **NEW** - BRT attached item code 1 |
+| attachedcode_2 | text | **NEW** - BRT attached item code 2 |
+| attachedcode_3 | text | **NEW** - BRT attached item code 3 |
+| attachedcode_4 | text | **NEW** - BRT attached item code 4 |
+| attachedcode_5 | text | **NEW** - BRT attached item code 5 |
+| attachedcode_6 | text | **NEW** - BRT attached item code 6 |
+| attachedcode_7 | text | **NEW** - BRT attached item code 7 |
+| attachedcode_8 | text | **NEW** - BRT attached item code 8 |
+| attachedcode_9 | text | **NEW** - BRT attached item code 9 |
+| attachedcode_10 | text | **NEW** - BRT attached item code 10 |
+| attachedcode_11 | text | **NEW** - BRT attached item code 11 |
+| attachedcode_12 | text | **NEW** - BRT attached item code 12 |
+| attachedcode_13 | text | **NEW** - BRT attached item code 13 |
+| attachedcode_14 | text | **NEW** - BRT attached item code 14 |
+| attachedcode_15 | text | **NEW** - BRT attached item code 15 |
+| attachedarea_1 | numeric | **NEW** - BRT attached item area 1 |
+| attachedarea_2 | numeric | **NEW** - BRT attached item area 2 |
+| attachedarea_3 | numeric | **NEW** - BRT attached item area 3 |
+| attachedarea_4 | numeric | **NEW** - BRT attached item area 4 |
+| attachedarea_5 | numeric | **NEW** - BRT attached item area 5 |
+| attachedarea_6 | numeric | **NEW** - BRT attached item area 6 |
+| attachedarea_7 | numeric | **NEW** - BRT attached item area 7 |
+| attachedarea_8 | numeric | **NEW** - BRT attached item area 8 |
+| attachedarea_9 | numeric | **NEW** - BRT attached item area 9 |
+| attachedarea_10 | numeric | **NEW** - BRT attached item area 10 |
+| attachedarea_11 | numeric | **NEW** - BRT attached item area 11 |
+| attachedarea_12 | numeric | **NEW** - BRT attached item area 12 |
+| attachedarea_13 | numeric | **NEW** - BRT attached item area 13 |
+| attachedarea_14 | numeric | **NEW** - BRT attached item area 14 |
+| attachedarea_15 | numeric | **NEW** - BRT attached item area 15 |
+| detachedcode_1 | text | **NEW** - BRT detached item code 1 |
+| detachedcode_2 | text | **NEW** - BRT detached item code 2 |
+| detachedcode_3 | text | **NEW** - BRT detached item code 3 |
+| detachedcode_4 | text | **NEW** - BRT detached item code 4 |
+| detachedcode_5 | text | **NEW** - BRT detached item code 5 |
+| detachedcode_6 | text | **NEW** - BRT detached item code 6 |
+| detachedcode_7 | text | **NEW** - BRT detached item code 7 |
+| detachedcode_8 | text | **NEW** - BRT detached item code 8 |
+| detachedcode_9 | text | **NEW** - BRT detached item code 9 |
+| detachedcode_10 | text | **NEW** - BRT detached item code 10 |
+| detachedcode_11 | text | **NEW** - BRT detached item code 11 |
+| detacheddcsize_1 | numeric | **NEW** - BRT detached item size 1 |
+| detacheddcsize_2 | numeric | **NEW** - BRT detached item size 2 |
+| detacheddcsize_3 | numeric | **NEW** - BRT detached item size 3 |
+| detacheddcsize_4 | numeric | **NEW** - BRT detached item size 4 |
+| detacheddcsize_5 | numeric | **NEW** - BRT detached item size 5 |
+| detacheddcsize_6 | numeric | **NEW** - BRT detached item size 6 |
+| detacheddcsize_7 | numeric | **NEW** - BRT detached item size 7 |
+| detacheddcsize_8 | numeric | **NEW** - BRT detached item size 8 |
+| detacheddcsize_9 | numeric | **NEW** - BRT detached item size 9 |
+| detacheddcsize_10 | numeric | **NEW** - BRT detached item size 10 |
+| detacheddcsize_11 | numeric | **NEW** - BRT detached item size 11 |
+| detachednc_1 | numeric | **NEW** - BRT detached item count 1 |
+| detachednc_2 | numeric | **NEW** - BRT detached item count 2 |
+| detachednc_3 | numeric | **NEW** - BRT detached item count 3 |
+| detachednc_4 | numeric | **NEW** - BRT detached item count 4 |
+| detachednc_5 | numeric | **NEW** - BRT detached item count 5 |
+| detachednc_6 | numeric | **NEW** - BRT detached item count 6 |
+| detachednc_7 | numeric | **NEW** - BRT detached item count 7 |
+| detachednc_8 | numeric | **NEW** - BRT detached item count 8 |
+| detachednc_9 | numeric | **NEW** - BRT detached item count 9 |
+| detachednc_10 | numeric | **NEW** - BRT detached item count 10 |
+| detachednc_11 | numeric | **NEW** - BRT detached item count 11 |
+| detached_item_code1 | text | **NEW** - Microsystems detached item code 1 |
+| detached_item_code2 | text | **NEW** - Microsystems detached item code 2 |
+| detached_item_code3 | text | **NEW** - Microsystems detached item code 3 |
+| detached_item_code4 | text | **NEW** - Microsystems detached item code 4 |
+| detachedbuilding1 | text | **NEW** - Microsystems detached building code 1 |
+| detachedbuilding2 | text | **NEW** - Microsystems detached building code 2 |
+| detachedbuilding3 | text | **NEW** - Microsystems detached building code 3 |
+| detachedbuilding4 | text | **NEW** - Microsystems detached building code 4 |
+| depth1 | numeric | **NEW** - Microsystems detached item depth 1 |
+| depth2 | numeric | **NEW** - Microsystems detached item depth 2 |
+| depth3 | numeric | **NEW** - Microsystems detached item depth 3 |
+| depth4 | numeric | **NEW** - Microsystems detached item depth 4 |
+| depthn1 | numeric | **NEW** - Microsystems detached building depth 1 |
+| depthn2 | numeric | **NEW** - Microsystems detached building depth 2 |
+| depthn3 | numeric | **NEW** - Microsystems detached building depth 3 |
+| depthn4 | numeric | **NEW** - Microsystems detached building depth 4 |
+| width1 | numeric | **NEW** - Microsystems detached item width 1 |
+| width2 | numeric | **NEW** - Microsystems detached item width 2 |
+| width3 | numeric | **NEW** - Microsystems detached item width 3 |
+| width4 | numeric | **NEW** - Microsystems detached item width 4 |
+| widthn1 | numeric | **NEW** - Microsystems detached building width 1 |
+| widthn2 | numeric | **NEW** - Microsystems detached building width 2 |
+| widthn3 | numeric | **NEW** - Microsystems detached building width 3 |
+| widthn4 | numeric | **NEW** - Microsystems detached building width 4 |
+| misc_1_brt | text | **NEW** - BRT miscellaneous item 1 |
+| misc_2_brt | text | **NEW** - BRT miscellaneous item 2 |
+| misc_3_brt | text | **NEW** - BRT miscellaneous item 3 |
+| misc_4_brt | text | **NEW** - BRT miscellaneous item 4 |
+| misc_5_brt | text | **NEW** - BRT miscellaneous item 5 |
+| misc_item_1 | text | **NEW** - Microsystems miscellaneous item 1 |
+| misc_item_2 | text | **NEW** - Microsystems miscellaneous item 2 |
+| misc_item_3 | text | **NEW** - Microsystems miscellaneous item 3 |
+| miscnum_1 | numeric | **NEW** - BRT miscellaneous item count 1 |
+| miscnum_2 | numeric | **NEW** - BRT miscellaneous item count 2 |
+| miscnum_3 | numeric | **NEW** - BRT miscellaneous item count 3 |
+| miscnum_4 | numeric | **NEW** - BRT miscellaneous item count 4 |
+| miscnum_5 | numeric | **NEW** - BRT miscellaneous item count 5 |
+| landffcond_1 | text | **NEW** - BRT land favorable condition 1 |
+| landffcond_2 | text | **NEW** - BRT land favorable condition 2 |
+| landffcond_3 | text | **NEW** - BRT land favorable condition 3 |
+| landffcond_4 | text | **NEW** - BRT land favorable condition 4 |
+| landffcond_5 | text | **NEW** - BRT land favorable condition 5 |
+| landffcond_6 | text | **NEW** - BRT land favorable condition 6 |
+| landffinfl_1 | text | **NEW** - BRT land unfavorable influence 1 |
+| landffinfl_2 | text | **NEW** - BRT land unfavorable influence 2 |
+| landffinfl_3 | text | **NEW** - BRT land unfavorable influence 3 |
+| landffinfl_4 | text | **NEW** - BRT land unfavorable influence 4 |
+| landffinfl_5 | text | **NEW** - BRT land unfavorable influence 5 |
+| landffinfl_6 | text | **NEW** - BRT land unfavorable influence 6 |
+| landur_1 | text | **NEW** - Microsystems land use code 1 (lowercase variant) |
+| landur_2 | text | **NEW** - Microsystems land use code 2 (lowercase variant) |
+| landur_3 | text | **NEW** - Microsystems land use code 3 (lowercase variant) |
+| landur_4 | text | **NEW** - Microsystems land use code 4 (lowercase variant) |
+| landur_5 | text | **NEW** - Microsystems land use code 5 (lowercase variant) |
+| landur_6 | text | **NEW** - Microsystems land use code 6 (lowercase variant) |
+| landurcond_1 | text | **NEW** - BRT land urban condition 1 |
+| landurcond_2 | text | **NEW** - BRT land urban condition 2 |
+| landurcond_3 | text | **NEW** - BRT land urban condition 3 |
+| landurcond_4 | text | **NEW** - BRT land urban condition 4 |
+| landurcond_5 | text | **NEW** - BRT land urban condition 5 |
+| landurcond_6 | text | **NEW** - BRT land urban condition 6 |
+| landurinfl_1 | text | **NEW** - BRT land urban influence 1 |
+| landurinfl_2 | text | **NEW** - BRT land urban influence 2 |
+| landurinfl_3 | text | **NEW** - BRT land urban influence 3 |
+| landurinfl_4 | text | **NEW** - BRT land urban influence 4 |
+| landurinfl_5 | text | **NEW** - BRT land urban influence 5 |
+| landurinfl_6 | text | **NEW** - BRT land urban influence 6 |
+| landurunits_1 | numeric | **NEW** - Microsystems land use units 1 (lowercase variant) |
+| landurunits_2 | numeric | **NEW** - Microsystems land use units 2 (lowercase variant) |
+| landurunits_3 | numeric | **NEW** - Microsystems land use units 3 (lowercase variant) |
+| landurunits_4 | numeric | **NEW** - Microsystems land use units 4 (lowercase variant) |
+| landurunits_5 | numeric | **NEW** - Microsystems land use units 5 (lowercase variant) |
+| landurunits_6 | numeric | **NEW** - Microsystems land use units 6 (lowercase variant) |
+| functional1 | numeric | **NEW** - Functional item 1 |
+| functional2 | numeric | **NEW** - Functional item 2 |
+| functional3 | numeric | **NEW** - Functional item 3 |
+| functional4 | numeric | **NEW** - Functional item 4 |
+| functional_depr1 | numeric | **NEW** - Functional depreciation 1 |
+| functional_depr2 | numeric | **NEW** - Functional depreciation 2 |
+| functional_depr3 | numeric | **NEW** - Functional depreciation 3 |
+| functional_depr4 | numeric | **NEW** - Functional depreciation 4 |
+| location_economic1 | numeric | **NEW** - Location economic factor 1 |
+| location_economic2 | numeric | **NEW** - Location economic factor 2 |
+| location_economic3 | numeric | **NEW** - Location economic factor 3 |
+| location_economic4 | numeric | **NEW** - Location economic factor 4 |
+| locationl_depr1 | numeric | **NEW** - Locational depreciation 1 |
+| locationl_depr2 | numeric | **NEW** - Locational depreciation 2 |
+| locationl_depr3 | numeric | **NEW** - Locational depreciation 3 |
+| locationl_depr4 | numeric | **NEW** - Locational depreciation 4 |
+| physical_depr1 | numeric | **NEW** - Physical depreciation 1 |
+| physical_depr2 | numeric | **NEW** - Physical depreciation 2 |
+| physical_depr3 | numeric | **NEW** - Physical depreciation 3 |
+| physical_depr4 | numeric | **NEW** - Physical depreciation 4 |
+| pysical1 | numeric | **NEW** - Physical item 1 (note: typo in schema, likely should be "physical") |
+| pysical2 | numeric | **NEW** - Physical item 2 (note: typo in schema) |
+| pysical3 | numeric | **NEW** - Physical item 3 (note: typo in schema) |
+| pysical4 | numeric | **NEW** - Physical item 4 (note: typo in schema) |
+| overall_adj_reason1 | text | **NEW** - Overall adjustment reason 1 |
+| overall_adj_reason2 | text | **NEW** - Overall adjustment reason 2 |
+| overall_adj_reason3 | text | **NEW** - Overall adjustment reason 3 |
+| overall_adj_reason4 | text | **NEW** - Overall adjustment reason 4 |
+| raw_detached_items | text | **NEW** - Raw detached items text field |
 | special_tax_code_1 | text | **NEW** - Special tax district code 1 (BRT: EXEMPT_SPECIAL_TAXCODE1, Micro: Sp Tax Cd1) |
 | special_tax_code_2 | text | **NEW** - Special tax district code 2 (BRT: EXEMPT_SPECIAL_TAXCODE2, Micro: Sp Tax Cd2) |
 | special_tax_code_3 | text | **NEW** - Special tax district code 3 (BRT: EXEMPT_SPECIAL_TAXCODE3, Micro: N/A) |
@@ -1500,6 +1680,85 @@ LEFT JOIN employees e ON ja.employee_id = e.id;
 - `src/components/job-modules/market-tabs/LandValuationTab.jsx` (~10,000 lines)
 
 **Status:** ✅ **COMPLETE** - All export functionality standardized and working. Ready for PR.
+
+---
+
+### ✅ COMPLETED: CME Attribute Display & Garage Per-Car Categorization (January 2025)
+
+**Context:** Implementation of comprehensive attribute extraction system for Sales Comparison (CME) with configurable garage categorization based on square footage thresholds.
+
+**Key Accomplishments:**
+
+1. **Attribute Extraction System**:
+   - ✅ **97 detail columns extracted** for BRT vendor (attached/detached items, misc items, land adjustments)
+   - ✅ **Code configuration system** - Auto-loads from job_settings during file processing
+   - ✅ **Smart code matching** - `codeMatches()` helper handles leading zeros and descriptions ("02" matches "2 - CONC PATIO")
+   - ✅ **Dimension-based fallback** - Calculates area from width × depth when direct area unavailable
+   - ✅ **Percentage value handling** - Converts "100%" to actual value by multiplying with SFLA
+
+2. **Code Configuration Loading**:
+   - ✅ **Processor integration** - brt-processor.js loads configuration automatically
+   - ✅ **Updater integration** - brt-updater.js mirrors processor pattern for UPSERT operations
+   - ✅ **Edge Function sync** - recalculate-amenities function uses same codeMatches() logic
+   - ✅ **9 extraction methods** added: garage, deck, patio, open_porch, enclosed_porch, det_garage, pool, barn, stable, pole_barn
+   - ✅ **Bug fixes**: Finished basement field name (BSMNTFINISHAREA → BSMNTFINISHAREA), clearRawDataCache location fix
+
+3. **Garage Per-Car Categorization System**:
+   - ✅ **Configurable thresholds** (default: 1-399=ONE CAR, 400-799=TWO CAR, 800-999=THREE CAR, 1000+=MULTI CAR)
+   - ✅ **UI display format** - Shows "TWO CAR (650 SF)" instead of raw square footage
+   - ✅ **Category-based adjustments** - Adjustment = category_difference × adjustment_value
+     - Example: Subject ONE CAR (cat 1), Comp TWO CAR (cat 2) → -1 category → -$10,000
+     - Example: Subject MULTI CAR (cat 4), Comp TWO CAR (cat 2) → +2 category → +$20,000
+   - ✅ **Configuration UI** - AdjustmentsTab includes threshold editor with real-time category range display
+   - ✅ **State management** - Garage thresholds loaded from job_settings in multiple components
+   - ✅ **Adjustment type** - Changed default from 'flat' to 'count' for both garage and det_garage
+
+4. **DetailedAppraisalGrid Display Fix**:
+   - ✅ **Removed YES/NONE override** - Garage area now displays category + SF format
+   - ✅ **No Edge Function needed** - Display change only, data already populated from processors
+   - ✅ **Preserved YES/NONE** for other amenities (deck, patio, pool, etc.)
+
+**Files Modified:**
+- `src/lib/data-pipeline/brt-processor.js` - Added code config loading, codeMatches(), 9 extraction methods
+- `src/lib/data-pipeline/brt-updater.js` - Mirrored processor changes for UPSERT operations
+- `src/components/job-modules/final-valuation-tabs/AdjustmentsTab.jsx` - Garage threshold configuration UI
+- `src/components/job-modules/final-valuation-tabs/DetailedAppraisalGrid.jsx` - Category display for garage area
+- `src/components/job-modules/final-valuation-tabs/SalesComparisonTab.jsx` - Category-based adjustment calculation
+- `src/components/job-modules/FileUploadButton.jsx` - Fixed clearRawDataCache bug
+- `supabase/functions/recalculate-amenities/index.ts` - Added codeMatches() helper
+
+**Database Changes:**
+- Added 97 new columns to property_records table (see schema documentation)
+- Added job_settings entries for garage thresholds: garage_threshold_one_car_max, garage_threshold_two_car_max, garage_threshold_three_car_max
+
+**Code Pattern Established:**
+```javascript
+// Smart code matching (handles "02" matching "2 - CONC PATIO")
+codeMatches(rawCode, configuredCodes) {
+  const normalizedRaw = String(rawCode).replace(/^0+/, '') || '0';
+  return configuredCodes.some(configCode => {
+    const codePart = String(configCode).split(' - ')[0].trim();
+    const normalizedConfig = codePart.replace(/^0+/, '') || '0';
+    return normalizedRaw === normalizedConfig;
+  });
+}
+
+// Garage category conversion
+getGarageCategory(sqft, thresholds) {
+  if (!sqft || sqft === 0) return 0; // NONE
+  if (sqft <= thresholds.one_car_max) return 1; // ONE CAR
+  if (sqft <= thresholds.two_car_max) return 2; // TWO CAR
+  if (sqft <= thresholds.three_car_max) return 3; // THREE CAR
+  return 4; // MULTI CAR
+}
+```
+
+**Next Session Priorities:**
+1. ✅ Verify adjustment calculation logic works correctly (category differences)
+2. 🎯 Add modal with Edge Function to edit attributes on-the-fly
+3. 🎯 End-to-end testing of garage categorization workflow
+
+**Status:** ✅ **COMPLETE** - All attribute extraction and garage categorization implemented. Ready for testing.
 
 ---
 

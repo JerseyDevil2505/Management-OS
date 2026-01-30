@@ -1,9 +1,64 @@
-import React from 'react';
-import { interpretCodes } from '../../../lib/supabaseClient';
+import React, { useState, useEffect } from 'react';
+import { interpretCodes, supabase } from '../../../lib/supabaseClient';
 
 const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [] }) => {
   const subject = result.subject;
   const comps = result.comparables || [];
+
+  // Load garage thresholds from job settings
+  const [garageThresholds, setGarageThresholds] = useState({
+    one_car_max: 399,
+    two_car_max: 799,
+    three_car_max: 999
+  });
+
+  useEffect(() => {
+    const loadGarageThresholds = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('job_settings')
+          .select('setting_key, setting_value')
+          .eq('job_id', jobData.id)
+          .in('setting_key', ['garage_threshold_one_car_max', 'garage_threshold_two_car_max', 'garage_threshold_three_car_max']);
+
+        if (error || !data) return;
+
+        const newThresholds = { ...garageThresholds };
+        data.forEach(setting => {
+          const key = setting.setting_key.replace('garage_threshold_', '');
+          newThresholds[key] = parseInt(setting.setting_value, 10) || garageThresholds[key];
+        });
+        setGarageThresholds(newThresholds);
+      } catch (error) {
+        console.error('Error loading garage thresholds:', error);
+      }
+    };
+
+    if (jobData?.id) {
+      loadGarageThresholds();
+    }
+  }, [jobData?.id]);
+
+  // Garage category helpers
+  const getGarageCategory = (sqft) => {
+    if (!sqft || sqft === 0) return 0; // NONE
+    if (sqft <= garageThresholds.one_car_max) return 1; // ONE CAR
+    if (sqft <= garageThresholds.two_car_max) return 2; // TWO CAR
+    if (sqft <= garageThresholds.three_car_max) return 3; // THREE CAR
+    return 4; // MULTI CAR
+  };
+
+  const getGarageCategoryLabel = (category) => {
+    const labels = ['NONE', 'ONE CAR', 'TWO CAR', 'THREE CAR', 'MULTI CAR'];
+    return labels[category] || 'NONE';
+  };
+
+  const getGarageDisplayText = (sqft) => {
+    if (!sqft || sqft === 0) return 'None';
+    const category = getGarageCategory(sqft);
+    const label = getGarageCategoryLabel(category);
+    return `${label} (${sqft.toLocaleString()} SF)`;
+  };
 
   // Helper to render comp cells (shows all 5 even if empty)
   const renderCompCells = (renderFunc) => {
@@ -20,9 +75,53 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
   // Helper to get adjustment for a specific attribute
   const getAdjustment = (comp, attributeName) => {
-    return comp.adjustments?.find(a => 
-      a.name === attributeName || 
+    return comp.adjustments?.find(a =>
+      a.name === attributeName ||
       a.name?.toLowerCase().includes(attributeName.toLowerCase())
+    );
+  };
+
+  // Helper to get adjustment definition from adjustmentGrid
+  const getAdjustmentDef = (adjustmentName) => {
+    if (!adjustmentName || !adjustmentGrid) return null;
+    return adjustmentGrid.find(adj =>
+      adj.adjustment_name === adjustmentName ||
+      adj.adjustment_name?.toLowerCase().includes(adjustmentName.toLowerCase())
+    );
+  };
+
+  // Helper to check if adjustment is flat type (YES/NONE display)
+  const isAdjustmentFlat = (adjustmentName) => {
+    const adjDef = getAdjustmentDef(adjustmentName);
+
+    // If adjustment definition exists, use it
+    if (adjDef) {
+      return adjDef.adjustment_type === 'flat';
+    }
+
+    // Fallback: Common amenities that are typically flat adjustments
+    const flatAmenities = [
+      'Garage', 'Det Garage', 'Deck', 'Patio', 'Open Porch', 'Enclosed Porch',
+      'Pool', 'Basement', 'Finished Basement', 'AC'
+    ];
+    return flatAmenities.some(amenity =>
+      adjustmentName?.toLowerCase().includes(amenity.toLowerCase())
+    );
+  };
+
+  // Helper to check if adjustment is count type (show numeric value)
+  const isAdjustmentCount = (adjustmentName) => {
+    const adjDef = getAdjustmentDef(adjustmentName);
+
+    // If adjustment definition exists, use it
+    if (adjDef) {
+      return adjDef.adjustment_type === 'count';
+    }
+
+    // Fallback: Common count adjustments
+    const countAmenities = ['Bathrooms', 'Bedrooms', 'Fireplaces'];
+    return countAmenities.some(amenity =>
+      adjustmentName?.toLowerCase().includes(amenity.toLowerCase())
     );
   };
 
@@ -51,10 +150,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
   // Define attribute order as specified by user
   const ATTRIBUTE_ORDER = [
-    { 
-      id: 'vcs', 
+    {
+      id: 'vcs',
       label: 'VCS',
-      render: (prop) => `${prop.property_block}/${prop.property_lot}${prop.property_qualifier ? '/' + prop.property_qualifier : ''}`,
+      render: (prop) => prop.new_vcs || prop.property_vcs || 'N/A',
       adjustmentName: null // No adjustment for VCS
     },
     {
@@ -83,7 +182,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     {
       id: 'property_class',
       label: 'Property Class',
-      render: (prop) => prop.property_class || prop.asset_property_class || 'N/A',
+      render: (prop) => prop.property_m4_class || prop.property_cama_class || 'N/A',
       adjustmentName: null
     },
     {
@@ -121,13 +220,29 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     {
       id: 'story_height_code',
       label: 'Story Height Code',
-      render: (prop) => prop.asset_stories || prop.asset_story_height || 'N/A',
+      render: (prop) => {
+        const code = prop.asset_stories || prop.asset_story_height;
+        if (!code) return 'N/A';
+        if (codeDefinitions) {
+          const name = interpretCodes.getStoryHeightName(prop, codeDefinitions, vendorType);
+          return name ? `${code} (${name})` : code;
+        }
+        return code;
+      },
       adjustmentName: null
     },
     {
       id: 'view_code',
       label: 'View Code',
-      render: (prop) => prop.asset_view || prop.asset_view_code || 'N/A',
+      render: (prop) => {
+        const code = prop.asset_view || prop.asset_view_code;
+        if (!code) return 'N/A';
+        if (codeDefinitions) {
+          const name = interpretCodes.getViewName(prop, codeDefinitions, vendorType);
+          return name ? `${code} (${name})` : code;
+        }
+        return code;
+      },
       adjustmentName: null
     },
     {
@@ -262,9 +377,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       id: 'garage_area',
       label: 'Garage Area (Per Car)',
       render: (prop) => {
-        // Check if garage_area column exists (future)
-        if (prop.garage_area !== undefined) {
-          return prop.garage_area > 0 ? `${prop.garage_area.toLocaleString()} SF` : 'None';
+        // Use garage_area column with category display
+        if (prop.garage_area !== undefined && prop.garage_area !== null) {
+          return getGarageDisplayText(prop.garage_area);
         }
         // Fallback
         if (vendorType === 'BRT') {
@@ -280,9 +395,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       id: 'det_garage_area',
       label: 'Det Garage Area (Per Car)',
       render: (prop) => {
-        // Check if det_garage_area column exists (future)
-        if (prop.det_garage_area !== undefined) {
-          return prop.det_garage_area > 0 ? `${prop.det_garage_area.toLocaleString()} SF` : 'None';
+        // Use det_garage_area column with category display
+        if (prop.det_garage_area !== undefined && prop.det_garage_area !== null) {
+          return getGarageDisplayText(prop.det_garage_area);
         }
         // Fallback
         if (vendorType === 'BRT') {
@@ -486,12 +601,101 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   )}
                 </td>
                 <td className={`px-3 py-2 text-center bg-yellow-50 ${attr.bold ? 'font-semibold' : 'text-xs'}`}>
-                  {attr.render(subject)}
+                  {(() => {
+                    let value = attr.render(subject);
+
+                    // ONLY apply YES/NONE to specific amenity area attributes
+                    // Exclude garage_area and det_garage_area as they use category display (ONE CAR, TWO CAR, etc.)
+                    const amenityAreaIds = [
+                      'deck_area', 'patio_area',
+                      'open_porch_area', 'enclosed_porch_area', 'pool_area',
+                      'basement_area', 'fin_bsmt_area', 'ac_area'
+                    ];
+
+                    if (amenityAreaIds.includes(attr.id)) {
+                      let rawPropertyValue = null;
+
+                      switch(attr.id) {
+                        case 'garage_area': rawPropertyValue = subject.garage_area; break;
+                        case 'det_garage_area': rawPropertyValue = subject.det_garage_area; break;
+                        case 'deck_area': rawPropertyValue = subject.deck_area; break;
+                        case 'patio_area': rawPropertyValue = subject.patio_area; break;
+                        case 'open_porch_area': rawPropertyValue = subject.open_porch_area; break;
+                        case 'enclosed_porch_area': rawPropertyValue = subject.enclosed_porch_area; break;
+                        case 'pool_area': rawPropertyValue = subject.pool_area; break;
+                        case 'basement_area': rawPropertyValue = subject.basement_area; break;
+                        case 'fin_bsmt_area': rawPropertyValue = subject.fin_basement_area; break;
+                        case 'ac_area': rawPropertyValue = subject.ac_area; break;
+                      }
+
+                      const hasValue = rawPropertyValue !== null &&
+                                      rawPropertyValue !== undefined &&
+                                      rawPropertyValue > 0;
+
+                      value = hasValue ? 'YES' : 'NONE';
+                    }
+
+                    return value;
+                  })()}
                 </td>
-                {renderCompCells((comp) => {
-                  const value = attr.render(comp);
+                {renderCompCells((comp, idx) => {
+                  let value = attr.render(comp);
                   const adj = attr.adjustmentName ? getAdjustment(comp, attr.adjustmentName) : null;
-                  
+
+                  // ONLY apply YES/NONE to specific amenity area attributes
+                  // Exclude: lot sizes, year built, count fields (bathrooms, bedrooms, fireplaces)
+                  // Exclude garage_area and det_garage_area as they use category display (ONE CAR, TWO CAR, etc.)
+                  const amenityAreaIds = [
+                    'deck_area', 'patio_area',
+                    'open_porch_area', 'enclosed_porch_area', 'pool_area',
+                    'basement_area', 'fin_bsmt_area', 'ac_area'
+                  ];
+
+                  if (amenityAreaIds.includes(attr.id)) {
+                    // Get raw property value based on attribute id
+                    let rawPropertyValue = null;
+
+                    switch(attr.id) {
+                      case 'garage_area':
+                        rawPropertyValue = comp.garage_area;
+                        break;
+                      case 'det_garage_area':
+                        rawPropertyValue = comp.det_garage_area;
+                        break;
+                      case 'deck_area':
+                        rawPropertyValue = comp.deck_area;
+                        break;
+                      case 'patio_area':
+                        rawPropertyValue = comp.patio_area;
+                        break;
+                      case 'open_porch_area':
+                        rawPropertyValue = comp.open_porch_area;
+                        break;
+                      case 'enclosed_porch_area':
+                        rawPropertyValue = comp.enclosed_porch_area;
+                        break;
+                      case 'pool_area':
+                        rawPropertyValue = comp.pool_area;
+                        break;
+                      case 'basement_area':
+                        rawPropertyValue = comp.basement_area;
+                        break;
+                      case 'fin_bsmt_area':
+                        rawPropertyValue = comp.fin_basement_area;
+                        break;
+                      case 'ac_area':
+                        rawPropertyValue = comp.ac_area;
+                        break;
+                    }
+
+                    // Check if has value
+                    const hasValue = rawPropertyValue !== null &&
+                                    rawPropertyValue !== undefined &&
+                                    rawPropertyValue > 0;
+
+                    value = hasValue ? 'YES' : 'NONE';
+                  }
+
                   return (
                     <div>
                       <div className={attr.bold ? 'font-semibold' : 'text-xs'}>{value}</div>
