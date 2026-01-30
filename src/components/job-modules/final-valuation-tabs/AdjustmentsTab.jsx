@@ -782,6 +782,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                     .join(' ');
 
                   newAdjustments.push({
+                    id: crypto.randomUUID(),
                     job_id: jobData.id,
                     adjustment_id: adjustmentId,
                     adjustment_name: titleCaseName,
