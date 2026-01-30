@@ -579,13 +579,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     .filter(adj => !adj.is_default)
     .map(adj => ({
       id: adj.adjustment_id,
-      label: adj.adjustment_name,
+      label: adj.adjustment_name, // Use the ACTUAL adjustment name from grid (already title-cased)
       render: (prop) => {
         // Helper to normalize code for comparison
         const normalizeCode = (c) => String(c).trim().replace(/^0+/, '').toUpperCase() || '0';
 
-        // Extract code from adjustment_id (e.g., "land_negative_BS" -> "BS")
-        const code = adj.adjustment_id.replace(/^(miscellaneous|land_positive|land_negative)_/, '');
+        // Extract code from adjustment_id (e.g., "pole_barn_PBAR" -> "PBAR")
+        const code = adj.adjustment_id.replace(/^(barn|pole_barn|stable|miscellaneous|land_positive|land_negative)_/, '');
         const targetCode = normalizeCode(code);
 
         // Check if this property has the code
