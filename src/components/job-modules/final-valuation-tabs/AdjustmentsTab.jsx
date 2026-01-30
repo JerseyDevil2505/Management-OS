@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase, getRawDataForJob } from '../../../lib/supabaseClient';
 import { Save, Plus, Trash2, Settings, X } from 'lucide-react';
 
-const AdjustmentsTab = ({ jobData = {} }) => {
+const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
   const vendorType = jobData?.vendor_type || 'BRT';
   const [activeSubTab, setActiveSubTab] = useState('adjustments');
 
