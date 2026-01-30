@@ -287,6 +287,9 @@ Deno.serve(async (req: Request) => {
         update.patio_area = patioArea > 0 ? patioArea : null;
         update.open_porch_area = openPorchArea > 0 ? openPorchArea : null;
         update.enclosed_porch_area = enclosedPorchArea > 0 ? enclosedPorchArea : null;
+        update.miscellaneous = miscFound.length > 0 ? miscFound.join(',') : null;
+        update.land_positive = landPosFound.length > 0 ? landPosFound.join(',') : null;
+        update.land_negative = landNegFound.length > 0 ? landNegFound.join(',') : null;
         hasUpdates = true;
       }
 
