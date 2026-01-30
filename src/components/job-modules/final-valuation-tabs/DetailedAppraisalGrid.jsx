@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { interpretCodes, supabase } from '../../../lib/supabaseClient';
 
-const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [] }) => {
+const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false }) => {
   const subject = result.subject;
   const comps = result.comparables || [];
 
@@ -62,15 +62,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       }
     };
 
-    if (jobData?.id) {
-      // Defer slightly to avoid interfering with initial property batch loading
-      const timer = setTimeout(() => {
-        loadGarageThresholds();
-      }, 1000);
-      return () => clearTimeout(timer);
+    // Wait for property loading to complete before loading settings
+    if (jobData?.id && !isJobContainerLoading) {
+      loadGarageThresholds();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobData?.id]);
+  }, [jobData?.id, isJobContainerLoading]);
 
   // Garage category helpers
   const getGarageCategory = (sqft) => {
