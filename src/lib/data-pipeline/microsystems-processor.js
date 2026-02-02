@@ -479,9 +479,6 @@ export class MicrosystemsProcessor {
       pole_barn_area: this.extractPoleBarnArea(rawRecord),
       ac_area: this.extractAcArea(rawRecord),
 
-      // Dynamic adjustments from code configuration
-      miscellaneous: this.extractMiscellaneousFromConfig(rawRecord),
-
       // Detached Item Code1-4 with dimensions and depreciation
       detached_item_code1: rawRecord['Detached Item Code1'] || null,
       width1: this.parseNumeric(rawRecord['Width1']),
