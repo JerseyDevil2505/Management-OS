@@ -2007,6 +2007,25 @@ const ProductionTracker = ({
         detailed_missing: missingProperties
       };
 
+      // Create missing priced properties report (commercial properties not yet priced)
+      const missingPricedReportData = {
+        summary: {
+          total_missing: missingPricedProperties.length,
+          by_class: missingPricedProperties.reduce((acc, prop) => {
+            acc[prop.property_class] = (acc[prop.property_class] || 0) + 1;
+            return acc;
+          }, {}),
+          by_inspector: missingPricedProperties.reduce((acc, prop) => {
+            const insp = prop.inspector || 'None';
+            acc[insp] = (acc[insp] || 0) + 1;
+            return acc;
+          }, {}),
+          total_commercial: ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.total || 0), 0),
+          total_priced: ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0)
+        },
+        detailed_missing: missingPricedProperties
+      };
+
       // Final analytics result with correct entry rate
       const analyticsResult = {
         totalRecords: rawData.length,
