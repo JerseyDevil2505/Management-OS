@@ -4012,7 +4012,7 @@ const exportMissingPropertiesReport = () => {
                         let csvContent = "Block,Lot,Qualifier,Card,Property Location,Override Reason,Override By,Override Date\n";
                         
                         validationOverrides.forEach(override => {
-                          csvContent += `"${override.block}","${override.lot}","${override.qualifier || ''}","${override.card || '1'}","${override.property_location || ''}","${override.override_reason}","${override.override_by || 'Manager'}","${override.override_date || ''}"\n`;
+                          csvContent += `"${override.block}","${override.lot}","${override.qualifier || ''}","${override.card}","${override.property_location || ''}","${override.override_reason}","${override.override_by || 'Manager'}","${override.override_date || ''}"\n`;
                         });
 
                         const blob = new Blob([csvContent], { type: 'text/csv' });
