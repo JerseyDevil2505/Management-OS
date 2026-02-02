@@ -2573,7 +2573,7 @@ const exportMissingPropertiesReport = () => {
           property.block,
           property.lot,
           property.qualifier || '',
-          property.card || '1',
+          property.card,
           property.property_location || '',
           property.property_class || '',
           property.inspector || '',
