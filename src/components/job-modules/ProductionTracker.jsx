@@ -1380,6 +1380,7 @@ const ProductionTracker = ({
             block: record.property_block,
             lot: record.property_lot,
             qualifier: record.property_qualifier || '',
+            card: record.property_addl_card || '-',
             property_location: record.property_location || '',
             property_class: propertyClass,
             reason: reasonNotAdded,
@@ -3970,7 +3971,7 @@ const exportMissingPropertiesReport = () => {
                                 <td className="px-3 py-2 font-medium">{property.block}</td>
                                 <td className="px-3 py-2 font-medium">{property.lot}</td>
                                 <td className="px-3 py-2">{property.qualifier || '-'}</td>
-                                <td className="px-3 py-2">{property.card || '1'}</td>
+                                <td className="px-3 py-2">{property.card || '-'}</td>
                                 <td className="px-3 py-2">{property.property_location}</td>
                                 <td className="px-3 py-2">
                                   <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
