@@ -1781,7 +1781,7 @@ const ProductionTracker = ({
             block: fullRecord.property_block,
             lot: fullRecord.property_lot,
             qualifier: fullRecord.property_qualifier || '',
-            card: fullRecord.property_addl_card || '1',
+            card: fullRecord.property_addl_card,
             property_location: fullRecord.property_location || '',
             property_class: fullRecord.property_m4_class,
             measure_by: fullRecord.inspection_measure_by,
