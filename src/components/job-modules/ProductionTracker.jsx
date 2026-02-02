@@ -24,6 +24,7 @@ const ProductionTracker = ({
   const [billingAnalytics, setBillingAnalytics] = useState(null);
   const [validationReport, setValidationReport] = useState(null);
   const [missingPropertiesReport, setMissingPropertiesReport] = useState(null);
+  const [missingPricedReport, setMissingPricedReport] = useState(null);
   const [sessionHistory, setSessionHistory] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const notificationCounterRef = useRef(0);
