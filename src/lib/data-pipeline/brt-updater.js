@@ -736,8 +736,6 @@ export class BRTUpdater {
       pole_barn_area: this.extractPoleBarnAreaFromConfig(rawRecord),
       ac_area: this.extractAcArea(rawRecord),
 
-      // Dynamic adjustments from code configuration
-      miscellaneous: this.extractMiscellaneousFromConfig(rawRecord),
 
       // BRT Detached structure detail columns (DETACHEDCODE_1-11, DETACHEDDCSIZE_1-11, DETACHEDNC_1-11)
       detachedcode_1: this.preserveStringValue(rawRecord.DETACHEDCODE_1),
@@ -1935,25 +1933,6 @@ export class BRTUpdater {
     return totalArea > 0 ? Math.round(totalArea) : null;
   }
 
-  /**
-   * Extract miscellaneous codes from detached items
-   */
-  extractMiscellaneousFromConfig(rawRecord) {
-    const miscCodes = this.codeConfig?.miscellaneous || [];
-    if (miscCodes.length === 0) return null;
-
-    const foundCodes = [];
-    for (let i = 1; i <= 11; i++) {
-      const code = this.preserveStringValue(rawRecord[`DETACHEDCODE_${i}`]);
-      if (code && this.codeMatches(code, miscCodes)) {
-        const normalized = String(code).replace(/^0+/, '') || '0';
-        if (!foundCodes.includes(normalized)) {
-          foundCodes.push(normalized);
-        }
-      }
-    }
-    return foundCodes.length > 0 ? foundCodes.join(',') : null;
-  }
 
 }
 
