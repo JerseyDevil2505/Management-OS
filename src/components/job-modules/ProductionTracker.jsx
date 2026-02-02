@@ -4184,6 +4184,180 @@ const exportMissingPropertiesReport = () => {
                 )}
               </div>
             )}
+
+            {/* Missing Priced Properties Tab */}
+            {activeTab === 'missingPriced' && missingPricedReport && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Missing Priced Properties - Commercial Properties Awaiting Pricing
+                  </h3>
+                  {missingPricedReport.summary.total_missing > 0 && (
+                    <button
+                      onClick={() => {
+                        // Export missing priced properties
+                        let csvContent = "Block,Lot,Qualifier,Card,Property Location,Class,Inspector,InfoBy Code,Measure Date,Price By,Price Date\n";
+
+                        missingPricedReport.detailed_missing.forEach(property => {
+                          csvContent += `"${property.block}","${property.lot}","${property.qualifier || ''}","${property.card}","${property.property_location || ''}","${property.property_class}","${property.inspector}","${property.info_by_code || ''}","${property.measure_date || ''}","${property.price_by || ''}","${property.price_date || ''}"\n`;
+                        });
+
+                        const blob = new Blob([csvContent], { type: 'text/csv' });
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `Missing_Priced_Properties_${jobData.ccdd || jobData.ccddCode}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.csv`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+
+                        addNotification('Exported missing priced properties', 'success');
+                      }}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Export Missing Priced</span>
+                    </button>
+                  )}
+                </div>
+
+                {missingPricedReport.summary.total_missing === 0 ? (
+                  <div className="text-center py-8">
+                    <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2">All Commercial Properties Priced</h4>
+                    <p className="text-gray-600">All commercial properties (4A, 4B, 4C) have been priced</p>
+                    <p className="text-sm text-gray-500 mt-2">
+                      Total Commercial: {missingPricedReport.summary.total_commercial} |
+                      Priced: {missingPricedReport.summary.total_priced}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-purple-600 font-medium">Missing Priced</p>
+                            <p className="text-2xl font-bold text-purple-800">{missingPricedReport.summary.total_missing}</p>
+                          </div>
+                          <AlertTriangle className="w-8 h-8 text-purple-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-green-600 font-medium">Already Priced</p>
+                            <p className="text-2xl font-bold text-green-800">{missingPricedReport.summary.total_priced}</p>
+                          </div>
+                          <CheckCircle className="w-8 h-8 text-green-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-blue-600 font-medium">Total Commercial</p>
+                            <p className="text-2xl font-bold text-blue-800">{missingPricedReport.summary.total_commercial}</p>
+                          </div>
+                          <Building className="w-8 h-8 text-blue-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-yellow-600 font-medium">Pricing Progress</p>
+                            <p className="text-2xl font-bold text-yellow-800">
+                              {missingPricedReport.summary.total_commercial > 0
+                                ? Math.round((missingPricedReport.summary.total_priced / missingPricedReport.summary.total_commercial) * 100)
+                                : 0}%
+                            </p>
+                          </div>
+                          <TrendingUp className="w-8 h-8 text-yellow-500" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Breakdown by Class */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+                      <h4 className="font-semibold text-gray-900 mb-4">Missing Priced by Property Class</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {Object.entries(missingPricedReport.summary.by_class).map(([cls, count]) => (
+                          <div key={cls} className="p-3 bg-gray-50 rounded border">
+                            <div className="font-medium text-gray-900">Class {cls}</div>
+                            <div className="text-sm text-gray-600">{count} properties missing pricing</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Breakdown by Inspector */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+                      <h4 className="font-semibold text-gray-900 mb-4">Missing Priced by Inspector</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {Object.entries(missingPricedReport.summary.by_inspector).map(([inspector, count]) => (
+                          <div key={inspector} className="p-3 bg-gray-50 rounded border">
+                            <div className="font-medium text-gray-900">{inspector}</div>
+                            <div className="text-sm text-gray-600">{count} properties missing pricing</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Detailed Table */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                      <h4 className="font-semibold text-gray-900 mb-4">Detailed Missing Priced Properties</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Card</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Class</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Inspector</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Measure Date</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Price By</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Price Date</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {missingPricedReport.detailed_missing.slice(0, 100).map((property, idx) => (
+                              <tr key={idx} className="border-t border-gray-200 bg-purple-50">
+                                <td className="px-3 py-2 font-medium">{property.block}</td>
+                                <td className="px-3 py-2 font-medium">{property.lot}</td>
+                                <td className="px-3 py-2">{property.qualifier || '-'}</td>
+                                <td className="px-3 py-2">{property.card}</td>
+                                <td className="px-3 py-2">{property.property_location}</td>
+                                <td className="px-3 py-2">
+                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
+                                    {property.property_class}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2">{property.inspector || '-'}</td>
+                                <td className="px-3 py-2">{property.measure_date ? new Date(property.measure_date).toLocaleDateString() : '-'}</td>
+                                <td className="px-3 py-2">{property.price_by || '-'}</td>
+                                <td className="px-3 py-2">{property.price_date ? new Date(property.price_date).toLocaleDateString() : '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {missingPricedReport.detailed_missing.length > 100 && (
+                          <div className="mt-4 text-center text-sm text-gray-500">
+                            Showing first 100 of {missingPricedReport.detailed_missing.length} missing priced properties. Export to see all.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
