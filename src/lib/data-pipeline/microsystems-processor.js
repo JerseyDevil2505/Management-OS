@@ -1366,29 +1366,6 @@ export class MicrosystemsProcessor {
   }
 
   /**
-   * Extract miscellaneous codes from detached items
-   */
-  extractMiscellaneousFromConfig(rawRecord) {
-    const miscCodes = this.codeConfig?.miscellaneous || [];
-    if (miscCodes.length === 0) return null;
-
-    const detachedItems = this.extractDetachedItems(rawRecord);
-    const foundCodes = [];
-
-    for (const item of detachedItems) {
-      if (miscCodes.includes(item.code)) {
-        const normalized = String(item.code).replace(/^0+/, '') || '0';
-        if (!foundCodes.includes(normalized)) {
-          foundCodes.push(normalized);
-        }
-      }
-    }
-
-    return foundCodes.length > 0 ? foundCodes.join(',') : null;
-  }
-
-
-  /**
    * Get codes by category
    */
   getCodesByCategory(category) {
