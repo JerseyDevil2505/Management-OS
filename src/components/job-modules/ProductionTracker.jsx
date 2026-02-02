@@ -807,7 +807,7 @@ const ProductionTracker = ({
         block: fullPropertyRecord.property_block,
         lot: fullPropertyRecord.property_lot,
         qualifier: fullPropertyRecord.property_qualifier || '',
-        card: fullPropertyRecord.property_addl_card || '1',
+        card: fullPropertyRecord.property_addl_card,
         property_location: fullPropertyRecord.property_location || '',
         property_class: fullPropertyRecord.property_m4_class,
         measure_by: fullPropertyRecord.inspection_measure_by,
