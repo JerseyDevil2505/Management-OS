@@ -2085,7 +2085,8 @@ const ProductionTracker = ({
       setBillingAnalytics(billingResult);
       setValidationReport(validationReportData);
       setMissingPropertiesReport(missingPropertiesReportData);
-      
+      setMissingPricedReport(missingPricedReportData);
+
       // Recalculate validation overrides to show the new ones from processing modal
       await calculateValidationOverrides(true); // Force fresh data fetch
 
