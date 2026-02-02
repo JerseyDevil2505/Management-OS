@@ -2742,6 +2742,7 @@ const exportMissingPropertiesReport = () => {
                         <h4 className="font-semibold text-gray-900 text-lg">
                           {currentValidation.block}-{currentValidation.lot}
                           {currentValidation.qualifier ? `-${currentValidation.qualifier}` : ''}
+                          {currentValidation.card ? ` (Card ${currentValidation.card})` : ''}
                         </h4>
                         <p className="text-sm text-gray-600 mt-1">{currentValidation.property_location}</p>
                       </div>
