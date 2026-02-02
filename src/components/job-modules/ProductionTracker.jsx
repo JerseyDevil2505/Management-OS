@@ -2375,7 +2375,7 @@ const exportValidationReport = () => {
             issue.block,
             issue.lot,
             issue.qualifier || '',
-            issue.card || '1',
+            issue.card,
             issue.property_location || '',
             issue.warning_message,
             overrideStatus
