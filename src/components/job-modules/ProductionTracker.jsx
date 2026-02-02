@@ -988,6 +988,7 @@ const ProductionTracker = ({
     setValidationReport(null);
     setCommercialCounts({ total: 0, inspected: 0, priced: 0 });
     setMissingPropertiesReport(null);
+    setMissingPricedReport(null);
     setValidationOverrides([]);
     setOverrideMap({});
     setPendingValidations([]);
