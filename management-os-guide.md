@@ -1217,6 +1217,7 @@ export const interpretCodes = {
 | asset_type_use | text | |
 | asset_view | text | |
 | asset_year_built | integer | |
+| asset_bedrooms | integer | Bedroom count (BRT: BEDTOT, Microsystems: Total Bedrms) |
 | asset_zoning | text | **REMOVED** - Moved to property_market_analysis |
 | ac_area | numeric | **NEW** - Air conditioning area in square feet (CME attribute) |
 | barn_area | numeric | **NEW** - Barn area in square feet (CME attribute) |
