@@ -738,8 +738,6 @@ export class BRTUpdater {
 
       // Dynamic adjustments from code configuration
       miscellaneous: this.extractMiscellaneousFromConfig(rawRecord),
-      land_positive: this.extractLandPositiveFromConfig(rawRecord),
-      land_negative: this.extractLandNegativeFromConfig(rawRecord),
 
       // BRT Detached structure detail columns (DETACHEDCODE_1-11, DETACHEDDCSIZE_1-11, DETACHEDNC_1-11)
       detachedcode_1: this.preserveStringValue(rawRecord.DETACHEDCODE_1),
@@ -1957,45 +1955,6 @@ export class BRTUpdater {
     return foundCodes.length > 0 ? foundCodes.join(',') : null;
   }
 
-  /**
-   * Extract positive land adjustment codes from detached items
-   */
-  extractLandPositiveFromConfig(rawRecord) {
-    const landPosCodes = this.codeConfig?.land_positive || [];
-    if (landPosCodes.length === 0) return null;
-
-    const foundCodes = [];
-    for (let i = 1; i <= 11; i++) {
-      const code = this.preserveStringValue(rawRecord[`DETACHEDCODE_${i}`]);
-      if (code && this.codeMatches(code, landPosCodes)) {
-        const normalized = String(code).replace(/^0+/, '') || '0';
-        if (!foundCodes.includes(normalized)) {
-          foundCodes.push(normalized);
-        }
-      }
-    }
-    return foundCodes.length > 0 ? foundCodes.join(',') : null;
-  }
-
-  /**
-   * Extract negative land adjustment codes from detached items
-   */
-  extractLandNegativeFromConfig(rawRecord) {
-    const landNegCodes = this.codeConfig?.land_negative || [];
-    if (landNegCodes.length === 0) return null;
-
-    const foundCodes = [];
-    for (let i = 1; i <= 11; i++) {
-      const code = this.preserveStringValue(rawRecord[`DETACHEDCODE_${i}`]);
-      if (code && this.codeMatches(code, landNegCodes)) {
-        const normalized = String(code).replace(/^0+/, '') || '0';
-        if (!foundCodes.includes(normalized)) {
-          foundCodes.push(normalized);
-        }
-      }
-    }
-    return foundCodes.length > 0 ? foundCodes.join(',') : null;
-  }
 }
 
 export const brtUpdater = new BRTUpdater();
