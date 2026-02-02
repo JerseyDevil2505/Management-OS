@@ -3971,7 +3971,7 @@ const exportMissingPropertiesReport = () => {
                                 <td className="px-3 py-2 font-medium">{property.block}</td>
                                 <td className="px-3 py-2 font-medium">{property.lot}</td>
                                 <td className="px-3 py-2">{property.qualifier || '-'}</td>
-                                <td className="px-3 py-2">{property.card || '-'}</td>
+                                <td className="px-3 py-2">{property.card}</td>
                                 <td className="px-3 py-2">{property.property_location}</td>
                                 <td className="px-3 py-2">
                                   <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
