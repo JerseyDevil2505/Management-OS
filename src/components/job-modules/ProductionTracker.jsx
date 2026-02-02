@@ -1181,6 +1181,7 @@ const ProductionTracker = ({
       const inspectionDataKeys = new Set(); // Track composite keys to prevent duplicates
       const missingProperties = []; // Track properties not added to inspection_data
       const pendingValidationsList = []; // NEW: Collect validation issues for modal
+      const missingPricedProperties = []; // Track commercial properties not yet priced
 
       // Initialize class counters - Count ALL properties for denominators
       const allClasses = ['1', '2', '3A', '3B', '4A', '4B', '4C', '15A', '15B', '15C', '15D', '15E', '15F', '5A', '5B', '6A', '6B'];
