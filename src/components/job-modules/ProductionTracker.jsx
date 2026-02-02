@@ -1656,6 +1656,23 @@ const ProductionTracker = ({
               if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
               }
+            } else {
+              // Track commercial properties not yet priced
+              missingPricedProperties.push({
+                composite_key: propertyKey,
+                block: record.property_block,
+                lot: record.property_lot,
+                qualifier: record.property_qualifier || '',
+                card: record.property_addl_card,
+                property_location: record.property_location || '',
+                property_class: propertyClass,
+                inspector: inspector,
+                info_by_code: infoByCode,
+                measure_date: record.inspection_measure_date,
+                price_by: record.inspection_price_by || '',
+                price_date: record.inspection_price_date || null,
+                vendor: currentVendor
+              });
             }
           }
 
