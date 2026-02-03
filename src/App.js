@@ -10,6 +10,8 @@ import FileUploadButton from './components/job-modules/FileUploadButton';
 import AppealCoverage from './components/job-modules/AppealCoverage';
 import LandingPage from './components/LandingPage';
 import UserManagement from './components/UserManagement';
+import OrganizationManagement from './components/OrganizationManagement';
+import RevenueManagement from './components/RevenueManagement';
 
 /**
  * MANAGEMENT OS - LIVE DATA ARCHITECTURE
