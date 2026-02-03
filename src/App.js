@@ -1094,6 +1094,40 @@ const App = () => {
                 🔐 Users
               </button>
               )}
+              {canManageUsers && (
+              <button
+                onClick={() => handleViewChange('organizations')}
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                  activeView === 'organizations'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                }`}
+                style={activeView === 'organizations' ? {
+                  backgroundColor: '#FFFFFF',
+                  opacity: 1,
+                  backdropFilter: 'none'
+                } : {}}
+              >
+                🏢 Organizations
+              </button>
+              )}
+              {canManageUsers && (
+              <button
+                onClick={() => handleViewChange('revenue')}
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                  activeView === 'revenue'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                }`}
+                style={activeView === 'revenue' ? {
+                  backgroundColor: '#FFFFFF',
+                  opacity: 1,
+                  backdropFilter: 'none'
+                } : {}}
+              >
+                💵 Revenue
+              </button>
+              )}
             </nav>
           )}
           
