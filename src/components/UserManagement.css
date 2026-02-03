@@ -142,6 +142,12 @@
   font-weight: 500;
 }
 
+.role-select.badge-owner {
+  background-color: #fce7f3;
+  border-color: #ec4899;
+  color: #9d174d;
+}
+
 .role-select.badge-admin {
   background-color: #fef3c7;
   border-color: #fbbf24;
