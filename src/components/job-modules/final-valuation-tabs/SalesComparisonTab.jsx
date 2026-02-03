@@ -501,6 +501,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
       // Fetch comparables
       const fetchedComps = [];
+      const notFoundEntries = [];
+      const noSalesDataEntries = [];
+
       for (const compEntry of manualComps) {
         if (compEntry.block && compEntry.lot) {
           const comp = properties.find(p => {
@@ -510,7 +513,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             return blockMatch && lotMatch && qualMatch;
           });
 
-          if (comp && comp.sales_date && (comp.values_norm_time || comp.sales_price)) {
+          if (!comp) {
+            // Property not found in database
+            notFoundEntries.push(`Block ${compEntry.block} Lot ${compEntry.lot}${compEntry.qualifier ? ` Qual ${compEntry.qualifier}` : ''}`);
+          } else if (!comp.sales_price && !comp.values_norm_time) {
+            // Property found but no sales data
+            noSalesDataEntries.push(`Block ${compEntry.block} Lot ${compEntry.lot} (${comp.property_location || 'N/A'})`);
+          } else {
             // Use time-normalized value if available, otherwise fall back to sales price
             const compValue = comp.values_norm_time || comp.sales_price;
 
@@ -536,6 +545,18 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             });
           }
         }
+      }
+
+      // Show warnings for properties not found or missing sales data
+      if (notFoundEntries.length > 0 || noSalesDataEntries.length > 0) {
+        let warningMessage = '';
+        if (notFoundEntries.length > 0) {
+          warningMessage += `⚠️ Properties NOT FOUND in database:\n${notFoundEntries.join('\n')}\n\n`;
+        }
+        if (noSalesDataEntries.length > 0) {
+          warningMessage += `⚠️ Properties found but have NO SALES DATA:\n${noSalesDataEntries.join('\n')}`;
+        }
+        alert(warningMessage.trim());
       }
 
       // Calculate weights and projected assessment
