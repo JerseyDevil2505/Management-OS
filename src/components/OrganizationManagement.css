@@ -1,0 +1,497 @@
+/* Organization Management Styles */
+
+.org-management-container {
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.org-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.org-header h2 {
+  font-size: 1.875rem;
+  color: #1a202c;
+  margin: 0;
+}
+
+.create-org-btn {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.create-org-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(5, 150, 105, 0.3);
+}
+
+/* Messages */
+.org-error, .org-success {
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+.org-error {
+  background-color: #fee;
+  color: #c53030;
+  border: 1px solid #feb2b2;
+}
+
+.org-success {
+  background-color: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+/* Summary Cards */
+.org-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.summary-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1.25rem;
+  text-align: center;
+}
+
+.summary-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.summary-label {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin-top: 0.25rem;
+}
+
+/* Loading & Empty States */
+.org-loading, .org-empty {
+  text-align: center;
+  padding: 3rem;
+  color: #718096;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.org-empty p {
+  margin: 0.5rem 0;
+}
+
+/* Table Container */
+.org-table-container {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.org-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.org-table thead {
+  background-color: #f7fafc;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.org-table th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #4a5568;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.org-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  color: #2d3748;
+}
+
+.org-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.org-table tbody tr:hover {
+  background-color: #f7fafc;
+}
+
+.org-name {
+  font-weight: 600;
+  color: #1a202c;
+}
+
+.org-slug {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-family: monospace;
+}
+
+.org-email {
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+/* Status Badges */
+.status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.status-active {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.status-suspended {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.status-cancelled {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.status-trial {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+/* Billing Status */
+.billing-status {
+  font-size: 0.875rem;
+}
+
+.billing-paid {
+  color: #059669;
+  font-weight: 600;
+}
+
+.billing-po {
+  color: #2563eb;
+  font-weight: 500;
+}
+
+.billing-invoiced {
+  color: #d97706;
+  font-weight: 500;
+}
+
+.billing-pending {
+  color: #6b7280;
+}
+
+/* Actions */
+.org-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.staff-btn, .edit-btn {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.staff-btn {
+  background-color: #2563eb;
+  color: white;
+}
+
+.staff-btn:hover {
+  background-color: #1d4ed8;
+}
+
+.edit-btn {
+  background-color: #e2e8f0;
+  color: #475569;
+}
+
+.edit-btn:hover {
+  background-color: #cbd5e1;
+}
+
+/* Modal */
+.org-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.org-modal {
+  background: white;
+  border-radius: 8px;
+  padding: 2rem;
+  max-width: 600px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.org-modal.staff-modal {
+  max-width: 700px;
+}
+
+.org-modal h3 {
+  margin: 0 0 1.5rem 0;
+  font-size: 1.5rem;
+  color: #1a202c;
+}
+
+.org-modal h4 {
+  margin: 1.5rem 0 1rem 0;
+  font-size: 1rem;
+  color: #475569;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 1rem;
+}
+
+/* Form Groups */
+.org-form-group {
+  margin-bottom: 1rem;
+}
+
+.org-form-group label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #4a5568;
+  margin-bottom: 0.5rem;
+}
+
+.org-form-group input,
+.org-form-group textarea,
+.org-form-group select {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  font-size: 1rem;
+  border: 1px solid #cbd5e0;
+  border-radius: 6px;
+  background-color: white;
+  transition: all 0.2s;
+}
+
+.org-form-group input:focus,
+.org-form-group textarea:focus,
+.org-form-group select:focus {
+  outline: none;
+  border-color: #059669;
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+}
+
+.org-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.checkbox-group {
+  display: flex;
+  align-items: center;
+}
+
+.checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.checkbox-group input[type="checkbox"] {
+  width: auto;
+}
+
+/* Fee Preview */
+.fee-preview {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  padding: 1rem;
+  margin: 1rem 0;
+}
+
+.fee-breakdown {
+  font-size: 0.875rem;
+  color: #166534;
+  margin-top: 0.5rem;
+}
+
+/* Modal Actions */
+.org-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.org-modal-actions button {
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.org-modal-actions button:not(.primary) {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+.org-modal-actions button:not(.primary):hover {
+  background-color: #e5e7eb;
+}
+
+.org-modal-actions button.primary {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  color: white;
+}
+
+.org-modal-actions button.primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(5, 150, 105, 0.3);
+}
+
+/* Staff Modal */
+.staff-list {
+  margin-bottom: 1rem;
+}
+
+.no-staff {
+  color: #6b7280;
+  text-align: center;
+  padding: 1rem;
+}
+
+.staff-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.staff-table th {
+  text-align: left;
+  padding: 0.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.staff-table td {
+  padding: 0.5rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.has-account {
+  color: #059669;
+  font-weight: 500;
+}
+
+.no-account {
+  color: #9ca3af;
+}
+
+.add-staff-section {
+  background: #f8fafc;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.add-staff-btn {
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  width: 100%;
+}
+
+.add-staff-btn:hover {
+  background: #1d4ed8;
+}
+
+.staff-fee-summary {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin-top: 1rem;
+  font-size: 0.875rem;
+}
+
+.fee-detail {
+  color: #92400e;
+  margin-left: 0.5rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .org-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+  }
+
+  .create-org-btn {
+    width: 100%;
+  }
+
+  .org-table-container {
+    overflow-x: auto;
+  }
+
+  .org-table {
+    min-width: 800px;
+  }
+
+  .org-form-row {
+    grid-template-columns: 1fr;
+  }
+}
