@@ -168,8 +168,8 @@ const App = () => {
       window.history.pushState({}, '', '/employees');
       return;
     }
-    // Only primary owner can access users
-    if (view === 'users' && user?.id !== PRIMARY_OWNER_ID) {
+    // Only primary owner can access users, organizations, and revenue
+    if ((view === 'users' || view === 'organizations' || view === 'revenue') && user?.id !== PRIMARY_OWNER_ID) {
       setActiveView('employees');
       window.history.pushState({}, '', '/employees');
       return;
