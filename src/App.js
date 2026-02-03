@@ -152,12 +152,22 @@ const App = () => {
   // Simple helper - true for users allowed to access billing/payroll
   const isAdmin = (user?.role || '').toString().toLowerCase() === 'admin' || (user?.role || '').toString().toLowerCase() === 'owner';
 
+  // Only the primary owner can access User Management
+  const PRIMARY_OWNER_ID = '5df85ca3-7a54-4798-a665-c31da8d9caad';
+  const canManageUsers = user?.id === PRIMARY_OWNER_ID;
+
   // Update URL when view changes
   const handleViewChange = useCallback((view) => {
     // Prevent non-admins from navigating to billing/payroll
     const role = user?.role?.toString?.().toLowerCase?.() || '';
     const isAdminLocal = role === 'admin' || role === 'owner';
     if ((view === 'billing' || view === 'payroll') && !isAdminLocal) {
+      setActiveView('employees');
+      window.history.pushState({}, '', '/employees');
+      return;
+    }
+    // Only primary owner can access users
+    if (view === 'users' && user?.id !== PRIMARY_OWNER_ID) {
       setActiveView('employees');
       window.history.pushState({}, '', '/employees');
       return;
@@ -1064,7 +1074,7 @@ const App = () => {
                   💸 Payroll
                 </button>
               )}
-              {isAdmin && (
+              {canManageUsers && (
               <button
                 onClick={() => handleViewChange('users')}
                 className={`px-4 py-2 rounded-xl font-medium text-sm border ${
