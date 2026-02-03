@@ -510,10 +510,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             return blockMatch && lotMatch && qualMatch;
           });
 
-          if (comp && comp.sales_date && comp.values_norm_time) {
+          if (comp && comp.sales_date && (comp.values_norm_time || comp.sales_price)) {
+            // Use time-normalized value if available, otherwise fall back to sales price
+            const compValue = comp.values_norm_time || comp.sales_price;
+
             // Calculate adjustments
             const { adjustments, totalAdjustment, adjustedPrice, adjustmentPercent } =
-              calculateAllAdjustments(subject, comp);
+              calculateAllAdjustments(subject, { ...comp, values_norm_time: compValue });
 
             const grossAdjustment = adjustments.reduce((sum, adj) => sum + Math.abs(adj.amount), 0);
             const grossAdjustmentPercent = comp.values_norm_time > 0
