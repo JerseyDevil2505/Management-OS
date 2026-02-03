@@ -803,6 +803,7 @@ const App = () => {
           window.location.hostname.includes('builder.io') ||
           window.location.search.includes('dev=true')) {
         setUser({
+          id: '5df85ca3-7a54-4798-a665-c31da8d9caad', // Primary owner ID for dev mode
           email: 'dev@lojik.com',
           role: 'admin',
           employeeData: {
