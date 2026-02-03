@@ -1253,6 +1253,14 @@ const App = () => {
           </div>
         ))}
 
+        {activeView === 'organizations' && canManageUsers && (
+          <OrganizationManagement />
+        )}
+
+        {activeView === 'revenue' && canManageUsers && (
+          <RevenueManagement />
+        )}
+
         {activeView === 'job-modules' && selectedJob && (
           <div>
             <JobContainer
