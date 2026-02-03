@@ -519,8 +519,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
               calculateAllAdjustments(subject, { ...comp, values_norm_time: compValue });
 
             const grossAdjustment = adjustments.reduce((sum, adj) => sum + Math.abs(adj.amount), 0);
-            const grossAdjustmentPercent = comp.values_norm_time > 0
-              ? (grossAdjustment / comp.values_norm_time) * 100
+            const grossAdjustmentPercent = compValue > 0
+              ? (grossAdjustment / compValue) * 100
               : 0;
 
             fetchedComps.push({
