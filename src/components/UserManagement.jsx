@@ -153,6 +153,7 @@ const UserManagement = () => {
 
   const getRoleBadgeClass = (role) => {
     switch (role) {
+      case 'Owner': return 'badge-owner';
       case 'Admin': return 'badge-admin';
       case 'Management': return 'badge-manager';
       default: return 'badge-inspector';
@@ -206,6 +207,7 @@ const UserManagement = () => {
                       onChange={(e) => handleRoleChange(user.id, e.target.value)}
                       className={`role-select ${getRoleBadgeClass(user.role)}`}
                     >
+                      <option value="Owner">Owner</option>
                       <option value="Admin">Admin</option>
                       <option value="Management">Management</option>
                     </select>
@@ -285,6 +287,7 @@ const UserManagement = () => {
                   value={newUser.role}
                   onChange={(e) => setNewUser({...newUser, role: e.target.value})}
                 >
+                  <option value="Owner">Owner</option>
                   <option value="Admin">Admin</option>
                   <option value="Management">Management</option>
                 </select>
