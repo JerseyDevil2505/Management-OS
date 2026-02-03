@@ -465,6 +465,66 @@ export const interpretCodes = {
 - **NEW table added**: `property_market_analysis` for field migration
 - **Major refactor**: Raw data consolidated from property to job level
 
+### Multi-Tenant Architecture (February 2025)
+
+**Purpose**: Enable external client access (Lojik CME assessor clients) while keeping PPA internal operations separate.
+
+**Organization Types:**
+- `internal` - PPA Associates (never charged, full access)
+- `assessor` - External clients (billed based on line items + users)
+
+**Pricing Model:**
+- Base fee based on line item count (primary cards only)
+- Primary user: $500/year
+- Additional staff: $250/year each
+- Government billing: Invoice → PO → Payment (no Stripe)
+
+**Tables Modified:**
+- `jobs` - Added `organization_id` (required)
+- `employees` - Added `organization_id` (required)
+- `profiles` - Added `organization_id` (required)
+- `planning_jobs` - Added `organization_id` (required)
+
+**New UI Components:**
+- `OrganizationManagement.jsx` - Add/manage client orgs, staff, billing status
+- `RevenueManagement.jsx` - Placeholder for invoice tracking (coming soon)
+
+**Access Control:**
+| Tab | Who Can See |
+|-----|-------------|
+| Employees, Jobs, Appeal Coverage | All Users |
+| Billing, Payroll | Admin + Owner |
+| Users, Organizations, Revenue | Primary Owner Only |
+
+#### **organizations** (NEW - February 2025)
+**Component:** `OrganizationManagement.jsx`
+
+| Column | Data Type | Description |
+|--------|-----------|-------------|
+| id | uuid | Primary key |
+| name | text | Organization name |
+| slug | text | URL-friendly identifier |
+| org_type | text | 'internal' or 'assessor' |
+| single_job_mode | boolean | Skip job list on login |
+| default_job_id | uuid | For single-job orgs |
+| tab_config | jsonb | Which tabs org users can see |
+| primary_contact_name | text | Billing contact |
+| primary_contact_email | text | Billing email |
+| billing_address | text | Invoice address |
+| line_item_count | integer | For fee calculation |
+| subscription_status | text | active/suspended/cancelled/trial |
+| invoice_sent_date | date | Billing workflow |
+| po_received_date | date | Billing workflow |
+| payment_received_date | date | Billing workflow |
+| renewal_date | date | Annual renewal |
+| annual_fee | numeric | Calculated fee |
+| created_at | timestamptz | Audit |
+| updated_at | timestamptz | Audit |
+
+**PPA Organization ID:** `00000000-0000-0000-0000-000000000001`
+
+---
+
 ### Core Production Tables with Component Mappings
 
 #### **billing_events**
