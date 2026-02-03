@@ -200,6 +200,14 @@ const UserManagement = () => {
             <span className="access-tab">🔐 Users</span>
             <span className="access-roles owner-only">Primary Owner Only</span>
           </div>
+          <div className="access-item">
+            <span className="access-tab">🏢 Organizations</span>
+            <span className="access-roles owner-only">Primary Owner Only</span>
+          </div>
+          <div className="access-item">
+            <span className="access-tab">💵 Revenue</span>
+            <span className="access-roles owner-only">Primary Owner Only</span>
+          </div>
         </div>
       </div>
 
