@@ -32,7 +32,7 @@ const UserManagement = () => {
         .from('employees')
         .select('*')
         .eq('employment_status', 'full_time')  // Only full-time employees
-        .in('role', ['Management', 'Admin'])   // Only Management and Admin roles
+        .in('role', ['Management', 'Admin', 'Owner'])   // Management, Admin, and Owner roles
         .order('last_name');
 
       if (error) throw error;
