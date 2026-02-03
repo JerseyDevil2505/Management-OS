@@ -630,19 +630,83 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               }
             }
           } else {
-            // BRT: Check detachedcode_1-11 for all dynamic adjustments
-            for (let i = 1; i <= 11; i++) {
-              const detachedCode = prop[`detachedcode_${i}`];
-              if (detachedCode && normalizeCode(detachedCode) === targetCode) {
-                return true;
+            // BRT COLUMN MAPPING:
+            // - Detached items (barn, pole_barn, stable) → detachedcode_1-11
+            // - Miscellaneous items → misc_1_brt through misc_5_brt (with counts in miscnum_1-5)
+            // - Positive Land adjustments → landffcond_1-6 + landurcond_1-6
+            // - Negative Land adjustments → landffinfl_1-6 + landurinfl_1-6
+
+            if (adj.adjustment_id.startsWith('land_positive_')) {
+              // Positive land: check landffcond_1-6 and landurcond_1-6
+              for (let i = 1; i <= 6; i++) {
+                const ffcondCode = prop[`landffcond_${i}`];
+                if (ffcondCode && normalizeCode(ffcondCode) === targetCode) {
+                  return true;
+                }
+                const urcondCode = prop[`landurcond_${i}`];
+                if (urcondCode && normalizeCode(urcondCode) === targetCode) {
+                  return true;
+                }
+              }
+            }
+            else if (adj.adjustment_id.startsWith('land_negative_')) {
+              // Negative land: check landffinfl_1-6 and landurinfl_1-6
+              for (let i = 1; i <= 6; i++) {
+                const ffinflCode = prop[`landffinfl_${i}`];
+                if (ffinflCode && normalizeCode(ffinflCode) === targetCode) {
+                  return true;
+                }
+                const urinflCode = prop[`landurinfl_${i}`];
+                if (urinflCode && normalizeCode(urinflCode) === targetCode) {
+                  return true;
+                }
+              }
+            }
+            else if (adj.adjustment_id.startsWith('miscellaneous_')) {
+              // BRT Miscellaneous: check misc_1_brt through misc_5_brt
+              for (let i = 1; i <= 5; i++) {
+                const miscCode = prop[`misc_${i}_brt`];
+                if (miscCode && normalizeCode(miscCode) === targetCode) {
+                  return true;
+                }
+              }
+            }
+            else if (adj.adjustment_id.startsWith('barn_') || adj.adjustment_id.startsWith('pole_barn_') || adj.adjustment_id.startsWith('stable_')) {
+              // BRT Detached items: check detachedcode_1-11
+              for (let i = 1; i <= 11; i++) {
+                const detachedCode = prop[`detachedcode_${i}`];
+                if (detachedCode && normalizeCode(detachedCode) === targetCode) {
+                  return true;
+                }
               }
             }
           }
           return false;
         };
 
+        // Helper to get miscellaneous count for BRT
+        const getMiscCount = () => {
+          if (vendorType !== 'BRT') return 0;
+          for (let i = 1; i <= 5; i++) {
+            const miscCode = prop[`misc_${i}_brt`];
+            if (miscCode && normalizeCode(miscCode) === targetCode) {
+              return parseInt(prop[`miscnum_${i}`], 10) || 1; // Default to 1 if count is missing
+            }
+          }
+          return 0;
+        };
+
         // Land adjustments: show YES/NONE (binary)
         if (adj.adjustment_id.startsWith('land_positive_') || adj.adjustment_id.startsWith('land_negative_')) {
+          return hasCode() ? 'YES' : 'NONE';
+        }
+
+        // Miscellaneous items: show count for BRT, YES/NONE for Microsystems
+        if (adj.adjustment_id.startsWith('miscellaneous_')) {
+          if (vendorType === 'BRT') {
+            const count = getMiscCount();
+            return count > 0 ? count : 'NONE';
+          }
           return hasCode() ? 'YES' : 'NONE';
         }
 
