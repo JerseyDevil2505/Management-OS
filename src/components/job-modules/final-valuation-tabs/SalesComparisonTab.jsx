@@ -1576,19 +1576,85 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 }
               }
             } else {
-              // BRT: Check detachedcode_1-11 for all dynamic adjustments
-              for (let i = 1; i <= 11; i++) {
-                const detachedCode = property[`detachedcode_${i}`];
-                if (detachedCode && normalizeCode(detachedCode) === targetCode) {
-                  return true;
+              // BRT COLUMN MAPPING:
+              // - Detached items (barn, pole_barn, stable) → detachedcode_1-11
+              // - Miscellaneous items → misc_1_brt through misc_5_brt
+              // - Positive Land adjustments → landffcond_1-6 + landurcond_1-6
+              // - Negative Land adjustments → landffinfl_1-6 + landurinfl_1-6
+
+              if (adjustmentDef.adjustment_id.startsWith('land_positive_')) {
+                // Positive land: check landffcond_1-6 and landurcond_1-6
+                for (let i = 1; i <= 6; i++) {
+                  const ffcondCode = property[`landffcond_${i}`];
+                  if (ffcondCode && normalizeCode(ffcondCode) === targetCode) {
+                    return true;
+                  }
+                  const urcondCode = property[`landurcond_${i}`];
+                  if (urcondCode && normalizeCode(urcondCode) === targetCode) {
+                    return true;
+                  }
+                }
+              }
+              else if (adjustmentDef.adjustment_id.startsWith('land_negative_')) {
+                // Negative land: check landffinfl_1-6 and landurinfl_1-6
+                for (let i = 1; i <= 6; i++) {
+                  const ffinflCode = property[`landffinfl_${i}`];
+                  if (ffinflCode && normalizeCode(ffinflCode) === targetCode) {
+                    return true;
+                  }
+                  const urinflCode = property[`landurinfl_${i}`];
+                  if (urinflCode && normalizeCode(urinflCode) === targetCode) {
+                    return true;
+                  }
+                }
+              }
+              else if (adjustmentDef.adjustment_id.startsWith('miscellaneous_')) {
+                // BRT Miscellaneous: check misc_1_brt through misc_5_brt
+                for (let i = 1; i <= 5; i++) {
+                  const miscCode = property[`misc_${i}_brt`];
+                  if (miscCode && normalizeCode(miscCode) === targetCode) {
+                    return true;
+                  }
+                }
+              }
+              else if (adjustmentDef.adjustment_id.startsWith('barn_') ||
+                       adjustmentDef.adjustment_id.startsWith('pole_barn_') ||
+                       adjustmentDef.adjustment_id.startsWith('stable_')) {
+                // BRT Detached items: check detachedcode_1-11
+                for (let i = 1; i <= 11; i++) {
+                  const detachedCode = property[`detachedcode_${i}`];
+                  if (detachedCode && normalizeCode(detachedCode) === targetCode) {
+                    return true;
+                  }
                 }
               }
             }
             return false;
           };
 
-          subjectValue = hasCode(subject) ? 1 : 0;
-          compValue = hasCode(comp) ? 1 : 0;
+          // Helper: Get miscellaneous count for BRT (returns actual count, not just 0/1)
+          const getMiscCount = (property) => {
+            if (vendorType !== 'BRT') return hasCode(property) ? 1 : 0;
+            const normalizeCode = (c) => String(c).trim().replace(/^0+/, '').toUpperCase() || '0';
+            const targetCode = normalizeCode(code);
+
+            for (let i = 1; i <= 5; i++) {
+              const miscCode = property[`misc_${i}_brt`];
+              if (miscCode && normalizeCode(miscCode) === targetCode) {
+                return parseInt(property[`miscnum_${i}`], 10) || 1; // Default to 1 if count is missing
+              }
+            }
+            return 0;
+          };
+
+          // Use count-based values for BRT miscellaneous items
+          if (adjustmentDef.adjustment_id.startsWith('miscellaneous_') && vendorType === 'BRT') {
+            subjectValue = getMiscCount(subject);
+            compValue = getMiscCount(comp);
+          } else {
+            subjectValue = hasCode(subject) ? 1 : 0;
+            compValue = hasCode(comp) ? 1 : 0;
+          }
         } else {
           return 0; // Unknown attribute
         }
