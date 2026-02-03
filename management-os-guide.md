@@ -176,8 +176,12 @@ JobContainer (loads once with pagination)
 │   │   ├── PayrollManagement.jsx      ← Office Manager chaos killer, inspection bonuses (1,100 lines)
 │   │   ├── LandingPage.jsx            ← Initial dashboard/landing page
 │   │   ├── LandingPage.css            ← Landing page styles
-│   │   ├── UserManagement.jsx         ← User account management
+│   │   ├── UserManagement.jsx         ← User account management (Primary Owner only)
 │   │   ├── UserManagement.css         ← User management styles
+│   │   ├── OrganizationManagement.jsx ← Multi-tenant client org management (Primary Owner only)
+│   │   ├── OrganizationManagement.css ← Organization management styles
+│   │   ├── RevenueManagement.jsx      ← Invoice/billing tracking placeholder (Primary Owner only)
+│   │   ├── RevenueManagement.css      ← Revenue management styles
 │   │   ├── VirtualPropertyList.jsx    ← Paginated property display component (performance optimization)
 │   │   └── job-modules/               ← Job-specific workflow modules
 │   │       ├── JobContainer.jsx       ← Job module dispatcher, navigation & DATA LOADER (NEW ROLE!)
