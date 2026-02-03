@@ -172,6 +172,37 @@ const UserManagement = () => {
         </button>
       </div>
 
+      {/* Access Control Summary */}
+      <div className="access-control-summary">
+        <h3>Tab Access Control</h3>
+        <div className="access-grid">
+          <div className="access-item">
+            <span className="access-tab">👥 Employees</span>
+            <span className="access-roles all-roles">All Users</span>
+          </div>
+          <div className="access-item">
+            <span className="access-tab">📋 Jobs</span>
+            <span className="access-roles all-roles">All Users</span>
+          </div>
+          <div className="access-item">
+            <span className="access-tab">⚖️ Appeal Coverage</span>
+            <span className="access-roles all-roles">All Users</span>
+          </div>
+          <div className="access-item">
+            <span className="access-tab">💰 Billing</span>
+            <span className="access-roles admin-only">Admin + Owner</span>
+          </div>
+          <div className="access-item">
+            <span className="access-tab">💸 Payroll</span>
+            <span className="access-roles admin-only">Admin + Owner</span>
+          </div>
+          <div className="access-item">
+            <span className="access-tab">🔐 Users</span>
+            <span className="access-roles owner-only">Primary Owner Only</span>
+          </div>
+        </div>
+      </div>
+
       {error && (
         <div className="um-error">{error}</div>
       )}
