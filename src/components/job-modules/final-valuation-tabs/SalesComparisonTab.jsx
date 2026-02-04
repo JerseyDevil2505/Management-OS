@@ -3234,6 +3234,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                   compFilters={compFilters}
                   cmeBrackets={CME_BRACKETS}
                   isJobContainerLoading={isJobContainerLoading}
+                  allProperties={properties}
                 />
               </div>
             )}
