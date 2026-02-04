@@ -255,9 +255,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   };
 
   // Helper to render comp cells (shows all 5 even if empty)
+  // Uses aggregatedComps which includes data from additional cards
   const renderCompCells = (renderFunc) => {
     return [0, 1, 2, 3, 4].map((idx) => {
-      const comp = comps[idx];
+      const comp = aggregatedComps[idx];
       const bgColor = comp?.isSubjectSale ? 'bg-green-50' : 'bg-blue-50';
       return (
         <td key={idx} className={`px-3 py-2 text-center ${bgColor} border-l border-gray-300`}>
