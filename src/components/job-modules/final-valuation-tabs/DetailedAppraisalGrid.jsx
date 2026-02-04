@@ -1347,194 +1347,123 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
       {/* Export Modal */}
       {showExportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
-            <div className="bg-blue-600 px-6 py-4 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl flex flex-col" style={{ maxHeight: 'calc(100vh - 100px)' }}>
+            {/* Modal Header - Always visible */}
+            <div className="bg-blue-600 px-4 py-3 flex items-center justify-between rounded-t-lg flex-shrink-0">
               <div className="flex items-center gap-3">
-                <Printer className="text-white" size={24} />
-                <h3 className="text-lg font-semibold text-white">Export Detailed Evaluation</h3>
+                <Printer className="text-white" size={20} />
+                <h3 className="text-base font-semibold text-white">Export PDF</h3>
               </div>
               <button
                 onClick={() => setShowExportModal(false)}
-                className="text-white hover:text-blue-200 transition-colors"
+                className="text-white hover:text-blue-200 transition-colors p-1"
               >
-                <X size={24} />
+                <X size={20} />
               </button>
             </div>
 
             {/* Modal Options */}
-            <div className="px-6 py-4 bg-gray-50 border-b flex items-center justify-between">
-              <div className="flex items-center gap-6">
-                <label className="flex items-center gap-2 cursor-pointer">
+            <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between flex-shrink-0">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showAdjustments}
+                  onChange={(e) => setShowAdjustments(e.target.checked)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  {showAdjustments ? (
+                    <span className="flex items-center gap-1"><Eye size={14} /> Include Adjustments & Valuation</span>
+                  ) : (
+                    <span className="flex items-center gap-1"><EyeOff size={14} /> Comps Only</span>
+                  )}
+                </span>
+              </label>
+              <span className="text-sm text-gray-500">
+                {Object.values(rowVisibility).filter(Boolean).length} rows
+              </span>
+            </div>
+
+            {/* Modal Content - Scrollable row selection */}
+            <div className="flex-1 overflow-y-auto px-4 py-3" style={{ maxHeight: '400px' }}>
+              <div className="space-y-1">
+                {/* Select All */}
+                <label className="flex items-center gap-2 p-2 bg-gray-100 rounded cursor-pointer hover:bg-gray-200">
                   <input
                     type="checkbox"
-                    checked={showAdjustments}
-                    onChange={(e) => setShowAdjustments(e.target.checked)}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    checked={Object.values(rowVisibility).every(Boolean)}
+                    onChange={(e) => {
+                      const newVisibility = {};
+                      Object.keys(rowVisibility).forEach(key => {
+                        newVisibility[key] = e.target.checked;
+                      });
+                      setRowVisibility(newVisibility);
+                    }}
+                    className="rounded border-gray-300 text-blue-600"
                   />
-                  <span className="text-sm font-medium text-gray-700">Show Adjustments & Valuation</span>
+                  <span className="text-sm font-semibold text-gray-700">Select All Rows</span>
                 </label>
-                <div className="text-sm text-gray-500">
-                  {showAdjustments ? (
-                    <span className="flex items-center gap-1"><Eye size={14} /> Full evaluation with adjustments</span>
-                  ) : (
-                    <span className="flex items-center gap-1"><EyeOff size={14} /> Comps only (no adjustments)</span>
-                  )}
-                </div>
-              </div>
-              <div className="text-sm text-gray-600">
-                <span className="font-medium">{Object.values(rowVisibility).filter(Boolean).length}</span> rows selected for export
-              </div>
-            </div>
 
-            {/* Modal Content - Preview Table */}
-            <div className="flex-1 overflow-auto p-6">
-              <div className="border rounded-lg overflow-hidden">
-                <table className="min-w-full text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-blue-600 text-white">
-                      <th className="px-2 py-2 w-8">
-                        <input
-                          type="checkbox"
-                          checked={Object.values(rowVisibility).every(Boolean)}
-                          onChange={(e) => {
-                            const newVisibility = {};
-                            Object.keys(rowVisibility).forEach(key => {
-                              newVisibility[key] = e.target.checked;
-                            });
-                            setRowVisibility(newVisibility);
-                          }}
-                          className="rounded border-white text-blue-600"
-                        />
-                      </th>
-                      <th className="px-3 py-2 text-left font-semibold">VCS</th>
-                      <th className="px-3 py-2 text-center font-semibold bg-yellow-600">Subject</th>
-                      {[1, 2, 3, 4, 5].map(n => (
-                        <th key={n} className="px-3 py-2 text-center font-semibold">Comp {n}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white">
-                    {allAttributes.map(attr => (
-                      <tr key={attr.id} className={`border-b ${!rowVisibility[attr.id] ? 'opacity-40 bg-gray-100' : ''}`}>
-                        <td className="px-2 py-1.5">
-                          <input
-                            type="checkbox"
-                            checked={rowVisibility[attr.id] ?? true}
-                            onChange={() => toggleRowVisibility(attr.id)}
-                            className="rounded border-gray-300 text-blue-600"
-                          />
-                        </td>
-                        <td className="px-3 py-1.5 font-medium whitespace-nowrap">
-                          {attr.label}
-                          {attr.isDynamic && <span className="ml-1 text-purple-500 text-xs">(Dyn)</span>}
-                        </td>
-                        <td className="px-3 py-1.5 text-center bg-yellow-50">
-                          <input
-                            type="text"
-                            className="w-full text-center text-xs border-0 bg-transparent focus:ring-1 focus:ring-blue-500 rounded"
-                            defaultValue={attr.render(subject)}
-                            onChange={(e) => updateEditableData(attr.id, 'subject', e.target.value)}
-                          />
-                        </td>
-                        {[0, 1, 2, 3, 4].map(i => {
-                          const comp = comps[i];
-                          return (
-                            <td key={i} className="px-3 py-1.5 text-center bg-blue-50">
-                              {comp ? (
-                                <input
-                                  type="text"
-                                  className="w-full text-center text-xs border-0 bg-transparent focus:ring-1 focus:ring-blue-500 rounded"
-                                  defaultValue={attr.render(comp)}
-                                  onChange={(e) => updateEditableData(attr.id, i, e.target.value)}
-                                />
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
+                {/* Attribute rows */}
+                {allAttributes.map(attr => (
+                  <label key={attr.id} className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-gray-50 ${!rowVisibility[attr.id] ? 'opacity-50' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={rowVisibility[attr.id] ?? true}
+                      onChange={() => toggleRowVisibility(attr.id)}
+                      className="rounded border-gray-300 text-blue-600"
+                    />
+                    <span className="text-sm text-gray-700 flex-1">{attr.label}</span>
+                    {attr.isDynamic && <span className="text-xs text-purple-500">(Dynamic)</span>}
+                  </label>
+                ))}
 
-                    {/* Net Adjustment Row */}
-                    {showAdjustments && (
-                      <tr className={`border-b bg-gray-100 ${!rowVisibility['net_adjustment'] ? 'opacity-40' : ''}`}>
-                        <td className="px-2 py-1.5">
-                          <input
-                            type="checkbox"
-                            checked={rowVisibility['net_adjustment'] ?? true}
-                            onChange={() => toggleRowVisibility('net_adjustment')}
-                            className="rounded border-gray-300 text-blue-600"
-                          />
-                        </td>
-                        <td className="px-3 py-1.5 font-bold">Net Adjustment</td>
-                        <td className="px-3 py-1.5 text-center bg-yellow-50">-</td>
-                        {[0, 1, 2, 3, 4].map(i => {
-                          const comp = comps[i];
-                          if (!comp) return <td key={i} className="px-3 py-1.5 text-center bg-blue-50 text-gray-400">-</td>;
-                          const total = comp.totalAdjustment || 0;
-                          const pct = comp.adjustmentPercent || 0;
-                          return (
-                            <td key={i} className={`px-3 py-1.5 text-center font-bold ${total > 0 ? 'text-green-700' : total < 0 ? 'text-red-700' : ''}`}>
-                              {total > 0 ? '+' : ''}${Math.round(total).toLocaleString()} ({pct > 0 ? '+' : ''}{pct.toFixed(0)}%)
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    )}
+                {/* Net Adjustment */}
+                {showAdjustments && (
+                  <label className={`flex items-center gap-2 p-2 bg-gray-100 rounded cursor-pointer hover:bg-gray-200 ${!rowVisibility['net_adjustment'] ? 'opacity-50' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={rowVisibility['net_adjustment'] ?? true}
+                      onChange={() => toggleRowVisibility('net_adjustment')}
+                      className="rounded border-gray-300 text-blue-600"
+                    />
+                    <span className="text-sm font-semibold text-gray-700">Net Adjustment</span>
+                  </label>
+                )}
 
-                    {/* Adjusted Valuation Row */}
-                    {showAdjustments && (
-                      <tr className={`border-b-2 bg-blue-100 ${!rowVisibility['adjusted_valuation'] ? 'opacity-40' : ''}`}>
-                        <td className="px-2 py-1.5">
-                          <input
-                            type="checkbox"
-                            checked={rowVisibility['adjusted_valuation'] ?? true}
-                            onChange={() => toggleRowVisibility('adjusted_valuation')}
-                            className="rounded border-gray-300 text-blue-600"
-                          />
-                        </td>
-                        <td className="px-3 py-1.5 font-bold">Adjusted Valuation</td>
-                        <td className="px-3 py-1.5 text-center bg-yellow-100 font-bold text-green-700">
-                          {result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-'}
-                        </td>
-                        {[0, 1, 2, 3, 4].map(i => {
-                          const comp = comps[i];
-                          return (
-                            <td key={i} className="px-3 py-1.5 text-center font-bold">
-                              {comp ? `$${Math.round(comp.adjustedPrice || 0).toLocaleString()}` : '-'}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="mt-4 text-sm text-gray-500">
-                <p>Edit any cell above to customize the exported PDF. Uncheck rows to exclude them from the export.</p>
-                {dynamicAttributes.length > 0 && (
-                  <p className="mt-1 text-purple-600">Dynamic adjustments will appear on page 2 of the PDF.</p>
+                {/* Adjusted Valuation */}
+                {showAdjustments && (
+                  <label className={`flex items-center gap-2 p-2 bg-blue-100 rounded cursor-pointer hover:bg-blue-200 ${!rowVisibility['adjusted_valuation'] ? 'opacity-50' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={rowVisibility['adjusted_valuation'] ?? true}
+                      onChange={() => toggleRowVisibility('adjusted_valuation')}
+                      className="rounded border-gray-300 text-blue-600"
+                    />
+                    <span className="text-sm font-semibold text-gray-700">Adjusted Valuation</span>
+                  </label>
                 )}
               </div>
+
+              {dynamicAttributes.length > 0 && (
+                <p className="mt-3 text-xs text-purple-600">Dynamic adjustments will appear on page 2 of the PDF.</p>
+              )}
             </div>
 
-            {/* Modal Footer */}
-            <div className="px-6 py-4 bg-gray-50 border-t flex items-center justify-end gap-3">
+            {/* Modal Footer - Always visible */}
+            <div className="px-4 py-3 bg-gray-50 border-t flex items-center justify-end gap-3 rounded-b-lg flex-shrink-0">
               <button
                 onClick={() => setShowExportModal(false)}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm"
               >
                 Cancel
               </button>
               <button
                 onClick={generatePDF}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
               >
-                <FileDown size={18} />
+                <FileDown size={16} />
                 Download PDF
               </button>
             </div>
