@@ -104,6 +104,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     three_car_max: 999
   });
 
+  // Detached item condition multipliers
+  const [detachedConditionMultipliers, setDetachedConditionMultipliers] = useState({
+    poor_threshold: 0.25,
+    poor_multiplier: 0.50,
+    standard_multiplier: 1.00,
+    excellent_threshold: 0.75,
+    excellent_multiplier: 1.25
+  });
+
   // Helper: Convert garage square footage to category number
   const getGarageCategory = useCallback((sqft) => {
     if (!sqft || sqft === 0) return 0; // NONE
