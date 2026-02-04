@@ -1,9 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { interpretCodes, supabase } from '../../../lib/supabaseClient';
+import { FileDown, X, Eye, EyeOff, Printer } from 'lucide-react';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false }) => {
   const subject = result.subject;
   const comps = result.comparables || [];
+
+  // ==================== PDF EXPORT STATE ====================
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showAdjustments, setShowAdjustments] = useState(true); // Toggle for comps-only mode
+  const [rowVisibility, setRowVisibility] = useState({}); // { attrId: boolean }
+  const [editableData, setEditableData] = useState({}); // { attrId_colIdx: value } for modal edits
 
   // Determine which bracket is being used
   const getBracketLabel = () => {
@@ -205,7 +214,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     },
     {
       id: 'block_lot_qual',
-      label: 'Block/Lot/Qualifier',
+      label: 'Block/Lot/Qual',
       render: (prop) => `${prop.property_block}/${prop.property_lot}${prop.property_qualifier ? '/' + prop.property_qualifier : ''}`,
       adjustmentName: null,
       bold: true
@@ -218,7 +227,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     },
     {
       id: 'prev_assessment',
-      label: 'Prev Assessment',
+      label: 'Prev. Assessment',
       render: (prop) => {
         const value = prop.values_mod4_total || prop.values_mod_total || prop.values_cama_total || 0;
         return value ? `$${value.toLocaleString()}` : 'N/A';
@@ -253,7 +262,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     },
     {
       id: 'type_use_code',
-      label: 'Type Use Code',
+      label: 'Type/Use Code',
       render: (prop) => {
         if (!prop.asset_type_use) return 'N/A';
         if (codeDefinitions) {
@@ -312,17 +321,17 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       bold: true
     },
     {
-      id: 'lot_size_ff',
-      label: 'Lot Size (FF)',
-      render: (prop) => (prop.market_manual_lot_ff || prop.asset_lot_ff || prop.asset_lot_frontage)?.toLocaleString() || 'N/A',
-      adjustmentName: 'Lot Size (FF)'
-    },
-    {
       id: 'lot_size_sf',
-      label: 'Lot Size (SF)',
+      label: 'Lot Size',
       render: (prop) => (prop.market_manual_lot_sf || prop.asset_lot_sf)?.toLocaleString() || 'N/A',
       adjustmentName: 'Lot Size (SF)',
       bold: true
+    },
+    {
+      id: 'lot_size_ff',
+      label: 'Lot Size (Front Foot)',
+      render: (prop) => (prop.market_manual_lot_ff || prop.asset_lot_ff || prop.asset_lot_frontage)?.toLocaleString() || 'N/A',
+      adjustmentName: 'Lot Size (FF)'
     },
     {
       id: 'lot_size_acre',
@@ -366,7 +375,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     },
     {
       id: 'fin_bsmt_area',
-      label: 'Fin Bsmt Area',
+      label: 'Fin. Bsmt. Area',
       render: (prop) => {
         // Check if fin_basement_area column exists (future)
         if (prop.fin_basement_area !== undefined) {
@@ -404,7 +413,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           return prop.ac_area > 0 ? `${prop.ac_area.toLocaleString()} SF` : 'None';
         }
         // Fallback to boolean indicator
-        return prop.asset_ac ? 'Yes' : 'None';
+        return prop.asset_ac ? 'Yes' : 'No';
       },
       adjustmentName: 'AC'
     },
@@ -440,7 +449,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     },
     {
       id: 'det_garage_area',
-      label: 'Det Garage Area (Per Car)',
+      label: 'Det. Garage Area (Per Car)',
       render: (prop) => {
         // Use det_garage_area column with category display
         if (prop.det_garage_area !== undefined && prop.det_garage_area !== null) {
@@ -462,14 +471,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       render: (prop) => {
         // Check if deck_area column exists (future)
         if (prop.deck_area !== undefined) {
-          return prop.deck_area > 0 ? `${prop.deck_area.toLocaleString()} SF` : 'None';
+          return prop.deck_area > 0 ? `${prop.deck_area.toLocaleString()} SF` : 'No';
         }
         // Fallback
         if (vendorType === 'BRT') {
           const area = getBRTItemArea(prop, ['11']); // Approximate - need specific deck codes
-          return area > 0 ? `${area.toLocaleString()} SF` : 'None';
+          return area > 0 ? `${area.toLocaleString()} SF` : 'No';
         } else {
-          return prop.asset_deck ? 'Yes' : 'None';
+          return prop.asset_deck ? 'Yes' : 'No';
         }
       },
       adjustmentName: 'Deck'
@@ -480,14 +489,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       render: (prop) => {
         // Check if patio_area column exists (future)
         if (prop.patio_area !== undefined) {
-          return prop.patio_area > 0 ? `${prop.patio_area.toLocaleString()} SF` : 'None';
+          return prop.patio_area > 0 ? `${prop.patio_area.toLocaleString()} SF` : 'No';
         }
         // Fallback
         if (vendorType === 'BRT') {
           const area = getBRTItemArea(prop, ['11']); // Approximate - need specific patio codes
-          return area > 0 ? `${area.toLocaleString()} SF` : 'None';
+          return area > 0 ? `${area.toLocaleString()} SF` : 'No';
         } else {
-          return prop.asset_patio ? 'Yes' : 'None';
+          return prop.asset_patio ? 'Yes' : 'No';
         }
       },
       adjustmentName: 'Patio'
@@ -498,32 +507,32 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       render: (prop) => {
         // Check if open_porch_area column exists (future)
         if (prop.open_porch_area !== undefined) {
-          return prop.open_porch_area > 0 ? `${prop.open_porch_area.toLocaleString()} SF` : 'None';
+          return prop.open_porch_area > 0 ? `${prop.open_porch_area.toLocaleString()} SF` : 'No';
         }
         // Fallback
         if (vendorType === 'BRT') {
           const area = getBRTItemArea(prop, ['11']); // Approximate - need specific open porch codes
-          return area > 0 ? `${area.toLocaleString()} SF` : 'None';
+          return area > 0 ? `${area.toLocaleString()} SF` : 'No';
         } else {
-          return prop.asset_open_porch ? 'Yes' : 'None';
+          return prop.asset_open_porch ? 'Yes' : 'No';
         }
       },
       adjustmentName: 'Open Porch'
     },
     {
       id: 'enclosed_porch_area',
-      label: 'Enclosed Porch Area',
+      label: 'Encl Porch Area',
       render: (prop) => {
         // Check if enclosed_porch_area column exists (future)
         if (prop.enclosed_porch_area !== undefined) {
-          return prop.enclosed_porch_area > 0 ? `${prop.enclosed_porch_area.toLocaleString()} SF` : 'None';
+          return prop.enclosed_porch_area > 0 ? `${prop.enclosed_porch_area.toLocaleString()} SF` : 'No';
         }
         // Fallback
         if (vendorType === 'BRT') {
           const area = getBRTItemArea(prop, ['11']); // Approximate - need specific enclosed porch codes
-          return area > 0 ? `${area.toLocaleString()} SF` : 'None';
+          return area > 0 ? `${area.toLocaleString()} SF` : 'No';
         } else {
-          return prop.asset_enclosed_porch ? 'Yes' : 'None';
+          return prop.asset_enclosed_porch ? 'Yes' : 'No';
         }
       },
       adjustmentName: 'Enclosed Porch'
@@ -534,26 +543,26 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       render: (prop) => {
         // Check if pool_area column exists (future)
         if (prop.pool_area !== undefined) {
-          return prop.pool_area > 0 ? `${prop.pool_area.toLocaleString()} SF` : 'None';
+          return prop.pool_area > 0 ? `${prop.pool_area.toLocaleString()} SF` : 'No';
         }
         // Fallback
         if (vendorType === 'BRT') {
           const area = getBRTItemArea(prop, ['15']); // Category 15 includes pools
-          return area > 0 ? `${area.toLocaleString()} SF` : 'None';
+          return area > 0 ? `${area.toLocaleString()} SF` : 'No';
         } else {
-          return prop.asset_pool ? 'Yes' : 'None';
+          return prop.asset_pool ? 'Yes' : 'No';
         }
       },
       adjustmentName: 'Pool'
     },
     {
       id: 'ext_condition',
-      label: 'Ext Condition',
+      label: 'Ext. Condition',
       render: (prop) => {
         if (!prop.asset_ext_cond) return 'N/A';
         if (codeDefinitions) {
           const name = interpretCodes.getExteriorConditionName(prop, codeDefinitions, vendorType);
-          return name ? `${prop.asset_ext_cond} (${name})` : prop.asset_ext_cond;
+          return name || prop.asset_ext_cond;
         }
         return prop.asset_ext_cond;
       },
@@ -561,12 +570,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     },
     {
       id: 'int_condition',
-      label: 'Int Condition',
+      label: 'Int. Condition',
       render: (prop) => {
         if (!prop.asset_int_cond) return 'N/A';
         if (codeDefinitions) {
           const name = interpretCodes.getInteriorConditionName(prop, codeDefinitions, vendorType);
-          return name ? `${prop.asset_int_cond} (${name})` : prop.asset_int_cond;
+          return name || prop.asset_int_cond;
         }
         return prop.asset_int_cond;
       },
@@ -575,7 +584,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   ];
 
   // Get dynamic attributes from adjustmentGrid (exclude default ones)
-  const dynamicAttributes = adjustmentGrid
+  const dynamicAttributes = useMemo(() => adjustmentGrid
     .filter(adj => !adj.is_default)
     .map(adj => ({
       id: adj.adjustment_id,
@@ -712,17 +721,6 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
         // Detached items (pole barn, barn, stable): show YES/NONE if detected, with area if available
         if (adj.adjustment_id.startsWith('barn_') || adj.adjustment_id.startsWith('pole_barn_') || adj.adjustment_id.startsWith('stable_')) {
-          // Debug logging for Block 1 Lot 3.02
-          if (prop.property_block === '1' && prop.property_lot === '3.02') {
-            console.log(`🔍 Checking ${adj.adjustment_name} (${adj.adjustment_id}) for Block 1 Lot 3.02`);
-            console.log('  Code to find:', targetCode);
-            console.log('  detached_item_code1:', prop.detached_item_code1);
-            console.log('  detached_item_code2:', prop.detached_item_code2);
-            console.log('  detached_item_code3:', prop.detached_item_code3);
-            console.log('  detached_item_code4:', prop.detached_item_code4);
-            console.log('  hasCode():', hasCode());
-          }
-
           // First check if code exists in raw columns
           if (hasCode()) {
             // Try to get area from common column mappings
@@ -742,11 +740,6 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           return 'NONE';
         }
 
-        // Miscellaneous items: show YES/NONE (binary)
-        if (adj.adjustment_id.startsWith('miscellaneous_')) {
-          return hasCode() ? 'YES' : 'NONE';
-        }
-
         // Legacy: For non-coded dynamic adjustments with area columns
         const columnMap = {
           'barn': 'barn_area',
@@ -763,19 +756,336 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       },
       adjustmentName: adj.adjustment_name,
       isDynamic: true
-    }));
+    })), [adjustmentGrid, vendorType]);
 
   // Combine static and dynamic attributes
-  const allAttributes = [...ATTRIBUTE_ORDER, ...dynamicAttributes];
+  const allAttributes = useMemo(() => [...ATTRIBUTE_ORDER, ...dynamicAttributes], [dynamicAttributes]);
+
+  // Initialize row visibility when attributes change (all checked by default)
+  useEffect(() => {
+    const initialVisibility = {};
+    allAttributes.forEach(attr => {
+      initialVisibility[attr.id] = true;
+    });
+    // Also add net_adjustment and adjusted_valuation
+    initialVisibility['net_adjustment'] = true;
+    initialVisibility['adjusted_valuation'] = true;
+    setRowVisibility(initialVisibility);
+  }, [allAttributes]);
+
+  // Toggle row visibility
+  const toggleRowVisibility = useCallback((attrId) => {
+    setRowVisibility(prev => ({
+      ...prev,
+      [attrId]: !prev[attrId]
+    }));
+  }, []);
+
+  // ==================== PDF EXPORT FUNCTIONS ====================
+
+  // Get cell value with optional edits applied
+  const getCellValue = useCallback((attrId, colIdx, defaultValue) => {
+    const editKey = `${attrId}_${colIdx}`;
+    return editableData[editKey] !== undefined ? editableData[editKey] : defaultValue;
+  }, [editableData]);
+
+  // Update editable data in modal
+  const updateEditableData = useCallback((attrId, colIdx, value) => {
+    setEditableData(prev => ({
+      ...prev,
+      [`${attrId}_${colIdx}`]: value
+    }));
+  }, []);
+
+  // Reset modal state when opening
+  const openExportModal = useCallback(() => {
+    setEditableData({});
+    setShowExportModal(true);
+  }, []);
+
+  // Generate PDF document
+  const generatePDF = useCallback(() => {
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'pt',
+      format: 'letter'
+    });
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 30;
+
+    // Lojik blue color
+    const lojikBlue = [0, 102, 204];
+
+    // Try to load logo (if exists in public folder)
+    const addHeader = (blockLot) => {
+      // Logo placeholder - would need actual logo file
+      doc.setFillColor(...lojikBlue);
+      doc.rect(margin, margin, 60, 30, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('LOJIK', margin + 8, margin + 20);
+      
+      // Block/Lot in top right
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text(blockLot, pageWidth - margin, margin + 20, { align: 'right' });
+    };
+
+    const subjectBlockLot = `${subject.property_block}/${subject.property_lot}${subject.property_qualifier ? '/' + subject.property_qualifier : ''}`;
+    addHeader(subjectBlockLot);
+
+    // Prepare table data
+    const visibleAttributes = allAttributes.filter(attr => rowVisibility[attr.id]);
+    const headers = [['VCS', 'Subject', 'Comparable 1', 'Comparable 2', 'Comparable 3', 'Comparable 4', 'Comparable 5']];
+
+    // Separate static and dynamic attributes
+    const staticAttrs = visibleAttributes.filter(a => !a.isDynamic);
+    const dynamicAttrs = visibleAttributes.filter(a => a.isDynamic);
+
+    // Build rows for static attributes (Page 1)
+    const staticRows = staticAttrs.map(attr => {
+      const row = [attr.label];
+      
+      // Subject column
+      let subjectVal = attr.render(subject);
+      subjectVal = getCellValue(attr.id, 'subject', subjectVal);
+      row.push(String(subjectVal));
+
+      // Comp columns
+      for (let i = 0; i < 5; i++) {
+        const comp = comps[i];
+        if (comp) {
+          let compVal = attr.render(comp);
+          compVal = getCellValue(attr.id, i, compVal);
+          const adj = attr.adjustmentName ? getAdjustment(comp, attr.adjustmentName) : null;
+          
+          if (showAdjustments && adj && adj.amount !== 0) {
+            const adjStr = adj.amount > 0 ? `+$${Math.round(adj.amount).toLocaleString()}` : `-$${Math.abs(Math.round(adj.amount)).toLocaleString()}`;
+            row.push(`${compVal}\n${adjStr}`);
+          } else {
+            row.push(String(compVal));
+          }
+        } else {
+          row.push('-');
+        }
+      }
+      return row;
+    });
+
+    // Add Net Adjustment row if visible and showing adjustments
+    if (showAdjustments && rowVisibility['net_adjustment']) {
+      const netRow = ['Net Adjustment', '-'];
+      for (let i = 0; i < 5; i++) {
+        const comp = comps[i];
+        if (comp) {
+          const total = comp.totalAdjustment || 0;
+          const pct = comp.adjustmentPercent || 0;
+          const sign = total > 0 ? '+' : '';
+          netRow.push(`${sign}$${Math.round(total).toLocaleString()} (${sign}${pct.toFixed(0)}%)`);
+        } else {
+          netRow.push('-');
+        }
+      }
+      staticRows.push(netRow);
+    }
+
+    // Add Adjusted Valuation row if visible and showing adjustments
+    if (showAdjustments && rowVisibility['adjusted_valuation']) {
+      const valRow = ['Adjusted Valuation'];
+      // Subject gets projected assessment
+      valRow.push(result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-');
+      for (let i = 0; i < 5; i++) {
+        const comp = comps[i];
+        if (comp) {
+          valRow.push(`$${Math.round(comp.adjustedPrice || 0).toLocaleString()}`);
+        } else {
+          valRow.push('-');
+        }
+      }
+      staticRows.push(valRow);
+    }
+
+    // Generate main table
+    doc.autoTable({
+      head: headers,
+      body: staticRows,
+      startY: margin + 50,
+      margin: { left: margin, right: margin },
+      styles: {
+        fontSize: 7,
+        cellPadding: 3,
+        lineColor: [200, 200, 200],
+        lineWidth: 0.5,
+        valign: 'middle'
+      },
+      headStyles: {
+        fillColor: lojikBlue,
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        halign: 'center'
+      },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 80 },
+        1: { fillColor: [255, 255, 230], halign: 'center' },
+        2: { fillColor: [230, 242, 255], halign: 'center' },
+        3: { fillColor: [230, 242, 255], halign: 'center' },
+        4: { fillColor: [230, 242, 255], halign: 'center' },
+        5: { fillColor: [230, 242, 255], halign: 'center' },
+        6: { fillColor: [230, 242, 255], halign: 'center' }
+      },
+      alternateRowStyles: {
+        fillColor: [250, 250, 250]
+      },
+      didParseCell: function(data) {
+        // Style Net Adjustment row
+        if (data.row.raw && data.row.raw[0] === 'Net Adjustment') {
+          data.cell.styles.fillColor = [240, 240, 240];
+          data.cell.styles.fontStyle = 'bold';
+        }
+        // Style Adjusted Valuation row
+        if (data.row.raw && data.row.raw[0] === 'Adjusted Valuation') {
+          data.cell.styles.fillColor = [200, 230, 255];
+          data.cell.styles.fontStyle = 'bold';
+        }
+      }
+    });
+
+    // Page 2: Dynamic adjustments (if any exist and are visible)
+    if (dynamicAttrs.length > 0) {
+      doc.addPage();
+      addHeader(subjectBlockLot);
+
+      doc.setFontSize(12);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Dynamic Adjustments', margin, margin + 55);
+
+      // Build dynamic rows
+      const dynamicRows = dynamicAttrs.map(attr => {
+        const row = [attr.label];
+        
+        // Subject column
+        let subjectVal = attr.render(subject);
+        row.push(String(subjectVal));
+
+        // Comp columns
+        for (let i = 0; i < 5; i++) {
+          const comp = comps[i];
+          if (comp) {
+            let compVal = attr.render(comp);
+            const adj = attr.adjustmentName ? getAdjustment(comp, attr.adjustmentName) : null;
+            
+            if (showAdjustments && adj && adj.amount !== 0) {
+              const adjStr = adj.amount > 0 ? `+$${Math.round(adj.amount).toLocaleString()}` : `-$${Math.abs(Math.round(adj.amount)).toLocaleString()}`;
+              row.push(`${compVal}\n${adjStr}`);
+            } else {
+              row.push(String(compVal));
+            }
+          } else {
+            row.push('-');
+          }
+        }
+        return row;
+      });
+
+      // Add Net Adjustment and Valuation rows to page 2 as well
+      if (showAdjustments && rowVisibility['net_adjustment']) {
+        const netRow = ['Net Adjustment', '-'];
+        for (let i = 0; i < 5; i++) {
+          const comp = comps[i];
+          if (comp) {
+            const total = comp.totalAdjustment || 0;
+            const pct = comp.adjustmentPercent || 0;
+            const sign = total > 0 ? '+' : '';
+            netRow.push(`${sign}$${Math.round(total).toLocaleString()} (${sign}${pct.toFixed(0)}%)`);
+          } else {
+            netRow.push('-');
+          }
+        }
+        dynamicRows.push(netRow);
+      }
+
+      if (showAdjustments && rowVisibility['adjusted_valuation']) {
+        const valRow = ['Adjusted Valuation'];
+        valRow.push(result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-');
+        for (let i = 0; i < 5; i++) {
+          const comp = comps[i];
+          if (comp) {
+            valRow.push(`$${Math.round(comp.adjustedPrice || 0).toLocaleString()}`);
+          } else {
+            valRow.push('-');
+          }
+        }
+        dynamicRows.push(valRow);
+      }
+
+      doc.autoTable({
+        head: headers,
+        body: dynamicRows,
+        startY: margin + 65,
+        margin: { left: margin, right: margin },
+        styles: {
+          fontSize: 7,
+          cellPadding: 3,
+          lineColor: [200, 200, 200],
+          lineWidth: 0.5,
+          valign: 'middle'
+        },
+        headStyles: {
+          fillColor: lojikBlue,
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          halign: 'center'
+        },
+        columnStyles: {
+          0: { fontStyle: 'bold', cellWidth: 80 },
+          1: { fillColor: [255, 255, 230], halign: 'center' },
+          2: { fillColor: [230, 242, 255], halign: 'center' },
+          3: { fillColor: [230, 242, 255], halign: 'center' },
+          4: { fillColor: [230, 242, 255], halign: 'center' },
+          5: { fillColor: [230, 242, 255], halign: 'center' },
+          6: { fillColor: [230, 242, 255], halign: 'center' }
+        },
+        didParseCell: function(data) {
+          if (data.row.raw && data.row.raw[0] === 'Net Adjustment') {
+            data.cell.styles.fillColor = [240, 240, 240];
+            data.cell.styles.fontStyle = 'bold';
+          }
+          if (data.row.raw && data.row.raw[0] === 'Adjusted Valuation') {
+            data.cell.styles.fillColor = [200, 230, 255];
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
+      });
+    }
+
+    // Save the PDF
+    const fileName = `DetailedEvaluation_${subject.property_block}_${subject.property_lot}.pdf`;
+    doc.save(fileName);
+    setShowExportModal(false);
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, getCellValue, getAdjustment]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
       <div className="bg-blue-600 px-4 py-3">
         <div className="flex items-center justify-between">
           <h4 className="font-semibold text-white">Detailed Evaluation</h4>
-          <div className="text-sm text-blue-100">
-            <span className="font-medium">Adjustment Bracket:</span>{' '}
-            <span className="font-semibold text-white">{getBracketLabel()}</span>
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-blue-100">
+              <span className="font-medium">Adjustment Bracket:</span>{' '}
+              <span className="font-semibold text-white">{getBracketLabel()}</span>
+            </div>
+            <button
+              onClick={openExportModal}
+              className="flex items-center gap-2 px-3 py-1.5 bg-white text-blue-600 rounded text-sm font-medium hover:bg-blue-50 transition-colors"
+            >
+              <FileDown size={16} />
+              Export PDF
+            </button>
           </div>
         </div>
       </div>
@@ -809,7 +1119,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             {allAttributes.map((attr) => (
               <tr key={attr.id} className="border-b hover:bg-gray-50">
                 <td className="px-2 py-2">
-                  <input type="checkbox" className="rounded" />
+                  <input 
+                    type="checkbox" 
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    checked={rowVisibility[attr.id] ?? true}
+                    onChange={() => toggleRowVisibility(attr.id)}
+                  />
                 </td>
                 <td className="sticky left-0 z-10 bg-white px-3 py-2 font-medium text-gray-900 border-r-2 border-gray-300">
                   {attr.label}
@@ -843,13 +1158,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                         case 'basement_area': rawPropertyValue = subject.basement_area; break;
                         case 'fin_bsmt_area': rawPropertyValue = subject.fin_basement_area; break;
                         case 'ac_area': rawPropertyValue = subject.ac_area; break;
+                        default: break;
                       }
 
                       const hasValue = rawPropertyValue !== null &&
                                       rawPropertyValue !== undefined &&
                                       rawPropertyValue > 0;
 
-                      value = hasValue ? 'YES' : 'NONE';
+                      value = hasValue ? 'Yes' : 'No';
                     }
 
                     return value;
@@ -903,6 +1219,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       case 'ac_area':
                         rawPropertyValue = comp.ac_area;
                         break;
+                      default:
+                        break;
                     }
 
                     // Check if has value
@@ -910,7 +1228,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                                     rawPropertyValue !== undefined &&
                                     rawPropertyValue > 0;
 
-                    value = hasValue ? 'YES' : 'NONE';
+                    value = hasValue ? 'Yes' : 'No';
                   }
 
                   return (
@@ -929,7 +1247,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
             {/* Net Adjustment */}
             <tr className="border-b-2 border-gray-400 bg-gray-50">
-              <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
+              <td className="px-2 py-2">
+                <input 
+                  type="checkbox" 
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  checked={rowVisibility['net_adjustment'] ?? true}
+                  onChange={() => toggleRowVisibility('net_adjustment')}
+                />
+              </td>
               <td className="sticky left-0 z-10 bg-gray-50 px-3 py-3 font-bold text-gray-900 border-r-2 border-gray-300">
                 Net Adjustment
               </td>
@@ -946,7 +1271,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
             {/* Adjusted Valuation */}
             <tr className="border-b-4 border-gray-400 bg-blue-50">
-              <td className="px-2 py-2"><input type="checkbox" className="rounded" /></td>
+              <td className="px-2 py-2">
+                <input 
+                  type="checkbox" 
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  checked={rowVisibility['adjusted_valuation'] ?? true}
+                  onChange={() => toggleRowVisibility('adjusted_valuation')}
+                />
+              </td>
               <td className="sticky left-0 z-10 bg-blue-50 px-3 py-4 font-bold text-gray-900 border-r-2 border-gray-300 text-base">
                 Adjusted Valuation
               </td>
@@ -991,6 +1323,203 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           </tbody>
         </table>
       </div>
+
+      {/* Export Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="bg-blue-600 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Printer className="text-white" size={24} />
+                <h3 className="text-lg font-semibold text-white">Export Detailed Evaluation</h3>
+              </div>
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="text-white hover:text-blue-200 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Modal Options */}
+            <div className="px-6 py-4 bg-gray-50 border-b flex items-center justify-between">
+              <div className="flex items-center gap-6">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showAdjustments}
+                    onChange={(e) => setShowAdjustments(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Show Adjustments & Valuation</span>
+                </label>
+                <div className="text-sm text-gray-500">
+                  {showAdjustments ? (
+                    <span className="flex items-center gap-1"><Eye size={14} /> Full evaluation with adjustments</span>
+                  ) : (
+                    <span className="flex items-center gap-1"><EyeOff size={14} /> Comps only (no adjustments)</span>
+                  )}
+                </div>
+              </div>
+              <div className="text-sm text-gray-600">
+                <span className="font-medium">{Object.values(rowVisibility).filter(Boolean).length}</span> rows selected for export
+              </div>
+            </div>
+
+            {/* Modal Content - Preview Table */}
+            <div className="flex-1 overflow-auto p-6">
+              <div className="border rounded-lg overflow-hidden">
+                <table className="min-w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-blue-600 text-white">
+                      <th className="px-2 py-2 w-8">
+                        <input
+                          type="checkbox"
+                          checked={Object.values(rowVisibility).every(Boolean)}
+                          onChange={(e) => {
+                            const newVisibility = {};
+                            Object.keys(rowVisibility).forEach(key => {
+                              newVisibility[key] = e.target.checked;
+                            });
+                            setRowVisibility(newVisibility);
+                          }}
+                          className="rounded border-white text-blue-600"
+                        />
+                      </th>
+                      <th className="px-3 py-2 text-left font-semibold">VCS</th>
+                      <th className="px-3 py-2 text-center font-semibold bg-yellow-600">Subject</th>
+                      {[1, 2, 3, 4, 5].map(n => (
+                        <th key={n} className="px-3 py-2 text-center font-semibold">Comp {n}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white">
+                    {allAttributes.map(attr => (
+                      <tr key={attr.id} className={`border-b ${!rowVisibility[attr.id] ? 'opacity-40 bg-gray-100' : ''}`}>
+                        <td className="px-2 py-1.5">
+                          <input
+                            type="checkbox"
+                            checked={rowVisibility[attr.id] ?? true}
+                            onChange={() => toggleRowVisibility(attr.id)}
+                            className="rounded border-gray-300 text-blue-600"
+                          />
+                        </td>
+                        <td className="px-3 py-1.5 font-medium whitespace-nowrap">
+                          {attr.label}
+                          {attr.isDynamic && <span className="ml-1 text-purple-500 text-xs">(Dyn)</span>}
+                        </td>
+                        <td className="px-3 py-1.5 text-center bg-yellow-50">
+                          <input
+                            type="text"
+                            className="w-full text-center text-xs border-0 bg-transparent focus:ring-1 focus:ring-blue-500 rounded"
+                            defaultValue={attr.render(subject)}
+                            onChange={(e) => updateEditableData(attr.id, 'subject', e.target.value)}
+                          />
+                        </td>
+                        {[0, 1, 2, 3, 4].map(i => {
+                          const comp = comps[i];
+                          return (
+                            <td key={i} className="px-3 py-1.5 text-center bg-blue-50">
+                              {comp ? (
+                                <input
+                                  type="text"
+                                  className="w-full text-center text-xs border-0 bg-transparent focus:ring-1 focus:ring-blue-500 rounded"
+                                  defaultValue={attr.render(comp)}
+                                  onChange={(e) => updateEditableData(attr.id, i, e.target.value)}
+                                />
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+
+                    {/* Net Adjustment Row */}
+                    {showAdjustments && (
+                      <tr className={`border-b bg-gray-100 ${!rowVisibility['net_adjustment'] ? 'opacity-40' : ''}`}>
+                        <td className="px-2 py-1.5">
+                          <input
+                            type="checkbox"
+                            checked={rowVisibility['net_adjustment'] ?? true}
+                            onChange={() => toggleRowVisibility('net_adjustment')}
+                            className="rounded border-gray-300 text-blue-600"
+                          />
+                        </td>
+                        <td className="px-3 py-1.5 font-bold">Net Adjustment</td>
+                        <td className="px-3 py-1.5 text-center bg-yellow-50">-</td>
+                        {[0, 1, 2, 3, 4].map(i => {
+                          const comp = comps[i];
+                          if (!comp) return <td key={i} className="px-3 py-1.5 text-center bg-blue-50 text-gray-400">-</td>;
+                          const total = comp.totalAdjustment || 0;
+                          const pct = comp.adjustmentPercent || 0;
+                          return (
+                            <td key={i} className={`px-3 py-1.5 text-center font-bold ${total > 0 ? 'text-green-700' : total < 0 ? 'text-red-700' : ''}`}>
+                              {total > 0 ? '+' : ''}${Math.round(total).toLocaleString()} ({pct > 0 ? '+' : ''}{pct.toFixed(0)}%)
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    )}
+
+                    {/* Adjusted Valuation Row */}
+                    {showAdjustments && (
+                      <tr className={`border-b-2 bg-blue-100 ${!rowVisibility['adjusted_valuation'] ? 'opacity-40' : ''}`}>
+                        <td className="px-2 py-1.5">
+                          <input
+                            type="checkbox"
+                            checked={rowVisibility['adjusted_valuation'] ?? true}
+                            onChange={() => toggleRowVisibility('adjusted_valuation')}
+                            className="rounded border-gray-300 text-blue-600"
+                          />
+                        </td>
+                        <td className="px-3 py-1.5 font-bold">Adjusted Valuation</td>
+                        <td className="px-3 py-1.5 text-center bg-yellow-100 font-bold text-green-700">
+                          {result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-'}
+                        </td>
+                        {[0, 1, 2, 3, 4].map(i => {
+                          const comp = comps[i];
+                          return (
+                            <td key={i} className="px-3 py-1.5 text-center font-bold">
+                              {comp ? `$${Math.round(comp.adjustedPrice || 0).toLocaleString()}` : '-'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-4 text-sm text-gray-500">
+                <p>Edit any cell above to customize the exported PDF. Uncheck rows to exclude them from the export.</p>
+                {dynamicAttributes.length > 0 && (
+                  <p className="mt-1 text-purple-600">Dynamic adjustments will appear on page 2 of the PDF.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-gray-50 border-t flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={generatePDF}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <FileDown size={18} />
+                Download PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
