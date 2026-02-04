@@ -1725,29 +1725,41 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                         );
                       }
 
-                      // Editable cell
+                      // Editable cell - use effectiveConfig for type detection
+                      const cfg = effectiveConfig;
+                      // For dynamic yesno, derive default from rendered value
+                      const getDefaultYesNo = () => {
+                        if (editedVal !== undefined) return editedVal;
+                        if (attr.isDynamic) {
+                          // Check rendered value for YES/NONE pattern
+                          const rendered = attr.render(prop);
+                          return (rendered && rendered !== 'NONE' && rendered !== 'N/A' && rendered !== 'No') ? 'Yes' : 'No';
+                        }
+                        return prop && prop[cfg.field] ? 'Yes' : 'No';
+                      };
+
                       return (
                         <td key={propKey} className={`px-1 py-1 text-center ${bgClass} border-r border-gray-200`}>
-                          {config.type === 'number' && (
+                          {cfg.type === 'number' && (
                             <input
                               type="text"
                               inputMode="decimal"
-                              value={editedVal ?? (prop ? (prop[config.altField] || prop[config.field]) : '') ?? ''}
+                              value={editedVal ?? (prop ? (prop[cfg.altField] || prop[cfg.field]) : '') ?? ''}
                               onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
                               className="w-full px-1 py-0.5 text-xs text-center border rounded focus:ring-1 focus:ring-blue-500"
                             />
                           )}
-                          {config.type === 'date' && (
+                          {cfg.type === 'date' && (
                             <input
                               type="date"
-                              value={editedVal ?? (prop ? prop[config.field] : '') ?? ''}
+                              value={editedVal ?? (prop ? prop[cfg.field] : '') ?? ''}
                               onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
                               className="w-full px-1 py-0.5 text-xs text-center border rounded focus:ring-1 focus:ring-blue-500"
                             />
                           )}
-                          {config.type === 'yesno' && (
+                          {cfg.type === 'yesno' && (
                             <select
-                              value={editedVal ?? (prop && prop[config.field] ? 'Yes' : 'No')}
+                              value={getDefaultYesNo()}
                               onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
                               className="w-full px-1 py-0.5 text-xs border rounded focus:ring-1 focus:ring-blue-500"
                             >
@@ -1755,9 +1767,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                               <option value="No">No</option>
                             </select>
                           )}
-                          {config.type === 'garage' && (
+                          {cfg.type === 'garage' && (
                             <select
-                              value={editedVal ?? getGarageCategory(prop ? prop[config.field] : 0)}
+                              value={editedVal ?? getGarageCategory(prop ? prop[cfg.field] : 0)}
                               onChange={(e) => updateEditedValue(propKey, attr.id, parseInt(e.target.value))}
                               className="w-full px-1 py-0.5 text-xs border rounded focus:ring-1 focus:ring-blue-500"
                             >
@@ -1766,9 +1778,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                               ))}
                             </select>
                           )}
-                          {config.type === 'condition' && (
+                          {cfg.type === 'condition' && (
                             <select
-                              value={editedVal ?? (prop ? prop[config.field] : '')}
+                              value={editedVal ?? (prop ? prop[cfg.field] : '')}
                               onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
                               className="w-full px-1 py-0.5 text-xs border rounded focus:ring-1 focus:ring-blue-500"
                             >
