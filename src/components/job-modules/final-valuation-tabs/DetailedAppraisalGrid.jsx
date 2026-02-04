@@ -1313,7 +1313,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         dynamicRows.push(valRow);
       }
 
-      doc.autoTable({
+      autoTable(doc, {
         head: headers,
         body: dynamicRows,
         startY: margin + 65,
