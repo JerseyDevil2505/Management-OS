@@ -1562,8 +1562,26 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         break;
 
       case 'lot_size_acre':
-        subjectValue = subject.market_manual_lot_acre || subject.asset_lot_acre || 0;
-        compValue = comp.market_manual_lot_acre || comp.asset_lot_acre || 0;
+        // For farm properties with farmSalesMode enabled, use combined lot acres (3A + 3B)
+        if (compFilters?.farmSalesMode) {
+          const subjectPkgData = interpretCodes.getPackageSaleData(properties, subject);
+          const compPkgData = interpretCodes.getPackageSaleData(properties, comp);
+
+          if (subjectPkgData?.is_farm_package && subjectPkgData.combined_lot_acres > 0) {
+            subjectValue = subjectPkgData.combined_lot_acres;
+          } else {
+            subjectValue = subject.market_manual_lot_acre || subject.asset_lot_acre || 0;
+          }
+
+          if (compPkgData?.is_farm_package && compPkgData.combined_lot_acres > 0) {
+            compValue = compPkgData.combined_lot_acres;
+          } else {
+            compValue = comp.market_manual_lot_acre || comp.asset_lot_acre || 0;
+          }
+        } else {
+          subjectValue = subject.market_manual_lot_acre || subject.asset_lot_acre || 0;
+          compValue = comp.market_manual_lot_acre || comp.asset_lot_acre || 0;
+        }
         break;
 
       case 'year_built':
