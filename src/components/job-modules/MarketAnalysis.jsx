@@ -319,7 +319,10 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 onUpdateJobCache={async (partialUpdate) => {
                   // Direct in-memory update for immediate effect in other components
                   if (partialUpdate && typeof updateJobDataDirect === 'function') {
+                    console.log('🔄 MarketAnalysis: Updating jobData in memory with:', partialUpdate);
                     updateJobDataDirect(partialUpdate);
+                  } else {
+                    console.warn('⚠️ MarketAnalysis: updateJobDataDirect not available or no partialUpdate', { partialUpdate, hasFunction: typeof updateJobDataDirect });
                   }
                   // Trigger surgical refresh after AttributeCardsTab saves
                   if (typeof refreshMarketLandData === 'function') {
