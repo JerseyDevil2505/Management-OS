@@ -1414,7 +1414,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               <th className="sticky left-0 z-10 bg-gray-100 px-3 py-3 text-left font-semibold text-gray-700 border-r-2 border-gray-300">
                 Attribute
               </th>
-              <th className="px-3 py-3 text-center font-semibold bg-yellow-50">
+              <th className="px-3 py-3 text-center font-semibold bg-slate-100">
                 Subject
               </th>
               {[1, 2, 3, 4, 5].map((compNum) => {
@@ -1449,7 +1449,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     <span className="ml-2 text-xs text-purple-600">(Custom)</span>
                   )}
                 </td>
-                <td className={`px-3 py-2 text-center bg-yellow-50 ${attr.bold ? 'font-semibold' : 'text-xs'}`}>
+                <td className={`px-3 py-2 text-center bg-slate-50 ${attr.bold ? 'font-semibold' : 'text-xs'}`}>
                   {(() => {
                     let value = attr.render(subject);
 
@@ -1575,7 +1575,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               <td className="sticky left-0 z-10 bg-gray-50 px-3 py-3 font-bold text-gray-900 border-r-2 border-gray-300">
                 Net Adjustment
               </td>
-              <td className="px-3 py-3 text-center bg-yellow-50">-</td>
+              <td className="px-3 py-3 text-center bg-slate-100">-</td>
               {renderCompCells((comp) => (
                 <div className={`font-bold ${comp.totalAdjustment > 0 ? 'text-green-700' : comp.totalAdjustment < 0 ? 'text-red-700' : 'text-gray-700'}`}>
                   {comp.totalAdjustment > 0 ? '+' : ''}${Math.round(comp.totalAdjustment || 0).toLocaleString()}
@@ -1599,7 +1599,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               <td className="sticky left-0 z-10 bg-blue-50 px-3 py-4 font-bold text-gray-900 border-r-2 border-gray-300 text-base">
                 Adjusted Valuation
               </td>
-              <td className="px-3 py-4 text-center bg-yellow-100">
+              <td className="px-3 py-4 text-center bg-slate-100">
                 {result.projectedAssessment && (
                   <div>
                     <div className="text-lg font-bold text-green-700">
@@ -1782,7 +1782,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                           {attr.label}
                           {attr.isDynamic && <span className="ml-1 text-purple-500 text-xs">(D)</span>}
                         </td>
-                        {renderCell('subject', 'bg-yellow-50')}
+                        {renderCell('subject', 'bg-slate-50')}
                         {[0, 1, 2, 3, 4].map(idx => renderCell(`comp_${idx}`, 'bg-blue-50'))}
                       </tr>
                     );
@@ -1792,7 +1792,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   {showAdjustments && rowVisibility['net_adjustment'] !== false && (
                     <tr className="border-b-2 border-gray-400 bg-gray-100">
                       <td className="px-2 py-2 font-bold text-gray-900 border-r border-gray-300">Net Adjustment</td>
-                      <td className="px-2 py-2 text-center bg-yellow-100 border-r border-gray-300">-</td>
+                      <td className="px-2 py-2 text-center bg-slate-100 border-r border-gray-300">-</td>
                       {[0, 1, 2, 3, 4].map(idx => {
                         const compKey = `comp_${idx}`;
                         const compData = editedAdjustments[compKey] || comps[idx] || {};
@@ -1816,7 +1816,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   {showAdjustments && rowVisibility['adjusted_valuation'] !== false && (
                     <tr className="border-b-2 border-gray-400 bg-blue-100">
                       <td className="px-2 py-2 font-bold text-gray-900 border-r border-gray-300">Adjusted Valuation</td>
-                      <td className="px-2 py-2 text-center bg-yellow-100 border-r border-gray-300 font-bold text-green-700">
+                      <td className="px-2 py-2 text-center bg-slate-100 border-r border-gray-300 font-bold text-green-700">
                         {result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-'}
                       </td>
                       {[0, 1, 2, 3, 4].map(idx => {
