@@ -1067,11 +1067,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           }
 
           // Farm sales filter - segregate farm and non-farm sales
+          const compPackageData = interpretCodes.getPackageSaleData(properties, comp);
+          const compIsFarm = compPackageData?.is_farm_package || comp.property_m4_class === '3A';
+
           if (compFilters.farmSalesMode) {
+            // Farm Sales Mode ON: segregate farm and non-farm
             const subjectPackageData = interpretCodes.getPackageSaleData(properties, subject);
-            const compPackageData = interpretCodes.getPackageSaleData(properties, comp);
             const subjectIsFarm = subjectPackageData?.is_farm_package || subject.property_m4_class === '3A';
-            const compIsFarm = compPackageData?.is_farm_package || comp.property_m4_class === '3A';
 
             // If subject is a farm, only allow farm comps that have been normalized (have values_norm_time)
             if (subjectIsFarm) {
@@ -1088,6 +1090,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
             // If subject is NOT a farm, exclude farm comps to prevent skewed values
             if (!subjectIsFarm && compIsFarm) {
+              if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
+              return false;
+            }
+          } else {
+            // Farm Sales Mode OFF: always exclude farm sales from comparisons
+            if (compIsFarm) {
               if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
               return false;
             }
