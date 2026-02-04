@@ -1066,15 +1066,29 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             }
           }
 
-          // Farm sales filter - if subject is a farm (has 3B package), only allow farm comps
+          // Farm sales filter - segregate farm and non-farm sales
           if (compFilters.farmSalesMode) {
             const subjectPackageData = interpretCodes.getPackageSaleData(properties, subject);
             const compPackageData = interpretCodes.getPackageSaleData(properties, comp);
             const subjectIsFarm = subjectPackageData?.is_farm_package || subject.property_m4_class === '3A';
             const compIsFarm = compPackageData?.is_farm_package || comp.property_m4_class === '3A';
 
-            // If subject is a farm, only allow farm comps
-            if (subjectIsFarm && !compIsFarm) {
+            // If subject is a farm, only allow farm comps that are "kept" (normalized)
+            if (subjectIsFarm) {
+              if (!compIsFarm) {
+                if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
+                return false;
+              }
+              // For farm comps, require they have been kept/normalized
+              const compKeepReject = comp.keep_reject || comp.sales_keep_reject;
+              if (compKeepReject && compKeepReject !== 'keep') {
+                if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
+                return false;
+              }
+            }
+
+            // If subject is NOT a farm, exclude farm comps to prevent skewed values
+            if (!subjectIsFarm && compIsFarm) {
               if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
               return false;
             }
