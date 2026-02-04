@@ -1012,12 +1012,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     setEditedAdjustments(newAdjustments);
   }, [comps, getEditedValue, calculateSingleAdjustment, allAttributes, adjustmentGrid]);
 
-  // Recalculate when edited properties change
-  useEffect(() => {
-    if (showExportModal && Object.keys(editableProperties).length > 0) {
-      recalculateAdjustments();
-    }
-  }, [editableProperties, showExportModal, recalculateAdjustments]);
+  // NOTE: We intentionally do NOT recalculate adjustments when user edits values
+  // The modal mirrors the detailed component's original adjustments exactly
+  // User edits only affect the displayed values, not the adjustments
+  // This ensures legal accuracy - adjustments stay as calculated by the system
 
   // Simple modal open - DON'T pre-initialize, just mirror the detailed component
   // Only track edits when user actually makes changes
