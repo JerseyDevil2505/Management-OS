@@ -316,7 +316,11 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
-                onUpdateJobCache={async () => {
+                onUpdateJobCache={async (partialUpdate) => {
+                  // Direct in-memory update for immediate effect in other components
+                  if (partialUpdate && typeof updateJobDataDirect === 'function') {
+                    updateJobDataDirect(partialUpdate);
+                  }
                   // Trigger surgical refresh after AttributeCardsTab saves
                   if (typeof refreshMarketLandData === 'function') {
                     await refreshMarketLandData();
