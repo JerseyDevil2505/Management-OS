@@ -1066,6 +1066,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             }
           }
 
+          // Farm sales filter - if subject is a farm (has 3B package), only allow farm comps
+          if (compFilters.farmSalesMode) {
+            const subjectPackageData = interpretCodes.getPackageSaleData(properties, subject);
+            const compPackageData = interpretCodes.getPackageSaleData(properties, comp);
+            const subjectIsFarm = subjectPackageData?.is_farm_package || subject.property_m4_class === '3A';
+            const compIsFarm = compPackageData?.is_farm_package || comp.property_m4_class === '3A';
+
+            // If subject is a farm, only allow farm comps
+            if (subjectIsFarm && !compIsFarm) {
+              if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
+              return false;
+            }
+          }
+
           if (isFirstProperty) debugFilters.passed++;
           return true;
         });
