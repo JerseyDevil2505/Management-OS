@@ -1179,7 +1179,23 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
     // Prepare table data
     const visibleAttributes = allAttributes.filter(attr => rowVisibility[attr.id]);
-    const headers = [['VCS', 'Subject', 'Comparable 1', 'Comparable 2', 'Comparable 3', 'Comparable 4', 'Comparable 5']];
+
+    // Build headers with additional cards badge
+    const subjectAdditionalCards = aggregatedSubject._additionalCardsCount || 0;
+    const subjectHeader = subjectAdditionalCards > 0 ? `Subject (+${subjectAdditionalCards})` : 'Subject';
+
+    const compHeaders = aggregatedComps.slice(0, 5).map((comp, idx) => {
+      const additionalCards = comp?._additionalCardsCount || 0;
+      const baseLabel = `Comparable ${idx + 1}`;
+      return additionalCards > 0 ? `${baseLabel} (+${additionalCards})` : baseLabel;
+    });
+
+    // Pad with empty comps if less than 5
+    while (compHeaders.length < 5) {
+      compHeaders.push(`Comparable ${compHeaders.length + 1}`);
+    }
+
+    const headers = [['VCS', subjectHeader, ...compHeaders]];
 
     // Separate static and dynamic attributes
     const staticAttrs = visibleAttributes.filter(a => !a.isDynamic);
