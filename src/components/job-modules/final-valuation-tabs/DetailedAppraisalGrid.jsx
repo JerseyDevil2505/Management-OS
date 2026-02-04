@@ -483,6 +483,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       id: 'lot_size_acre',
       label: 'Lot Size (Acre)',
       render: (prop) => {
+        // For farm properties with farmSalesMode enabled, use combined lot acres (3A + 3B)
+        if (compFilters?.farmSalesMode && allProperties?.length > 0) {
+          const pkgData = interpretCodes.getPackageSaleData(allProperties, prop);
+          if (pkgData?.is_farm_package && pkgData.combined_lot_acres > 0) {
+            return `${pkgData.combined_lot_acres.toFixed(2)} (Farm)`;
+          }
+        }
         const acres = prop.market_manual_lot_acre || prop.asset_lot_acre;
         return acres ? acres.toFixed(2) : 'N/A';
       },
