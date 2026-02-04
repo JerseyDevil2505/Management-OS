@@ -1137,6 +1137,95 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
             </p>
           </div>
 
+          {/* Detached Item Condition Multipliers */}
+          <div className="mb-6 bg-purple-50 border border-purple-200 rounded-lg p-4">
+            <h4 className="text-sm font-semibold text-gray-900 mb-3">Detached Item Condition Multipliers</h4>
+            <p className="text-xs text-gray-600 mb-3">
+              Apply multipliers to detached item adjustments (Barn, Pole Barn, Stable, Pool, etc.) based on the inspector's depreciation/net condition value.
+              BRT uses DETACHEDNC fields; Microsystems uses the average of Physical, Functional, and Locational depreciation.
+            </p>
+            <div className="grid grid-cols-5 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Poor Threshold
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0"
+                  max="1"
+                  value={detachedConditionMultipliers.poor_threshold}
+                  onChange={(e) => setDetachedConditionMultipliers(prev => ({ ...prev, poor_threshold: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">≤ this = Poor</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Poor Multiplier
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0"
+                  max="2"
+                  value={detachedConditionMultipliers.poor_multiplier}
+                  onChange={(e) => setDetachedConditionMultipliers(prev => ({ ...prev, poor_multiplier: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">×{detachedConditionMultipliers.poor_multiplier}</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Standard Multiplier
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0"
+                  max="2"
+                  value={detachedConditionMultipliers.standard_multiplier}
+                  onChange={(e) => setDetachedConditionMultipliers(prev => ({ ...prev, standard_multiplier: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">×{detachedConditionMultipliers.standard_multiplier}</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Excellent Threshold
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0"
+                  max="1"
+                  value={detachedConditionMultipliers.excellent_threshold}
+                  onChange={(e) => setDetachedConditionMultipliers(prev => ({ ...prev, excellent_threshold: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">≥ this = Excellent</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Excellent Multiplier
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0"
+                  max="2"
+                  value={detachedConditionMultipliers.excellent_multiplier}
+                  onChange={(e) => setDetachedConditionMultipliers(prev => ({ ...prev, excellent_multiplier: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">×{detachedConditionMultipliers.excellent_multiplier}</p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-600 mt-3">
+              <strong>Example:</strong> Base adjustment $10,000 with depr value 0.15 → Poor condition → $10,000 × {detachedConditionMultipliers.poor_multiplier} = ${(10000 * detachedConditionMultipliers.poor_multiplier).toLocaleString()}
+            </p>
+          </div>
+
           {/* Auto-populate Notification */}
           {showAutoPopulateNotice && (
             <div className={`mb-6 rounded-lg p-4 ${
