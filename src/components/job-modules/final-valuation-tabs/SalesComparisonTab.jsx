@@ -1782,13 +1782,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           // Lot size: multiply difference by rate per unit
           return difference * adjustmentValue;
         }
-        // Check if this is a land_negative adjustment - automatically negate the value
-        else if (adjustmentDef.adjustment_id.startsWith('land_negative_')) {
-          // Land negative: always subtract the value (enter positive amounts in grid, we negate automatically)
-          return difference > 0 ? -adjustmentValue : (difference < 0 ? adjustmentValue : 0);
-        }
         else {
-          // Boolean amenities: binary adjustment (has it or doesn't)
+          // Boolean amenities (including land adjustments): binary adjustment (has it or doesn't)
+          // For negative land items like "Busy Rd", user should enter negative value in grid (e.g., -5000)
+          // This way: Subject has it, comp doesn't → difference=1 → 1 * -5000 = -5000 (comp adjusted down)
           return difference > 0 ? adjustmentValue : (difference < 0 ? -adjustmentValue : 0);
         }
 
