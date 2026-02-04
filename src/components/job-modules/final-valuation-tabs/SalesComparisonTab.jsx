@@ -1877,9 +1877,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
       case 'percent':
         // Percent adjustment based on comp sale price
-        // Positive difference (subject better) = add to comp price
-        // Negative difference (comp better) = subtract from comp price
-        return (comp.values_norm_time || 0) * (adjustmentValue / 100) * Math.sign(difference);
+        // Positive difference (subject better) = add to comp price (e.g., +2 steps = +20%)
+        // Negative difference (comp better) = subtract from comp price (e.g., -2 steps = -20%)
+        // Use full difference for tiered adjustments (e.g., EXCELLENT is 2 steps from AVERAGE)
+        return (comp.values_norm_time || 0) * (adjustmentValue / 100) * difference;
 
       default:
         return 0;
