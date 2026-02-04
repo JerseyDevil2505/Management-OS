@@ -1925,28 +1925,41 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     const betterCodes = (config.better || []).map(c => c.toUpperCase().trim());
     const worseCodes = (config.worse || []).map(c => c.toUpperCase().trim());
 
+    // DEBUG: Log the config being used
+    console.log(`🔍 getConditionRank DEBUG for ${configType}:`, {
+      inputCode: code,
+      baseline,
+      betterCodes,
+      worseCodes,
+      configSavedAt: conditionConfig.savedAt
+    });
+
     // Rank based on configuration:
     // Better codes = positive rank (higher is better)
     // Baseline = 0
     // Worse codes = negative rank (lower is worse)
 
+    let rank = 0;
     if (code === baseline) {
-      return 0; // Baseline
+      rank = 0; // Baseline
     } else if (betterCodes.includes(code)) {
       // Better codes get positive ranks based on their position
       // First better code = +1, second = +2, etc.
       const index = betterCodes.indexOf(code);
-      return (index + 1);
+      rank = (index + 1);
     } else if (worseCodes.includes(code)) {
       // Worse codes get negative ranks based on their position
       // First worse code = -1, second = -2, etc.
       const index = worseCodes.indexOf(code);
-      return -(index + 1);
+      rank = -(index + 1);
     } else {
       // Unknown code - default to baseline
       console.warn(`⚠️  Unknown condition code "${code}" for ${configType}, defaulting to baseline`);
-      return 0;
+      rank = 0;
     }
+
+    console.log(`   → ${code} = rank ${rank}`);
+    return rank;
   };
 
   // ==================== RENDER ====================
