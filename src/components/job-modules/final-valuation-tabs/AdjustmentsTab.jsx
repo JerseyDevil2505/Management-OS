@@ -595,14 +595,29 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
     try {
       setIsSaving(true);
 
+      // Normalize all bracket values to numbers before saving
+      const normalizedAdjustments = adjustments.map(adj => {
+        const normalized = { ...adj };
+        for (let i = 0; i < 10; i++) {
+          const key = `bracket_${i}`;
+          if (normalized[key] !== undefined) {
+            const parsed = parseFloat(normalized[key]);
+            normalized[key] = isNaN(parsed) ? 0 : parsed;
+          }
+        }
+        return normalized;
+      });
+
       const { error } = await supabase
         .from('job_adjustment_grid')
-        .upsert(adjustments, {
+        .upsert(normalizedAdjustments, {
           onConflict: 'job_id,adjustment_id'
         });
 
       if (error) throw error;
 
+      // Update local state with normalized values
+      setAdjustments(normalizedAdjustments);
       alert('Adjustments saved successfully!');
     } catch (error) {
       console.error('Error saving adjustments:', error);
