@@ -1691,7 +1691,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 <tbody>
                   {allAttributes.filter(attr => rowVisibility[attr.id] !== false).map(attr => {
                     const config = EDITABLE_CONFIG[attr.id];
-                    const isEditable = !!config;
+                    // Make both configured fields AND dynamic rows editable
+                    const isEditable = !!config || attr.isDynamic;
+                    // For dynamic rows, treat as yesno type
+                    const effectiveConfig = config || (attr.isDynamic ? { type: 'yesno', field: attr.id } : null);
 
                     // Render cell for a property
                     const renderCell = (propKey, bgClass) => {
