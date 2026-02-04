@@ -1782,6 +1782,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           // Lot size: multiply difference by rate per unit
           return difference * adjustmentValue;
         }
+        // Garage adjustments use category counts (0=NONE, 1=ONE CAR, 2=TWO CAR, etc.)
+        // Should multiply by the difference in categories
+        else if (adjustmentDef.adjustment_id === 'garage' || adjustmentDef.adjustment_id === 'det_garage') {
+          // Category count adjustment: multiply difference by $ per category
+          return difference * adjustmentValue;
+        }
         else {
           // Boolean amenities (including land adjustments): binary adjustment (has it or doesn't)
           // For negative land items like "Busy Rd", user should enter negative value in grid (e.g., -5000)
