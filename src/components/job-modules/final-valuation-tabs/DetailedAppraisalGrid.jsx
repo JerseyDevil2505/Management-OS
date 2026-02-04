@@ -1560,71 +1560,220 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         </table>
       </div>
 
-      {/* Export Modal - Simple */}
+      {/* Export Modal - Editable Grid */}
       {showExportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-2">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl flex flex-col" style={{ maxHeight: 'calc(100vh - 40px)' }}>
             {/* Modal Header */}
-            <div className="bg-blue-600 px-4 py-3 flex items-center justify-between rounded-t-lg">
+            <div className="bg-blue-600 px-4 py-3 flex items-center justify-between rounded-t-lg flex-shrink-0">
               <div className="flex items-center gap-3">
                 <Printer className="text-white" size={20} />
-                <h3 className="text-base font-semibold text-white">Export PDF</h3>
+                <h3 className="text-base font-semibold text-white">Export PDF - Edit Values</h3>
               </div>
-              <button
-                onClick={() => setShowExportModal(false)}
-                className="text-white hover:text-blue-200 transition-colors p-1"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Modal Content */}
-            <div className="p-6">
-              <p className="text-sm text-gray-600 mb-4">
-                Export the detailed evaluation to PDF. Use the checkboxes in the grid to hide/show rows.
-              </p>
-
-              {/* Hide Adjustments Toggle */}
-              <label className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 border">
-                <input
-                  type="checkbox"
-                  checked={!showAdjustments}
-                  onChange={(e) => setShowAdjustments(!e.target.checked)}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-5 h-5"
-                />
-                <div>
-                  <span className="text-sm font-medium text-gray-900 flex items-center gap-2">
-                    {showAdjustments ? <Eye size={16} /> : <EyeOff size={16} />}
+              <div className="flex items-center gap-4">
+                {/* Hide Adjustments Toggle */}
+                <label className="flex items-center gap-2 cursor-pointer text-white text-sm">
+                  <input
+                    type="checkbox"
+                    checked={!showAdjustments}
+                    onChange={(e) => setShowAdjustments(!e.target.checked)}
+                    className="rounded border-white text-blue-600"
+                  />
+                  <span className="flex items-center gap-1">
+                    {showAdjustments ? <Eye size={14} /> : <EyeOff size={14} />}
                     Hide Adjustments
                   </span>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {showAdjustments ? 'Showing adjustments, net adjustment & valuation' : 'Hiding adjustments (comps only)'}
-                  </p>
-                </div>
-              </label>
-
-              {/* Row count info */}
-              <p className="text-xs text-gray-500 mt-4">
-                {Object.values(rowVisibility).filter(Boolean).length} rows will be exported
-                {dynamicAttributes.length > 0 && ' (dynamic adjustments on page 2)'}
-              </p>
+                </label>
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="text-white hover:text-blue-200 transition-colors p-1"
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
-            {/* Modal Footer - Always visible */}
-            <div className="px-4 py-3 bg-gray-50 border-t flex items-center justify-end gap-3 rounded-b-lg flex-shrink-0">
-              <button
-                onClick={() => setShowExportModal(false)}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={generatePDF}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
-              >
-                <FileDown size={16} />
-                Download PDF
-              </button>
+            {/* Modal Content - Editable Grid */}
+            <div className="flex-1 overflow-auto p-2">
+              <table className="min-w-full text-xs border-collapse border border-gray-300">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-blue-600 text-white">
+                    <th className="px-2 py-2 text-left font-semibold border-r border-blue-500 w-40">Attribute</th>
+                    <th className="px-2 py-2 text-center font-semibold bg-yellow-600 border-r border-yellow-500 w-28">Subject</th>
+                    {[0, 1, 2, 3, 4].map(idx => (
+                      <th key={idx} className="px-2 py-2 text-center font-semibold border-r border-blue-500 w-28">
+                        Comp {idx + 1}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {allAttributes.filter(attr => rowVisibility[attr.id] !== false).map(attr => {
+                    const config = EDITABLE_CONFIG[attr.id];
+                    const isEditable = !!config;
+
+                    // Render cell for a property
+                    const renderCell = (propKey, bgClass) => {
+                      const prop = propKey === 'subject' ? subject : comps[parseInt(propKey.replace('comp_', ''))];
+                      if (!prop && propKey !== 'subject') {
+                        return <td key={propKey} className={`px-2 py-1 text-center ${bgClass} border-r border-gray-200 text-gray-400`}>-</td>;
+                      }
+
+                      const editedVal = editableProperties[propKey]?.[attr.id];
+                      const displayVal = editedVal !== undefined ? editedVal : attr.render(prop);
+
+                      // Get adjustment for this comp (if applicable)
+                      const compAdj = propKey.startsWith('comp_') && showAdjustments ?
+                        editedAdjustments[propKey]?.adjustments?.find(a =>
+                          a.name?.toLowerCase() === attr.adjustmentName?.toLowerCase()
+                        ) : null;
+
+                      if (!isEditable) {
+                        return (
+                          <td key={propKey} className={`px-2 py-1 text-center ${bgClass} border-r border-gray-200`}>
+                            <div className="text-xs">{displayVal}</div>
+                            {compAdj && compAdj.amount !== 0 && (
+                              <div className={`text-xs font-bold ${compAdj.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {compAdj.amount > 0 ? '+' : ''}${Math.round(compAdj.amount).toLocaleString()}
+                              </div>
+                            )}
+                          </td>
+                        );
+                      }
+
+                      // Editable cell
+                      return (
+                        <td key={propKey} className={`px-1 py-1 text-center ${bgClass} border-r border-gray-200`}>
+                          {config.type === 'number' && (
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={editedVal ?? (prop ? prop[config.field] : '') ?? ''}
+                              onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
+                              className="w-full px-1 py-0.5 text-xs text-center border rounded focus:ring-1 focus:ring-blue-500"
+                            />
+                          )}
+                          {config.type === 'yesno' && (
+                            <select
+                              value={editedVal ?? (prop && prop[config.field] ? 'Yes' : 'No')}
+                              onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
+                              className="w-full px-1 py-0.5 text-xs border rounded focus:ring-1 focus:ring-blue-500"
+                            >
+                              <option value="Yes">Yes</option>
+                              <option value="No">No</option>
+                            </select>
+                          )}
+                          {config.type === 'garage' && (
+                            <select
+                              value={editedVal ?? getGarageCategory(prop ? prop[config.field] : 0)}
+                              onChange={(e) => updateEditedValue(propKey, attr.id, parseInt(e.target.value))}
+                              className="w-full px-1 py-0.5 text-xs border rounded focus:ring-1 focus:ring-blue-500"
+                            >
+                              {GARAGE_OPTIONS.map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                          )}
+                          {config.type === 'condition' && (
+                            <select
+                              value={editedVal ?? (prop ? prop[config.field] : '')}
+                              onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
+                              className="w-full px-1 py-0.5 text-xs border rounded focus:ring-1 focus:ring-blue-500"
+                            >
+                              <option value="">-</option>
+                              {getConditionOptions().map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                          )}
+                          {compAdj && compAdj.amount !== 0 && (
+                            <div className={`text-xs font-bold ${compAdj.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {compAdj.amount > 0 ? '+' : ''}${Math.round(compAdj.amount).toLocaleString()}
+                            </div>
+                          )}
+                        </td>
+                      );
+                    };
+
+                    return (
+                      <tr key={attr.id} className="border-b border-gray-200 hover:bg-gray-50">
+                        <td className="px-2 py-1 font-medium text-gray-900 border-r border-gray-200 whitespace-nowrap">
+                          {attr.label}
+                          {attr.isDynamic && <span className="ml-1 text-purple-500 text-xs">(D)</span>}
+                        </td>
+                        {renderCell('subject', 'bg-yellow-50')}
+                        {[0, 1, 2, 3, 4].map(idx => renderCell(`comp_${idx}`, 'bg-blue-50'))}
+                      </tr>
+                    );
+                  })}
+
+                  {/* Net Adjustment Row */}
+                  {showAdjustments && rowVisibility['net_adjustment'] !== false && (
+                    <tr className="border-b-2 border-gray-400 bg-gray-100">
+                      <td className="px-2 py-2 font-bold text-gray-900 border-r border-gray-300">Net Adjustment</td>
+                      <td className="px-2 py-2 text-center bg-yellow-100 border-r border-gray-300">-</td>
+                      {[0, 1, 2, 3, 4].map(idx => {
+                        const compKey = `comp_${idx}`;
+                        const compData = editedAdjustments[compKey] || comps[idx] || {};
+                        const total = compData.totalAdjustment || 0;
+                        const pct = compData.adjustmentPercent || 0;
+                        return (
+                          <td key={idx} className={`px-2 py-2 text-center font-bold border-r border-gray-300 ${total > 0 ? 'text-green-700' : total < 0 ? 'text-red-700' : ''}`}>
+                            {comps[idx] ? (
+                              <>
+                                {total > 0 ? '+' : ''}${Math.round(total).toLocaleString()}
+                                <div className="text-xs font-normal">({pct > 0 ? '+' : ''}{pct.toFixed(0)}%)</div>
+                              </>
+                            ) : '-'}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  )}
+
+                  {/* Adjusted Valuation Row */}
+                  {showAdjustments && rowVisibility['adjusted_valuation'] !== false && (
+                    <tr className="border-b-2 border-gray-400 bg-blue-100">
+                      <td className="px-2 py-2 font-bold text-gray-900 border-r border-gray-300">Adjusted Valuation</td>
+                      <td className="px-2 py-2 text-center bg-yellow-100 border-r border-gray-300 font-bold text-green-700">
+                        {result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-'}
+                      </td>
+                      {[0, 1, 2, 3, 4].map(idx => {
+                        const compKey = `comp_${idx}`;
+                        const compData = editedAdjustments[compKey] || comps[idx] || {};
+                        const adjustedPrice = compData.adjustedPrice || 0;
+                        return (
+                          <td key={idx} className="px-2 py-2 text-center font-bold border-r border-gray-300">
+                            {comps[idx] ? `$${Math.round(adjustedPrice).toLocaleString()}` : '-'}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-4 py-3 bg-gray-50 border-t flex items-center justify-between rounded-b-lg flex-shrink-0">
+              <p className="text-xs text-gray-500">
+                Edit values directly in the grid. Adjustments recalculate automatically.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={generatePDF}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                >
+                  <FileDown size={16} />
+                  Download PDF
+                </button>
+              </div>
             </div>
           </div>
         </div>
