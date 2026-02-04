@@ -1040,43 +1040,57 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     // Lojik blue color
     const lojikBlue = [0, 102, 204];
 
-    // Load logo image
-    let logoImage = null;
-    try {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
-        img.src = '/lojik-logo.PNG';
-      });
-      logoImage = img;
-    } catch (e) {
-      console.warn('Could not load logo image:', e);
-    }
+    // Helper to draw the LOJIK logo with diamond shapes
+    const drawLojikLogo = (x, y) => {
+      // Draw two overlapping diamond shapes
+      doc.setDrawColor(...lojikBlue);
+      doc.setLineWidth(1.5);
+
+      // First diamond (larger, background)
+      const diamond1Size = 14;
+      doc.setFillColor(255, 255, 255);
+      doc.lines([
+        [diamond1Size, diamond1Size],
+        [-diamond1Size, diamond1Size],
+        [-diamond1Size, -diamond1Size],
+        [diamond1Size, -diamond1Size]
+      ], x + 12, y + 15, [1, 1], 'D');
+
+      // Second diamond (smaller, overlapping)
+      const diamond2Size = 10;
+      doc.lines([
+        [diamond2Size, diamond2Size],
+        [-diamond2Size, diamond2Size],
+        [-diamond2Size, -diamond2Size],
+        [diamond2Size, -diamond2Size]
+      ], x + 22, y + 10, [1, 1], 'D');
+
+      // Draw "LOJIK" text next to diamonds
+      doc.setTextColor(...lojikBlue);
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text('LOJIK', x + 40, y + 20);
+    };
 
     // Add header with logo
-    const addHeader = (blockLot) => {
-      if (logoImage) {
-        // Calculate aspect ratio to fit logo nicely
-        const logoHeight = 35;
-        const logoWidth = (logoImage.width / logoImage.height) * logoHeight;
-        doc.addImage(logoImage, 'PNG', margin, margin - 5, logoWidth, logoHeight);
-      } else {
-        // Fallback text if logo not loaded
-        doc.setFillColor(...lojikBlue);
-        doc.rect(margin, margin, 60, 30, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'bold');
-        doc.text('LOJIK', margin + 8, margin + 20);
-      }
+    const addHeader = (blockLot, includeBlockLotRow = false) => {
+      // Draw the LOJIK logo with diamond shapes
+      drawLojikLogo(margin, margin - 5);
 
       // Block/Lot in top right
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(18);
       doc.setFont('helvetica', 'bold');
       doc.text(blockLot, pageWidth - margin, margin + 20, { align: 'right' });
+
+      // If this is page 2+, add Block/Lot/Qualifier row under header
+      if (includeBlockLotRow) {
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(80, 80, 80);
+        const blqText = `Block: ${subject.property_block} | Lot: ${subject.property_lot}${subject.property_qualifier ? ` | Qualifier: ${subject.property_qualifier}` : ''}`;
+        doc.text(blqText, margin, margin + 45);
+      }
     };
 
     const subjectBlockLot = `${subject.property_block}/${subject.property_lot}${subject.property_qualifier ? '/' + subject.property_qualifier : ''}`;
@@ -1137,8 +1151,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           const adj = editedAdj || origAdj;
 
           if (showAdjustments && adj && adj.amount !== 0) {
-            const adjStr = adj.amount > 0 ? `+$${Math.round(adj.amount).toLocaleString()}` : `-$${Math.abs(Math.round(adj.amount)).toLocaleString()}`;
-            row.push(`${compVal}\n${adjStr}`);
+            const adjSign = adj.amount > 0 ? '+' : '-';
+            const adjStr = `${adjSign}$${Math.abs(Math.round(adj.amount)).toLocaleString()}`;
+            // Store adjustment info for coloring in didParseCell
+            row.push({ content: `${compVal}\n${adjStr}`, adjAmount: adj.amount });
           } else {
             row.push(String(compVal));
           }
@@ -1161,7 +1177,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           const total = compData.totalAdjustment || 0;
           const pct = compData.adjustmentPercent || 0;
           const sign = total > 0 ? '+' : '';
-          netRow.push(`${sign}$${Math.round(total).toLocaleString()} (${sign}${pct.toFixed(0)}%)`);
+          // Store adjustment amount for coloring
+          netRow.push({ content: `${sign}$${Math.round(total).toLocaleString()} (${sign}${pct.toFixed(0)}%)`, adjAmount: total });
         } else {
           netRow.push('-');
         }
@@ -1230,13 +1247,29 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           data.cell.styles.fillColor = [200, 230, 255];
           data.cell.styles.fontStyle = 'bold';
         }
+        // Color adjustment amounts: green for positive, red for negative
+        const cellData = data.row.raw?.[data.column.index];
+        if (cellData && typeof cellData === 'object' && cellData.adjAmount !== undefined) {
+          if (cellData.adjAmount > 0) {
+            data.cell.styles.textColor = [34, 139, 34]; // Green
+          } else if (cellData.adjAmount < 0) {
+            data.cell.styles.textColor = [220, 20, 60]; // Red
+          }
+        }
+      },
+      willDrawCell: function(data) {
+        // Convert object cells to string content before drawing
+        const cellData = data.row.raw?.[data.column.index];
+        if (cellData && typeof cellData === 'object' && cellData.content) {
+          data.cell.text = cellData.content.split('\n');
+        }
       }
     });
 
     // Page 2: Dynamic adjustments (if any exist and are visible)
     if (dynamicAttrs.length > 0) {
       doc.addPage();
-      addHeader(subjectBlockLot);
+      addHeader(subjectBlockLot, true); // Include Block/Lot/Qualifier row on page 2
 
       doc.setFontSize(12);
       doc.setTextColor(0, 0, 0);
@@ -1266,8 +1299,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             const adj = editedAdj || origAdj;
 
             if (showAdjustments && adj && adj.amount !== 0) {
-              const adjStr = adj.amount > 0 ? `+$${Math.round(adj.amount).toLocaleString()}` : `-$${Math.abs(Math.round(adj.amount)).toLocaleString()}`;
-              row.push(`${compVal}\n${adjStr}`);
+              const adjSign = adj.amount > 0 ? '+' : '-';
+              const adjStr = `${adjSign}$${Math.abs(Math.round(adj.amount)).toLocaleString()}`;
+              row.push({ content: `${compVal}\n${adjStr}`, adjAmount: adj.amount });
             } else {
               row.push(String(compVal));
             }
@@ -1289,7 +1323,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             const total = compData.totalAdjustment || 0;
             const pct = compData.adjustmentPercent || 0;
             const sign = total > 0 ? '+' : '';
-            netRow.push(`${sign}$${Math.round(total).toLocaleString()} (${sign}${pct.toFixed(0)}%)`);
+            netRow.push({ content: `${sign}$${Math.round(total).toLocaleString()} (${sign}${pct.toFixed(0)}%)`, adjAmount: total });
           } else {
             netRow.push('-');
           }
@@ -1349,12 +1383,32 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             data.cell.styles.fillColor = [200, 230, 255];
             data.cell.styles.fontStyle = 'bold';
           }
+          // Color adjustment amounts: green for positive, red for negative
+          const cellData = data.row.raw?.[data.column.index];
+          if (cellData && typeof cellData === 'object' && cellData.adjAmount !== undefined) {
+            if (cellData.adjAmount > 0) {
+              data.cell.styles.textColor = [34, 139, 34]; // Green
+            } else if (cellData.adjAmount < 0) {
+              data.cell.styles.textColor = [220, 20, 60]; // Red
+            }
+          }
+        },
+        willDrawCell: function(data) {
+          // Convert object cells to string content before drawing
+          const cellData = data.row.raw?.[data.column.index];
+          if (cellData && typeof cellData === 'object' && cellData.content) {
+            data.cell.text = cellData.content.split('\n');
+          }
         }
       });
     }
 
-    // Save the PDF
-    const fileName = `DetailedEvaluation_${subject.property_block}_${subject.property_lot}.pdf`;
+    // Save the PDF with CME naming format: CME_ccdd_block_lot_qualifier.pdf
+    const ccdd = jobData?.ccdd || 'UNKNOWN';
+    const block = subject.property_block || '';
+    const lot = subject.property_lot || '';
+    const qualifier = subject.property_qualifier || '';
+    const fileName = `CME_${ccdd}_${block}_${lot}${qualifier ? '_' + qualifier : ''}.pdf`;
     doc.save(fileName);
     setShowExportModal(false);
   }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, getAdjustment, GARAGE_OPTIONS]);
