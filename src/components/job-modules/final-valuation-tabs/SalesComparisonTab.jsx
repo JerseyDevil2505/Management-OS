@@ -122,9 +122,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     return 4; // MULTI CAR
   }, [garageThresholds]);
 
-  // Load garage thresholds on mount
+  // Load garage thresholds and detached condition multipliers on mount
   useEffect(() => {
-    const loadGarageThresholds = async () => {
+    const loadThresholds = async () => {
       if (!jobData?.id) return;
 
       try {
@@ -132,25 +132,43 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           .from('job_settings')
           .select('setting_key, setting_value')
           .eq('job_id', jobData.id)
-          .in('setting_key', ['garage_threshold_one_car_max', 'garage_threshold_two_car_max', 'garage_threshold_three_car_max']);
+          .in('setting_key', [
+            'garage_threshold_one_car_max',
+            'garage_threshold_two_car_max',
+            'garage_threshold_three_car_max',
+            'detached_condition_poor_threshold',
+            'detached_condition_poor_multiplier',
+            'detached_condition_standard_multiplier',
+            'detached_condition_excellent_threshold',
+            'detached_condition_excellent_multiplier'
+          ]);
 
         if (error || !data) return;
 
-        const newThresholds = { ...garageThresholds };
+        const newGarageThresholds = { ...garageThresholds };
+        const newConditionMultipliers = { ...detachedConditionMultipliers };
+
         data.forEach(setting => {
-          const key = setting.setting_key.replace('garage_threshold_', '');
-          newThresholds[key] = parseInt(setting.setting_value, 10) || garageThresholds[key];
+          if (setting.setting_key.startsWith('garage_threshold_')) {
+            const key = setting.setting_key.replace('garage_threshold_', '');
+            newGarageThresholds[key] = parseInt(setting.setting_value, 10) || garageThresholds[key];
+          } else if (setting.setting_key.startsWith('detached_condition_')) {
+            const key = setting.setting_key.replace('detached_condition_', '');
+            newConditionMultipliers[key] = parseFloat(setting.setting_value) || detachedConditionMultipliers[key];
+          }
         });
-        setGarageThresholds(newThresholds);
+
+        setGarageThresholds(newGarageThresholds);
+        setDetachedConditionMultipliers(newConditionMultipliers);
       } catch (error) {
         // Silent error handling - don't interfere with job loading
-        console.warn('⚠️ Garage thresholds loading error (non-critical):', error.message || error);
+        console.warn('⚠️ Thresholds loading error (non-critical):', error.message || error);
       }
     };
 
     // Wait for property loading to complete before loading settings
     if (!isJobContainerLoading) {
-      loadGarageThresholds();
+      loadThresholds();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id, isJobContainerLoading]);
