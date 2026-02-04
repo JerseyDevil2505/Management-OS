@@ -1019,68 +1019,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     }
   }, [editableProperties, showExportModal, recalculateAdjustments]);
 
-  // Helper to determine Yes/No from rendered value (matching detailed component logic)
-  const getYesNoFromRender = useCallback((prop, attrId) => {
-    const attrObj = allAttributes.find(a => a.id === attrId);
-    if (!attrObj) return 'No';
-    const rendered = attrObj.render(prop);
-    if (!rendered) return 'No';
-    const renderedStr = String(rendered).toLowerCase();
-    if (renderedStr === 'no' || renderedStr === 'none' || renderedStr === 'n/a') {
-      return 'No';
-    }
-    return 'Yes';
-  }, [allAttributes]);
-
-  // Initialize editable properties from actual data when modal opens
+  // Simple modal open - DON'T pre-initialize, just mirror the detailed component
+  // Only track edits when user actually makes changes
   const openExportModal = useCallback(() => {
-    // Initialize with current property values - use render functions for accurate values
-    const initialData = { subject: {} };
-
-    Object.keys(EDITABLE_CONFIG).forEach(attrId => {
-      const config = EDITABLE_CONFIG[attrId];
-      if (config.type === 'yesno') {
-        // Use render function to get accurate Yes/No value
-        initialData.subject[attrId] = getYesNoFromRender(subject, attrId);
-      } else if (config.type === 'garage') {
-        initialData.subject[attrId] = getGarageCategory(subject[config.field] || 0);
-      } else if (config.type === 'number') {
-        // Check altField first for number fields
-        initialData.subject[attrId] = config.altField ?
-          (subject[config.altField] || subject[config.field]) :
-          subject[config.field];
-      } else {
-        initialData.subject[attrId] = subject[config.field];
-      }
-    });
-
-    comps.forEach((comp, idx) => {
-      if (!comp) return;
-      const compKey = `comp_${idx}`;
-      initialData[compKey] = {};
-
-      Object.keys(EDITABLE_CONFIG).forEach(attrId => {
-        const config = EDITABLE_CONFIG[attrId];
-        if (config.type === 'yesno') {
-          // Use render function to get accurate Yes/No value
-          initialData[compKey][attrId] = getYesNoFromRender(comp, attrId);
-        } else if (config.type === 'garage') {
-          initialData[compKey][attrId] = getGarageCategory(comp[config.field] || 0);
-        } else if (config.type === 'number') {
-          // Check altField first for number fields
-          initialData[compKey][attrId] = config.altField ?
-            (comp[config.altField] || comp[config.field]) :
-            comp[config.field];
-        } else {
-          initialData[compKey][attrId] = comp[config.field];
-        }
-      });
-    });
-
-    setEditableProperties(initialData);
+    // Start with empty - values will come directly from data, just like detailed component
+    setEditableProperties({});
     setEditedAdjustments({});
     setShowExportModal(true);
-  }, [subject, comps, getGarageCategory, getYesNoFromRender]);
+  }, []);
 
   // Generate PDF document
   const generatePDF = useCallback(async () => {
