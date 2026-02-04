@@ -220,12 +220,16 @@ const SalesReviewTab = ({
   
   const enrichedProperties = useMemo(() => {
     return properties.map(prop => {
-      // Period classification
-      const periodCode = getPeriodClassification(prop.sales_date, jobData?.end_date);
-      
-      // Package detection
+      // Package detection (do this first to check for farm)
       const packageAnalysis = interpretCodes.getPackageSaleData(properties, prop);
       const isPackage = packageAnalysis && (packageAnalysis.is_additional_card || packageAnalysis.is_multi_property_package);
+      const isFarmSale = packageAnalysis?.is_farm_package || prop.property_m4_class === '3A';
+
+      // Period classification - override to FARM for farm sales
+      let periodCode = getPeriodClassification(prop.sales_date, jobData?.end_date);
+      if (isFarmSale && periodCode) {
+        periodCode = 'FARM'; // Farm sales get their own category
+      }
       
       // Calculated fields
       const pricePerSF = prop.sales_price && prop.asset_sfla && prop.asset_sfla > 0
