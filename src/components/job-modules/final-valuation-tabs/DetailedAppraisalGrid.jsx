@@ -1711,10 +1711,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       const displayVal = editedVal !== undefined ? editedVal : attr.render(prop);
 
                       // Get adjustment for this comp (if applicable)
-                      const compAdj = propKey.startsWith('comp_') && showAdjustments ?
+                      // First check editedAdjustments, then fall back to original comp adjustments
+                      const compAdj = propKey.startsWith('comp_') && showAdjustments ? (
                         editedAdjustments[propKey]?.adjustments?.find(a =>
                           a.name?.toLowerCase() === attr.adjustmentName?.toLowerCase()
-                        ) : null;
+                        ) ||
+                        // Fallback to original adjustment from comp data
+                        (attr.adjustmentName ? getAdjustment(prop, attr.adjustmentName) : null)
+                      ) : null;
 
                       if (!isEditable) {
                         return (
