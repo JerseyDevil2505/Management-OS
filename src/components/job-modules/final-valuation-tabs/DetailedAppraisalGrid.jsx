@@ -1731,15 +1731,19 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
                       // Editable cell - use effectiveConfig for type detection
                       const cfg = effectiveConfig;
-                      // For dynamic yesno, derive default from rendered value
+                      // For ALL yesno fields, derive default from rendered value to match detailed component
                       const getDefaultYesNo = () => {
                         if (editedVal !== undefined) return editedVal;
-                        if (attr.isDynamic) {
-                          // Check rendered value for YES/NONE pattern
-                          const rendered = attr.render(prop);
-                          return (rendered && rendered !== 'NONE' && rendered !== 'N/A' && rendered !== 'No') ? 'Yes' : 'No';
+                        // Use the render function to determine actual value - this matches what detailed component shows
+                        const rendered = attr.render(prop);
+                        if (!rendered) return 'No';
+                        // Check for various "yes" patterns in rendered output
+                        const renderedStr = String(rendered).toLowerCase();
+                        if (renderedStr === 'no' || renderedStr === 'none' || renderedStr === 'n/a') {
+                          return 'No';
                         }
-                        return prop && prop[cfg.field] ? 'Yes' : 'No';
+                        // If it shows Yes, a number, or an area (SF), it's Yes
+                        return 'Yes';
                       };
 
                       return (
