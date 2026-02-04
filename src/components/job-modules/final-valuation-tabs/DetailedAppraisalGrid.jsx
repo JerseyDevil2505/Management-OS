@@ -1349,7 +1349,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const fileName = `DetailedEvaluation_${subject.property_block}_${subject.property_lot}.pdf`;
     doc.save(fileName);
     setShowExportModal(false);
-  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, getCellValue, getAdjustment]);
+  }, [allAttributes, rowVisibility, showAdjustments, subject, comps, result, editableProperties, editedAdjustments, getAdjustment, GARAGE_OPTIONS]);
 
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
