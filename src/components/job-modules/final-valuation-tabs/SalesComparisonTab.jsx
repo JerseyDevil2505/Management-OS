@@ -2769,6 +2769,28 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 </div>
               </div>
 
+              {/* Farm Sales Mode */}
+              <div className="mt-6 pt-6 border-t border-gray-300">
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id="farmSalesMode"
+                    checked={compFilters.farmSalesMode}
+                    onChange={(e) => setCompFilters(prev => ({ ...prev, farmSalesMode: e.target.checked }))}
+                    className="mt-1 rounded"
+                  />
+                  <div>
+                    <label htmlFor="farmSalesMode" className="text-sm font-medium text-gray-900 cursor-pointer">
+                      Farm Sales Mode
+                    </label>
+                    <p className="text-xs text-gray-600 mt-1">
+                      When enabled, farm properties (3A with 3B package) will only compare to other farm sales,
+                      and lot size will include the combined acreage of both 3A and 3B parcels.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* Adjustment Tolerance Filters */}
               <div className="mt-6 pt-6 border-t border-gray-300">
                 <h4 className="text-sm font-semibold text-gray-900 mb-4">Adjustment Tolerances</h4>
