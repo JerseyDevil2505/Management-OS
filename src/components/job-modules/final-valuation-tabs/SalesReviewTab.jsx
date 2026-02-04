@@ -1377,6 +1377,12 @@ const SalesReviewTab = ({
           >
             HSP Period
           </button>
+            <button
+              onClick={() => handleSetDateRange('FARM')}
+              className="px-3 py-1.5 text-sm bg-amber-50 text-amber-700 border border-amber-200 rounded hover:bg-amber-100"
+            >
+              Farm Sales
+            </button>
           </div>
 
           {/* Font Size Control */}
