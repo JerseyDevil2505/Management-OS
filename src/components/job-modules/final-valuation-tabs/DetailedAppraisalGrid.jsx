@@ -1577,7 +1577,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                 </td>
                 <td className={`px-3 py-2 text-center bg-slate-50 ${attr.bold ? 'font-semibold' : 'text-xs'}`}>
                   {(() => {
-                    let value = attr.render(subject);
+                    // Use aggregated subject data for properties with additional cards
+                    let value = attr.render(aggregatedSubject);
 
                     // ONLY apply YES/NONE to specific amenity area attributes
                     // Exclude garage_area and det_garage_area as they use category display (ONE CAR, TWO CAR, etc.)
@@ -1591,16 +1592,16 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       let rawPropertyValue = null;
 
                       switch(attr.id) {
-                        case 'garage_area': rawPropertyValue = subject.garage_area; break;
-                        case 'det_garage_area': rawPropertyValue = subject.det_garage_area; break;
-                        case 'deck_area': rawPropertyValue = subject.deck_area; break;
-                        case 'patio_area': rawPropertyValue = subject.patio_area; break;
-                        case 'open_porch_area': rawPropertyValue = subject.open_porch_area; break;
-                        case 'enclosed_porch_area': rawPropertyValue = subject.enclosed_porch_area; break;
-                        case 'pool_area': rawPropertyValue = subject.pool_area; break;
-                        case 'basement_area': rawPropertyValue = subject.basement_area; break;
-                        case 'fin_bsmt_area': rawPropertyValue = subject.fin_basement_area; break;
-                        case 'ac_area': rawPropertyValue = subject.ac_area; break;
+                        case 'garage_area': rawPropertyValue = aggregatedSubject.garage_area; break;
+                        case 'det_garage_area': rawPropertyValue = aggregatedSubject.det_garage_area; break;
+                        case 'deck_area': rawPropertyValue = aggregatedSubject.deck_area; break;
+                        case 'patio_area': rawPropertyValue = aggregatedSubject.patio_area; break;
+                        case 'open_porch_area': rawPropertyValue = aggregatedSubject.open_porch_area; break;
+                        case 'enclosed_porch_area': rawPropertyValue = aggregatedSubject.enclosed_porch_area; break;
+                        case 'pool_area': rawPropertyValue = aggregatedSubject.pool_area; break;
+                        case 'basement_area': rawPropertyValue = aggregatedSubject.basement_area; break;
+                        case 'fin_bsmt_area': rawPropertyValue = aggregatedSubject.fin_basement_area; break;
+                        case 'ac_area': rawPropertyValue = aggregatedSubject.ac_area; break;
                         default: break;
                       }
 
