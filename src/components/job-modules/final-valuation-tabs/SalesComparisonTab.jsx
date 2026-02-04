@@ -1100,6 +1100,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           console.log(`   ❌ Failed style: ${debugFilters.style}`);
           console.log(`   ❌ Failed story height: ${debugFilters.storyHeight}`);
           console.log(`   ❌ Failed view: ${debugFilters.view}`);
+          console.log(`   ❌ Failed farm sales: ${debugFilters.farmSales || 0}`);
           console.log(`   ✅ Passed initial filters: ${debugFilters.passed}`);
         }
 
