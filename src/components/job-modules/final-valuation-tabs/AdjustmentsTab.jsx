@@ -784,6 +784,35 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
         }
       );
 
+      // Add detached item condition multipliers
+      settingsToSave.push(
+        {
+          job_id: jobData.id,
+          setting_key: 'detached_condition_poor_threshold',
+          setting_value: String(detachedConditionMultipliers.poor_threshold)
+        },
+        {
+          job_id: jobData.id,
+          setting_key: 'detached_condition_poor_multiplier',
+          setting_value: String(detachedConditionMultipliers.poor_multiplier)
+        },
+        {
+          job_id: jobData.id,
+          setting_key: 'detached_condition_standard_multiplier',
+          setting_value: String(detachedConditionMultipliers.standard_multiplier)
+        },
+        {
+          job_id: jobData.id,
+          setting_key: 'detached_condition_excellent_threshold',
+          setting_value: String(detachedConditionMultipliers.excellent_threshold)
+        },
+        {
+          job_id: jobData.id,
+          setting_key: 'detached_condition_excellent_multiplier',
+          setting_value: String(detachedConditionMultipliers.excellent_multiplier)
+        }
+      );
+
       // Save settings that have values
       if (settingsToSave.length > 0) {
         const { error: settingsError } = await supabase
