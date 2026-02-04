@@ -29,9 +29,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     lot_size_acre: { type: 'number', field: 'asset_lot_acre', altField: 'market_manual_lot_acre', step: 0.01 },
     liveable_area: { type: 'number', field: 'asset_sfla' },
     year_built: { type: 'number', field: 'asset_year_built' },
-    bathrooms: { type: 'number', field: 'asset_bathrooms', step: 0.5 },
+    bathrooms: { type: 'number', field: 'asset_bathrooms', altField: 'total_baths_calculated', step: 0.5 },
     bedrooms: { type: 'number', field: 'asset_bedrooms' },
-    fireplaces: { type: 'number', field: 'asset_fireplaces' },
+    fireplaces: { type: 'number', field: 'asset_fireplaces', altField: 'fireplace_count' },
     sales_price: { type: 'number', field: 'sales_price' },
     // Yes/No dropdowns
     basement_area: { type: 'yesno', field: 'asset_basement' },
