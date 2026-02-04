@@ -1743,8 +1743,8 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                                     Rank {rankLevel}
                                   </span>
                                   <span style={{ flex: 1 }}>{condition}</span>
-                                  <span style={{ fontSize: '12px', color: '#6B7280' }}>
-                                    (-{tierPercent}% adj)
+                                  <span style={{ fontSize: '12px', color: '#6B7280', fontWeight: '500' }}>
+                                    ({rankLevel}x adjustment)
                                   </span>
                                   <button
                                     onClick={() => {
