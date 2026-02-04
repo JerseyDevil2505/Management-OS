@@ -848,25 +848,175 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
   // ==================== PDF EXPORT FUNCTIONS ====================
 
-  // Get cell value with optional edits applied
-  const getCellValue = useCallback((attrId, colIdx, defaultValue) => {
-    const editKey = `${attrId}_${colIdx}`;
-    return editableData[editKey] !== undefined ? editableData[editKey] : defaultValue;
-  }, [editableData]);
+  // Get raw value from property for a given attribute
+  const getRawValue = useCallback((prop, attrId) => {
+    if (!prop) return null;
+    const config = EDITABLE_CONFIG[attrId];
+    if (!config) return null;
+    return prop[config.field];
+  }, []);
 
-  // Update editable data in modal
-  const updateEditableData = useCallback((attrId, colIdx, value) => {
-    setEditableData(prev => ({
+  // Get edited value or fall back to original
+  const getEditedValue = useCallback((propKey, attrId) => {
+    const edited = editableProperties[propKey];
+    if (edited && edited[attrId] !== undefined) {
+      return edited[attrId];
+    }
+    // Get original value
+    const prop = propKey === 'subject' ? subject : comps[parseInt(propKey.replace('comp_', ''))];
+    return getRawValue(prop, attrId);
+  }, [editableProperties, subject, comps, getRawValue]);
+
+  // Update a single cell value
+  const updateEditedValue = useCallback((propKey, attrId, value) => {
+    setEditableProperties(prev => ({
       ...prev,
-      [`${attrId}_${colIdx}`]: value
+      [propKey]: {
+        ...(prev[propKey] || {}),
+        [attrId]: value
+      }
     }));
   }, []);
 
-  // Reset modal state when opening
-  const openExportModal = useCallback(() => {
-    setEditableData({});
-    setShowExportModal(true);
+  // Calculate adjustment for a single attribute between subject and comp
+  const calculateSingleAdjustment = useCallback((subjectVal, compVal, adjustmentDef, compSalesPrice) => {
+    if (!adjustmentDef) return 0;
+
+    const adjustmentValue = adjustmentDef.bracket_0 || 0; // Use first bracket as default
+    const adjustmentType = adjustmentDef.adjustment_type || 'flat';
+
+    const subjectNum = parseFloat(subjectVal) || 0;
+    const compNum = parseFloat(compVal) || 0;
+    const difference = subjectNum - compNum;
+
+    if (difference === 0) return 0;
+
+    switch (adjustmentType) {
+      case 'flat':
+        return difference > 0 ? adjustmentValue : -adjustmentValue;
+      case 'per_sqft':
+        return difference * adjustmentValue;
+      case 'count':
+        return difference * adjustmentValue;
+      case 'percent':
+        return (compSalesPrice || 0) * (adjustmentValue / 100) * Math.sign(difference);
+      default:
+        return 0;
+    }
   }, []);
+
+  // Recalculate all adjustments based on edited values
+  const recalculateAdjustments = useCallback(() => {
+    const newAdjustments = {};
+
+    comps.forEach((comp, idx) => {
+      if (!comp) return;
+
+      const compKey = `comp_${idx}`;
+      const compAdjustments = [];
+      let totalAdjustment = 0;
+
+      // Get comp's sales price (edited or original)
+      const compSalesPrice = getEditedValue(compKey, 'sales_price') || comp.values_norm_time || comp.sales_price || 0;
+
+      // Calculate adjustments for each adjustable attribute
+      Object.keys(EDITABLE_CONFIG).forEach(attrId => {
+        const config = EDITABLE_CONFIG[attrId];
+        if (!config) return;
+
+        // Find the adjustment definition
+        const attrObj = allAttributes.find(a => a.id === attrId);
+        if (!attrObj?.adjustmentName) return;
+
+        const adjustmentDef = adjustmentGrid.find(adj =>
+          adj.adjustment_name?.toLowerCase() === attrObj.adjustmentName?.toLowerCase()
+        );
+        if (!adjustmentDef) return;
+
+        // Get subject and comp values (edited or original)
+        let subjectVal = getEditedValue('subject', attrId);
+        let compVal = getEditedValue(compKey, attrId);
+
+        // Convert Yes/No to 1/0 for flat adjustments
+        if (config.type === 'yesno') {
+          subjectVal = (subjectVal === true || subjectVal === 'Yes' || subjectVal === 1) ? 1 : 0;
+          compVal = (compVal === true || compVal === 'Yes' || compVal === 1) ? 1 : 0;
+        }
+
+        // Convert garage category to number
+        if (config.type === 'garage') {
+          subjectVal = parseInt(subjectVal) || 0;
+          compVal = parseInt(compVal) || 0;
+        }
+
+        const adjustment = calculateSingleAdjustment(subjectVal, compVal, adjustmentDef, compSalesPrice);
+        if (adjustment !== 0) {
+          compAdjustments.push({
+            name: attrObj.adjustmentName,
+            amount: adjustment
+          });
+          totalAdjustment += adjustment;
+        }
+      });
+
+      const adjustedPrice = compSalesPrice + totalAdjustment;
+      const adjustmentPercent = compSalesPrice > 0 ? (totalAdjustment / compSalesPrice) * 100 : 0;
+
+      newAdjustments[compKey] = {
+        adjustments: compAdjustments,
+        totalAdjustment,
+        adjustedPrice,
+        adjustmentPercent
+      };
+    });
+
+    setEditedAdjustments(newAdjustments);
+  }, [comps, getEditedValue, calculateSingleAdjustment, allAttributes, adjustmentGrid]);
+
+  // Recalculate when edited properties change
+  useEffect(() => {
+    if (showExportModal && Object.keys(editableProperties).length > 0) {
+      recalculateAdjustments();
+    }
+  }, [editableProperties, showExportModal, recalculateAdjustments]);
+
+  // Initialize editable properties from actual data when modal opens
+  const openExportModal = useCallback(() => {
+    // Initialize with current property values
+    const initialData = { subject: {} };
+
+    Object.keys(EDITABLE_CONFIG).forEach(attrId => {
+      const config = EDITABLE_CONFIG[attrId];
+      if (config.type === 'yesno') {
+        initialData.subject[attrId] = subject[config.field] ? 'Yes' : 'No';
+      } else if (config.type === 'garage') {
+        initialData.subject[attrId] = getGarageCategory(subject[config.field] || 0);
+      } else {
+        initialData.subject[attrId] = subject[config.field];
+      }
+    });
+
+    comps.forEach((comp, idx) => {
+      if (!comp) return;
+      const compKey = `comp_${idx}`;
+      initialData[compKey] = {};
+
+      Object.keys(EDITABLE_CONFIG).forEach(attrId => {
+        const config = EDITABLE_CONFIG[attrId];
+        if (config.type === 'yesno') {
+          initialData[compKey][attrId] = comp[config.field] ? 'Yes' : 'No';
+        } else if (config.type === 'garage') {
+          initialData[compKey][attrId] = getGarageCategory(comp[config.field] || 0);
+        } else {
+          initialData[compKey][attrId] = comp[config.field];
+        }
+      });
+    });
+
+    setEditableProperties(initialData);
+    setEditedAdjustments({});
+    setShowExportModal(true);
+  }, [subject, comps, getGarageCategory]);
 
   // Generate PDF document
   const generatePDF = useCallback(async () => {
