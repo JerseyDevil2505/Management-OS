@@ -791,9 +791,17 @@ const SalesReviewTab = ({
           start: new Date(assessmentYear - 3, 9, 1).toISOString().split('T')[0],
           end: new Date(assessmentYear - 2, 8, 30).toISOString().split('T')[0]
         });
+        setPeriodFilter([]);
+        break;
+      case 'FARM':
+        // FARM: Show only farm sales (no date range, just filter by period code)
+        setDateRange({ start: '', end: '' });
+        setPeriodFilter(['FARM']);
+        setShowAllNormalizedSales(true); // Need to show all to see FARM since it's excluded by default
         break;
       default:
         setDateRange({ start: '', end: '' });
+        setPeriodFilter([]);
     }
   };
 
