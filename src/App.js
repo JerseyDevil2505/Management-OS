@@ -10,6 +10,8 @@ import FileUploadButton from './components/job-modules/FileUploadButton';
 import AppealCoverage from './components/job-modules/AppealCoverage';
 import LandingPage from './components/LandingPage';
 import UserManagement from './components/UserManagement';
+import OrganizationManagement from './components/OrganizationManagement';
+import RevenueManagement from './components/RevenueManagement';
 
 /**
  * MANAGEMENT OS - LIVE DATA ARCHITECTURE
@@ -61,7 +63,7 @@ const App = () => {
   const [activeView, setActiveView] = useState(() => {
     // Read from URL on initial load
     const path = window.location.pathname.slice(1) || 'admin-jobs';
-    const validViews = ['admin-jobs', 'billing', 'employees', 'payroll', 'appeal-coverage', 'job-modules', 'users'];
+    const validViews = ['admin-jobs', 'billing', 'employees', 'payroll', 'appeal-coverage', 'job-modules', 'users', 'organizations', 'revenue'];
     return validViews.includes(path) ? path : 'admin-jobs';
   });
 
@@ -80,7 +82,7 @@ const App = () => {
       
       // Handle main navigation
       const viewPath = path.slice(1) || 'admin-jobs';
-      const validViews = ['dashboard', 'admin-jobs', 'billing', 'employees', 'payroll', 'appeal-coverage', 'users'];
+      const validViews = ['dashboard', 'admin-jobs', 'billing', 'employees', 'payroll', 'appeal-coverage', 'users', 'organizations', 'revenue'];
       if (validViews.includes(viewPath)) {
         setActiveView(viewPath);
         setSelectedJob(null); // Clear job selection when navigating to main views
@@ -152,12 +154,22 @@ const App = () => {
   // Simple helper - true for users allowed to access billing/payroll
   const isAdmin = (user?.role || '').toString().toLowerCase() === 'admin' || (user?.role || '').toString().toLowerCase() === 'owner';
 
+  // Only the primary owner can access User Management
+  const PRIMARY_OWNER_ID = '5df85ca3-7a54-4798-a665-c31da8d9caad';
+  const canManageUsers = user?.id === PRIMARY_OWNER_ID;
+
   // Update URL when view changes
   const handleViewChange = useCallback((view) => {
     // Prevent non-admins from navigating to billing/payroll
     const role = user?.role?.toString?.().toLowerCase?.() || '';
     const isAdminLocal = role === 'admin' || role === 'owner';
     if ((view === 'billing' || view === 'payroll') && !isAdminLocal) {
+      setActiveView('employees');
+      window.history.pushState({}, '', '/employees');
+      return;
+    }
+    // Only primary owner can access users, organizations, and revenue
+    if ((view === 'users' || view === 'organizations' || view === 'revenue') && user?.id !== PRIMARY_OWNER_ID) {
       setActiveView('employees');
       window.history.pushState({}, '', '/employees');
       return;
@@ -793,6 +805,7 @@ const App = () => {
           window.location.hostname.includes('builder.io') ||
           window.location.search.includes('dev=true')) {
         setUser({
+          id: '5df85ca3-7a54-4798-a665-c31da8d9caad', // Primary owner ID for dev mode
           email: 'dev@lojik.com',
           role: 'admin',
           employeeData: {
@@ -1064,7 +1077,7 @@ const App = () => {
                   💸 Payroll
                 </button>
               )}
-              {isAdmin && (
+              {canManageUsers && (
               <button
                 onClick={() => handleViewChange('users')}
                 className={`px-4 py-2 rounded-xl font-medium text-sm border ${
@@ -1079,6 +1092,40 @@ const App = () => {
                 } : {}}
               >
                 🔐 Users
+              </button>
+              )}
+              {canManageUsers && (
+              <button
+                onClick={() => handleViewChange('organizations')}
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                  activeView === 'organizations'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                }`}
+                style={activeView === 'organizations' ? {
+                  backgroundColor: '#FFFFFF',
+                  opacity: 1,
+                  backdropFilter: 'none'
+                } : {}}
+              >
+                🏢 Organizations
+              </button>
+              )}
+              {canManageUsers && (
+              <button
+                onClick={() => handleViewChange('revenue')}
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                  activeView === 'revenue'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                }`}
+                style={activeView === 'revenue' ? {
+                  backgroundColor: '#FFFFFF',
+                  opacity: 1,
+                  backdropFilter: 'none'
+                } : {}}
+              >
+                💵 Revenue
               </button>
               )}
             </nav>
@@ -1205,6 +1252,14 @@ const App = () => {
             <p className="text-sm text-gray-600">You do not have permission to view Users.</p>
           </div>
         ))}
+
+        {activeView === 'organizations' && canManageUsers && (
+          <OrganizationManagement />
+        )}
+
+        {activeView === 'revenue' && canManageUsers && (
+          <RevenueManagement />
+        )}
 
         {activeView === 'job-modules' && selectedJob && (
           <div>

@@ -220,12 +220,16 @@ const SalesReviewTab = ({
   
   const enrichedProperties = useMemo(() => {
     return properties.map(prop => {
-      // Period classification
-      const periodCode = getPeriodClassification(prop.sales_date, jobData?.end_date);
-      
-      // Package detection
+      // Package detection (do this first to check for farm)
       const packageAnalysis = interpretCodes.getPackageSaleData(properties, prop);
       const isPackage = packageAnalysis && (packageAnalysis.is_additional_card || packageAnalysis.is_multi_property_package);
+      const isFarmSale = packageAnalysis?.is_farm_package || prop.property_m4_class === '3A';
+
+      // Period classification - override to FARM for farm sales
+      let periodCode = getPeriodClassification(prop.sales_date, jobData?.end_date);
+      if (isFarmSale && periodCode) {
+        periodCode = 'FARM'; // Farm sales get their own category
+      }
       
       // Calculated fields
       const pricePerSF = prop.sales_price && prop.asset_sfla && prop.asset_sfla > 0
@@ -273,6 +277,7 @@ const SalesReviewTab = ({
         ...prop,
         periodCode,
         isPackage,
+        isFarmSale,
         pricePerSF,
         normPricePerSF,
         salesRatio,
@@ -786,9 +791,17 @@ const SalesReviewTab = ({
           start: new Date(assessmentYear - 3, 9, 1).toISOString().split('T')[0],
           end: new Date(assessmentYear - 2, 8, 30).toISOString().split('T')[0]
         });
+        setPeriodFilter([]);
+        break;
+      case 'FARM':
+        // FARM: Show only farm sales (no date range, just filter by period code)
+        setDateRange({ start: '', end: '' });
+        setPeriodFilter(['FARM']);
+        setShowAllNormalizedSales(true); // Need to show all to see FARM since it's excluded by default
         break;
       default:
         setDateRange({ start: '', end: '' });
+        setPeriodFilter([]);
     }
   };
 
@@ -1364,6 +1377,12 @@ const SalesReviewTab = ({
           >
             HSP Period
           </button>
+            <button
+              onClick={() => handleSetDateRange('FARM')}
+              className="px-3 py-1.5 text-sm bg-amber-50 text-amber-700 border border-amber-200 rounded hover:bg-amber-100"
+            >
+              Farm Sales
+            </button>
           </div>
 
           {/* Font Size Control */}

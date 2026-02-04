@@ -64,7 +64,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     sameView: false,
     individualAdjPct: 0,
     netAdjPct: 0,
-    grossAdjPct: 0
+    grossAdjPct: 0,
+    farmSalesMode: true // When enabled, farm subjects only compare to farm comps and use combined 3A+3B lot size
   });
   
   // ==================== EVALUATION STATE ====================
@@ -104,6 +105,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     three_car_max: 999
   });
 
+  // Detached item condition multipliers
+  const [detachedConditionMultipliers, setDetachedConditionMultipliers] = useState({
+    poor_threshold: 0.25,
+    poor_multiplier: 0.50,
+    standard_multiplier: 1.00,
+    excellent_threshold: 0.75,
+    excellent_multiplier: 1.25
+  });
+
   // Helper: Convert garage square footage to category number
   const getGarageCategory = useCallback((sqft) => {
     if (!sqft || sqft === 0) return 0; // NONE
@@ -113,9 +123,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     return 4; // MULTI CAR
   }, [garageThresholds]);
 
-  // Load garage thresholds on mount
+  // Load garage thresholds and detached condition multipliers on mount
   useEffect(() => {
-    const loadGarageThresholds = async () => {
+    const loadThresholds = async () => {
       if (!jobData?.id) return;
 
       try {
@@ -123,25 +133,43 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           .from('job_settings')
           .select('setting_key, setting_value')
           .eq('job_id', jobData.id)
-          .in('setting_key', ['garage_threshold_one_car_max', 'garage_threshold_two_car_max', 'garage_threshold_three_car_max']);
+          .in('setting_key', [
+            'garage_threshold_one_car_max',
+            'garage_threshold_two_car_max',
+            'garage_threshold_three_car_max',
+            'detached_condition_poor_threshold',
+            'detached_condition_poor_multiplier',
+            'detached_condition_standard_multiplier',
+            'detached_condition_excellent_threshold',
+            'detached_condition_excellent_multiplier'
+          ]);
 
         if (error || !data) return;
 
-        const newThresholds = { ...garageThresholds };
+        const newGarageThresholds = { ...garageThresholds };
+        const newConditionMultipliers = { ...detachedConditionMultipliers };
+
         data.forEach(setting => {
-          const key = setting.setting_key.replace('garage_threshold_', '');
-          newThresholds[key] = parseInt(setting.setting_value, 10) || garageThresholds[key];
+          if (setting.setting_key.startsWith('garage_threshold_')) {
+            const key = setting.setting_key.replace('garage_threshold_', '');
+            newGarageThresholds[key] = parseInt(setting.setting_value, 10) || garageThresholds[key];
+          } else if (setting.setting_key.startsWith('detached_condition_')) {
+            const key = setting.setting_key.replace('detached_condition_', '');
+            newConditionMultipliers[key] = parseFloat(setting.setting_value) || detachedConditionMultipliers[key];
+          }
         });
-        setGarageThresholds(newThresholds);
+
+        setGarageThresholds(newGarageThresholds);
+        setDetachedConditionMultipliers(newConditionMultipliers);
       } catch (error) {
         // Silent error handling - don't interfere with job loading
-        console.warn('⚠️ Garage thresholds loading error (non-critical):', error.message || error);
+        console.warn('⚠️ Thresholds loading error (non-critical):', error.message || error);
       }
     };
 
     // Wait for property loading to complete before loading settings
     if (!isJobContainerLoading) {
-      loadGarageThresholds();
+      loadThresholds();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id, isJobContainerLoading]);
@@ -473,6 +501,73 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     }
   };
 
+  // ==================== HELPER: AGGREGATE PROPERTY DATA ACROSS CARDS ====================
+  // Helper to check if a card identifier is a main card
+  const isMainCard = (cardValue) => {
+    const card = (cardValue || '').toString().trim();
+    if (vendorType === 'Microsystems') {
+      const cardUpper = card.toUpperCase();
+      return cardUpper === 'M' || cardUpper === 'MAIN' || cardUpper === '';
+    } else { // BRT
+      const cardNum = parseInt(card);
+      return cardNum === 1 || card === '' || isNaN(cardNum);
+    }
+  };
+
+  // Helper to get all cards for a property (main + additional)
+  const getPropertyCards = (prop) => {
+    if (!prop) return [prop];
+    const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
+    return properties.filter(p => {
+      const pBaseKey = `${p.property_block || ''}-${p.property_lot || ''}-${p.property_qualifier || ''}`;
+      return pBaseKey === baseKey;
+    });
+  };
+
+  // Helper to aggregate data across all cards for a property
+  const aggregatePropertyData = (prop) => {
+    const allCards = getPropertyCards(prop);
+    if (allCards.length <= 1) return prop; // No additional cards, return as-is
+
+    const aggregated = { ...prop };
+
+    // SUM fields
+    const sumFields = [
+      'asset_sfla', 'total_baths_calculated', 'asset_bathrooms', 'asset_bedrooms',
+      'fireplace_count', 'asset_fireplaces', 'basement_area', 'fin_basement_area',
+      'garage_area', 'det_garage_area', 'deck_area', 'patio_area', 'pool_area',
+      'open_porch_area', 'enclosed_porch_area', 'barn_area', 'stable_area', 'pole_barn_area', 'ac_area'
+    ];
+
+    sumFields.forEach(field => {
+      const total = allCards.reduce((sum, card) => sum + (parseFloat(card[field]) || 0), 0);
+      if (total > 0) aggregated[field] = total;
+    });
+
+    // AVERAGE: year_built
+    const validYears = allCards
+      .map(card => parseInt(card.asset_year_built))
+      .filter(year => year > 1800 && year <= new Date().getFullYear());
+    if (validYears.length > 0) {
+      aggregated.asset_year_built = Math.round(validYears.reduce((a, b) => a + b, 0) / validYears.length);
+    }
+
+    // OR logic for boolean amenities
+    const booleanFields = [
+      'asset_basement', 'asset_fin_basement', 'asset_ac', 'asset_deck',
+      'asset_patio', 'asset_open_porch', 'asset_enclosed_porch', 'asset_pool'
+    ];
+
+    booleanFields.forEach(field => {
+      const hasAny = allCards.some(card => card[field] && card[field] !== 'No' && card[field] !== 'NONE');
+      aggregated[field] = hasAny;
+    });
+
+    aggregated._additionalCardsCount = allCards.filter(p => !isMainCard(p.property_addl_card || p.additional_card)).length;
+
+    return aggregated;
+  };
+
   // ==================== MANUAL BLQ EVALUATION (DETAILED TAB) ====================
   const handleManualEvaluate = async () => {
     setIsManualEvaluating(true);
@@ -486,38 +581,56 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       }
 
       // Find subject by block, lot, qualifier (normalize for comparison)
-      const subject = properties.find(p => {
+      const subjectRaw = properties.find(p => {
         const blockMatch = (p.property_block || '').trim().toUpperCase() === manualSubject.block.trim().toUpperCase();
         const lotMatch = (p.property_lot || '').trim().toUpperCase() === manualSubject.lot.trim().toUpperCase();
         const qualMatch = (p.property_qualifier || '').trim().toUpperCase() === (manualSubject.qualifier || '').trim().toUpperCase();
         return blockMatch && lotMatch && qualMatch;
       });
 
-      if (!subject) {
+      if (!subjectRaw) {
         alert(`Subject property not found: Block ${manualSubject.block}, Lot ${manualSubject.lot}${manualSubject.qualifier ? `, Qual ${manualSubject.qualifier}` : ''}\n\nMake sure the property exists in this job.`);
         setIsManualEvaluating(false);
         return;
       }
 
+      // Aggregate subject data across all cards (main + additional)
+      const subject = aggregatePropertyData(subjectRaw);
+
       // Fetch comparables
       const fetchedComps = [];
+      const notFoundEntries = [];
+      const noSalesDataEntries = [];
+
       for (const compEntry of manualComps) {
         if (compEntry.block && compEntry.lot) {
-          const comp = properties.find(p => {
+          const compRaw = properties.find(p => {
             const blockMatch = (p.property_block || '').trim().toUpperCase() === compEntry.block.trim().toUpperCase();
             const lotMatch = (p.property_lot || '').trim().toUpperCase() === compEntry.lot.trim().toUpperCase();
             const qualMatch = (p.property_qualifier || '').trim().toUpperCase() === (compEntry.qualifier || '').trim().toUpperCase();
             return blockMatch && lotMatch && qualMatch;
           });
 
-          if (comp && comp.sales_date && comp.values_norm_time) {
-            // Calculate adjustments
+          if (!compRaw) {
+            // Property not found in database
+            notFoundEntries.push(`Block ${compEntry.block} Lot ${compEntry.lot}${compEntry.qualifier ? ` Qual ${compEntry.qualifier}` : ''}`);
+          } else if (!compRaw.sales_price && !compRaw.values_norm_time) {
+            // Property found but no sales data
+            noSalesDataEntries.push(`Block ${compEntry.block} Lot ${compEntry.lot} (${compRaw.property_location || 'N/A'})`);
+          } else {
+            // Aggregate comp data across all cards (main + additional)
+            const comp = aggregatePropertyData(compRaw);
+
+            // Use time-normalized value if available, otherwise fall back to sales price
+            const compValue = comp.values_norm_time || comp.sales_price;
+
+            // Calculate adjustments using aggregated data
             const { adjustments, totalAdjustment, adjustedPrice, adjustmentPercent } =
-              calculateAllAdjustments(subject, comp);
+              calculateAllAdjustments(subject, { ...comp, values_norm_time: compValue });
 
             const grossAdjustment = adjustments.reduce((sum, adj) => sum + Math.abs(adj.amount), 0);
-            const grossAdjustmentPercent = comp.values_norm_time > 0
-              ? (grossAdjustment / comp.values_norm_time) * 100
+            const grossAdjustmentPercent = compValue > 0
+              ? (grossAdjustment / compValue) * 100
               : 0;
 
             fetchedComps.push({
@@ -533,6 +646,18 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             });
           }
         }
+      }
+
+      // Show warnings for properties not found or missing sales data
+      if (notFoundEntries.length > 0 || noSalesDataEntries.length > 0) {
+        let warningMessage = '';
+        if (notFoundEntries.length > 0) {
+          warningMessage += `⚠️ Properties NOT FOUND in database:\n${notFoundEntries.join('\n')}\n\n`;
+        }
+        if (noSalesDataEntries.length > 0) {
+          warningMessage += `⚠️ Properties found but have NO SALES DATA:\n${noSalesDataEntries.join('\n')}`;
+        }
+        alert(warningMessage.trim());
       }
 
       // Calculate weights and projected assessment
@@ -941,6 +1066,41 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             }
           }
 
+          // Farm sales filter - segregate farm and non-farm sales
+          const compPackageData = interpretCodes.getPackageSaleData(properties, comp);
+          const compIsFarm = compPackageData?.is_farm_package || comp.property_m4_class === '3A';
+
+          if (compFilters.farmSalesMode) {
+            // Farm Sales Mode ON: segregate farm and non-farm
+            const subjectPackageData = interpretCodes.getPackageSaleData(properties, subject);
+            const subjectIsFarm = subjectPackageData?.is_farm_package || subject.property_m4_class === '3A';
+
+            // If subject is a farm, only allow farm comps that have been normalized (have values_norm_time)
+            if (subjectIsFarm) {
+              if (!compIsFarm) {
+                if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
+                return false;
+              }
+              // For farm comps, require they have normalized time value (indicates they were processed)
+              if (!comp.values_norm_time || comp.values_norm_time <= 0) {
+                if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
+                return false;
+              }
+            }
+
+            // If subject is NOT a farm, exclude farm comps to prevent skewed values
+            if (!subjectIsFarm && compIsFarm) {
+              if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
+              return false;
+            }
+          } else {
+            // Farm Sales Mode OFF: always exclude farm sales from comparisons
+            if (compIsFarm) {
+              if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
+              return false;
+            }
+          }
+
           if (isFirstProperty) debugFilters.passed++;
           return true;
         });
@@ -961,6 +1121,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           console.log(`   ❌ Failed style: ${debugFilters.style}`);
           console.log(`   ❌ Failed story height: ${debugFilters.storyHeight}`);
           console.log(`   ❌ Failed view: ${debugFilters.view}`);
+          console.log(`   ❌ Failed farm sales: ${debugFilters.farmSales || 0}`);
           console.log(`   ✅ Passed initial filters: ${debugFilters.passed}`);
         }
 
@@ -1422,8 +1583,26 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         break;
 
       case 'lot_size_acre':
-        subjectValue = subject.market_manual_lot_acre || subject.asset_lot_acre || 0;
-        compValue = comp.market_manual_lot_acre || comp.asset_lot_acre || 0;
+        // For farm properties with farmSalesMode enabled, use combined lot acres (3A + 3B)
+        if (compFilters?.farmSalesMode) {
+          const subjectPkgData = interpretCodes.getPackageSaleData(properties, subject);
+          const compPkgData = interpretCodes.getPackageSaleData(properties, comp);
+
+          if (subjectPkgData?.is_farm_package && subjectPkgData.combined_lot_acres > 0) {
+            subjectValue = subjectPkgData.combined_lot_acres;
+          } else {
+            subjectValue = subject.market_manual_lot_acre || subject.asset_lot_acre || 0;
+          }
+
+          if (compPkgData?.is_farm_package && compPkgData.combined_lot_acres > 0) {
+            compValue = compPkgData.combined_lot_acres;
+          } else {
+            compValue = comp.market_manual_lot_acre || comp.asset_lot_acre || 0;
+          }
+        } else {
+          subjectValue = subject.market_manual_lot_acre || subject.asset_lot_acre || 0;
+          compValue = comp.market_manual_lot_acre || comp.asset_lot_acre || 0;
+        }
         break;
 
       case 'year_built':
@@ -1552,19 +1731,167 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 }
               }
             } else {
-              // BRT: Check detachedcode_1-11 for all dynamic adjustments
-              for (let i = 1; i <= 11; i++) {
-                const detachedCode = property[`detachedcode_${i}`];
-                if (detachedCode && normalizeCode(detachedCode) === targetCode) {
-                  return true;
+              // BRT COLUMN MAPPING:
+              // - Detached items (barn, pole_barn, stable) → detachedcode_1-11
+              // - Miscellaneous items → misc_1_brt through misc_5_brt
+              // - Positive Land adjustments → landffcond_1-6 + landurcond_1-6
+              // - Negative Land adjustments → landffinfl_1-6 + landurinfl_1-6
+
+              if (adjustmentDef.adjustment_id.startsWith('land_positive_')) {
+                // Positive land: check landffcond_1-6 and landurcond_1-6
+                for (let i = 1; i <= 6; i++) {
+                  const ffcondCode = property[`landffcond_${i}`];
+                  if (ffcondCode && normalizeCode(ffcondCode) === targetCode) {
+                    return true;
+                  }
+                  const urcondCode = property[`landurcond_${i}`];
+                  if (urcondCode && normalizeCode(urcondCode) === targetCode) {
+                    return true;
+                  }
+                }
+              }
+              else if (adjustmentDef.adjustment_id.startsWith('land_negative_')) {
+                // Negative land: check landffinfl_1-6 and landurinfl_1-6
+                for (let i = 1; i <= 6; i++) {
+                  const ffinflCode = property[`landffinfl_${i}`];
+                  if (ffinflCode && normalizeCode(ffinflCode) === targetCode) {
+                    return true;
+                  }
+                  const urinflCode = property[`landurinfl_${i}`];
+                  if (urinflCode && normalizeCode(urinflCode) === targetCode) {
+                    return true;
+                  }
+                }
+              }
+              else if (adjustmentDef.adjustment_id.startsWith('miscellaneous_')) {
+                // BRT Miscellaneous: check misc_1_brt through misc_5_brt
+                for (let i = 1; i <= 5; i++) {
+                  const miscCode = property[`misc_${i}_brt`];
+                  if (miscCode && normalizeCode(miscCode) === targetCode) {
+                    return true;
+                  }
+                }
+              }
+              else if (adjustmentDef.adjustment_id.startsWith('barn_') ||
+                       adjustmentDef.adjustment_id.startsWith('pole_barn_') ||
+                       adjustmentDef.adjustment_id.startsWith('stable_')) {
+                // BRT Detached items: check detachedcode_1-11
+                for (let i = 1; i <= 11; i++) {
+                  const detachedCode = property[`detachedcode_${i}`];
+                  if (detachedCode && normalizeCode(detachedCode) === targetCode) {
+                    return true;
+                  }
                 }
               }
             }
             return false;
           };
 
-          subjectValue = hasCode(subject) ? 1 : 0;
-          compValue = hasCode(comp) ? 1 : 0;
+          // Helper: Get miscellaneous count for BRT (returns actual count, not just 0/1)
+          const getMiscCount = (property) => {
+            if (vendorType !== 'BRT') return hasCode(property) ? 1 : 0;
+            const normalizeCode = (c) => String(c).trim().replace(/^0+/, '').toUpperCase() || '0';
+            const targetCode = normalizeCode(code);
+
+            for (let i = 1; i <= 5; i++) {
+              const miscCode = property[`misc_${i}_brt`];
+              if (miscCode && normalizeCode(miscCode) === targetCode) {
+                return parseInt(property[`miscnum_${i}`], 10) || 1; // Default to 1 if count is missing
+              }
+            }
+            return 0;
+          };
+
+          // Helper: Get condition multiplier for detached items based on depreciation/NC value
+          const getConditionMultiplier = (property) => {
+            const normalizeCode = (c) => String(c).trim().replace(/^0+/, '').toUpperCase() || '0';
+            const targetCode = normalizeCode(code);
+            let deprValue = null;
+
+            if (vendorType === 'BRT') {
+              // BRT: Find the detachedcode match and get its DETACHEDNC value
+              for (let i = 1; i <= 11; i++) {
+                const detachedCode = property[`detachedcode_${i}`];
+                if (detachedCode && normalizeCode(detachedCode) === targetCode) {
+                  deprValue = parseFloat(property[`detachednc_${i}`]) || null;
+                  break;
+                }
+              }
+            } else {
+              // Microsystems: Check detached_item_code1-4 and detachedbuilding1-4
+              // Use average of physical, functional, and locational depreciation
+              for (let i = 1; i <= 4; i++) {
+                const itemCode = property[`detached_item_code${i}`];
+                if (itemCode && normalizeCode(itemCode) === targetCode) {
+                  const physical = parseFloat(property[`physical_depr${i}`]) || 0;
+                  const functional = parseFloat(property[`functional_depr${i}`]) || 0;
+                  const locational = parseFloat(property[`locationl_depr${i}`]) || 0;
+                  const validValues = [physical, functional, locational].filter(v => v > 0);
+                  deprValue = validValues.length > 0 ? validValues.reduce((a, b) => a + b, 0) / validValues.length : null;
+                  break;
+                }
+              }
+              if (deprValue === null) {
+                for (let i = 1; i <= 4; i++) {
+                  const buildingCode = property[`detachedbuilding${i}`];
+                  if (buildingCode && normalizeCode(buildingCode) === targetCode) {
+                    const physical = parseFloat(property[`pysical${i}`]) || 0;
+                    const functional = parseFloat(property[`functional${i}`]) || 0;
+                    const locational = parseFloat(property[`location_economic${i}`]) || 0;
+                    const validValues = [physical, functional, locational].filter(v => v > 0);
+                    deprValue = validValues.length > 0 ? validValues.reduce((a, b) => a + b, 0) / validValues.length : null;
+                    break;
+                  }
+                }
+              }
+            }
+
+            // If no depreciation value found, use standard multiplier
+            if (deprValue === null) return detachedConditionMultipliers.standard_multiplier;
+
+            // Apply threshold logic
+            if (deprValue <= detachedConditionMultipliers.poor_threshold) {
+              return detachedConditionMultipliers.poor_multiplier;
+            } else if (deprValue >= detachedConditionMultipliers.excellent_threshold) {
+              return detachedConditionMultipliers.excellent_multiplier;
+            } else {
+              return detachedConditionMultipliers.standard_multiplier;
+            }
+          };
+
+          // Use count-based values for BRT miscellaneous items
+          if (adjustmentDef.adjustment_id.startsWith('miscellaneous_') && vendorType === 'BRT') {
+            subjectValue = getMiscCount(subject);
+            compValue = getMiscCount(comp);
+          } else {
+            subjectValue = hasCode(subject) ? 1 : 0;
+            compValue = hasCode(comp) ? 1 : 0;
+          }
+
+          // For detached items (barn, pole_barn, stable), store condition multipliers for later use
+          let subjectConditionMultiplier = 1.0;
+          let compConditionMultiplier = 1.0;
+          if (adjustmentDef.adjustment_id.startsWith('barn_') ||
+              adjustmentDef.adjustment_id.startsWith('pole_barn_') ||
+              adjustmentDef.adjustment_id.startsWith('stable_')) {
+            if (subjectValue > 0) subjectConditionMultiplier = getConditionMultiplier(subject);
+            if (compValue > 0) compConditionMultiplier = getConditionMultiplier(comp);
+          }
+
+          // Calculate adjustment with condition multipliers for detached items
+          if ((adjustmentDef.adjustment_id.startsWith('barn_') ||
+               adjustmentDef.adjustment_id.startsWith('pole_barn_') ||
+               adjustmentDef.adjustment_id.startsWith('stable_')) &&
+              (subjectValue !== compValue)) {
+            // Apply condition-adjusted calculation
+            const subjectAdjustedValue = subjectValue * subjectConditionMultiplier;
+            const compAdjustedValue = compValue * compConditionMultiplier;
+            const adjustedDifference = subjectAdjustedValue - compAdjustedValue;
+
+            // Return the condition-adjusted flat adjustment
+            return adjustedDifference > 0 ? adjustmentValue * subjectConditionMultiplier :
+                   (adjustedDifference < 0 ? -adjustmentValue * compConditionMultiplier : 0);
+          }
         } else {
           return 0; // Unknown attribute
         }
@@ -1583,13 +1910,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           // Lot size: multiply difference by rate per unit
           return difference * adjustmentValue;
         }
-        // Check if this is a land_negative adjustment - automatically negate the value
-        else if (adjustmentDef.adjustment_id.startsWith('land_negative_')) {
-          // Land negative: always subtract the value (enter positive amounts in grid, we negate automatically)
-          return difference > 0 ? -adjustmentValue : (difference < 0 ? adjustmentValue : 0);
+        // Garage adjustments use category counts (0=NONE, 1=ONE CAR, 2=TWO CAR, etc.)
+        // Should multiply by the difference in categories
+        else if (adjustmentDef.adjustment_id === 'garage' || adjustmentDef.adjustment_id === 'det_garage') {
+          // Category count adjustment: multiply difference by $ per category
+          return difference * adjustmentValue;
         }
         else {
-          // Boolean amenities: binary adjustment (has it or doesn't)
+          // Boolean amenities (including land adjustments): binary adjustment (has it or doesn't)
+          // For negative land items like "Busy Rd", user should enter negative value in grid (e.g., -5000)
+          // This way: Subject has it, comp doesn't → difference=1 → 1 * -5000 = -5000 (comp adjusted down)
           return difference > 0 ? adjustmentValue : (difference < 0 ? -adjustmentValue : 0);
         }
 
@@ -1602,9 +1932,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
       case 'percent':
         // Percent adjustment based on comp sale price
-        // Positive difference (subject better) = add to comp price
-        // Negative difference (comp better) = subtract from comp price
-        return (comp.values_norm_time || 0) * (adjustmentValue / 100) * Math.sign(difference);
+        // Positive difference (subject better) = add to comp price (e.g., +2 steps = +20%)
+        // Negative difference (comp better) = subtract from comp price (e.g., -2 steps = -20%)
+        // Use full difference for tiered adjustments (e.g., EXCELLENT is 2 steps from AVERAGE)
+        return (comp.values_norm_time || 0) * (adjustmentValue / 100) * difference;
 
       default:
         return 0;
@@ -1649,28 +1980,41 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     const betterCodes = (config.better || []).map(c => c.toUpperCase().trim());
     const worseCodes = (config.worse || []).map(c => c.toUpperCase().trim());
 
+    // DEBUG: Log the config being used
+    console.log(`🔍 getConditionRank DEBUG for ${configType}:`, {
+      inputCode: code,
+      baseline,
+      betterCodes,
+      worseCodes,
+      configSavedAt: conditionConfig.savedAt
+    });
+
     // Rank based on configuration:
     // Better codes = positive rank (higher is better)
     // Baseline = 0
     // Worse codes = negative rank (lower is worse)
 
+    let rank = 0;
     if (code === baseline) {
-      return 0; // Baseline
+      rank = 0; // Baseline
     } else if (betterCodes.includes(code)) {
       // Better codes get positive ranks based on their position
       // First better code = +1, second = +2, etc.
       const index = betterCodes.indexOf(code);
-      return (index + 1);
+      rank = (index + 1);
     } else if (worseCodes.includes(code)) {
       // Worse codes get negative ranks based on their position
       // First worse code = -1, second = -2, etc.
       const index = worseCodes.indexOf(code);
-      return -(index + 1);
+      rank = -(index + 1);
     } else {
       // Unknown code - default to baseline
       console.warn(`⚠️  Unknown condition code "${code}" for ${configType}, defaulting to baseline`);
-      return 0;
+      rank = 0;
     }
+
+    console.log(`   → ${code} = rank ${rank}`);
+    return rank;
   };
 
   // ==================== RENDER ====================
@@ -2446,6 +2790,28 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 </div>
               </div>
 
+              {/* Farm Sales Mode */}
+              <div className="mt-6 pt-6 border-t border-gray-300">
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id="farmSalesMode"
+                    checked={compFilters.farmSalesMode}
+                    onChange={(e) => setCompFilters(prev => ({ ...prev, farmSalesMode: e.target.checked }))}
+                    className="mt-1 rounded"
+                  />
+                  <div>
+                    <label htmlFor="farmSalesMode" className="text-sm font-medium text-gray-900 cursor-pointer">
+                      Farm Sales Mode
+                    </label>
+                    <p className="text-xs text-gray-600 mt-1">
+                      When enabled: Farm subjects (3A with 3B) only compare to kept/normalized farm sales using combined lot acreage.
+                      Non-farm subjects exclude farm sales to prevent skewed values.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* Adjustment Tolerance Filters */}
               <div className="mt-6 pt-6 border-t border-gray-300">
                 <h4 className="text-sm font-semibold text-gray-900 mb-4">Adjustment Tolerances</h4>
@@ -3038,6 +3404,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                   compFilters={compFilters}
                   cmeBrackets={CME_BRACKETS}
                   isJobContainerLoading={isJobContainerLoading}
+                  allProperties={properties}
                 />
               </div>
             )}

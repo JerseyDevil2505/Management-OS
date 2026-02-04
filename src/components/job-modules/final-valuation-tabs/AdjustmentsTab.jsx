@@ -70,6 +70,15 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
     // Anything above three_car_max is MULTI CAR
   });
 
+  // Detached item condition multipliers (based on depreciation/net condition values)
+  const [detachedConditionMultipliers, setDetachedConditionMultipliers] = useState({
+    poor_threshold: 0.25,      // Depr <= this = poor condition
+    poor_multiplier: 0.50,     // Multiplier for poor condition
+    standard_multiplier: 1.00, // Multiplier for standard condition (between poor and excellent)
+    excellent_threshold: 0.75, // Depr >= this = excellent condition
+    excellent_multiplier: 1.25 // Multiplier for excellent condition
+  });
+
   // Helper: Convert garage square footage to category number
   const getGarageCategory = (sqft, thresholds = garageThresholds) => {
     if (!sqft || sqft === 0) return 0; // NONE
@@ -290,7 +299,12 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
         'adjustment_codes_version', // Track code definition version
         'garage_threshold_one_car_max',
         'garage_threshold_two_car_max',
-        'garage_threshold_three_car_max'
+        'garage_threshold_three_car_max',
+        'detached_condition_poor_threshold',
+        'detached_condition_poor_multiplier',
+        'detached_condition_standard_multiplier',
+        'detached_condition_excellent_threshold',
+        'detached_condition_excellent_multiplier'
       ];
 
       const { data, error } = await supabase
@@ -312,11 +326,18 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
         const newConfig = { ...codeConfig };
         const newThresholds = { ...garageThresholds };
 
+        const newConditionMultipliers = { ...detachedConditionMultipliers };
+
         data.forEach(setting => {
           // Handle garage thresholds
           if (setting.setting_key.startsWith('garage_threshold_')) {
             const thresholdKey = setting.setting_key.replace('garage_threshold_', '');
             newThresholds[thresholdKey] = parseInt(setting.setting_value, 10) || garageThresholds[thresholdKey];
+          }
+          // Handle detached condition multipliers
+          else if (setting.setting_key.startsWith('detached_condition_')) {
+            const multiplierKey = setting.setting_key.replace('detached_condition_', '');
+            newConditionMultipliers[multiplierKey] = parseFloat(setting.setting_value) || detachedConditionMultipliers[multiplierKey];
           }
           // Handle code configuration
           else {
@@ -333,6 +354,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
 
         setCodeConfig(newConfig);
         setGarageThresholds(newThresholds);
+        setDetachedConditionMultipliers(newConditionMultipliers);
       } else {
         // No saved settings OR version mismatch (code table changed) - re-auto-populate
         if (savedVersion && savedVersion !== currentVersion) {
@@ -558,9 +580,11 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
   const handleAdjustmentChange = (adjustmentId, bracketIndex, value) => {
     setAdjustments(prev => prev.map(adj => {
       if (adj.adjustment_id === adjustmentId) {
+        // Store value as-is while typing (allows "-", ".", "-." etc.)
+        // The onBlur handler will convert to proper number
         return {
           ...adj,
-          [`bracket_${bracketIndex}`]: parseFloat(value) || 0
+          [`bracket_${bracketIndex}`]: value
         };
       }
       return adj;
@@ -571,14 +595,29 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
     try {
       setIsSaving(true);
 
+      // Normalize all bracket values to numbers before saving
+      const normalizedAdjustments = adjustments.map(adj => {
+        const normalized = { ...adj };
+        for (let i = 0; i < 10; i++) {
+          const key = `bracket_${i}`;
+          if (normalized[key] !== undefined) {
+            const parsed = parseFloat(normalized[key]);
+            normalized[key] = isNaN(parsed) ? 0 : parsed;
+          }
+        }
+        return normalized;
+      });
+
       const { error } = await supabase
         .from('job_adjustment_grid')
-        .upsert(adjustments, {
+        .upsert(normalizedAdjustments, {
           onConflict: 'job_id,adjustment_id'
         });
 
       if (error) throw error;
 
+      // Update local state with normalized values
+      setAdjustments(normalizedAdjustments);
       alert('Adjustments saved successfully!');
     } catch (error) {
       console.error('Error saving adjustments:', error);
@@ -759,6 +798,35 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
           job_id: jobData.id,
           setting_key: 'garage_threshold_three_car_max',
           setting_value: String(garageThresholds.three_car_max)
+        }
+      );
+
+      // Add detached item condition multipliers
+      settingsToSave.push(
+        {
+          job_id: jobData.id,
+          setting_key: 'detached_condition_poor_threshold',
+          setting_value: String(detachedConditionMultipliers.poor_threshold)
+        },
+        {
+          job_id: jobData.id,
+          setting_key: 'detached_condition_poor_multiplier',
+          setting_value: String(detachedConditionMultipliers.poor_multiplier)
+        },
+        {
+          job_id: jobData.id,
+          setting_key: 'detached_condition_standard_multiplier',
+          setting_value: String(detachedConditionMultipliers.standard_multiplier)
+        },
+        {
+          job_id: jobData.id,
+          setting_key: 'detached_condition_excellent_threshold',
+          setting_value: String(detachedConditionMultipliers.excellent_threshold)
+        },
+        {
+          job_id: jobData.id,
+          setting_key: 'detached_condition_excellent_multiplier',
+          setting_value: String(detachedConditionMultipliers.excellent_multiplier)
         }
       );
 
@@ -1083,6 +1151,95 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
             <p className="text-xs text-gray-600 mt-3">
               <strong>Note:</strong> Garages over {garageThresholds.three_car_max} SF are categorized as <strong>MULTI CAR</strong>.
               Category differences are multiplied by the adjustment value (e.g., ONE CAR to TWO CAR = 1 step × adjustment amount).
+            </p>
+          </div>
+
+          {/* Detached Item Condition Multipliers */}
+          <div className="mb-6 bg-purple-50 border border-purple-200 rounded-lg p-4">
+            <h4 className="text-sm font-semibold text-gray-900 mb-3">Detached Item Condition Multipliers</h4>
+            <p className="text-xs text-gray-600 mb-3">
+              Apply multipliers to detached item adjustments (Barn, Pole Barn, Stable, Pool, etc.) based on the inspector's depreciation/net condition value.
+              BRT uses DETACHEDNC fields; Microsystems uses the average of Physical, Functional, and Locational depreciation.
+            </p>
+            <div className="grid grid-cols-5 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Poor Threshold
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0"
+                  max="1"
+                  value={detachedConditionMultipliers.poor_threshold}
+                  onChange={(e) => setDetachedConditionMultipliers(prev => ({ ...prev, poor_threshold: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">≤ this = Poor</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Poor Multiplier
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0"
+                  max="2"
+                  value={detachedConditionMultipliers.poor_multiplier}
+                  onChange={(e) => setDetachedConditionMultipliers(prev => ({ ...prev, poor_multiplier: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">×{detachedConditionMultipliers.poor_multiplier}</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Standard Multiplier
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0"
+                  max="2"
+                  value={detachedConditionMultipliers.standard_multiplier}
+                  onChange={(e) => setDetachedConditionMultipliers(prev => ({ ...prev, standard_multiplier: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">×{detachedConditionMultipliers.standard_multiplier}</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Excellent Threshold
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0"
+                  max="1"
+                  value={detachedConditionMultipliers.excellent_threshold}
+                  onChange={(e) => setDetachedConditionMultipliers(prev => ({ ...prev, excellent_threshold: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">≥ this = Excellent</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Excellent Multiplier
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0"
+                  max="2"
+                  value={detachedConditionMultipliers.excellent_multiplier}
+                  onChange={(e) => setDetachedConditionMultipliers(prev => ({ ...prev, excellent_multiplier: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">×{detachedConditionMultipliers.excellent_multiplier}</p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-600 mt-3">
+              <strong>Example:</strong> Base adjustment $10,000 with depr value 0.15 → Poor condition → $10,000 × {detachedConditionMultipliers.poor_multiplier} = ${(10000 * detachedConditionMultipliers.poor_multiplier).toLocaleString()}
             </p>
           </div>
 
@@ -1458,11 +1615,20 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
                         style={{ backgroundColor: `${bracket.color}33` }}
                       >
                         <input
-                          type="number"
-                          value={adj[`bracket_${bIdx}`] || 0}
+                          type="text"
+                          inputMode="decimal"
+                          value={adj[`bracket_${bIdx}`] ?? 0}
                           onChange={(e) => handleAdjustmentChange(adj.adjustment_id, bIdx, e.target.value)}
+                          onBlur={(e) => {
+                            // Convert to number on blur
+                            const parsed = parseFloat(e.target.value);
+                            if (!isNaN(parsed)) {
+                              handleAdjustmentChange(adj.adjustment_id, bIdx, parsed);
+                            } else if (e.target.value === '' || e.target.value === '-') {
+                              handleAdjustmentChange(adj.adjustment_id, bIdx, 0);
+                            }
+                          }}
                           className="w-20 px-2 py-1 text-sm text-center border rounded focus:ring-2 focus:ring-blue-500"
-                          step={adj.adjustment_type === 'per_sqft' ? '0.01' : adj.adjustment_type === 'percent' ? '1' : adj.adjustment_type === 'count' ? '1' : '100'}
                         />
                       </td>
                     ))}
@@ -1489,7 +1655,6 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
                           value={adj.adjustment_type}
                           onChange={(e) => handleTypeChange(adj.adjustment_id, e.target.value)}
                           className="text-xs border rounded px-2 py-1"
-                          disabled={adj.is_default && adj.adjustment_type !== 'percent'}
                         >
                           <option value="flat">Flat ($)</option>
                           <option value="per_sqft">Per SF ($/SF)</option>

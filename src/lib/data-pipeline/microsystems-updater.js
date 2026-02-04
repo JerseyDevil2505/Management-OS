@@ -606,11 +606,6 @@ export class MicrosystemsUpdater {
       pole_barn_area: this.extractPoleBarnArea(rawRecord),
       ac_area: this.extractAcArea(rawRecord),
 
-      // Dynamic adjustments from code configuration
-      miscellaneous: this.extractMiscellaneousFromConfig(rawRecord),
-      land_positive: this.extractLandPositiveFromConfig(rawRecord),
-      land_negative: this.extractLandNegativeFromConfig(rawRecord),
-
       // Detached Item Code1-4 with dimensions and depreciation
       detached_item_code1: rawRecord['Detached Item Code1'] || null,
       width1: this.parseNumeric(rawRecord['Width1']),
@@ -1412,72 +1407,6 @@ export class MicrosystemsUpdater {
     }
 
     return null;
-  }
-
-  /**
-   * Extract miscellaneous codes from detached items
-   */
-  extractMiscellaneousFromConfig(rawRecord) {
-    const miscCodes = this.codeConfig?.miscellaneous || [];
-    if (miscCodes.length === 0) return null;
-
-    const detachedItems = this.extractDetachedItems(rawRecord);
-    const foundCodes = [];
-
-    for (const item of detachedItems) {
-      if (miscCodes.includes(item.code)) {
-        const normalized = String(item.code).replace(/^0+/, '') || '0';
-        if (!foundCodes.includes(normalized)) {
-          foundCodes.push(normalized);
-        }
-      }
-    }
-
-    return foundCodes.length > 0 ? foundCodes.join(',') : null;
-  }
-
-  /**
-   * Extract positive land adjustment codes from detached items
-   */
-  extractLandPositiveFromConfig(rawRecord) {
-    const landPosCodes = this.codeConfig?.land_positive || [];
-    if (landPosCodes.length === 0) return null;
-
-    const detachedItems = this.extractDetachedItems(rawRecord);
-    const foundCodes = [];
-
-    for (const item of detachedItems) {
-      if (landPosCodes.includes(item.code)) {
-        const normalized = String(item.code).replace(/^0+/, '') || '0';
-        if (!foundCodes.includes(normalized)) {
-          foundCodes.push(normalized);
-        }
-      }
-    }
-
-    return foundCodes.length > 0 ? foundCodes.join(',') : null;
-  }
-
-  /**
-   * Extract negative land adjustment codes from detached items
-   */
-  extractLandNegativeFromConfig(rawRecord) {
-    const landNegCodes = this.codeConfig?.land_negative || [];
-    if (landNegCodes.length === 0) return null;
-
-    const detachedItems = this.extractDetachedItems(rawRecord);
-    const foundCodes = [];
-
-    for (const item of detachedItems) {
-      if (landNegCodes.includes(item.code)) {
-        const normalized = String(item.code).replace(/^0+/, '') || '0';
-        if (!foundCodes.includes(normalized)) {
-          foundCodes.push(normalized);
-        }
-      }
-    }
-
-    return foundCodes.length > 0 ? foundCodes.join(',') : null;
   }
 
   /**

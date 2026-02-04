@@ -1592,17 +1592,113 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                         </select>
                       </div>
 
-                      {/* Better Conditions */}
+                      {/* Better Conditions - Tiered with reordering */}
                       <div style={{ marginBottom: '20px' }}>
                         <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>
-                          Better than Baseline (positive adjustments):
+                          Better than Baseline (positive adjustments) - Rank 1 is closest to baseline:
                         </label>
+
+                        {/* Ordered list of selected better conditions */}
+                        {currentBetter.length > 0 && (
+                          <div style={{ marginBottom: '12px', padding: '10px', backgroundColor: '#D1FAE5', borderRadius: '6px' }}>
+                            <div style={{ fontSize: '12px', color: '#065F46', marginBottom: '8px', fontWeight: '500' }}>
+                              Rank 1 = 1x adjustment, Rank 2 = 2x adjustment, etc. Use arrows to reorder:
+                            </div>
+                            {currentBetter.map((condition, idx) => {
+                              const rankLevel = idx + 1;
+                              return (
+                                <div key={condition} style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  padding: '6px 10px',
+                                  backgroundColor: 'white',
+                                  borderRadius: '4px',
+                                  marginBottom: '4px',
+                                  border: '1px solid #A7F3D0'
+                                }}>
+                                  <span style={{
+                                    fontWeight: '700',
+                                    color: '#059669',
+                                    minWidth: '70px'
+                                  }}>
+                                    Rank {rankLevel}
+                                  </span>
+                                  <span style={{ flex: 1 }}>{condition}</span>
+                                  <span style={{ fontSize: '12px', color: '#6B7280', fontWeight: '500' }}>
+                                    ({rankLevel}x adjustment)
+                                  </span>
+                                  <button
+                                    onClick={() => {
+                                      if (idx > 0) {
+                                        const newOrder = [...currentBetter];
+                                        [newOrder[idx - 1], newOrder[idx]] = [newOrder[idx], newOrder[idx - 1]];
+                                        if (isExterior) setExteriorBetterConditions(newOrder);
+                                        else setInteriorBetterConditions(newOrder);
+                                      }
+                                    }}
+                                    disabled={idx === 0}
+                                    style={{
+                                      padding: '2px 6px',
+                                      fontSize: '12px',
+                                      cursor: idx === 0 ? 'not-allowed' : 'pointer',
+                                      opacity: idx === 0 ? 0.3 : 1,
+                                      border: '1px solid #D1D5DB',
+                                      borderRadius: '3px',
+                                      backgroundColor: 'white'
+                                    }}
+                                  >
+                                    ↑
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      if (idx < currentBetter.length - 1) {
+                                        const newOrder = [...currentBetter];
+                                        [newOrder[idx], newOrder[idx + 1]] = [newOrder[idx + 1], newOrder[idx]];
+                                        if (isExterior) setExteriorBetterConditions(newOrder);
+                                        else setInteriorBetterConditions(newOrder);
+                                      }
+                                    }}
+                                    disabled={idx === currentBetter.length - 1}
+                                    style={{
+                                      padding: '2px 6px',
+                                      fontSize: '12px',
+                                      cursor: idx === currentBetter.length - 1 ? 'not-allowed' : 'pointer',
+                                      opacity: idx === currentBetter.length - 1 ? 0.3 : 1,
+                                      border: '1px solid #D1D5DB',
+                                      borderRadius: '3px',
+                                      backgroundColor: 'white'
+                                    }}
+                                  >
+                                    ↓
+                                  </button>
+                                  <button
+                                    onClick={() => toggleBetter(condition)}
+                                    style={{
+                                      padding: '2px 8px',
+                                      fontSize: '12px',
+                                      cursor: 'pointer',
+                                      border: '1px solid #FECACA',
+                                      borderRadius: '3px',
+                                      backgroundColor: '#FEF2F2',
+                                      color: '#DC2626'
+                                    }}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Checkboxes to add conditions */}
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                          {allConditions.filter(item => item.description !== currentBaseline).map(item => (
+                          {allConditions.filter(item => item.description !== currentBaseline && !currentBetter.includes(item.description)).map(item => (
                             <label key={item.code} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                               <input
                                 type="checkbox"
-                                checked={currentBetter.includes(item.description)}
+                                checked={false}
                                 onChange={() => toggleBetter(item.description)}
                                 disabled={currentWorse.includes(item.description)}
                               />
@@ -1614,17 +1710,113 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                         </div>
                       </div>
 
-                      {/* Worse Conditions */}
+                      {/* Worse Conditions - Tiered with reordering */}
                       <div>
                         <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>
-                          Worse than Baseline (negative adjustments):
+                          Worse than Baseline (negative adjustments) - Rank 1 is closest to baseline:
                         </label>
+
+                        {/* Ordered list of selected worse conditions */}
+                        {currentWorse.length > 0 && (
+                          <div style={{ marginBottom: '12px', padding: '10px', backgroundColor: '#FEE2E2', borderRadius: '6px' }}>
+                            <div style={{ fontSize: '12px', color: '#991B1B', marginBottom: '8px', fontWeight: '500' }}>
+                              Rank 1 = 1x adjustment, Rank 2 = 2x adjustment, etc. Use arrows to reorder:
+                            </div>
+                            {currentWorse.map((condition, idx) => {
+                              const rankLevel = idx + 1;
+                              return (
+                                <div key={condition} style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  padding: '6px 10px',
+                                  backgroundColor: 'white',
+                                  borderRadius: '4px',
+                                  marginBottom: '4px',
+                                  border: '1px solid #FECACA'
+                                }}>
+                                  <span style={{
+                                    fontWeight: '700',
+                                    color: '#DC2626',
+                                    minWidth: '70px'
+                                  }}>
+                                    Rank {rankLevel}
+                                  </span>
+                                  <span style={{ flex: 1 }}>{condition}</span>
+                                  <span style={{ fontSize: '12px', color: '#6B7280', fontWeight: '500' }}>
+                                    ({rankLevel}x adjustment)
+                                  </span>
+                                  <button
+                                    onClick={() => {
+                                      if (idx > 0) {
+                                        const newOrder = [...currentWorse];
+                                        [newOrder[idx - 1], newOrder[idx]] = [newOrder[idx], newOrder[idx - 1]];
+                                        if (isExterior) setExteriorWorseConditions(newOrder);
+                                        else setInteriorWorseConditions(newOrder);
+                                      }
+                                    }}
+                                    disabled={idx === 0}
+                                    style={{
+                                      padding: '2px 6px',
+                                      fontSize: '12px',
+                                      cursor: idx === 0 ? 'not-allowed' : 'pointer',
+                                      opacity: idx === 0 ? 0.3 : 1,
+                                      border: '1px solid #D1D5DB',
+                                      borderRadius: '3px',
+                                      backgroundColor: 'white'
+                                    }}
+                                  >
+                                    ↑
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      if (idx < currentWorse.length - 1) {
+                                        const newOrder = [...currentWorse];
+                                        [newOrder[idx], newOrder[idx + 1]] = [newOrder[idx + 1], newOrder[idx]];
+                                        if (isExterior) setExteriorWorseConditions(newOrder);
+                                        else setInteriorWorseConditions(newOrder);
+                                      }
+                                    }}
+                                    disabled={idx === currentWorse.length - 1}
+                                    style={{
+                                      padding: '2px 6px',
+                                      fontSize: '12px',
+                                      cursor: idx === currentWorse.length - 1 ? 'not-allowed' : 'pointer',
+                                      opacity: idx === currentWorse.length - 1 ? 0.3 : 1,
+                                      border: '1px solid #D1D5DB',
+                                      borderRadius: '3px',
+                                      backgroundColor: 'white'
+                                    }}
+                                  >
+                                    ↓
+                                  </button>
+                                  <button
+                                    onClick={() => toggleWorse(condition)}
+                                    style={{
+                                      padding: '2px 8px',
+                                      fontSize: '12px',
+                                      cursor: 'pointer',
+                                      border: '1px solid #FECACA',
+                                      borderRadius: '3px',
+                                      backgroundColor: '#FEF2F2',
+                                      color: '#DC2626'
+                                    }}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Checkboxes to add conditions */}
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                          {allConditions.filter(item => item.description !== currentBaseline).map(item => (
+                          {allConditions.filter(item => item.description !== currentBaseline && !currentWorse.includes(item.description)).map(item => (
                             <label key={item.code} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                               <input
                                 type="checkbox"
-                                checked={currentWorse.includes(item.description)}
+                                checked={false}
                                 onChange={() => toggleWorse(item.description)}
                                 disabled={currentBetter.includes(item.description)}
                               />
@@ -1645,8 +1837,17 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                         fontSize: '13px',
                         color: '#1E40AF'
                       }}>
-                        <strong>How it works:</strong> The export summary will only sum positive adjustments for "better" conditions
-                        and only sum negative adjustments for "worse" conditions. The baseline shows blank (no adjustment).
+                        <strong>How ranked adjustments work:</strong>
+                        <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
+                          <li><strong>Rank 1</strong> = 1x the adjustment % (e.g., GOOD = +10% if 10% is set)</li>
+                          <li><strong>Rank 2</strong> = 2x the adjustment % (e.g., EXCELLENT = +20%)</li>
+                          <li><strong>Worse Rank 1</strong> = 1x negative (e.g., FAIR = -10%)</li>
+                          <li><strong>Worse Rank 2</strong> = 2x negative (e.g., POOR = -20%)</li>
+                        </ul>
+                        <div style={{ marginTop: '8px' }}>
+                          <strong>Order matters:</strong> Rank 1 should be closest to baseline (e.g., GOOD before EXCELLENT).
+                          Use ↑↓ arrows to reorder.
+                        </div>
                       </div>
 
                       {/* Save Button */}

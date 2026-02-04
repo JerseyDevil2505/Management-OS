@@ -26,7 +26,7 @@ import LandValuationTab from './market-tabs/LandValuationTab';
 import CostValuationTab from './market-tabs/CostValuationTab';
 import AttributeCardsTab from './market-tabs/AttributeCardsTab';
 
-const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache, onDataChange, refreshMarketLandData }) => {
+const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache, onDataChange, refreshMarketLandData, updateJobDataDirect }) => {
   // 📊 DEBUG - MarketAnalysis passing data to tabs
   console.log('📊 MarketAnalysis passing to LandValuationTab:', {
     marketLandData_updated_at: marketLandData?.updated_at,
@@ -316,7 +316,14 @@ const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUp
                 vendorType={vendorType}
                 codeDefinitions={codeDefinitions}
                 marketLandData={marketLandData}
-                onUpdateJobCache={async () => {
+                onUpdateJobCache={async (partialUpdate) => {
+                  // Direct in-memory update for immediate effect in other components
+                  if (partialUpdate && typeof updateJobDataDirect === 'function') {
+                    console.log('🔄 MarketAnalysis: Updating jobData in memory with:', partialUpdate);
+                    updateJobDataDirect(partialUpdate);
+                  } else {
+                    console.warn('⚠️ MarketAnalysis: updateJobDataDirect not available or no partialUpdate', { partialUpdate, hasFunction: typeof updateJobDataDirect });
+                  }
                   // Trigger surgical refresh after AttributeCardsTab saves
                   if (typeof refreshMarketLandData === 'function') {
                     await refreshMarketLandData();

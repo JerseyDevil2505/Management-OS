@@ -1,0 +1,116 @@
+/* Revenue Management Styles */
+
+.revenue-container {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.revenue-header {
+  margin-bottom: 2rem;
+}
+
+.revenue-header h2 {
+  font-size: 1.875rem;
+  color: #1a202c;
+  margin: 0;
+}
+
+/* Placeholder */
+.revenue-placeholder {
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+  border: 2px dashed #10b981;
+  border-radius: 12px;
+  padding: 3rem;
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.placeholder-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.revenue-placeholder h3 {
+  font-size: 1.5rem;
+  color: #065f46;
+  margin: 0 0 1rem 0;
+}
+
+.revenue-placeholder p {
+  color: #047857;
+  margin: 0.5rem 0;
+}
+
+.revenue-placeholder ul {
+  text-align: left;
+  display: inline-block;
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+}
+
+.revenue-placeholder li {
+  color: #047857;
+  margin: 0.5rem 0;
+}
+
+.placeholder-note {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-top: 1.5rem;
+  color: #374151;
+}
+
+/* Preview Section */
+.revenue-preview {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.revenue-preview h4 {
+  margin: 0 0 1rem 0;
+  color: #64748b;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.preview-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.preview-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1.25rem;
+  text-align: center;
+}
+
+.preview-label {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin-bottom: 0.5rem;
+}
+
+.preview-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .revenue-placeholder {
+    padding: 2rem 1rem;
+  }
+  
+  .preview-cards {
+    grid-template-columns: 1fr 1fr;
+  }
+}
