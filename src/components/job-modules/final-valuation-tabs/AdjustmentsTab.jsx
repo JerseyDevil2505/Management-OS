@@ -70,6 +70,15 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
     // Anything above three_car_max is MULTI CAR
   });
 
+  // Detached item condition multipliers (based on depreciation/net condition values)
+  const [detachedConditionMultipliers, setDetachedConditionMultipliers] = useState({
+    poor_threshold: 0.25,      // Depr <= this = poor condition
+    poor_multiplier: 0.50,     // Multiplier for poor condition
+    standard_multiplier: 1.00, // Multiplier for standard condition (between poor and excellent)
+    excellent_threshold: 0.75, // Depr >= this = excellent condition
+    excellent_multiplier: 1.25 // Multiplier for excellent condition
+  });
+
   // Helper: Convert garage square footage to category number
   const getGarageCategory = (sqft, thresholds = garageThresholds) => {
     if (!sqft || sqft === 0) return 0; // NONE
@@ -290,7 +299,12 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
         'adjustment_codes_version', // Track code definition version
         'garage_threshold_one_car_max',
         'garage_threshold_two_car_max',
-        'garage_threshold_three_car_max'
+        'garage_threshold_three_car_max',
+        'detached_condition_poor_threshold',
+        'detached_condition_poor_multiplier',
+        'detached_condition_standard_multiplier',
+        'detached_condition_excellent_threshold',
+        'detached_condition_excellent_multiplier'
       ];
 
       const { data, error } = await supabase
@@ -312,11 +326,18 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
         const newConfig = { ...codeConfig };
         const newThresholds = { ...garageThresholds };
 
+        const newConditionMultipliers = { ...detachedConditionMultipliers };
+
         data.forEach(setting => {
           // Handle garage thresholds
           if (setting.setting_key.startsWith('garage_threshold_')) {
             const thresholdKey = setting.setting_key.replace('garage_threshold_', '');
             newThresholds[thresholdKey] = parseInt(setting.setting_value, 10) || garageThresholds[thresholdKey];
+          }
+          // Handle detached condition multipliers
+          else if (setting.setting_key.startsWith('detached_condition_')) {
+            const multiplierKey = setting.setting_key.replace('detached_condition_', '');
+            newConditionMultipliers[multiplierKey] = parseFloat(setting.setting_value) || detachedConditionMultipliers[multiplierKey];
           }
           // Handle code configuration
           else {
@@ -333,6 +354,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
 
         setCodeConfig(newConfig);
         setGarageThresholds(newThresholds);
+        setDetachedConditionMultipliers(newConditionMultipliers);
       } else {
         // No saved settings OR version mismatch (code table changed) - re-auto-populate
         if (savedVersion && savedVersion !== currentVersion) {
