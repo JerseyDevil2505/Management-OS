@@ -277,6 +277,7 @@ const SalesReviewTab = ({
         ...prop,
         periodCode,
         isPackage,
+        isFarmSale,
         pricePerSF,
         normPricePerSF,
         salesRatio,
