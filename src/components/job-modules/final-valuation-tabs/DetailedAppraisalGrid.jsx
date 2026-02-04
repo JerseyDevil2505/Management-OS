@@ -1205,7 +1205,31 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
       // Fall back to original render
       const prop = propKey === 'subject' ? subject : comps[parseInt(propKey.replace('comp_', ''))];
-      return prop ? attr.render(prop) : 'N/A';
+      if (!prop) return 'N/A';
+
+      // For amenity area attributes, convert to Yes/No for PDF display
+      const amenityAreaIds = [
+        'deck_area', 'patio_area', 'open_porch_area', 'enclosed_porch_area',
+        'pool_area', 'basement_area', 'fin_bsmt_area', 'ac_area'
+      ];
+
+      if (amenityAreaIds.includes(attr.id)) {
+        let rawValue = null;
+        switch(attr.id) {
+          case 'deck_area': rawValue = prop.deck_area; break;
+          case 'patio_area': rawValue = prop.patio_area; break;
+          case 'open_porch_area': rawValue = prop.open_porch_area; break;
+          case 'enclosed_porch_area': rawValue = prop.enclosed_porch_area; break;
+          case 'pool_area': rawValue = prop.pool_area; break;
+          case 'basement_area': rawValue = prop.basement_area; break;
+          case 'fin_bsmt_area': rawValue = prop.fin_basement_area; break;
+          case 'ac_area': rawValue = prop.ac_area; break;
+          default: break;
+        }
+        return (rawValue !== null && rawValue !== undefined && rawValue > 0) ? 'Yes' : 'No';
+      }
+
+      return attr.render(prop);
     };
 
     // Build rows for static attributes (Page 1)
