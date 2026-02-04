@@ -1655,7 +1655,6 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
                           value={adj.adjustment_type}
                           onChange={(e) => handleTypeChange(adj.adjustment_id, e.target.value)}
                           className="text-xs border rounded px-2 py-1"
-                          disabled={adj.is_default && adj.adjustment_type !== 'percent'}
                         >
                           <option value="flat">Flat ($)</option>
                           <option value="per_sqft">Per SF ($/SF)</option>
