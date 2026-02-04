@@ -23,9 +23,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   // Define which attributes are editable and their input types
   const EDITABLE_CONFIG = {
     // Numeric inputs
-    lot_size_sf: { type: 'number', field: 'asset_lot_sf' },
-    lot_size_ff: { type: 'number', field: 'asset_lot_ff' },
-    lot_size_acre: { type: 'number', field: 'asset_lot_acre', step: 0.01 },
+    lot_size_sf: { type: 'number', field: 'asset_lot_sf', altField: 'market_manual_lot_sf' },
+    sales_date: { type: 'date', field: 'sales_date' },
+    lot_size_ff: { type: 'number', field: 'asset_lot_ff', altField: 'market_manual_lot_ff' },
+    lot_size_acre: { type: 'number', field: 'asset_lot_acre', altField: 'market_manual_lot_acre', step: 0.01 },
     liveable_area: { type: 'number', field: 'asset_sfla' },
     year_built: { type: 'number', field: 'asset_year_built' },
     bathrooms: { type: 'number', field: 'asset_bathrooms', step: 0.5 },
@@ -387,7 +388,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     },
     {
       id: 'lot_size_sf',
-      label: 'Lot Size',
+      label: 'Lot Size (Square Foot)',
       render: (prop) => (prop.market_manual_lot_sf || prop.asset_lot_sf)?.toLocaleString() || 'N/A',
       adjustmentName: 'Lot Size (SF)',
       bold: true
@@ -826,17 +827,51 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   // Combine static and dynamic attributes
   const allAttributes = useMemo(() => [...ATTRIBUTE_ORDER, ...dynamicAttributes], [dynamicAttributes]);
 
-  // Initialize row visibility when attributes change (all checked by default)
+  // Generate a storage key based on job data to persist visibility per job
+  const storageKey = useMemo(() => {
+    const jobId = jobData?.id || 'default';
+    return `detailedGrid_rowVisibility_${jobId}`;
+  }, [jobData?.id]);
+
+  // Initialize row visibility - load from localStorage or default to all checked
   useEffect(() => {
+    // Try to load from localStorage first
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Merge with any new attributes that might not be in saved state
+        const merged = { ...parsed };
+        allAttributes.forEach(attr => {
+          if (merged[attr.id] === undefined) {
+            merged[attr.id] = true;
+          }
+        });
+        if (merged['net_adjustment'] === undefined) merged['net_adjustment'] = true;
+        if (merged['adjusted_valuation'] === undefined) merged['adjusted_valuation'] = true;
+        setRowVisibility(merged);
+        return;
+      } catch (e) {
+        console.warn('Failed to parse saved row visibility:', e);
+      }
+    }
+
+    // Default: all checked
     const initialVisibility = {};
     allAttributes.forEach(attr => {
       initialVisibility[attr.id] = true;
     });
-    // Also add net_adjustment and adjusted_valuation
     initialVisibility['net_adjustment'] = true;
     initialVisibility['adjusted_valuation'] = true;
     setRowVisibility(initialVisibility);
-  }, [allAttributes]);
+  }, [allAttributes, storageKey]);
+
+  // Save row visibility to localStorage when it changes
+  useEffect(() => {
+    if (Object.keys(rowVisibility).length > 0) {
+      localStorage.setItem(storageKey, JSON.stringify(rowVisibility));
+    }
+  }, [rowVisibility, storageKey]);
 
   // Toggle row visibility
   const toggleRowVisibility = useCallback((attrId) => {
