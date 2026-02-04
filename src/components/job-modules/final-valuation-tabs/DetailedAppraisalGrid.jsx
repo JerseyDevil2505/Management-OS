@@ -33,16 +33,6 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     });
   }, [allProperties]);
 
-  // Helper to get additional cards count for a property
-  const getAdditionalCardsCount = useCallback((prop) => {
-    const allCards = getPropertyCards(prop);
-    const additionalCards = allCards.filter(p => {
-      const card = (p.property_addl_card || p.additional_card || '').toString().trim();
-      return !isMainCard(card);
-    });
-    return additionalCards.length;
-  }, [getPropertyCards, isMainCard]);
-
   // Helper to aggregate data across all cards for a property
   const getAggregatedPropertyData = useCallback((prop) => {
     const allCards = getPropertyCards(prop);
