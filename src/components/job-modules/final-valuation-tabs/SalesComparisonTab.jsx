@@ -2798,8 +2798,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       Farm Sales Mode
                     </label>
                     <p className="text-xs text-gray-600 mt-1">
-                      When enabled, farm properties (3A with 3B package) will only compare to other farm sales,
-                      and lot size will include the combined acreage of both 3A and 3B parcels.
+                      When enabled: Farm subjects (3A with 3B) only compare to kept/normalized farm sales using combined lot acreage.
+                      Non-farm subjects exclude farm sales to prevent skewed values.
                     </p>
                   </div>
                 </div>
