@@ -1345,12 +1345,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         </table>
       </div>
 
-      {/* Export Modal */}
+      {/* Export Modal - Simple */}
       {showExportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl flex flex-col" style={{ maxHeight: 'calc(100vh - 100px)' }}>
-            {/* Modal Header - Always visible */}
-            <div className="bg-blue-600 px-4 py-3 flex items-center justify-between rounded-t-lg flex-shrink-0">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            {/* Modal Header */}
+            <div className="bg-blue-600 px-4 py-3 flex items-center justify-between rounded-t-lg">
               <div className="flex items-center gap-3">
                 <Printer className="text-white" size={20} />
                 <h3 className="text-base font-semibold text-white">Export PDF</h3>
@@ -1363,92 +1363,36 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               </button>
             </div>
 
-            {/* Modal Options */}
-            <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between flex-shrink-0">
-              <label className="flex items-center gap-2 cursor-pointer">
+            {/* Modal Content */}
+            <div className="p-6">
+              <p className="text-sm text-gray-600 mb-4">
+                Export the detailed evaluation to PDF. Use the checkboxes in the grid to hide/show rows.
+              </p>
+
+              {/* Hide Adjustments Toggle */}
+              <label className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 border">
                 <input
                   type="checkbox"
-                  checked={showAdjustments}
-                  onChange={(e) => setShowAdjustments(e.target.checked)}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  checked={!showAdjustments}
+                  onChange={(e) => setShowAdjustments(!e.target.checked)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-5 h-5"
                 />
-                <span className="text-sm font-medium text-gray-700">
-                  {showAdjustments ? (
-                    <span className="flex items-center gap-1"><Eye size={14} /> Include Adjustments & Valuation</span>
-                  ) : (
-                    <span className="flex items-center gap-1"><EyeOff size={14} /> Comps Only</span>
-                  )}
-                </span>
+                <div>
+                  <span className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                    {showAdjustments ? <Eye size={16} /> : <EyeOff size={16} />}
+                    Hide Adjustments
+                  </span>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {showAdjustments ? 'Showing adjustments, net adjustment & valuation' : 'Hiding adjustments (comps only)'}
+                  </p>
+                </div>
               </label>
-              <span className="text-sm text-gray-500">
-                {Object.values(rowVisibility).filter(Boolean).length} rows
-              </span>
-            </div>
 
-            {/* Modal Content - Scrollable row selection */}
-            <div className="flex-1 overflow-y-auto px-4 py-3" style={{ maxHeight: '400px' }}>
-              <div className="space-y-1">
-                {/* Select All */}
-                <label className="flex items-center gap-2 p-2 bg-gray-100 rounded cursor-pointer hover:bg-gray-200">
-                  <input
-                    type="checkbox"
-                    checked={Object.values(rowVisibility).every(Boolean)}
-                    onChange={(e) => {
-                      const newVisibility = {};
-                      Object.keys(rowVisibility).forEach(key => {
-                        newVisibility[key] = e.target.checked;
-                      });
-                      setRowVisibility(newVisibility);
-                    }}
-                    className="rounded border-gray-300 text-blue-600"
-                  />
-                  <span className="text-sm font-semibold text-gray-700">Select All Rows</span>
-                </label>
-
-                {/* Attribute rows */}
-                {allAttributes.map(attr => (
-                  <label key={attr.id} className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-gray-50 ${!rowVisibility[attr.id] ? 'opacity-50' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={rowVisibility[attr.id] ?? true}
-                      onChange={() => toggleRowVisibility(attr.id)}
-                      className="rounded border-gray-300 text-blue-600"
-                    />
-                    <span className="text-sm text-gray-700 flex-1">{attr.label}</span>
-                    {attr.isDynamic && <span className="text-xs text-purple-500">(Dynamic)</span>}
-                  </label>
-                ))}
-
-                {/* Net Adjustment */}
-                {showAdjustments && (
-                  <label className={`flex items-center gap-2 p-2 bg-gray-100 rounded cursor-pointer hover:bg-gray-200 ${!rowVisibility['net_adjustment'] ? 'opacity-50' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={rowVisibility['net_adjustment'] ?? true}
-                      onChange={() => toggleRowVisibility('net_adjustment')}
-                      className="rounded border-gray-300 text-blue-600"
-                    />
-                    <span className="text-sm font-semibold text-gray-700">Net Adjustment</span>
-                  </label>
-                )}
-
-                {/* Adjusted Valuation */}
-                {showAdjustments && (
-                  <label className={`flex items-center gap-2 p-2 bg-blue-100 rounded cursor-pointer hover:bg-blue-200 ${!rowVisibility['adjusted_valuation'] ? 'opacity-50' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={rowVisibility['adjusted_valuation'] ?? true}
-                      onChange={() => toggleRowVisibility('adjusted_valuation')}
-                      className="rounded border-gray-300 text-blue-600"
-                    />
-                    <span className="text-sm font-semibold text-gray-700">Adjusted Valuation</span>
-                  </label>
-                )}
-              </div>
-
-              {dynamicAttributes.length > 0 && (
-                <p className="mt-3 text-xs text-purple-600">Dynamic adjustments will appear on page 2 of the PDF.</p>
-              )}
+              {/* Row count info */}
+              <p className="text-xs text-gray-500 mt-4">
+                {Object.values(rowVisibility).filter(Boolean).length} rows will be exported
+                {dynamicAttributes.length > 0 && ' (dynamic adjustments on page 2)'}
+              </p>
             </div>
 
             {/* Modal Footer - Always visible */}
