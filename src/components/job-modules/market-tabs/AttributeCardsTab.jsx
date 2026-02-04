@@ -1837,15 +1837,16 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                         fontSize: '13px',
                         color: '#1E40AF'
                       }}>
-                        <strong>How tiered adjustments work:</strong>
+                        <strong>How ranked adjustments work:</strong>
                         <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
-                          <li><strong>Tier +1</strong> (e.g., GOOD): 1x the adjustment percentage from the Adjustments tab</li>
-                          <li><strong>Tier +2</strong> (e.g., EXCELLENT): 2x the adjustment percentage</li>
-                          <li><strong>Tier -1</strong> (e.g., FAIR): 1x negative adjustment</li>
-                          <li><strong>Tier -2</strong> (e.g., POOR): 2x negative adjustment</li>
+                          <li><strong>Rank 1</strong> = 1x the adjustment % (e.g., GOOD = +10% if 10% is set)</li>
+                          <li><strong>Rank 2</strong> = 2x the adjustment % (e.g., EXCELLENT = +20%)</li>
+                          <li><strong>Worse Rank 1</strong> = 1x negative (e.g., FAIR = -10%)</li>
+                          <li><strong>Worse Rank 2</strong> = 2x negative (e.g., POOR = -20%)</li>
                         </ul>
                         <div style={{ marginTop: '8px' }}>
-                          Use the ↑↓ arrows to reorder conditions and set the correct tier level.
+                          <strong>Order matters:</strong> Rank 1 should be closest to baseline (e.g., GOOD before EXCELLENT).
+                          Use ↑↓ arrows to reorder.
                         </div>
                       </div>
 
