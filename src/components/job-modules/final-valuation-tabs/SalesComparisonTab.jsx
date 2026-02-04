@@ -1073,15 +1073,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             const subjectIsFarm = subjectPackageData?.is_farm_package || subject.property_m4_class === '3A';
             const compIsFarm = compPackageData?.is_farm_package || comp.property_m4_class === '3A';
 
-            // If subject is a farm, only allow farm comps that are "kept" (normalized)
+            // If subject is a farm, only allow farm comps that have been normalized (have values_norm_time)
             if (subjectIsFarm) {
               if (!compIsFarm) {
                 if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
                 return false;
               }
-              // For farm comps, require they have been kept/normalized
-              const compKeepReject = comp.keep_reject || comp.sales_keep_reject;
-              if (compKeepReject && compKeepReject !== 'keep') {
+              // For farm comps, require they have normalized time value (indicates they were processed)
+              if (!comp.values_norm_time || comp.values_norm_time <= 0) {
                 if (isFirstProperty) debugFilters.farmSales = (debugFilters.farmSales || 0) + 1;
                 return false;
               }
