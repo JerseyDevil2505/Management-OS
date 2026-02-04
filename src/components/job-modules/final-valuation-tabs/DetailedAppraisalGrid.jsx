@@ -1018,7 +1018,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       case 'count':
         return difference * adjustmentValue;
       case 'percent':
-        return (compSalesPrice || 0) * (adjustmentValue / 100) * Math.sign(difference);
+        // Use full difference for tiered adjustments (e.g., EXCELLENT is 2 steps from AVERAGE = 2x adjustment)
+        return (compSalesPrice || 0) * (adjustmentValue / 100) * difference;
       default:
         return 0;
     }
