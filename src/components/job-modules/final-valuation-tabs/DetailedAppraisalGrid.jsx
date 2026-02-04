@@ -4,9 +4,98 @@ import { FileDown, X, Eye, EyeOff, Printer } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false }) => {
+const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, adjustmentGrid = [], compFilters = null, cmeBrackets = [], isJobContainerLoading = false, allProperties = [] }) => {
   const subject = result.subject;
   const comps = result.comparables || [];
+
+  // ==================== ADDITIONAL CARDS DETECTION ====================
+  // Helper to check if a card identifier is a main card
+  const isMainCard = useCallback((cardValue) => {
+    const card = (cardValue || '').toString().trim();
+    if (vendorType === 'Microsystems') {
+      const cardUpper = card.toUpperCase();
+      return cardUpper === 'M' || cardUpper === 'MAIN' || cardUpper === '';
+    } else { // BRT
+      const cardNum = parseInt(card);
+      return cardNum === 1 || card === '' || isNaN(cardNum);
+    }
+  }, [vendorType]);
+
+  // Helper to get all cards for a property (main + additional)
+  const getPropertyCards = useCallback((prop) => {
+    if (!prop || !allProperties || allProperties.length === 0) return [prop];
+
+    const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
+
+    return allProperties.filter(p => {
+      const pBaseKey = `${p.property_block || ''}-${p.property_lot || ''}-${p.property_qualifier || ''}`;
+      return pBaseKey === baseKey;
+    });
+  }, [allProperties]);
+
+  // Helper to get additional cards count for a property
+  const getAdditionalCardsCount = useCallback((prop) => {
+    const allCards = getPropertyCards(prop);
+    const additionalCards = allCards.filter(p => {
+      const card = (p.property_addl_card || p.additional_card || '').toString().trim();
+      return !isMainCard(card);
+    });
+    return additionalCards.length;
+  }, [getPropertyCards, isMainCard]);
+
+  // Helper to aggregate data across all cards for a property
+  const getAggregatedPropertyData = useCallback((prop) => {
+    const allCards = getPropertyCards(prop);
+    if (allCards.length <= 1) return prop; // No additional cards, return as-is
+
+    // Aggregate data across all cards
+    const aggregated = { ...prop };
+
+    // SUM: SFLA, bathrooms, bedrooms, fireplaces, basement_area, fin_basement_area,
+    // garage_area, det_garage_area, deck_area, patio_area, pool_area, open_porch_area, enclosed_porch_area
+    const sumFields = [
+      'asset_sfla', 'total_baths_calculated', 'asset_bathrooms', 'asset_bedrooms',
+      'fireplace_count', 'asset_fireplaces', 'basement_area', 'fin_basement_area',
+      'garage_area', 'det_garage_area', 'deck_area', 'patio_area', 'pool_area',
+      'open_porch_area', 'enclosed_porch_area', 'barn_area', 'stable_area', 'pole_barn_area', 'ac_area'
+    ];
+
+    sumFields.forEach(field => {
+      const total = allCards.reduce((sum, card) => sum + (parseFloat(card[field]) || 0), 0);
+      if (total > 0) aggregated[field] = total;
+    });
+
+    // AVERAGE: year_built
+    const validYears = allCards
+      .map(card => parseInt(card.asset_year_built))
+      .filter(year => year > 1800 && year <= new Date().getFullYear());
+    if (validYears.length > 0) {
+      aggregated.asset_year_built = Math.round(validYears.reduce((a, b) => a + b, 0) / validYears.length);
+    }
+
+    // OR logic for boolean amenities (if any card has it, show Yes)
+    const booleanFields = [
+      'asset_basement', 'asset_fin_basement', 'asset_ac', 'asset_deck',
+      'asset_patio', 'asset_open_porch', 'asset_enclosed_porch', 'asset_pool'
+    ];
+
+    booleanFields.forEach(field => {
+      const hasAny = allCards.some(card => card[field] && card[field] !== 'No' && card[field] !== 'NONE');
+      aggregated[field] = hasAny;
+    });
+
+    // Store additional cards count
+    aggregated._additionalCardsCount = allCards.length - 1;
+
+    return aggregated;
+  }, [getPropertyCards]);
+
+  // Get aggregated subject and comps
+  const aggregatedSubject = useMemo(() => getAggregatedPropertyData(subject), [subject, getAggregatedPropertyData]);
+  const aggregatedComps = useMemo(() => comps.map(comp => ({
+    ...comp,
+    ...getAggregatedPropertyData(comp)
+  })), [comps, getAggregatedPropertyData]);
 
   // ==================== PDF EXPORT STATE ====================
   const [showExportModal, setShowExportModal] = useState(false);
