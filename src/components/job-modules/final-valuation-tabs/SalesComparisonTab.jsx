@@ -500,6 +500,73 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     }
   };
 
+  // ==================== HELPER: AGGREGATE PROPERTY DATA ACROSS CARDS ====================
+  // Helper to check if a card identifier is a main card
+  const isMainCard = (cardValue) => {
+    const card = (cardValue || '').toString().trim();
+    if (vendorType === 'Microsystems') {
+      const cardUpper = card.toUpperCase();
+      return cardUpper === 'M' || cardUpper === 'MAIN' || cardUpper === '';
+    } else { // BRT
+      const cardNum = parseInt(card);
+      return cardNum === 1 || card === '' || isNaN(cardNum);
+    }
+  };
+
+  // Helper to get all cards for a property (main + additional)
+  const getPropertyCards = (prop) => {
+    if (!prop) return [prop];
+    const baseKey = `${prop.property_block || ''}-${prop.property_lot || ''}-${prop.property_qualifier || ''}`;
+    return properties.filter(p => {
+      const pBaseKey = `${p.property_block || ''}-${p.property_lot || ''}-${p.property_qualifier || ''}`;
+      return pBaseKey === baseKey;
+    });
+  };
+
+  // Helper to aggregate data across all cards for a property
+  const aggregatePropertyData = (prop) => {
+    const allCards = getPropertyCards(prop);
+    if (allCards.length <= 1) return prop; // No additional cards, return as-is
+
+    const aggregated = { ...prop };
+
+    // SUM fields
+    const sumFields = [
+      'asset_sfla', 'total_baths_calculated', 'asset_bathrooms', 'asset_bedrooms',
+      'fireplace_count', 'asset_fireplaces', 'basement_area', 'fin_basement_area',
+      'garage_area', 'det_garage_area', 'deck_area', 'patio_area', 'pool_area',
+      'open_porch_area', 'enclosed_porch_area', 'barn_area', 'stable_area', 'pole_barn_area', 'ac_area'
+    ];
+
+    sumFields.forEach(field => {
+      const total = allCards.reduce((sum, card) => sum + (parseFloat(card[field]) || 0), 0);
+      if (total > 0) aggregated[field] = total;
+    });
+
+    // AVERAGE: year_built
+    const validYears = allCards
+      .map(card => parseInt(card.asset_year_built))
+      .filter(year => year > 1800 && year <= new Date().getFullYear());
+    if (validYears.length > 0) {
+      aggregated.asset_year_built = Math.round(validYears.reduce((a, b) => a + b, 0) / validYears.length);
+    }
+
+    // OR logic for boolean amenities
+    const booleanFields = [
+      'asset_basement', 'asset_fin_basement', 'asset_ac', 'asset_deck',
+      'asset_patio', 'asset_open_porch', 'asset_enclosed_porch', 'asset_pool'
+    ];
+
+    booleanFields.forEach(field => {
+      const hasAny = allCards.some(card => card[field] && card[field] !== 'No' && card[field] !== 'NONE');
+      aggregated[field] = hasAny;
+    });
+
+    aggregated._additionalCardsCount = allCards.filter(p => !isMainCard(p.property_addl_card || p.additional_card)).length;
+
+    return aggregated;
+  };
+
   // ==================== MANUAL BLQ EVALUATION (DETAILED TAB) ====================
   const handleManualEvaluate = async () => {
     setIsManualEvaluating(true);
@@ -513,18 +580,21 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       }
 
       // Find subject by block, lot, qualifier (normalize for comparison)
-      const subject = properties.find(p => {
+      const subjectRaw = properties.find(p => {
         const blockMatch = (p.property_block || '').trim().toUpperCase() === manualSubject.block.trim().toUpperCase();
         const lotMatch = (p.property_lot || '').trim().toUpperCase() === manualSubject.lot.trim().toUpperCase();
         const qualMatch = (p.property_qualifier || '').trim().toUpperCase() === (manualSubject.qualifier || '').trim().toUpperCase();
         return blockMatch && lotMatch && qualMatch;
       });
 
-      if (!subject) {
+      if (!subjectRaw) {
         alert(`Subject property not found: Block ${manualSubject.block}, Lot ${manualSubject.lot}${manualSubject.qualifier ? `, Qual ${manualSubject.qualifier}` : ''}\n\nMake sure the property exists in this job.`);
         setIsManualEvaluating(false);
         return;
       }
+
+      // Aggregate subject data across all cards (main + additional)
+      const subject = aggregatePropertyData(subjectRaw);
 
       // Fetch comparables
       const fetchedComps = [];
@@ -533,24 +603,27 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
       for (const compEntry of manualComps) {
         if (compEntry.block && compEntry.lot) {
-          const comp = properties.find(p => {
+          const compRaw = properties.find(p => {
             const blockMatch = (p.property_block || '').trim().toUpperCase() === compEntry.block.trim().toUpperCase();
             const lotMatch = (p.property_lot || '').trim().toUpperCase() === compEntry.lot.trim().toUpperCase();
             const qualMatch = (p.property_qualifier || '').trim().toUpperCase() === (compEntry.qualifier || '').trim().toUpperCase();
             return blockMatch && lotMatch && qualMatch;
           });
 
-          if (!comp) {
+          if (!compRaw) {
             // Property not found in database
             notFoundEntries.push(`Block ${compEntry.block} Lot ${compEntry.lot}${compEntry.qualifier ? ` Qual ${compEntry.qualifier}` : ''}`);
-          } else if (!comp.sales_price && !comp.values_norm_time) {
+          } else if (!compRaw.sales_price && !compRaw.values_norm_time) {
             // Property found but no sales data
-            noSalesDataEntries.push(`Block ${compEntry.block} Lot ${compEntry.lot} (${comp.property_location || 'N/A'})`);
+            noSalesDataEntries.push(`Block ${compEntry.block} Lot ${compEntry.lot} (${compRaw.property_location || 'N/A'})`);
           } else {
+            // Aggregate comp data across all cards (main + additional)
+            const comp = aggregatePropertyData(compRaw);
+
             // Use time-normalized value if available, otherwise fall back to sales price
             const compValue = comp.values_norm_time || comp.sales_price;
 
-            // Calculate adjustments
+            // Calculate adjustments using aggregated data
             const { adjustments, totalAdjustment, adjustedPrice, adjustmentPercent } =
               calculateAllAdjustments(subject, { ...comp, values_norm_time: compValue });
 
