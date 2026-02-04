@@ -1532,15 +1532,25 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
               </th>
               <th className="px-3 py-3 text-center font-semibold bg-slate-100">
                 Subject
+                {aggregatedSubject._additionalCardsCount > 0 && (
+                  <span className="block text-xs text-purple-700 font-semibold mt-1 bg-purple-100 rounded px-1">
+                    (+{aggregatedSubject._additionalCardsCount} cards)
+                  </span>
+                )}
               </th>
               {[1, 2, 3, 4, 5].map((compNum) => {
-                const comp = comps[compNum - 1];
+                const comp = aggregatedComps[compNum - 1];
                 const bgColor = comp?.isSubjectSale ? 'bg-green-50' : 'bg-blue-50';
                 return (
                   <th key={compNum} className={`px-3 py-3 text-center font-semibold ${bgColor} border-l border-gray-300`}>
                     Comparable {compNum}
                     {comp?.isSubjectSale && (
                       <span className="block text-xs text-green-700 font-semibold mt-1">(Subject Sale)</span>
+                    )}
+                    {comp?._additionalCardsCount > 0 && (
+                      <span className="block text-xs text-purple-700 font-semibold mt-1 bg-purple-100 rounded px-1">
+                        (+{comp._additionalCardsCount} cards)
+                      </span>
                     )}
                   </th>
                 );
