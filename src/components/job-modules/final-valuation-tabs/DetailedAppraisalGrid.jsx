@@ -804,7 +804,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   }, []);
 
   // Generate PDF document
-  const generatePDF = useCallback(() => {
+  const generatePDF = useCallback(async () => {
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'pt',
@@ -812,22 +812,43 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     });
 
     const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 30;
 
     // Lojik blue color
     const lojikBlue = [0, 102, 204];
 
-    // Try to load logo (if exists in public folder)
+    // Load logo image
+    let logoImage = null;
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = '/lojik-logo.PNG';
+      });
+      logoImage = img;
+    } catch (e) {
+      console.warn('Could not load logo image:', e);
+    }
+
+    // Add header with logo
     const addHeader = (blockLot) => {
-      // Logo placeholder - would need actual logo file
-      doc.setFillColor(...lojikBlue);
-      doc.rect(margin, margin, 60, 30, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('LOJIK', margin + 8, margin + 20);
-      
+      if (logoImage) {
+        // Calculate aspect ratio to fit logo nicely
+        const logoHeight = 35;
+        const logoWidth = (logoImage.width / logoImage.height) * logoHeight;
+        doc.addImage(logoImage, 'PNG', margin, margin - 5, logoWidth, logoHeight);
+      } else {
+        // Fallback text if logo not loaded
+        doc.setFillColor(...lojikBlue);
+        doc.rect(margin, margin, 60, 30, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text('LOJIK', margin + 8, margin + 20);
+      }
+
       // Block/Lot in top right
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(18);
