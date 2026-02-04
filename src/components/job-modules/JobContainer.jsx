@@ -982,6 +982,11 @@ const JobContainer = ({
         // Mark that this module made changes
         setModuleHasChanges(true);
       },
+      // Direct in-memory update for jobData (no server round-trip)
+      // Use this for config updates that should immediately reflect in other components
+      updateJobDataDirect: (partialUpdate) => {
+        setJobData(prev => prev ? { ...prev, ...partialUpdate } : prev);
+      },
       // SURGICAL REFRESH: Only reload marketLandData without affecting other data
       refreshMarketLandData: refreshMarketLandData,
       // REMOVED: No longer needed - FileUploadButton uses job.vendor_type directly
