@@ -1674,6 +1674,63 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             return 0;
           };
 
+          // Helper: Get condition multiplier for detached items based on depreciation/NC value
+          const getConditionMultiplier = (property) => {
+            const normalizeCode = (c) => String(c).trim().replace(/^0+/, '').toUpperCase() || '0';
+            const targetCode = normalizeCode(code);
+            let deprValue = null;
+
+            if (vendorType === 'BRT') {
+              // BRT: Find the detachedcode match and get its DETACHEDNC value
+              for (let i = 1; i <= 11; i++) {
+                const detachedCode = property[`detachedcode_${i}`];
+                if (detachedCode && normalizeCode(detachedCode) === targetCode) {
+                  deprValue = parseFloat(property[`detachednc_${i}`]) || null;
+                  break;
+                }
+              }
+            } else {
+              // Microsystems: Check detached_item_code1-4 and detachedbuilding1-4
+              // Use average of physical, functional, and locational depreciation
+              for (let i = 1; i <= 4; i++) {
+                const itemCode = property[`detached_item_code${i}`];
+                if (itemCode && normalizeCode(itemCode) === targetCode) {
+                  const physical = parseFloat(property[`physical_depr${i}`]) || 0;
+                  const functional = parseFloat(property[`functional_depr${i}`]) || 0;
+                  const locational = parseFloat(property[`locationl_depr${i}`]) || 0;
+                  const validValues = [physical, functional, locational].filter(v => v > 0);
+                  deprValue = validValues.length > 0 ? validValues.reduce((a, b) => a + b, 0) / validValues.length : null;
+                  break;
+                }
+              }
+              if (deprValue === null) {
+                for (let i = 1; i <= 4; i++) {
+                  const buildingCode = property[`detachedbuilding${i}`];
+                  if (buildingCode && normalizeCode(buildingCode) === targetCode) {
+                    const physical = parseFloat(property[`pysical${i}`]) || 0;
+                    const functional = parseFloat(property[`functional${i}`]) || 0;
+                    const locational = parseFloat(property[`location_economic${i}`]) || 0;
+                    const validValues = [physical, functional, locational].filter(v => v > 0);
+                    deprValue = validValues.length > 0 ? validValues.reduce((a, b) => a + b, 0) / validValues.length : null;
+                    break;
+                  }
+                }
+              }
+            }
+
+            // If no depreciation value found, use standard multiplier
+            if (deprValue === null) return detachedConditionMultipliers.standard_multiplier;
+
+            // Apply threshold logic
+            if (deprValue <= detachedConditionMultipliers.poor_threshold) {
+              return detachedConditionMultipliers.poor_multiplier;
+            } else if (deprValue >= detachedConditionMultipliers.excellent_threshold) {
+              return detachedConditionMultipliers.excellent_multiplier;
+            } else {
+              return detachedConditionMultipliers.standard_multiplier;
+            }
+          };
+
           // Use count-based values for BRT miscellaneous items
           if (adjustmentDef.adjustment_id.startsWith('miscellaneous_') && vendorType === 'BRT') {
             subjectValue = getMiscCount(subject);
@@ -1681,6 +1738,31 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           } else {
             subjectValue = hasCode(subject) ? 1 : 0;
             compValue = hasCode(comp) ? 1 : 0;
+          }
+
+          // For detached items (barn, pole_barn, stable), store condition multipliers for later use
+          let subjectConditionMultiplier = 1.0;
+          let compConditionMultiplier = 1.0;
+          if (adjustmentDef.adjustment_id.startsWith('barn_') ||
+              adjustmentDef.adjustment_id.startsWith('pole_barn_') ||
+              adjustmentDef.adjustment_id.startsWith('stable_')) {
+            if (subjectValue > 0) subjectConditionMultiplier = getConditionMultiplier(subject);
+            if (compValue > 0) compConditionMultiplier = getConditionMultiplier(comp);
+          }
+
+          // Calculate adjustment with condition multipliers for detached items
+          if ((adjustmentDef.adjustment_id.startsWith('barn_') ||
+               adjustmentDef.adjustment_id.startsWith('pole_barn_') ||
+               adjustmentDef.adjustment_id.startsWith('stable_')) &&
+              (subjectValue !== compValue)) {
+            // Apply condition-adjusted calculation
+            const subjectAdjustedValue = subjectValue * subjectConditionMultiplier;
+            const compAdjustedValue = compValue * compConditionMultiplier;
+            const adjustedDifference = subjectAdjustedValue - compAdjustedValue;
+
+            // Return the condition-adjusted flat adjustment
+            return adjustedDifference > 0 ? adjustmentValue * subjectConditionMultiplier :
+                   (adjustedDifference < 0 ? -adjustmentValue * compConditionMultiplier : 0);
           }
         } else {
           return 0; // Unknown attribute
