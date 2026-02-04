@@ -1595,18 +1595,17 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                       {/* Better Conditions - Tiered with reordering */}
                       <div style={{ marginBottom: '20px' }}>
                         <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>
-                          Better than Baseline (positive adjustments) - Order determines tier level:
+                          Better than Baseline (positive adjustments) - Rank 1 is closest to baseline:
                         </label>
 
                         {/* Ordered list of selected better conditions */}
                         {currentBetter.length > 0 && (
                           <div style={{ marginBottom: '12px', padding: '10px', backgroundColor: '#D1FAE5', borderRadius: '6px' }}>
                             <div style={{ fontSize: '12px', color: '#065F46', marginBottom: '8px', fontWeight: '500' }}>
-                              Current tier order (drag or use arrows to reorder):
+                              Rank 1 = 1x adjustment, Rank 2 = 2x adjustment, etc. Use arrows to reorder:
                             </div>
                             {currentBetter.map((condition, idx) => {
-                              const tierLevel = idx + 1;
-                              const tierPercent = tierLevel * (isExterior ? 10 : 10); // Assumes 10% per tier
+                              const rankLevel = idx + 1;
                               return (
                                 <div key={condition} style={{
                                   display: 'flex',
@@ -1621,13 +1620,13 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                                   <span style={{
                                     fontWeight: '700',
                                     color: '#059669',
-                                    minWidth: '60px'
+                                    minWidth: '70px'
                                   }}>
-                                    Tier +{tierLevel}
+                                    Rank {rankLevel}
                                   </span>
                                   <span style={{ flex: 1 }}>{condition}</span>
-                                  <span style={{ fontSize: '12px', color: '#6B7280' }}>
-                                    (+{tierPercent}% adj)
+                                  <span style={{ fontSize: '12px', color: '#6B7280', fontWeight: '500' }}>
+                                    ({rankLevel}x adjustment)
                                   </span>
                                   <button
                                     onClick={() => {
@@ -1714,18 +1713,17 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                       {/* Worse Conditions - Tiered with reordering */}
                       <div>
                         <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>
-                          Worse than Baseline (negative adjustments) - Order determines tier level:
+                          Worse than Baseline (negative adjustments) - Rank 1 is closest to baseline:
                         </label>
 
                         {/* Ordered list of selected worse conditions */}
                         {currentWorse.length > 0 && (
                           <div style={{ marginBottom: '12px', padding: '10px', backgroundColor: '#FEE2E2', borderRadius: '6px' }}>
                             <div style={{ fontSize: '12px', color: '#991B1B', marginBottom: '8px', fontWeight: '500' }}>
-                              Current tier order (drag or use arrows to reorder):
+                              Rank 1 = 1x adjustment, Rank 2 = 2x adjustment, etc. Use arrows to reorder:
                             </div>
                             {currentWorse.map((condition, idx) => {
-                              const tierLevel = idx + 1;
-                              const tierPercent = tierLevel * (isExterior ? 10 : 10); // Assumes 10% per tier
+                              const rankLevel = idx + 1;
                               return (
                                 <div key={condition} style={{
                                   display: 'flex',
@@ -1740,9 +1738,9 @@ const AttributeCardsTab = ({ jobData = {}, properties = [], marketLandData = {},
                                   <span style={{
                                     fontWeight: '700',
                                     color: '#DC2626',
-                                    minWidth: '60px'
+                                    minWidth: '70px'
                                   }}>
-                                    Tier -{tierLevel}
+                                    Rank {rankLevel}
                                   </span>
                                   <span style={{ flex: 1 }}>{condition}</span>
                                   <span style={{ fontSize: '12px', color: '#6B7280' }}>
