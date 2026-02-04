@@ -1082,23 +1082,52 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const staticAttrs = visibleAttributes.filter(a => !a.isDynamic);
     const dynamicAttrs = visibleAttributes.filter(a => a.isDynamic);
 
+    // Helper to get display value for PDF (uses edited values)
+    const getDisplayValue = (attr, propKey) => {
+      const config = EDITABLE_CONFIG[attr.id];
+      const editedVal = editableProperties[propKey]?.[attr.id];
+
+      if (editedVal !== undefined) {
+        // Format edited value for display
+        if (config?.type === 'garage') {
+          return GARAGE_OPTIONS.find(o => o.value === editedVal)?.label || 'None';
+        }
+        if (config?.type === 'yesno') {
+          return editedVal;
+        }
+        if (config?.type === 'number' && attr.id === 'sales_price') {
+          return editedVal ? `$${parseFloat(editedVal).toLocaleString()}` : 'N/A';
+        }
+        return editedVal?.toLocaleString?.() || String(editedVal);
+      }
+
+      // Fall back to original render
+      const prop = propKey === 'subject' ? subject : comps[parseInt(propKey.replace('comp_', ''))];
+      return prop ? attr.render(prop) : 'N/A';
+    };
+
     // Build rows for static attributes (Page 1)
     const staticRows = staticAttrs.map(attr => {
       const row = [attr.label];
-      
-      // Subject column
-      let subjectVal = attr.render(subject);
-      subjectVal = getCellValue(attr.id, 'subject', subjectVal);
+
+      // Subject column - use edited value if available
+      const subjectVal = getDisplayValue(attr, 'subject');
       row.push(String(subjectVal));
 
       // Comp columns
       for (let i = 0; i < 5; i++) {
         const comp = comps[i];
+        const compKey = `comp_${i}`;
         if (comp) {
-          let compVal = attr.render(comp);
-          compVal = getCellValue(attr.id, i, compVal);
-          const adj = attr.adjustmentName ? getAdjustment(comp, attr.adjustmentName) : null;
-          
+          const compVal = getDisplayValue(attr, compKey);
+
+          // Get adjustment from edited adjustments or original
+          const editedAdj = editedAdjustments[compKey]?.adjustments?.find(a =>
+            a.name?.toLowerCase() === attr.adjustmentName?.toLowerCase()
+          );
+          const origAdj = attr.adjustmentName ? getAdjustment(comp, attr.adjustmentName) : null;
+          const adj = editedAdj || origAdj;
+
           if (showAdjustments && adj && adj.amount !== 0) {
             const adjStr = adj.amount > 0 ? `+$${Math.round(adj.amount).toLocaleString()}` : `-$${Math.abs(Math.round(adj.amount)).toLocaleString()}`;
             row.push(`${compVal}\n${adjStr}`);
@@ -1117,9 +1146,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       const netRow = ['Net Adjustment', '-'];
       for (let i = 0; i < 5; i++) {
         const comp = comps[i];
+        const compKey = `comp_${i}`;
         if (comp) {
-          const total = comp.totalAdjustment || 0;
-          const pct = comp.adjustmentPercent || 0;
+          // Use edited adjustments if available, otherwise original
+          const compData = editedAdjustments[compKey] || comp;
+          const total = compData.totalAdjustment || 0;
+          const pct = compData.adjustmentPercent || 0;
           const sign = total > 0 ? '+' : '';
           netRow.push(`${sign}$${Math.round(total).toLocaleString()} (${sign}${pct.toFixed(0)}%)`);
         } else {
@@ -1136,8 +1168,11 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       valRow.push(result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-');
       for (let i = 0; i < 5; i++) {
         const comp = comps[i];
+        const compKey = `comp_${i}`;
         if (comp) {
-          valRow.push(`$${Math.round(comp.adjustedPrice || 0).toLocaleString()}`);
+          // Use edited adjustments if available, otherwise original
+          const compData = editedAdjustments[compKey] || comp;
+          valRow.push(`$${Math.round(compData.adjustedPrice || 0).toLocaleString()}`);
         } else {
           valRow.push('-');
         }
