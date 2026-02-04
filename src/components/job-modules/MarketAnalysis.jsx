@@ -26,7 +26,7 @@ import LandValuationTab from './market-tabs/LandValuationTab';
 import CostValuationTab from './market-tabs/CostValuationTab';
 import AttributeCardsTab from './market-tabs/AttributeCardsTab';
 
-const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache, onDataChange, refreshMarketLandData }) => {
+const MarketLandAnalysis = ({ jobData, properties, marketLandData, hpiData, onUpdateJobCache, onDataChange, refreshMarketLandData, updateJobDataDirect }) => {
   // 📊 DEBUG - MarketAnalysis passing data to tabs
   console.log('📊 MarketAnalysis passing to LandValuationTab:', {
     marketLandData_updated_at: marketLandData?.updated_at,
