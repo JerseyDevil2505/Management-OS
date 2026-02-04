@@ -580,18 +580,11 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
   const handleAdjustmentChange = (adjustmentId, bracketIndex, value) => {
     setAdjustments(prev => prev.map(adj => {
       if (adj.adjustment_id === adjustmentId) {
-        // Allow typing minus sign and decimal - keep partial input as-is
-        // Only convert to 0 if completely empty
-        if (value === '' || value === '-' || value === '.' || value === '-.') {
-          return {
-            ...adj,
-            [`bracket_${bracketIndex}`]: value === '' ? 0 : value
-          };
-        }
-        const parsed = parseFloat(value);
+        // Store value as-is while typing (allows "-", ".", "-." etc.)
+        // The onBlur handler will convert to proper number
         return {
           ...adj,
-          [`bracket_${bracketIndex}`]: isNaN(parsed) ? 0 : parsed
+          [`bracket_${bracketIndex}`]: value
         };
       }
       return adj;
