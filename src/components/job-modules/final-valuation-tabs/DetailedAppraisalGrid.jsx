@@ -1238,18 +1238,25 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       // Build dynamic rows
       const dynamicRows = dynamicAttrs.map(attr => {
         const row = [attr.label];
-        
+
         // Subject column
-        let subjectVal = attr.render(subject);
+        const subjectVal = attr.render(subject);
         row.push(String(subjectVal));
 
         // Comp columns
         for (let i = 0; i < 5; i++) {
           const comp = comps[i];
+          const compKey = `comp_${i}`;
           if (comp) {
-            let compVal = attr.render(comp);
-            const adj = attr.adjustmentName ? getAdjustment(comp, attr.adjustmentName) : null;
-            
+            const compVal = attr.render(comp);
+
+            // Get adjustment from edited adjustments or original
+            const editedAdj = editedAdjustments[compKey]?.adjustments?.find(a =>
+              a.name?.toLowerCase() === attr.adjustmentName?.toLowerCase()
+            );
+            const origAdj = attr.adjustmentName ? getAdjustment(comp, attr.adjustmentName) : null;
+            const adj = editedAdj || origAdj;
+
             if (showAdjustments && adj && adj.amount !== 0) {
               const adjStr = adj.amount > 0 ? `+$${Math.round(adj.amount).toLocaleString()}` : `-$${Math.abs(Math.round(adj.amount)).toLocaleString()}`;
               row.push(`${compVal}\n${adjStr}`);
@@ -1268,9 +1275,11 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         const netRow = ['Net Adjustment', '-'];
         for (let i = 0; i < 5; i++) {
           const comp = comps[i];
+          const compKey = `comp_${i}`;
           if (comp) {
-            const total = comp.totalAdjustment || 0;
-            const pct = comp.adjustmentPercent || 0;
+            const compData = editedAdjustments[compKey] || comp;
+            const total = compData.totalAdjustment || 0;
+            const pct = compData.adjustmentPercent || 0;
             const sign = total > 0 ? '+' : '';
             netRow.push(`${sign}$${Math.round(total).toLocaleString()} (${sign}${pct.toFixed(0)}%)`);
           } else {
@@ -1285,8 +1294,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         valRow.push(result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-');
         for (let i = 0; i < 5; i++) {
           const comp = comps[i];
+          const compKey = `comp_${i}`;
           if (comp) {
-            valRow.push(`$${Math.round(comp.adjustedPrice || 0).toLocaleString()}`);
+            const compData = editedAdjustments[compKey] || comp;
+            valRow.push(`$${Math.round(compData.adjustedPrice || 0).toLocaleString()}`);
           } else {
             valRow.push('-');
           }
