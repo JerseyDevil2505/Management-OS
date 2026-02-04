@@ -1189,7 +1189,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     }
 
     // Generate main table
-    doc.autoTable({
+    autoTable(doc, {
       head: headers,
       body: staticRows,
       startY: margin + 50,
