@@ -12,7 +12,72 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   const [showExportModal, setShowExportModal] = useState(false);
   const [showAdjustments, setShowAdjustments] = useState(true); // Toggle for comps-only mode
   const [rowVisibility, setRowVisibility] = useState({}); // { attrId: boolean }
-  const [editableData, setEditableData] = useState({}); // { attrId_colIdx: value } for modal edits
+
+  // Editable data for export modal - stores property overrides
+  // Structure: { subject: {...propertyOverrides}, comp_0: {...}, comp_1: {...}, etc. }
+  const [editableProperties, setEditableProperties] = useState({});
+
+  // Calculated adjustments based on edited values
+  const [editedAdjustments, setEditedAdjustments] = useState({});
+
+  // Define which attributes are editable and their input types
+  const EDITABLE_CONFIG = {
+    // Numeric inputs
+    lot_size_sf: { type: 'number', field: 'asset_lot_sf' },
+    lot_size_ff: { type: 'number', field: 'asset_lot_ff' },
+    lot_size_acre: { type: 'number', field: 'asset_lot_acre', step: 0.01 },
+    liveable_area: { type: 'number', field: 'asset_sfla' },
+    year_built: { type: 'number', field: 'asset_year_built' },
+    bathrooms: { type: 'number', field: 'asset_bathrooms', step: 0.5 },
+    bedrooms: { type: 'number', field: 'asset_bedrooms' },
+    fireplaces: { type: 'number', field: 'asset_fireplaces' },
+    sales_price: { type: 'number', field: 'sales_price' },
+    // Yes/No dropdowns
+    basement_area: { type: 'yesno', field: 'asset_basement' },
+    fin_bsmt_area: { type: 'yesno', field: 'asset_fin_basement' },
+    ac_area: { type: 'yesno', field: 'asset_ac' },
+    deck_area: { type: 'yesno', field: 'asset_deck' },
+    patio_area: { type: 'yesno', field: 'asset_patio' },
+    open_porch_area: { type: 'yesno', field: 'asset_open_porch' },
+    enclosed_porch_area: { type: 'yesno', field: 'asset_enclosed_porch' },
+    pool_area: { type: 'yesno', field: 'asset_pool' },
+    // Garage dropdown
+    garage_area: { type: 'garage', field: 'garage_area' },
+    det_garage_area: { type: 'garage', field: 'det_garage_area' },
+    // Condition dropdown
+    ext_condition: { type: 'condition', field: 'asset_ext_cond' },
+    int_condition: { type: 'condition', field: 'asset_int_cond' }
+  };
+
+  // Garage options
+  const GARAGE_OPTIONS = [
+    { value: 0, label: 'None' },
+    { value: 1, label: 'One Car' },
+    { value: 2, label: 'Two Car' },
+    { value: 3, label: 'Three Car' },
+    { value: 4, label: 'Multi Car' }
+  ];
+
+  // Condition options (will be populated from code definitions)
+  const getConditionOptions = useCallback(() => {
+    // Try to get from code definitions
+    if (codeDefinitions?.field_codes) {
+      const extCondCodes = codeDefinitions.field_codes['260'] || codeDefinitions.field_codes['exterior_condition'] || {};
+      const options = Object.entries(extCondCodes).map(([code, data]) => ({
+        value: code,
+        label: data.description || code
+      }));
+      if (options.length > 0) return options;
+    }
+    // Fallback standard options
+    return [
+      { value: 'E', label: 'Excellent' },
+      { value: 'G', label: 'Good' },
+      { value: 'A', label: 'Average' },
+      { value: 'F', label: 'Fair' },
+      { value: 'P', label: 'Poor' }
+    ];
+  }, [codeDefinitions]);
 
   // Determine which bracket is being used
   const getBracketLabel = () => {
