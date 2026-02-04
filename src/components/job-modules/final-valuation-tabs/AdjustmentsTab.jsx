@@ -1607,11 +1607,20 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
                         style={{ backgroundColor: `${bracket.color}33` }}
                       >
                         <input
-                          type="number"
-                          value={adj[`bracket_${bIdx}`] || 0}
+                          type="text"
+                          inputMode="decimal"
+                          value={adj[`bracket_${bIdx}`] ?? 0}
                           onChange={(e) => handleAdjustmentChange(adj.adjustment_id, bIdx, e.target.value)}
+                          onBlur={(e) => {
+                            // Convert to number on blur
+                            const parsed = parseFloat(e.target.value);
+                            if (!isNaN(parsed)) {
+                              handleAdjustmentChange(adj.adjustment_id, bIdx, parsed);
+                            } else if (e.target.value === '' || e.target.value === '-') {
+                              handleAdjustmentChange(adj.adjustment_id, bIdx, 0);
+                            }
+                          }}
                           className="w-20 px-2 py-1 text-sm text-center border rounded focus:ring-2 focus:ring-blue-500"
-                          step={adj.adjustment_type === 'per_sqft' ? '0.01' : adj.adjustment_type === 'percent' ? '1' : adj.adjustment_type === 'count' ? '1' : '100'}
                         />
                       </td>
                     ))}
