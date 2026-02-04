@@ -1729,6 +1729,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                             <input
                               type="text"
                               inputMode="decimal"
+                              value={editedVal ?? (prop ? (prop[config.altField] || prop[config.field]) : '') ?? ''}
+                              onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
+                              className="w-full px-1 py-0.5 text-xs text-center border rounded focus:ring-1 focus:ring-blue-500"
+                            />
+                          )}
+                          {config.type === 'date' && (
+                            <input
+                              type="date"
                               value={editedVal ?? (prop ? prop[config.field] : '') ?? ''}
                               onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
                               className="w-full px-1 py-0.5 text-xs text-center border rounded focus:ring-1 focus:ring-blue-500"
