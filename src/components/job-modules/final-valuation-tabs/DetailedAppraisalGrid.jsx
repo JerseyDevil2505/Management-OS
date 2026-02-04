@@ -1788,31 +1788,29 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     );
                   })}
 
-                  {/* Net Adjustment Row */}
+                  {/* Net Adjustment Row - ALWAYS use original comp data */}
                   {showAdjustments && rowVisibility['net_adjustment'] !== false && (
                     <tr className="border-b-2 border-gray-400 bg-gray-100">
                       <td className="px-2 py-2 font-bold text-gray-900 border-r border-gray-300">Net Adjustment</td>
                       <td className="px-2 py-2 text-center bg-slate-100 border-r border-gray-300">-</td>
                       {[0, 1, 2, 3, 4].map(idx => {
-                        const compKey = `comp_${idx}`;
-                        const compData = editedAdjustments[compKey] || comps[idx] || {};
-                        const total = compData.totalAdjustment || 0;
-                        const pct = compData.adjustmentPercent || 0;
+                        const comp = comps[idx];
+                        if (!comp) {
+                          return <td key={idx} className="px-2 py-2 text-center border-r border-gray-300">-</td>;
+                        }
+                        const total = comp.totalAdjustment || 0;
+                        const pct = comp.adjustmentPercent || 0;
                         return (
                           <td key={idx} className={`px-2 py-2 text-center font-bold border-r border-gray-300 ${total > 0 ? 'text-green-700' : total < 0 ? 'text-red-700' : ''}`}>
-                            {comps[idx] ? (
-                              <>
-                                {total > 0 ? '+' : ''}${Math.round(total).toLocaleString()}
-                                <div className="text-xs font-normal">({pct > 0 ? '+' : ''}{pct.toFixed(0)}%)</div>
-                              </>
-                            ) : '-'}
+                            {total > 0 ? '+' : ''}${Math.round(total).toLocaleString()}
+                            <div className="text-xs font-normal">({pct > 0 ? '+' : ''}{pct.toFixed(0)}%)</div>
                           </td>
                         );
                       })}
                     </tr>
                   )}
 
-                  {/* Adjusted Valuation Row */}
+                  {/* Adjusted Valuation Row - ALWAYS use original comp data */}
                   {showAdjustments && rowVisibility['adjusted_valuation'] !== false && (
                     <tr className="border-b-2 border-gray-400 bg-blue-100">
                       <td className="px-2 py-2 font-bold text-gray-900 border-r border-gray-300">Adjusted Valuation</td>
@@ -1820,12 +1818,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                         {result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-'}
                       </td>
                       {[0, 1, 2, 3, 4].map(idx => {
-                        const compKey = `comp_${idx}`;
-                        const compData = editedAdjustments[compKey] || comps[idx] || {};
-                        const adjustedPrice = compData.adjustedPrice || 0;
+                        const comp = comps[idx];
+                        if (!comp) {
+                          return <td key={idx} className="px-2 py-2 text-center border-r border-gray-300">-</td>;
+                        }
+                        const adjustedPrice = comp.adjustedPrice || 0;
                         return (
                           <td key={idx} className="px-2 py-2 text-center font-bold border-r border-gray-300">
-                            {comps[idx] ? `$${Math.round(adjustedPrice).toLocaleString()}` : '-'}
+                            ${Math.round(adjustedPrice).toLocaleString()}
                           </td>
                         );
                       })}
