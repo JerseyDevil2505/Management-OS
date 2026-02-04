@@ -888,6 +888,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     if (!prop) return null;
     const config = EDITABLE_CONFIG[attrId];
     if (!config) return null;
+    // Check altField first (for cases like market_manual_lot_sf vs asset_lot_sf)
+    if (config.altField && prop[config.altField] !== undefined && prop[config.altField] !== null) {
+      return prop[config.altField];
+    }
     return prop[config.field];
   }, []);
 
