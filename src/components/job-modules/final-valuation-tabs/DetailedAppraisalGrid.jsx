@@ -1994,7 +1994,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       {[0, 1, 2, 3, 4].map(idx => {
                         const comp = comps[idx];
                         if (!comp) {
-                          return <td key={idx} className="px-2 py-2 text-center border-r border-gray-300">-</td>;
+                          return <td key={idx} className="px-2 py-2 text-center border-r border-slate-500 text-slate-400">-</td>;
                         }
                         const total = comp.totalAdjustment || 0;
                         const pct = comp.adjustmentPercent || 0;
@@ -2018,7 +2018,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       {[0, 1, 2, 3, 4].map(idx => {
                         const comp = comps[idx];
                         if (!comp) {
-                          return <td key={idx} className="px-2 py-2 text-center border-r border-gray-300">-</td>;
+                          return <td key={idx} className="px-2 py-2 text-center border-r border-slate-500 text-slate-400">-</td>;
                         }
                         const adjustedPrice = comp.adjustedPrice || 0;
                         return (
@@ -2034,14 +2034,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             </div>
 
             {/* Modal Footer */}
-            <div className="px-4 py-3 bg-gray-50 border-t flex items-center justify-between rounded-b-lg flex-shrink-0">
-              <p className="text-xs text-gray-500">
+            <div className="px-4 py-3 bg-slate-700 border-t border-slate-600 flex items-center justify-between rounded-b-lg flex-shrink-0">
+              <p className="text-xs text-slate-300">
                 Edit values directly in the grid. Adjustments recalculate automatically.
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowExportModal(false)}
-                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+                  className="px-4 py-2 text-slate-300 bg-slate-600 border border-slate-500 rounded-lg hover:bg-slate-500 transition-colors text-sm"
                 >
                   Cancel
                 </button>
