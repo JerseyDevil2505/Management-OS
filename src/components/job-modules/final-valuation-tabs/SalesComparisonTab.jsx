@@ -1456,36 +1456,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
       console.log(`✅ Database save complete`);
 
-      // Update progress: Rendering results
-      setEvaluationProgress({ current: subjects.length + 1, total: subjects.length + 1 });
-      console.log(`📊 Rendering results table...`);
-
-      // Set results - in 'keep' mode, include set-aside count for summary display
-      setEvaluationResults(results);
-
       // Reload saved evaluations from DB to reflect any changes
       await loadSavedEvaluations();
 
-      // Calculate summary stats for console logging
-      const successful = results.filter(r => r.comparables.length >= 3).length;
-      const needsMoreComps = results.filter(r => r.comparables.length > 0 && r.comparables.length < 3).length;
-      const noComps = results.filter(r => r.comparables.length === 0).length;
-      const setAsideCount = evaluationMode === 'keep' ? savedEvaluations.length : 0;
+      // Set results immediately - no delay
+      setEvaluationResults(results);
+      setIsEvaluating(false);
+      setEvaluationProgress({ current: 0, total: 0 });
 
-      console.log(`✅ Evaluation Complete!`);
-      console.log(`   - ${successful} properties with 3-5 comps (ready to value)`);
-      console.log(`   - ${needsMoreComps} properties with 1-2 comps (need more comps)`);
-      console.log(`   - ${noComps} properties with 0 comps (no matches found)`);
-      if (setAsideCount > 0) {
-        console.log(`   - ${setAsideCount} properties previously set aside (kept)`);
-      }
-
-      // Auto-scroll to results immediately
-      setTimeout(() => {
+      // Auto-scroll to results
+      requestAnimationFrame(() => {
         if (resultsRef.current) {
           resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
-      }, 100);
+      });
 
     } catch (error) {
       console.error('❌ Error during evaluation:', error);
