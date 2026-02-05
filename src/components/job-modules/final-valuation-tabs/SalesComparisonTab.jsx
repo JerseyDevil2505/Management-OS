@@ -2707,95 +2707,60 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 </div>
               </div>
 
-              {/* Farm Sales Mode */}
+              {/* Farm Sales Mode - Centered */}
               <div className="mt-4 pt-4 border-t border-gray-200">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={compFilters.farmSalesMode}
-                    onChange={(e) => setCompFilters(prev => ({ ...prev, farmSalesMode: e.target.checked }))}
-                    className="rounded"
-                  />
-                  <span className="font-medium text-gray-900">Farm Sales Mode</span>
-                  <span className="text-gray-600">- Farm subjects (3A+3B) compare to farm comps using combined lot acreage</span>
-                </label>
+                <div className="flex justify-center">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={compFilters.farmSalesMode}
+                      onChange={(e) => setCompFilters(prev => ({ ...prev, farmSalesMode: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="font-medium text-gray-900">Farm Sales Mode</span>
+                    <span className="text-gray-600">- Farm subjects (3A+3B) compare to farm comps using combined lot acreage</span>
+                  </label>
+                </div>
               </div>
 
-              {/* Adjustment Bracket + Tolerances */}
+              {/* Tolerances - Centered */}
               <div className="mt-4 pt-4 border-t border-gray-200">
-                <div className="grid grid-cols-4 gap-4 items-end">
-                  {/* Adjustment Bracket */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Adjustment Bracket</label>
-                    <select
-                      value={compFilters.adjustmentBracket || ''}
-                      onChange={(e) => {
-                        const newValue = e.target.value;
-                        setCompFilters(prev => ({
-                          ...prev,
-                          adjustmentBracket: newValue,
-                          autoAdjustment: newValue === 'auto'
-                        }));
-                      }}
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
-                    >
-                      <option value="">Select bracket...</option>
-                      <option value="auto">Auto (based on sale price)</option>
-                      <optgroup label="Default Brackets">
-                        {CME_BRACKETS.map((bracket, idx) => (
-                          <option key={idx} value={`bracket_${idx}`}>{bracket.label}</option>
-                        ))}
-                      </optgroup>
-                      {customBrackets.length > 0 && (
-                        <optgroup label="Custom Brackets">
-                          {customBrackets.map((bracket) => (
-                            <option key={bracket.bracket_id} value={bracket.bracket_id}>{bracket.bracket_name}</option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </select>
-                  </div>
+                <div className="flex justify-center gap-8">
                   {/* Individual Adj */}
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Individual adj within</label>
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="number"
-                        value={compFilters.individualAdjPct}
-                        onChange={(e) => setCompFilters(prev => ({ ...prev, individualAdjPct: parseFloat(e.target.value) || 0 }))}
-                        className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
-                        min="0"
-                      />
-                      <span className="text-xs text-gray-600">%</span>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-700">Individual adj within</label>
+                    <input
+                      type="number"
+                      value={compFilters.individualAdjPct}
+                      onChange={(e) => setCompFilters(prev => ({ ...prev, individualAdjPct: parseFloat(e.target.value) || 0 }))}
+                      className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+                      min="0"
+                    />
+                    <span className="text-sm text-gray-600">%</span>
                   </div>
                   {/* Net Adj */}
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Net adj within</label>
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="number"
-                        value={compFilters.netAdjPct}
-                        onChange={(e) => setCompFilters(prev => ({ ...prev, netAdjPct: parseFloat(e.target.value) || 0 }))}
-                        className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
-                        min="0"
-                      />
-                      <span className="text-xs text-gray-600">%</span>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-700">Net adj within</label>
+                    <input
+                      type="number"
+                      value={compFilters.netAdjPct}
+                      onChange={(e) => setCompFilters(prev => ({ ...prev, netAdjPct: parseFloat(e.target.value) || 0 }))}
+                      className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+                      min="0"
+                    />
+                    <span className="text-sm text-gray-600">%</span>
                   </div>
                   {/* Gross Adj */}
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Gross adj within</label>
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="number"
-                        value={compFilters.grossAdjPct}
-                        onChange={(e) => setCompFilters(prev => ({ ...prev, grossAdjPct: parseFloat(e.target.value) || 0 }))}
-                        className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
-                        min="0"
-                      />
-                      <span className="text-xs text-gray-600">%</span>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-700">Gross adj within</label>
+                    <input
+                      type="number"
+                      value={compFilters.grossAdjPct}
+                      onChange={(e) => setCompFilters(prev => ({ ...prev, grossAdjPct: parseFloat(e.target.value) || 0 }))}
+                      className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+                      min="0"
+                    />
+                    <span className="text-sm text-gray-600">%</span>
                   </div>
                 </div>
               </div>
