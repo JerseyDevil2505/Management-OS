@@ -1988,18 +1988,18 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
                   {/* Net Adjustment Row - ALWAYS use original comp data */}
                   {showAdjustments && rowVisibility['net_adjustment'] !== false && (
-                    <tr className="border-b-2 border-slate-500 bg-slate-700">
-                      <td className="px-2 py-2 font-bold text-white border-r border-slate-500">Net Adjustment</td>
-                      <td className="px-2 py-2 text-center bg-slate-600 border-r border-slate-500 text-white">-</td>
+                    <tr className="border-b-2 border-gray-400 bg-gray-100">
+                      <td className="px-2 py-2 font-bold text-gray-900 border-r border-gray-300">Net Adjustment</td>
+                      <td className="px-2 py-2 text-center bg-slate-100 border-r border-gray-300">-</td>
                       {[0, 1, 2, 3, 4].map(idx => {
                         const comp = comps[idx];
                         if (!comp) {
-                          return <td key={idx} className="px-2 py-2 text-center border-r border-slate-500 text-slate-400">-</td>;
+                          return <td key={idx} className="px-2 py-2 text-center border-r border-gray-300">-</td>;
                         }
                         const total = comp.totalAdjustment || 0;
                         const pct = comp.adjustmentPercent || 0;
                         return (
-                          <td key={idx} className={`px-2 py-2 text-center font-bold border-r border-slate-500 ${total > 0 ? 'text-green-400' : total < 0 ? 'text-red-400' : 'text-white'}`}>
+                          <td key={idx} className={`px-2 py-2 text-center font-bold border-r border-gray-300 ${total > 0 ? 'text-green-700' : total < 0 ? 'text-red-700' : ''}`}>
                             {total > 0 ? '+' : ''}${Math.round(total).toLocaleString()}
                             <div className="text-xs font-normal">({pct > 0 ? '+' : ''}{pct.toFixed(0)}%)</div>
                           </td>
@@ -2010,19 +2010,19 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
                   {/* Adjusted Valuation Row - ALWAYS use original comp data */}
                   {showAdjustments && rowVisibility['adjusted_valuation'] !== false && (
-                    <tr className="border-b-2 border-slate-500 bg-slate-700">
-                      <td className="px-2 py-2 font-bold text-white border-r border-slate-500">Adjusted Valuation</td>
-                      <td className="px-2 py-2 text-center bg-slate-600 border-r border-slate-500 font-bold text-green-400">
+                    <tr className="border-b-2 border-gray-400 bg-blue-100">
+                      <td className="px-2 py-2 font-bold text-gray-900 border-r border-gray-300">Adjusted Valuation</td>
+                      <td className="px-2 py-2 text-center bg-slate-100 border-r border-gray-300 font-bold text-green-700">
                         {result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-'}
                       </td>
                       {[0, 1, 2, 3, 4].map(idx => {
                         const comp = comps[idx];
                         if (!comp) {
-                          return <td key={idx} className="px-2 py-2 text-center border-r border-slate-500 text-slate-400">-</td>;
+                          return <td key={idx} className="px-2 py-2 text-center border-r border-gray-300">-</td>;
                         }
                         const adjustedPrice = comp.adjustedPrice || 0;
                         return (
-                          <td key={idx} className="px-2 py-2 text-center font-bold border-r border-slate-500 text-white">
+                          <td key={idx} className="px-2 py-2 text-center font-bold border-r border-gray-300">
                             ${Math.round(adjustedPrice).toLocaleString()}
                           </td>
                         );
@@ -2034,14 +2034,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             </div>
 
             {/* Modal Footer */}
-            <div className="px-4 py-3 bg-slate-700 border-t border-slate-600 flex items-center justify-between rounded-b-lg flex-shrink-0">
-              <p className="text-xs text-slate-300">
+            <div className="px-4 py-3 bg-gray-50 border-t flex items-center justify-between rounded-b-lg flex-shrink-0">
+              <p className="text-xs text-gray-500">
                 Edit values directly in the grid. Adjustments recalculate automatically.
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowExportModal(false)}
-                  className="px-4 py-2 text-slate-300 bg-slate-600 border border-slate-500 rounded-lg hover:bg-slate-500 transition-colors text-sm"
+                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm"
                 >
                   Cancel
                 </button>
