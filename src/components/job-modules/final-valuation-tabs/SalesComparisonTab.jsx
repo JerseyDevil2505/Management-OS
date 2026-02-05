@@ -2065,13 +2065,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           <div className="space-y-8">
             {/* SECTION 1: Which properties do you want to evaluate? */}
             <div className="bg-white border border-gray-300 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 text-center">
                 Which properties do you want to evaluate?
               </h3>
 
               <div className="space-y-4">
-                {/* VCS and Type/Use side-by-side */}
-                <div className="grid grid-cols-2 gap-6">
+                {/* VCS and Type/Use side-by-side - centered */}
+                <div className="grid grid-cols-2 gap-6 max-w-2xl mx-auto">
                   {/* VCS Dropdown */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">VCS</label>
