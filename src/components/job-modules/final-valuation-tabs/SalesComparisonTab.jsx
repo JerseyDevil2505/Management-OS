@@ -634,14 +634,29 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     }
 
     try {
-      // Update status to 'set_aside' in database for these evaluations
-      const subjectIds = successful.map(r => r.subject.id);
+      // Insert set-aside records into database
+      const setAsideRecords = successful.map(r => ({
+        job_id: jobData.id,
+        subject_property_id: r.subject.id,
+        subject_pams: r.subject.property_composite_key,
+        subject_address: r.subject.property_location,
+        search_criteria: compFilters,
+        comparables: r.comparables.map(c => ({
+          property_id: c.id,
+          pams_id: c.property_composite_key,
+          address: c.property_location,
+          rank: c.rank,
+          adjustedPrice: c.adjustedPrice,
+          adjustmentPercent: c.adjustmentPercent,
+        })),
+        projected_assessment: r.projectedAssessment,
+        confidence_score: r.confidenceScore,
+        status: 'set_aside'
+      }));
 
       const { error } = await supabase
         .from('job_cme_evaluations')
-        .update({ status: 'set_aside' })
-        .in('subject_property_id', subjectIds)
-        .eq('job_id', jobData.id);
+        .insert(setAsideRecords);
 
       if (error) throw error;
 
