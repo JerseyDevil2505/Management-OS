@@ -43,14 +43,21 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     sameVCS: true, // Default checked
     neighborhood: [],
     sameNeighborhood: false,
+    // Lot Size filter
+    lotAcreMin: '',
+    lotAcreMax: '',
+    sameLotSize: false, // OR Similar Lot Size
+    // Year Built filter
     builtWithinYears: 25,
     useBuiltRange: false,
     builtYearMin: '',
     builtYearMax: '',
+    // Size (SFLA) filter
     sizeWithinSqft: 500,
     useSizeRange: false,
     sizeMin: '',
     sizeMax: '',
+    // Attribute filters
     zone: [],
     sameZone: false,
     buildingClass: [],
@@ -63,6 +70,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     sameStoryHeight: false,
     view: [],
     sameView: false,
+    // Tolerance filters
     individualAdjPct: 0,
     netAdjPct: 0,
     grossAdjPct: 0,
