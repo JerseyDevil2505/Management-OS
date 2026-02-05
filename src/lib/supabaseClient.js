@@ -3867,6 +3867,7 @@ export const checklistService = {
         .update({
           status: 'archived',
           turnover_date: turnoverDate,
+          archived_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
         .eq('id', jobId)
