@@ -1815,7 +1815,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       {/* Export Modal - Editable Grid */}
       {showExportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-2">
-          <div className="bg-slate-800 rounded-lg shadow-xl w-full max-w-7xl flex flex-col" style={{ maxHeight: 'calc(100vh - 40px)' }}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl flex flex-col" style={{ maxHeight: 'calc(100vh - 40px)' }}>
             {/* Modal Header */}
             <div className="bg-blue-600 px-4 py-3 flex items-center justify-between rounded-t-lg flex-shrink-0">
               <div className="flex items-center gap-3">
@@ -1847,7 +1847,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
             {/* Modal Content - Editable Grid */}
             <div className="flex-1 overflow-auto p-2">
-              <table className="min-w-full text-xs border-collapse border border-slate-600 text-white">
+              <table className="min-w-full text-xs border-collapse border border-gray-300">
                 <thead className="sticky top-0 z-10">
                   <tr className="bg-blue-600 text-white">
                     <th className="px-2 py-2 text-left font-semibold border-r border-blue-500 w-40">Attribute</th>
@@ -1871,7 +1871,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     const renderCell = (propKey, bgClass) => {
                       const prop = propKey === 'subject' ? subject : comps[parseInt(propKey.replace('comp_', ''))];
                       if (!prop && propKey !== 'subject') {
-                        return <td key={propKey} className={`px-2 py-1 text-center ${bgClass} border-r border-slate-600 text-slate-400`}>-</td>;
+                        return <td key={propKey} className={`px-2 py-1 text-center ${bgClass} border-r border-gray-200 text-gray-400`}>-</td>;
                       }
 
                       const editedVal = editableProperties[propKey]?.[attr.id];
@@ -1885,10 +1885,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
                       if (!isEditable) {
                         return (
-                          <td key={propKey} className={`px-2 py-1 text-center ${bgClass} border-r border-slate-600 text-white`}>
+                          <td key={propKey} className={`px-2 py-1 text-center ${bgClass} border-r border-gray-200`}>
                             <div className="text-xs">{displayVal}</div>
                             {compAdj && compAdj.amount !== 0 && (
-                              <div className={`text-xs font-bold ${compAdj.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              <div className={`text-xs font-bold ${compAdj.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
                                 {compAdj.amount > 0 ? '+' : ''}${Math.round(compAdj.amount).toLocaleString()}
                               </div>
                             )}
@@ -1914,7 +1914,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       };
 
                       return (
-                        <td key={propKey} className={`px-1 py-1 text-center ${bgClass} border-r border-slate-600`}>
+                        <td key={propKey} className={`px-1 py-1 text-center ${bgClass} border-r border-gray-200`}>
                           {cfg.type === 'number' && (
                             <input
                               type="text"
@@ -1966,7 +1966,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                             </select>
                           )}
                           {compAdj && compAdj.amount !== 0 && (
-                            <div className={`text-xs font-bold ${compAdj.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            <div className={`text-xs font-bold ${compAdj.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
                               {compAdj.amount > 0 ? '+' : ''}${Math.round(compAdj.amount).toLocaleString()}
                             </div>
                           )}
@@ -1975,13 +1975,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     };
 
                     return (
-                      <tr key={attr.id} className="border-b border-slate-600 hover:bg-slate-700">
-                        <td className="px-2 py-1 font-medium text-white border-r border-slate-600 whitespace-nowrap">
+                      <tr key={attr.id} className="border-b border-gray-200 hover:bg-gray-50">
+                        <td className="px-2 py-1 font-medium text-gray-900 border-r border-gray-200 whitespace-nowrap">
                           {attr.label}
                           {attr.isDynamic && <span className="ml-1 text-purple-500 text-xs">(D)</span>}
                         </td>
-                        {renderCell('subject', 'bg-slate-700')}
-                        {[0, 1, 2, 3, 4].map(idx => renderCell(`comp_${idx}`, 'bg-slate-600'))}
+                        {renderCell('subject', 'bg-slate-50')}
+                        {[0, 1, 2, 3, 4].map(idx => renderCell(`comp_${idx}`, 'bg-blue-50'))}
                       </tr>
                     );
                   })}
