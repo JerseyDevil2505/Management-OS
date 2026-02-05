@@ -18,6 +18,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   const [manualProperties, setManualProperties] = useState([]);
   const [showManualEntryModal, setShowManualEntryModal] = useState(false);
   const [manualBlockLot, setManualBlockLot] = useState({ block: '', lot: '', qualifier: '' });
+  const [pendingBlockLotRows, setPendingBlockLotRows] = useState([]); // Inline editable rows
   
   // ==================== COMPARABLE FILTERS STATE ====================
   // Calculate CSP date range on mount
