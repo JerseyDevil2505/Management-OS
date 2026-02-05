@@ -1457,18 +1457,25 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       setEvaluationProgress({ current: subjects.length + 1, total: subjects.length + 1 });
       console.log(`📊 Rendering results table...`);
 
-      // Set results and immediately scroll to them
+      // Set results - in 'keep' mode, include set-aside count for summary display
       setEvaluationResults(results);
+
+      // Reload saved evaluations from DB to reflect any changes
+      await loadSavedEvaluations();
 
       // Calculate summary stats for console logging
       const successful = results.filter(r => r.comparables.length >= 3).length;
       const needsMoreComps = results.filter(r => r.comparables.length > 0 && r.comparables.length < 3).length;
       const noComps = results.filter(r => r.comparables.length === 0).length;
+      const setAsideCount = evaluationMode === 'keep' ? savedEvaluations.length : 0;
 
       console.log(`✅ Evaluation Complete!`);
       console.log(`   - ${successful} properties with 3-5 comps (ready to value)`);
       console.log(`   - ${needsMoreComps} properties with 1-2 comps (need more comps)`);
       console.log(`   - ${noComps} properties with 0 comps (no matches found)`);
+      if (setAsideCount > 0) {
+        console.log(`   - ${setAsideCount} properties previously set aside (kept)`);
+      }
 
       // Auto-scroll to results immediately
       setTimeout(() => {
