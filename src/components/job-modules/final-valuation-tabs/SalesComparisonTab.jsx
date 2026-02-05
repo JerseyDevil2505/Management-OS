@@ -815,7 +815,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       // HARD RULE: Only evaluate properties with building_class > 10
       // This excludes commercial (1-4), exempt (15A/B/C), and vacant land (1)
       const isResidentialProperty = (p) => {
-        const buildingClass = parseInt(p.property_class) || 0;
+        const buildingClass = parseInt(p.asset_building_class) || 0;
         return buildingClass > 10;
       };
 
