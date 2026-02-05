@@ -838,7 +838,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       }
 
       if (subjects.length === 0) {
-        alert('No subject properties match your criteria');
+        alert('No subject properties match your criteria.\n\nNote: Only residential properties (Class 2+) can be evaluated. Commercial, exempt, and vacant land are excluded.');
         setIsEvaluating(false);
         setEvaluationProgress({ current: 0, total: 0 });
         return;
