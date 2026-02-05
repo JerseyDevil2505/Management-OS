@@ -1027,7 +1027,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       // Note: Evaluation can proceed even without adjustment grid - comps will have $0 adjustments
       // This allows users to see comp matches before setting up adjustments
 
-      // Step 3: For each subject, find matching comparables
+      // Step 3: Pre-aggregate all eligible sales across cards (main + additional)
+      // This ensures filters AND adjustments use correct totals for multi-card properties
+      const aggregatedSales = eligibleSales.map(s => aggregatePropertyData(s));
+      console.log(`📊 Aggregated ${aggregatedSales.length} eligible sales (multi-card data merged)`);
+
+      // Step 4: For each subject, find matching comparables
       const results = [];
       setEvaluationProgress({ current: 0, total: subjects.length });
 
