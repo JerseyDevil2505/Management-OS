@@ -3533,12 +3533,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
       </div>
 
-      {/* Manual Entry Modal */}
+      {/* Import Block/Lot/Qual Modal */}
       {showManualEntryModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4">
             <div className="px-6 py-4 border-b flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Add Property</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Import Block/Lot/Qual</h3>
               <button
                 onClick={() => setShowManualEntryModal(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -3548,47 +3548,73 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             </div>
 
             <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Block</label>
-                <input
-                  type="text"
-                  value={manualBlockLot.block}
-                  onChange={(e) => setManualBlockLot(prev => ({ ...prev, block: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                />
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-blue-900 mb-2">Expected Columns</h4>
+                <p className="text-sm text-blue-800 mb-2">
+                  Your CSV or Excel file should contain the following columns:
+                </p>
+                <ul className="text-sm text-blue-700 list-disc list-inside space-y-1">
+                  <li><strong>ccdd</strong> — County/District code (optional)</li>
+                  <li><strong>block</strong> — Block number (required)</li>
+                  <li><strong>lot</strong> — Lot number (required)</li>
+                  <li><strong>qualifier</strong> — Qualifier (optional)</li>
+                  <li><strong>location</strong> — Property address (optional)</li>
+                </ul>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Lot</label>
-                <input
-                  type="text"
-                  value={manualBlockLot.lot}
-                  onChange={(e) => setManualBlockLot(prev => ({ ...prev, lot: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                />
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <p className="text-xs text-yellow-800">
+                  <strong>Note:</strong> Only Card 1 (BRT) or M/Main (Microsystems) properties will be matched.
+                </p>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Qualifier (Optional)</label>
+
+              <div className="pt-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Select File</label>
                 <input
-                  type="text"
-                  value={manualBlockLot.qualifier}
-                  onChange={(e) => setManualBlockLot(prev => ({ ...prev, qualifier: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    try {
+                      const data = await file.arrayBuffer();
+                      const workbook = XLSX.read(data);
+                      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+                      // Map columns (case-insensitive)
+                      const imported = jsonData.map(row => {
+                        const block = row.Block || row.block || row.BLOCK || '';
+                        const lot = row.Lot || row.lot || row.LOT || '';
+                        const qualifier = row.Qualifier || row.qualifier || row.QUALIFIER || row.Qual || row.qual || '';
+                        if (!block || !lot) return null;
+                        return `${block}-${lot}${qualifier ? `-${qualifier}` : ''}`;
+                      }).filter(key => key);
+
+                      setManualProperties(prev => {
+                        const combined = [...new Set([...prev, ...imported])];
+                        return combined;
+                      });
+
+                      setShowManualEntryModal(false);
+                      alert(`Imported ${imported.length} properties`);
+                    } catch (error) {
+                      console.error('Error importing file:', error);
+                      alert('Failed to import file. Please check the format.');
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-sm file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                 />
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t flex justify-end gap-3">
+            <div className="px-6 py-4 border-t flex justify-end">
               <button
                 onClick={() => setShowManualEntryModal(false)}
                 className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
               >
                 Cancel
-              </button>
-              <button
-                onClick={handleAddManualProperty}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Add Property
               </button>
             </div>
           </div>
