@@ -400,6 +400,24 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     }
   };
 
+  // Delete a saved result set
+  const handleDeleteResultSet = async (setId, setName) => {
+    if (!window.confirm(`Delete saved result set "${setName}"?`)) return;
+
+    try {
+      const { error } = await supabase
+        .from('job_cme_result_sets')
+        .delete()
+        .eq('id', setId);
+
+      if (error) throw error;
+      await loadSavedResultSets();
+    } catch (error) {
+      console.error('Error deleting result set:', error);
+      alert(`Failed to delete: ${error.message}`);
+    }
+  };
+
   const loadAdjustmentGrid = async () => {
     try {
       const { data, error } = await supabase
