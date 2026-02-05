@@ -3039,11 +3039,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       Set Aside
                     </button>
                     <button
-                      onClick={handleApplyToFinalRoster}
-                      disabled={!evaluationResults || evaluationResults.filter(r => r.projectedAssessment).length === 0}
+                      onClick={handleSaveResultSet}
+                      disabled={!evaluationResults || evaluationResults.length === 0}
                       className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                     >
-                      Apply to Final Roster
+                      Save Result Set
                     </button>
                   </div>
                 </div>
