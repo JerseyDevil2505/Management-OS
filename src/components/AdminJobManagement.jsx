@@ -6,6 +6,39 @@ import {
 import { supabase, employeeService, jobService, planningJobService, utilityService, authService, propertyService, checklistService } from '../lib/supabaseClient';
 import FileUploadButton from './job-modules/FileUploadButton';
 
+// Checklist template - must match ManagementChecklist.jsx
+const CHECKLIST_TEMPLATE = [
+  { id: 'contract-signed-client', item_text: 'Contract Signed by Client', category: 'setup' },
+  { id: 'contract-signed-state', item_text: 'Contract Signed/Approved by State', category: 'setup' },
+  { id: 'tax-maps-approved', item_text: 'Tax Maps Approved', category: 'setup' },
+  { id: 'tax-map-upload', item_text: 'Tax Map Upload', category: 'setup' },
+  { id: 'zoning-map-upload', item_text: 'Zoning Map Upload', category: 'setup' },
+  { id: 'zoning-regulations-upload', item_text: 'Zoning Bulk and Use Regulations Upload', category: 'setup' },
+  { id: 'ppa-website-updated', item_text: 'PPA Website Updated', category: 'setup' },
+  { id: 'data-collection-params', item_text: 'Data Collection Parameters', category: 'setup' },
+  { id: 'initial-mailing-list', item_text: 'Initial Mailing List', category: 'inspection' },
+  { id: 'initial-letter-brochure', item_text: 'Initial Letter and Brochure', category: 'inspection' },
+  { id: 'initial-mailing-sent', item_text: 'Initial Mailing Sent', category: 'inspection' },
+  { id: 'first-attempt', item_text: 'First Attempt Inspections', category: 'inspection' },
+  { id: 'second-attempt', item_text: 'Second Attempt Inspections', category: 'inspection' },
+  { id: 'third-attempt', item_text: 'Third Attempt Inspections', category: 'inspection' },
+  { id: 'lot-sizing', item_text: 'Lot Sizing Completed', category: 'inspection' },
+  { id: 'lot-sizing-questions', item_text: 'Lot Sizing Questions Complete', category: 'inspection' },
+  { id: 'data-quality-analysis', item_text: 'Data Quality Analysis', category: 'analysis' },
+  { id: 'market-analysis', item_text: 'Market Analysis', category: 'analysis' },
+  { id: 'page-by-page', item_text: 'Page by Page Analysis', category: 'analysis' },
+  { id: 'land-value-tables', item_text: 'Land Value Tables Built', category: 'analysis' },
+  { id: 'land-values-entered', item_text: 'Land Values Entered', category: 'analysis' },
+  { id: 'economic-obsolescence', item_text: 'Economic Obsolescence Study', category: 'analysis' },
+  { id: 'vcs-reviewed', item_text: 'VCS Reviewed/Reset', category: 'analysis' },
+  { id: 'cost-conversion', item_text: 'Cost Conversion Factor Set', category: 'analysis' },
+  { id: 'building-class-review', item_text: 'Building Class Review/Updated', category: 'analysis' },
+  { id: 'effective-age', item_text: 'Effective Age Loaded/Set', category: 'analysis' },
+  { id: 'final-values', item_text: 'Final Values Ready', category: 'completion' },
+  { id: 'turnover-document', item_text: 'Generate Turnover Document', category: 'completion' },
+  { id: 'turnover-date', item_text: 'Turnover Date', category: 'completion' }
+];
+
 // Accept jobMetrics props for live metrics integration
 const AdminJobManagement = ({ 
   onJobSelect, 
@@ -1296,8 +1329,8 @@ const AdminJobManagement = ({
   // Archive job function
   const archiveJob = async (job) => {
     try {
-      // Get checklist template items
-      const checklistItems = await checklistService.getChecklistItems(job.id);
+      // Use the hardcoded template (same as ManagementChecklist.jsx)
+      const checklistItems = CHECKLIST_TEMPLATE;
 
       // Get actual status for each item from checklist_item_status table
       const { data: statusData, error: statusError } = await supabase
@@ -1307,7 +1340,7 @@ const AdminJobManagement = ({
 
       if (statusError) throw statusError;
 
-      // Create a map of item statuses
+      // Create a map of item statuses by item_id
       const statusMap = new Map();
       (statusData || []).forEach(status => {
         statusMap.set(status.item_id, status);
