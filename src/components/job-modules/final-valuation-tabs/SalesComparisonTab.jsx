@@ -2378,6 +2378,21 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                     </optgroup>
                   )}
                 </select>
+                <label className="flex items-center gap-1 text-sm whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    checked={compFilters.adjustmentBracket === 'auto'}
+                    onChange={(e) => {
+                      setCompFilters(prev => ({
+                        ...prev,
+                        adjustmentBracket: e.target.checked ? 'auto' : '',
+                        autoAdjustment: e.target.checked
+                      }));
+                    }}
+                    className="rounded"
+                  />
+                  <span className="text-gray-700">Auto</span>
+                </label>
               </div>
             </div>
 
@@ -2416,11 +2431,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 </div>
                 {/* Sales Between */}
                 <div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <span className="text-xs text-gray-500 block">MM-DD-YYYY</span>
-                      <span className="text-sm font-medium text-gray-700">Sales Between</span>
-                    </div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Sales Between</label>
+                  <div className="flex items-center gap-2">
                     <input
                       type="date"
                       value={compFilters.salesDateStart}
@@ -2428,15 +2440,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       className="px-2 py-1 border border-gray-300 rounded text-sm w-36"
                     />
                     <span className="text-sm">and</span>
-                    <div>
-                      <span className="text-xs text-gray-500 block">MM-DD-YYYY</span>
-                      <input
-                        type="date"
-                        value={compFilters.salesDateEnd}
-                        onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateEnd: e.target.value }))}
-                        className="px-2 py-1 border border-gray-300 rounded text-sm w-36"
-                      />
-                    </div>
+                    <input
+                      type="date"
+                      value={compFilters.salesDateEnd}
+                      onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateEnd: e.target.value }))}
+                      className="px-2 py-1 border border-gray-300 rounded text-sm w-36"
+                    />
                   </div>
                 </div>
               </div>
