@@ -1128,42 +1128,47 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     // Lojik blue color
     const lojikBlue = [0, 102, 204];
 
-    // Helper to draw the LOJIK logo with diamond shapes
-    const drawLojikLogo = (x, y) => {
-      // Draw two overlapping diamond shapes
-      doc.setDrawColor(...lojikBlue);
-      doc.setLineWidth(1.5);
+    // Load the LOJIK logo image
+    let logoDataUrl = null;
+    try {
+      const response = await fetch('/lojik-logo.PNG');
+      const blob = await response.blob();
+      logoDataUrl = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    } catch (err) {
+      console.warn('Could not load logo image for PDF:', err);
+    }
 
-      // First diamond (larger, background)
-      const diamond1Size = 14;
-      doc.setFillColor(255, 255, 255);
-      doc.lines([
-        [diamond1Size, diamond1Size],
-        [-diamond1Size, diamond1Size],
-        [-diamond1Size, -diamond1Size],
-        [diamond1Size, -diamond1Size]
-      ], x + 12, y + 15, [1, 1], 'D');
-
-      // Second diamond (smaller, overlapping)
-      const diamond2Size = 10;
-      doc.lines([
-        [diamond2Size, diamond2Size],
-        [-diamond2Size, diamond2Size],
-        [-diamond2Size, -diamond2Size],
-        [diamond2Size, -diamond2Size]
-      ], x + 22, y + 10, [1, 1], 'D');
-
-      // Draw "LOJIK" text next to diamonds
-      doc.setTextColor(...lojikBlue);
-      doc.setFontSize(16);
-      doc.setFont('helvetica', 'bold');
-      doc.text('LOJIK', x + 40, y + 20);
+    // Helper to add the LOJIK logo to PDF
+    const addLogoToPage = (x, y) => {
+      if (logoDataUrl) {
+        // Add the actual logo image (height ~35pt, auto width to maintain aspect ratio)
+        try {
+          doc.addImage(logoDataUrl, 'PNG', x, y, 80, 35);
+        } catch (err) {
+          console.warn('Could not add logo to PDF:', err);
+          // Fallback: draw text
+          doc.setTextColor(...lojikBlue);
+          doc.setFontSize(16);
+          doc.setFont('helvetica', 'bold');
+          doc.text('LOJIK', x, y + 20);
+        }
+      } else {
+        // Fallback: draw LOJIK text if image failed to load
+        doc.setTextColor(...lojikBlue);
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text('LOJIK', x, y + 20);
+      }
     };
 
     // Add header with logo
     const addHeader = (blockLot, includeBlockLotRow = false) => {
-      // Draw the LOJIK logo with diamond shapes
-      drawLojikLogo(margin, margin - 5);
+      // Add the LOJIK logo image
+      addLogoToPage(margin, margin - 5);
 
       // Block/Lot in top right
       doc.setTextColor(0, 0, 0);
