@@ -1394,72 +1394,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         });
       }
 
-      console.log(`✅ Processed ${results.length} properties`);
-      console.log(`   - With 3+ comps: ${results.filter(r => r.comparables.length >= 3).length}`);
-      console.log(`   - With 0 comps: ${results.filter(r => r.comparables.length === 0).length}`);
-      console.log(`   - With projected values: ${results.filter(r => r.projectedAssessment).length}`);
-
-      // Update progress: Start database save phase
-      setEvaluationProgress({ current: subjects.length, total: subjects.length + 1 });
-      console.log(`💾 Saving ${results.length} evaluations to database...`);
-
-      // Save results to database
-      const evaluationRunId = crypto.randomUUID ? crypto.randomUUID() :
-        'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-          const r = (Math.random() * 16) | 0;
-          const v = c === 'x' ? r : ((r & 0x3) | 0x8);
-          return v.toString(16);
-        });
-
-      for (const result of results) {
-        const evaluationData = {
-          job_id: jobData.id,
-          evaluation_run_id: evaluationRunId,
-          subject_property_id: result.subject.id,
-          subject_pams: result.subject.property_composite_key,
-          subject_address: result.subject.property_location,
-          search_criteria: compFilters,
-          comparables: result.comparables.map(comp => ({
-            property_id: comp.id,
-            pams_id: comp.property_composite_key,
-            address: comp.property_location,
-            sale_price: comp.sales_price,
-            sale_date: comp.sales_date,
-            time_adjusted_price: comp.values_norm_time,
-            rank: comp.rank,
-            is_subject_sale: comp.isSubjectSale || false,
-            adjustments: comp.adjustments.reduce((obj, adj) => {
-              obj[adj.name] = { amount: adj.amount, category: adj.category };
-              return obj;
-            }, {}),
-            gross_adjustment: comp.grossAdjustment,
-            net_adjustment: comp.totalAdjustment,
-            net_adjustment_percent: comp.adjustmentPercent,
-            gross_adjustment_percent: comp.grossAdjustmentPercent,
-            adjusted_sale_price: comp.adjustedPrice,
-            weight: comp.weight || 0
-          })),
-          projected_assessment: result.projectedAssessment,
-          weighted_average_price: result.projectedAssessment,
-          confidence_score: result.confidenceScore,
-          status: 'pending'
-        };
-
-        const { error } = await supabase
-          .from('job_cme_evaluations')
-          .insert(evaluationData);
-
-        if (error) {
-          console.error('Error saving evaluation:', error);
-        }
-      }
-
-      console.log(`✅ Database save complete`);
-
-      // Reload saved evaluations from DB to reflect any changes
-      await loadSavedEvaluations();
-
-      // Set results immediately - no delay
+      // Display results immediately - no DB save during evaluation
+      // User saves explicitly via "Save Result Set" button
       setEvaluationResults(results);
       setIsEvaluating(false);
       setEvaluationProgress({ current: 0, total: 0 });
