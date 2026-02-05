@@ -2538,64 +2538,62 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 </label>
               </div>
 
-              {/* Row 4: Built Within + Comparable Built Between + Size Within + Comparable Size Between */}
-              <div className="grid grid-cols-4 gap-4 mb-4 text-sm">
-                <div className="flex items-center gap-1">
-                  <span className="font-medium text-gray-700">Built within</span>
-                  <input
-                    type="number"
-                    value={compFilters.builtWithinYears}
-                    onChange={(e) => setCompFilters(prev => ({ ...prev, builtWithinYears: parseInt(e.target.value) || 0, useBuiltRange: false }))}
-                    className="w-12 px-1 py-1 border border-gray-300 rounded text-sm text-center"
-                  />
-                  <span className="text-gray-600">years of each other</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="font-medium text-gray-700">Comparable built between</span>
-                  <input
-                    type="number"
-                    value={compFilters.builtYearMin}
-                    onChange={(e) => setCompFilters(prev => ({ ...prev, builtYearMin: e.target.value, useBuiltRange: true }))}
-                    className="w-16 px-1 py-1 border border-gray-300 rounded text-sm text-center"
-                    placeholder="YYYY"
-                  />
-                  <span>and</span>
-                  <input
-                    type="number"
-                    value={compFilters.builtYearMax}
-                    onChange={(e) => setCompFilters(prev => ({ ...prev, builtYearMax: e.target.value, useBuiltRange: true }))}
-                    className="w-16 px-1 py-1 border border-gray-300 rounded text-sm text-center"
-                    placeholder="YYYY"
-                  />
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="font-medium text-gray-700">Size within</span>
-                  <input
-                    type="number"
-                    value={compFilters.sizeWithinSqft}
-                    onChange={(e) => setCompFilters(prev => ({ ...prev, sizeWithinSqft: parseInt(e.target.value) || 0, useSizeRange: false }))}
-                    className="w-16 px-1 py-1 border border-gray-300 rounded text-sm text-center"
-                  />
-                  <span className="text-gray-600">sqft of each other</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="font-medium text-gray-700">Comparable size between</span>
-                  <input
-                    type="number"
-                    value={compFilters.sizeMin}
-                    onChange={(e) => setCompFilters(prev => ({ ...prev, sizeMin: e.target.value, useSizeRange: true }))}
-                    className="w-16 px-1 py-1 border border-gray-300 rounded text-sm text-center"
-                    placeholder="sqft"
-                  />
-                  <span>and</span>
-                  <input
-                    type="number"
-                    value={compFilters.sizeMax}
-                    onChange={(e) => setCompFilters(prev => ({ ...prev, sizeMax: e.target.value, useSizeRange: true }))}
-                    className="w-16 px-1 py-1 border border-gray-300 rounded text-sm text-center"
-                    placeholder="sqft"
-                  />
-                </div>
+              {/* Row 5: Built Within / Comparable Built Between */}
+              <div className="flex justify-center items-center gap-2 mb-3 text-sm">
+                <span className="font-medium text-gray-700">Built within</span>
+                <input
+                  type="number"
+                  value={compFilters.builtWithinYears}
+                  onChange={(e) => setCompFilters(prev => ({ ...prev, builtWithinYears: parseInt(e.target.value) || 0, useBuiltRange: false }))}
+                  className="w-12 px-1 py-1 border border-gray-300 rounded text-sm text-center"
+                />
+                <span className="text-gray-600">years of each other</span>
+                <span className="font-bold text-gray-800 mx-2">Or</span>
+                <span className="font-medium text-gray-700">Comparable Built Between</span>
+                <input
+                  type="number"
+                  value={compFilters.builtYearMin}
+                  onChange={(e) => setCompFilters(prev => ({ ...prev, builtYearMin: e.target.value, useBuiltRange: true }))}
+                  className="w-16 px-1 py-1 border border-gray-300 rounded text-sm text-center"
+                  placeholder="YYYY"
+                />
+                <span>and</span>
+                <input
+                  type="number"
+                  value={compFilters.builtYearMax}
+                  onChange={(e) => setCompFilters(prev => ({ ...prev, builtYearMax: e.target.value, useBuiltRange: true }))}
+                  className="w-16 px-1 py-1 border border-gray-300 rounded text-sm text-center"
+                  placeholder="YYYY"
+                />
+              </div>
+
+              {/* Row 6: Size Within / Comparable Size Between */}
+              <div className="flex justify-center items-center gap-2 mb-4 text-sm">
+                <span className="font-medium text-gray-700">Size within</span>
+                <input
+                  type="number"
+                  value={compFilters.sizeWithinSqft}
+                  onChange={(e) => setCompFilters(prev => ({ ...prev, sizeWithinSqft: parseInt(e.target.value) || 0, useSizeRange: false }))}
+                  className="w-16 px-1 py-1 border border-gray-300 rounded text-sm text-center"
+                />
+                <span className="text-gray-600">sqft of each other</span>
+                <span className="font-bold text-gray-800 mx-2">Or</span>
+                <span className="font-medium text-gray-700">Comparable Size Between</span>
+                <input
+                  type="number"
+                  value={compFilters.sizeMin}
+                  onChange={(e) => setCompFilters(prev => ({ ...prev, sizeMin: e.target.value, useSizeRange: true }))}
+                  className="w-16 px-1 py-1 border border-gray-300 rounded text-sm text-center"
+                  placeholder="sqft"
+                />
+                <span>and</span>
+                <input
+                  type="number"
+                  value={compFilters.sizeMax}
+                  onChange={(e) => setCompFilters(prev => ({ ...prev, sizeMax: e.target.value, useSizeRange: true }))}
+                  className="w-16 px-1 py-1 border border-gray-300 rounded text-sm text-center"
+                  placeholder="sqft"
+                />
               </div>
 
               {/* Row 5-6: Attribute Filters (2x3 grid) */}
