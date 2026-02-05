@@ -793,6 +793,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
   // ==================== EVALUATE COMPARABLES ====================
   const handleEvaluate = async () => {
+    // Validate: adjustment bracket must be selected
+    if (!compFilters.adjustmentBracket) {
+      alert('Please select an Adjustment Bracket before evaluating.');
+      return;
+    }
+
     setIsEvaluating(true);
     setEvaluationProgress({ current: 0, total: 0 });
 
