@@ -2954,7 +2954,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
               <div ref={resultsRef} className="mt-6 bg-white border border-gray-300 rounded-lg p-4">
                 {/* Summary Statistics */}
                 <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div className="grid grid-cols-4 gap-4 text-sm">
                     <div>
                       <span className="font-semibold text-gray-700">Total Evaluated:</span>
                       <span className="ml-2 text-gray-900">{evaluationResults.length} properties</span>
@@ -2969,6 +2969,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       <span className="font-semibold text-green-700">With {minCompsForSuccess}+ Comps:</span>
                       <span className="ml-2 text-green-900 font-bold">
                         {evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess).length} of {evaluationResults.length}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-blue-700">Set Aside:</span>
+                      <span className="ml-2 text-blue-900 font-bold">
+                        {savedEvaluations.length}
                       </span>
                     </div>
                   </div>
