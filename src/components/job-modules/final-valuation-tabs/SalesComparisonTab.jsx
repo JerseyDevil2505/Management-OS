@@ -2311,28 +2311,17 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
             {/* SECTION 2: Which comparables do you want to use? */}
             <div className="bg-white border border-gray-300 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 text-center">
                 Which comparables do you want to use?
               </h3>
 
-              {/* Auto-Include Logic Info */}
-              <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-900">
-                  <strong>Auto-Include Logic:</strong> CSP period sales (10/1 prior-prior year to 12/31 prior year) are automatically included.
-                  Use <span className="inline-flex items-center mx-1"><Check className="w-3 h-3 text-green-600" /></span> and <span className="inline-flex items-center mx-1"><X className="w-3 h-3 text-red-600" /></span> buttons
-                  in <strong>Sales Review</strong> tab to manually override.
-                </p>
-              </div>
-
-              {/* Adjustment Bracket Selection */}
-              <div className="mb-6 pb-4 border-b border-gray-200">
+              {/* Adjustment Bracket Selection - Centered */}
+              <div className="mb-6 pb-4 border-b border-gray-200 max-w-md mx-auto">
                 <div className="flex items-center gap-4">
                   <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Adjustment Bracket
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Adjustment Bracket</label>
                     <select
-                      value={compFilters.adjustmentBracket || 'auto'}
+                      value={compFilters.adjustmentBracket || ''}
                       onChange={(e) => {
                         const newValue = e.target.value;
                         setCompFilters(prev => ({
@@ -2341,8 +2330,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                           autoAdjustment: newValue === 'auto'
                         }));
                       }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                     >
+                      <option value="">Select bracket...</option>
                       <option value="auto">Auto (based on sale price)</option>
                       <optgroup label="Default Brackets">
                         {CME_BRACKETS.map((bracket, idx) => (
@@ -2362,30 +2352,24 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       )}
                     </select>
                   </div>
-                  <div className="flex items-center gap-2 pt-6">
+                  <div className="flex items-center gap-2 pt-5">
                     <input
                       type="checkbox"
                       checked={compFilters.adjustmentBracket === 'auto'}
                       onChange={(e) => {
                         setCompFilters(prev => ({
                           ...prev,
-                          adjustmentBracket: e.target.checked ? 'auto' : 'bracket_1',
+                          adjustmentBracket: e.target.checked ? 'auto' : '',
                           autoAdjustment: e.target.checked
                         }));
                       }}
                       className="rounded"
                       id="auto-adjustment"
                     />
-                    <label htmlFor="auto-adjustment" className="text-sm text-gray-700">
-                      Auto
-                    </label>
+                    <label htmlFor="auto-adjustment" className="text-sm text-gray-700">Auto</label>
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Select which adjustment bracket to use for comparable evaluations.
-                  "Auto" automatically selects the bracket based on each comparable's sale price.
-                  {customBrackets.length > 0 && ' Custom brackets allow you to define your own price ranges and adjustment values.'}
-                </p>
+                <p className="text-xs text-gray-500 mt-1 text-center">Select bracket for comparable adjustments</p>
               </div>
 
               <div className="grid grid-cols-2 gap-6">
