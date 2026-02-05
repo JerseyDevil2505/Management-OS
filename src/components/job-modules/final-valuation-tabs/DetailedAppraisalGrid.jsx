@@ -1871,7 +1871,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     const renderCell = (propKey, bgClass) => {
                       const prop = propKey === 'subject' ? subject : comps[parseInt(propKey.replace('comp_', ''))];
                       if (!prop && propKey !== 'subject') {
-                        return <td key={propKey} className={`px-2 py-1 text-center ${bgClass} border-r border-gray-200 text-gray-400`}>-</td>;
+                        return <td key={propKey} className={`px-2 py-1 text-center ${bgClass} border-r border-slate-600 text-slate-400`}>-</td>;
                       }
 
                       const editedVal = editableProperties[propKey]?.[attr.id];
@@ -1885,10 +1885,10 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
                       if (!isEditable) {
                         return (
-                          <td key={propKey} className={`px-2 py-1 text-center ${bgClass} border-r border-gray-200`}>
+                          <td key={propKey} className={`px-2 py-1 text-center ${bgClass} border-r border-slate-600 text-white`}>
                             <div className="text-xs">{displayVal}</div>
                             {compAdj && compAdj.amount !== 0 && (
-                              <div className={`text-xs font-bold ${compAdj.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              <div className={`text-xs font-bold ${compAdj.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
                                 {compAdj.amount > 0 ? '+' : ''}${Math.round(compAdj.amount).toLocaleString()}
                               </div>
                             )}
