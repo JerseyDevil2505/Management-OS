@@ -2909,7 +2909,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                         onChange={() => setEvaluationMode('keep')}
                         className="rounded"
                       />
-                      <span className="text-sm">Keep saved results</span>
+                      <span className="text-sm">Keep saved results{savedEvaluations.length > 0 ? ` (${savedEvaluations.length} set aside)` : ''}</span>
                     </label>
                   </div>
 
