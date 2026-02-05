@@ -274,6 +274,131 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     }
   };
 
+  // Load saved result sets from database
+  const loadSavedResultSets = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('job_cme_result_sets')
+        .select('id, name, adjustment_bracket, created_at')
+        .eq('job_id', jobData.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setSavedResultSets(data || []);
+    } catch (error) {
+      console.warn('⚠️ Error loading saved result sets:', error.message);
+    }
+  };
+
+  // Save current result set with a user-provided name
+  const handleSaveResultSet = async () => {
+    if (!evaluationResults || evaluationResults.length === 0) return;
+
+    const name = window.prompt('Enter a name for this result set:');
+    if (!name || !name.trim()) return;
+
+    try {
+      // Serialize results for storage (strip circular refs / large objects)
+      const serializedResults = evaluationResults.map(r => ({
+        subject: {
+          id: r.subject.id,
+          property_composite_key: r.subject.property_composite_key,
+          property_vcs: r.subject.property_vcs,
+          property_block: r.subject.property_block,
+          property_lot: r.subject.property_lot,
+          property_qualifier: r.subject.property_qualifier,
+          property_location: r.subject.property_location,
+          asset_type_use: r.subject.asset_type_use,
+          asset_design_style: r.subject.asset_design_style,
+          asset_building_class: r.subject.asset_building_class,
+          asset_sfla: r.subject.asset_sfla,
+          values_mod_total: r.subject.values_mod_total,
+          values_cama_total: r.subject.values_cama_total,
+        },
+        comparables: r.comparables.map(c => ({
+          id: c.id,
+          property_composite_key: c.property_composite_key,
+          property_block: c.property_block,
+          property_lot: c.property_lot,
+          property_qualifier: c.property_qualifier,
+          property_location: c.property_location,
+          sales_price: c.sales_price,
+          sales_date: c.sales_date,
+          values_norm_time: c.values_norm_time,
+          rank: c.rank,
+          isSubjectSale: c.isSubjectSale || false,
+          adjustments: c.adjustments,
+          totalAdjustment: c.totalAdjustment,
+          grossAdjustment: c.grossAdjustment,
+          adjustmentPercent: c.adjustmentPercent,
+          grossAdjustmentPercent: c.grossAdjustmentPercent,
+          adjustedPrice: c.adjustedPrice,
+          weight: c.weight || 0,
+        })),
+        totalFound: r.totalFound,
+        totalValid: r.totalValid,
+        projectedAssessment: r.projectedAssessment,
+        confidenceScore: r.confidenceScore,
+        hasSubjectSale: r.hasSubjectSale,
+      }));
+
+      const { error } = await supabase
+        .from('job_cme_result_sets')
+        .insert({
+          job_id: jobData.id,
+          name: name.trim(),
+          adjustment_bracket: compFilters.adjustmentBracket,
+          search_criteria: compFilters,
+          results: serializedResults,
+        });
+
+      if (error) throw error;
+
+      alert(`Result set "${name.trim()}" saved successfully!`);
+      await loadSavedResultSets();
+    } catch (error) {
+      console.error('Error saving result set:', error);
+      alert(`Failed to save result set: ${error.message}`);
+    }
+  };
+
+  // Load a saved result set by ID
+  const handleLoadResultSet = async (setId) => {
+    if (!setId) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('job_cme_result_sets')
+        .select('*')
+        .eq('id', setId)
+        .single();
+
+      if (error) throw error;
+
+      // Restore results
+      setEvaluationResults(data.results);
+
+      // Restore adjustment bracket
+      if (data.adjustment_bracket) {
+        setCompFilters(prev => ({
+          ...prev,
+          adjustmentBracket: data.adjustment_bracket,
+          autoAdjustment: data.adjustment_bracket === 'auto',
+        }));
+      }
+
+      // Scroll to results
+      requestAnimationFrame(() => {
+        if (resultsRef.current) {
+          resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    } catch (error) {
+      console.error('Error loading result set:', error);
+      alert(`Failed to load result set: ${error.message}`);
+    }
+  };
+
   const loadAdjustmentGrid = async () => {
     try {
       const { data, error } = await supabase
