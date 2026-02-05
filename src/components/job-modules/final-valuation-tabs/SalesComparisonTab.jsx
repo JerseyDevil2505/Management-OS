@@ -2891,7 +2891,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
               {/* Evaluate Button */}
               <div className="mt-6 pt-6 border-t border-gray-300">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-col items-center mb-4">
                   <div className="space-y-2">
                     <label className="flex items-center gap-2">
                       <input
@@ -2909,14 +2909,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                         onChange={() => setEvaluationMode('keep')}
                         className="rounded"
                       />
-                      <span className="text-sm">Keep saved results{savedEvaluations.length > 0 ? ` (${savedEvaluations.length} set aside)` : ''}</span>
+                      <span className="text-sm">Keep saved results</span>
                     </label>
                   </div>
 
                   <button
                     onClick={handleEvaluate}
                     disabled={isEvaluating}
-                    className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold text-lg"
+                    className="mt-3 px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold text-lg"
                   >
                     {isEvaluating
                       ? `Evaluating ${evaluationProgress.current}/${evaluationProgress.total}...`
