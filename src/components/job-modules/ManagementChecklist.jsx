@@ -988,11 +988,28 @@ useEffect(() => {
   };
   const handleTurnoverDate = async (itemId, date) => {
     if (date) {
-      // First update the item status
+      // Update the item status to completed
       await handleItemStatusChange(itemId, 'completed');
-      
-      // Then show archive confirmation
-      setShowArchiveConfirm(true);
+
+      // Save the turnover date to the job
+      try {
+        const { error } = await supabase
+          .from('jobs')
+          .update({
+            turnover_date: date,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', jobData.id);
+
+        if (error) {
+          console.error('Error saving turnover date:', error);
+        } else {
+          console.log('✅ Turnover date saved:', date);
+        }
+      } catch (err) {
+        console.error('Error saving turnover date:', err);
+      }
+      // Archive can be done manually from Admin Jobs
     }
   };
 
