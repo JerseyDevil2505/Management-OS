@@ -83,6 +83,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   const [evaluationProgress, setEvaluationProgress] = useState({ current: 0, total: 0 });
   const [evaluationResults, setEvaluationResults] = useState(null);
   const [savedEvaluations, setSavedEvaluations] = useState([]); // Set-aside evaluations from DB
+  const [savedResultSets, setSavedResultSets] = useState([]); // Named result sets from DB
   const [adjustmentGrid, setAdjustmentGrid] = useState([]);
   const [customBrackets, setCustomBrackets] = useState([]);
   const [minCompsForSuccess, setMinCompsForSuccess] = useState(3); // User-selectable threshold
