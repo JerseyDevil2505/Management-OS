@@ -967,6 +967,30 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             }
           }
 
+          // Lot size filter
+          if (compFilters.sameLotSize) {
+            // "Similar lot size" - within 25% of subject's lot size
+            const subjectLotAcre = subject.asset_lot_acre || 0;
+            const compLotAcre = comp.asset_lot_acre || 0;
+            if (subjectLotAcre > 0 && compLotAcre > 0) {
+              const tolerance = subjectLotAcre * 0.25; // 25% tolerance
+              if (Math.abs(compLotAcre - subjectLotAcre) > tolerance) {
+                if (isFirstProperty) debugFilters.lotSize = (debugFilters.lotSize || 0) + 1;
+                return false;
+              }
+            }
+          } else if (compFilters.lotAcreMin || compFilters.lotAcreMax) {
+            const compLotAcre = comp.asset_lot_acre || 0;
+            if (compFilters.lotAcreMin && compLotAcre < parseFloat(compFilters.lotAcreMin)) {
+              if (isFirstProperty) debugFilters.lotSize = (debugFilters.lotSize || 0) + 1;
+              return false;
+            }
+            if (compFilters.lotAcreMax && compLotAcre > parseFloat(compFilters.lotAcreMax)) {
+              if (isFirstProperty) debugFilters.lotSize = (debugFilters.lotSize || 0) + 1;
+              return false;
+            }
+          }
+
           // Year built filter
           if (compFilters.useBuiltRange) {
             if (compFilters.builtYearMin && comp.asset_year_built < parseInt(compFilters.builtYearMin)) {
