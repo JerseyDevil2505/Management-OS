@@ -2991,16 +2991,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                     <thead className="bg-gray-100">
                       <tr>
                         {/* Subject Property Info */}
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">VCS</th>
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Block</th>
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Lot</th>
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Qual</th>
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Location</th>
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">TypeUse</th>
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Style</th>
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-right font-semibold bg-yellow-50">Current Asmt</th>
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-right font-semibold bg-green-50">New Asmt</th>
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-right font-semibold bg-blue-50">%Change</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">VCS</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">Block</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">Lot</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">Qual</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">Location</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">TypeUse</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">Style</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold bg-yellow-50">Current Asmt</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold bg-green-50">New Asmt</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold bg-blue-50">%Change</th>
                         {/* Comparable Columns */}
                         {[1, 2, 3, 4, 5].map(num => (
                           <th key={num} colSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold bg-blue-50">
@@ -3039,18 +3039,18 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                         return (
                           <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                             {/* Subject Property Info */}
-                            <td className="border border-gray-300 px-2 py-2 text-sm">{result.subject.property_vcs}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-sm font-medium">{result.subject.property_block}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-sm font-medium">{result.subject.property_lot}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-sm">{result.subject.property_qualifier || ''}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-xs max-w-xs truncate">{result.subject.property_location || ''}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-xs">{typeUseDisplay}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-xs">{styleDisplay}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-right text-sm font-semibold bg-yellow-50">
+                            <td className="border border-gray-300 px-2 py-2 text-center text-sm">{result.subject.property_vcs}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-center text-sm font-medium">{result.subject.property_block}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-center text-sm font-medium">{result.subject.property_lot}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-center text-sm">{result.subject.property_qualifier || ''}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-center text-xs max-w-xs truncate">{result.subject.property_location || ''}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-center text-xs">{typeUseDisplay}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-center text-xs">{styleDisplay}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold bg-yellow-50">
                               ${(result.subject.values_mod_total || result.subject.values_cama_total || 0).toLocaleString()}
                             </td>
                             <td
-                              className="border border-gray-300 px-2 py-2 text-right text-sm font-bold bg-green-50 text-green-700 cursor-pointer hover:underline"
+                              className="border border-gray-300 px-2 py-2 text-center text-sm font-bold bg-green-50 text-green-700 cursor-pointer hover:underline"
                               onClick={() => {
                                 setManualEvaluationResult(result);
                                 setActiveSubTab('detailed');
@@ -3059,7 +3059,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                             >
                               {result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-'}
                             </td>
-                            <td className="border border-gray-300 px-2 py-2 text-right text-sm font-semibold bg-blue-50">
+                            <td className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold bg-blue-50">
                               {(() => {
                                 const currentAsmt = result.subject.values_mod_total || result.subject.values_cama_total || 0;
                                 const newAsmt = result.projectedAssessment;
@@ -3092,7 +3092,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                                   <td className="border border-gray-300 px-2 py-2 text-center text-xs">
                                     {blqFormatted}
                                   </td>
-                                  <td className="border border-gray-300 px-2 py-2 text-right text-xs font-semibold">
+                                  <td className="border border-gray-300 px-2 py-2 text-center text-xs font-semibold">
                                     ${Math.round(comp.adjustedPrice || 0).toLocaleString()}
                                   </td>
                                 </React.Fragment>
