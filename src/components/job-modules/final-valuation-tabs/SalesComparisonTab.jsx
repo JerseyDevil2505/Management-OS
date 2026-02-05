@@ -250,6 +250,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       loadCustomBrackets();
       loadCodeDefinitions();
       loadSavedEvaluations();
+      loadSavedResultSets();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id]);
