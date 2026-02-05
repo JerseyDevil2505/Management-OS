@@ -2978,6 +2978,25 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                   </div>
                 )}
               </div>
+
+              {/* Load Saved Result Set */}
+              {savedResultSets.length > 0 && (
+                <div className="mt-4 flex justify-center items-center gap-3">
+                  <label className="text-sm font-medium text-gray-700">Load Saved Result Set:</label>
+                  <select
+                    onChange={(e) => handleLoadResultSet(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-300 rounded text-sm min-w-[200px]"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Select a saved set...</option>
+                    {savedResultSets.map(rs => (
+                      <option key={rs.id} value={rs.id}>
+                        {rs.name} ({new Date(rs.created_at).toLocaleDateString()})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* INLINE RESULTS - Show directly below search filters */}
