@@ -248,9 +248,30 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       loadAdjustmentGrid();
       loadCustomBrackets();
       loadCodeDefinitions();
+      loadSavedEvaluations();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id]);
+
+  // Load existing set_aside evaluations from database
+  const loadSavedEvaluations = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('job_cme_evaluations')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .eq('status', 'set_aside');
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setSavedEvaluations(data);
+        console.log(`📌 Loaded ${data.length} set-aside evaluations`);
+      }
+    } catch (error) {
+      console.warn('⚠️ Error loading saved evaluations:', error.message);
+    }
+  };
 
   const loadAdjustmentGrid = async () => {
     try {
