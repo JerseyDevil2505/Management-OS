@@ -2267,11 +2267,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
                 {/* Manual Properties Chips */}
                 {manualProperties.length > 0 && (
-                  <div className="pt-2">
+                  <div className="pt-2 max-w-2xl mx-auto text-center">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Manual Properties ({manualProperties.length})
                     </label>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap justify-center gap-1.5">
                       {manualProperties.map(key => (
                         <span
                           key={key}
