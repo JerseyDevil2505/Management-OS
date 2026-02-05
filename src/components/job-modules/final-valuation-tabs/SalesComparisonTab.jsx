@@ -812,16 +812,25 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
     try {
       // Step 1: Determine subject properties
+      // HARD RULE: Only evaluate properties with building_class > 10
+      // This excludes commercial (1-4), exempt (15A/B/C), and vacant land (1)
+      const isResidentialProperty = (p) => {
+        const buildingClass = parseInt(p.property_class) || 0;
+        return buildingClass > 10;
+      };
+
       let subjects = [];
 
       if (manualProperties.length > 0) {
-        // Use manually entered properties
+        // Use manually entered properties (still enforce building_class > 10)
         subjects = properties.filter(p =>
-          manualProperties.includes(p.property_composite_key)
+          manualProperties.includes(p.property_composite_key) && isResidentialProperty(p)
         );
       } else {
         // Use VCS + Type/Use filters
         subjects = properties.filter(p => {
+          // Must be residential (building_class > 10)
+          if (!isResidentialProperty(p)) return false;
           if (subjectVCS.length > 0 && !subjectVCS.includes(p.property_vcs)) return false;
           if (subjectTypeUse.length > 0 && !subjectTypeUse.includes(p.asset_type_use)) return false;
           return true;
