@@ -1077,7 +1077,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           passed: 0
         };
 
-        const matchingComps = eligibleSales.filter(comp => {
+        const matchingComps = aggregatedSales.filter(comp => {
           // Exclude self
           if (comp.property_composite_key === subject.property_composite_key) {
             if (isFirstProperty) debugFilters.self++;
