@@ -2070,98 +2070,200 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
               </h3>
 
               <div className="space-y-4">
-                {/* VCS Dropdown */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">VCS</label>
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        toggleChip(subjectVCS, setSubjectVCS)(e.target.value);
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select VCS to add...</option>
-                    {uniqueVCS.map(vcs => (
-                      <option key={vcs} value={vcs}>{vcs}</option>
-                    ))}
-                  </select>
-                  {/* VCS Chips */}
-                  {subjectVCS.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {subjectVCS.map(vcs => (
-                        <span
-                          key={vcs}
-                          className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
-                        >
-                          {vcs}
-                          <button
-                            onClick={() => toggleChip(subjectVCS, setSubjectVCS)(vcs)}
-                            className="ml-1 text-blue-600 hover:text-blue-800"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
+                {/* VCS and Type/Use side-by-side */}
+                <div className="grid grid-cols-2 gap-6">
+                  {/* VCS Dropdown */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">VCS</label>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          toggleChip(subjectVCS, setSubjectVCS)(e.target.value);
+                        }
+                      }}
+                      className="w-full max-w-xs px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select VCS...</option>
+                      {uniqueVCS.map(vcs => (
+                        <option key={vcs} value={vcs}>{vcs}</option>
                       ))}
-                    </div>
-                  )}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">Blank for full town</p>
+                    {/* VCS Chips */}
+                    {subjectVCS.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {subjectVCS.map(vcs => (
+                          <span
+                            key={vcs}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs"
+                          >
+                            {vcs}
+                            <button
+                              onClick={() => toggleChip(subjectVCS, setSubjectVCS)(vcs)}
+                              className="ml-0.5 text-blue-600 hover:text-blue-800"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Type/Use Dropdown */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Type/Use Codes</label>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          toggleChip(subjectTypeUse, setSubjectTypeUse)(e.target.value);
+                        }
+                      }}
+                      className="w-full max-w-xs px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select Type/Use...</option>
+                      {uniqueTypeUse.map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">Can select multiple. Blank for all</p>
+                    {/* Type/Use Chips */}
+                    {subjectTypeUse.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {subjectTypeUse.map(type => (
+                          <span
+                            key={type}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs"
+                          >
+                            {type}
+                            <button
+                              onClick={() => toggleChip(subjectTypeUse, setSubjectTypeUse)(type)}
+                              className="ml-0.5 text-green-600 hover:text-green-800"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* Type/Use Dropdown */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Type/Use Codes</label>
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        toggleChip(subjectTypeUse, setSubjectTypeUse)(e.target.value);
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select Type/Use to add...</option>
-                    {uniqueTypeUse.map(type => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
-                  {/* Type/Use Chips */}
-                  {subjectTypeUse.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {subjectTypeUse.map(type => (
-                        <span
-                          key={type}
-                          className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm"
+                {/* Inline Block/Lot/Qual Entry Rows */}
+                {pendingBlockLotRows.length > 0 && (
+                  <div className="space-y-2 pt-2">
+                    {pendingBlockLotRows.map((row, idx) => (
+                      <div key={idx} className="flex items-center gap-3">
+                        <div className="flex-1 grid grid-cols-3 gap-3 max-w-lg">
+                          <div>
+                            {idx === 0 && <label className="block text-xs font-medium text-gray-600 mb-1">Block</label>}
+                            <input
+                              type="text"
+                              value={row.block}
+                              onChange={(e) => {
+                                const updated = [...pendingBlockLotRows];
+                                updated[idx] = { ...updated[idx], block: e.target.value };
+                                setPendingBlockLotRows(updated);
+                              }}
+                              onBlur={() => {
+                                if (row.block && row.lot) {
+                                  const key = `${row.block}-${row.lot}${row.qualifier ? `-${row.qualifier}` : ''}`;
+                                  if (!manualProperties.includes(key)) {
+                                    setManualProperties(prev => [...prev, key]);
+                                  }
+                                  setPendingBlockLotRows(prev => prev.filter((_, i) => i !== idx));
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && row.block && row.lot) {
+                                  const key = `${row.block}-${row.lot}${row.qualifier ? `-${row.qualifier}` : ''}`;
+                                  if (!manualProperties.includes(key)) {
+                                    setManualProperties(prev => [...prev, key]);
+                                  }
+                                  setPendingBlockLotRows(prev => prev.filter((_, i) => i !== idx));
+                                }
+                              }}
+                              placeholder="Block"
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            {idx === 0 && <label className="block text-xs font-medium text-gray-600 mb-1">Lot</label>}
+                            <input
+                              type="text"
+                              value={row.lot}
+                              onChange={(e) => {
+                                const updated = [...pendingBlockLotRows];
+                                updated[idx] = { ...updated[idx], lot: e.target.value };
+                                setPendingBlockLotRows(updated);
+                              }}
+                              onBlur={() => {
+                                if (row.block && row.lot) {
+                                  const key = `${row.block}-${row.lot}${row.qualifier ? `-${row.qualifier}` : ''}`;
+                                  if (!manualProperties.includes(key)) {
+                                    setManualProperties(prev => [...prev, key]);
+                                  }
+                                  setPendingBlockLotRows(prev => prev.filter((_, i) => i !== idx));
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && row.block && row.lot) {
+                                  const key = `${row.block}-${row.lot}${row.qualifier ? `-${row.qualifier}` : ''}`;
+                                  if (!manualProperties.includes(key)) {
+                                    setManualProperties(prev => [...prev, key]);
+                                  }
+                                  setPendingBlockLotRows(prev => prev.filter((_, i) => i !== idx));
+                                }
+                              }}
+                              placeholder="Lot"
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            {idx === 0 && <label className="block text-xs font-medium text-gray-600 mb-1">Qual</label>}
+                            <input
+                              type="text"
+                              value={row.qualifier}
+                              onChange={(e) => {
+                                const updated = [...pendingBlockLotRows];
+                                updated[idx] = { ...updated[idx], qualifier: e.target.value };
+                                setPendingBlockLotRows(updated);
+                              }}
+                              onBlur={() => {
+                                if (row.block && row.lot) {
+                                  const key = `${row.block}-${row.lot}${row.qualifier ? `-${row.qualifier}` : ''}`;
+                                  if (!manualProperties.includes(key)) {
+                                    setManualProperties(prev => [...prev, key]);
+                                  }
+                                  setPendingBlockLotRows(prev => prev.filter((_, i) => i !== idx));
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && row.block && row.lot) {
+                                  const key = `${row.block}-${row.lot}${row.qualifier ? `-${row.qualifier}` : ''}`;
+                                  if (!manualProperties.includes(key)) {
+                                    setManualProperties(prev => [...prev, key]);
+                                  }
+                                  setPendingBlockLotRows(prev => prev.filter((_, i) => i !== idx));
+                                }
+                              }}
+                              placeholder="Qual"
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setPendingBlockLotRows(prev => prev.filter((_, i) => i !== idx))}
+                          className="text-gray-400 hover:text-gray-600 p-1"
                         >
-                          {type}
-                          <button
-                            onClick={() => toggleChip(subjectTypeUse, setSubjectTypeUse)(type)}
-                            className="ml-1 text-green-600 hover:text-green-800"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Manual Entry Buttons */}
-                <div className="flex gap-3 pt-2">
-                  <button
-                    onClick={() => setShowManualEntryModal(true)}
-                    className="px-4 py-2 bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm font-medium"
-                  >
-                    New Block/Lot/Qual
-                  </button>
-                  <button
-                    onClick={handleImportExcel}
-                    className="px-4 py-2 bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm font-medium inline-flex items-center gap-2"
-                  >
-                    <Upload className="w-4 h-4" />
-                    Import Block/Lot/Qual
-                  </button>
-                </div>
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* Manual Properties Chips */}
                 {manualProperties.length > 0 && (
@@ -2169,16 +2271,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Manual Properties ({manualProperties.length})
                     </label>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-1.5">
                       {manualProperties.map(key => (
                         <span
                           key={key}
-                          className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-800 rounded-full text-xs"
                         >
                           {key}
                           <button
                             onClick={() => setManualProperties(prev => prev.filter(k => k !== key))}
-                            className="ml-1 text-purple-600 hover:text-purple-800"
+                            className="ml-0.5 text-purple-600 hover:text-purple-800"
                           >
                             <X className="w-3 h-3" />
                           </button>
@@ -2187,6 +2289,23 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                     </div>
                   </div>
                 )}
+
+                {/* Centered Buttons */}
+                <div className="flex justify-center gap-3 pt-3">
+                  <button
+                    onClick={() => setPendingBlockLotRows(prev => [...prev, { block: '', lot: '', qualifier: '' }])}
+                    className="px-4 py-2 bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm font-medium"
+                  >
+                    New Block/Lot/Qual
+                  </button>
+                  <button
+                    onClick={() => setShowManualEntryModal(true)}
+                    className="px-4 py-2 bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm font-medium inline-flex items-center gap-2"
+                  >
+                    <Upload className="w-4 h-4" />
+                    Import Block/Lot/Qual
+                  </button>
+                </div>
               </div>
             </div>
 
