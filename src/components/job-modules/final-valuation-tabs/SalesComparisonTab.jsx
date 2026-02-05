@@ -866,6 +866,54 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         return;
       }
 
+      console.log(`🔍 Found ${subjects.length} subject properties matching criteria`);
+
+      // Handle evaluation mode: fresh vs keep
+      if (evaluationMode === 'fresh') {
+        // Delete ALL existing evaluations for this job
+        const { error: deleteError } = await supabase
+          .from('job_cme_evaluations')
+          .delete()
+          .eq('job_id', jobData.id);
+
+        if (deleteError) {
+          console.error('Error clearing evaluations:', deleteError);
+        } else {
+          console.log('🗑️ Cleared all previous evaluations (fresh mode)');
+        }
+        setSavedEvaluations([]);
+      } else {
+        // Keep mode: exclude properties that already have set_aside results
+        const setAsidePropertyIds = new Set(
+          savedEvaluations.map(e => e.subject_property_id)
+        );
+        const totalBefore = subjects.length;
+        subjects = subjects.filter(s => !setAsidePropertyIds.has(s.id));
+        const excluded = totalBefore - subjects.length;
+
+        console.log(`📌 Keep mode: ${excluded} properties already set aside, ${subjects.length} remaining to evaluate`);
+
+        if (subjects.length === 0) {
+          alert(`All matching properties already have saved results (${excluded} set aside).\n\nSwitch to "Fresh evaluation" to re-evaluate them, or adjust your "What" criteria to target different properties.`);
+          setIsEvaluating(false);
+          setEvaluationProgress({ current: 0, total: 0 });
+          return;
+        }
+
+        // Delete only non-set-aside evaluations for remaining subjects (re-evaluate them)
+        const remainingIds = subjects.map(s => s.id);
+        const { error: deleteError } = await supabase
+          .from('job_cme_evaluations')
+          .delete()
+          .eq('job_id', jobData.id)
+          .in('subject_property_id', remainingIds)
+          .neq('status', 'set_aside');
+
+        if (deleteError) {
+          console.error('Error clearing non-saved evaluations:', deleteError);
+        }
+      }
+
       console.log(`🔍 Evaluating ${subjects.length} subject properties...`);
 
       // Step 2: Get eligible sales (from Sales Review logic)
