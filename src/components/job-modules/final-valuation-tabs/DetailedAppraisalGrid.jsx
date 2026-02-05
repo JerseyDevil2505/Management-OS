@@ -1914,7 +1914,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       };
 
                       return (
-                        <td key={propKey} className={`px-1 py-1 text-center ${bgClass} border-r border-gray-200`}>
+                        <td key={propKey} className={`px-1 py-1 text-center ${bgClass} border-r border-slate-600`}>
                           {cfg.type === 'number' && (
                             <input
                               type="text"
@@ -1966,7 +1966,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                             </select>
                           )}
                           {compAdj && compAdj.amount !== 0 && (
-                            <div className={`text-xs font-bold ${compAdj.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            <div className={`text-xs font-bold ${compAdj.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
                               {compAdj.amount > 0 ? '+' : ''}${Math.round(compAdj.amount).toLocaleString()}
                             </div>
                           )}
