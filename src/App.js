@@ -969,7 +969,7 @@ const App = () => {
                   objectFit: 'contain'
                 }}
               />
-              Property Assessment CoPilot
+              Property Assessment Copilot
             </h1>
             <div className="flex items-center gap-4">
               <span className="text-sm text-white opacity-95">
