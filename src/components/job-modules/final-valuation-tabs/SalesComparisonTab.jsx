@@ -518,13 +518,19 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
       if (error) throw error;
 
-      // Remove set-aside properties from current subject filters
-      const remainingResults = evaluationResults.filter(r => r.comparables.length < 3);
+      // Reload saved evaluations to include newly set-aside ones
+      await loadSavedEvaluations();
+
+      // Remove set-aside properties from current results display
+      const remainingResults = evaluationResults.filter(r => r.comparables.length < minCompsForSuccess);
 
       alert(`${successful.length} properties set aside successfully. ${remainingResults.length} properties remain for re-evaluation.`);
 
       // Update results to show only remaining
       setEvaluationResults(remainingResults.length > 0 ? remainingResults : null);
+
+      // Auto-switch to 'keep' mode since user now has saved results
+      setEvaluationMode('keep');
 
     } catch (error) {
       console.error('Error setting aside properties:', error);
