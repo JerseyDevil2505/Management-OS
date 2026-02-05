@@ -1327,9 +1327,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           console.log(`   ✅ Passed initial filters: ${debugFilters.passed}`);
         }
 
-        // Calculate adjustments for each comparable (aggregate multi-card data)
-        const compsWithAdjustments = matchingComps.map(rawComp => {
-          const comp = aggregatePropertyData(rawComp);
+        // Calculate adjustments for each comparable (already aggregated via aggregatedSales)
+        const compsWithAdjustments = matchingComps.map(comp => {
           const { adjustments, totalAdjustment, adjustedPrice, adjustmentPercent } =
             calculateAllAdjustments(subject, comp);
 
