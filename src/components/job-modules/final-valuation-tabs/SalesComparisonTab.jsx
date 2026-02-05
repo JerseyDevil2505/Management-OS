@@ -2951,22 +2951,30 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 )}
               </div>
 
-              {/* Load Saved Result Set */}
+              {/* Saved Result Sets */}
               {savedResultSets.length > 0 && (
-                <div className="mt-4 flex justify-center items-center gap-3">
-                  <label className="text-sm font-medium text-gray-700">Load Saved Result Set:</label>
-                  <select
-                    onChange={(e) => handleLoadResultSet(e.target.value)}
-                    className="px-3 py-1.5 border border-gray-300 rounded text-sm min-w-[200px]"
-                    defaultValue=""
-                  >
-                    <option value="" disabled>Select a saved set...</option>
+                <div className="mt-4">
+                  <div className="text-sm font-medium text-gray-700 text-center mb-2">Saved Result Sets</div>
+                  <div className="flex flex-wrap justify-center gap-2">
                     {savedResultSets.map(rs => (
-                      <option key={rs.id} value={rs.id}>
-                        {rs.name} ({new Date(rs.created_at).toLocaleDateString()})
-                      </option>
+                      <div key={rs.id} className="flex items-center gap-1 bg-gray-100 border border-gray-300 rounded px-3 py-1.5">
+                        <button
+                          onClick={() => handleLoadResultSet(rs.id)}
+                          className="text-sm text-blue-700 hover:text-blue-900 hover:underline font-medium"
+                        >
+                          {rs.name}
+                        </button>
+                        <span className="text-xs text-gray-500 ml-1">({new Date(rs.created_at).toLocaleDateString()})</span>
+                        <button
+                          onClick={() => handleDeleteResultSet(rs.id, rs.name)}
+                          className="ml-2 text-red-400 hover:text-red-600 text-sm font-bold"
+                          title="Delete this result set"
+                        >
+                          x
+                        </button>
+                      </div>
                     ))}
-                  </select>
+                  </div>
                 </div>
               )}
             </div>
