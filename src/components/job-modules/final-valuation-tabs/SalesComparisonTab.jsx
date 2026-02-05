@@ -34,8 +34,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   const cspDateRange = useMemo(() => getCSPDateRange(), [getCSPDateRange]);
 
   const [compFilters, setCompFilters] = useState({
-    adjustmentBracket: 'auto', // 'auto' or 'bracket_0', 'bracket_1', etc.
-    autoAdjustment: true, // Auto checkbox
+    adjustmentBracket: '', // '' (unselected), 'auto', or 'bracket_0', 'bracket_1', etc.
+    autoAdjustment: false, // Auto checkbox - default OFF
     salesCodes: ['', '00', '07', '32', '36'], // CSP default codes
     salesDateStart: cspDateRange.start,
     salesDateEnd: cspDateRange.end,
