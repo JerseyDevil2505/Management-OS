@@ -2347,6 +2347,40 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
               </div>
             </div>
 
+            {/* Adjustment Bracket - Between sections, centered */}
+            <div className="bg-white border border-gray-300 rounded-lg p-4 mb-4">
+              <div className="flex justify-center items-center gap-4">
+                <label className="text-sm font-medium text-gray-700">Adjustment Bracket</label>
+                <select
+                  value={compFilters.adjustmentBracket || ''}
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    setCompFilters(prev => ({
+                      ...prev,
+                      adjustmentBracket: newValue,
+                      autoAdjustment: newValue === 'auto'
+                    }));
+                  }}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded w-64"
+                >
+                  <option value="">Select bracket...</option>
+                  <option value="auto">Auto (based on sale price)</option>
+                  <optgroup label="Default Brackets">
+                    {CME_BRACKETS.map((bracket, idx) => (
+                      <option key={idx} value={`bracket_${idx}`}>{bracket.label}</option>
+                    ))}
+                  </optgroup>
+                  {customBrackets.length > 0 && (
+                    <optgroup label="Custom Brackets">
+                      {customBrackets.map((bracket) => (
+                        <option key={bracket.bracket_id} value={bracket.bracket_id}>{bracket.bracket_name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+              </div>
+            </div>
+
             {/* SECTION 2: Which comparables do you want to use? */}
             <div className="bg-white border border-gray-300 rounded-lg p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4 text-center">
@@ -2355,22 +2389,29 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
               {/* Row 1: Sales Codes + Sales Between */}
               <div className="grid grid-cols-2 gap-8 mb-4">
-                {/* Sales Codes - Checkboxes */}
+                {/* Sales Codes - Dropdown with chips */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Sales Codes</label>
-                  <div className="flex flex-wrap gap-2">
-                    {uniqueSalesCodes.slice(0, 8).map(code => (
-                      <label key={code} className="flex items-center gap-1 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={compFilters.salesCodes.includes(code)}
-                          onChange={() => toggleCompFilterChip('salesCodes')(code)}
-                          className="rounded"
-                        />
-                        {code || 'blank'}
-                      </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Sales Codes</label>
+                  <select
+                    value=""
+                    onChange={(e) => { if (e.target.value) toggleCompFilterChip('salesCodes')(e.target.value); }}
+                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                  >
+                    <option value="">Select code...</option>
+                    {uniqueSalesCodes.map(code => (
+                      <option key={code} value={code}>{code || '(blank)'}</option>
                     ))}
-                  </div>
+                  </select>
+                  {compFilters.salesCodes.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {compFilters.salesCodes.map(code => (
+                        <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
+                          {code || '(blank)'}
+                          <button onClick={() => toggleCompFilterChip('salesCodes')(code)} className="text-blue-600 hover:text-blue-800"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">Can select multiple sales codes. Blank for all</p>
                 </div>
                 {/* Sales Between */}
@@ -2400,94 +2441,92 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 </div>
               </div>
 
-              {/* Row 2: VCS + Neighborhood */}
-              <div className="grid grid-cols-2 gap-8 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">VCS</label>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value=""
-                      onChange={(e) => { if (e.target.value) toggleCompFilterChip('vcs')(e.target.value); }}
-                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                      disabled={compFilters.sameVCS}
-                    >
-                      <option value="">{compFilters.sameVCS ? '' : 'Select VCS...'}</option>
-                      {uniqueVCS.map(v => <option key={v} value={v}>{v}</option>)}
-                    </select>
-                    <label className="flex items-center gap-1 text-sm whitespace-nowrap">
-                      <span className="text-gray-500">OR Same VCS</span>
-                      <input type="checkbox" checked={compFilters.sameVCS} onChange={(e) => setCompFilters(prev => ({ ...prev, sameVCS: e.target.checked }))} className="rounded" />
-                    </label>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-0.5">Blank for full town. May take very long on large towns</p>
-                  {!compFilters.sameVCS && compFilters.vcs.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {compFilters.vcs.map(v => (
-                        <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
-                          {v}<button onClick={() => toggleCompFilterChip('vcs')(v)} className="text-blue-600 hover:text-blue-800"><X className="w-3 h-3" /></button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Neighborhood</label>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value=""
-                      onChange={(e) => { if (e.target.value) toggleCompFilterChip('neighborhood')(e.target.value); }}
-                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                      disabled={compFilters.sameNeighborhood}
-                    >
-                      <option value="">{compFilters.sameNeighborhood ? '' : 'Select...'}</option>
-                      {uniqueNeighborhood.map(n => <option key={n} value={n}>{n}</option>)}
-                    </select>
-                    <label className="flex items-center gap-1 text-sm whitespace-nowrap">
-                      <span className="text-gray-500">OR Same Neighborhood</span>
-                      <input type="checkbox" checked={compFilters.sameNeighborhood} onChange={(e) => setCompFilters(prev => ({ ...prev, sameNeighborhood: e.target.checked }))} className="rounded" />
-                    </label>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-0.5">Blank for full neighborhood</p>
-                  {!compFilters.sameNeighborhood && compFilters.neighborhood.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {compFilters.neighborhood.map(n => (
-                        <span key={n} className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs">
-                          {n}<button onClick={() => toggleCompFilterChip('neighborhood')(n)} className="text-green-600 hover:text-green-800"><X className="w-3 h-3" /></button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Row 3: Lot Size */}
-              <div className="mb-4">
-                <div className="flex items-center gap-4">
-                  <label className="text-sm font-medium text-gray-700">Lot Size (Acre) Between</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={compFilters.lotAcreMin}
-                    onChange={(e) => setCompFilters(prev => ({ ...prev, lotAcreMin: e.target.value }))}
-                    className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
-                    placeholder=""
-                    disabled={compFilters.sameLotSize}
-                  />
-                  <span className="text-sm">and</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={compFilters.lotAcreMax}
-                    onChange={(e) => setCompFilters(prev => ({ ...prev, lotAcreMax: e.target.value }))}
-                    className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
-                    placeholder=""
-                    disabled={compFilters.sameLotSize}
-                  />
+              {/* Row 2: VCS (centered) */}
+              <div className="max-w-xl mx-auto mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">VCS</label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value=""
+                    onChange={(e) => { if (e.target.value) toggleCompFilterChip('vcs')(e.target.value); }}
+                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                    disabled={compFilters.sameVCS}
+                  >
+                    <option value="">{compFilters.sameVCS ? '' : 'Select VCS...'}</option>
+                    {uniqueVCS.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
                   <label className="flex items-center gap-1 text-sm whitespace-nowrap">
-                    <span className="text-gray-500">OR Similar Lot Size</span>
-                    <input type="checkbox" checked={compFilters.sameLotSize} onChange={(e) => setCompFilters(prev => ({ ...prev, sameLotSize: e.target.checked }))} className="rounded" />
+                    <span className="text-gray-500">OR Same VCS</span>
+                    <input type="checkbox" checked={compFilters.sameVCS} onChange={(e) => setCompFilters(prev => ({ ...prev, sameVCS: e.target.checked }))} className="rounded" />
                   </label>
                 </div>
+                <p className="text-xs text-gray-500 mt-0.5">Blank for full town. May take very long on large towns</p>
+                {!compFilters.sameVCS && compFilters.vcs.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {compFilters.vcs.map(v => (
+                      <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
+                        {v}<button onClick={() => toggleCompFilterChip('vcs')(v)} className="text-blue-600 hover:text-blue-800"><X className="w-3 h-3" /></button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Row 3: Neighborhood (centered under VCS) */}
+              <div className="max-w-xl mx-auto mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Neighborhood</label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value=""
+                    onChange={(e) => { if (e.target.value) toggleCompFilterChip('neighborhood')(e.target.value); }}
+                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                    disabled={compFilters.sameNeighborhood}
+                  >
+                    <option value="">{compFilters.sameNeighborhood ? '' : 'Select...'}</option>
+                    {uniqueNeighborhood.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                  <label className="flex items-center gap-1 text-sm whitespace-nowrap">
+                    <span className="text-gray-500">OR Same Neighborhood</span>
+                    <input type="checkbox" checked={compFilters.sameNeighborhood} onChange={(e) => setCompFilters(prev => ({ ...prev, sameNeighborhood: e.target.checked }))} className="rounded" />
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">Blank for full neighborhood</p>
+                {!compFilters.sameNeighborhood && compFilters.neighborhood.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {compFilters.neighborhood.map(n => (
+                      <span key={n} className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs">
+                        {n}<button onClick={() => toggleCompFilterChip('neighborhood')(n)} className="text-green-600 hover:text-green-800"><X className="w-3 h-3" /></button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Row 4: Lot Size (centered) */}
+              <div className="flex justify-center items-center gap-4 mb-4">
+                <label className="text-sm font-medium text-gray-700">Lot Size (Acre) Between</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={compFilters.lotAcreMin}
+                  onChange={(e) => setCompFilters(prev => ({ ...prev, lotAcreMin: e.target.value }))}
+                  className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
+                  placeholder=""
+                  disabled={compFilters.sameLotSize}
+                />
+                <span className="text-sm">and</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={compFilters.lotAcreMax}
+                  onChange={(e) => setCompFilters(prev => ({ ...prev, lotAcreMax: e.target.value }))}
+                  className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
+                  placeholder=""
+                  disabled={compFilters.sameLotSize}
+                />
+                <label className="flex items-center gap-1 text-sm whitespace-nowrap">
+                  <span className="text-gray-500">OR Similar Lot Size</span>
+                  <input type="checkbox" checked={compFilters.sameLotSize} onChange={(e) => setCompFilters(prev => ({ ...prev, sameLotSize: e.target.checked }))} className="rounded" />
+                </label>
               </div>
 
               {/* Row 4: Built Within + Comparable Built Between + Size Within + Comparable Size Between */}
