@@ -1035,7 +1035,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       const BATCH_SIZE = 25;
 
       for (let i = 0; i < subjects.length; i++) {
-        const subject = subjects[i];
+        // Aggregate subject data across all cards (main + additional)
+        const subject = aggregatePropertyData(subjects[i]);
 
         // Update progress counter
         setEvaluationProgress({ current: i + 1, total: subjects.length });
