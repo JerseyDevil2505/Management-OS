@@ -299,41 +299,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     if (!name || !name.trim()) return;
 
     try {
-      // Serialize results for storage (strip circular refs / large objects)
+      // Serialize results for storage - preserve all property fields so loaded results
+      // can be displayed in DetailedAppraisalGrid with full attribute data (VCS, year built,
+      // bathrooms, building class, style, conditions, lot size, etc.)
       const serializedResults = evaluationResults.map(r => ({
-        subject: {
-          id: r.subject.id,
-          property_composite_key: r.subject.property_composite_key,
-          property_vcs: r.subject.property_vcs,
-          property_block: r.subject.property_block,
-          property_lot: r.subject.property_lot,
-          property_qualifier: r.subject.property_qualifier,
-          property_location: r.subject.property_location,
-          asset_type_use: r.subject.asset_type_use,
-          asset_design_style: r.subject.asset_design_style,
-          asset_building_class: r.subject.asset_building_class,
-          asset_sfla: r.subject.asset_sfla,
-          values_mod_total: r.subject.values_mod_total,
-          values_cama_total: r.subject.values_cama_total,
-        },
+        subject: { ...r.subject },
         comparables: r.comparables.map(c => ({
-          id: c.id,
-          property_composite_key: c.property_composite_key,
-          property_block: c.property_block,
-          property_lot: c.property_lot,
-          property_qualifier: c.property_qualifier,
-          property_location: c.property_location,
-          sales_price: c.sales_price,
-          sales_date: c.sales_date,
-          values_norm_time: c.values_norm_time,
-          rank: c.rank,
+          ...c,
           isSubjectSale: c.isSubjectSale || false,
-          adjustments: c.adjustments,
-          totalAdjustment: c.totalAdjustment,
-          grossAdjustment: c.grossAdjustment,
-          adjustmentPercent: c.adjustmentPercent,
-          grossAdjustmentPercent: c.grossAdjustmentPercent,
-          adjustedPrice: c.adjustedPrice,
           weight: c.weight || 0,
         })),
         totalFound: r.totalFound,
