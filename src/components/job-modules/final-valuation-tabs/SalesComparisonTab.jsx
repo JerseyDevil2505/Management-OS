@@ -956,20 +956,17 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       const results = [];
       setEvaluationProgress({ current: 0, total: subjects.length });
 
-      // Force a small delay to ensure progress bar renders
-      await new Promise(resolve => setTimeout(resolve, 50));
-
-      // Process in smaller batches for more frequent UI updates
-      const BATCH_SIZE = 10;
+      // Process in batches for UI progress updates
+      const BATCH_SIZE = 25;
 
       for (let i = 0; i < subjects.length; i++) {
         const subject = subjects[i];
 
-        // Update progress immediately
-        setEvaluationProgress(prev => ({ current: i + 1, total: subjects.length }));
+        // Update progress counter
+        setEvaluationProgress({ current: i + 1, total: subjects.length });
 
-        // Allow UI to update every batch (more frequently for responsive progress)
-        if (i > 0 && i % BATCH_SIZE === 0) {
+        // Yield to UI every batch so counter updates
+        if (i % BATCH_SIZE === 0) {
           await new Promise(resolve => setTimeout(resolve, 0));
         }
         // Debug: Log first property's matching process
