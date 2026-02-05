@@ -2153,10 +2153,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
                 {/* Inline Block/Lot/Qual Entry Rows */}
                 {pendingBlockLotRows.length > 0 && (
-                  <div className="space-y-2 pt-2">
+                  <div className="space-y-2 pt-2 max-w-2xl mx-auto">
                     {pendingBlockLotRows.map((row, idx) => (
-                      <div key={idx} className="flex items-center gap-3">
-                        <div className="flex-1 grid grid-cols-3 gap-3 max-w-lg">
+                      <div key={idx} className="flex items-center justify-center gap-3">
+                        <div className="grid grid-cols-3 gap-3 w-full max-w-md">
                           <div>
                             {idx === 0 && <label className="block text-xs font-medium text-gray-600 mb-1">Block</label>}
                             <input
