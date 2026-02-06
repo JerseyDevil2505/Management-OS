@@ -283,7 +283,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     try {
       const { data, error } = await supabase
         .from('job_cme_result_sets')
-        .select('id, name, adjustment_bracket, created_at')
+        .select('id, name, adjustment_bracket, created_at, results')
         .eq('job_id', jobData.id)
         .order('created_at', { ascending: false });
 
