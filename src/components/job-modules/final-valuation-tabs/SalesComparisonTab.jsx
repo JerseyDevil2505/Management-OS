@@ -2658,7 +2658,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                   className="px-3 py-1.5 text-sm border border-gray-300 rounded w-64"
                 >
                   <option value="">Select bracket...</option>
-                  <option value="auto">Auto (based on sale price)</option>
+                  <option value="auto">Auto (based on mapping)</option>
                   <optgroup label="Default Brackets">
                     {CME_BRACKETS.map((bracket, idx) => (
                       <option key={idx} value={`bracket_${idx}`}>{bracket.label}</option>
