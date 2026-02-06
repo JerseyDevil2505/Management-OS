@@ -140,25 +140,35 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   ];
 
   // Condition options (will be populated from code definitions)
-  const getConditionOptions = useCallback(() => {
-    // Try to get from code definitions
-    if (codeDefinitions?.field_codes) {
-      const extCondCodes = codeDefinitions.field_codes['260'] || codeDefinitions.field_codes['exterior_condition'] || {};
-      const options = Object.entries(extCondCodes).map(([code, data]) => ({
-        value: code,
-        label: data.description || code
-      }));
+  const getConditionOptions = useCallback((configType) => {
+    // Pull from condition config (same source used for ranking/adjustments)
+    const conditionConfig = jobData?.attribute_condition_config;
+    if (conditionConfig && conditionConfig[configType]) {
+      const config = conditionConfig[configType];
+      const options = [];
+      // Better conditions (best first)
+      if (config.better) {
+        [...config.better].reverse().forEach(name => options.push({ value: name, label: name }));
+      }
+      // Baseline
+      if (config.baseline) {
+        options.push({ value: config.baseline, label: config.baseline });
+      }
+      // Worse conditions (least bad first)
+      if (config.worse) {
+        config.worse.forEach(name => options.push({ value: name, label: name }));
+      }
       if (options.length > 0) return options;
     }
     // Fallback standard options
     return [
-      { value: 'E', label: 'Excellent' },
-      { value: 'G', label: 'Good' },
-      { value: 'A', label: 'Average' },
-      { value: 'F', label: 'Fair' },
-      { value: 'P', label: 'Poor' }
+      { value: 'Excellent', label: 'Excellent' },
+      { value: 'Good', label: 'Good' },
+      { value: 'Average', label: 'Average' },
+      { value: 'Fair', label: 'Fair' },
+      { value: 'Poor', label: 'Poor' }
     ];
-  }, [codeDefinitions]);
+  }, [jobData]);
 
   // Determine which bracket is being used
   const getBracketLabel = () => {
@@ -2005,12 +2015,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                           )}
                           {cfg.type === 'condition' && (
                             <select
-                              value={editedVal ?? (prop ? prop[cfg.field] : '')}
+                              value={editedVal ?? (prop ? attr.render(prop) : '')}
                               onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
                               className="w-full px-1 py-0.5 text-xs border rounded focus:ring-1 focus:ring-blue-500"
                             >
                               <option value="">-</option>
-                              {getConditionOptions().map(opt => (
+                              {getConditionOptions(attr.id === 'ext_condition' ? 'exterior' : 'interior').map(opt => (
                                 <option key={opt.value} value={opt.value}>{opt.label}</option>
                               ))}
                             </select>
