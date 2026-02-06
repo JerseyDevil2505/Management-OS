@@ -98,6 +98,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
   // Calculated adjustments based on edited values
   const [editedAdjustments, setEditedAdjustments] = useState({});
+  const [hasEdits, setHasEdits] = useState(false);
 
   // Define which attributes are editable and their input types
   const EDITABLE_CONFIG = {
