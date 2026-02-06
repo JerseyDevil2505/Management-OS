@@ -2036,7 +2036,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     );
                   })}
 
-                  {/* Net Adjustment Row - ALWAYS use original comp data */}
+                  {/* Net Adjustment Row - use edited if recalculated, otherwise original */}
                   {showAdjustments && rowVisibility['net_adjustment'] !== false && (
                     <tr className="border-b-2 border-gray-400 bg-gray-100">
                       <td className="px-2 py-2 font-bold text-gray-900 border-r border-gray-300">Net Adjustment</td>
@@ -2046,8 +2046,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                         if (!comp) {
                           return <td key={idx} className="px-2 py-2 text-center border-r border-gray-300">-</td>;
                         }
-                        const total = comp.totalAdjustment || 0;
-                        const pct = comp.adjustmentPercent || 0;
+                        const editedData = editedAdjustments[`comp_${idx}`];
+                        const total = editedData ? editedData.totalAdjustment : (comp.totalAdjustment || 0);
+                        const pct = editedData ? editedData.adjustmentPercent : (comp.adjustmentPercent || 0);
                         return (
                           <td key={idx} className={`px-2 py-2 text-center font-bold border-r border-gray-300 ${total > 0 ? 'text-green-700' : total < 0 ? 'text-red-700' : ''}`}>
                             {total > 0 ? '+' : ''}${Math.round(total).toLocaleString()}
@@ -2058,7 +2059,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     </tr>
                   )}
 
-                  {/* Adjusted Valuation Row - ALWAYS use original comp data */}
+                  {/* Adjusted Valuation Row - use edited if recalculated, otherwise original */}
                   {showAdjustments && rowVisibility['adjusted_valuation'] !== false && (
                     <tr className="border-b-2 border-gray-400 bg-blue-100">
                       <td className="px-2 py-2 font-bold text-gray-900 border-r border-gray-300">Adjusted Valuation</td>
@@ -2070,7 +2071,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                         if (!comp) {
                           return <td key={idx} className="px-2 py-2 text-center border-r border-gray-300">-</td>;
                         }
-                        const adjustedPrice = comp.adjustedPrice || 0;
+                        const editedData = editedAdjustments[`comp_${idx}`];
+                        const adjustedPrice = editedData ? editedData.adjustedPrice : (comp.adjustedPrice || 0);
                         return (
                           <td key={idx} className="px-2 py-2 text-center font-bold border-r border-gray-300">
                             ${Math.round(adjustedPrice).toLocaleString()}
