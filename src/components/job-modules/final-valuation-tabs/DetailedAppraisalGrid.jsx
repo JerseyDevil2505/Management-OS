@@ -2088,7 +2088,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             {/* Modal Footer */}
             <div className="px-4 py-3 bg-gray-50 border-t flex items-center justify-between rounded-b-lg flex-shrink-0">
               <p className="text-xs text-gray-500">
-                Edit values directly in the grid. Adjustments recalculate automatically.
+                Edit values, then click Recalculate to update adjustments before exporting.
               </p>
               <div className="flex gap-3">
                 <button
@@ -2096,6 +2096,17 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm"
                 >
                   Cancel
+                </button>
+                <button
+                  onClick={recalculateAdjustments}
+                  disabled={!hasEdits}
+                  className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
+                    hasEdits
+                      ? 'bg-amber-500 text-white hover:bg-amber-600'
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  Recalculate
                 </button>
                 <button
                   onClick={generatePDF}
