@@ -253,16 +253,6 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
     return { typeUseToBracket: tu, vcsToBracket: vcs };
   }, [bracketMappings]);
 
-  const unassignedTypeUse = useMemo(() =>
-    uniqueTypeUse.filter(t => !typeUseToBracket[t]),
-    [uniqueTypeUse, typeUseToBracket]
-  );
-
-  const unassignedVCS = useMemo(() =>
-    uniqueVCS.filter(v => !vcsToBracket[v]),
-    [uniqueVCS, vcsToBracket]
-  );
-
   const assignToBracket = (code, codeType, bracketValue) => {
     setBracketMappings(prev => {
       // Remove any existing assignment for this code
@@ -401,6 +391,17 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
     const set = new Set(properties.filter(p => isQualifyingSale(p)).map(p => p.asset_type_use).filter(Boolean));
     return [...set].sort();
   }, [properties, isQualifyingSale]);
+
+  // Unassigned codes (codes not yet mapped to any bracket)
+  const unassignedTypeUse = useMemo(() =>
+    uniqueTypeUse.filter(t => !typeUseToBracket[t]),
+    [uniqueTypeUse, typeUseToBracket]
+  );
+
+  const unassignedVCS = useMemo(() =>
+    uniqueVCS.filter(v => !vcsToBracket[v]),
+    [uniqueVCS, vcsToBracket]
+  );
 
   // All bracket options (default + custom)
   const allBracketOptions = useMemo(() => {
