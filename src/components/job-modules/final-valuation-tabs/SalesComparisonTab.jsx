@@ -2176,7 +2176,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       <div className="tab-content">
         {/* ADJUSTMENTS TAB */}
         {activeSubTab === 'adjustments' && (
-          <AdjustmentsTab jobData={jobData} />
+          <AdjustmentsTab jobData={jobData} properties={properties} />
         )}
 
         {/* SEARCH TAB */}
