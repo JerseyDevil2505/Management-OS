@@ -3755,14 +3755,18 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 '3B': { count: 0, currentTotal: 0, newTotal: 0, description: 'Qualified Farmland' },
                 '4A': { count: 0, currentTotal: 0, newTotal: 0, description: 'Commercial' },
                 '4B': { count: 0, currentTotal: 0, newTotal: 0, description: 'Industrial' },
-                '4C': { count: 0, currentTotal: 0, newTotal: 0, description: 'Apartment' }
+                '4C': { count: 0, currentTotal: 0, newTotal: 0, description: 'Apartment' },
+                '6A': { count: 0, currentTotal: 0, newTotal: 0, description: 'Personal Property' },
+                '6B': { count: 0, currentTotal: 0, newTotal: 0, description: 'Machinery, Apparatus' }
               };
 
-              // Populate Class 1 from CAMA totals (vacant land / building class blank or ≤10)
-              // These properties aren't evaluated by CME, so use their existing CAMA value
+              // Classes NOT evaluated by CME — use CAMA values directly
+              const nonCmeClasses = new Set(['1', '3B', '4A', '4B', '4C', '6A', '6B']);
+
+              // Populate non-CME classes and Class 2/3A detached-only (building class ≤ 10)
               properties.forEach(p => {
                 const m4Class = p.property_m4_class || '';
-                if (m4Class !== '1') return;
+                if (!classSummary[m4Class]) return;
                 // Only main cards
                 const card = (p.property_addl_card || '').toString().trim();
                 const isMain = vendorType === 'BRT'
@@ -3771,12 +3775,27 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 if (!isMain) return;
                 // Exclude exempt
                 if (p.property_facility === 'EXEMPT') return;
-                const camaTotal = p.values_cama_total || 0;
-                classSummary['1'].count++;
-                classSummary['1'].currentTotal += camaTotal;
-                classSummary['1'].newTotal += camaTotal; // Same value — not re-appraised by CME
+
+                const bc = parseInt(p.asset_building_class) || 0;
+
+                if (nonCmeClasses.has(m4Class)) {
+                  // Non-CME class: always use CAMA value
+                  const camaTotal = p.values_cama_total || 0;
+                  classSummary[m4Class].count++;
+                  classSummary[m4Class].currentTotal += camaTotal;
+                  classSummary[m4Class].newTotal += camaTotal;
+                } else if ((m4Class === '2' || m4Class === '3A') && bc <= 10) {
+                  // Residential/Farmhouse with no home (detached garage, pool only)
+                  // CME doesn't evaluate these — use CAMA value
+                  if (setAsideKeys.has(p.property_composite_key)) return; // skip if set-aside already counted
+                  const camaTotal = p.values_cama_total || 0;
+                  classSummary[m4Class].count++;
+                  classSummary[m4Class].currentTotal += camaTotal;
+                  classSummary[m4Class].newTotal += camaTotal;
+                }
               });
 
+              // Add CME set-aside results (Class 2 / 3A with building class > 10)
               successful.forEach(r => {
                 const m4Class = r.subject?.property_m4_class || '';
                 const currentTotal = r.subject?.values_mod_total || r.subject?.values_cama_total || 0;
@@ -3793,6 +3812,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
               const class4Count = classSummary['4A'].count + classSummary['4B'].count + classSummary['4C'].count;
               const class4Current = classSummary['4A'].currentTotal + classSummary['4B'].currentTotal + classSummary['4C'].currentTotal;
               const class4New = classSummary['4A'].newTotal + classSummary['4B'].newTotal + classSummary['4C'].newTotal;
+
+              const class6Count = classSummary['6A'].count + classSummary['6B'].count;
+              const class6Current = classSummary['6A'].currentTotal + classSummary['6B'].currentTotal;
+              const class6New = classSummary['6A'].newTotal + classSummary['6B'].newTotal;
 
               const grandCount = Object.values(classSummary).reduce((s, c) => s + c.count, 0);
               const grandCurrent = Object.values(classSummary).reduce((s, c) => s + c.currentTotal, 0);
@@ -3993,6 +4016,32 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                             <td className="px-4 py-3 text-base text-right font-bold text-orange-700">{class4Count > 0 ? `$${class4New.toLocaleString()}` : '-'}</td>
                             <td className={`px-4 py-3 text-sm text-right font-bold ${pctChange(class4Current, class4New) > 0 ? 'text-green-700' : pctChange(class4Current, class4New) < 0 ? 'text-red-700' : 'text-orange-700'}`}>
                               {class4Count > 0 ? `${pctChange(class4Current, class4New) > 0 ? '+' : ''}${pctChange(class4Current, class4New).toFixed(2)}%` : '-'}
+                            </td>
+                          </tr>
+                          {['6A', '6B'].map(cls => {
+                            const data = classSummary[cls];
+                            const change = pctChange(data.currentTotal, data.newTotal);
+                            return (
+                              <tr key={cls} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-sm font-medium text-gray-900">Class {cls}</td>
+                                <td className="px-4 py-3 text-sm text-gray-700">{data.description}</td>
+                                <td className="px-3 py-3 text-sm text-right font-semibold text-gray-900">{data.count > 0 ? data.count.toLocaleString() : '-'}</td>
+                                <td className="px-4 py-3 text-sm text-right font-semibold text-gray-700">{data.count > 0 ? `$${data.currentTotal.toLocaleString()}` : '-'}</td>
+                                <td className="px-4 py-3 text-base text-right font-bold text-blue-600">{data.count > 0 ? `$${data.newTotal.toLocaleString()}` : '-'}</td>
+                                <td className={`px-4 py-3 text-sm text-right font-semibold ${change > 0 ? 'text-green-700' : change < 0 ? 'text-red-700' : 'text-gray-500'}`}>
+                                  {data.count > 0 ? `${change > 0 ? '+' : ''}${change.toFixed(2)}%` : '-'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          <tr className="bg-purple-50 hover:bg-purple-100 border-t-2 border-purple-300">
+                            <td className="px-4 py-3 text-sm font-bold text-purple-700">Class 6*</td>
+                            <td className="px-4 py-3 text-sm font-semibold text-purple-700">Aggregate Total</td>
+                            <td className="px-3 py-3 text-sm text-right font-bold text-purple-700">{class6Count > 0 ? class6Count.toLocaleString() : '-'}</td>
+                            <td className="px-4 py-3 text-sm text-right font-bold text-purple-700">{class6Count > 0 ? `$${class6Current.toLocaleString()}` : '-'}</td>
+                            <td className="px-4 py-3 text-base text-right font-bold text-purple-700">{class6Count > 0 ? `$${class6New.toLocaleString()}` : '-'}</td>
+                            <td className={`px-4 py-3 text-sm text-right font-bold ${pctChange(class6Current, class6New) > 0 ? 'text-green-700' : pctChange(class6Current, class6New) < 0 ? 'text-red-700' : 'text-purple-700'}`}>
+                              {class6Count > 0 ? `${pctChange(class6Current, class6New) > 0 ? '+' : ''}${pctChange(class6Current, class6New).toFixed(2)}%` : '-'}
                             </td>
                           </tr>
                           <tr className="bg-blue-600 text-white border-t-4 border-blue-700">
