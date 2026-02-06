@@ -6216,33 +6216,38 @@ Class 4: $256.8M @ 2.684% = $6,892,196 total tax
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Evaluate Sub-Tab:**
+**Search & Results Sub-Tab:**
 
 **Automated CME Workflow:**
 
 **Step 1: Evaluation Mode Selection:**
-- **Fresh Evaluation** - Overwrites existing CME data
-- **Keep Existing** - Only evaluates properties without CME data
+- **Fresh Evaluation** - Clears all existing set-aside evaluations, starts over
+- **Keep Existing** - Skips properties already set aside, evaluates remaining
 
-**Step 2: Process Properties:**
+**Step 2: Bracket Selection:**
+- **Auto (based on mapping)** - Uses bracket mappings from AdjustmentsTab to route each property to the correct adjustment bracket based on its VCS or Type/Use code
+- **Specific bracket** - Force all properties into a single bracket
+- If no mapping exists for a property, falls back to price-based bracket selection
+
+**Step 3: Process Properties:**
 ```javascript
 for each subject property:
-  1. Find comparables matching all filter criteria
-  2. Apply adjustment grid for subject's price bracket
-  3. Calculate adjusted sale prices
-  4. Select best 5 comparables
-  5. Calculate min, max, average ranges
-  6. Save to final_valuation_data (cme_* fields)
+  1. Look up bracket mapping (VCS → bracket, or Type/Use → bracket)
+  2. If no mapping found, determine bracket from subject's sale price
+  3. Find comparables matching all filter criteria
+  4. Apply adjustment grid for the determined bracket
+  5. Calculate adjusted sale prices with weighted averaging
+  6. Select best 5 comparables (sorted by lowest net adjustment %)
+  7. Calculate projected assessment (weighted average by adjustment proximity)
 ```
 
-**Step 3: Progress Display:**
-```
-Processing CME Analysis...
-Progress: 456 / 1,234 properties (37%)
-Successes: 389 (85%)
-Failures: 67 (15%)
-Current: Block 123, Lot 45
-```
+**Step 4: Results Display & Set Aside:**
+- Results shown inline below search filters
+- Summary stats: Total evaluated, no comps, with N+ comps, set aside count
+- Valuation summary panel with class breakdown, current vs projected
+- **Set Aside** button: saves successful evaluations (N+ comps) to `job_cme_evaluations` table
+- **Save Result Set** button: saves named snapshot to `job_cme_result_sets` for later recall
+- **Create Update** / **Build Final Roster** export buttons on results
 
 **Adjustment Grid Application:**
 
