@@ -1006,11 +1006,52 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     setHasEdits(true);
   }, []);
 
+  // Helper: Get condition rank from condition code/name (mirrors SalesComparisonTab logic)
+  const getConditionRank = useCallback((conditionCode, configType) => {
+    if (!conditionCode || String(conditionCode).trim() === '') return 0;
+    const conditionConfig = jobData?.attribute_condition_config;
+    if (!conditionConfig || !conditionConfig[configType]) return 0;
+
+    const config = conditionConfig[configType];
+    const code = String(conditionCode).toUpperCase().trim();
+    const baseline = config.baseline?.toUpperCase().trim();
+    const betterCodes = (config.better || []).map(c => c.toUpperCase().trim());
+    const worseCodes = (config.worse || []).map(c => c.toUpperCase().trim());
+
+    // Also try translating code to name via code definitions
+    let codeName = code;
+    if (codeDefinitions) {
+      const nameFromCode = configType === 'exterior'
+        ? interpretCodes.getExteriorConditionName({ asset_ext_cond: conditionCode }, codeDefinitions, vendorType)
+        : interpretCodes.getInteriorConditionName({ asset_int_cond: conditionCode }, codeDefinitions, vendorType);
+      if (nameFromCode) codeName = nameFromCode.toUpperCase().trim();
+    }
+
+    if (code === baseline || codeName === baseline) return 0;
+    const betterIdx = betterCodes.indexOf(code) !== -1 ? betterCodes.indexOf(code) : betterCodes.indexOf(codeName);
+    if (betterIdx !== -1) return betterIdx + 1;
+    const worseIdx = worseCodes.indexOf(code) !== -1 ? worseCodes.indexOf(code) : worseCodes.indexOf(codeName);
+    if (worseIdx !== -1) return -(worseIdx + 1);
+    return 0;
+  }, [jobData, codeDefinitions, vendorType]);
+
+  // Helper: Get bracket index based on compFilters and comp price
+  const getBracketIndex = useCallback((compNormTime) => {
+    if (compFilters?.adjustmentBracket && compFilters.adjustmentBracket !== 'auto') {
+      const match = compFilters.adjustmentBracket.match(/bracket_(\d+)/);
+      if (match) return parseInt(match[1]);
+    }
+    if (!compNormTime || !cmeBrackets?.length) return 0;
+    const bracket = cmeBrackets.findIndex(b => compNormTime >= b.min && compNormTime <= b.max);
+    return bracket >= 0 ? bracket : 0;
+  }, [compFilters, cmeBrackets]);
+
   // Calculate adjustment for a single attribute between subject and comp
   const calculateSingleAdjustment = useCallback((subjectVal, compVal, adjustmentDef, compSalesPrice) => {
     if (!adjustmentDef) return 0;
 
-    const adjustmentValue = adjustmentDef.bracket_0 || 0; // Use first bracket as default
+    const bracketIndex = getBracketIndex(compSalesPrice);
+    const adjustmentValue = adjustmentDef[`bracket_${bracketIndex}`] || 0;
     const adjustmentType = adjustmentDef.adjustment_type || 'flat';
 
     const subjectNum = parseFloat(subjectVal) || 0;
@@ -1027,12 +1068,11 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
       case 'count':
         return difference * adjustmentValue;
       case 'percent':
-        // Use full difference for tiered adjustments (e.g., EXCELLENT is 2 steps from AVERAGE = 2x adjustment)
         return (compSalesPrice || 0) * (adjustmentValue / 100) * difference;
       default:
         return 0;
     }
-  }, []);
+  }, [getBracketIndex]);
 
   // Recalculate all adjustments based on edited values
   const recalculateAdjustments = useCallback(() => {
