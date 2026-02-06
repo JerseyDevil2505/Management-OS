@@ -1003,6 +1003,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         [attrId]: value
       }
     }));
+    setHasEdits(true);
   }, []);
 
   // Calculate adjustment for a single attribute between subject and comp
