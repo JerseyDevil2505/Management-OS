@@ -3187,6 +3187,135 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                   </table>
                 </div>
 
+                {/* ==================== VALUATION SUMMARY PANEL ==================== */}
+                {(() => {
+                  const successful = evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess);
+                  const skipped = evaluationResults.filter(r => r.comparables.length < minCompsForSuccess);
+
+                  // Build class summary from successful evaluations
+                  const classSummary = {};
+                  let totalCurrentLand = 0, totalCurrentImpr = 0, totalCurrentTotal = 0;
+                  let totalNewValue = 0;
+
+                  successful.forEach(r => {
+                    const m4Class = r.subject.property_m4_class || 'Unknown';
+                    if (!classSummary[m4Class]) classSummary[m4Class] = { count: 0, currentTotal: 0, newTotal: 0 };
+                    classSummary[m4Class].count++;
+                    const currentTotal = r.subject.values_mod_total || r.subject.values_cama_total || 0;
+                    const currentLand = r.subject.values_cama_land || r.subject.values_mod_land || 0;
+                    classSummary[m4Class].currentTotal += currentTotal;
+                    classSummary[m4Class].newTotal += (r.projectedAssessment || 0);
+                    totalCurrentLand += currentLand;
+                    totalCurrentImpr += (currentTotal - currentLand);
+                    totalCurrentTotal += currentTotal;
+                    totalNewValue += (r.projectedAssessment || 0);
+                  });
+
+                  return (
+                    <div className="mt-6 space-y-4">
+                      {/* Skipped / Missing Comps */}
+                      {skipped.length > 0 && (
+                        <div className="bg-amber-50 border border-amber-300 rounded-lg p-4">
+                          <h4 className="text-sm font-semibold text-amber-800 mb-2">
+                            Skipped Properties ({skipped.length}) — Fewer than {minCompsForSuccess} comparable(s)
+                          </h4>
+                          <div className="max-h-40 overflow-y-auto">
+                            <table className="min-w-full text-xs">
+                              <thead>
+                                <tr className="bg-amber-100">
+                                  <th className="px-2 py-1 text-left">VCS</th>
+                                  <th className="px-2 py-1 text-left">Block</th>
+                                  <th className="px-2 py-1 text-left">Lot</th>
+                                  <th className="px-2 py-1 text-left">Location</th>
+                                  <th className="px-2 py-1 text-center">Comps Found</th>
+                                  <th className="px-2 py-1 text-center">Current Asmt</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {skipped.map((r, idx) => (
+                                  <tr key={idx} className="border-t border-amber-200">
+                                    <td className="px-2 py-1">{r.subject.property_vcs}</td>
+                                    <td className="px-2 py-1">{r.subject.property_block}</td>
+                                    <td className="px-2 py-1">{r.subject.property_lot}</td>
+                                    <td className="px-2 py-1">{r.subject.property_location}</td>
+                                    <td className="px-2 py-1 text-center text-red-600 font-bold">{r.comparables.length}</td>
+                                    <td className="px-2 py-1 text-center">${(r.subject.values_mod_total || r.subject.values_cama_total || 0).toLocaleString()}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Net Valuation Summary */}
+                      <div className="bg-white border border-gray-300 rounded-lg p-4">
+                        <h4 className="text-sm font-semibold text-gray-900 mb-3">
+                          Projected Net Valuation Summary — CME Sales Comparison
+                        </h4>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-gray-100">
+                                <th className="border border-gray-300 px-3 py-2 text-left">Class</th>
+                                <th className="border border-gray-300 px-3 py-2 text-center">Count</th>
+                                <th className="border border-gray-300 px-3 py-2 text-right">Current Total</th>
+                                <th className="border border-gray-300 px-3 py-2 text-right">New Projected</th>
+                                <th className="border border-gray-300 px-3 py-2 text-right">Change</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {Object.entries(classSummary).sort((a, b) => a[0].localeCompare(b[0])).map(([cls, data]) => {
+                                const change = data.currentTotal > 0 ? ((data.newTotal - data.currentTotal) / data.currentTotal * 100) : 0;
+                                return (
+                                  <tr key={cls} className="border-t">
+                                    <td className="border border-gray-300 px-3 py-1 font-medium">{cls}</td>
+                                    <td className="border border-gray-300 px-3 py-1 text-center">{data.count}</td>
+                                    <td className="border border-gray-300 px-3 py-1 text-right">${data.currentTotal.toLocaleString()}</td>
+                                    <td className="border border-gray-300 px-3 py-1 text-right font-semibold">${data.newTotal.toLocaleString()}</td>
+                                    <td className={`border border-gray-300 px-3 py-1 text-right font-semibold ${change > 0 ? 'text-green-700' : change < 0 ? 'text-red-700' : ''}`}>
+                                      {change > 0 ? '+' : ''}{change.toFixed(2)}%
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                              <tr className="bg-gray-100 font-bold">
+                                <td className="border border-gray-300 px-3 py-2">Total</td>
+                                <td className="border border-gray-300 px-3 py-2 text-center">{successful.length}</td>
+                                <td className="border border-gray-300 px-3 py-2 text-right">${totalCurrentTotal.toLocaleString()}</td>
+                                <td className="border border-gray-300 px-3 py-2 text-right">${totalNewValue.toLocaleString()}</td>
+                                <td className={`border border-gray-300 px-3 py-2 text-right ${totalCurrentTotal > 0 && ((totalNewValue - totalCurrentTotal) / totalCurrentTotal * 100) > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                  {totalCurrentTotal > 0 ? `${((totalNewValue - totalCurrentTotal) / totalCurrentTotal * 100) > 0 ? '+' : ''}${((totalNewValue - totalCurrentTotal) / totalCurrentTotal * 100).toFixed(2)}%` : '-'}
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Export Buttons */}
+                        <div className="mt-4 flex gap-3 justify-end">
+                          <button
+                            onClick={() => handleCreateUpdate(successful)}
+                            disabled={successful.length === 0}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium flex items-center gap-2"
+                          >
+                            <Upload className="w-4 h-4" />
+                            Create Update
+                          </button>
+                          <button
+                            onClick={() => handleBuildFinalRoster(successful, skipped)}
+                            disabled={successful.length === 0}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium flex items-center gap-2"
+                          >
+                            <FileText className="w-4 h-4" />
+                            Build Final Roster
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
               </div>
             )}
           </div>
