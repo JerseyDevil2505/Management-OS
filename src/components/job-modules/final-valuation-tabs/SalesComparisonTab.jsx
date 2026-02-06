@@ -86,6 +86,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   const [savedResultSets, setSavedResultSets] = useState([]); // Named result sets from DB
   const [adjustmentGrid, setAdjustmentGrid] = useState([]);
   const [customBrackets, setCustomBrackets] = useState([]);
+  const [bracketMappings, setBracketMappings] = useState([]);
   const [minCompsForSuccess, setMinCompsForSuccess] = useState(3); // User-selectable threshold
 
   // Manual entry state for detailed tab
@@ -251,6 +252,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       loadCodeDefinitions();
       loadSavedEvaluations();
       loadSavedResultSets();
+      loadBracketMappings();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id]);
@@ -389,6 +391,35 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       console.error('Error deleting result set:', error);
       alert(`Failed to delete: ${error.message}`);
     }
+  };
+
+  const loadBracketMappings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('job_cme_bracket_mappings')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .order('sort_order');
+      if (error) throw error;
+      setBracketMappings(data || []);
+    } catch (error) {
+      console.warn('Bracket mappings loading error:', error.message);
+    }
+  };
+
+  // Look up bracket mapping for a property (returns { bracket, searchScope } or null)
+  const getBracketMapping = (property) => {
+    if (!bracketMappings || bracketMappings.length === 0) return null;
+    const propVCS = property.property_vcs || '';
+    const propTypeUse = property.asset_type_use || '';
+    for (const mapping of bracketMappings) {
+      const vcsMatch = !mapping.vcs_codes || mapping.vcs_codes.length === 0 || mapping.vcs_codes.includes(propVCS);
+      const tuMatch = !mapping.type_use_codes || mapping.type_use_codes.length === 0 || mapping.type_use_codes.includes(propTypeUse);
+      if (vcsMatch && tuMatch) {
+        return { bracket: mapping.bracket_value, searchScope: mapping.search_scope };
+      }
+    }
+    return null;
   };
 
   const loadAdjustmentGrid = async () => {
