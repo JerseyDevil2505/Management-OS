@@ -3702,7 +3702,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
               // "Not done" = all residential properties that are NOT in any saved result set
               const savedKeys = new Set(seenKeys.keys());
               const notDone = properties.filter(p => {
-                if (setAsideKeys.has(p.property_composite_key)) return false;
+                if (savedKeys.has(p.property_composite_key)) return false;
                 // Only count residential+ (building class > 10, i.e. not vacant/exempt)
                 const bc = parseInt(p.asset_building_class) || 0;
                 if (bc <= 10) return false;
@@ -3799,7 +3799,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 } else if ((camaClass === '2' || camaClass === '3A') && bc <= 10) {
                   // Residential/Farmhouse with no home (detached garage, pool only)
                   // CME doesn't evaluate these — use CAMA value
-                  if (setAsideKeys.has(p.property_composite_key)) return; // skip if set-aside already counted
+                  if (savedKeys.has(p.property_composite_key)) return; // skip if already in saved results
                   const camaTotal = p.values_cama_total || 0;
                   classSummary[camaClass].count++;
                   classSummary[camaClass].currentTotal += camaTotal;
