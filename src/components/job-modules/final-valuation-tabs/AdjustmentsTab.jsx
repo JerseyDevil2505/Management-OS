@@ -1,8 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { supabase, getRawDataForJob } from '../../../lib/supabaseClient';
-import { Save, Plus, Trash2, Settings, X } from 'lucide-react';
+import { Save, Plus, Trash2, Settings, X, Map, ChevronDown, ChevronUp } from 'lucide-react';
 
-const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
+// Valid sales codes for CME averages (matches SalesComparisonTab defaults)
+const VALID_SALES_CODES = ['', '0', '00', '7', '07', '32', '36'];
+
+const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, properties = [] }) => {
   const vendorType = jobData?.vendor_type || 'BRT';
   const [activeSubTab, setActiveSubTab] = useState('adjustments');
 
@@ -35,6 +38,10 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
     attributeValues: {} // Will hold { lot_size_ff: { value: 0, type: 'flat' }, ... }
   });
   const [customBrackets, setCustomBrackets] = useState([]); // Load from DB
+
+  // Bracket mapping state
+  const [bracketMappings, setBracketMappings] = useState([]);
+  const [isSavingMappings, setIsSavingMappings] = useState(false);
   
   // Structure: maps attribute -> array of codes
   const [codeConfig, setCodeConfig] = useState({
@@ -198,6 +205,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
     loadAdjustments();
     loadAvailableCodes();
     loadCustomBrackets();
+    loadBracketMappings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id, isJobContainerLoading]);
 
@@ -211,6 +219,201 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id, isJobContainerLoading, availableCodes, isLoadingCodes]);
+
+  // ==================== BRACKET MAPPING FUNCTIONS ====================
+  const loadBracketMappings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('job_cme_bracket_mappings')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .order('sort_order');
+      if (error) throw error;
+      setBracketMappings(data || []);
+    } catch (error) {
+      console.warn('Bracket mappings loading error:', error.message);
+      setBracketMappings([]);
+    }
+  };
+
+  // ==================== DRAG-AND-DROP BRACKET MAPPING ====================
+  const dragDataRef = useRef(null);
+
+  // Derive assignments from bracketMappings rows
+  const { typeUseToBracket, vcsToBracket } = useMemo(() => {
+    const tu = {};
+    const vcs = {};
+    (bracketMappings || []).forEach(m => {
+      if (m.type_use_codes && m.type_use_codes.length > 0 && (!m.vcs_codes || m.vcs_codes.length === 0)) {
+        m.type_use_codes.forEach(code => { tu[code] = m.bracket_value; });
+      } else if (m.vcs_codes && m.vcs_codes.length > 0 && (!m.type_use_codes || m.type_use_codes.length === 0)) {
+        m.vcs_codes.forEach(code => { vcs[code] = m.bracket_value; });
+      }
+    });
+    return { typeUseToBracket: tu, vcsToBracket: vcs };
+  }, [bracketMappings]);
+
+  const assignToBracket = (code, codeType, bracketValue) => {
+    setBracketMappings(prev => {
+      // Remove any existing assignment for this code
+      const filtered = prev.filter(m => {
+        if (codeType === 'type_use') {
+          return !(m.type_use_codes && m.type_use_codes.includes(code) && (!m.vcs_codes || m.vcs_codes.length === 0));
+        }
+        return !(m.vcs_codes && m.vcs_codes.includes(code) && (!m.type_use_codes || m.type_use_codes.length === 0));
+      });
+      return [...filtered, {
+        id: `new_${Date.now()}_${code}`,
+        job_id: jobData.id,
+        vcs_codes: codeType === 'vcs' ? [code] : null,
+        type_use_codes: codeType === 'type_use' ? [code] : null,
+        bracket_value: bracketValue,
+        sort_order: filtered.length,
+        _isNew: true
+      }];
+    });
+  };
+
+  const unassignFromBracket = (code, codeType) => {
+    setBracketMappings(prev => prev.filter(m => {
+      if (codeType === 'type_use') {
+        return !(m.type_use_codes && m.type_use_codes.includes(code) && (!m.vcs_codes || m.vcs_codes.length === 0));
+      }
+      return !(m.vcs_codes && m.vcs_codes.includes(code) && (!m.type_use_codes || m.type_use_codes.length === 0));
+    }));
+  };
+
+  const handleDragStart = (e, code, codeType) => {
+    dragDataRef.current = { code, codeType };
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', `${codeType}:${code}`);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e, bracketValue) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('ring-2', 'ring-blue-400');
+    if (dragDataRef.current) {
+      const { code, codeType } = dragDataRef.current;
+      assignToBracket(code, codeType, bracketValue);
+      dragDataRef.current = null;
+    }
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.currentTarget.classList.add('ring-2', 'ring-blue-400');
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('ring-2', 'ring-blue-400');
+  };
+
+  const saveBracketMappings = async () => {
+    try {
+      setIsSavingMappings(true);
+      await supabase.from('job_cme_bracket_mappings').delete().eq('job_id', jobData.id);
+      // Build rows: Type/Use first (higher priority in lookup), then VCS
+      const typeUseRows = Object.entries(typeUseToBracket).map(([code, bracket]) => ({
+        job_id: jobData.id,
+        vcs_codes: null,
+        type_use_codes: [code],
+        bracket_value: bracket,
+        sort_order: 0
+      }));
+      const vcsRows = Object.entries(vcsToBracket).map(([code, bracket]) => ({
+        job_id: jobData.id,
+        vcs_codes: [code],
+        type_use_codes: null,
+        bracket_value: bracket,
+        sort_order: 0
+      }));
+      const allRows = [...typeUseRows, ...vcsRows].map((r, i) => ({ ...r, sort_order: i }));
+      if (allRows.length > 0) {
+        const { error } = await supabase.from('job_cme_bracket_mappings').insert(allRows);
+        if (error) throw error;
+      }
+      await loadBracketMappings();
+      alert('Bracket mappings saved successfully!');
+    } catch (error) {
+      console.error('Error saving bracket mappings:', error);
+      alert('Failed to save bracket mappings: ' + error.message);
+    } finally {
+      setIsSavingMappings(false);
+    }
+  };
+
+  // ==================== SALES STATS FOR MAPPING HINTS ====================
+  const isQualifyingSale = useCallback((p) => {
+    // Must have a sale price
+    const price = p.values_norm_time || p.sales_price;
+    if (!price || price <= 0) return false;
+    // Must be residential (building class > 10)
+    const buildingClass = parseInt(p.asset_building_class) || 0;
+    if (buildingClass <= 10) return false;
+    // Must have a valid sales code
+    const nuCode = String(p.sales_nu ?? '').trim();
+    if (!VALID_SALES_CODES.includes(nuCode)) return false;
+    return true;
+  }, []);
+
+  const salesStats = useMemo(() => {
+    if (!properties || properties.length === 0) return { byVCS: {}, byTypeUse: {} };
+    const byVCS = {};
+    const byTypeUse = {};
+    properties.forEach(p => {
+      if (!isQualifyingSale(p)) return;
+      const price = p.values_norm_time || p.sales_price;
+      const vcs = p.property_vcs || 'Unknown';
+      const tu = p.asset_type_use || 'Unknown';
+      if (!byVCS[vcs]) byVCS[vcs] = { count: 0, total: 0 };
+      byVCS[vcs].count++;
+      byVCS[vcs].total += price;
+      if (!byTypeUse[tu]) byTypeUse[tu] = { count: 0, total: 0 };
+      byTypeUse[tu].count++;
+      byTypeUse[tu].total += price;
+    });
+    return { byVCS, byTypeUse };
+  }, [properties, isQualifyingSale]);
+
+  // Unique VCS and Type/Use values for dropdowns
+  const uniqueVCS = useMemo(() => {
+    const set = new Set(properties.filter(p => isQualifyingSale(p)).map(p => p.property_vcs).filter(Boolean));
+    return [...set].sort();
+  }, [properties, isQualifyingSale]);
+
+  const uniqueTypeUse = useMemo(() => {
+    const set = new Set(properties.filter(p => isQualifyingSale(p)).map(p => p.asset_type_use).filter(Boolean));
+    return [...set].sort();
+  }, [properties, isQualifyingSale]);
+
+  // Unassigned codes (codes not yet mapped to any bracket)
+  const unassignedTypeUse = useMemo(() =>
+    uniqueTypeUse.filter(t => !typeUseToBracket[t]),
+    [uniqueTypeUse, typeUseToBracket]
+  );
+
+  const unassignedVCS = useMemo(() =>
+    uniqueVCS.filter(v => !vcsToBracket[v]),
+    [uniqueVCS, vcsToBracket]
+  );
+
+  // All bracket options (default + custom)
+  const allBracketOptions = useMemo(() => {
+    const options = CME_BRACKETS.map((b, idx) => ({
+      value: `bracket_${idx}`,
+      label: b.shortLabel
+    }));
+    customBrackets.forEach(cb => {
+      options.push({ value: `custom_${cb.bracket_id}`, label: cb.bracket_name });
+    });
+    return options;
+  }, [customBrackets]);
 
   const loadCustomBrackets = async () => {
     try {
@@ -1090,6 +1293,20 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
           >
             Adjustment Grid
           </button>
+          <button
+            onClick={() => setActiveSubTab('mapping')}
+            className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm inline-flex items-center gap-2 ${
+              activeSubTab === 'mapping'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <Map className="w-4 h-4" />
+            Bracket Mapping
+            {bracketMappings.length > 0 && (
+              <span className="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded-full">{bracketMappings.length}</span>
+            )}
+          </button>
         </nav>
       </div>
 
@@ -1821,6 +2038,201 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Bracket Mapping Tab */}
+      {activeSubTab === 'mapping' && (
+        <div>
+          <div className="mb-4 flex justify-between items-center">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Bracket Mapping</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Drag Type/Use or VCS codes into adjustment brackets. When "Auto" is selected during evaluation,
+                each property uses the mapped bracket. Type/Use matches take priority over VCS.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {(Object.keys(typeUseToBracket).length > 0 || Object.keys(vcsToBracket).length > 0) && (
+                <button
+                  onClick={() => setBracketMappings([])}
+                  className="inline-flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-red-600 border border-gray-300 rounded hover:border-red-300"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Clear All
+                </button>
+              )}
+              <button
+                onClick={saveBracketMappings}
+                disabled={isSavingMappings}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                {isSavingMappings ? 'Saving...' : 'Save Mappings'}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex gap-4" style={{ minHeight: '400px' }}>
+            {/* Left: Unassigned Codes */}
+            <div className="w-1/3 space-y-4 flex-shrink-0">
+              {/* Unassigned Type/Use */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-purple-50 px-3 py-2 border-b">
+                  <h4 className="text-xs font-semibold text-purple-800 uppercase">
+                    Type/Use ({unassignedTypeUse.length} unassigned)
+                  </h4>
+                </div>
+                <div className="p-2 max-h-56 overflow-y-auto">
+                  {unassignedTypeUse.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic text-center py-2">All Type/Use codes assigned</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {unassignedTypeUse.map(code => {
+                        const stats = salesStats.byTypeUse[code];
+                        const avgK = stats ? `$${Math.round(stats.total / stats.count / 1000)}K` : null;
+                        return (
+                          <div
+                            key={code}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, code, 'type_use')}
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium cursor-grab active:cursor-grabbing hover:bg-purple-200 border border-purple-200 select-none"
+                            title={stats ? `${code}: $${Math.round(stats.total / stats.count).toLocaleString()} avg (${stats.count} sales)` : code}
+                          >
+                            {code}
+                            {avgK && <span className="text-purple-500 text-[10px]">{avgK}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Unassigned VCS */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-teal-50 px-3 py-2 border-b">
+                  <h4 className="text-xs font-semibold text-teal-800 uppercase">
+                    VCS ({unassignedVCS.length} unassigned)
+                  </h4>
+                </div>
+                <div className="p-2 max-h-56 overflow-y-auto">
+                  {unassignedVCS.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic text-center py-2">All VCS codes assigned</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {unassignedVCS.map(code => {
+                        const stats = salesStats.byVCS[code];
+                        const avgK = stats ? `$${Math.round(stats.total / stats.count / 1000)}K` : null;
+                        return (
+                          <div
+                            key={code}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, code, 'vcs')}
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-teal-100 text-teal-800 rounded text-xs font-medium cursor-grab active:cursor-grabbing hover:bg-teal-200 border border-teal-200 select-none"
+                            title={stats ? `${code}: $${Math.round(stats.total / stats.count).toLocaleString()} avg (${stats.count} sales)` : code}
+                          >
+                            {code}
+                            {avgK && <span className="text-teal-500 text-[10px]">{avgK}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* How it works */}
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-xs text-amber-800">
+                  <strong>How it works:</strong> Drag codes into brackets. Type/Use matches take priority over VCS.
+                  Unmapped properties fall back to price-based bracket selection. You can also drag codes between brackets to reassign.
+                </p>
+              </div>
+            </div>
+
+            {/* Right: Bracket Buckets */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="grid grid-cols-2 gap-3">
+                {allBracketOptions.map((opt, idx) => {
+                  const bracket = CME_BRACKETS[idx];
+                  const bgColor = bracket ? bracket.color : '#D1D5DB';
+                  const assignedTU = Object.entries(typeUseToBracket)
+                    .filter(([, b]) => b === opt.value)
+                    .map(([code]) => code)
+                    .sort();
+                  const assignedVCS = Object.entries(vcsToBracket)
+                    .filter(([, b]) => b === opt.value)
+                    .map(([code]) => code)
+                    .sort();
+                  const hasAssignments = assignedTU.length > 0 || assignedVCS.length > 0;
+
+                  return (
+                    <div
+                      key={opt.value}
+                      onDragOver={handleDragOver}
+                      onDragEnter={handleDragEnter}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, opt.value)}
+                      className={`border-2 rounded-lg overflow-hidden transition-all ${hasAssignments ? 'border-gray-300' : 'border-dashed border-gray-200 hover:border-gray-300'}`}
+                    >
+                      <div
+                        className="px-3 py-1.5 flex items-center justify-between"
+                        style={{ backgroundColor: bgColor + '60' }}
+                      >
+                        <span className="text-xs font-bold text-gray-800">{opt.label}</span>
+                        {hasAssignments && (
+                          <span className="text-[10px] text-gray-500 bg-white/60 px-1.5 py-0.5 rounded">
+                            {assignedTU.length + assignedVCS.length}
+                          </span>
+                        )}
+                      </div>
+                      <div className="p-2 min-h-[44px] bg-white">
+                        {!hasAssignments ? (
+                          <p className="text-[10px] text-gray-300 text-center italic py-1">Drop codes here</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {assignedTU.map(code => (
+                              <span
+                                key={`tu_${code}`}
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, code, 'type_use')}
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[11px] font-medium cursor-grab active:cursor-grabbing"
+                              >
+                                {code}
+                                <button
+                                  onClick={() => unassignFromBracket(code, 'type_use')}
+                                  className="ml-0.5 text-purple-400 hover:text-purple-600"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            {assignedVCS.map(code => (
+                              <span
+                                key={`vcs_${code}`}
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, code, 'vcs')}
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded text-[11px] font-medium cursor-grab active:cursor-grabbing"
+                              >
+                                {code}
+                                <button
+                                  onClick={() => unassignFromBracket(code, 'vcs')}
+                                  className="ml-0.5 text-teal-400 hover:text-teal-600"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -1188,8 +1188,8 @@ export const interpretCodes = {
 
 **Purpose:** Generic key-value store for job-specific configuration settings that don't warrant dedicated columns. Allows flexible setting storage without schema changes.
 
-#### **job_cme_evaluations** ⚠️ LEGACY TABLE
-**Component:** Early CME prototype (superseded by final_valuation_data)
+#### **job_cme_evaluations** ⚠️ ACTIVE TABLE (Updated 2025)
+**Component:** SalesComparisonTab.jsx - Set-aside evaluation storage
 
 | Column | Data Type | Notes |
 |--------|-----------|-------|
@@ -1197,22 +1197,59 @@ export const interpretCodes = {
 | job_id | uuid | Foreign key to jobs |
 | evaluation_run_id | uuid | Batch evaluation identifier |
 | subject_property_id | uuid | Property being evaluated |
-| subject_pams | text | Property identifier string |
+| subject_pams | text | Property composite key (block-lot-qualifier) |
 | subject_address | text | Property address |
-| search_criteria | jsonb | Filter criteria used |
-| comparables | jsonb | Array of comparable properties |
-| projected_assessment | numeric | Estimated value |
+| search_criteria | jsonb | Filter criteria used for this evaluation |
+| comparables | jsonb | Array of comparable properties with adjustedPrice, adjustmentPercent, rank |
+| projected_assessment | numeric | CME projected value (weighted average of adjusted comps) |
 | weighted_average_price | numeric | Average of comps |
-| confidence_score | numeric | Quality metric |
-| status | text | 'pending', 'completed', 'failed' |
+| confidence_score | numeric | Quality metric (0-100) |
+| status | text | 'set_aside' (committed results) |
 | notes | text | Evaluation notes |
 | created_by | uuid | User who ran evaluation |
 | created_at | timestamp with time zone | |
 | updated_at | timestamp with time zone | |
 
-**Status:** LEGACY - Early prototype. Current system uses final_valuation_data table. May contain historical data but not actively used.
+**Status:** ACTIVE - Used for "Set Aside" workflow. When a user evaluates properties and sets aside successful results, they are saved here with status='set_aside'. The Summary tab aggregates these records to show working totals, VCS completion tracking, and projected net valuation.
 
-**Purpose:** Original CME evaluation storage before consolidation into final_valuation_data. Preserved for historical reference.
+**Purpose:** Stores committed CME evaluation results. Users evaluate in batches (by VCS, type/use, etc.), review results, then "Set Aside" successful evaluations (those with sufficient comparables). The Summary tab uses these records as the source of truth for the projected valuation table and export.
+
+#### **job_cme_result_sets** ⚠️ NEW TABLE (2025)
+**Component:** SalesComparisonTab.jsx - Named result set snapshots
+
+| Column | Data Type | Notes |
+|--------|-----------|-------|
+| id | uuid | Primary key |
+| job_id | uuid | Foreign key to jobs |
+| name | text | User-provided name for the result set |
+| adjustment_bracket | text | Bracket mode used ('auto', 'bracket_0', etc.) |
+| search_criteria | jsonb | Complete compFilters state at time of save |
+| results | jsonb | Full serialized evaluation results (subjects + comparables with all property fields) |
+| created_at | timestamp with time zone | |
+
+**Purpose:** Allows users to save named snapshots of evaluation results for later recall. Preserves complete subject and comparable property data so results can be reloaded and viewed in DetailedAppraisalGrid without re-running the evaluation. Users can load, delete, and manage multiple saved sets per job.
+
+#### **job_cme_bracket_mappings** ⚠️ NEW TABLE (2025)
+**Component:** AdjustmentsTab.jsx - Bracket Mapping sub-tab (drag-and-drop UI)
+
+| Column | Data Type | Notes |
+|--------|-----------|-------|
+| id | uuid | Primary key |
+| job_id | uuid | Foreign key to jobs |
+| vcs_codes | text[] | Array of VCS codes (null if type/use mapping) |
+| type_use_codes | text[] | Array of Type/Use codes (null if VCS mapping) |
+| bracket_value | text | Target bracket identifier (e.g., 'bracket_0', 'bracket_5') |
+| sort_order | integer | Processing priority order |
+| created_at | timestamp with time zone | |
+
+**Purpose:** Maps VCS and Type/Use codes to specific adjustment brackets. When CME runs in "Auto (based on mapping)" mode, each subject property is routed to the correct bracket based on its VCS or Type/Use code rather than falling back to price-based bracket selection. This is critical because a property's current assessed value may not reflect its true market segment — a $300K-assessed property in a $500K neighborhood should use the $500K bracket adjustments.
+
+**Drag-and-Drop UI:** Left side shows unassigned Type/Use and VCS codes stacked vertically. Right side shows bracket buckets in a 2-column grid with color-coding and average sale prices. Users drag codes into brackets to assign them.
+
+**Qualifying Sales Filter:** Average sale prices shown in bracket hints only include:
+- Building class > 10 (residential only)
+- Valid sales codes: 00, 0, 7, 07, 32, 36
+- Properties with values_norm_time > 0
 
 #### **analytics_runs** ⚠️ NEW TABLE (January 2025)
 **Component:** ProductionTracker.jsx - Analytics history tracking
@@ -6051,22 +6088,27 @@ Class 4: $256.8M @ 2.684% = $6,892,196 total tax
 
 ### SalesComparisonTab.jsx - Comparative Market Evaluation (CME) Engine 🔍
 
-**Scale**: 2,812 lines - THE LARGEST Final Valuation component!
+**Scale**: ~3,900+ lines - THE LARGEST Final Valuation component!
 
-**Core Philosophy**: Automated comparable search with sophisticated filtering and adjustment grid integration
+**Core Philosophy**: Automated comparable search with sophisticated filtering, bracket mapping, and adjustment grid integration. Supports batch-based workflows where users evaluate by VCS/Type-Use segments, set aside good results, and build toward a complete town valuation.
 
 **Key Features:**
 - **Subject Property Selection** - Multi-select by VCS, Type Use, or manual entry
 - **Comparable Filtering** - 15+ filter criteria with smart defaults
 - **Adjustment Grid Integration** - 10 price brackets with attribute adjustments
-- **Automated Evaluation** - Process hundreds/thousands of properties
+- **Bracket Mapping** - Drag-and-drop VCS/Type-Use → bracket assignment (configured in AdjustmentsTab)
+- **Automated Evaluation** - Process hundreds/thousands of properties with "Auto (based on mapping)" mode
+- **Set Aside Workflow** - Save successful evaluations incrementally as batches are completed
+- **Result Set Snapshots** - Save/load named result sets for review
 - **Manual Appraisal Mode** - Detailed grid for custom comparable selection
-- **Excel Export** - Comprehensive CME analysis report
+- **Summary Dashboard** - Working totals, VCS completion tracking, projected net valuation by class
+- **Excel Export** - Update file (BLQ + Improvement Override) and Final Roster (placeholder)
 
-**Three Nested Sub-Tabs:**
-1. **Search** - Subject selection and comparable filtering
-2. **Evaluate** - Run automated CME analysis
-3. **Detailed** - Manual comparable appraisal grid
+**Four Nested Sub-Tabs:**
+1. **Adjustments** - Adjustment grid configuration and bracket mapping (via AdjustmentsTab)
+2. **Search & Results** - Subject selection, comparable filtering, evaluation execution, inline results with Set Aside
+3. **Detailed** - Manual comparable appraisal grid (DetailedAppraisalGrid)
+4. **Summary** - Aggregated working totals from set-aside evaluations, VCS breakdown, projected net valuation table (mirrors Market Data format), export buttons
 
 **Search Sub-Tab:**
 
@@ -6174,33 +6216,38 @@ Class 4: $256.8M @ 2.684% = $6,892,196 total tax
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Evaluate Sub-Tab:**
+**Search & Results Sub-Tab:**
 
 **Automated CME Workflow:**
 
 **Step 1: Evaluation Mode Selection:**
-- **Fresh Evaluation** - Overwrites existing CME data
-- **Keep Existing** - Only evaluates properties without CME data
+- **Fresh Evaluation** - Clears all existing set-aside evaluations, starts over
+- **Keep Existing** - Skips properties already set aside, evaluates remaining
 
-**Step 2: Process Properties:**
+**Step 2: Bracket Selection:**
+- **Auto (based on mapping)** - Uses bracket mappings from AdjustmentsTab to route each property to the correct adjustment bracket based on its VCS or Type/Use code
+- **Specific bracket** - Force all properties into a single bracket
+- If no mapping exists for a property, falls back to price-based bracket selection
+
+**Step 3: Process Properties:**
 ```javascript
 for each subject property:
-  1. Find comparables matching all filter criteria
-  2. Apply adjustment grid for subject's price bracket
-  3. Calculate adjusted sale prices
-  4. Select best 5 comparables
-  5. Calculate min, max, average ranges
-  6. Save to final_valuation_data (cme_* fields)
+  1. Look up bracket mapping (VCS → bracket, or Type/Use → bracket)
+  2. If no mapping found, determine bracket from subject's sale price
+  3. Find comparables matching all filter criteria
+  4. Apply adjustment grid for the determined bracket
+  5. Calculate adjusted sale prices with weighted averaging
+  6. Select best 5 comparables (sorted by lowest net adjustment %)
+  7. Calculate projected assessment (weighted average by adjustment proximity)
 ```
 
-**Step 3: Progress Display:**
-```
-Processing CME Analysis...
-Progress: 456 / 1,234 properties (37%)
-Successes: 389 (85%)
-Failures: 67 (15%)
-Current: Block 123, Lot 45
-```
+**Step 4: Results Display & Set Aside:**
+- Results shown inline below search filters
+- Summary stats: Total evaluated, no comps, with N+ comps, set aside count
+- Valuation summary panel with class breakdown, current vs projected
+- **Set Aside** button: saves successful evaluations (N+ comps) to `job_cme_evaluations` table
+- **Save Result Set** button: saves named snapshot to `job_cme_result_sets` for later recall
+- **Create Update** / **Build Final Roster** export buttons on results
 
 **Adjustment Grid Application:**
 
@@ -6282,132 +6329,135 @@ cme_max_range = Math.max(...bestComps.map(c => c.adjustedPrice));
 
 **Purpose:**
 - Manual comparable selection for specific properties
-- Override automated CME results
-- Detailed appraisal grid interface
+- Click any "New Asmt" value in results table to jump to Detailed view for that property
+- Enter custom subject + comparables by BLQ for ad-hoc evaluations
 
 **Workflow:**
 1. Enter subject Block-Lot-Qualifier
 2. Manually enter up to 5 comparable Block-Lot-Qualifiers
 3. System loads property details for all
-4. Applies adjustment grid automatically
-5. Displays detailed appraisal grid
-6. Option to save as CME result
+4. Applies adjustment grid automatically (uses mapped bracket if available)
+5. Displays detailed appraisal grid (DetailedAppraisalGrid.jsx)
+6. Header shows bracket used: "Auto - Mapped ($500K-$749K)" or "Auto ($300K-$399K)" for price-based
 
-**Detailed Appraisal Grid:**
+**Detailed Appraisal Grid (DetailedAppraisalGrid.jsx):**
 
-Integrated component (DetailedAppraisalGrid.jsx - 577 lines):
-- Subject property details
+Integrated component (~1,700+ lines):
+- Subject property details with all attributes
 - Comparable property details (5 columns)
-- Row-by-row attribute comparison
-- Automatic adjustment calculations
-- Final adjusted values
-- Min/max/average ranges
+- Row-by-row attribute comparison with adjustment calculations
+- Editable fields in PDF export modal for what-if scenarios
+- Supports multi-card property aggregation (additional cards for SFLA, garages, etc.)
+- Bracket-aware: uses `mappedBracket` from evaluation result when available
 
 **Grid Rows:**
-- Address
-- Sale Price / Sale Date
-- Living Area (SFLA)
-- Year Built
-- Lot Size
-- Style
-- Condition
-- Garage
-- Basement
-- Fireplace
-- Pool
-- Central Air
-- [Custom attributes from grid]
-- Total Adjustments
-- Adjusted Sale Price
+- Address, Sale Price, Sale Date, VCS
+- Living Area (SFLA), Year Built, Lot Size
+- Style, Condition, Building Class
+- Garage (categorized: 1-car, 2-car, 3-car based on configurable SF thresholds)
+- Basement (finished), Fireplace, Pool, Central Air
+- Detached items (with condition multipliers: poor/standard/excellent)
+- Miscellaneous codes (land positive/negative adjustments)
+- [Custom attributes from adjustment grid]
+- Total/Net/Gross Adjustments with percentage
+- Adjusted Sale Price, Weight, Weighted Value
+
+**Summary Sub-Tab (CME Dashboard):**
+
+**Purpose:**
+- Working progress tracker showing what's done vs what's remaining
+- Projected net valuation table matching Market Data format
+- Export functionality for update files
+
+**Info Section - CME Evaluation Overview:**
+- 3 stat cards: Set Aside (Done), Not Yet Evaluated, Total Residential
+- VCS breakdown table: shows "Set Aside" vs "Not Done" counts per VCS (sortable)
+- "Not Yet Evaluated" expandable table with sortable headers (VCS, Block, Lot, Qual, Location, Type/Use, Current Asmt)
+
+**Projected Net Valuation (Taxable) - CME Total:**
+- Mirrors Market Data summary table structure exactly
+- All 9 property classes: 1, 2, 3A, 3B, 4A, 4B, 4C, 6A, 6B
+- Class 4* and Class 6* aggregate rows
+- Grand total row with blue bar
+
+**Class Population Logic:**
+- **Non-CME classes** (1, 3B, 4A, 4B, 4C, 6A, 6B): Uses `property_cama_class` and `values_cama_total` directly from data file. CME doesn't evaluate these — they carry through unchanged.
+- **Class 2/3A with building class ≤ 10** (detached-only parcels — garage, pool, no home): Uses CAMA values. CME skips these.
+- **Class 2/3A with building class > 10** (actual homes): Uses CME set-aside projected assessments, rounded to nearest $100.
+
+**Export Section:**
+- **Export Excel Update**: Block, Lot, Qualifier, Card, Improvement Override (rounded CME value minus `values_cama_land`)
+- **Build Final Roster**: Placeholder button — column selection TBD
 
 **Database Integration:**
-- Saves to final_valuation_data table
-- Fields: cme_projected_assessment, cme_min_range, cme_max_range
-- Comparable references: cme_comp1, cme_comp2, cme_comp3, cme_comp4, cme_comp5
-- Preserves manual overrides
-
-**Excel Export:**
-
-Comprehensive CME report with:
-- Subject property list
-- Comparable details for each
-- Adjustment breakdown
-- Adjusted sale prices
-- CME projected range
-- Formula-based calculations
-- Professional formatting
+- Set-aside evaluations: `job_cme_evaluations` table (status='set_aside')
+- Named result snapshots: `job_cme_result_sets` table
+- Bracket mappings: `job_cme_bracket_mappings` table
+- Adjustment grid: `job_adjustment_grid` table
 
 **Integration with AdjustmentsTab:**
 
-Adjustments grid configured in separate tab:
-- 10 price brackets
-- Default adjustments (Living Area, Garage, Pool, etc.)
-- Custom adjustments (user-defined)
-- Per-bracket customization
-- Saved to job_adjustment_grid table
+AdjustmentsTab contains two sub-sections:
+1. **Adjustment Grid** - 10 price brackets with default + custom adjustments, saved to `job_adjustment_grid`
+2. **Bracket Mapping** - Drag-and-drop VCS/Type-Use → bracket assignment with qualifying sale price hints, saved to `job_cme_bracket_mappings`
 
 **Critical Implementation Notes:**
 - Filter presets optimized for CSP methodology
-- Auto-adjustment uses subject's sales price bracket
-- Manual mode allows override of automated results
-- Export includes all comparables and adjustments
+- Auto mode uses bracket mapping first, then falls back to price-based bracket
+- Bracket mapping only affects bracket selection, NOT comp search filtering (VCS filtering remains user-controlled)
+- Set Aside is the commit mechanism — Summary tab only counts set-aside results
+- Values rounded to nearest $100 for projected assessments
+- Improvement Override in export uses `values_cama_land` (not mod4 land)
 - Performance optimized for 1,000+ subject properties
-- Progress tracking essential for large evaluations
 
 ---
 
-### 🚧 **CME_NEEDS_WORK_JAN2025** - Sales Comparison Issues to Address
+### ✅ **CME_NEEDS_WORK_JAN2025** - Sales Comparison Issues (RESOLVED)
 
 **SEARCHPHRASE for quick find: CME_NEEDS_WORK_JAN2025**
 
-**Priority Items for Next Session:**
+**All items completed as of 2025:**
 
-**1. ATTRIBUTE DATA VERIFICATION (CRITICAL):**
-- **Issue**: Attributes showing up in adjustment grid (decks, patios, pools, garages, etc.) need verification at individual Block-Lot level
-- **Action Required**:
-  - Check specific Block-Lot combinations in database vs what's displayed in CME grid
-  - Verify data is coming from correct source (property_records vs raw fields)
-  - Ensure Microsystems attribute mapping is correct (garage_area, pool_area, deck_area, etc.)
-  - Cross-reference with property detail views to confirm accuracy
-- **Files**: SalesComparisonTab.jsx, DetailedAppraisalGrid.jsx
-- **Database**: property_records table - attribute fields
+**1. ATTRIBUTE DATA VERIFICATION — COMPLETED**
+- Attributes verified working for both BRT and Microsystems vendor types
+- Multi-card aggregation implemented (additional cards contribute SFLA, garages, etc.)
+- Garage categorization uses configurable SF thresholds (job_settings)
+- Detached item condition multipliers (poor/standard/excellent) configurable per job
+- Microsystems attribute mapping verified with Glen Ridge test job
+- Ongoing: edge cases may surface during broader testing but core functionality is solid
 
-**2. PROGRESS BAR REALISM (UX):**
-- **Issue**: Evaluation progress bar jumps to 99% instantly, not realistic
-- **Current Behavior**: Bar hits 99% in ~1 second regardless of property count
-- **Desired Behavior**: Progressive real-time updates as evaluation proceeds:
-  - Find comparables (Phase 1)
-  - Calculate adjustments (Phase 2)
-  - Rank and select best comps (Phase 3)
-  - Save results (Phase 4)
-- **Action Required**: Implement true progress tracking with status updates per property
-- **Files**: SalesComparisonTab.jsx - Evaluate sub-tab
-- **Implementation**: Use state updates in evaluation loop, possibly with batching for performance
+**2. PROGRESS BAR REALISM — COMPLETED**
+- Evaluation loop now updates `evaluationProgress({ current, total })` per property
+- UI shows "Evaluating X of Y properties..." with real-time progress
+- No longer jumps to 99% instantly
 
-**3. ADJUSTMENT CALCULATION VERIFICATION (POST-DATA FIX):**
-- **Issue**: Once attribute data is verified correct, need to validate adjustment calculations
-- **Action Required**:
-  - Manual spot-check of adjustment math
-  - Verify bracket-based adjustment values applying correctly
-  - Confirm total adjustments, net adjustments, gross adjustments formulas
-  - Test edge cases (missing attributes, zero values, etc.)
-- **Dependencies**: Complete Item #1 first
-- **Files**: DetailedAppraisalGrid.jsx, SalesComparisonTab.jsx
+**3. ADJUSTMENT CALCULATION VERIFICATION — COMPLETED**
+- Bracket-based adjustments verified working correctly
+- Bracket mapping system routes properties to correct bracket via VCS/Type-Use mapping
+- User verified SE05 properties correctly using bracket_5 ($500K-$749K) adjustments
+- Label display fixed: header shows "Auto - Mapped ($500K-$749K)" when mapped bracket used
+- Net/gross adjustment percentages calculating correctly
+- Weighted average projected assessment using inverse-adjustment weighting
 
-**Status**: Ready for investigation - Microsystems jobs showing issues, BRT appears functional
+**Status**: All items resolved. Further edge cases will be caught through continued testing.
 
 ---
 
-### AdjustmentsTab.jsx - CME Adjustment Grid Configuration ⚙️
+### AdjustmentsTab.jsx - CME Adjustment Grid & Bracket Mapping ⚙️
 
-**Scale**: 1,325 lines of adjustment grid management
+**Scale**: ~1,500+ lines of adjustment grid management and bracket mapping
 
-**Core Philosophy**: Configure market-based adjustments across 10 price brackets for automated CME
+**Core Philosophy**: Configure market-based adjustments across 10 price brackets and map VCS/Type-Use codes to brackets for automated CME routing
+
+**Two Sections:**
+1. **Adjustment Grid** — Define per-bracket adjustment values for property attributes
+2. **Bracket Mapping** — Drag-and-drop assignment of VCS/Type-Use codes to brackets
 
 **Purpose:**
 - Define adjustment values for property attributes
 - Differentiate by price bracket (market segmentation)
 - Support both system defaults and custom adjustments
+- Map VCS and Type/Use codes to specific brackets (overrides price-based bracket selection)
 - Feed into Sales Comparison automated evaluation
 
 **10 Price Brackets:**

@@ -950,16 +950,26 @@ const App = () => {
       <div className="app-header">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex justify-between items-center mb-4">
-            <h1 style={{ 
+            <h1 style={{
               color: '#FFFFFF',
               fontSize: '2rem',
               fontWeight: 'bold',
-              fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", 
+              fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
               letterSpacing: '-0.02em',
               display: 'flex',
-              alignItems: 'center'
+              alignItems: 'center',
+              gap: '12px'
             }}>
-              Management OS
+              <img
+                src="/lojik-logo.PNG"
+                alt="LOJIK Logo"
+                style={{
+                  height: '40px',
+                  width: 'auto',
+                  objectFit: 'contain'
+                }}
+              />
+              Property Assessment Copilot
             </h1>
             <div className="flex items-center gap-4">
               <span className="text-sm text-white opacity-95">

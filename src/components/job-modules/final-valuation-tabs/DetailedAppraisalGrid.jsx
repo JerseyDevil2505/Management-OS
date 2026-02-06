@@ -98,6 +98,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
   // Calculated adjustments based on edited values
   const [editedAdjustments, setEditedAdjustments] = useState({});
+  const [hasEdits, setHasEdits] = useState(false);
 
   // Define which attributes are editable and their input types
   const EDITABLE_CONFIG = {
@@ -139,25 +140,35 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
   ];
 
   // Condition options (will be populated from code definitions)
-  const getConditionOptions = useCallback(() => {
-    // Try to get from code definitions
-    if (codeDefinitions?.field_codes) {
-      const extCondCodes = codeDefinitions.field_codes['260'] || codeDefinitions.field_codes['exterior_condition'] || {};
-      const options = Object.entries(extCondCodes).map(([code, data]) => ({
-        value: code,
-        label: data.description || code
-      }));
+  const getConditionOptions = useCallback((configType) => {
+    // Pull from condition config (same source used for ranking/adjustments)
+    const conditionConfig = jobData?.attribute_condition_config;
+    if (conditionConfig && conditionConfig[configType]) {
+      const config = conditionConfig[configType];
+      const options = [];
+      // Better conditions (best first)
+      if (config.better) {
+        [...config.better].reverse().forEach(name => options.push({ value: name, label: name }));
+      }
+      // Baseline
+      if (config.baseline) {
+        options.push({ value: config.baseline, label: config.baseline });
+      }
+      // Worse conditions (least bad first)
+      if (config.worse) {
+        config.worse.forEach(name => options.push({ value: name, label: name }));
+      }
       if (options.length > 0) return options;
     }
     // Fallback standard options
     return [
-      { value: 'E', label: 'Excellent' },
-      { value: 'G', label: 'Good' },
-      { value: 'A', label: 'Average' },
-      { value: 'F', label: 'Fair' },
-      { value: 'P', label: 'Poor' }
+      { value: 'Excellent', label: 'Excellent' },
+      { value: 'Good', label: 'Good' },
+      { value: 'Average', label: 'Average' },
+      { value: 'Fair', label: 'Fair' },
+      { value: 'Poor', label: 'Poor' }
     ];
-  }, [codeDefinitions]);
+  }, [jobData]);
 
   // Determine which bracket is being used
   const getBracketLabel = () => {
@@ -166,7 +177,18 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const selectedBracket = compFilters.adjustmentBracket;
 
     if (selectedBracket === 'auto') {
-      // Show the auto-determined bracket based on subject's value
+      // If a mapped bracket was used for this result, show that
+      if (result.mappedBracket) {
+        const match = result.mappedBracket.match(/bracket_(\d+)/);
+        if (match) {
+          const idx = parseInt(match[1]);
+          if (cmeBrackets[idx]) {
+            return `Auto - Mapped (${cmeBrackets[idx].label})`;
+          }
+        }
+        return `Auto - Mapped`;
+      }
+      // Fall back to price-based bracket
       const subjectValue = subject.values_norm_time || subject.sales_price || subject.values_mod_total || subject.values_cama_total || 0;
       const bracketIndex = cmeBrackets.findIndex(b => subjectValue >= b.min && subjectValue <= b.max);
       if (bracketIndex >= 0 && cmeBrackets[bracketIndex]) {
@@ -1002,13 +1024,62 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
         [attrId]: value
       }
     }));
+    setHasEdits(true);
   }, []);
+
+  // Helper: Get condition rank from condition code/name (mirrors SalesComparisonTab logic)
+  const getConditionRank = useCallback((conditionCode, configType) => {
+    if (!conditionCode || String(conditionCode).trim() === '') return 0;
+    const conditionConfig = jobData?.attribute_condition_config;
+    if (!conditionConfig || !conditionConfig[configType]) return 0;
+
+    const config = conditionConfig[configType];
+    const code = String(conditionCode).toUpperCase().trim();
+    const baseline = config.baseline?.toUpperCase().trim();
+    const betterCodes = (config.better || []).map(c => c.toUpperCase().trim());
+    const worseCodes = (config.worse || []).map(c => c.toUpperCase().trim());
+
+    // Also try translating code to name via code definitions
+    let codeName = code;
+    if (codeDefinitions) {
+      const nameFromCode = configType === 'exterior'
+        ? interpretCodes.getExteriorConditionName({ asset_ext_cond: conditionCode }, codeDefinitions, vendorType)
+        : interpretCodes.getInteriorConditionName({ asset_int_cond: conditionCode }, codeDefinitions, vendorType);
+      if (nameFromCode) codeName = nameFromCode.toUpperCase().trim();
+    }
+
+    if (code === baseline || codeName === baseline) return 0;
+    const betterIdx = betterCodes.indexOf(code) !== -1 ? betterCodes.indexOf(code) : betterCodes.indexOf(codeName);
+    if (betterIdx !== -1) return betterIdx + 1;
+    const worseIdx = worseCodes.indexOf(code) !== -1 ? worseCodes.indexOf(code) : worseCodes.indexOf(codeName);
+    if (worseIdx !== -1) return -(worseIdx + 1);
+    return 0;
+  }, [jobData, codeDefinitions, vendorType]);
+
+  // Helper: Get bracket index based on compFilters, mapped bracket, and comp price
+  const getBracketIndex = useCallback((compNormTime) => {
+    // If a specific bracket is selected (not auto), use it
+    if (compFilters?.adjustmentBracket && compFilters.adjustmentBracket !== 'auto') {
+      const match = compFilters.adjustmentBracket.match(/bracket_(\d+)/);
+      if (match) return parseInt(match[1]);
+    }
+    // If auto with a mapped bracket for this subject, use the mapped bracket
+    if (result.mappedBracket) {
+      const match = result.mappedBracket.match(/bracket_(\d+)/);
+      if (match) return parseInt(match[1]);
+    }
+    // Fall back to price-based bracket
+    if (!compNormTime || !cmeBrackets?.length) return 0;
+    const bracket = cmeBrackets.findIndex(b => compNormTime >= b.min && compNormTime <= b.max);
+    return bracket >= 0 ? bracket : 0;
+  }, [compFilters, cmeBrackets, result.mappedBracket]);
 
   // Calculate adjustment for a single attribute between subject and comp
   const calculateSingleAdjustment = useCallback((subjectVal, compVal, adjustmentDef, compSalesPrice) => {
     if (!adjustmentDef) return 0;
 
-    const adjustmentValue = adjustmentDef.bracket_0 || 0; // Use first bracket as default
+    const bracketIndex = getBracketIndex(compSalesPrice);
+    const adjustmentValue = adjustmentDef[`bracket_${bracketIndex}`] || 0;
     const adjustmentType = adjustmentDef.adjustment_type || 'flat';
 
     const subjectNum = parseFloat(subjectVal) || 0;
@@ -1019,18 +1090,24 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
     switch (adjustmentType) {
       case 'flat':
-        return difference > 0 ? adjustmentValue : -adjustmentValue;
+        // Lot size and garage adjustments multiply by difference (not binary)
+        if (adjustmentDef.adjustment_id?.includes('lot_size') ||
+            adjustmentDef.adjustment_id === 'garage' ||
+            adjustmentDef.adjustment_id === 'det_garage') {
+          return difference * adjustmentValue;
+        }
+        // Boolean amenities: binary adjustment
+        return difference > 0 ? adjustmentValue : (difference < 0 ? -adjustmentValue : 0);
       case 'per_sqft':
         return difference * adjustmentValue;
       case 'count':
         return difference * adjustmentValue;
       case 'percent':
-        // Use full difference for tiered adjustments (e.g., EXCELLENT is 2 steps from AVERAGE = 2x adjustment)
         return (compSalesPrice || 0) * (adjustmentValue / 100) * difference;
       default:
         return 0;
     }
-  }, []);
+  }, [getBracketIndex]);
 
   // Recalculate all adjustments based on edited values
   const recalculateAdjustments = useCallback(() => {
@@ -1070,10 +1147,20 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           compVal = (compVal === true || compVal === 'Yes' || compVal === 1) ? 1 : 0;
         }
 
-        // Convert garage category to number
+        // Convert garage to category number
+        // Edited values are already categories (0-4), raw values are sq ft that need conversion
         if (config.type === 'garage') {
           subjectVal = parseInt(subjectVal) || 0;
           compVal = parseInt(compVal) || 0;
+          if (subjectVal > 4) subjectVal = getGarageCategory(subjectVal);
+          if (compVal > 4) compVal = getGarageCategory(compVal);
+        }
+
+        // Convert condition code/name to rank
+        if (config.type === 'condition') {
+          const configType = attrId === 'ext_condition' ? 'exterior' : 'interior';
+          subjectVal = getConditionRank(subjectVal, configType);
+          compVal = getConditionRank(compVal, configType);
         }
 
         const adjustment = calculateSingleAdjustment(subjectVal, compVal, adjustmentDef, compSalesPrice);
@@ -1098,19 +1185,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     });
 
     setEditedAdjustments(newAdjustments);
-  }, [comps, getEditedValue, calculateSingleAdjustment, allAttributes, adjustmentGrid]);
+    setHasEdits(false);
+  }, [comps, getEditedValue, calculateSingleAdjustment, allAttributes, adjustmentGrid, getConditionRank]);
 
-  // NOTE: We intentionally do NOT recalculate adjustments when user edits values
-  // The modal mirrors the detailed component's original adjustments exactly
-  // User edits only affect the displayed values, not the adjustments
-  // This ensures legal accuracy - adjustments stay as calculated by the system
-
-  // Simple modal open - DON'T pre-initialize, just mirror the detailed component
-  // Only track edits when user actually makes changes
   const openExportModal = useCallback(() => {
-    // Start with empty - values will come directly from data, just like detailed component
     setEditableProperties({});
     setEditedAdjustments({});
+    setHasEdits(false);
     setShowExportModal(true);
   }, []);
 
@@ -1128,42 +1209,47 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     // Lojik blue color
     const lojikBlue = [0, 102, 204];
 
-    // Helper to draw the LOJIK logo with diamond shapes
-    const drawLojikLogo = (x, y) => {
-      // Draw two overlapping diamond shapes
-      doc.setDrawColor(...lojikBlue);
-      doc.setLineWidth(1.5);
+    // Load the LOJIK logo image
+    let logoDataUrl = null;
+    try {
+      const response = await fetch('/lojik-logo.PNG');
+      const blob = await response.blob();
+      logoDataUrl = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    } catch (err) {
+      console.warn('Could not load logo image for PDF:', err);
+    }
 
-      // First diamond (larger, background)
-      const diamond1Size = 14;
-      doc.setFillColor(255, 255, 255);
-      doc.lines([
-        [diamond1Size, diamond1Size],
-        [-diamond1Size, diamond1Size],
-        [-diamond1Size, -diamond1Size],
-        [diamond1Size, -diamond1Size]
-      ], x + 12, y + 15, [1, 1], 'D');
-
-      // Second diamond (smaller, overlapping)
-      const diamond2Size = 10;
-      doc.lines([
-        [diamond2Size, diamond2Size],
-        [-diamond2Size, diamond2Size],
-        [-diamond2Size, -diamond2Size],
-        [diamond2Size, -diamond2Size]
-      ], x + 22, y + 10, [1, 1], 'D');
-
-      // Draw "LOJIK" text next to diamonds
-      doc.setTextColor(...lojikBlue);
-      doc.setFontSize(16);
-      doc.setFont('helvetica', 'bold');
-      doc.text('LOJIK', x + 40, y + 20);
+    // Helper to add the LOJIK logo to PDF
+    const addLogoToPage = (x, y) => {
+      if (logoDataUrl) {
+        // Add the actual logo image (height ~35pt, auto width to maintain aspect ratio)
+        try {
+          doc.addImage(logoDataUrl, 'PNG', x, y, 80, 35);
+        } catch (err) {
+          console.warn('Could not add logo to PDF:', err);
+          // Fallback: draw text
+          doc.setTextColor(...lojikBlue);
+          doc.setFontSize(16);
+          doc.setFont('helvetica', 'bold');
+          doc.text('LOJIK', x, y + 20);
+        }
+      } else {
+        // Fallback: draw LOJIK text if image failed to load
+        doc.setTextColor(...lojikBlue);
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text('LOJIK', x, y + 20);
+      }
     };
 
     // Add header with logo
     const addHeader = (blockLot, includeBlockLotRow = false) => {
-      // Draw the LOJIK logo with diamond shapes
-      drawLojikLogo(margin, margin - 5);
+      // Add the LOJIK logo image
+      addLogoToPage(margin, margin - 5);
 
       // Block/Lot in top right
       doc.setTextColor(0, 0, 0);
@@ -1872,11 +1958,18 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       const editedVal = editableProperties[propKey]?.[attr.id];
                       const displayVal = editedVal !== undefined ? editedVal : attr.render(prop);
 
-                      // Get adjustment for this comp - ALWAYS use original from comp data
-                      // This ensures modal mirrors detailed component exactly
-                      const compAdj = propKey.startsWith('comp_') && showAdjustments && attr.adjustmentName
-                        ? getAdjustment(prop, attr.adjustmentName)
-                        : null;
+                      // Get adjustment for this comp - use edited if recalculated, otherwise original
+                      let compAdj = null;
+                      if (propKey.startsWith('comp_') && showAdjustments && attr.adjustmentName) {
+                        const editedCompData = editedAdjustments[propKey];
+                        if (editedCompData) {
+                          compAdj = editedCompData.adjustments.find(a =>
+                            a.name?.toLowerCase() === attr.adjustmentName?.toLowerCase()
+                          ) || null;
+                        } else {
+                          compAdj = getAdjustment(prop, attr.adjustmentName);
+                        }
+                      }
 
                       if (!isEditable) {
                         return (
@@ -1950,12 +2043,12 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                           )}
                           {cfg.type === 'condition' && (
                             <select
-                              value={editedVal ?? (prop ? prop[cfg.field] : '')}
+                              value={editedVal ?? (prop ? attr.render(prop) : '')}
                               onChange={(e) => updateEditedValue(propKey, attr.id, e.target.value)}
                               className="w-full px-1 py-0.5 text-xs border rounded focus:ring-1 focus:ring-blue-500"
                             >
                               <option value="">-</option>
-                              {getConditionOptions().map(opt => (
+                              {getConditionOptions(attr.id === 'ext_condition' ? 'exterior' : 'interior').map(opt => (
                                 <option key={opt.value} value={opt.value}>{opt.label}</option>
                               ))}
                             </select>
@@ -1981,7 +2074,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     );
                   })}
 
-                  {/* Net Adjustment Row - ALWAYS use original comp data */}
+                  {/* Net Adjustment Row - use edited if recalculated, otherwise original */}
                   {showAdjustments && rowVisibility['net_adjustment'] !== false && (
                     <tr className="border-b-2 border-gray-400 bg-gray-100">
                       <td className="px-2 py-2 font-bold text-gray-900 border-r border-gray-300">Net Adjustment</td>
@@ -1991,8 +2084,9 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                         if (!comp) {
                           return <td key={idx} className="px-2 py-2 text-center border-r border-gray-300">-</td>;
                         }
-                        const total = comp.totalAdjustment || 0;
-                        const pct = comp.adjustmentPercent || 0;
+                        const editedData = editedAdjustments[`comp_${idx}`];
+                        const total = editedData ? editedData.totalAdjustment : (comp.totalAdjustment || 0);
+                        const pct = editedData ? editedData.adjustmentPercent : (comp.adjustmentPercent || 0);
                         return (
                           <td key={idx} className={`px-2 py-2 text-center font-bold border-r border-gray-300 ${total > 0 ? 'text-green-700' : total < 0 ? 'text-red-700' : ''}`}>
                             {total > 0 ? '+' : ''}${Math.round(total).toLocaleString()}
@@ -2003,7 +2097,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                     </tr>
                   )}
 
-                  {/* Adjusted Valuation Row - ALWAYS use original comp data */}
+                  {/* Adjusted Valuation Row - use edited if recalculated, otherwise original */}
                   {showAdjustments && rowVisibility['adjusted_valuation'] !== false && (
                     <tr className="border-b-2 border-gray-400 bg-blue-100">
                       <td className="px-2 py-2 font-bold text-gray-900 border-r border-gray-300">Adjusted Valuation</td>
@@ -2015,7 +2109,8 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                         if (!comp) {
                           return <td key={idx} className="px-2 py-2 text-center border-r border-gray-300">-</td>;
                         }
-                        const adjustedPrice = comp.adjustedPrice || 0;
+                        const editedData = editedAdjustments[`comp_${idx}`];
+                        const adjustedPrice = editedData ? editedData.adjustedPrice : (comp.adjustedPrice || 0);
                         return (
                           <td key={idx} className="px-2 py-2 text-center font-bold border-r border-gray-300">
                             ${Math.round(adjustedPrice).toLocaleString()}
@@ -2031,7 +2126,7 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
             {/* Modal Footer */}
             <div className="px-4 py-3 bg-gray-50 border-t flex items-center justify-between rounded-b-lg flex-shrink-0">
               <p className="text-xs text-gray-500">
-                Edit values directly in the grid. Adjustments recalculate automatically.
+                Edit values, then click Recalculate to update adjustments before exporting.
               </p>
               <div className="flex gap-3">
                 <button
@@ -2039,6 +2134,17 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                   className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm"
                 >
                   Cancel
+                </button>
+                <button
+                  onClick={recalculateAdjustments}
+                  disabled={!hasEdits}
+                  className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
+                    hasEdits
+                      ? 'bg-amber-500 text-white hover:bg-amber-600'
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  Recalculate
                 </button>
                 <button
                   onClick={generatePDF}

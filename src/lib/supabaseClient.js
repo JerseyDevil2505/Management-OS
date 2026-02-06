@@ -3864,7 +3864,7 @@ export const checklistService = {
     try {
       const { data, error } = await supabase
         .from('jobs')
-        .update({ 
+        .update({
           status: 'archived',
           turnover_date: turnoverDate,
           archived_at: new Date().toISOString(),
@@ -3873,13 +3873,14 @@ export const checklistService = {
         .eq('id', jobId)
         .select()
         .single();
-      
+
       if (error) throw error;
       console.log('✅ Job archived successfully');
       return data;
     } catch (error) {
-      console.error('Job archive error:', error);
-      throw error;
+      const errorMsg = getErrorMessage(error);
+      console.error('Job archive error:', errorMsg);
+      throw new Error(errorMsg);
     }
   }
 };

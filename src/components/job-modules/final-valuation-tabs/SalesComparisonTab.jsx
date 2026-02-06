@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, interpretCodes, getRawDataForJob } from '../../../lib/supabaseClient';
-import { Search, X, Upload, Sliders, FileText, Check } from 'lucide-react';
+import { Search, X, Upload, Sliders, FileText, BarChart3, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
@@ -18,6 +18,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   const [manualProperties, setManualProperties] = useState([]);
   const [showManualEntryModal, setShowManualEntryModal] = useState(false);
   const [manualBlockLot, setManualBlockLot] = useState({ block: '', lot: '', qualifier: '' });
+  const [pendingBlockLotRows, setPendingBlockLotRows] = useState([]); // Inline editable rows
   
   // ==================== COMPARABLE FILTERS STATE ====================
   // Calculate CSP date range on mount
@@ -33,23 +34,30 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   const cspDateRange = useMemo(() => getCSPDateRange(), [getCSPDateRange]);
 
   const [compFilters, setCompFilters] = useState({
-    adjustmentBracket: 'auto', // 'auto' or 'bracket_0', 'bracket_1', etc.
-    autoAdjustment: true, // Auto checkbox
-    salesCodes: ['', '00', '07', '32', '36'], // CSP default codes
+    adjustmentBracket: '', // '' (unselected), 'auto', or 'bracket_0', 'bracket_1', etc.
+    autoAdjustment: false, // Auto checkbox - default OFF
+    salesCodes: ['00', '07', '32', '36'], // CSP default codes
     salesDateStart: cspDateRange.start,
     salesDateEnd: cspDateRange.end,
     vcs: [],
     sameVCS: true, // Default checked
     neighborhood: [],
     sameNeighborhood: false,
+    // Lot Size filter
+    lotAcreMin: '',
+    lotAcreMax: '',
+    sameLotSize: false, // OR Similar Lot Size
+    // Year Built filter
     builtWithinYears: 25,
     useBuiltRange: false,
     builtYearMin: '',
     builtYearMax: '',
+    // Size (SFLA) filter
     sizeWithinSqft: 500,
     useSizeRange: false,
     sizeMin: '',
     sizeMax: '',
+    // Attribute filters
     zone: [],
     sameZone: false,
     buildingClass: [],
@@ -62,6 +70,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     sameStoryHeight: false,
     view: [],
     sameView: false,
+    // Tolerance filters
     individualAdjPct: 0,
     netAdjPct: 0,
     grossAdjPct: 0,
@@ -73,9 +82,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [evaluationProgress, setEvaluationProgress] = useState({ current: 0, total: 0 });
   const [evaluationResults, setEvaluationResults] = useState(null);
+  const [savedEvaluations, setSavedEvaluations] = useState([]); // Set-aside evaluations from DB
+  const [savedResultSets, setSavedResultSets] = useState([]); // Named result sets from DB
   const [adjustmentGrid, setAdjustmentGrid] = useState([]);
   const [customBrackets, setCustomBrackets] = useState([]);
+  const [bracketMappings, setBracketMappings] = useState([]);
   const [minCompsForSuccess, setMinCompsForSuccess] = useState(3); // User-selectable threshold
+  const [summarySort, setSummarySort] = useState({ field: 'property_vcs', dir: 'asc' }); // Summary tab sort
 
   // Manual entry state for detailed tab
   const [manualSubject, setManualSubject] = useState({ block: '', lot: '', qualifier: '' });
@@ -238,9 +251,177 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       loadAdjustmentGrid();
       loadCustomBrackets();
       loadCodeDefinitions();
+      loadSavedEvaluations();
+      loadSavedResultSets();
+      loadBracketMappings();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id]);
+
+  // Load existing set_aside evaluations from database
+  const loadSavedEvaluations = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('job_cme_evaluations')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .eq('status', 'set_aside');
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setSavedEvaluations(data);
+        console.log(`📌 Loaded ${data.length} set-aside evaluations`);
+      }
+    } catch (error) {
+      console.warn('⚠️ Error loading saved evaluations:', error.message);
+    }
+  };
+
+  // Load saved result sets from database
+  const loadSavedResultSets = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('job_cme_result_sets')
+        .select('id, name, adjustment_bracket, created_at, results')
+        .eq('job_id', jobData.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setSavedResultSets(data || []);
+    } catch (error) {
+      console.warn('⚠️ Error loading saved result sets:', error.message);
+    }
+  };
+
+  // Save current result set with a user-provided name
+  const handleSaveResultSet = async () => {
+    if (!evaluationResults || evaluationResults.length === 0) return;
+
+    const name = window.prompt('Enter a name for this result set:');
+    if (!name || !name.trim()) return;
+
+    try {
+      // Serialize results for storage - preserve all property fields so loaded results
+      // can be displayed in DetailedAppraisalGrid with full attribute data (VCS, year built,
+      // bathrooms, building class, style, conditions, lot size, etc.)
+      const serializedResults = evaluationResults.map(r => ({
+        subject: { ...r.subject },
+        comparables: r.comparables.map(c => ({
+          ...c,
+          isSubjectSale: c.isSubjectSale || false,
+          weight: c.weight || 0,
+        })),
+        totalFound: r.totalFound,
+        totalValid: r.totalValid,
+        projectedAssessment: r.projectedAssessment,
+        confidenceScore: r.confidenceScore,
+        hasSubjectSale: r.hasSubjectSale,
+      }));
+
+      const { error } = await supabase
+        .from('job_cme_result_sets')
+        .insert({
+          job_id: jobData.id,
+          name: name.trim(),
+          adjustment_bracket: compFilters.adjustmentBracket,
+          search_criteria: compFilters,
+          results: serializedResults,
+        });
+
+      if (error) throw error;
+
+      alert(`Result set "${name.trim()}" saved successfully!`);
+      await loadSavedResultSets();
+    } catch (error) {
+      console.error('Error saving result set:', error);
+      alert(`Failed to save result set: ${error.message}`);
+    }
+  };
+
+  // Load a saved result set by ID
+  const handleLoadResultSet = async (setId) => {
+    if (!setId) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('job_cme_result_sets')
+        .select('*')
+        .eq('id', setId)
+        .single();
+
+      if (error) throw error;
+
+      // Restore results
+      setEvaluationResults(data.results);
+
+      // Restore adjustment bracket
+      if (data.adjustment_bracket) {
+        setCompFilters(prev => ({
+          ...prev,
+          adjustmentBracket: data.adjustment_bracket,
+          autoAdjustment: data.adjustment_bracket === 'auto',
+        }));
+      }
+
+      // Scroll to results
+      requestAnimationFrame(() => {
+        if (resultsRef.current) {
+          resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    } catch (error) {
+      console.error('Error loading result set:', error);
+      alert(`Failed to load result set: ${error.message}`);
+    }
+  };
+
+  // Delete a saved result set
+  const handleDeleteResultSet = async (setId, setName) => {
+    if (!window.confirm(`Delete saved result set "${setName}"?`)) return;
+
+    try {
+      const { error } = await supabase
+        .from('job_cme_result_sets')
+        .delete()
+        .eq('id', setId);
+
+      if (error) throw error;
+      await loadSavedResultSets();
+    } catch (error) {
+      console.error('Error deleting result set:', error);
+      alert(`Failed to delete: ${error.message}`);
+    }
+  };
+
+  const loadBracketMappings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('job_cme_bracket_mappings')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .order('sort_order');
+      if (error) throw error;
+      setBracketMappings(data || []);
+    } catch (error) {
+      console.warn('Bracket mappings loading error:', error.message);
+    }
+  };
+
+  // Look up bracket mapping for a property (returns { bracket } or null)
+  const getBracketMapping = (property) => {
+    if (!bracketMappings || bracketMappings.length === 0) return null;
+    const propVCS = property.property_vcs || '';
+    const propTypeUse = property.asset_type_use || '';
+    for (const mapping of bracketMappings) {
+      const vcsMatch = !mapping.vcs_codes || mapping.vcs_codes.length === 0 || mapping.vcs_codes.includes(propVCS);
+      const tuMatch = !mapping.type_use_codes || mapping.type_use_codes.length === 0 || mapping.type_use_codes.includes(propTypeUse);
+      if (vcsMatch && tuMatch) {
+        return { bracket: mapping.bracket_value };
+      }
+    }
+    return null;
+  };
 
   const loadAdjustmentGrid = async () => {
     try {
@@ -476,24 +657,45 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     }
 
     try {
-      // Update status to 'set_aside' in database for these evaluations
-      const subjectIds = successful.map(r => r.subject.id);
+      // Insert set-aside records into database
+      const setAsideRecords = successful.map(r => ({
+        job_id: jobData.id,
+        subject_property_id: r.subject.id,
+        subject_pams: r.subject.property_composite_key,
+        subject_address: r.subject.property_location,
+        search_criteria: compFilters,
+        comparables: r.comparables.map(c => ({
+          property_id: c.id,
+          pams_id: c.property_composite_key,
+          address: c.property_location,
+          rank: c.rank,
+          adjustedPrice: c.adjustedPrice,
+          adjustmentPercent: c.adjustmentPercent,
+        })),
+        projected_assessment: r.projectedAssessment,
+        confidence_score: r.confidenceScore,
+        status: 'set_aside'
+      }));
 
       const { error } = await supabase
         .from('job_cme_evaluations')
-        .update({ status: 'set_aside' })
-        .in('subject_property_id', subjectIds)
-        .eq('job_id', jobData.id);
+        .insert(setAsideRecords);
 
       if (error) throw error;
 
-      // Remove set-aside properties from current subject filters
-      const remainingResults = evaluationResults.filter(r => r.comparables.length < 3);
+      // Reload saved evaluations to include newly set-aside ones
+      await loadSavedEvaluations();
+
+      // Remove set-aside properties from current results display
+      const remainingResults = evaluationResults.filter(r => r.comparables.length < minCompsForSuccess);
 
       alert(`${successful.length} properties set aside successfully. ${remainingResults.length} properties remain for re-evaluation.`);
 
       // Update results to show only remaining
       setEvaluationResults(remainingResults.length > 0 ? remainingResults : null);
+
+      // Auto-switch to 'keep' mode since user now has saved results
+      setEvaluationMode('keep');
 
     } catch (error) {
       console.error('Error setting aside properties:', error);
@@ -723,90 +925,38 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     setManualEvaluationResult(null);
   };
 
-  // ==================== APPLY TO FINAL ROSTER ====================
-  const handleApplyToFinalRoster = async () => {
-    if (!evaluationResults) return;
-
-    const valued = evaluationResults.filter(r => r.projectedAssessment);
-
-    if (valued.length === 0) {
-      alert('No properties with projected assessments to apply');
+  // ==================== EVALUATE COMPARABLES ====================
+  const handleEvaluate = async () => {
+    // Validate: adjustment bracket must be selected
+    if (!compFilters.adjustmentBracket) {
+      alert('Please select an Adjustment Bracket before evaluating.');
       return;
     }
 
-    const confirmation = window.confirm(
-      `Apply ${valued.length} projected assessments to Final Valuation?\n\n` +
-      `This will update the CME fields in the final_valuation_data table.`
-    );
-
-    if (!confirmation) return;
-
-    try {
-      // For each valued property, update or insert into final_valuation_data
-      for (const result of valued) {
-        const compKeys = result.comparables.map((c, idx) =>
-          `${c.property_block}-${c.property_lot}-${c.property_qualifier || ''}`
-        );
-
-        const finalData = {
-          job_id: jobData.id,
-          property_composite_key: result.subject.property_composite_key,
-          cme_projected_assessment: result.projectedAssessment,
-          cme_comp1: compKeys[0] || null,
-          cme_comp2: compKeys[1] || null,
-          cme_comp3: compKeys[2] || null,
-          cme_comp4: compKeys[3] || null,
-          cme_comp5: compKeys[4] || null
-        };
-
-        // Upsert into final_valuation_data
-        const { error } = await supabase
-          .from('final_valuation_data')
-          .upsert(finalData, {
-            onConflict: 'job_id,property_composite_key'
-          });
-
-        if (error) throw error;
-      }
-
-      // Update evaluation status to 'applied'
-      const subjectIds = valued.map(r => r.subject.id);
-
-      await supabase
-        .from('job_cme_evaluations')
-        .update({ status: 'applied' })
-        .in('subject_property_id', subjectIds)
-        .eq('job_id', jobData.id);
-
-      alert(`Successfully applied ${valued.length} projected assessments to Final Valuation!`);
-
-      // Clear results to indicate completion
-      setEvaluationResults(null);
-      setActiveSubTab('search');
-
-    } catch (error) {
-      console.error('Error applying to final roster:', error);
-      alert(`Failed to apply values: ${error.message}`);
-    }
-  };
-
-  // ==================== EVALUATE COMPARABLES ====================
-  const handleEvaluate = async () => {
     setIsEvaluating(true);
     setEvaluationProgress({ current: 0, total: 0 });
 
     try {
       // Step 1: Determine subject properties
+      // HARD RULE: Only evaluate properties with building_class > 10
+      // This excludes commercial (1-4), exempt (15A/B/C), and vacant land (1)
+      const isResidentialProperty = (p) => {
+        const buildingClass = parseInt(p.asset_building_class) || 0;
+        return buildingClass > 10;
+      };
+
       let subjects = [];
 
       if (manualProperties.length > 0) {
-        // Use manually entered properties
+        // Use manually entered properties (still enforce building_class > 10)
         subjects = properties.filter(p =>
-          manualProperties.includes(p.property_composite_key)
+          manualProperties.includes(p.property_composite_key) && isResidentialProperty(p)
         );
       } else {
         // Use VCS + Type/Use filters
         subjects = properties.filter(p => {
+          // Must be residential (building_class > 10)
+          if (!isResidentialProperty(p)) return false;
           if (subjectVCS.length > 0 && !subjectVCS.includes(p.property_vcs)) return false;
           if (subjectTypeUse.length > 0 && !subjectTypeUse.includes(p.asset_type_use)) return false;
           return true;
@@ -814,10 +964,58 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       }
 
       if (subjects.length === 0) {
-        alert('No subject properties match your criteria');
+        alert('No subject properties match your criteria.\n\nNote: Only residential properties (Class 2+) can be evaluated. Commercial, exempt, and vacant land are excluded.');
         setIsEvaluating(false);
         setEvaluationProgress({ current: 0, total: 0 });
         return;
+      }
+
+      console.log(`🔍 Found ${subjects.length} subject properties matching criteria`);
+
+      // Handle evaluation mode: fresh vs keep
+      if (evaluationMode === 'fresh') {
+        // Delete ALL existing evaluations for this job
+        const { error: deleteError } = await supabase
+          .from('job_cme_evaluations')
+          .delete()
+          .eq('job_id', jobData.id);
+
+        if (deleteError) {
+          console.error('Error clearing evaluations:', deleteError);
+        } else {
+          console.log('🗑️ Cleared all previous evaluations (fresh mode)');
+        }
+        setSavedEvaluations([]);
+      } else {
+        // Keep mode: exclude properties that already have set_aside results
+        const setAsidePropertyIds = new Set(
+          savedEvaluations.map(e => e.subject_property_id)
+        );
+        const totalBefore = subjects.length;
+        subjects = subjects.filter(s => !setAsidePropertyIds.has(s.id));
+        const excluded = totalBefore - subjects.length;
+
+        console.log(`📌 Keep mode: ${excluded} properties already set aside, ${subjects.length} remaining to evaluate`);
+
+        if (subjects.length === 0) {
+          alert(`All matching properties already have saved results (${excluded} set aside).\n\nSwitch to "Fresh evaluation" to re-evaluate them, or adjust your "What" criteria to target different properties.`);
+          setIsEvaluating(false);
+          setEvaluationProgress({ current: 0, total: 0 });
+          return;
+        }
+
+        // Delete only non-set-aside evaluations for remaining subjects (re-evaluate them)
+        const remainingIds = subjects.map(s => s.id);
+        const { error: deleteError } = await supabase
+          .from('job_cme_evaluations')
+          .delete()
+          .eq('job_id', jobData.id)
+          .in('subject_property_id', remainingIds)
+          .neq('status', 'set_aside');
+
+        if (deleteError) {
+          console.error('Error clearing non-saved evaluations:', deleteError);
+        }
       }
 
       console.log(`🔍 Evaluating ${subjects.length} subject properties...`);
@@ -852,24 +1050,36 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       // Note: Evaluation can proceed even without adjustment grid - comps will have $0 adjustments
       // This allows users to see comp matches before setting up adjustments
 
-      // Step 3: For each subject, find matching comparables
+      // Step 3: Pre-aggregate all eligible sales across cards (main + additional)
+      // This ensures filters AND adjustments use correct totals for multi-card properties
+      const aggregatedSales = eligibleSales.map(s => aggregatePropertyData(s));
+      console.log(`📊 Aggregated ${aggregatedSales.length} eligible sales (multi-card data merged)`);
+
+      // Step 4: For each subject, find matching comparables
       const results = [];
       setEvaluationProgress({ current: 0, total: subjects.length });
 
-      // Force a small delay to ensure progress bar renders
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Process in batches for UI progress updates
+      const BATCH_SIZE = 25;
 
-      // Process in smaller batches for more frequent UI updates
-      const BATCH_SIZE = 10;
+      // Pre-check: if Auto mode with bracket mappings, log mapping info
+      const isAutoWithMappings = compFilters.adjustmentBracket === 'auto' && bracketMappings.length > 0;
+      if (isAutoWithMappings) {
+        console.log(`🗺️ Auto mode with ${bracketMappings.length} bracket mapping(s) active`);
+      }
 
       for (let i = 0; i < subjects.length; i++) {
-        const subject = subjects[i];
+        // Aggregate subject data across all cards (main + additional)
+        const subject = aggregatePropertyData(subjects[i]);
 
-        // Update progress immediately
-        setEvaluationProgress(prev => ({ current: i + 1, total: subjects.length }));
+        // Resolve bracket mapping for this subject (Auto mode with mappings)
+        const subjectMapping = isAutoWithMappings ? getBracketMapping(subject) : null;
 
-        // Allow UI to update every batch (more frequently for responsive progress)
-        if (i > 0 && i % BATCH_SIZE === 0) {
+        // Update progress counter
+        setEvaluationProgress({ current: i + 1, total: subjects.length });
+
+        // Yield to UI every batch so counter updates
+        if (i % BATCH_SIZE === 0) {
           await new Promise(resolve => setTimeout(resolve, 0));
         }
         // Debug: Log first property's matching process
@@ -880,6 +1090,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           console.log(`   VCS: ${subject.property_vcs}, Type: ${subject.asset_type_use}`);
           console.log(`   Year Built: ${subject.asset_year_built}, SFLA: ${subject.asset_sfla}`);
           console.log(`   Eligible sales pool: ${eligibleSales.length}`);
+          if (subjectMapping) {
+            console.log(`   🗺️ Mapped bracket: ${subjectMapping.bracket}`);
+          }
         }
 
         let debugFilters = {
@@ -899,7 +1112,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           passed: 0
         };
 
-        const matchingComps = eligibleSales.filter(comp => {
+        const matchingComps = aggregatedSales.filter(comp => {
           // Exclude self
           if (comp.property_composite_key === subject.property_composite_key) {
             if (isFirstProperty) debugFilters.self++;
@@ -926,7 +1139,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             return false;
           }
 
-          // VCS filter
+          // VCS filter - always user-controlled via comp filters
           if (compFilters.sameVCS) {
             if (comp.property_vcs !== subject.property_vcs) {
               if (isFirstProperty) debugFilters.vcs++;
@@ -948,6 +1161,30 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           } else if (compFilters.neighborhood.length > 0) {
             if (!compFilters.neighborhood.includes(comp.asset_neighborhood)) {
               if (isFirstProperty) debugFilters.neighborhood++;
+              return false;
+            }
+          }
+
+          // Lot size filter
+          if (compFilters.sameLotSize) {
+            // "Similar lot size" - within 25% of subject's lot size
+            const subjectLotAcre = subject.asset_lot_acre || 0;
+            const compLotAcre = comp.asset_lot_acre || 0;
+            if (subjectLotAcre > 0 && compLotAcre > 0) {
+              const tolerance = subjectLotAcre * 0.25; // 25% tolerance
+              if (Math.abs(compLotAcre - subjectLotAcre) > tolerance) {
+                if (isFirstProperty) debugFilters.lotSize = (debugFilters.lotSize || 0) + 1;
+                return false;
+              }
+            }
+          } else if (compFilters.lotAcreMin || compFilters.lotAcreMax) {
+            const compLotAcre = comp.asset_lot_acre || 0;
+            if (compFilters.lotAcreMin && compLotAcre < parseFloat(compFilters.lotAcreMin)) {
+              if (isFirstProperty) debugFilters.lotSize = (debugFilters.lotSize || 0) + 1;
+              return false;
+            }
+            if (compFilters.lotAcreMax && compLotAcre > parseFloat(compFilters.lotAcreMax)) {
+              if (isFirstProperty) debugFilters.lotSize = (debugFilters.lotSize || 0) + 1;
               return false;
             }
           }
@@ -1125,10 +1362,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           console.log(`   ✅ Passed initial filters: ${debugFilters.passed}`);
         }
 
-        // Calculate adjustments for each comparable
+        // Calculate adjustments for each comparable (already aggregated via aggregatedSales)
         const compsWithAdjustments = matchingComps.map(comp => {
           const { adjustments, totalAdjustment, adjustedPrice, adjustmentPercent } =
-            calculateAllAdjustments(subject, comp);
+            calculateAllAdjustments(subject, comp, subjectMapping?.bracket);
 
           const grossAdjustment = adjustments.reduce((sum, adj) => sum + Math.abs(adj.amount), 0);
           const grossAdjustmentPercent = comp.values_norm_time > 0
@@ -1269,95 +1506,23 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           totalValid: validComps.length,
           projectedAssessment: projectedAssessment ? Math.round(projectedAssessment) : null,
           confidenceScore: Math.round(confidenceScore),
-          hasSubjectSale: !!priorityComp
+          hasSubjectSale: !!priorityComp,
+          mappedBracket: subjectMapping?.bracket || null
         });
       }
 
-      console.log(`✅ Processed ${results.length} properties`);
-      console.log(`   - With 3+ comps: ${results.filter(r => r.comparables.length >= 3).length}`);
-      console.log(`   - With 0 comps: ${results.filter(r => r.comparables.length === 0).length}`);
-      console.log(`   - With projected values: ${results.filter(r => r.projectedAssessment).length}`);
-
-      // Update progress: Start database save phase
-      setEvaluationProgress({ current: subjects.length, total: subjects.length + 1 });
-      console.log(`💾 Saving ${results.length} evaluations to database...`);
-
-      // Save results to database
-      const evaluationRunId = crypto.randomUUID ? crypto.randomUUID() :
-        'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-          const r = (Math.random() * 16) | 0;
-          const v = c === 'x' ? r : ((r & 0x3) | 0x8);
-          return v.toString(16);
-        });
-
-      for (const result of results) {
-        const evaluationData = {
-          job_id: jobData.id,
-          evaluation_run_id: evaluationRunId,
-          subject_property_id: result.subject.id,
-          subject_pams: result.subject.property_composite_key,
-          subject_address: result.subject.property_location,
-          search_criteria: compFilters,
-          comparables: result.comparables.map(comp => ({
-            property_id: comp.id,
-            pams_id: comp.property_composite_key,
-            address: comp.property_location,
-            sale_price: comp.sales_price,
-            sale_date: comp.sales_date,
-            time_adjusted_price: comp.values_norm_time,
-            rank: comp.rank,
-            is_subject_sale: comp.isSubjectSale || false,
-            adjustments: comp.adjustments.reduce((obj, adj) => {
-              obj[adj.name] = { amount: adj.amount, category: adj.category };
-              return obj;
-            }, {}),
-            gross_adjustment: comp.grossAdjustment,
-            net_adjustment: comp.totalAdjustment,
-            net_adjustment_percent: comp.adjustmentPercent,
-            gross_adjustment_percent: comp.grossAdjustmentPercent,
-            adjusted_sale_price: comp.adjustedPrice,
-            weight: comp.weight || 0
-          })),
-          projected_assessment: result.projectedAssessment,
-          weighted_average_price: result.projectedAssessment,
-          confidence_score: result.confidenceScore,
-          status: 'pending'
-        };
-
-        const { error } = await supabase
-          .from('job_cme_evaluations')
-          .insert(evaluationData);
-
-        if (error) {
-          console.error('Error saving evaluation:', error);
-        }
-      }
-
-      console.log(`✅ Database save complete`);
-
-      // Update progress: Rendering results
-      setEvaluationProgress({ current: subjects.length + 1, total: subjects.length + 1 });
-      console.log(`📊 Rendering results table...`);
-
-      // Set results and immediately scroll to them
+      // Display results immediately - no DB save during evaluation
+      // User saves explicitly via "Save Result Set" button
       setEvaluationResults(results);
+      setIsEvaluating(false);
+      setEvaluationProgress({ current: 0, total: 0 });
 
-      // Calculate summary stats for console logging
-      const successful = results.filter(r => r.comparables.length >= 3).length;
-      const needsMoreComps = results.filter(r => r.comparables.length > 0 && r.comparables.length < 3).length;
-      const noComps = results.filter(r => r.comparables.length === 0).length;
-
-      console.log(`✅ Evaluation Complete!`);
-      console.log(`   - ${successful} properties with 3-5 comps (ready to value)`);
-      console.log(`   - ${needsMoreComps} properties with 1-2 comps (need more comps)`);
-      console.log(`   - ${noComps} properties with 0 comps (no matches found)`);
-
-      // Auto-scroll to results immediately
-      setTimeout(() => {
+      // Auto-scroll to results
+      requestAnimationFrame(() => {
         if (resultsRef.current) {
           resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
-      }, 100);
+      });
 
     } catch (error) {
       console.error('❌ Error during evaluation:', error);
@@ -1401,9 +1566,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   };
 
   // ==================== CALCULATE ADJUSTMENTS ====================
-  const calculateAllAdjustments = (subject, comp) => {
+  const calculateAllAdjustments = (subject, comp, overrideBracket) => {
     const adjustments = adjustmentGrid.map(adjDef => {
-      const amount = calculateAdjustment(subject, comp, adjDef);
+      const amount = calculateAdjustment(subject, comp, adjDef, overrideBracket);
       return {
         name: adjDef.adjustment_name,
         category: adjDef.category,
@@ -1422,11 +1587,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     };
   };
 
-  const getPriceBracketIndex = (normPrice) => {
-    // Check if user selected a specific bracket (not auto)
-    if (compFilters.adjustmentBracket && compFilters.adjustmentBracket !== 'auto') {
-      // Extract bracket index from 'bracket_0', 'bracket_1', etc.
-      const match = compFilters.adjustmentBracket.match(/bracket_(\d+)/);
+  const getPriceBracketIndex = (normPrice, overrideBracket) => {
+    // If an override bracket is provided (from mapping), use it
+    const effectiveBracket = overrideBracket || compFilters.adjustmentBracket;
+
+    // Check if a specific bracket is selected (not auto)
+    if (effectiveBracket && effectiveBracket !== 'auto') {
+      const match = effectiveBracket.match(/bracket_(\d+)/);
       if (match) {
         return parseInt(match[1]);
       }
@@ -1456,10 +1623,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     return property[fieldName];
   }, [vendorType]);
 
-  const calculateAdjustment = (subject, comp, adjustmentDef) => {
+  const calculateAdjustment = (subject, comp, adjustmentDef, overrideBracket) => {
     if (!subject || !comp || !adjustmentDef) return 0;
 
-    const selectedBracket = compFilters.adjustmentBracket;
+    const selectedBracket = overrideBracket || compFilters.adjustmentBracket;
     let adjustmentValue = 0;
     let adjustmentType = adjustmentDef.adjustment_type;
 
@@ -1475,7 +1642,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       }
     } else {
       // Use default bracket
-      const bracketIndex = getPriceBracketIndex(comp.values_norm_time);
+      const bracketIndex = getPriceBracketIndex(comp.values_norm_time, overrideBracket);
       adjustmentValue = adjustmentDef[`bracket_${bracketIndex}`] || 0;
 
       // Debug first property only
@@ -2017,11 +2184,179 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     return rank;
   };
 
+  // ==================== CREATE UPDATE EXPORT ====================
+  const handleCreateUpdate = (successfulResults) => {
+    if (!successfulResults || successfulResults.length === 0) return;
+
+    const rows = successfulResults.map(r => {
+      const subject = r.subject;
+      const newTotal = Math.round((r.projectedAssessment || 0) / 100) * 100; // Round to nearest hundred
+      const currentLand = subject.values_cama_land || subject.values_mod_land || 0;
+      const improvementOverride = newTotal - currentLand;
+
+      return {
+        'Block': subject.property_block || '',
+        'Lot': subject.property_lot || '',
+        'Qualifier': subject.property_qualifier || '',
+        'Location': subject.property_location || '',
+        'Current Total': subject.values_mod_total || subject.values_cama_total || 0,
+        'Current Land': currentLand,
+        'New Total (Rounded)': newTotal,
+        'Improvement Override': improvementOverride
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const range = XLSX.utils.decode_range(worksheet['!ref']);
+
+    // Format block/lot as text to preserve trailing zeros
+    for (let R = 1; R <= range.e.r; R++) {
+      const blockCell = worksheet[XLSX.utils.encode_cell({ r: R, c: 0 })];
+      const lotCell = worksheet[XLSX.utils.encode_cell({ r: R, c: 1 })];
+      if (blockCell) { blockCell.t = 's'; blockCell.v = String(blockCell.v); }
+      if (lotCell) { lotCell.t = 's'; lotCell.v = String(lotCell.v); }
+    }
+
+    // Set number formats for currency columns
+    for (let R = 1; R <= range.e.r; R++) {
+      for (let C = 4; C <= 7; C++) {
+        const cell = worksheet[XLSX.utils.encode_cell({ r: R, c: C })];
+        if (cell) cell.z = '$#,##0';
+      }
+    }
+
+    worksheet['!cols'] = [
+      { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 30 },
+      { wch: 15 }, { wch: 15 }, { wch: 18 }, { wch: 20 }
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'CME Update');
+    XLSX.writeFile(workbook, `CME_Update_${jobData.job_name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  // ==================== BUILD FINAL ROSTER ====================
+  const handleBuildFinalRoster = (successfulResults, skippedResults) => {
+    if (!successfulResults || successfulResults.length === 0) return;
+
+    const rows = successfulResults.map(r => {
+      const subject = r.subject;
+      const comps = r.comparables || [];
+      const newTotal = Math.round((r.projectedAssessment || 0) / 100) * 100;
+      const currentTotal = subject.values_mod_total || subject.values_cama_total || 0;
+      const currentLand = subject.values_cama_land || subject.values_mod_land || 0;
+      const currentImpr = currentTotal - currentLand;
+      const adjustedPrices = comps.map(c => c.adjustedPrice || 0).filter(p => p > 0);
+      const minAdjusted = adjustedPrices.length > 0 ? Math.min(...adjustedPrices) : 0;
+      const maxAdjusted = adjustedPrices.length > 0 ? Math.max(...adjustedPrices) : 0;
+
+      const row = {
+        'Block': subject.property_block || '',
+        'Lot': subject.property_lot || '',
+        'Qualifier': subject.property_qualifier || '',
+        'Location': subject.property_location || '',
+        'Owner': subject.owner_name || '',
+        'VCS': subject.property_vcs || '',
+        'Type/Use': subject.asset_type_use || '',
+        'Building Class': subject.asset_building_class || '',
+        'Style': subject.asset_design_style || '',
+        'Year Built': subject.asset_year_built || '',
+        'SFLA': subject.asset_sfla || 0,
+        'Lot Size (SF)': subject.market_manual_lot_sf || subject.asset_lot_sf || 0,
+        'Current Land': currentLand,
+        'Current Impr': currentImpr,
+        'Current Total': currentTotal,
+        'Proposed Value': newTotal,
+        'Improvement Override': newTotal - currentLand,
+        'Delta %': currentTotal > 0 ? ((newTotal - currentTotal) / currentTotal) : 0,
+        'Confidence': r.confidenceScore || 0,
+        '# Comps': comps.length,
+        'Min Adjusted': minAdjusted,
+        'Max Adjusted': maxAdjusted
+      };
+
+      // Add per-comp columns
+      comps.forEach((comp, idx) => {
+        const compNum = idx + 1;
+        row[`Comp ${compNum} BLQ`] = `${comp.property_block}/${comp.property_lot}${comp.property_qualifier && comp.property_qualifier !== 'NONE' ? '/' + comp.property_qualifier : ''}`;
+        row[`Comp ${compNum} Sale Price`] = comp.values_norm_time || comp.sales_price || 0;
+        row[`Comp ${compNum} Adjusted`] = Math.round(comp.adjustedPrice || 0);
+        row[`Comp ${compNum} Net Adj %`] = comp.adjustmentPercent ? (comp.adjustmentPercent / 100) : 0;
+      });
+
+      return row;
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const range = XLSX.utils.decode_range(worksheet['!ref']);
+
+    // Format block/lot as text to preserve trailing zeros
+    for (let R = 1; R <= range.e.r; R++) {
+      const blockCell = worksheet[XLSX.utils.encode_cell({ r: R, c: 0 })];
+      const lotCell = worksheet[XLSX.utils.encode_cell({ r: R, c: 1 })];
+      if (blockCell) { blockCell.t = 's'; blockCell.v = String(blockCell.v); }
+      if (lotCell) { lotCell.t = 's'; lotCell.v = String(lotCell.v); }
+    }
+
+    // Set column widths
+    const colCount = range.e.c + 1;
+    worksheet['!cols'] = Array(colCount).fill({ wch: 14 });
+    worksheet['!cols'][3] = { wch: 30 }; // Location
+    worksheet['!cols'][4] = { wch: 20 }; // Owner
+
+    // Header styling
+    const headers = Object.keys(rows[0] || {});
+    headers.forEach((header, idx) => {
+      const cellRef = XLSX.utils.encode_cell({ r: 0, c: idx });
+      if (worksheet[cellRef]) {
+        worksheet[cellRef].s = { font: { bold: true }, fill: { fgColor: { rgb: 'E2E8F0' } } };
+      }
+    });
+
+    // Number formats for data rows
+    for (let R = 1; R <= range.e.r; R++) {
+      headers.forEach((header, C) => {
+        const cell = worksheet[XLSX.utils.encode_cell({ r: R, c: C })];
+        if (!cell) return;
+        if (['Current Land', 'Current Impr', 'Current Total', 'Proposed Value', 'Improvement Override', 'Min Adjusted', 'Max Adjusted'].includes(header) || header.includes('Sale Price') || header.includes('Adjusted')) {
+          cell.z = '$#,##0';
+        }
+        if (header === 'Delta %' || header.includes('Net Adj %')) {
+          cell.z = '0.00%';
+        }
+      });
+    }
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'CME Final Roster');
+
+    // Add skipped properties sheet if any
+    if (skippedResults && skippedResults.length > 0) {
+      const skippedRows = skippedResults.map(r => ({
+        'Block': r.subject.property_block || '',
+        'Lot': r.subject.property_lot || '',
+        'Qualifier': r.subject.property_qualifier || '',
+        'Location': r.subject.property_location || '',
+        'VCS': r.subject.property_vcs || '',
+        'Type/Use': r.subject.asset_type_use || '',
+        'Current Total': r.subject.values_mod_total || r.subject.values_cama_total || 0,
+        'Comps Found': r.comparables.length,
+        'Reason': r.comparables.length === 0 ? 'No comparables found' : `Only ${r.comparables.length} comp(s)`
+      }));
+      const skippedWs = XLSX.utils.json_to_sheet(skippedRows);
+      skippedWs['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 30 }, { wch: 10 }, { wch: 10 }, { wch: 15 }, { wch: 12 }, { wch: 25 }];
+      XLSX.utils.book_append_sheet(workbook, skippedWs, 'Skipped Properties');
+    }
+
+    XLSX.writeFile(workbook, `CME_Final_Roster_${jobData.job_name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   // ==================== RENDER ====================
   const subTabs = [
     { id: 'adjustments', label: 'Adjustments', icon: Sliders },
     { id: 'search', label: 'Search & Results', icon: Search },
-    { id: 'detailed', label: 'Detailed', icon: FileText }
+    { id: 'detailed', label: 'Detailed', icon: FileText },
+    { id: 'summary', label: 'Summary', icon: BarChart3 }
   ];
 
   return (
@@ -2056,7 +2391,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       <div className="tab-content">
         {/* ADJUSTMENTS TAB */}
         {activeSubTab === 'adjustments' && (
-          <AdjustmentsTab jobData={jobData} />
+          <AdjustmentsTab jobData={jobData} properties={properties} />
         )}
 
         {/* SEARCH TAB */}
@@ -2064,241 +2399,43 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           <div className="space-y-8">
             {/* SECTION 1: Which properties do you want to evaluate? */}
             <div className="bg-white border border-gray-300 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 text-center">
                 Which properties do you want to evaluate?
               </h3>
 
               <div className="space-y-4">
-                {/* VCS Dropdown */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">VCS</label>
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        toggleChip(subjectVCS, setSubjectVCS)(e.target.value);
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select VCS to add...</option>
-                    {uniqueVCS.map(vcs => (
-                      <option key={vcs} value={vcs}>{vcs}</option>
-                    ))}
-                  </select>
-                  {/* VCS Chips */}
-                  {subjectVCS.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {subjectVCS.map(vcs => (
-                        <span
-                          key={vcs}
-                          className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
-                        >
-                          {vcs}
-                          <button
-                            onClick={() => toggleChip(subjectVCS, setSubjectVCS)(vcs)}
-                            className="ml-1 text-blue-600 hover:text-blue-800"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Type/Use Dropdown */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Type/Use Codes</label>
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        toggleChip(subjectTypeUse, setSubjectTypeUse)(e.target.value);
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select Type/Use to add...</option>
-                    {uniqueTypeUse.map(type => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
-                  {/* Type/Use Chips */}
-                  {subjectTypeUse.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {subjectTypeUse.map(type => (
-                        <span
-                          key={type}
-                          className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm"
-                        >
-                          {type}
-                          <button
-                            onClick={() => toggleChip(subjectTypeUse, setSubjectTypeUse)(type)}
-                            className="ml-1 text-green-600 hover:text-green-800"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Manual Entry Buttons */}
-                <div className="flex gap-3 pt-2">
-                  <button
-                    onClick={() => setShowManualEntryModal(true)}
-                    className="px-4 py-2 bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm font-medium"
-                  >
-                    New Block/Lot/Qual
-                  </button>
-                  <button
-                    onClick={handleImportExcel}
-                    className="px-4 py-2 bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm font-medium inline-flex items-center gap-2"
-                  >
-                    <Upload className="w-4 h-4" />
-                    Import Block/Lot/Qual
-                  </button>
-                </div>
-
-                {/* Manual Properties Chips */}
-                {manualProperties.length > 0 && (
-                  <div className="pt-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Manual Properties ({manualProperties.length})
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {manualProperties.map(key => (
-                        <span
-                          key={key}
-                          className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm"
-                        >
-                          {key}
-                          <button
-                            onClick={() => setManualProperties(prev => prev.filter(k => k !== key))}
-                            className="ml-1 text-purple-600 hover:text-purple-800"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* SECTION 2: Which comparables do you want to use? */}
-            <div className="bg-white border border-gray-300 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Which comparables do you want to use?
-              </h3>
-
-              {/* Auto-Include Logic Info */}
-              <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-900">
-                  <strong>Auto-Include Logic:</strong> CSP period sales (10/1 prior-prior year to 12/31 prior year) are automatically included.
-                  Use <span className="inline-flex items-center mx-1"><Check className="w-3 h-3 text-green-600" /></span> and <span className="inline-flex items-center mx-1"><X className="w-3 h-3 text-red-600" /></span> buttons
-                  in <strong>Sales Review</strong> tab to manually override.
-                </p>
-              </div>
-
-              {/* Adjustment Bracket Selection */}
-              <div className="mb-6 pb-4 border-b border-gray-200">
-                <div className="flex items-center gap-4">
-                  <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Adjustment Bracket
-                    </label>
-                    <select
-                      value={compFilters.adjustmentBracket || 'auto'}
-                      onChange={(e) => {
-                        const newValue = e.target.value;
-                        setCompFilters(prev => ({
-                          ...prev,
-                          adjustmentBracket: newValue,
-                          autoAdjustment: newValue === 'auto'
-                        }));
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="auto">Auto (based on sale price)</option>
-                      <optgroup label="Default Brackets">
-                        {CME_BRACKETS.map((bracket, idx) => (
-                          <option key={idx} value={`bracket_${idx}`}>
-                            {bracket.label}
-                          </option>
-                        ))}
-                      </optgroup>
-                      {customBrackets.length > 0 && (
-                        <optgroup label="Custom Brackets">
-                          {customBrackets.map((bracket) => (
-                            <option key={bracket.bracket_id} value={bracket.bracket_id}>
-                              {bracket.bracket_name}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </select>
-                  </div>
-                  <div className="flex items-center gap-2 pt-6">
-                    <input
-                      type="checkbox"
-                      checked={compFilters.adjustmentBracket === 'auto'}
-                      onChange={(e) => {
-                        setCompFilters(prev => ({
-                          ...prev,
-                          adjustmentBracket: e.target.checked ? 'auto' : 'bracket_1',
-                          autoAdjustment: e.target.checked
-                        }));
-                      }}
-                      className="rounded"
-                      id="auto-adjustment"
-                    />
-                    <label htmlFor="auto-adjustment" className="text-sm text-gray-700">
-                      Auto
-                    </label>
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Select which adjustment bracket to use for comparable evaluations.
-                  "Auto" automatically selects the bracket based on each comparable's sale price.
-                  {customBrackets.length > 0 && ' Custom brackets allow you to define your own price ranges and adjustment values.'}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-6">
-                {/* LEFT COLUMN */}
-                <div className="space-y-4">
-                  {/* Sales Codes */}
+                {/* VCS and Type/Use side-by-side - centered */}
+                <div className="grid grid-cols-2 gap-6 max-w-2xl mx-auto">
+                  {/* VCS Dropdown */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Sales Codes</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">VCS</label>
                     <select
                       value=""
                       onChange={(e) => {
                         if (e.target.value) {
-                          toggleCompFilterChip('salesCodes')(e.target.value);
+                          toggleChip(subjectVCS, setSubjectVCS)(e.target.value);
                         }
                       }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                      className="w-full max-w-xs px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="">Select code...</option>
-                      {uniqueSalesCodes.map(code => (
-                        <option key={code} value={code}>{code || '(blank)'}</option>
+                      <option value="">Select VCS...</option>
+                      {uniqueVCS.map(vcs => (
+                        <option key={vcs} value={vcs}>{vcs}</option>
                       ))}
                     </select>
-                    {compFilters.salesCodes.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {compFilters.salesCodes.map(code => (
+                    <p className="text-xs text-gray-500 mt-1">Blank for full town</p>
+                    {/* VCS Chips */}
+                    {subjectVCS.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {subjectVCS.map(vcs => (
                           <span
-                            key={code}
-                            className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
+                            key={vcs}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs"
                           >
-                            {code || '(blank)'}
+                            {vcs}
                             <button
-                              onClick={() => toggleCompFilterChip('salesCodes')(code)}
-                              className="ml-1 text-blue-600 hover:text-blue-800"
+                              onClick={() => toggleChip(subjectVCS, setSubjectVCS)(vcs)}
+                              className="ml-0.5 text-blue-600 hover:text-blue-800"
                             >
                               <X className="w-3 h-3" />
                             </button>
@@ -2308,558 +2445,625 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                     )}
                   </div>
 
-                  {/* Sales Between */}
+                  {/* Type/Use Dropdown */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Sales Between</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="date"
-                        value={compFilters.salesDateStart}
-                        onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateStart: e.target.value }))}
-                        className="px-3 py-2 border border-gray-300 rounded"
-                      />
-                      <input
-                        type="date"
-                        value={compFilters.salesDateEnd}
-                        onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateEnd: e.target.value }))}
-                        className="px-3 py-2 border border-gray-300 rounded"
-                      />
-                    </div>
-                  </div>
-
-                  {/* VCS */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-sm font-medium text-gray-700">VCS</label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={compFilters.sameVCS}
-                          onChange={(e) => setCompFilters(prev => ({ ...prev, sameVCS: e.target.checked }))}
-                          className="rounded"
-                        />
-                        Same VCS
-                      </label>
-                    </div>
-                    {!compFilters.sameVCS && (
-                      <>
-                        <select
-                          value=""
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              toggleCompFilterChip('vcs')(e.target.value);
-                            }
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded"
-                        >
-                          <option value="">Select VCS...</option>
-                          {uniqueVCS.map(vcs => (
-                            <option key={vcs} value={vcs}>{vcs}</option>
-                          ))}
-                        </select>
-                        {compFilters.vcs.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {compFilters.vcs.map(vcs => (
-                              <span key={vcs} className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                                {vcs}
-                                <button onClick={() => toggleCompFilterChip('vcs')(vcs)} className="ml-1 text-blue-600 hover:text-blue-800">
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Type/Use Codes</label>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          toggleChip(subjectTypeUse, setSubjectTypeUse)(e.target.value);
+                        }
+                      }}
+                      className="w-full max-w-xs px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select Type/Use...</option>
+                      {uniqueTypeUse.map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">Can select multiple. Blank for all</p>
+                    {/* Type/Use Chips */}
+                    {subjectTypeUse.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {subjectTypeUse.map(type => (
+                          <span
+                            key={type}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs"
+                          >
+                            {type}
+                            <button
+                              onClick={() => toggleChip(subjectTypeUse, setSubjectTypeUse)(type)}
+                              className="ml-0.5 text-green-600 hover:text-green-800"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
                     )}
-                  </div>
-
-                  {/* Neighborhood */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-sm font-medium text-gray-700">Neighborhood</label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={compFilters.sameNeighborhood}
-                          onChange={(e) => setCompFilters(prev => ({ ...prev, sameNeighborhood: e.target.checked }))}
-                          className="rounded"
-                        />
-                        Same Neighborhood
-                      </label>
-                    </div>
-                    {!compFilters.sameNeighborhood && (
-                      <>
-                        <select
-                          value=""
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              toggleCompFilterChip('neighborhood')(e.target.value);
-                            }
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded"
-                        >
-                          <option value="">Select neighborhood...</option>
-                          {uniqueNeighborhood.map(nb => (
-                            <option key={nb} value={nb}>{nb}</option>
-                          ))}
-                        </select>
-                        {compFilters.neighborhood.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {compFilters.neighborhood.map(nb => (
-                              <span key={nb} className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                                {nb}
-                                <button onClick={() => toggleCompFilterChip('neighborhood')(nb)} className="ml-1 text-green-600 hover:text-green-800">
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  {/* Year Built */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Year Built</label>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          checked={!compFilters.useBuiltRange}
-                          onChange={() => setCompFilters(prev => ({ ...prev, useBuiltRange: false }))}
-                        />
-                        <span className="text-sm">Built within</span>
-                        <input
-                          type="number"
-                          value={compFilters.builtWithinYears}
-                          onChange={(e) => setCompFilters(prev => ({ ...prev, builtWithinYears: parseInt(e.target.value) || 0 }))}
-                          className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
-                        />
-                        <span className="text-sm">years of each other</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          checked={compFilters.useBuiltRange}
-                          onChange={() => setCompFilters(prev => ({ ...prev, useBuiltRange: true }))}
-                        />
-                        <span className="text-sm">Comparable built between</span>
-                        <input
-                          type="number"
-                          value={compFilters.builtYearMin}
-                          onChange={(e) => setCompFilters(prev => ({ ...prev, builtYearMin: e.target.value }))}
-                          className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
-                          placeholder="YYYY"
-                        />
-                        <span className="text-sm">and</span>
-                        <input
-                          type="number"
-                          value={compFilters.builtYearMax}
-                          onChange={(e) => setCompFilters(prev => ({ ...prev, builtYearMax: e.target.value }))}
-                          className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
-                          placeholder="YYYY"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Size */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Size (SFLA)</label>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          checked={!compFilters.useSizeRange}
-                          onChange={() => setCompFilters(prev => ({ ...prev, useSizeRange: false }))}
-                        />
-                        <span className="text-sm">Size within</span>
-                        <input
-                          type="number"
-                          value={compFilters.sizeWithinSqft}
-                          onChange={(e) => setCompFilters(prev => ({ ...prev, sizeWithinSqft: parseInt(e.target.value) || 0 }))}
-                          className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
-                        />
-                        <span className="text-sm">sqft of each other</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          checked={compFilters.useSizeRange}
-                          onChange={() => setCompFilters(prev => ({ ...prev, useSizeRange: true }))}
-                        />
-                        <span className="text-sm">Comparable size between</span>
-                        <input
-                          type="number"
-                          value={compFilters.sizeMin}
-                          onChange={(e) => setCompFilters(prev => ({ ...prev, sizeMin: e.target.value }))}
-                          className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
-                          placeholder="sqft"
-                        />
-                        <span className="text-sm">and</span>
-                        <input
-                          type="number"
-                          value={compFilters.sizeMax}
-                          onChange={(e) => setCompFilters(prev => ({ ...prev, sizeMax: e.target.value }))}
-                          className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
-                          placeholder="sqft"
-                        />
-                      </div>
-                    </div>
                   </div>
                 </div>
 
-                {/* RIGHT COLUMN */}
-                <div className="space-y-4">
-                  {/* Zone */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-sm font-medium text-gray-700">Zone</label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={compFilters.sameZone}
-                          onChange={(e) => setCompFilters(prev => ({ ...prev, sameZone: e.target.checked }))}
-                          className="rounded"
-                        />
-                        Same Zone
-                      </label>
-                    </div>
-                    {!compFilters.sameZone && uniqueZone.length > 0 && (
-                      <>
-                        <select
-                          value=""
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              toggleCompFilterChip('zone')(e.target.value);
-                            }
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded"
-                        >
-                          <option value="">Select zone...</option>
-                          {uniqueZone.map(z => (
-                            <option key={z} value={z}>{z}</option>
-                          ))}
-                        </select>
-                        {compFilters.zone.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {compFilters.zone.map(z => (
-                              <span key={z} className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
-                                {z}
-                                <button onClick={() => toggleCompFilterChip('zone')(z)} className="ml-1 text-yellow-600 hover:text-yellow-800">
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            ))}
+                {/* Inline Block/Lot/Qual Entry Rows */}
+                {pendingBlockLotRows.length > 0 && (
+                  <div className="space-y-2 pt-2 max-w-2xl mx-auto">
+                    {pendingBlockLotRows.map((row, idx) => (
+                      <div key={idx} className="flex items-center justify-center gap-3">
+                        <div className="grid grid-cols-3 gap-3 w-full max-w-md">
+                          <div>
+                            {idx === 0 && <label className="block text-xs font-medium text-gray-600 mb-1">Block</label>}
+                            <input
+                              type="text"
+                              value={row.block}
+                              onChange={(e) => {
+                                const updated = [...pendingBlockLotRows];
+                                updated[idx] = { ...updated[idx], block: e.target.value };
+                                setPendingBlockLotRows(updated);
+                              }}
+                              onBlur={() => {
+                                if (row.block && row.lot) {
+                                  const key = `${row.block}-${row.lot}${row.qualifier ? `-${row.qualifier}` : ''}`;
+                                  if (!manualProperties.includes(key)) {
+                                    setManualProperties(prev => [...prev, key]);
+                                  }
+                                  setPendingBlockLotRows(prev => prev.filter((_, i) => i !== idx));
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && row.block && row.lot) {
+                                  const key = `${row.block}-${row.lot}${row.qualifier ? `-${row.qualifier}` : ''}`;
+                                  if (!manualProperties.includes(key)) {
+                                    setManualProperties(prev => [...prev, key]);
+                                  }
+                                  setPendingBlockLotRows(prev => prev.filter((_, i) => i !== idx));
+                                }
+                              }}
+                              placeholder="Block"
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                            />
                           </div>
-                        )}
-                      </>
-                    )}
+                          <div>
+                            {idx === 0 && <label className="block text-xs font-medium text-gray-600 mb-1">Lot</label>}
+                            <input
+                              type="text"
+                              value={row.lot}
+                              onChange={(e) => {
+                                const updated = [...pendingBlockLotRows];
+                                updated[idx] = { ...updated[idx], lot: e.target.value };
+                                setPendingBlockLotRows(updated);
+                              }}
+                              onBlur={() => {
+                                if (row.block && row.lot) {
+                                  const key = `${row.block}-${row.lot}${row.qualifier ? `-${row.qualifier}` : ''}`;
+                                  if (!manualProperties.includes(key)) {
+                                    setManualProperties(prev => [...prev, key]);
+                                  }
+                                  setPendingBlockLotRows(prev => prev.filter((_, i) => i !== idx));
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && row.block && row.lot) {
+                                  const key = `${row.block}-${row.lot}${row.qualifier ? `-${row.qualifier}` : ''}`;
+                                  if (!manualProperties.includes(key)) {
+                                    setManualProperties(prev => [...prev, key]);
+                                  }
+                                  setPendingBlockLotRows(prev => prev.filter((_, i) => i !== idx));
+                                }
+                              }}
+                              placeholder="Lot"
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            {idx === 0 && <label className="block text-xs font-medium text-gray-600 mb-1">Qual</label>}
+                            <input
+                              type="text"
+                              value={row.qualifier}
+                              onChange={(e) => {
+                                const updated = [...pendingBlockLotRows];
+                                updated[idx] = { ...updated[idx], qualifier: e.target.value };
+                                setPendingBlockLotRows(updated);
+                              }}
+                              onBlur={() => {
+                                if (row.block && row.lot) {
+                                  const key = `${row.block}-${row.lot}${row.qualifier ? `-${row.qualifier}` : ''}`;
+                                  if (!manualProperties.includes(key)) {
+                                    setManualProperties(prev => [...prev, key]);
+                                  }
+                                  setPendingBlockLotRows(prev => prev.filter((_, i) => i !== idx));
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && row.block && row.lot) {
+                                  const key = `${row.block}-${row.lot}${row.qualifier ? `-${row.qualifier}` : ''}`;
+                                  if (!manualProperties.includes(key)) {
+                                    setManualProperties(prev => [...prev, key]);
+                                  }
+                                  setPendingBlockLotRows(prev => prev.filter((_, i) => i !== idx));
+                                }
+                              }}
+                              placeholder="Qual"
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setPendingBlockLotRows(prev => prev.filter((_, i) => i !== idx))}
+                          className="text-gray-400 hover:text-gray-600 p-1"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
+                )}
 
-                  {/* Building Class */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-sm font-medium text-gray-700">Building Class</label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={compFilters.sameBuildingClass}
-                          onChange={(e) => setCompFilters(prev => ({ ...prev, sameBuildingClass: e.target.checked }))}
-                          className="rounded"
-                        />
-                        Same
-                      </label>
-                    </div>
-                    {!compFilters.sameBuildingClass && (
-                      <>
-                        <select
-                          value=""
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              toggleCompFilterChip('buildingClass')(e.target.value);
-                            }
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded"
+                {/* Manual Properties Chips */}
+                {manualProperties.length > 0 && (
+                  <div className="pt-2 max-w-2xl mx-auto text-center">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Manual Properties ({manualProperties.length})
+                    </label>
+                    <div className="flex flex-wrap justify-center gap-1.5">
+                      {manualProperties.map(key => (
+                        <span
+                          key={key}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-800 rounded-full text-xs"
                         >
-                          <option value="">Select class...</option>
-                          {uniqueBuildingClass.map(c => (
-                            <option key={c} value={c}>{c}</option>
-                          ))}
-                        </select>
-                        {compFilters.buildingClass.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {compFilters.buildingClass.map(c => (
-                              <span key={c} className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm">
-                                {c}
-                                <button onClick={() => toggleCompFilterChip('buildingClass')(c)} className="ml-1 text-purple-600 hover:text-purple-800">
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    )}
+                          {key}
+                          <button
+                            onClick={() => setManualProperties(prev => prev.filter(k => k !== key))}
+                            className="ml-0.5 text-purple-600 hover:text-purple-800"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
                   </div>
+                )}
 
-                  {/* Type/Use */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-sm font-medium text-gray-700">Type/Use</label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={compFilters.sameTypeUse}
-                          onChange={(e) => setCompFilters(prev => ({ ...prev, sameTypeUse: e.target.checked }))}
-                          className="rounded"
-                        />
-                        Same
-                      </label>
-                    </div>
-                    {!compFilters.sameTypeUse && (
-                      <>
-                        <select
-                          value=""
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              toggleCompFilterChip('typeUse')(e.target.value);
-                            }
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded"
-                        >
-                          <option value="">Select type...</option>
-                          {uniqueTypeUse.map(t => (
-                            <option key={t} value={t}>{t}</option>
-                          ))}
-                        </select>
-                        {compFilters.typeUse.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {compFilters.typeUse.map(t => (
-                              <span key={t} className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                                {t}
-                                <button onClick={() => toggleCompFilterChip('typeUse')(t)} className="ml-1 text-green-600 hover:text-green-800">
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  {/* Style */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-sm font-medium text-gray-700">Style</label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={compFilters.sameStyle}
-                          onChange={(e) => setCompFilters(prev => ({ ...prev, sameStyle: e.target.checked }))}
-                          className="rounded"
-                        />
-                        Same
-                      </label>
-                    </div>
-                    {!compFilters.sameStyle && (
-                      <>
-                        <select
-                          value=""
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              toggleCompFilterChip('style')(e.target.value);
-                            }
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded"
-                        >
-                          <option value="">Select style...</option>
-                          {uniqueStyle.map(s => (
-                            <option key={s} value={s}>{s}</option>
-                          ))}
-                        </select>
-                        {compFilters.style.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {compFilters.style.map(s => (
-                              <span key={s} className="inline-flex items-center gap-1 px-3 py-1 bg-pink-100 text-pink-800 rounded-full text-sm">
-                                {s}
-                                <button onClick={() => toggleCompFilterChip('style')(s)} className="ml-1 text-pink-600 hover:text-pink-800">
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  {/* Story Height */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-sm font-medium text-gray-700">Story Height</label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={compFilters.sameStoryHeight}
-                          onChange={(e) => setCompFilters(prev => ({ ...prev, sameStoryHeight: e.target.checked }))}
-                          className="rounded"
-                        />
-                        Same
-                      </label>
-                    </div>
-                    {!compFilters.sameStoryHeight && uniqueStoryHeight.length > 0 && (
-                      <>
-                        <select
-                          value=""
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              toggleCompFilterChip('storyHeight')(e.target.value);
-                            }
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded"
-                        >
-                          <option value="">Select height...</option>
-                          {uniqueStoryHeight.map(h => (
-                            <option key={h} value={h}>{h}</option>
-                          ))}
-                        </select>
-                        {compFilters.storyHeight.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {compFilters.storyHeight.map(h => (
-                              <span key={h} className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-sm">
-                                {h}
-                                <button onClick={() => toggleCompFilterChip('storyHeight')(h)} className="ml-1 text-indigo-600 hover:text-indigo-800">
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  {/* View */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-sm font-medium text-gray-700">View</label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={compFilters.sameView}
-                          onChange={(e) => setCompFilters(prev => ({ ...prev, sameView: e.target.checked }))}
-                          className="rounded"
-                        />
-                        Same View
-                      </label>
-                    </div>
-                    {!compFilters.sameView && uniqueView.length > 0 && (
-                      <>
-                        <select
-                          value=""
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              toggleCompFilterChip('view')(e.target.value);
-                            }
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded"
-                        >
-                          <option value="">Select view...</option>
-                          {uniqueView.map(v => (
-                            <option key={v} value={v}>{v}</option>
-                          ))}
-                        </select>
-                        {compFilters.view.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {compFilters.view.map(v => (
-                              <span key={v} className="inline-flex items-center gap-1 px-3 py-1 bg-teal-100 text-teal-800 rounded-full text-sm">
-                                {v}
-                                <button onClick={() => toggleCompFilterChip('view')(v)} className="ml-1 text-teal-600 hover:text-teal-800">
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
+                {/* Centered Buttons */}
+                <div className="flex justify-center gap-3 pt-3">
+                  <button
+                    onClick={() => setPendingBlockLotRows(prev => [...prev, { block: '', lot: '', qualifier: '' }])}
+                    className="px-4 py-2 bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm font-medium"
+                  >
+                    New Block/Lot/Qual
+                  </button>
+                  <button
+                    onClick={() => setShowManualEntryModal(true)}
+                    className="px-4 py-2 bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm font-medium inline-flex items-center gap-2"
+                  >
+                    <Upload className="w-4 h-4" />
+                    Import Block/Lot/Qual
+                  </button>
                 </div>
               </div>
+            </div>
 
-              {/* Farm Sales Mode */}
-              <div className="mt-6 pt-6 border-t border-gray-300">
-                <div className="flex items-start gap-3">
+            {/* Adjustment Bracket - Between sections, centered */}
+            <div className="bg-white border border-gray-300 rounded-lg p-4 mb-4">
+              <div className="flex justify-center items-center gap-4">
+                <label className="text-sm font-medium text-gray-700">Adjustment Bracket</label>
+                <select
+                  value={compFilters.adjustmentBracket || ''}
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    setCompFilters(prev => ({
+                      ...prev,
+                      adjustmentBracket: newValue,
+                      autoAdjustment: newValue === 'auto'
+                    }));
+                  }}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded w-64"
+                >
+                  <option value="">Select bracket...</option>
+                  <option value="auto">Auto (based on mapping)</option>
+                  <optgroup label="Default Brackets">
+                    {CME_BRACKETS.map((bracket, idx) => (
+                      <option key={idx} value={`bracket_${idx}`}>{bracket.label}</option>
+                    ))}
+                  </optgroup>
+                  {customBrackets.length > 0 && (
+                    <optgroup label="Custom Brackets">
+                      {customBrackets.map((bracket) => (
+                        <option key={bracket.bracket_id} value={bracket.bracket_id}>{bracket.bracket_name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+                <label className="flex items-center gap-1 text-sm whitespace-nowrap">
                   <input
                     type="checkbox"
-                    id="farmSalesMode"
-                    checked={compFilters.farmSalesMode}
-                    onChange={(e) => setCompFilters(prev => ({ ...prev, farmSalesMode: e.target.checked }))}
-                    className="mt-1 rounded"
+                    checked={compFilters.adjustmentBracket === 'auto'}
+                    onChange={(e) => {
+                      setCompFilters(prev => ({
+                        ...prev,
+                        adjustmentBracket: e.target.checked ? 'auto' : '',
+                        autoAdjustment: e.target.checked
+                      }));
+                    }}
+                    className="rounded"
                   />
-                  <div>
-                    <label htmlFor="farmSalesMode" className="text-sm font-medium text-gray-900 cursor-pointer">
-                      Farm Sales Mode
-                    </label>
-                    <p className="text-xs text-gray-600 mt-1">
-                      When enabled: Farm subjects (3A with 3B) only compare to kept/normalized farm sales using combined lot acreage.
-                      Non-farm subjects exclude farm sales to prevent skewed values.
-                    </p>
+                  <span className="text-gray-700">Auto</span>
+                </label>
+              </div>
+            </div>
+
+            {/* SECTION 2: Which comparables do you want to use? */}
+            <div className="bg-white border border-gray-300 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 text-center">
+                Which comparables do you want to use?
+              </h3>
+
+              {/* Row 1: Sales Codes + Sales Between */}
+              <div className="grid grid-cols-2 gap-8 mb-4">
+                {/* Sales Codes - Dropdown with chips */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Sales Codes</label>
+                  <select
+                    value=""
+                    onChange={(e) => { if (e.target.value) toggleCompFilterChip('salesCodes')(e.target.value); }}
+                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                  >
+                    <option value="">Select code...</option>
+                    {uniqueSalesCodes.map(code => (
+                      <option key={code} value={code}>{code || '(blank)'}</option>
+                    ))}
+                  </select>
+                  {compFilters.salesCodes.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {compFilters.salesCodes.map(code => (
+                        <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
+                          {code || '(blank)'}
+                          <button onClick={() => toggleCompFilterChip('salesCodes')(code)} className="text-blue-600 hover:text-blue-800"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">Can select multiple sales codes. Blank for all</p>
+                </div>
+                {/* Sales Between */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Sales Between</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={compFilters.salesDateStart}
+                      onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateStart: e.target.value }))}
+                      className="px-2 py-1 border border-gray-300 rounded text-sm w-36"
+                    />
+                    <span className="text-sm">and</span>
+                    <input
+                      type="date"
+                      value={compFilters.salesDateEnd}
+                      onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateEnd: e.target.value }))}
+                      className="px-2 py-1 border border-gray-300 rounded text-sm w-36"
+                    />
                   </div>
                 </div>
               </div>
 
-              {/* Adjustment Tolerance Filters */}
-              <div className="mt-6 pt-6 border-t border-gray-300">
-                <h4 className="text-sm font-semibold text-gray-900 mb-4">Adjustment Tolerances</h4>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm text-gray-700 mb-1">
-                      Individual adjustments within
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        value={compFilters.individualAdjPct}
-                        onChange={(e) => setCompFilters(prev => ({ ...prev, individualAdjPct: parseFloat(e.target.value) || 0 }))}
-                        className="w-20 px-2 py-1 border border-gray-300 rounded"
-                        min="0"
-                      />
-                      <span className="text-sm">% of sale for comparison</span>
-                    </div>
+              {/* Row 2: VCS (centered) */}
+              <div className="max-w-xl mx-auto mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">VCS</label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value=""
+                    onChange={(e) => { if (e.target.value) toggleCompFilterChip('vcs')(e.target.value); }}
+                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                    disabled={compFilters.sameVCS}
+                  >
+                    <option value="">{compFilters.sameVCS ? '' : 'Select VCS...'}</option>
+                    {uniqueVCS.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                  <label className="flex items-center gap-1 text-sm whitespace-nowrap">
+                    <span className="text-gray-500">OR Same VCS</span>
+                    <input type="checkbox" checked={compFilters.sameVCS} onChange={(e) => setCompFilters(prev => ({ ...prev, sameVCS: e.target.checked }))} className="rounded" />
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">Blank for full town. May take very long on large towns</p>
+                {!compFilters.sameVCS && compFilters.vcs.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {compFilters.vcs.map(v => (
+                      <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
+                        {v}<button onClick={() => toggleCompFilterChip('vcs')(v)} className="text-blue-600 hover:text-blue-800"><X className="w-3 h-3" /></button>
+                      </span>
+                    ))}
                   </div>
-                  <div>
-                    <label className="block text-sm text-gray-700 mb-1">
-                      Net adjusted valuation within
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        value={compFilters.netAdjPct}
-                        onChange={(e) => setCompFilters(prev => ({ ...prev, netAdjPct: parseFloat(e.target.value) || 0 }))}
-                        className="w-20 px-2 py-1 border border-gray-300 rounded"
-                        min="0"
-                      />
-                      <span className="text-sm">% of sale for comparison</span>
-                    </div>
+                )}
+              </div>
+
+              {/* Row 3: Neighborhood (centered under VCS) */}
+              <div className="max-w-xl mx-auto mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Neighborhood</label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value=""
+                    onChange={(e) => { if (e.target.value) toggleCompFilterChip('neighborhood')(e.target.value); }}
+                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                    disabled={compFilters.sameNeighborhood}
+                  >
+                    <option value="">{compFilters.sameNeighborhood ? '' : 'Select...'}</option>
+                    {uniqueNeighborhood.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                  <label className="flex items-center gap-1 text-sm whitespace-nowrap">
+                    <span className="text-gray-500">OR Same Neighborhood</span>
+                    <input type="checkbox" checked={compFilters.sameNeighborhood} onChange={(e) => setCompFilters(prev => ({ ...prev, sameNeighborhood: e.target.checked }))} className="rounded" />
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">Blank for full neighborhood</p>
+                {!compFilters.sameNeighborhood && compFilters.neighborhood.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {compFilters.neighborhood.map(n => (
+                      <span key={n} className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs">
+                        {n}<button onClick={() => toggleCompFilterChip('neighborhood')(n)} className="text-green-600 hover:text-green-800"><X className="w-3 h-3" /></button>
+                      </span>
+                    ))}
                   </div>
-                  <div>
-                    <label className="block text-sm text-gray-700 mb-1">
-                      Gross adjusted valuation within
+                )}
+              </div>
+
+              {/* Row 4: Lot Size (centered) */}
+              <div className="flex justify-center items-center gap-4 mb-4">
+                <label className="text-sm font-medium text-gray-700">Lot Size (Acre) Between</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={compFilters.lotAcreMin}
+                  onChange={(e) => setCompFilters(prev => ({ ...prev, lotAcreMin: e.target.value }))}
+                  className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
+                  placeholder=""
+                  disabled={compFilters.sameLotSize}
+                />
+                <span className="text-sm">and</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={compFilters.lotAcreMax}
+                  onChange={(e) => setCompFilters(prev => ({ ...prev, lotAcreMax: e.target.value }))}
+                  className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
+                  placeholder=""
+                  disabled={compFilters.sameLotSize}
+                />
+                <label className="flex items-center gap-1 text-sm whitespace-nowrap">
+                  <span className="text-gray-500">OR Similar Lot Size</span>
+                  <input type="checkbox" checked={compFilters.sameLotSize} onChange={(e) => setCompFilters(prev => ({ ...prev, sameLotSize: e.target.checked }))} className="rounded" />
+                </label>
+              </div>
+
+              {/* Row 5: Built Within / Comparable Built Between */}
+              <div className="flex justify-center items-center gap-2 mb-3 text-sm">
+                <span className="font-medium text-gray-700">Built within</span>
+                <input
+                  type="number"
+                  value={compFilters.builtWithinYears}
+                  onChange={(e) => setCompFilters(prev => ({ ...prev, builtWithinYears: parseInt(e.target.value) || 0, useBuiltRange: false }))}
+                  className="w-12 px-1 py-1 border border-gray-300 rounded text-sm text-center"
+                />
+                <span className="text-gray-600">years of each other</span>
+                <span className="font-bold text-gray-800 mx-2">Or</span>
+                <span className="font-medium text-gray-700">Comparable Built Between</span>
+                <input
+                  type="number"
+                  value={compFilters.builtYearMin}
+                  onChange={(e) => setCompFilters(prev => ({ ...prev, builtYearMin: e.target.value, useBuiltRange: true }))}
+                  className="w-16 px-1 py-1 border border-gray-300 rounded text-sm text-center"
+                  placeholder="YYYY"
+                />
+                <span>and</span>
+                <input
+                  type="number"
+                  value={compFilters.builtYearMax}
+                  onChange={(e) => setCompFilters(prev => ({ ...prev, builtYearMax: e.target.value, useBuiltRange: true }))}
+                  className="w-16 px-1 py-1 border border-gray-300 rounded text-sm text-center"
+                  placeholder="YYYY"
+                />
+              </div>
+
+              {/* Row 6: Size Within / Comparable Size Between */}
+              <div className="flex justify-center items-center gap-2 mb-4 text-sm">
+                <span className="font-medium text-gray-700">Size within</span>
+                <input
+                  type="number"
+                  value={compFilters.sizeWithinSqft}
+                  onChange={(e) => setCompFilters(prev => ({ ...prev, sizeWithinSqft: parseInt(e.target.value) || 0, useSizeRange: false }))}
+                  className="w-16 px-1 py-1 border border-gray-300 rounded text-sm text-center"
+                />
+                <span className="text-gray-600">sqft of each other</span>
+                <span className="font-bold text-gray-800 mx-2">Or</span>
+                <span className="font-medium text-gray-700">Comparable Size Between</span>
+                <input
+                  type="number"
+                  value={compFilters.sizeMin}
+                  onChange={(e) => setCompFilters(prev => ({ ...prev, sizeMin: e.target.value, useSizeRange: true }))}
+                  className="w-16 px-1 py-1 border border-gray-300 rounded text-sm text-center"
+                  placeholder="sqft"
+                />
+                <span>and</span>
+                <input
+                  type="number"
+                  value={compFilters.sizeMax}
+                  onChange={(e) => setCompFilters(prev => ({ ...prev, sizeMax: e.target.value, useSizeRange: true }))}
+                  className="w-16 px-1 py-1 border border-gray-300 rounded text-sm text-center"
+                  placeholder="sqft"
+                />
+              </div>
+
+              {/* Row 5-6: Attribute Filters (2x3 grid) */}
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                {/* Zone */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Zone</label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value=""
+                      onChange={(e) => { if (e.target.value) toggleCompFilterChip('zone')(e.target.value); }}
+                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                      disabled={compFilters.sameZone}
+                    >
+                      <option value="">Select...</option>
+                      {uniqueZone.map(z => <option key={z} value={z}>{z}</option>)}
+                    </select>
+                    <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+                      <span className="text-gray-500">OR Same Zone</span>
+                      <input type="checkbox" checked={compFilters.sameZone} onChange={(e) => setCompFilters(prev => ({ ...prev, sameZone: e.target.checked }))} className="rounded" />
                     </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        value={compFilters.grossAdjPct}
-                        onChange={(e) => setCompFilters(prev => ({ ...prev, grossAdjPct: parseFloat(e.target.value) || 0 }))}
-                        className="w-20 px-2 py-1 border border-gray-300 rounded"
-                        min="0"
-                      />
-                      <span className="text-sm">% of sale for comparison</span>
-                    </div>
+                  </div>
+                </div>
+                {/* Building Class */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Building Class</label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value=""
+                      onChange={(e) => { if (e.target.value) toggleCompFilterChip('buildingClass')(e.target.value); }}
+                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                      disabled={compFilters.sameBuildingClass}
+                    >
+                      <option value="">Select...</option>
+                      {uniqueBuildingClass.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+                      <span className="text-gray-500">OR Same Building Class</span>
+                      <input type="checkbox" checked={compFilters.sameBuildingClass} onChange={(e) => setCompFilters(prev => ({ ...prev, sameBuildingClass: e.target.checked }))} className="rounded" />
+                    </label>
+                  </div>
+                </div>
+                {/* Type/Use */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Type/Use</label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value=""
+                      onChange={(e) => { if (e.target.value) toggleCompFilterChip('typeUse')(e.target.value); }}
+                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                      disabled={compFilters.sameTypeUse}
+                    >
+                      <option value="">Select...</option>
+                      {uniqueTypeUse.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+                      <span className="text-gray-500">OR Same Type/Use</span>
+                      <input type="checkbox" checked={compFilters.sameTypeUse} onChange={(e) => setCompFilters(prev => ({ ...prev, sameTypeUse: e.target.checked }))} className="rounded" />
+                    </label>
+                  </div>
+                </div>
+                {/* Style */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Style</label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value=""
+                      onChange={(e) => { if (e.target.value) toggleCompFilterChip('style')(e.target.value); }}
+                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                      disabled={compFilters.sameStyle}
+                    >
+                      <option value="">Select...</option>
+                      {uniqueStyle.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+                      <span className="text-gray-500">OR Same Style</span>
+                      <input type="checkbox" checked={compFilters.sameStyle} onChange={(e) => setCompFilters(prev => ({ ...prev, sameStyle: e.target.checked }))} className="rounded" />
+                    </label>
+                  </div>
+                </div>
+                {/* Story Height */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Story Height</label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value=""
+                      onChange={(e) => { if (e.target.value) toggleCompFilterChip('storyHeight')(e.target.value); }}
+                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                      disabled={compFilters.sameStoryHeight}
+                    >
+                      <option value="">Select...</option>
+                      {uniqueStoryHeight.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                    <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+                      <span className="text-gray-500">OR Same Story Height</span>
+                      <input type="checkbox" checked={compFilters.sameStoryHeight} onChange={(e) => setCompFilters(prev => ({ ...prev, sameStoryHeight: e.target.checked }))} className="rounded" />
+                    </label>
+                  </div>
+                </div>
+                {/* View */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">View</label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value=""
+                      onChange={(e) => { if (e.target.value) toggleCompFilterChip('view')(e.target.value); }}
+                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                      disabled={compFilters.sameView}
+                    >
+                      <option value="">Select...</option>
+                      {uniqueView.map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                    <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+                      <span className="text-gray-500">OR Same View</span>
+                      <input type="checkbox" checked={compFilters.sameView} onChange={(e) => setCompFilters(prev => ({ ...prev, sameView: e.target.checked }))} className="rounded" />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Farm Sales Mode - Centered */}
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="flex justify-center">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={compFilters.farmSalesMode}
+                      onChange={(e) => setCompFilters(prev => ({ ...prev, farmSalesMode: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <span className="font-medium text-gray-900">Farm Sales Mode</span>
+                    <span className="text-gray-600">- Farm subjects (3A+3B) compare to farm comps using combined lot acreage</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Tolerances - Centered */}
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="flex justify-center gap-8">
+                  {/* Individual Adj */}
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-700">Individual adj within</label>
+                    <input
+                      type="number"
+                      value={compFilters.individualAdjPct}
+                      onChange={(e) => setCompFilters(prev => ({ ...prev, individualAdjPct: parseFloat(e.target.value) || 0 }))}
+                      className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+                      min="0"
+                    />
+                    <span className="text-sm text-gray-600">%</span>
+                  </div>
+                  {/* Net Adj */}
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-700">Net adj within</label>
+                    <input
+                      type="number"
+                      value={compFilters.netAdjPct}
+                      onChange={(e) => setCompFilters(prev => ({ ...prev, netAdjPct: parseFloat(e.target.value) || 0 }))}
+                      className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+                      min="0"
+                    />
+                    <span className="text-sm text-gray-600">%</span>
+                  </div>
+                  {/* Gross Adj */}
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-700">Gross adj within</label>
+                    <input
+                      type="number"
+                      value={compFilters.grossAdjPct}
+                      onChange={(e) => setCompFilters(prev => ({ ...prev, grossAdjPct: parseFloat(e.target.value) || 0 }))}
+                      className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+                      min="0"
+                    />
+                    <span className="text-sm text-gray-600">%</span>
                   </div>
                 </div>
               </div>
@@ -2891,7 +3095,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
               {/* Evaluate Button */}
               <div className="mt-6 pt-6 border-t border-gray-300">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-col items-center mb-4">
                   <div className="space-y-2">
                     <label className="flex items-center gap-2">
                       <input
@@ -2916,7 +3120,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                   <button
                     onClick={handleEvaluate}
                     disabled={isEvaluating}
-                    className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold text-lg"
+                    className="mt-3 px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold text-lg"
                   >
                     {isEvaluating
                       ? `Evaluating ${evaluationProgress.current}/${evaluationProgress.total}...`
@@ -2927,26 +3131,40 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
                 {/* Progress Bar */}
                 {isEvaluating && evaluationProgress.total > 0 && (
-                  <div className="mt-4">
-                    <div className="flex items-center justify-between text-sm font-semibold text-blue-700 mb-2">
-                      <span>
-                        {evaluationProgress.current > evaluationProgress.total - 1
-                          ? 'Saving and rendering results...'
-                          : `Evaluating ${evaluationProgress.current} of ${evaluationProgress.total} properties`}
-                      </span>
-                      <span>{Math.round((evaluationProgress.current / evaluationProgress.total) * 100)}% Complete</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-3 shadow-inner">
-                      <div
-                        className="bg-blue-600 h-3 rounded-full transition-all duration-150 ease-out"
-                        style={{
-                          width: `${Math.min(100, (evaluationProgress.current / evaluationProgress.total) * 100)}%`
-                        }}
-                      ></div>
-                    </div>
+                  <div className="mt-4 flex justify-center">
+                    <span className="text-sm font-semibold text-blue-700 animate-pulse">
+                      Evaluating {evaluationProgress.current} of {evaluationProgress.total} properties...
+                    </span>
                   </div>
                 )}
               </div>
+
+              {/* Saved Result Sets */}
+              {savedResultSets.length > 0 && (
+                <div className="mt-4">
+                  <div className="text-sm font-medium text-gray-700 text-center mb-2">Saved Result Sets</div>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {savedResultSets.map(rs => (
+                      <div key={rs.id} className="flex items-center gap-1 bg-gray-100 border border-gray-300 rounded px-3 py-1.5">
+                        <button
+                          onClick={() => handleLoadResultSet(rs.id)}
+                          className="text-sm text-blue-700 hover:text-blue-900 hover:underline font-medium"
+                        >
+                          {rs.name}
+                        </button>
+                        <span className="text-xs text-gray-500 ml-1">({new Date(rs.created_at).toLocaleDateString()})</span>
+                        <button
+                          onClick={() => handleDeleteResultSet(rs.id, rs.name)}
+                          className="ml-2 text-red-400 hover:text-red-600 text-sm font-bold"
+                          title="Delete this result set"
+                        >
+                          x
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* INLINE RESULTS - Show directly below search filters */}
@@ -2954,7 +3172,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
               <div ref={resultsRef} className="mt-6 bg-white border border-gray-300 rounded-lg p-4">
                 {/* Summary Statistics */}
                 <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div className="grid grid-cols-4 gap-4 text-sm">
                     <div>
                       <span className="font-semibold text-gray-700">Total Evaluated:</span>
                       <span className="ml-2 text-gray-900">{evaluationResults.length} properties</span>
@@ -2969,6 +3187,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       <span className="font-semibold text-green-700">With {minCompsForSuccess}+ Comps:</span>
                       <span className="ml-2 text-green-900 font-bold">
                         {evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess).length} of {evaluationResults.length}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-blue-700">Set Aside:</span>
+                      <span className="ml-2 text-blue-900 font-bold">
+                        {savedEvaluations.length}
                       </span>
                     </div>
                   </div>
@@ -2999,14 +3223,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       disabled={!evaluationResults || evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess).length === 0}
                       className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                     >
-                      Set Aside ({evaluationResults ? evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess).length : 0})
+                      Set Aside
                     </button>
                     <button
-                      onClick={handleApplyToFinalRoster}
-                      disabled={!evaluationResults || evaluationResults.filter(r => r.projectedAssessment).length === 0}
+                      onClick={handleSaveResultSet}
+                      disabled={!evaluationResults || evaluationResults.length === 0}
                       className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                     >
-                      Apply to Final Roster
+                      Save Result Set
                     </button>
                   </div>
                 </div>
@@ -3017,16 +3241,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                     <thead className="bg-gray-100">
                       <tr>
                         {/* Subject Property Info */}
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">VCS</th>
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Block</th>
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Lot</th>
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Qual</th>
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Location</th>
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">TypeUse</th>
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-left font-semibold">Style</th>
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-right font-semibold bg-yellow-50">Current Asmt</th>
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-right font-semibold bg-green-50">New Asmt</th>
-                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-right font-semibold bg-blue-50">%Change</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">VCS</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">Block</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">Lot</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">Qual</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">Location</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">TypeUse</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold">Style</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold bg-yellow-50">Current Asmt</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold bg-green-50">New Asmt</th>
+                        <th rowSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold bg-blue-50">%Change</th>
                         {/* Comparable Columns */}
                         {[1, 2, 3, 4, 5].map(num => (
                           <th key={num} colSpan="2" className="border border-gray-300 px-2 py-2 text-center font-semibold bg-blue-50">
@@ -3065,18 +3289,18 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                         return (
                           <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                             {/* Subject Property Info */}
-                            <td className="border border-gray-300 px-2 py-2 text-sm">{result.subject.property_vcs}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-sm font-medium">{result.subject.property_block}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-sm font-medium">{result.subject.property_lot}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-sm">{result.subject.property_qualifier || ''}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-xs max-w-xs truncate">{result.subject.property_location || ''}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-xs">{typeUseDisplay}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-xs">{styleDisplay}</td>
-                            <td className="border border-gray-300 px-2 py-2 text-right text-sm font-semibold bg-yellow-50">
+                            <td className="border border-gray-300 px-2 py-2 text-center text-sm">{result.subject.property_vcs}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-center text-sm font-medium">{result.subject.property_block}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-center text-sm font-medium">{result.subject.property_lot}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-center text-sm">{result.subject.property_qualifier || ''}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-center text-xs max-w-xs truncate">{result.subject.property_location || ''}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-center text-xs">{typeUseDisplay}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-center text-xs">{styleDisplay}</td>
+                            <td className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold bg-yellow-50">
                               ${(result.subject.values_mod_total || result.subject.values_cama_total || 0).toLocaleString()}
                             </td>
                             <td
-                              className="border border-gray-300 px-2 py-2 text-right text-sm font-bold bg-green-50 text-green-700 cursor-pointer hover:underline"
+                              className="border border-gray-300 px-2 py-2 text-center text-sm font-bold bg-green-50 text-green-700 cursor-pointer hover:underline"
                               onClick={() => {
                                 setManualEvaluationResult(result);
                                 setActiveSubTab('detailed');
@@ -3085,7 +3309,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                             >
                               {result.projectedAssessment ? `$${result.projectedAssessment.toLocaleString()}` : '-'}
                             </td>
-                            <td className="border border-gray-300 px-2 py-2 text-right text-sm font-semibold bg-blue-50">
+                            <td className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold bg-blue-50">
                               {(() => {
                                 const currentAsmt = result.subject.values_mod_total || result.subject.values_cama_total || 0;
                                 const newAsmt = result.projectedAssessment;
@@ -3118,7 +3342,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                                   <td className="border border-gray-300 px-2 py-2 text-center text-xs">
                                     {blqFormatted}
                                   </td>
-                                  <td className="border border-gray-300 px-2 py-2 text-right text-xs font-semibold">
+                                  <td className="border border-gray-300 px-2 py-2 text-center text-xs font-semibold">
                                     ${Math.round(comp.adjustedPrice || 0).toLocaleString()}
                                   </td>
                                 </React.Fragment>
@@ -3131,105 +3355,132 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                   </table>
                 </div>
 
-                {/* Detailed Comparable Breakdown */}
-                <div className="mt-8 space-y-6">
-                  <h4 className="text-lg font-semibold text-gray-900">Comparable Details</h4>
-                  {evaluationResults.map((result, resultIdx) => (
-                    <div key={resultIdx} className="border border-gray-300 rounded-lg overflow-hidden">
-                      <div className="bg-gray-100 px-4 py-3 flex items-center justify-between">
-                        <div>
-                          <div className="font-semibold text-gray-900">
-                            Subject: <span className="text-blue-600">{result.subject.property_vcs}</span> | Block {result.subject.property_block} | Lot {result.subject.property_lot}{result.subject.property_qualifier ? ` | Qual ${result.subject.property_qualifier}` : ''}
-                          </div>
-                          <div className="text-sm text-gray-600 mt-1">
-                            {result.subject.property_location} • {result.subject.asset_type_use} • {result.subject.asset_sfla?.toLocaleString()} SF
-                          </div>
-                        </div>
-                        {result.projectedAssessment && (
-                          <div className="text-right">
-                            <div className="text-xs text-gray-600">Projected Assessment</div>
-                            <div className="text-xl font-bold text-green-700">
-                              ${result.projectedAssessment.toLocaleString()}
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                {/* ==================== VALUATION SUMMARY PANEL ==================== */}
+                {(() => {
+                  const successful = evaluationResults.filter(r => r.comparables.length >= minCompsForSuccess);
+                  const skipped = evaluationResults.filter(r => r.comparables.length < minCompsForSuccess);
 
-                      {result.comparables.length === 0 ? (
-                        <div className="px-4 py-8 text-center text-gray-500">
-                          No valid comparables found
+                  // Build class summary from successful evaluations
+                  const classSummary = {};
+                  let totalCurrentTotal = 0;
+                  let totalNewValue = 0;
+
+                  successful.forEach(r => {
+                    const m4Class = r.subject.property_m4_class || 'Unknown';
+                    if (!classSummary[m4Class]) classSummary[m4Class] = { count: 0, currentTotal: 0, newTotal: 0 };
+                    classSummary[m4Class].count++;
+                    const currentTotal = r.subject.values_mod_total || r.subject.values_cama_total || 0;
+                    classSummary[m4Class].currentTotal += currentTotal;
+                    classSummary[m4Class].newTotal += (r.projectedAssessment || 0);
+                    totalCurrentTotal += currentTotal;
+                    totalNewValue += (r.projectedAssessment || 0);
+                  });
+
+                  return (
+                    <div className="mt-6 space-y-4">
+                      {/* Skipped / Missing Comps */}
+                      {skipped.length > 0 && (
+                        <div className="bg-amber-50 border border-amber-300 rounded-lg p-4">
+                          <h4 className="text-sm font-semibold text-amber-800 mb-2">
+                            Skipped Properties ({skipped.length}) — Fewer than {minCompsForSuccess} comparable(s)
+                          </h4>
+                          <div className="max-h-40 overflow-y-auto">
+                            <table className="min-w-full text-xs">
+                              <thead>
+                                <tr className="bg-amber-100">
+                                  <th className="px-2 py-1 text-left">VCS</th>
+                                  <th className="px-2 py-1 text-left">Block</th>
+                                  <th className="px-2 py-1 text-left">Lot</th>
+                                  <th className="px-2 py-1 text-left">Location</th>
+                                  <th className="px-2 py-1 text-center">Comps Found</th>
+                                  <th className="px-2 py-1 text-center">Current Asmt</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {skipped.map((r, idx) => (
+                                  <tr key={idx} className="border-t border-amber-200">
+                                    <td className="px-2 py-1">{r.subject.property_vcs}</td>
+                                    <td className="px-2 py-1">{r.subject.property_block}</td>
+                                    <td className="px-2 py-1">{r.subject.property_lot}</td>
+                                    <td className="px-2 py-1">{r.subject.property_location}</td>
+                                    <td className="px-2 py-1 text-center text-red-600 font-bold">{r.comparables.length}</td>
+                                    <td className="px-2 py-1 text-center">${(r.subject.values_mod_total || r.subject.values_cama_total || 0).toLocaleString()}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
-                      ) : (
+                      )}
+
+                      {/* Net Valuation Summary */}
+                      <div className="bg-white border border-gray-300 rounded-lg p-4">
+                        <h4 className="text-sm font-semibold text-gray-900 mb-3">
+                          Projected Net Valuation Summary — CME Sales Comparison
+                        </h4>
                         <div className="overflow-x-auto">
-                          <table className="min-w-full divide-y divide-gray-200 text-xs">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Rank</th>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700">Comparable</th>
-                                <th className="px-3 py-2 text-right font-medium text-gray-700">Sale Price</th>
-                                <th className="px-3 py-2 text-right font-medium text-gray-700">Time Adj</th>
-                                <th className="px-3 py-2 text-right font-medium text-gray-700">Net Adj</th>
-                                <th className="px-3 py-2 text-right font-medium text-gray-700">Net Adj %</th>
-                                <th className="px-3 py-2 text-right font-medium text-gray-700">Adjusted Price</th>
-                                <th className="px-3 py-2 text-right font-medium text-gray-700">Weight</th>
+                          <table className="min-w-full text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-gray-100">
+                                <th className="border border-gray-300 px-3 py-2 text-left">Class</th>
+                                <th className="border border-gray-300 px-3 py-2 text-center">Count</th>
+                                <th className="border border-gray-300 px-3 py-2 text-right">Current Total</th>
+                                <th className="border border-gray-300 px-3 py-2 text-right">New Projected</th>
+                                <th className="border border-gray-300 px-3 py-2 text-right">Change</th>
                               </tr>
                             </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                              {result.comparables.map((comp, compIdx) => (
-                                <tr key={compIdx} className={comp.isSubjectSale ? 'bg-green-50' : 'hover:bg-gray-50'}>
-                                  <td className="px-3 py-2">
-                                    <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
-                                      comp.rank === 1 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'
-                                    }`}>
-                                      {comp.rank}
-                                    </span>
-                                  </td>
-                                  <td className="px-3 py-2">
-                                    <div className="font-medium text-gray-900">
-                                      {comp.property_block}-{comp.property_lot}-{comp.property_qualifier}
-                                    </div>
-                                    <div className="text-gray-600">{comp.property_location}</div>
-                                    {comp.isSubjectSale && (
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-200 text-green-900">
-                                        Subject Sale (Auto Comp #1)
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="px-3 py-2 text-right text-gray-700">
-                                    ${comp.sales_price?.toLocaleString()}
-                                  </td>
-                                  <td className="px-3 py-2 text-right text-gray-700">
-                                    ${comp.values_norm_time?.toLocaleString()}
-                                  </td>
-                                  <td className="px-3 py-2 text-right">
-                                    <span className={comp.totalAdjustment >= 0 ? 'text-green-700' : 'text-red-700'}>
-                                      {comp.totalAdjustment >= 0 ? '+' : ''}${comp.totalAdjustment?.toLocaleString()}
-                                    </span>
-                                  </td>
-                                  <td className="px-3 py-2 text-right">
-                                    <span className={`font-semibold ${
-                                      Math.abs(comp.adjustmentPercent) < 5 ? 'text-green-700' :
-                                      Math.abs(comp.adjustmentPercent) < 15 ? 'text-yellow-700' :
-                                      'text-red-700'
-                                    }`}>
-                                      {comp.adjustmentPercent >= 0 ? '+' : ''}{comp.adjustmentPercent?.toFixed(0)}%
-                                    </span>
-                                  </td>
-                                  <td className="px-3 py-2 text-right font-semibold text-gray-900">
-                                    ${comp.adjustedPrice?.toLocaleString()}
-                                  </td>
-                                  <td className="px-3 py-2 text-right text-gray-700">
-                                    {(comp.weight * 100)?.toFixed(1)}%
-                                  </td>
-                                </tr>
-                              ))}
+                            <tbody>
+                              {Object.entries(classSummary).sort((a, b) => a[0].localeCompare(b[0])).map(([cls, data]) => {
+                                const change = data.currentTotal > 0 ? ((data.newTotal - data.currentTotal) / data.currentTotal * 100) : 0;
+                                return (
+                                  <tr key={cls} className="border-t">
+                                    <td className="border border-gray-300 px-3 py-1 font-medium">{cls}</td>
+                                    <td className="border border-gray-300 px-3 py-1 text-center">{data.count}</td>
+                                    <td className="border border-gray-300 px-3 py-1 text-right">${data.currentTotal.toLocaleString()}</td>
+                                    <td className="border border-gray-300 px-3 py-1 text-right font-semibold">${data.newTotal.toLocaleString()}</td>
+                                    <td className={`border border-gray-300 px-3 py-1 text-right font-semibold ${change > 0 ? 'text-green-700' : change < 0 ? 'text-red-700' : ''}`}>
+                                      {change > 0 ? '+' : ''}{change.toFixed(2)}%
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                              <tr className="bg-gray-100 font-bold">
+                                <td className="border border-gray-300 px-3 py-2">Total</td>
+                                <td className="border border-gray-300 px-3 py-2 text-center">{successful.length}</td>
+                                <td className="border border-gray-300 px-3 py-2 text-right">${totalCurrentTotal.toLocaleString()}</td>
+                                <td className="border border-gray-300 px-3 py-2 text-right">${totalNewValue.toLocaleString()}</td>
+                                <td className={`border border-gray-300 px-3 py-2 text-right ${totalCurrentTotal > 0 && ((totalNewValue - totalCurrentTotal) / totalCurrentTotal * 100) > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                  {totalCurrentTotal > 0 ? `${((totalNewValue - totalCurrentTotal) / totalCurrentTotal * 100) > 0 ? '+' : ''}${((totalNewValue - totalCurrentTotal) / totalCurrentTotal * 100).toFixed(2)}%` : '-'}
+                                </td>
+                              </tr>
                             </tbody>
                           </table>
                         </div>
-                      )}
+
+                        {/* Export Buttons */}
+                        <div className="mt-4 flex gap-3 justify-end">
+                          <button
+                            onClick={() => handleCreateUpdate(successful)}
+                            disabled={successful.length === 0}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium flex items-center gap-2"
+                          >
+                            <Upload className="w-4 h-4" />
+                            Create Update
+                          </button>
+                          <button
+                            onClick={() => handleBuildFinalRoster(successful, skipped)}
+                            disabled={successful.length === 0}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium flex items-center gap-2"
+                          >
+                            <FileText className="w-4 h-4" />
+                            Build Final Roster
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  ))}
-                </div>
+                  );
+                })()}
+
               </div>
             )}
           </div>
@@ -3411,14 +3662,476 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           </div>
         )}
 
+        {/* SUMMARY TAB */}
+        {activeSubTab === 'summary' && (
+          <div className="space-y-6">
+            {(() => {
+              // Summary uses saved result sets (named snapshots) as the source of truth.
+              // This acts as a working total — users save batches and the Summary aggregates
+              // across all saved sets. If a property appears in multiple sets, the latest wins.
+              const savedResults = [];
+              const seenKeys = new Map(); // composite_key -> index in savedResults
+
+              // Process result sets from oldest to newest (they're ordered desc by created_at, so reverse)
+              const orderedSets = [...(savedResultSets || [])].reverse();
+              orderedSets.forEach(rs => {
+                if (!rs.results || !Array.isArray(rs.results)) return;
+                rs.results.forEach(r => {
+                  const key = r.subject?.property_composite_key;
+                  if (!key || !r.projectedAssessment) return;
+                  // Look up current property data (may have been refreshed since save)
+                  const currentProp = properties.find(p => p.property_composite_key === key);
+                  const entry = {
+                    subject: currentProp || r.subject,
+                    comparables: r.comparables || [],
+                    projectedAssessment: r.projectedAssessment,
+                    confidenceScore: r.confidenceScore || 0,
+                  };
+                  if (seenKeys.has(key)) {
+                    // Replace with newer result (later result set wins)
+                    savedResults[seenKeys.get(key)] = entry;
+                  } else {
+                    seenKeys.set(key, savedResults.length);
+                    savedResults.push(entry);
+                  }
+                });
+              });
+
+              const successful = savedResults;
+
+              // "Not done" = all residential properties that are NOT in any saved result set
+              const savedKeys = new Set(seenKeys.keys());
+              const notDone = properties.filter(p => {
+                if (savedKeys.has(p.property_composite_key)) return false;
+                // Only count residential+ (building class > 10, i.e. not vacant/exempt)
+                const bc = parseInt(p.asset_building_class) || 0;
+                if (bc <= 10) return false;
+                // Only main cards
+                const card = (p.property_addl_card || '').toString().trim();
+                const isMain = vendorType === 'BRT'
+                  ? (!card || card === '1' || card === '')
+                  : (!card || card.toUpperCase() === 'M' || card.toUpperCase() === 'MAIN' || card === '');
+                return isMain;
+              });
+
+              // VCS breakdown: saved (done) vs not done
+              const vcsSummary = {};
+              successful.forEach(r => {
+                const vcs = r.subject?.property_vcs || 'Unknown';
+                if (!vcsSummary[vcs]) vcsSummary[vcs] = { count: 0, missingCount: 0 };
+                vcsSummary[vcs].count++;
+              });
+              notDone.forEach(p => {
+                const vcs = p.property_vcs || 'Unknown';
+                if (!vcsSummary[vcs]) vcsSummary[vcs] = { count: 0, missingCount: 0 };
+                vcsSummary[vcs].missingCount++;
+              });
+
+              // Sort the notDone list
+              const sortedNotDone = [...notDone].sort((a, b) => {
+                const field = summarySort.field;
+                let aVal = a[field] ?? '';
+                let bVal = b[field] ?? '';
+                // Numeric sort for assessment
+                if (field === '_currentAsmt') {
+                  aVal = (a.values_mod_total || a.values_cama_total || 0);
+                  bVal = (b.values_mod_total || b.values_cama_total || 0);
+                  return summarySort.dir === 'asc' ? aVal - bVal : bVal - aVal;
+                }
+                // String sort
+                aVal = String(aVal).toLowerCase();
+                bVal = String(bVal).toLowerCase();
+                if (aVal < bVal) return summarySort.dir === 'asc' ? -1 : 1;
+                if (aVal > bVal) return summarySort.dir === 'asc' ? 1 : -1;
+                return 0;
+              });
+
+              const handleSortClick = (field) => {
+                setSummarySort(prev => ({
+                  field,
+                  dir: prev.field === field && prev.dir === 'asc' ? 'desc' : 'asc'
+                }));
+              };
+
+              const sortArrow = (field) => {
+                if (summarySort.field !== field) return '';
+                return summarySort.dir === 'asc' ? ' ▲' : ' ▼';
+              };
+
+              // Class summary with rounding to nearest $100
+              const classSummary = {
+                '1': { count: 0, currentTotal: 0, newTotal: 0, description: 'Vacant Land' },
+                '2': { count: 0, currentTotal: 0, newTotal: 0, description: 'Residential' },
+                '3A': { count: 0, currentTotal: 0, newTotal: 0, description: 'Farmhouse' },
+                '3B': { count: 0, currentTotal: 0, newTotal: 0, description: 'Qualified Farmland' },
+                '4A': { count: 0, currentTotal: 0, newTotal: 0, description: 'Commercial' },
+                '4B': { count: 0, currentTotal: 0, newTotal: 0, description: 'Industrial' },
+                '4C': { count: 0, currentTotal: 0, newTotal: 0, description: 'Apartment' },
+                '6A': { count: 0, currentTotal: 0, newTotal: 0, description: 'Personal Property' },
+                '6B': { count: 0, currentTotal: 0, newTotal: 0, description: 'Machinery, Apparatus' }
+              };
+
+              // Classes NOT evaluated by CME — use CAMA values directly
+              const nonCmeClasses = new Set(['1', '3B', '4A', '4B', '4C', '6A', '6B']);
+
+              // Populate non-CME classes and Class 2/3A detached-only (building class ≤ 10)
+              // Use property_cama_class for non-CME eligible properties
+              properties.forEach(p => {
+                const camaClass = p.property_cama_class || '';
+                if (!classSummary[camaClass]) return;
+                // Only main cards
+                const card = (p.property_addl_card || '').toString().trim();
+                const isMain = vendorType === 'BRT'
+                  ? (!card || card === '1' || card === '')
+                  : (!card || card.toUpperCase() === 'M' || card.toUpperCase() === 'MAIN' || card === '');
+                if (!isMain) return;
+                // Exclude exempt
+                if (p.property_facility === 'EXEMPT') return;
+
+                const bc = parseInt(p.asset_building_class) || 0;
+
+                if (nonCmeClasses.has(camaClass)) {
+                  // Non-CME class: always use CAMA value, classified by CAMA class
+                  const camaTotal = p.values_cama_total || 0;
+                  classSummary[camaClass].count++;
+                  classSummary[camaClass].currentTotal += camaTotal;
+                  classSummary[camaClass].newTotal += camaTotal;
+                } else if ((camaClass === '2' || camaClass === '3A') && bc <= 10) {
+                  // Residential/Farmhouse with no home (detached garage, pool only)
+                  // CME doesn't evaluate these — use CAMA value
+                  if (savedKeys.has(p.property_composite_key)) return; // skip if already in saved results
+                  const camaTotal = p.values_cama_total || 0;
+                  classSummary[camaClass].count++;
+                  classSummary[camaClass].currentTotal += camaTotal;
+                  classSummary[camaClass].newTotal += camaTotal;
+                }
+              });
+
+              // Add CME set-aside results (Class 2 / 3A with building class > 10)
+              successful.forEach(r => {
+                const m4Class = r.subject?.property_m4_class || '';
+                const currentTotal = r.subject?.values_mod_total || r.subject?.values_cama_total || 0;
+                const roundedNew = Math.round((r.projectedAssessment || 0) / 100) * 100;
+
+                if (classSummary[m4Class]) {
+                  classSummary[m4Class].count++;
+                  classSummary[m4Class].currentTotal += currentTotal;
+                  classSummary[m4Class].newTotal += roundedNew;
+                }
+              });
+
+              // Aggregates
+              const class4Count = classSummary['4A'].count + classSummary['4B'].count + classSummary['4C'].count;
+              const class4Current = classSummary['4A'].currentTotal + classSummary['4B'].currentTotal + classSummary['4C'].currentTotal;
+              const class4New = classSummary['4A'].newTotal + classSummary['4B'].newTotal + classSummary['4C'].newTotal;
+
+              const class6Count = classSummary['6A'].count + classSummary['6B'].count;
+              const class6Current = classSummary['6A'].currentTotal + classSummary['6B'].currentTotal;
+              const class6New = classSummary['6A'].newTotal + classSummary['6B'].newTotal;
+
+              const grandCount = Object.values(classSummary).reduce((s, c) => s + c.count, 0);
+              const grandCurrent = Object.values(classSummary).reduce((s, c) => s + c.currentTotal, 0);
+              const grandNew = Object.values(classSummary).reduce((s, c) => s + c.newTotal, 0);
+
+              const pctChange = (curr, nw) => curr > 0 ? ((nw - curr) / curr * 100) : 0;
+
+              // Export Excel Update handler
+              const handleSummaryExportUpdate = () => {
+                if (successful.length === 0) return;
+
+                const rows = successful.map(r => {
+                  const subject = r.subject;
+                  const roundedNew = Math.round((r.projectedAssessment || 0) / 100) * 100;
+                  const currentLand = subject.values_cama_land || 0;
+                  const improvementOverride = roundedNew - currentLand;
+                  const card = subject.property_addl_card || (vendorType === 'BRT' ? '1' : 'M');
+
+                  return {
+                    'Block': subject.property_block || '',
+                    'Lot': subject.property_lot || '',
+                    'Qualifier': subject.property_qualifier || '',
+                    'Card': card,
+                    'Improvement Override': improvementOverride > 0 ? improvementOverride : 0
+                  };
+                });
+
+                const worksheet = XLSX.utils.json_to_sheet(rows);
+                const range = XLSX.utils.decode_range(worksheet['!ref']);
+
+                // Format block/lot as text
+                for (let R = 1; R <= range.e.r; R++) {
+                  const blockCell = worksheet[XLSX.utils.encode_cell({ r: R, c: 0 })];
+                  const lotCell = worksheet[XLSX.utils.encode_cell({ r: R, c: 1 })];
+                  if (blockCell) { blockCell.t = 's'; blockCell.v = String(blockCell.v); }
+                  if (lotCell) { lotCell.t = 's'; lotCell.v = String(lotCell.v); }
+                }
+
+                // Currency format for improvement override
+                for (let R = 1; R <= range.e.r; R++) {
+                  const cell = worksheet[XLSX.utils.encode_cell({ r: R, c: 4 })];
+                  if (cell) cell.z = '$#,##0';
+                }
+
+                worksheet['!cols'] = [
+                  { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 22 }
+                ];
+
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, 'CME Update');
+                XLSX.writeFile(workbook, `CME_Update_${jobData.job_name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+              };
+
+              return (
+                <>
+                  {/* Info Section */}
+                  <div className="bg-gradient-to-r from-slate-50 to-gray-50 border border-gray-200 rounded-lg p-6">
+                    <h3 className="text-lg font-bold text-gray-900 mb-4">CME Evaluation Overview</h3>
+
+                    {/* Top Stats Cards */}
+                    <div className="grid grid-cols-3 gap-4 mb-6">
+                      <div className="bg-white rounded-lg border border-green-300 p-4 text-center">
+                        <div className="text-3xl font-bold text-green-600">{successful.length}</div>
+                        <div className="text-xs text-gray-500 mt-1">Saved (Done)</div>
+                      </div>
+                      <div className="bg-white rounded-lg border border-amber-300 p-4 text-center">
+                        <div className="text-3xl font-bold text-amber-600">{notDone.length}</div>
+                        <div className="text-xs text-gray-500 mt-1">Not Yet Evaluated</div>
+                      </div>
+                      <div className="bg-white rounded-lg border border-blue-300 p-4 text-center">
+                        <div className="text-3xl font-bold text-blue-600">{successful.length + notDone.length}</div>
+                        <div className="text-xs text-gray-500 mt-1">Total Residential</div>
+                      </div>
+                    </div>
+
+                    {/* VCS Breakdown */}
+                    <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
+                      <div className="px-4 py-3 bg-gray-100 border-b border-gray-300">
+                        <h4 className="font-semibold text-gray-700 text-sm">By VCS</h4>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50 sticky top-0">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-semibold text-gray-600">VCS</th>
+                              <th className="px-3 py-2 text-right font-semibold text-green-700">Saved</th>
+                              <th className="px-3 py-2 text-right font-semibold text-amber-700">Not Done</th>
+                              <th className="px-3 py-2 text-right font-semibold text-gray-700">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {Object.entries(vcsSummary).sort((a, b) => a[0].localeCompare(b[0])).map(([vcs, data]) => (
+                              <tr key={vcs} className="hover:bg-gray-50">
+                                <td className="px-3 py-1.5 font-medium text-gray-900">{vcs}</td>
+                                <td className="px-3 py-1.5 text-right text-green-700 font-semibold">{data.count}</td>
+                                <td className="px-3 py-1.5 text-right text-amber-600 font-semibold">{data.missingCount > 0 ? data.missingCount : '-'}</td>
+                                <td className="px-3 py-1.5 text-right text-gray-700 font-semibold">{data.count + data.missingCount}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Not Done Detail */}
+                    {notDone.length > 0 && (
+                      <div className="mt-4 bg-amber-50 border border-amber-300 rounded-lg p-4">
+                        <h4 className="text-sm font-semibold text-amber-800 mb-2">
+                          Properties Not Yet Evaluated ({notDone.length})
+                        </h4>
+                        <div className="max-h-64 overflow-y-auto">
+                          <table className="min-w-full text-xs">
+                            <thead className="sticky top-0">
+                              <tr className="bg-amber-100">
+                                <th className="px-2 py-1 text-left cursor-pointer select-none hover:bg-amber-200" onClick={() => handleSortClick('property_vcs')}>VCS{sortArrow('property_vcs')}</th>
+                                <th className="px-2 py-1 text-left cursor-pointer select-none hover:bg-amber-200" onClick={() => handleSortClick('property_block')}>Block{sortArrow('property_block')}</th>
+                                <th className="px-2 py-1 text-left cursor-pointer select-none hover:bg-amber-200" onClick={() => handleSortClick('property_lot')}>Lot{sortArrow('property_lot')}</th>
+                                <th className="px-2 py-1 text-left cursor-pointer select-none hover:bg-amber-200" onClick={() => handleSortClick('property_qualifier')}>Qual{sortArrow('property_qualifier')}</th>
+                                <th className="px-2 py-1 text-left cursor-pointer select-none hover:bg-amber-200" onClick={() => handleSortClick('property_location')}>Location{sortArrow('property_location')}</th>
+                                <th className="px-2 py-1 text-left cursor-pointer select-none hover:bg-amber-200" onClick={() => handleSortClick('asset_type_use')}>Type/Use{sortArrow('asset_type_use')}</th>
+                                <th className="px-2 py-1 text-right cursor-pointer select-none hover:bg-amber-200" onClick={() => handleSortClick('_currentAsmt')}>Current Asmt{sortArrow('_currentAsmt')}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {sortedNotDone.map((p, idx) => (
+                                <tr key={idx} className="border-t border-amber-200">
+                                  <td className="px-2 py-1">{p.property_vcs}</td>
+                                  <td className="px-2 py-1">{p.property_block}</td>
+                                  <td className="px-2 py-1">{p.property_lot}</td>
+                                  <td className="px-2 py-1">{p.property_qualifier || ''}</td>
+                                  <td className="px-2 py-1 max-w-xs truncate">{p.property_location}</td>
+                                  <td className="px-2 py-1">{p.asset_type_use || ''}</td>
+                                  <td className="px-2 py-1 text-right">${(p.values_mod_total || p.values_cama_total || 0).toLocaleString()}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Projected CME Valuation */}
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
+                    <h3 className="text-lg font-bold text-gray-900 mb-4">Projected Net Valuation (Taxable) - CME Total</h3>
+                    <p className="text-xs text-gray-500 mb-4">Based on saved result sets. Values rounded to nearest $100.</p>
+
+                    <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
+                      <table className="w-full">
+                        <thead className="bg-gray-100 border-b border-gray-300">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Class</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Description</th>
+                            <th className="px-3 py-3 text-right text-sm font-semibold text-gray-700">Count</th>
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Current Valuation</th>
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">CME Projected</th>
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Change</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {['1', '2', '3A', '3B'].map(cls => {
+                            const data = classSummary[cls];
+                            const change = pctChange(data.currentTotal, data.newTotal);
+                            return (
+                              <tr key={cls} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-sm font-medium text-gray-900">Class {cls}</td>
+                                <td className="px-4 py-3 text-sm text-gray-700">{data.description}</td>
+                                <td className="px-3 py-3 text-sm text-right font-semibold text-gray-900">{data.count > 0 ? data.count.toLocaleString() : '-'}</td>
+                                <td className="px-4 py-3 text-sm text-right font-semibold text-gray-700">{data.count > 0 ? `$${data.currentTotal.toLocaleString()}` : '-'}</td>
+                                <td className="px-4 py-3 text-base text-right font-bold text-blue-600">{data.count > 0 ? `$${data.newTotal.toLocaleString()}` : '-'}</td>
+                                <td className={`px-4 py-3 text-sm text-right font-semibold ${change > 0 ? 'text-green-700' : change < 0 ? 'text-red-700' : 'text-gray-500'}`}>
+                                  {data.count > 0 ? `${change > 0 ? '+' : ''}${change.toFixed(2)}%` : '-'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {['4A', '4B', '4C'].map(cls => {
+                            const data = classSummary[cls];
+                            const change = pctChange(data.currentTotal, data.newTotal);
+                            return (
+                              <tr key={cls} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-sm font-medium text-gray-900">Class {cls}</td>
+                                <td className="px-4 py-3 text-sm text-gray-700">{data.description}</td>
+                                <td className="px-3 py-3 text-sm text-right font-semibold text-gray-900">{data.count > 0 ? data.count.toLocaleString() : '-'}</td>
+                                <td className="px-4 py-3 text-sm text-right font-semibold text-gray-700">{data.count > 0 ? `$${data.currentTotal.toLocaleString()}` : '-'}</td>
+                                <td className="px-4 py-3 text-base text-right font-bold text-blue-600">{data.count > 0 ? `$${data.newTotal.toLocaleString()}` : '-'}</td>
+                                <td className={`px-4 py-3 text-sm text-right font-semibold ${change > 0 ? 'text-green-700' : change < 0 ? 'text-red-700' : 'text-gray-500'}`}>
+                                  {data.count > 0 ? `${change > 0 ? '+' : ''}${change.toFixed(2)}%` : '-'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          <tr className="bg-orange-50 hover:bg-orange-100 border-t-2 border-orange-300">
+                            <td className="px-4 py-3 text-sm font-bold text-orange-700">Class 4*</td>
+                            <td className="px-4 py-3 text-sm font-semibold text-orange-700">Aggregate Total</td>
+                            <td className="px-3 py-3 text-sm text-right font-bold text-orange-700">{class4Count > 0 ? class4Count.toLocaleString() : '-'}</td>
+                            <td className="px-4 py-3 text-sm text-right font-bold text-orange-700">{class4Count > 0 ? `$${class4Current.toLocaleString()}` : '-'}</td>
+                            <td className="px-4 py-3 text-base text-right font-bold text-orange-700">{class4Count > 0 ? `$${class4New.toLocaleString()}` : '-'}</td>
+                            <td className={`px-4 py-3 text-sm text-right font-bold ${pctChange(class4Current, class4New) > 0 ? 'text-green-700' : pctChange(class4Current, class4New) < 0 ? 'text-red-700' : 'text-orange-700'}`}>
+                              {class4Count > 0 ? `${pctChange(class4Current, class4New) > 0 ? '+' : ''}${pctChange(class4Current, class4New).toFixed(2)}%` : '-'}
+                            </td>
+                          </tr>
+                          {['6A', '6B'].map(cls => {
+                            const data = classSummary[cls];
+                            const change = pctChange(data.currentTotal, data.newTotal);
+                            return (
+                              <tr key={cls} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-sm font-medium text-gray-900">Class {cls}</td>
+                                <td className="px-4 py-3 text-sm text-gray-700">{data.description}</td>
+                                <td className="px-3 py-3 text-sm text-right font-semibold text-gray-900">{data.count > 0 ? data.count.toLocaleString() : '-'}</td>
+                                <td className="px-4 py-3 text-sm text-right font-semibold text-gray-700">{data.count > 0 ? `$${data.currentTotal.toLocaleString()}` : '-'}</td>
+                                <td className="px-4 py-3 text-base text-right font-bold text-blue-600">{data.count > 0 ? `$${data.newTotal.toLocaleString()}` : '-'}</td>
+                                <td className={`px-4 py-3 text-sm text-right font-semibold ${change > 0 ? 'text-green-700' : change < 0 ? 'text-red-700' : 'text-gray-500'}`}>
+                                  {data.count > 0 ? `${change > 0 ? '+' : ''}${change.toFixed(2)}%` : '-'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          <tr className="bg-purple-50 hover:bg-purple-100 border-t-2 border-purple-300">
+                            <td className="px-4 py-3 text-sm font-bold text-purple-700">Class 6*</td>
+                            <td className="px-4 py-3 text-sm font-semibold text-purple-700">Aggregate Total</td>
+                            <td className="px-3 py-3 text-sm text-right font-bold text-purple-700">{class6Count > 0 ? class6Count.toLocaleString() : '-'}</td>
+                            <td className="px-4 py-3 text-sm text-right font-bold text-purple-700">{class6Count > 0 ? `$${class6Current.toLocaleString()}` : '-'}</td>
+                            <td className="px-4 py-3 text-base text-right font-bold text-purple-700">{class6Count > 0 ? `$${class6New.toLocaleString()}` : '-'}</td>
+                            <td className={`px-4 py-3 text-sm text-right font-bold ${pctChange(class6Current, class6New) > 0 ? 'text-green-700' : pctChange(class6Current, class6New) < 0 ? 'text-red-700' : 'text-purple-700'}`}>
+                              {class6Count > 0 ? `${pctChange(class6Current, class6New) > 0 ? '+' : ''}${pctChange(class6Current, class6New).toFixed(2)}%` : '-'}
+                            </td>
+                          </tr>
+                          <tr className="bg-blue-600 text-white border-t-4 border-blue-700">
+                            <td className="px-4 py-4 text-sm font-bold" colSpan="2"></td>
+                            <td className="px-3 py-4 text-right">
+                              <div className="text-xs font-semibold mb-1">Total Lines</div>
+                              <div className="text-base font-bold">{grandCount.toLocaleString()}</div>
+                            </td>
+                            <td className="px-4 py-4 text-right">
+                              <div className="text-xs font-semibold mb-1">Current Valuation</div>
+                              <div className="text-base font-bold">${grandCurrent.toLocaleString()}</div>
+                            </td>
+                            <td className="px-4 py-4 text-right">
+                              <div className="text-xs font-semibold mb-1">CME Projected Total</div>
+                              <div className="text-xl font-bold">${grandNew.toLocaleString()}</div>
+                            </td>
+                            <td className="px-4 py-4 text-right">
+                              <div className="text-xs font-semibold mb-1">Net Change</div>
+                              <div className={`text-base font-bold ${pctChange(grandCurrent, grandNew) > 0 ? 'text-green-200' : 'text-red-200'}`}>
+                                {grandCount > 0 ? `${pctChange(grandCurrent, grandNew) > 0 ? '+' : ''}${pctChange(grandCurrent, grandNew).toFixed(2)}%` : '-'}
+                              </div>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Export Buttons */}
+                  <div className="bg-white border border-gray-300 rounded-lg p-6">
+                    <h3 className="text-lg font-bold text-gray-900 mb-4">Export</h3>
+                    <div className="flex gap-4">
+                      <button
+                        onClick={handleSummaryExportUpdate}
+                        disabled={successful.length === 0}
+                        className="px-5 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium flex items-center gap-2"
+                      >
+                        <Download className="w-4 h-4" />
+                        Export Excel Update
+                      </button>
+                      <button
+                        disabled
+                        className="px-5 py-3 bg-gray-400 text-white rounded-lg cursor-not-allowed text-sm font-medium flex items-center gap-2 opacity-60"
+                        title="Coming soon"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Build Final Roster
+                      </button>
+                    </div>
+                    <p className="mt-3 text-xs text-gray-500">
+                      <strong>Export Excel Update:</strong> Block, Lot, Qualifier, Card, Improvement Override (CME value minus current land).
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      <strong>Build Final Roster:</strong> Placeholder — column selection and build process will be configured separately.
+                    </p>
+                  </div>
+
+                  {successful.length === 0 && (
+                    <div className="text-center py-16 text-gray-400">
+                      <BarChart3 className="w-16 h-16 mx-auto mb-4 opacity-30" />
+                      <p className="text-lg font-medium">No evaluation results yet</p>
+                      <p className="text-sm mt-2">Run an evaluation from the Search & Results tab, or load a saved result set.</p>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        )}
+
       </div>
 
-      {/* Manual Entry Modal */}
+      {/* Import Block/Lot/Qual Modal */}
       {showManualEntryModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4">
             <div className="px-6 py-4 border-b flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Add Property</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Import Block/Lot/Qual</h3>
               <button
                 onClick={() => setShowManualEntryModal(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -3428,47 +4141,73 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             </div>
 
             <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Block</label>
-                <input
-                  type="text"
-                  value={manualBlockLot.block}
-                  onChange={(e) => setManualBlockLot(prev => ({ ...prev, block: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                />
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-blue-900 mb-2">Expected Columns</h4>
+                <p className="text-sm text-blue-800 mb-2">
+                  Your CSV or Excel file should contain the following columns:
+                </p>
+                <ul className="text-sm text-blue-700 list-disc list-inside space-y-1">
+                  <li><strong>ccdd</strong> — County/District code (optional)</li>
+                  <li><strong>block</strong> — Block number (required)</li>
+                  <li><strong>lot</strong> — Lot number (required)</li>
+                  <li><strong>qualifier</strong> — Qualifier (optional)</li>
+                  <li><strong>location</strong> — Property address (optional)</li>
+                </ul>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Lot</label>
-                <input
-                  type="text"
-                  value={manualBlockLot.lot}
-                  onChange={(e) => setManualBlockLot(prev => ({ ...prev, lot: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                />
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <p className="text-xs text-yellow-800">
+                  <strong>Note:</strong> Only Card 1 (BRT) or M/Main (Microsystems) properties will be matched.
+                </p>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Qualifier (Optional)</label>
+
+              <div className="pt-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Select File</label>
                 <input
-                  type="text"
-                  value={manualBlockLot.qualifier}
-                  onChange={(e) => setManualBlockLot(prev => ({ ...prev, qualifier: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    try {
+                      const data = await file.arrayBuffer();
+                      const workbook = XLSX.read(data);
+                      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+                      // Map columns (case-insensitive)
+                      const imported = jsonData.map(row => {
+                        const block = row.Block || row.block || row.BLOCK || '';
+                        const lot = row.Lot || row.lot || row.LOT || '';
+                        const qualifier = row.Qualifier || row.qualifier || row.QUALIFIER || row.Qual || row.qual || '';
+                        if (!block || !lot) return null;
+                        return `${block}-${lot}${qualifier ? `-${qualifier}` : ''}`;
+                      }).filter(key => key);
+
+                      setManualProperties(prev => {
+                        const combined = [...new Set([...prev, ...imported])];
+                        return combined;
+                      });
+
+                      setShowManualEntryModal(false);
+                      alert(`Imported ${imported.length} properties`);
+                    } catch (error) {
+                      console.error('Error importing file:', error);
+                      alert('Failed to import file. Please check the format.');
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-sm file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                 />
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t flex justify-end gap-3">
+            <div className="px-6 py-4 border-t flex justify-end">
               <button
                 onClick={() => setShowManualEntryModal(false)}
                 className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
               >
                 Cancel
-              </button>
-              <button
-                onClick={handleAddManualProperty}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Add Property
               </button>
             </div>
           </div>
