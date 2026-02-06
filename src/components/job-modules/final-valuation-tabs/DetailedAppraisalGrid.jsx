@@ -1056,16 +1056,23 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     return 0;
   }, [jobData, codeDefinitions, vendorType]);
 
-  // Helper: Get bracket index based on compFilters and comp price
+  // Helper: Get bracket index based on compFilters, mapped bracket, and comp price
   const getBracketIndex = useCallback((compNormTime) => {
+    // If a specific bracket is selected (not auto), use it
     if (compFilters?.adjustmentBracket && compFilters.adjustmentBracket !== 'auto') {
       const match = compFilters.adjustmentBracket.match(/bracket_(\d+)/);
       if (match) return parseInt(match[1]);
     }
+    // If auto with a mapped bracket for this subject, use the mapped bracket
+    if (result.mappedBracket) {
+      const match = result.mappedBracket.match(/bracket_(\d+)/);
+      if (match) return parseInt(match[1]);
+    }
+    // Fall back to price-based bracket
     if (!compNormTime || !cmeBrackets?.length) return 0;
     const bracket = cmeBrackets.findIndex(b => compNormTime >= b.min && compNormTime <= b.max);
     return bracket >= 0 ? bracket : 0;
-  }, [compFilters, cmeBrackets]);
+  }, [compFilters, cmeBrackets, result.mappedBracket]);
 
   // Calculate adjustment for a single attribute between subject and comp
   const calculateSingleAdjustment = useCallback((subjectVal, compVal, adjustmentDef, compSalesPrice) => {
