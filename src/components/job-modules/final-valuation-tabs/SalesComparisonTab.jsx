@@ -3764,9 +3764,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
               const nonCmeClasses = new Set(['1', '3B', '4A', '4B', '4C', '6A', '6B']);
 
               // Populate non-CME classes and Class 2/3A detached-only (building class ≤ 10)
+              // Use property_cama_class for non-CME eligible properties
               properties.forEach(p => {
-                const m4Class = p.property_m4_class || '';
-                if (!classSummary[m4Class]) return;
+                const camaClass = p.property_cama_class || '';
+                if (!classSummary[camaClass]) return;
                 // Only main cards
                 const card = (p.property_addl_card || '').toString().trim();
                 const isMain = vendorType === 'BRT'
@@ -3778,20 +3779,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
                 const bc = parseInt(p.asset_building_class) || 0;
 
-                if (nonCmeClasses.has(m4Class)) {
-                  // Non-CME class: always use CAMA value
+                if (nonCmeClasses.has(camaClass)) {
+                  // Non-CME class: always use CAMA value, classified by CAMA class
                   const camaTotal = p.values_cama_total || 0;
-                  classSummary[m4Class].count++;
-                  classSummary[m4Class].currentTotal += camaTotal;
-                  classSummary[m4Class].newTotal += camaTotal;
-                } else if ((m4Class === '2' || m4Class === '3A') && bc <= 10) {
+                  classSummary[camaClass].count++;
+                  classSummary[camaClass].currentTotal += camaTotal;
+                  classSummary[camaClass].newTotal += camaTotal;
+                } else if ((camaClass === '2' || camaClass === '3A') && bc <= 10) {
                   // Residential/Farmhouse with no home (detached garage, pool only)
                   // CME doesn't evaluate these — use CAMA value
                   if (setAsideKeys.has(p.property_composite_key)) return; // skip if set-aside already counted
                   const camaTotal = p.values_cama_total || 0;
-                  classSummary[m4Class].count++;
-                  classSummary[m4Class].currentTotal += camaTotal;
-                  classSummary[m4Class].newTotal += camaTotal;
+                  classSummary[camaClass].count++;
+                  classSummary[camaClass].currentTotal += camaTotal;
+                  classSummary[camaClass].newTotal += camaTotal;
                 }
               });
 
