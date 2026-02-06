@@ -2043,22 +2043,24 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
       {/* Bracket Mapping Tab */}
       {activeSubTab === 'mapping' && (
         <div>
-          <div className="mb-6 flex justify-between items-center">
+          <div className="mb-4 flex justify-between items-center">
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Bracket Mapping</h3>
               <p className="text-sm text-gray-600 mt-1">
-                Map adjustment brackets to VCS and/or Type/Use combinations. When "Auto" is selected during evaluation,
-                each property will use the correct bracket based on these mappings. Rules are evaluated top-to-bottom; first match wins.
+                Drag Type/Use or VCS codes into adjustment brackets. When "Auto" is selected during evaluation,
+                each property uses the mapped bracket. Type/Use matches take priority over VCS.
               </p>
             </div>
             <div className="flex gap-2">
-              <button
-                onClick={addBracketMapping}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 border border-gray-300"
-              >
-                <Plus className="w-4 h-4" />
-                Add Rule
-              </button>
+              {(Object.keys(typeUseToBracket).length > 0 || Object.keys(vcsToBracket).length > 0) && (
+                <button
+                  onClick={() => setBracketMappings([])}
+                  className="inline-flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-red-600 border border-gray-300 rounded hover:border-red-300"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Clear All
+                </button>
+              )}
               <button
                 onClick={saveBracketMappings}
                 disabled={isSavingMappings}
@@ -2070,141 +2072,165 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
             </div>
           </div>
 
-          {/* Sales Stats Hint Panel */}
-          {Object.keys(salesStats.byVCS).length > 0 && (
-            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h4 className="text-sm font-semibold text-blue-900 mb-3">Average Sale Prices (Hints)</h4>
-              <div className="grid grid-cols-2 gap-6">
-                {/* By VCS */}
-                <div>
-                  <h5 className="text-xs font-medium text-blue-700 mb-2 uppercase">By VCS</h5>
-                  <div className="max-h-48 overflow-y-auto space-y-1">
-                    {Object.entries(salesStats.byVCS)
-                      .sort((a, b) => a[0].localeCompare(b[0]))
-                      .map(([vcs, data]) => (
-                        <div key={vcs} className="flex justify-between text-xs bg-white px-2 py-1 rounded">
-                          <span className="font-medium text-gray-700">{vcs}</span>
-                          <span className="text-gray-500">
-                            ${Math.round(data.total / data.count).toLocaleString()} avg ({data.count} sales)
-                          </span>
-                        </div>
-                      ))}
-                  </div>
+          <div className="flex gap-4" style={{ minHeight: '400px' }}>
+            {/* Left: Unassigned Codes */}
+            <div className="w-1/3 space-y-4 flex-shrink-0">
+              {/* Unassigned Type/Use */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-purple-50 px-3 py-2 border-b">
+                  <h4 className="text-xs font-semibold text-purple-800 uppercase">
+                    Type/Use ({unassignedTypeUse.length} unassigned)
+                  </h4>
                 </div>
-                {/* By Type/Use */}
-                <div>
-                  <h5 className="text-xs font-medium text-blue-700 mb-2 uppercase">By Type/Use</h5>
-                  <div className="max-h-48 overflow-y-auto space-y-1">
-                    {Object.entries(salesStats.byTypeUse)
-                      .sort((a, b) => a[0].localeCompare(b[0]))
-                      .map(([tu, data]) => (
-                        <div key={tu} className="flex justify-between text-xs bg-white px-2 py-1 rounded">
-                          <span className="font-medium text-gray-700">{tu}</span>
-                          <span className="text-gray-500">
-                            ${Math.round(data.total / data.count).toLocaleString()} avg ({data.count} sales)
-                          </span>
-                        </div>
-                      ))}
-                  </div>
+                <div className="p-2 max-h-56 overflow-y-auto">
+                  {unassignedTypeUse.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic text-center py-2">All Type/Use codes assigned</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {unassignedTypeUse.map(code => {
+                        const stats = salesStats.byTypeUse[code];
+                        const avgK = stats ? `$${Math.round(stats.total / stats.count / 1000)}K` : null;
+                        return (
+                          <div
+                            key={code}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, code, 'type_use')}
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium cursor-grab active:cursor-grabbing hover:bg-purple-200 border border-purple-200 select-none"
+                            title={stats ? `${code}: $${Math.round(stats.total / stats.count).toLocaleString()} avg (${stats.count} sales)` : code}
+                          >
+                            {code}
+                            {avgK && <span className="text-purple-500 text-[10px]">{avgK}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* Mapping Rules Table */}
-          {bracketMappings.length === 0 ? (
-            <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-              <Map className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-              <p className="text-gray-500 text-sm">No bracket mappings defined.</p>
-              <p className="text-gray-400 text-xs mt-1">Add rules to map VCS and Type/Use combinations to specific adjustment brackets.</p>
-              <button onClick={addBracketMapping} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
-                Add First Rule
-              </button>
-            </div>
-          ) : (
-            <div className="border rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase w-8">#</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">VCS Codes</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type/Use Codes</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bracket</th>
-                    <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase w-24">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {bracketMappings.map((mapping, idx) => (
-                    <tr key={mapping.id} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 text-sm text-gray-500 font-mono">{idx + 1}</td>
-                      <td className="px-3 py-2">
-                        <select
-                          multiple
-                          value={mapping.vcs_codes || []}
-                          onChange={(e) => {
-                            const selected = [...e.target.selectedOptions].map(o => o.value);
-                            updateMapping(idx, 'vcs_codes', selected.length > 0 ? selected : null);
-                          }}
-                          className="w-full text-xs border rounded p-1 min-h-[60px]"
-                        >
-                          {uniqueVCS.map(v => (
-                            <option key={v} value={v}>{v} {salesStats.byVCS[v] ? `($${Math.round(salesStats.byVCS[v].total / salesStats.byVCS[v].count).toLocaleString()} avg)` : ''}</option>
-                          ))}
-                        </select>
-                        {!mapping.vcs_codes && <span className="text-xs text-gray-400 italic">Any VCS</span>}
-                      </td>
-                      <td className="px-3 py-2">
-                        <select
-                          multiple
-                          value={mapping.type_use_codes || []}
-                          onChange={(e) => {
-                            const selected = [...e.target.selectedOptions].map(o => o.value);
-                            updateMapping(idx, 'type_use_codes', selected.length > 0 ? selected : null);
-                          }}
-                          className="w-full text-xs border rounded p-1 min-h-[60px]"
-                        >
-                          {uniqueTypeUse.map(t => (
-                            <option key={t} value={t}>{t} {salesStats.byTypeUse[t] ? `($${Math.round(salesStats.byTypeUse[t].total / salesStats.byTypeUse[t].count).toLocaleString()} avg)` : ''}</option>
-                          ))}
-                        </select>
-                        {!mapping.type_use_codes && <span className="text-xs text-gray-400 italic">Any Type/Use</span>}
-                      </td>
-                      <td className="px-3 py-2">
-                        <select
-                          value={mapping.bracket_value}
-                          onChange={(e) => updateMapping(idx, 'bracket_value', e.target.value)}
-                          className="w-full text-xs border rounded p-1"
-                        >
-                          {allBracketOptions.map(opt => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => moveMappingUp(idx)} disabled={idx === 0} className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30" title="Move up">
-                            <ChevronUp className="w-4 h-4" />
-                          </button>
-                          <button onClick={() => moveMappingDown(idx)} disabled={idx === bracketMappings.length - 1} className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30" title="Move down">
-                            <ChevronDown className="w-4 h-4" />
-                          </button>
-                          <button onClick={() => removeMapping(idx)} className="p-1 text-red-400 hover:text-red-600" title="Delete rule">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+              {/* Unassigned VCS */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-teal-50 px-3 py-2 border-b">
+                  <h4 className="text-xs font-semibold text-teal-800 uppercase">
+                    VCS ({unassignedVCS.length} unassigned)
+                  </h4>
+                </div>
+                <div className="p-2 max-h-56 overflow-y-auto">
+                  {unassignedVCS.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic text-center py-2">All VCS codes assigned</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {unassignedVCS.map(code => {
+                        const stats = salesStats.byVCS[code];
+                        const avgK = stats ? `$${Math.round(stats.total / stats.count / 1000)}K` : null;
+                        return (
+                          <div
+                            key={code}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, code, 'vcs')}
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-teal-100 text-teal-800 rounded text-xs font-medium cursor-grab active:cursor-grabbing hover:bg-teal-200 border border-teal-200 select-none"
+                            title={stats ? `${code}: $${Math.round(stats.total / stats.count).toLocaleString()} avg (${stats.count} sales)` : code}
+                          >
+                            {code}
+                            {avgK && <span className="text-teal-500 text-[10px]">{avgK}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
 
-          <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
-            <p className="text-xs text-amber-800">
-              <strong>How it works:</strong> When evaluating with "Auto" selected, the system checks each property's VCS and Type/Use against these rules top-to-bottom.
-              The first matching rule determines which adjustment bracket to use. Properties that don't match any rule will fall back to price-based bracket selection.
-            </p>
+              {/* How it works */}
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-xs text-amber-800">
+                  <strong>How it works:</strong> Drag codes into brackets. Type/Use matches take priority over VCS.
+                  Unmapped properties fall back to price-based bracket selection. You can also drag codes between brackets to reassign.
+                </p>
+              </div>
+            </div>
+
+            {/* Right: Bracket Buckets */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="grid grid-cols-2 gap-3">
+                {allBracketOptions.map((opt, idx) => {
+                  const bracket = CME_BRACKETS[idx];
+                  const bgColor = bracket ? bracket.color : '#D1D5DB';
+                  const assignedTU = Object.entries(typeUseToBracket)
+                    .filter(([, b]) => b === opt.value)
+                    .map(([code]) => code)
+                    .sort();
+                  const assignedVCS = Object.entries(vcsToBracket)
+                    .filter(([, b]) => b === opt.value)
+                    .map(([code]) => code)
+                    .sort();
+                  const hasAssignments = assignedTU.length > 0 || assignedVCS.length > 0;
+
+                  return (
+                    <div
+                      key={opt.value}
+                      onDragOver={handleDragOver}
+                      onDragEnter={handleDragEnter}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, opt.value)}
+                      className={`border-2 rounded-lg overflow-hidden transition-all ${hasAssignments ? 'border-gray-300' : 'border-dashed border-gray-200 hover:border-gray-300'}`}
+                    >
+                      <div
+                        className="px-3 py-1.5 flex items-center justify-between"
+                        style={{ backgroundColor: bgColor + '60' }}
+                      >
+                        <span className="text-xs font-bold text-gray-800">{opt.label}</span>
+                        {hasAssignments && (
+                          <span className="text-[10px] text-gray-500 bg-white/60 px-1.5 py-0.5 rounded">
+                            {assignedTU.length + assignedVCS.length}
+                          </span>
+                        )}
+                      </div>
+                      <div className="p-2 min-h-[44px] bg-white">
+                        {!hasAssignments ? (
+                          <p className="text-[10px] text-gray-300 text-center italic py-1">Drop codes here</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {assignedTU.map(code => (
+                              <span
+                                key={`tu_${code}`}
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, code, 'type_use')}
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[11px] font-medium cursor-grab active:cursor-grabbing"
+                              >
+                                {code}
+                                <button
+                                  onClick={() => unassignFromBracket(code, 'type_use')}
+                                  className="ml-0.5 text-purple-400 hover:text-purple-600"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            {assignedVCS.map(code => (
+                              <span
+                                key={`vcs_${code}`}
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, code, 'vcs')}
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded text-[11px] font-medium cursor-grab active:cursor-grabbing"
+                              >
+                                {code}
+                                <button
+                                  onClick={() => unassignFromBracket(code, 'vcs')}
+                                  className="ml-0.5 text-teal-400 hover:text-teal-600"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       )}
