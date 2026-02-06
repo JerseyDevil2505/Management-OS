@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, interpretCodes, getRawDataForJob } from '../../../lib/supabaseClient';
-import { Search, X, Upload, Sliders, FileText, Check } from 'lucide-react';
+import { Search, X, Upload, Sliders, FileText, Check, BarChart3, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
@@ -2354,7 +2354,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   const subTabs = [
     { id: 'adjustments', label: 'Adjustments', icon: Sliders },
     { id: 'search', label: 'Search & Results', icon: Search },
-    { id: 'detailed', label: 'Detailed', icon: FileText }
+    { id: 'detailed', label: 'Detailed', icon: FileText },
+    { id: 'summary', label: 'Summary', icon: BarChart3 }
   ];
 
   return (
