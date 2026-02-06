@@ -3666,30 +3666,41 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         {activeSubTab === 'summary' && (
           <div className="space-y-6">
             {(() => {
-              // Summary uses ONLY set-aside evaluations (committed results)
-              // This acts as a working total showing what's done vs what's still needed
-              const setAsideResults = [];
+              // Summary uses saved result sets (named snapshots) as the source of truth.
+              // This acts as a working total — users save batches and the Summary aggregates
+              // across all saved sets. If a property appears in multiple sets, the latest wins.
+              const savedResults = [];
+              const seenKeys = new Map(); // composite_key -> index in savedResults
 
-              if (savedEvaluations && savedEvaluations.length > 0) {
-                savedEvaluations.forEach(e => {
-                  if (e.projected_assessment) {
-                    const prop = properties.find(p => p.property_composite_key === e.subject_pams);
-                    if (prop) {
-                      setAsideResults.push({
-                        subject: prop,
-                        comparables: e.comparables || [],
-                        projectedAssessment: e.projected_assessment,
-                        confidenceScore: e.confidence_score || 0,
-                      });
-                    }
+              // Process result sets from oldest to newest (they're ordered desc by created_at, so reverse)
+              const orderedSets = [...(savedResultSets || [])].reverse();
+              orderedSets.forEach(rs => {
+                if (!rs.results || !Array.isArray(rs.results)) return;
+                rs.results.forEach(r => {
+                  const key = r.subject?.property_composite_key;
+                  if (!key || !r.projectedAssessment) return;
+                  // Look up current property data (may have been refreshed since save)
+                  const currentProp = properties.find(p => p.property_composite_key === key);
+                  const entry = {
+                    subject: currentProp || r.subject,
+                    comparables: r.comparables || [],
+                    projectedAssessment: r.projectedAssessment,
+                    confidenceScore: r.confidenceScore || 0,
+                  };
+                  if (seenKeys.has(key)) {
+                    // Replace with newer result (later result set wins)
+                    savedResults[seenKeys.get(key)] = entry;
+                  } else {
+                    seenKeys.set(key, savedResults.length);
+                    savedResults.push(entry);
                   }
                 });
-              }
+              });
 
-              const successful = setAsideResults;
+              const successful = savedResults;
 
-              // "Not done" = all residential properties (class > 1) that are NOT in set-aside
-              const setAsideKeys = new Set(savedEvaluations.map(e => e.subject_pams));
+              // "Not done" = all residential properties that are NOT in any saved result set
+              const savedKeys = new Set(seenKeys.keys());
               const notDone = properties.filter(p => {
                 if (setAsideKeys.has(p.property_composite_key)) return false;
                 // Only count residential+ (building class > 10, i.e. not vacant/exempt)
