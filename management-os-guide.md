@@ -6329,77 +6329,86 @@ cme_max_range = Math.max(...bestComps.map(c => c.adjustedPrice));
 
 **Purpose:**
 - Manual comparable selection for specific properties
-- Override automated CME results
-- Detailed appraisal grid interface
+- Click any "New Asmt" value in results table to jump to Detailed view for that property
+- Enter custom subject + comparables by BLQ for ad-hoc evaluations
 
 **Workflow:**
 1. Enter subject Block-Lot-Qualifier
 2. Manually enter up to 5 comparable Block-Lot-Qualifiers
 3. System loads property details for all
-4. Applies adjustment grid automatically
-5. Displays detailed appraisal grid
-6. Option to save as CME result
+4. Applies adjustment grid automatically (uses mapped bracket if available)
+5. Displays detailed appraisal grid (DetailedAppraisalGrid.jsx)
+6. Header shows bracket used: "Auto - Mapped ($500K-$749K)" or "Auto ($300K-$399K)" for price-based
 
-**Detailed Appraisal Grid:**
+**Detailed Appraisal Grid (DetailedAppraisalGrid.jsx):**
 
-Integrated component (DetailedAppraisalGrid.jsx - 577 lines):
-- Subject property details
+Integrated component (~1,700+ lines):
+- Subject property details with all attributes
 - Comparable property details (5 columns)
-- Row-by-row attribute comparison
-- Automatic adjustment calculations
-- Final adjusted values
-- Min/max/average ranges
+- Row-by-row attribute comparison with adjustment calculations
+- Editable fields in PDF export modal for what-if scenarios
+- Supports multi-card property aggregation (additional cards for SFLA, garages, etc.)
+- Bracket-aware: uses `mappedBracket` from evaluation result when available
 
 **Grid Rows:**
-- Address
-- Sale Price / Sale Date
-- Living Area (SFLA)
-- Year Built
-- Lot Size
-- Style
-- Condition
-- Garage
-- Basement
-- Fireplace
-- Pool
-- Central Air
-- [Custom attributes from grid]
-- Total Adjustments
-- Adjusted Sale Price
+- Address, Sale Price, Sale Date, VCS
+- Living Area (SFLA), Year Built, Lot Size
+- Style, Condition, Building Class
+- Garage (categorized: 1-car, 2-car, 3-car based on configurable SF thresholds)
+- Basement (finished), Fireplace, Pool, Central Air
+- Detached items (with condition multipliers: poor/standard/excellent)
+- Miscellaneous codes (land positive/negative adjustments)
+- [Custom attributes from adjustment grid]
+- Total/Net/Gross Adjustments with percentage
+- Adjusted Sale Price, Weight, Weighted Value
+
+**Summary Sub-Tab (CME Dashboard):**
+
+**Purpose:**
+- Working progress tracker showing what's done vs what's remaining
+- Projected net valuation table matching Market Data format
+- Export functionality for update files
+
+**Info Section - CME Evaluation Overview:**
+- 3 stat cards: Set Aside (Done), Not Yet Evaluated, Total Residential
+- VCS breakdown table: shows "Set Aside" vs "Not Done" counts per VCS (sortable)
+- "Not Yet Evaluated" expandable table with sortable headers (VCS, Block, Lot, Qual, Location, Type/Use, Current Asmt)
+
+**Projected Net Valuation (Taxable) - CME Total:**
+- Mirrors Market Data summary table structure exactly
+- All 9 property classes: 1, 2, 3A, 3B, 4A, 4B, 4C, 6A, 6B
+- Class 4* and Class 6* aggregate rows
+- Grand total row with blue bar
+
+**Class Population Logic:**
+- **Non-CME classes** (1, 3B, 4A, 4B, 4C, 6A, 6B): Uses `property_cama_class` and `values_cama_total` directly from data file. CME doesn't evaluate these — they carry through unchanged.
+- **Class 2/3A with building class ≤ 10** (detached-only parcels — garage, pool, no home): Uses CAMA values. CME skips these.
+- **Class 2/3A with building class > 10** (actual homes): Uses CME set-aside projected assessments, rounded to nearest $100.
+
+**Export Section:**
+- **Export Excel Update**: Block, Lot, Qualifier, Card, Improvement Override (rounded CME value minus `values_cama_land`)
+- **Build Final Roster**: Placeholder button — column selection TBD
 
 **Database Integration:**
-- Saves to final_valuation_data table
-- Fields: cme_projected_assessment, cme_min_range, cme_max_range
-- Comparable references: cme_comp1, cme_comp2, cme_comp3, cme_comp4, cme_comp5
-- Preserves manual overrides
-
-**Excel Export:**
-
-Comprehensive CME report with:
-- Subject property list
-- Comparable details for each
-- Adjustment breakdown
-- Adjusted sale prices
-- CME projected range
-- Formula-based calculations
-- Professional formatting
+- Set-aside evaluations: `job_cme_evaluations` table (status='set_aside')
+- Named result snapshots: `job_cme_result_sets` table
+- Bracket mappings: `job_cme_bracket_mappings` table
+- Adjustment grid: `job_adjustment_grid` table
 
 **Integration with AdjustmentsTab:**
 
-Adjustments grid configured in separate tab:
-- 10 price brackets
-- Default adjustments (Living Area, Garage, Pool, etc.)
-- Custom adjustments (user-defined)
-- Per-bracket customization
-- Saved to job_adjustment_grid table
+AdjustmentsTab contains two sub-sections:
+1. **Adjustment Grid** - 10 price brackets with default + custom adjustments, saved to `job_adjustment_grid`
+2. **Bracket Mapping** - Drag-and-drop VCS/Type-Use → bracket assignment with qualifying sale price hints, saved to `job_cme_bracket_mappings`
 
 **Critical Implementation Notes:**
 - Filter presets optimized for CSP methodology
-- Auto-adjustment uses subject's sales price bracket
-- Manual mode allows override of automated results
-- Export includes all comparables and adjustments
+- Auto mode uses bracket mapping first, then falls back to price-based bracket
+- Bracket mapping only affects bracket selection, NOT comp search filtering (VCS filtering remains user-controlled)
+- Set Aside is the commit mechanism — Summary tab only counts set-aside results
+- Values rounded to nearest $100 for projected assessments
+- Improvement Override in export uses `values_cama_land` (not mod4 land)
 - Performance optimized for 1,000+ subject properties
-- Progress tracking essential for large evaluations
 
 ---
 
