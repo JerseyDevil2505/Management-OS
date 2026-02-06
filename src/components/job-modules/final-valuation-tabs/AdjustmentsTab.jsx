@@ -305,9 +305,6 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
   };
 
   // ==================== SALES STATS FOR MAPPING HINTS ====================
-  // Valid sales codes for CME (matches SalesComparisonTab defaults)
-  const VALID_SALES_CODES = ['', '0', '00', '7', '07', '32', '36'];
-
   const isQualifyingSale = useCallback((p) => {
     // Must have a sale price
     const price = p.values_norm_time || p.sales_price;
