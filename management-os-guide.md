@@ -6088,22 +6088,27 @@ Class 4: $256.8M @ 2.684% = $6,892,196 total tax
 
 ### SalesComparisonTab.jsx - Comparative Market Evaluation (CME) Engine 🔍
 
-**Scale**: 2,812 lines - THE LARGEST Final Valuation component!
+**Scale**: ~3,900+ lines - THE LARGEST Final Valuation component!
 
-**Core Philosophy**: Automated comparable search with sophisticated filtering and adjustment grid integration
+**Core Philosophy**: Automated comparable search with sophisticated filtering, bracket mapping, and adjustment grid integration. Supports batch-based workflows where users evaluate by VCS/Type-Use segments, set aside good results, and build toward a complete town valuation.
 
 **Key Features:**
 - **Subject Property Selection** - Multi-select by VCS, Type Use, or manual entry
 - **Comparable Filtering** - 15+ filter criteria with smart defaults
 - **Adjustment Grid Integration** - 10 price brackets with attribute adjustments
-- **Automated Evaluation** - Process hundreds/thousands of properties
+- **Bracket Mapping** - Drag-and-drop VCS/Type-Use → bracket assignment (configured in AdjustmentsTab)
+- **Automated Evaluation** - Process hundreds/thousands of properties with "Auto (based on mapping)" mode
+- **Set Aside Workflow** - Save successful evaluations incrementally as batches are completed
+- **Result Set Snapshots** - Save/load named result sets for review
 - **Manual Appraisal Mode** - Detailed grid for custom comparable selection
-- **Excel Export** - Comprehensive CME analysis report
+- **Summary Dashboard** - Working totals, VCS completion tracking, projected net valuation by class
+- **Excel Export** - Update file (BLQ + Improvement Override) and Final Roster (placeholder)
 
-**Three Nested Sub-Tabs:**
-1. **Search** - Subject selection and comparable filtering
-2. **Evaluate** - Run automated CME analysis
-3. **Detailed** - Manual comparable appraisal grid
+**Four Nested Sub-Tabs:**
+1. **Adjustments** - Adjustment grid configuration and bracket mapping (via AdjustmentsTab)
+2. **Search & Results** - Subject selection, comparable filtering, evaluation execution, inline results with Set Aside
+3. **Detailed** - Manual comparable appraisal grid (DetailedAppraisalGrid)
+4. **Summary** - Aggregated working totals from set-aside evaluations, VCS breakdown, projected net valuation table (mirrors Market Data format), export buttons
 
 **Search Sub-Tab:**
 
