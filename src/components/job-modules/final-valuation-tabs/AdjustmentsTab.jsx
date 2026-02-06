@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, getRawDataForJob } from '../../../lib/supabaseClient';
 import { Save, Plus, Trash2, Settings, X, Map, ChevronDown, ChevronUp } from 'lucide-react';
 
