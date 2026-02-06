@@ -1072,7 +1072,14 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
 
     switch (adjustmentType) {
       case 'flat':
-        return difference > 0 ? adjustmentValue : -adjustmentValue;
+        // Lot size and garage adjustments multiply by difference (not binary)
+        if (adjustmentDef.adjustment_id?.includes('lot_size') ||
+            adjustmentDef.adjustment_id === 'garage' ||
+            adjustmentDef.adjustment_id === 'det_garage') {
+          return difference * adjustmentValue;
+        }
+        // Boolean amenities: binary adjustment
+        return difference > 0 ? adjustmentValue : (difference < 0 ? -adjustmentValue : 0);
       case 'per_sqft':
         return difference * adjustmentValue;
       case 'count':
