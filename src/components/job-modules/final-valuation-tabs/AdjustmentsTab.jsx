@@ -2,6 +2,9 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, getRawDataForJob } from '../../../lib/supabaseClient';
 import { Save, Plus, Trash2, Settings, X, Map, ChevronDown, ChevronUp } from 'lucide-react';
 
+// Valid sales codes for CME averages (matches SalesComparisonTab defaults)
+const VALID_SALES_CODES = ['', '0', '00', '7', '07', '32', '36'];
+
 const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, properties = [] }) => {
   const vendorType = jobData?.vendor_type || 'BRT';
   const [activeSubTab, setActiveSubTab] = useState('adjustments');
