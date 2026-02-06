@@ -236,62 +236,116 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
     }
   };
 
-  const addBracketMapping = () => {
-    setBracketMappings(prev => [
-      ...prev,
-      {
-        id: `new_${Date.now()}`,
-        job_id: jobData.id,
-        vcs_codes: null,
-        type_use_codes: null,
-        bracket_value: 'bracket_0',
-        sort_order: prev.length,
-        _isNew: true
+  // ==================== DRAG-AND-DROP BRACKET MAPPING ====================
+  const dragDataRef = useRef(null);
+
+  // Derive assignments from bracketMappings rows
+  const { typeUseToBracket, vcsToBracket } = useMemo(() => {
+    const tu = {};
+    const vcs = {};
+    (bracketMappings || []).forEach(m => {
+      if (m.type_use_codes && m.type_use_codes.length > 0 && (!m.vcs_codes || m.vcs_codes.length === 0)) {
+        m.type_use_codes.forEach(code => { tu[code] = m.bracket_value; });
+      } else if (m.vcs_codes && m.vcs_codes.length > 0 && (!m.type_use_codes || m.type_use_codes.length === 0)) {
+        m.vcs_codes.forEach(code => { vcs[code] = m.bracket_value; });
       }
-    ]);
-  };
+    });
+    return { typeUseToBracket: tu, vcsToBracket: vcs };
+  }, [bracketMappings]);
 
-  const updateMapping = (idx, field, value) => {
-    setBracketMappings(prev => prev.map((m, i) => i === idx ? { ...m, [field]: value } : m));
-  };
+  const unassignedTypeUse = useMemo(() =>
+    uniqueTypeUse.filter(t => !typeUseToBracket[t]),
+    [uniqueTypeUse, typeUseToBracket]
+  );
 
-  const removeMapping = (idx) => {
-    setBracketMappings(prev => prev.filter((_, i) => i !== idx));
-  };
+  const unassignedVCS = useMemo(() =>
+    uniqueVCS.filter(v => !vcsToBracket[v]),
+    [uniqueVCS, vcsToBracket]
+  );
 
-  const moveMappingUp = (idx) => {
-    if (idx === 0) return;
+  const assignToBracket = (code, codeType, bracketValue) => {
     setBracketMappings(prev => {
-      const arr = [...prev];
-      [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
-      return arr.map((m, i) => ({ ...m, sort_order: i }));
+      // Remove any existing assignment for this code
+      const filtered = prev.filter(m => {
+        if (codeType === 'type_use') {
+          return !(m.type_use_codes && m.type_use_codes.includes(code) && (!m.vcs_codes || m.vcs_codes.length === 0));
+        }
+        return !(m.vcs_codes && m.vcs_codes.includes(code) && (!m.type_use_codes || m.type_use_codes.length === 0));
+      });
+      return [...filtered, {
+        id: `new_${Date.now()}_${code}`,
+        job_id: jobData.id,
+        vcs_codes: codeType === 'vcs' ? [code] : null,
+        type_use_codes: codeType === 'type_use' ? [code] : null,
+        bracket_value: bracketValue,
+        sort_order: filtered.length,
+        _isNew: true
+      }];
     });
   };
 
-  const moveMappingDown = (idx) => {
-    setBracketMappings(prev => {
-      if (idx >= prev.length - 1) return prev;
-      const arr = [...prev];
-      [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
-      return arr.map((m, i) => ({ ...m, sort_order: i }));
-    });
+  const unassignFromBracket = (code, codeType) => {
+    setBracketMappings(prev => prev.filter(m => {
+      if (codeType === 'type_use') {
+        return !(m.type_use_codes && m.type_use_codes.includes(code) && (!m.vcs_codes || m.vcs_codes.length === 0));
+      }
+      return !(m.vcs_codes && m.vcs_codes.includes(code) && (!m.type_use_codes || m.type_use_codes.length === 0));
+    }));
+  };
+
+  const handleDragStart = (e, code, codeType) => {
+    dragDataRef.current = { code, codeType };
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', `${codeType}:${code}`);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e, bracketValue) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('ring-2', 'ring-blue-400');
+    if (dragDataRef.current) {
+      const { code, codeType } = dragDataRef.current;
+      assignToBracket(code, codeType, bracketValue);
+      dragDataRef.current = null;
+    }
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.currentTarget.classList.add('ring-2', 'ring-blue-400');
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('ring-2', 'ring-blue-400');
   };
 
   const saveBracketMappings = async () => {
     try {
       setIsSavingMappings(true);
-      // Delete all existing mappings for this job
       await supabase.from('job_cme_bracket_mappings').delete().eq('job_id', jobData.id);
-      // Insert current mappings
-      if (bracketMappings.length > 0) {
-        const rows = bracketMappings.map((m, i) => ({
-          job_id: jobData.id,
-          vcs_codes: m.vcs_codes,
-          type_use_codes: m.type_use_codes,
-          bracket_value: m.bracket_value,
-          sort_order: i
-        }));
-        const { error } = await supabase.from('job_cme_bracket_mappings').insert(rows);
+      // Build rows: Type/Use first (higher priority in lookup), then VCS
+      const typeUseRows = Object.entries(typeUseToBracket).map(([code, bracket]) => ({
+        job_id: jobData.id,
+        vcs_codes: null,
+        type_use_codes: [code],
+        bracket_value: bracket,
+        sort_order: 0
+      }));
+      const vcsRows = Object.entries(vcsToBracket).map(([code, bracket]) => ({
+        job_id: jobData.id,
+        vcs_codes: [code],
+        type_use_codes: null,
+        bracket_value: bracket,
+        sort_order: 0
+      }));
+      const allRows = [...typeUseRows, ...vcsRows].map((r, i) => ({ ...r, sort_order: i }));
+      if (allRows.length > 0) {
+        const { error } = await supabase.from('job_cme_bracket_mappings').insert(allRows);
         if (error) throw error;
       }
       await loadBracketMappings();
