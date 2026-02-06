@@ -1505,7 +1505,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           totalValid: validComps.length,
           projectedAssessment: projectedAssessment ? Math.round(projectedAssessment) : null,
           confidenceScore: Math.round(confidenceScore),
-          hasSubjectSale: !!priorityComp
+          hasSubjectSale: !!priorityComp,
+          mappedBracket: subjectMapping?.bracket || null
         });
       }
 
