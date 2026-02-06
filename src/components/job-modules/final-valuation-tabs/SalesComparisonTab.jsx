@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, interpretCodes, getRawDataForJob } from '../../../lib/supabaseClient';
-import { Search, X, Upload, Sliders, FileText, Check, BarChart3, Download } from 'lucide-react';
+import { Search, X, Upload, Sliders, FileText, BarChart3, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
