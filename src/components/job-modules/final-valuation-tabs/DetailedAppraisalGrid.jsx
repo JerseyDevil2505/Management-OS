@@ -1118,6 +1118,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           compVal = parseInt(compVal) || 0;
         }
 
+        // Convert condition code/name to rank
+        if (config.type === 'condition') {
+          const configType = attrId === 'ext_condition' ? 'exterior' : 'interior';
+          subjectVal = getConditionRank(subjectVal, configType);
+          compVal = getConditionRank(compVal, configType);
+        }
+
         const adjustment = calculateSingleAdjustment(subjectVal, compVal, adjustmentDef, compSalesPrice);
         if (adjustment !== 0) {
           compAdjustments.push({
@@ -1140,19 +1147,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     });
 
     setEditedAdjustments(newAdjustments);
-  }, [comps, getEditedValue, calculateSingleAdjustment, allAttributes, adjustmentGrid]);
+    setHasEdits(false);
+  }, [comps, getEditedValue, calculateSingleAdjustment, allAttributes, adjustmentGrid, getConditionRank]);
 
-  // NOTE: We intentionally do NOT recalculate adjustments when user edits values
-  // The modal mirrors the detailed component's original adjustments exactly
-  // User edits only affect the displayed values, not the adjustments
-  // This ensures legal accuracy - adjustments stay as calculated by the system
-
-  // Simple modal open - DON'T pre-initialize, just mirror the detailed component
-  // Only track edits when user actually makes changes
   const openExportModal = useCallback(() => {
-    // Start with empty - values will come directly from data, just like detailed component
     setEditableProperties({});
     setEditedAdjustments({});
+    setHasEdits(false);
     setShowExportModal(true);
   }, []);
 
