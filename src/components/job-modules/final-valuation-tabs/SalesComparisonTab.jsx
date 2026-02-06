@@ -3665,49 +3665,52 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         {activeSubTab === 'summary' && (
           <div className="space-y-6">
             {(() => {
-              // Aggregate all results: current evaluationResults + set-aside evaluations
-              const allResults = [];
+              // Summary uses ONLY set-aside evaluations (committed results)
+              // This acts as a working total showing what's done vs what's still needed
+              const setAsideResults = [];
 
-              // Include current evaluation results
-              if (evaluationResults && evaluationResults.length > 0) {
-                evaluationResults.forEach(r => allResults.push(r));
-              }
-
-              // Include set-aside evaluations (convert to same shape)
               if (savedEvaluations && savedEvaluations.length > 0) {
                 savedEvaluations.forEach(e => {
-                  // Avoid duplicates - check if this subject is already in current results
-                  const alreadyIncluded = allResults.some(r =>
-                    r.subject?.property_composite_key === e.subject_pams
-                  );
-                  if (!alreadyIncluded && e.projected_assessment) {
-                    // Find the property in the properties array to get full data
+                  if (e.projected_assessment) {
                     const prop = properties.find(p => p.property_composite_key === e.subject_pams);
                     if (prop) {
-                      allResults.push({
+                      setAsideResults.push({
                         subject: prop,
                         comparables: e.comparables || [],
                         projectedAssessment: e.projected_assessment,
                         confidenceScore: e.confidence_score || 0,
-                        source: 'set_aside'
                       });
                     }
                   }
                 });
               }
 
-              const successful = allResults.filter(r => r.comparables && r.comparables.length >= minCompsForSuccess && r.projectedAssessment);
-              const missingComps = allResults.filter(r => !r.comparables || r.comparables.length < minCompsForSuccess || !r.projectedAssessment);
+              const successful = setAsideResults;
 
-              // VCS breakdown
+              // "Not done" = all residential properties (class > 1) that are NOT in set-aside
+              const setAsideKeys = new Set(savedEvaluations.map(e => e.subject_pams));
+              const notDone = properties.filter(p => {
+                if (setAsideKeys.has(p.property_composite_key)) return false;
+                // Only count residential+ (building class > 10, i.e. not vacant/exempt)
+                const bc = parseInt(p.asset_building_class) || 0;
+                if (bc <= 10) return false;
+                // Only main cards
+                const card = (p.property_addl_card || '').toString().trim();
+                const isMain = vendorType === 'BRT'
+                  ? (!card || card === '1' || card === '')
+                  : (!card || card.toUpperCase() === 'M' || card.toUpperCase() === 'MAIN' || card === '');
+                return isMain;
+              });
+
+              // VCS breakdown: set-aside (done) vs not done
               const vcsSummary = {};
               successful.forEach(r => {
                 const vcs = r.subject?.property_vcs || 'Unknown';
                 if (!vcsSummary[vcs]) vcsSummary[vcs] = { count: 0, missingCount: 0 };
                 vcsSummary[vcs].count++;
               });
-              missingComps.forEach(r => {
-                const vcs = r.subject?.property_vcs || 'Unknown';
+              notDone.forEach(p => {
+                const vcs = p.property_vcs || 'Unknown';
                 if (!vcsSummary[vcs]) vcsSummary[vcs] = { count: 0, missingCount: 0 };
                 vcsSummary[vcs].missingCount++;
               });
@@ -3753,7 +3756,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 const rows = successful.map(r => {
                   const subject = r.subject;
                   const roundedNew = Math.round((r.projectedAssessment || 0) / 100) * 100;
-                  const currentLand = subject.values_cama_land || subject.values_mod_land || 0;
+                  const currentLand = subject.values_cama_land || 0;
                   const improvementOverride = roundedNew - currentLand;
                   const card = subject.property_addl_card || (vendorType === 'BRT' ? '1' : 'M');
 
@@ -3799,22 +3802,18 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                     <h3 className="text-lg font-bold text-gray-900 mb-4">CME Evaluation Overview</h3>
 
                     {/* Top Stats Cards */}
-                    <div className="grid grid-cols-4 gap-4 mb-6">
-                      <div className="bg-white rounded-lg border border-gray-300 p-4 text-center">
-                        <div className="text-3xl font-bold text-blue-600">{allResults.length}</div>
-                        <div className="text-xs text-gray-500 mt-1">Total Evaluated</div>
-                      </div>
+                    <div className="grid grid-cols-3 gap-4 mb-6">
                       <div className="bg-white rounded-lg border border-green-300 p-4 text-center">
                         <div className="text-3xl font-bold text-green-600">{successful.length}</div>
-                        <div className="text-xs text-gray-500 mt-1">With {minCompsForSuccess}+ Comps</div>
+                        <div className="text-xs text-gray-500 mt-1">Set Aside (Done)</div>
                       </div>
-                      <div className="bg-white rounded-lg border border-red-300 p-4 text-center">
-                        <div className="text-3xl font-bold text-red-600">{missingComps.length}</div>
-                        <div className="text-xs text-gray-500 mt-1">Missing Comps</div>
+                      <div className="bg-white rounded-lg border border-amber-300 p-4 text-center">
+                        <div className="text-3xl font-bold text-amber-600">{notDone.length}</div>
+                        <div className="text-xs text-gray-500 mt-1">Not Yet Evaluated</div>
                       </div>
-                      <div className="bg-white rounded-lg border border-purple-300 p-4 text-center">
-                        <div className="text-3xl font-bold text-purple-600">{savedEvaluations.length}</div>
-                        <div className="text-xs text-gray-500 mt-1">Set Aside</div>
+                      <div className="bg-white rounded-lg border border-blue-300 p-4 text-center">
+                        <div className="text-3xl font-bold text-blue-600">{successful.length + notDone.length}</div>
+                        <div className="text-xs text-gray-500 mt-1">Total Residential</div>
                       </div>
                     </div>
 
@@ -3828,8 +3827,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                           <thead className="bg-gray-50 sticky top-0">
                             <tr>
                               <th className="px-3 py-2 text-left font-semibold text-gray-600">VCS</th>
-                              <th className="px-3 py-2 text-right font-semibold text-green-700">Evaluated</th>
-                              <th className="px-3 py-2 text-right font-semibold text-red-700">Missing Comps</th>
+                              <th className="px-3 py-2 text-right font-semibold text-green-700">Set Aside</th>
+                              <th className="px-3 py-2 text-right font-semibold text-amber-700">Not Done</th>
                               <th className="px-3 py-2 text-right font-semibold text-gray-700">Total</th>
                             </tr>
                           </thead>
@@ -3838,7 +3837,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                               <tr key={vcs} className="hover:bg-gray-50">
                                 <td className="px-3 py-1.5 font-medium text-gray-900">{vcs}</td>
                                 <td className="px-3 py-1.5 text-right text-green-700 font-semibold">{data.count}</td>
-                                <td className="px-3 py-1.5 text-right text-red-600 font-semibold">{data.missingCount > 0 ? data.missingCount : '-'}</td>
+                                <td className="px-3 py-1.5 text-right text-amber-600 font-semibold">{data.missingCount > 0 ? data.missingCount : '-'}</td>
                                 <td className="px-3 py-1.5 text-right text-gray-700 font-semibold">{data.count + data.missingCount}</td>
                               </tr>
                             ))}
@@ -3847,11 +3846,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       </div>
                     </div>
 
-                    {/* Missing Comps Detail */}
-                    {missingComps.length > 0 && (
+                    {/* Not Done Detail */}
+                    {notDone.length > 0 && (
                       <div className="mt-4 bg-amber-50 border border-amber-300 rounded-lg p-4">
                         <h4 className="text-sm font-semibold text-amber-800 mb-2">
-                          Properties Missing Comps ({missingComps.length})
+                          Properties Not Yet Evaluated ({notDone.length})
                         </h4>
                         <div className="max-h-40 overflow-y-auto">
                           <table className="min-w-full text-xs">
@@ -3862,20 +3861,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                                 <th className="px-2 py-1 text-left">Lot</th>
                                 <th className="px-2 py-1 text-left">Qual</th>
                                 <th className="px-2 py-1 text-left">Location</th>
-                                <th className="px-2 py-1 text-center">Comps</th>
+                                <th className="px-2 py-1 text-left">Type/Use</th>
                                 <th className="px-2 py-1 text-right">Current Asmt</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {missingComps.map((r, idx) => (
+                              {notDone.map((p, idx) => (
                                 <tr key={idx} className="border-t border-amber-200">
-                                  <td className="px-2 py-1">{r.subject?.property_vcs}</td>
-                                  <td className="px-2 py-1">{r.subject?.property_block}</td>
-                                  <td className="px-2 py-1">{r.subject?.property_lot}</td>
-                                  <td className="px-2 py-1">{r.subject?.property_qualifier || ''}</td>
-                                  <td className="px-2 py-1 max-w-xs truncate">{r.subject?.property_location}</td>
-                                  <td className="px-2 py-1 text-center text-red-600 font-bold">{r.comparables?.length || 0}</td>
-                                  <td className="px-2 py-1 text-right">${(r.subject?.values_mod_total || r.subject?.values_cama_total || 0).toLocaleString()}</td>
+                                  <td className="px-2 py-1">{p.property_vcs}</td>
+                                  <td className="px-2 py-1">{p.property_block}</td>
+                                  <td className="px-2 py-1">{p.property_lot}</td>
+                                  <td className="px-2 py-1">{p.property_qualifier || ''}</td>
+                                  <td className="px-2 py-1 max-w-xs truncate">{p.property_location}</td>
+                                  <td className="px-2 py-1">{p.asset_type_use || ''}</td>
+                                  <td className="px-2 py-1 text-right">${(p.values_mod_total || p.values_cama_total || 0).toLocaleString()}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -3888,7 +3887,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                   {/* Projected CME Valuation */}
                   <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
                     <h3 className="text-lg font-bold text-gray-900 mb-4">Projected Net Valuation (Taxable) - CME Total</h3>
-                    <p className="text-xs text-gray-500 mb-4">Values rounded to nearest $100. Excludes properties with insufficient comparables and exempt properties.</p>
+                    <p className="text-xs text-gray-500 mb-4">Based on set-aside evaluations only. Values rounded to nearest $100.</p>
 
                     <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
                       <table className="w-full">
@@ -4000,7 +3999,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                     </p>
                   </div>
 
-                  {allResults.length === 0 && (
+                  {successful.length === 0 && (
                     <div className="text-center py-16 text-gray-400">
                       <BarChart3 className="w-16 h-16 mx-auto mb-4 opacity-30" />
                       <p className="text-lg font-medium">No evaluation results yet</p>
