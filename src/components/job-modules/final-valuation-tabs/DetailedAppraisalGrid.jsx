@@ -1920,11 +1920,18 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
                       const editedVal = editableProperties[propKey]?.[attr.id];
                       const displayVal = editedVal !== undefined ? editedVal : attr.render(prop);
 
-                      // Get adjustment for this comp - ALWAYS use original from comp data
-                      // This ensures modal mirrors detailed component exactly
-                      const compAdj = propKey.startsWith('comp_') && showAdjustments && attr.adjustmentName
-                        ? getAdjustment(prop, attr.adjustmentName)
-                        : null;
+                      // Get adjustment for this comp - use edited if recalculated, otherwise original
+                      let compAdj = null;
+                      if (propKey.startsWith('comp_') && showAdjustments && attr.adjustmentName) {
+                        const editedCompData = editedAdjustments[propKey];
+                        if (editedCompData) {
+                          compAdj = editedCompData.adjustments.find(a =>
+                            a.name?.toLowerCase() === attr.adjustmentName?.toLowerCase()
+                          ) || null;
+                        } else {
+                          compAdj = getAdjustment(prop, attr.adjustmentName);
+                        }
+                      }
 
                       if (!isEditable) {
                         return (
