@@ -3361,7 +3361,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
                   // Build class summary from successful evaluations
                   const classSummary = {};
-                  let totalCurrentLand = 0, totalCurrentImpr = 0, totalCurrentTotal = 0;
+                  let totalCurrentTotal = 0;
                   let totalNewValue = 0;
 
                   successful.forEach(r => {
