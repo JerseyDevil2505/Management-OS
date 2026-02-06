@@ -1061,9 +1061,18 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       // Process in batches for UI progress updates
       const BATCH_SIZE = 25;
 
+      // Pre-check: if Auto mode with bracket mappings, log mapping info
+      const isAutoWithMappings = compFilters.adjustmentBracket === 'auto' && bracketMappings.length > 0;
+      if (isAutoWithMappings) {
+        console.log(`🗺️ Auto mode with ${bracketMappings.length} bracket mapping(s) active`);
+      }
+
       for (let i = 0; i < subjects.length; i++) {
         // Aggregate subject data across all cards (main + additional)
         const subject = aggregatePropertyData(subjects[i]);
+
+        // Resolve bracket mapping for this subject (Auto mode with mappings)
+        const subjectMapping = isAutoWithMappings ? getBracketMapping(subject) : null;
 
         // Update progress counter
         setEvaluationProgress({ current: i + 1, total: subjects.length });
@@ -1080,6 +1089,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           console.log(`   VCS: ${subject.property_vcs}, Type: ${subject.asset_type_use}`);
           console.log(`   Year Built: ${subject.asset_year_built}, SFLA: ${subject.asset_sfla}`);
           console.log(`   Eligible sales pool: ${eligibleSales.length}`);
+          if (subjectMapping) {
+            console.log(`   🗺️ Mapped bracket: ${subjectMapping.bracket}, scope: ${subjectMapping.searchScope}`);
+          }
         }
 
         let debugFilters = {
