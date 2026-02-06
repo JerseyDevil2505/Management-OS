@@ -1366,7 +1366,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         // Calculate adjustments for each comparable (already aggregated via aggregatedSales)
         const compsWithAdjustments = matchingComps.map(comp => {
           const { adjustments, totalAdjustment, adjustedPrice, adjustmentPercent } =
-            calculateAllAdjustments(subject, comp);
+            calculateAllAdjustments(subject, comp, subjectMapping?.bracket);
 
           const grossAdjustment = adjustments.reduce((sum, adj) => sum + Math.abs(adj.amount), 0);
           const grossAdjustmentPercent = comp.values_norm_time > 0
@@ -1566,9 +1566,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   };
 
   // ==================== CALCULATE ADJUSTMENTS ====================
-  const calculateAllAdjustments = (subject, comp) => {
+  const calculateAllAdjustments = (subject, comp, overrideBracket) => {
     const adjustments = adjustmentGrid.map(adjDef => {
-      const amount = calculateAdjustment(subject, comp, adjDef);
+      const amount = calculateAdjustment(subject, comp, adjDef, overrideBracket);
       return {
         name: adjDef.adjustment_name,
         category: adjDef.category,
@@ -1587,11 +1587,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     };
   };
 
-  const getPriceBracketIndex = (normPrice) => {
-    // Check if user selected a specific bracket (not auto)
-    if (compFilters.adjustmentBracket && compFilters.adjustmentBracket !== 'auto') {
-      // Extract bracket index from 'bracket_0', 'bracket_1', etc.
-      const match = compFilters.adjustmentBracket.match(/bracket_(\d+)/);
+  const getPriceBracketIndex = (normPrice, overrideBracket) => {
+    // If an override bracket is provided (from mapping), use it
+    const effectiveBracket = overrideBracket || compFilters.adjustmentBracket;
+
+    // Check if a specific bracket is selected (not auto)
+    if (effectiveBracket && effectiveBracket !== 'auto') {
+      const match = effectiveBracket.match(/bracket_(\d+)/);
       if (match) {
         return parseInt(match[1]);
       }
@@ -1621,10 +1623,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     return property[fieldName];
   }, [vendorType]);
 
-  const calculateAdjustment = (subject, comp, adjustmentDef) => {
+  const calculateAdjustment = (subject, comp, adjustmentDef, overrideBracket) => {
     if (!subject || !comp || !adjustmentDef) return 0;
 
-    const selectedBracket = compFilters.adjustmentBracket;
+    const selectedBracket = overrideBracket || compFilters.adjustmentBracket;
     let adjustmentValue = 0;
     let adjustmentType = adjustmentDef.adjustment_type;
 
@@ -1640,7 +1642,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       }
     } else {
       // Use default bracket
-      const bracketIndex = getPriceBracketIndex(comp.values_norm_time);
+      const bracketIndex = getPriceBracketIndex(comp.values_norm_time, overrideBracket);
       adjustmentValue = adjustmentDef[`bracket_${bracketIndex}`] || 0;
 
       // Debug first property only
