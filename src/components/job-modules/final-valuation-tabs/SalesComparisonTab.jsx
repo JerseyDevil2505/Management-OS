@@ -1138,10 +1138,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             return false;
           }
 
-          // VCS filter - mapping search scope can override
-          if (subjectMapping && subjectMapping.searchScope === 'all_vcs') {
-            // Mapped to all_vcs: skip VCS filter entirely (town-wide search)
-          } else if (compFilters.sameVCS) {
+          // VCS filter - always user-controlled via comp filters
+          if (compFilters.sameVCS) {
             if (comp.property_vcs !== subject.property_vcs) {
               if (isFirstProperty) debugFilters.vcs++;
               return false;
