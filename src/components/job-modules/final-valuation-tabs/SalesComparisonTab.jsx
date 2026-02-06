@@ -3714,7 +3714,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 return isMain;
               });
 
-              // VCS breakdown: set-aside (done) vs not done
+              // VCS breakdown: saved (done) vs not done
               const vcsSummary = {};
               successful.forEach(r => {
                 const vcs = r.subject?.property_vcs || 'Unknown';
@@ -3891,7 +3891,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                     <div className="grid grid-cols-3 gap-4 mb-6">
                       <div className="bg-white rounded-lg border border-green-300 p-4 text-center">
                         <div className="text-3xl font-bold text-green-600">{successful.length}</div>
-                        <div className="text-xs text-gray-500 mt-1">Set Aside (Done)</div>
+                        <div className="text-xs text-gray-500 mt-1">Saved (Done)</div>
                       </div>
                       <div className="bg-white rounded-lg border border-amber-300 p-4 text-center">
                         <div className="text-3xl font-bold text-amber-600">{notDone.length}</div>
@@ -3913,7 +3913,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                           <thead className="bg-gray-50 sticky top-0">
                             <tr>
                               <th className="px-3 py-2 text-left font-semibold text-gray-600">VCS</th>
-                              <th className="px-3 py-2 text-right font-semibold text-green-700">Set Aside</th>
+                              <th className="px-3 py-2 text-right font-semibold text-green-700">Saved</th>
                               <th className="px-3 py-2 text-right font-semibold text-amber-700">Not Done</th>
                               <th className="px-3 py-2 text-right font-semibold text-gray-700">Total</th>
                             </tr>
@@ -3973,7 +3973,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                   {/* Projected CME Valuation */}
                   <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
                     <h3 className="text-lg font-bold text-gray-900 mb-4">Projected Net Valuation (Taxable) - CME Total</h3>
-                    <p className="text-xs text-gray-500 mb-4">Based on set-aside evaluations only. Values rounded to nearest $100.</p>
+                    <p className="text-xs text-gray-500 mb-4">Based on saved result sets. Values rounded to nearest $100.</p>
 
                     <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
                       <table className="w-full">
