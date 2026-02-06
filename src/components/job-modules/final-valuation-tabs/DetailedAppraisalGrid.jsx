@@ -1129,10 +1129,13 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
           compVal = (compVal === true || compVal === 'Yes' || compVal === 1) ? 1 : 0;
         }
 
-        // Convert garage category to number
+        // Convert garage to category number
+        // Edited values are already categories (0-4), raw values are sq ft that need conversion
         if (config.type === 'garage') {
           subjectVal = parseInt(subjectVal) || 0;
           compVal = parseInt(compVal) || 0;
+          if (subjectVal > 4) subjectVal = getGarageCategory(subjectVal);
+          if (compVal > 4) compVal = getGarageCategory(compVal);
         }
 
         // Convert condition code/name to rank
