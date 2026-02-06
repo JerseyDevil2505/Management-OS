@@ -2184,6 +2184,173 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     return rank;
   };
 
+  // ==================== CREATE UPDATE EXPORT ====================
+  const handleCreateUpdate = (successfulResults) => {
+    if (!successfulResults || successfulResults.length === 0) return;
+
+    const rows = successfulResults.map(r => {
+      const subject = r.subject;
+      const newTotal = Math.round((r.projectedAssessment || 0) / 100) * 100; // Round to nearest hundred
+      const currentLand = subject.values_cama_land || subject.values_mod_land || 0;
+      const improvementOverride = newTotal - currentLand;
+
+      return {
+        'Block': subject.property_block || '',
+        'Lot': subject.property_lot || '',
+        'Qualifier': subject.property_qualifier || '',
+        'Location': subject.property_location || '',
+        'Current Total': subject.values_mod_total || subject.values_cama_total || 0,
+        'Current Land': currentLand,
+        'New Total (Rounded)': newTotal,
+        'Improvement Override': improvementOverride
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const range = XLSX.utils.decode_range(worksheet['!ref']);
+
+    // Format block/lot as text to preserve trailing zeros
+    for (let R = 1; R <= range.e.r; R++) {
+      const blockCell = worksheet[XLSX.utils.encode_cell({ r: R, c: 0 })];
+      const lotCell = worksheet[XLSX.utils.encode_cell({ r: R, c: 1 })];
+      if (blockCell) { blockCell.t = 's'; blockCell.v = String(blockCell.v); }
+      if (lotCell) { lotCell.t = 's'; lotCell.v = String(lotCell.v); }
+    }
+
+    // Set number formats for currency columns
+    for (let R = 1; R <= range.e.r; R++) {
+      for (let C = 4; C <= 7; C++) {
+        const cell = worksheet[XLSX.utils.encode_cell({ r: R, c: C })];
+        if (cell) cell.z = '$#,##0';
+      }
+    }
+
+    worksheet['!cols'] = [
+      { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 30 },
+      { wch: 15 }, { wch: 15 }, { wch: 18 }, { wch: 20 }
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'CME Update');
+    XLSX.writeFile(workbook, `CME_Update_${jobData.job_name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  // ==================== BUILD FINAL ROSTER ====================
+  const handleBuildFinalRoster = (successfulResults, skippedResults) => {
+    if (!successfulResults || successfulResults.length === 0) return;
+
+    const rows = successfulResults.map(r => {
+      const subject = r.subject;
+      const comps = r.comparables || [];
+      const newTotal = Math.round((r.projectedAssessment || 0) / 100) * 100;
+      const currentTotal = subject.values_mod_total || subject.values_cama_total || 0;
+      const currentLand = subject.values_cama_land || subject.values_mod_land || 0;
+      const currentImpr = currentTotal - currentLand;
+      const adjustedPrices = comps.map(c => c.adjustedPrice || 0).filter(p => p > 0);
+      const minAdjusted = adjustedPrices.length > 0 ? Math.min(...adjustedPrices) : 0;
+      const maxAdjusted = adjustedPrices.length > 0 ? Math.max(...adjustedPrices) : 0;
+
+      const row = {
+        'Block': subject.property_block || '',
+        'Lot': subject.property_lot || '',
+        'Qualifier': subject.property_qualifier || '',
+        'Location': subject.property_location || '',
+        'Owner': subject.owner_name || '',
+        'VCS': subject.property_vcs || '',
+        'Type/Use': subject.asset_type_use || '',
+        'Building Class': subject.asset_building_class || '',
+        'Style': subject.asset_design_style || '',
+        'Year Built': subject.asset_year_built || '',
+        'SFLA': subject.asset_sfla || 0,
+        'Lot Size (SF)': subject.market_manual_lot_sf || subject.asset_lot_sf || 0,
+        'Current Land': currentLand,
+        'Current Impr': currentImpr,
+        'Current Total': currentTotal,
+        'Proposed Value': newTotal,
+        'Improvement Override': newTotal - currentLand,
+        'Delta %': currentTotal > 0 ? ((newTotal - currentTotal) / currentTotal) : 0,
+        'Confidence': r.confidenceScore || 0,
+        '# Comps': comps.length,
+        'Min Adjusted': minAdjusted,
+        'Max Adjusted': maxAdjusted
+      };
+
+      // Add per-comp columns
+      comps.forEach((comp, idx) => {
+        const compNum = idx + 1;
+        row[`Comp ${compNum} BLQ`] = `${comp.property_block}/${comp.property_lot}${comp.property_qualifier && comp.property_qualifier !== 'NONE' ? '/' + comp.property_qualifier : ''}`;
+        row[`Comp ${compNum} Sale Price`] = comp.values_norm_time || comp.sales_price || 0;
+        row[`Comp ${compNum} Adjusted`] = Math.round(comp.adjustedPrice || 0);
+        row[`Comp ${compNum} Net Adj %`] = comp.adjustmentPercent ? (comp.adjustmentPercent / 100) : 0;
+      });
+
+      return row;
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const range = XLSX.utils.decode_range(worksheet['!ref']);
+
+    // Format block/lot as text to preserve trailing zeros
+    for (let R = 1; R <= range.e.r; R++) {
+      const blockCell = worksheet[XLSX.utils.encode_cell({ r: R, c: 0 })];
+      const lotCell = worksheet[XLSX.utils.encode_cell({ r: R, c: 1 })];
+      if (blockCell) { blockCell.t = 's'; blockCell.v = String(blockCell.v); }
+      if (lotCell) { lotCell.t = 's'; lotCell.v = String(lotCell.v); }
+    }
+
+    // Set column widths
+    const colCount = range.e.c + 1;
+    worksheet['!cols'] = Array(colCount).fill({ wch: 14 });
+    worksheet['!cols'][3] = { wch: 30 }; // Location
+    worksheet['!cols'][4] = { wch: 20 }; // Owner
+
+    // Header styling
+    const headers = Object.keys(rows[0] || {});
+    headers.forEach((header, idx) => {
+      const cellRef = XLSX.utils.encode_cell({ r: 0, c: idx });
+      if (worksheet[cellRef]) {
+        worksheet[cellRef].s = { font: { bold: true }, fill: { fgColor: { rgb: 'E2E8F0' } } };
+      }
+    });
+
+    // Number formats for data rows
+    for (let R = 1; R <= range.e.r; R++) {
+      headers.forEach((header, C) => {
+        const cell = worksheet[XLSX.utils.encode_cell({ r: R, c: C })];
+        if (!cell) return;
+        if (['Current Land', 'Current Impr', 'Current Total', 'Proposed Value', 'Improvement Override', 'Min Adjusted', 'Max Adjusted'].includes(header) || header.includes('Sale Price') || header.includes('Adjusted')) {
+          cell.z = '$#,##0';
+        }
+        if (header === 'Delta %' || header.includes('Net Adj %')) {
+          cell.z = '0.00%';
+        }
+      });
+    }
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'CME Final Roster');
+
+    // Add skipped properties sheet if any
+    if (skippedResults && skippedResults.length > 0) {
+      const skippedRows = skippedResults.map(r => ({
+        'Block': r.subject.property_block || '',
+        'Lot': r.subject.property_lot || '',
+        'Qualifier': r.subject.property_qualifier || '',
+        'Location': r.subject.property_location || '',
+        'VCS': r.subject.property_vcs || '',
+        'Type/Use': r.subject.asset_type_use || '',
+        'Current Total': r.subject.values_mod_total || r.subject.values_cama_total || 0,
+        'Comps Found': r.comparables.length,
+        'Reason': r.comparables.length === 0 ? 'No comparables found' : `Only ${r.comparables.length} comp(s)`
+      }));
+      const skippedWs = XLSX.utils.json_to_sheet(skippedRows);
+      skippedWs['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 30 }, { wch: 10 }, { wch: 10 }, { wch: 15 }, { wch: 12 }, { wch: 25 }];
+      XLSX.utils.book_append_sheet(workbook, skippedWs, 'Skipped Properties');
+    }
+
+    XLSX.writeFile(workbook, `CME_Final_Roster_${jobData.job_name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   // ==================== RENDER ====================
   const subTabs = [
     { id: 'adjustments', label: 'Adjustments', icon: Sliders },
