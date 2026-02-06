@@ -177,7 +177,18 @@ const DetailedAppraisalGrid = ({ result, jobData, codeDefinitions, vendorType, a
     const selectedBracket = compFilters.adjustmentBracket;
 
     if (selectedBracket === 'auto') {
-      // Show the auto-determined bracket based on subject's value
+      // If a mapped bracket was used for this result, show that
+      if (result.mappedBracket) {
+        const match = result.mappedBracket.match(/bracket_(\d+)/);
+        if (match) {
+          const idx = parseInt(match[1]);
+          if (cmeBrackets[idx]) {
+            return `Auto - Mapped (${cmeBrackets[idx].label})`;
+          }
+        }
+        return `Auto - Mapped`;
+      }
+      // Fall back to price-based bracket
       const subjectValue = subject.values_norm_time || subject.sales_price || subject.values_mod_total || subject.values_cama_total || 0;
       const bracketIndex = cmeBrackets.findIndex(b => subjectValue >= b.min && subjectValue <= b.max);
       if (bracketIndex >= 0 && cmeBrackets[bracketIndex]) {
