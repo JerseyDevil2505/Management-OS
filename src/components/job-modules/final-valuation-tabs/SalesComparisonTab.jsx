@@ -3661,6 +3661,358 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           </div>
         )}
 
+        {/* SUMMARY TAB */}
+        {activeSubTab === 'summary' && (
+          <div className="space-y-6">
+            {(() => {
+              // Aggregate all results: current evaluationResults + set-aside evaluations
+              const allResults = [];
+
+              // Include current evaluation results
+              if (evaluationResults && evaluationResults.length > 0) {
+                evaluationResults.forEach(r => allResults.push(r));
+              }
+
+              // Include set-aside evaluations (convert to same shape)
+              if (savedEvaluations && savedEvaluations.length > 0) {
+                savedEvaluations.forEach(e => {
+                  // Avoid duplicates - check if this subject is already in current results
+                  const alreadyIncluded = allResults.some(r =>
+                    r.subject?.property_composite_key === e.subject_pams
+                  );
+                  if (!alreadyIncluded && e.projected_assessment) {
+                    // Find the property in the properties array to get full data
+                    const prop = properties.find(p => p.property_composite_key === e.subject_pams);
+                    if (prop) {
+                      allResults.push({
+                        subject: prop,
+                        comparables: e.comparables || [],
+                        projectedAssessment: e.projected_assessment,
+                        confidenceScore: e.confidence_score || 0,
+                        source: 'set_aside'
+                      });
+                    }
+                  }
+                });
+              }
+
+              const successful = allResults.filter(r => r.comparables && r.comparables.length >= minCompsForSuccess && r.projectedAssessment);
+              const missingComps = allResults.filter(r => !r.comparables || r.comparables.length < minCompsForSuccess || !r.projectedAssessment);
+
+              // VCS breakdown
+              const vcsSummary = {};
+              successful.forEach(r => {
+                const vcs = r.subject?.property_vcs || 'Unknown';
+                if (!vcsSummary[vcs]) vcsSummary[vcs] = { count: 0, missingCount: 0 };
+                vcsSummary[vcs].count++;
+              });
+              missingComps.forEach(r => {
+                const vcs = r.subject?.property_vcs || 'Unknown';
+                if (!vcsSummary[vcs]) vcsSummary[vcs] = { count: 0, missingCount: 0 };
+                vcsSummary[vcs].missingCount++;
+              });
+
+              // Class summary with rounding to nearest $100
+              const classSummary = {
+                '1': { count: 0, currentTotal: 0, newTotal: 0, description: 'Vacant Land' },
+                '2': { count: 0, currentTotal: 0, newTotal: 0, description: 'Residential' },
+                '3A': { count: 0, currentTotal: 0, newTotal: 0, description: 'Farmhouse' },
+                '3B': { count: 0, currentTotal: 0, newTotal: 0, description: 'Qualified Farmland' },
+                '4A': { count: 0, currentTotal: 0, newTotal: 0, description: 'Commercial' },
+                '4B': { count: 0, currentTotal: 0, newTotal: 0, description: 'Industrial' },
+                '4C': { count: 0, currentTotal: 0, newTotal: 0, description: 'Apartment' }
+              };
+
+              successful.forEach(r => {
+                const m4Class = r.subject?.property_m4_class || '';
+                const currentTotal = r.subject?.values_mod_total || r.subject?.values_cama_total || 0;
+                const roundedNew = Math.round((r.projectedAssessment || 0) / 100) * 100;
+
+                if (classSummary[m4Class]) {
+                  classSummary[m4Class].count++;
+                  classSummary[m4Class].currentTotal += currentTotal;
+                  classSummary[m4Class].newTotal += roundedNew;
+                }
+              });
+
+              // Aggregates
+              const class4Count = classSummary['4A'].count + classSummary['4B'].count + classSummary['4C'].count;
+              const class4Current = classSummary['4A'].currentTotal + classSummary['4B'].currentTotal + classSummary['4C'].currentTotal;
+              const class4New = classSummary['4A'].newTotal + classSummary['4B'].newTotal + classSummary['4C'].newTotal;
+
+              const grandCount = Object.values(classSummary).reduce((s, c) => s + c.count, 0);
+              const grandCurrent = Object.values(classSummary).reduce((s, c) => s + c.currentTotal, 0);
+              const grandNew = Object.values(classSummary).reduce((s, c) => s + c.newTotal, 0);
+
+              const pctChange = (curr, nw) => curr > 0 ? ((nw - curr) / curr * 100) : 0;
+
+              // Export Excel Update handler
+              const handleSummaryExportUpdate = () => {
+                if (successful.length === 0) return;
+
+                const rows = successful.map(r => {
+                  const subject = r.subject;
+                  const roundedNew = Math.round((r.projectedAssessment || 0) / 100) * 100;
+                  const currentLand = subject.values_cama_land || subject.values_mod_land || 0;
+                  const improvementOverride = roundedNew - currentLand;
+                  const card = subject.property_addl_card || (vendorType === 'BRT' ? '1' : 'M');
+
+                  return {
+                    'Block': subject.property_block || '',
+                    'Lot': subject.property_lot || '',
+                    'Qualifier': subject.property_qualifier || '',
+                    'Card': card,
+                    'Improvement Override': improvementOverride > 0 ? improvementOverride : 0
+                  };
+                });
+
+                const worksheet = XLSX.utils.json_to_sheet(rows);
+                const range = XLSX.utils.decode_range(worksheet['!ref']);
+
+                // Format block/lot as text
+                for (let R = 1; R <= range.e.r; R++) {
+                  const blockCell = worksheet[XLSX.utils.encode_cell({ r: R, c: 0 })];
+                  const lotCell = worksheet[XLSX.utils.encode_cell({ r: R, c: 1 })];
+                  if (blockCell) { blockCell.t = 's'; blockCell.v = String(blockCell.v); }
+                  if (lotCell) { lotCell.t = 's'; lotCell.v = String(lotCell.v); }
+                }
+
+                // Currency format for improvement override
+                for (let R = 1; R <= range.e.r; R++) {
+                  const cell = worksheet[XLSX.utils.encode_cell({ r: R, c: 4 })];
+                  if (cell) cell.z = '$#,##0';
+                }
+
+                worksheet['!cols'] = [
+                  { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 22 }
+                ];
+
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, 'CME Update');
+                XLSX.writeFile(workbook, `CME_Update_${jobData.job_name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+              };
+
+              return (
+                <>
+                  {/* Info Section */}
+                  <div className="bg-gradient-to-r from-slate-50 to-gray-50 border border-gray-200 rounded-lg p-6">
+                    <h3 className="text-lg font-bold text-gray-900 mb-4">CME Evaluation Overview</h3>
+
+                    {/* Top Stats Cards */}
+                    <div className="grid grid-cols-4 gap-4 mb-6">
+                      <div className="bg-white rounded-lg border border-gray-300 p-4 text-center">
+                        <div className="text-3xl font-bold text-blue-600">{allResults.length}</div>
+                        <div className="text-xs text-gray-500 mt-1">Total Evaluated</div>
+                      </div>
+                      <div className="bg-white rounded-lg border border-green-300 p-4 text-center">
+                        <div className="text-3xl font-bold text-green-600">{successful.length}</div>
+                        <div className="text-xs text-gray-500 mt-1">With {minCompsForSuccess}+ Comps</div>
+                      </div>
+                      <div className="bg-white rounded-lg border border-red-300 p-4 text-center">
+                        <div className="text-3xl font-bold text-red-600">{missingComps.length}</div>
+                        <div className="text-xs text-gray-500 mt-1">Missing Comps</div>
+                      </div>
+                      <div className="bg-white rounded-lg border border-purple-300 p-4 text-center">
+                        <div className="text-3xl font-bold text-purple-600">{savedEvaluations.length}</div>
+                        <div className="text-xs text-gray-500 mt-1">Set Aside</div>
+                      </div>
+                    </div>
+
+                    {/* VCS Breakdown */}
+                    <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
+                      <div className="px-4 py-3 bg-gray-100 border-b border-gray-300">
+                        <h4 className="font-semibold text-gray-700 text-sm">By VCS</h4>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50 sticky top-0">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-semibold text-gray-600">VCS</th>
+                              <th className="px-3 py-2 text-right font-semibold text-green-700">Evaluated</th>
+                              <th className="px-3 py-2 text-right font-semibold text-red-700">Missing Comps</th>
+                              <th className="px-3 py-2 text-right font-semibold text-gray-700">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {Object.entries(vcsSummary).sort((a, b) => a[0].localeCompare(b[0])).map(([vcs, data]) => (
+                              <tr key={vcs} className="hover:bg-gray-50">
+                                <td className="px-3 py-1.5 font-medium text-gray-900">{vcs}</td>
+                                <td className="px-3 py-1.5 text-right text-green-700 font-semibold">{data.count}</td>
+                                <td className="px-3 py-1.5 text-right text-red-600 font-semibold">{data.missingCount > 0 ? data.missingCount : '-'}</td>
+                                <td className="px-3 py-1.5 text-right text-gray-700 font-semibold">{data.count + data.missingCount}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Missing Comps Detail */}
+                    {missingComps.length > 0 && (
+                      <div className="mt-4 bg-amber-50 border border-amber-300 rounded-lg p-4">
+                        <h4 className="text-sm font-semibold text-amber-800 mb-2">
+                          Properties Missing Comps ({missingComps.length})
+                        </h4>
+                        <div className="max-h-40 overflow-y-auto">
+                          <table className="min-w-full text-xs">
+                            <thead>
+                              <tr className="bg-amber-100">
+                                <th className="px-2 py-1 text-left">VCS</th>
+                                <th className="px-2 py-1 text-left">Block</th>
+                                <th className="px-2 py-1 text-left">Lot</th>
+                                <th className="px-2 py-1 text-left">Qual</th>
+                                <th className="px-2 py-1 text-left">Location</th>
+                                <th className="px-2 py-1 text-center">Comps</th>
+                                <th className="px-2 py-1 text-right">Current Asmt</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {missingComps.map((r, idx) => (
+                                <tr key={idx} className="border-t border-amber-200">
+                                  <td className="px-2 py-1">{r.subject?.property_vcs}</td>
+                                  <td className="px-2 py-1">{r.subject?.property_block}</td>
+                                  <td className="px-2 py-1">{r.subject?.property_lot}</td>
+                                  <td className="px-2 py-1">{r.subject?.property_qualifier || ''}</td>
+                                  <td className="px-2 py-1 max-w-xs truncate">{r.subject?.property_location}</td>
+                                  <td className="px-2 py-1 text-center text-red-600 font-bold">{r.comparables?.length || 0}</td>
+                                  <td className="px-2 py-1 text-right">${(r.subject?.values_mod_total || r.subject?.values_cama_total || 0).toLocaleString()}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Projected CME Valuation */}
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
+                    <h3 className="text-lg font-bold text-gray-900 mb-4">Projected Net Valuation (Taxable) - CME Total</h3>
+                    <p className="text-xs text-gray-500 mb-4">Values rounded to nearest $100. Excludes properties with insufficient comparables and exempt properties.</p>
+
+                    <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
+                      <table className="w-full">
+                        <thead className="bg-gray-100 border-b border-gray-300">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Class</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Description</th>
+                            <th className="px-3 py-3 text-right text-sm font-semibold text-gray-700">Count</th>
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Current Valuation</th>
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">CME Projected</th>
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Change</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {['1', '2', '3A', '3B'].map(cls => {
+                            const data = classSummary[cls];
+                            const change = pctChange(data.currentTotal, data.newTotal);
+                            return (
+                              <tr key={cls} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-sm font-medium text-gray-900">Class {cls}</td>
+                                <td className="px-4 py-3 text-sm text-gray-700">{data.description}</td>
+                                <td className="px-3 py-3 text-sm text-right font-semibold text-gray-900">{data.count > 0 ? data.count.toLocaleString() : '-'}</td>
+                                <td className="px-4 py-3 text-sm text-right font-semibold text-gray-700">{data.count > 0 ? `$${data.currentTotal.toLocaleString()}` : '-'}</td>
+                                <td className="px-4 py-3 text-base text-right font-bold text-blue-600">{data.count > 0 ? `$${data.newTotal.toLocaleString()}` : '-'}</td>
+                                <td className={`px-4 py-3 text-sm text-right font-semibold ${change > 0 ? 'text-green-700' : change < 0 ? 'text-red-700' : 'text-gray-500'}`}>
+                                  {data.count > 0 ? `${change > 0 ? '+' : ''}${change.toFixed(2)}%` : '-'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {['4A', '4B', '4C'].map(cls => {
+                            const data = classSummary[cls];
+                            const change = pctChange(data.currentTotal, data.newTotal);
+                            return (
+                              <tr key={cls} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-sm font-medium text-gray-900">Class {cls}</td>
+                                <td className="px-4 py-3 text-sm text-gray-700">{data.description}</td>
+                                <td className="px-3 py-3 text-sm text-right font-semibold text-gray-900">{data.count > 0 ? data.count.toLocaleString() : '-'}</td>
+                                <td className="px-4 py-3 text-sm text-right font-semibold text-gray-700">{data.count > 0 ? `$${data.currentTotal.toLocaleString()}` : '-'}</td>
+                                <td className="px-4 py-3 text-base text-right font-bold text-blue-600">{data.count > 0 ? `$${data.newTotal.toLocaleString()}` : '-'}</td>
+                                <td className={`px-4 py-3 text-sm text-right font-semibold ${change > 0 ? 'text-green-700' : change < 0 ? 'text-red-700' : 'text-gray-500'}`}>
+                                  {data.count > 0 ? `${change > 0 ? '+' : ''}${change.toFixed(2)}%` : '-'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          <tr className="bg-orange-50 hover:bg-orange-100 border-t-2 border-orange-300">
+                            <td className="px-4 py-3 text-sm font-bold text-orange-700">Class 4*</td>
+                            <td className="px-4 py-3 text-sm font-semibold text-orange-700">Aggregate Total</td>
+                            <td className="px-3 py-3 text-sm text-right font-bold text-orange-700">{class4Count > 0 ? class4Count.toLocaleString() : '-'}</td>
+                            <td className="px-4 py-3 text-sm text-right font-bold text-orange-700">{class4Count > 0 ? `$${class4Current.toLocaleString()}` : '-'}</td>
+                            <td className="px-4 py-3 text-base text-right font-bold text-orange-700">{class4Count > 0 ? `$${class4New.toLocaleString()}` : '-'}</td>
+                            <td className={`px-4 py-3 text-sm text-right font-bold ${pctChange(class4Current, class4New) > 0 ? 'text-green-700' : pctChange(class4Current, class4New) < 0 ? 'text-red-700' : 'text-orange-700'}`}>
+                              {class4Count > 0 ? `${pctChange(class4Current, class4New) > 0 ? '+' : ''}${pctChange(class4Current, class4New).toFixed(2)}%` : '-'}
+                            </td>
+                          </tr>
+                          <tr className="bg-blue-600 text-white border-t-4 border-blue-700">
+                            <td className="px-4 py-4 text-sm font-bold" colSpan="2"></td>
+                            <td className="px-3 py-4 text-right">
+                              <div className="text-xs font-semibold mb-1">Total Lines</div>
+                              <div className="text-base font-bold">{grandCount.toLocaleString()}</div>
+                            </td>
+                            <td className="px-4 py-4 text-right">
+                              <div className="text-xs font-semibold mb-1">Current Valuation</div>
+                              <div className="text-base font-bold">${grandCurrent.toLocaleString()}</div>
+                            </td>
+                            <td className="px-4 py-4 text-right">
+                              <div className="text-xs font-semibold mb-1">CME Projected Total</div>
+                              <div className="text-xl font-bold">${grandNew.toLocaleString()}</div>
+                            </td>
+                            <td className="px-4 py-4 text-right">
+                              <div className="text-xs font-semibold mb-1">Net Change</div>
+                              <div className={`text-base font-bold ${pctChange(grandCurrent, grandNew) > 0 ? 'text-green-200' : 'text-red-200'}`}>
+                                {grandCount > 0 ? `${pctChange(grandCurrent, grandNew) > 0 ? '+' : ''}${pctChange(grandCurrent, grandNew).toFixed(2)}%` : '-'}
+                              </div>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Export Buttons */}
+                  <div className="bg-white border border-gray-300 rounded-lg p-6">
+                    <h3 className="text-lg font-bold text-gray-900 mb-4">Export</h3>
+                    <div className="flex gap-4">
+                      <button
+                        onClick={handleSummaryExportUpdate}
+                        disabled={successful.length === 0}
+                        className="px-5 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium flex items-center gap-2"
+                      >
+                        <Download className="w-4 h-4" />
+                        Export Excel Update
+                      </button>
+                      <button
+                        disabled
+                        className="px-5 py-3 bg-gray-400 text-white rounded-lg cursor-not-allowed text-sm font-medium flex items-center gap-2 opacity-60"
+                        title="Coming soon"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Build Final Roster
+                      </button>
+                    </div>
+                    <p className="mt-3 text-xs text-gray-500">
+                      <strong>Export Excel Update:</strong> Block, Lot, Qualifier, Card, Improvement Override (CME value minus current land).
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      <strong>Build Final Roster:</strong> Placeholder — column selection and build process will be configured separately.
+                    </p>
+                  </div>
+
+                  {allResults.length === 0 && (
+                    <div className="text-center py-16 text-gray-400">
+                      <BarChart3 className="w-16 h-16 mx-auto mb-4 opacity-30" />
+                      <p className="text-lg font-medium">No evaluation results yet</p>
+                      <p className="text-sm mt-2">Run an evaluation from the Search & Results tab, or load a saved result set.</p>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        )}
+
       </div>
 
       {/* Import Block/Lot/Qual Modal */}
