@@ -6443,16 +6443,21 @@ AdjustmentsTab contains two sub-sections:
 
 ---
 
-### AdjustmentsTab.jsx - CME Adjustment Grid Configuration ⚙️
+### AdjustmentsTab.jsx - CME Adjustment Grid & Bracket Mapping ⚙️
 
-**Scale**: 1,325 lines of adjustment grid management
+**Scale**: ~1,500+ lines of adjustment grid management and bracket mapping
 
-**Core Philosophy**: Configure market-based adjustments across 10 price brackets for automated CME
+**Core Philosophy**: Configure market-based adjustments across 10 price brackets and map VCS/Type-Use codes to brackets for automated CME routing
+
+**Two Sections:**
+1. **Adjustment Grid** — Define per-bracket adjustment values for property attributes
+2. **Bracket Mapping** — Drag-and-drop assignment of VCS/Type-Use codes to brackets
 
 **Purpose:**
 - Define adjustment values for property attributes
 - Differentiate by price bracket (market segmentation)
 - Support both system defaults and custom adjustments
+- Map VCS and Type/Use codes to specific brackets (overrides price-based bracket selection)
 - Feed into Sales Comparison automated evaluation
 
 **10 Price Brackets:**
