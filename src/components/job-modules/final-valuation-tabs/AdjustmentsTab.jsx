@@ -1224,6 +1224,20 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
           >
             Adjustment Grid
           </button>
+          <button
+            onClick={() => setActiveSubTab('mapping')}
+            className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm inline-flex items-center gap-2 ${
+              activeSubTab === 'mapping'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <Map className="w-4 h-4" />
+            Bracket Mapping
+            {bracketMappings.length > 0 && (
+              <span className="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded-full">{bracketMappings.length}</span>
+            )}
+          </button>
         </nav>
       </div>
 
