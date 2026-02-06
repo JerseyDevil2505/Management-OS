@@ -88,6 +88,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   const [customBrackets, setCustomBrackets] = useState([]);
   const [bracketMappings, setBracketMappings] = useState([]);
   const [minCompsForSuccess, setMinCompsForSuccess] = useState(3); // User-selectable threshold
+  const [summarySort, setSummarySort] = useState({ field: 'property_vcs', dir: 'asc' }); // Summary tab sort
 
   // Manual entry state for detailed tab
   const [manualSubject, setManualSubject] = useState({ block: '', lot: '', qualifier: '' });
@@ -3715,6 +3716,37 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 vcsSummary[vcs].missingCount++;
               });
 
+              // Sort the notDone list
+              const sortedNotDone = [...notDone].sort((a, b) => {
+                const field = summarySort.field;
+                let aVal = a[field] ?? '';
+                let bVal = b[field] ?? '';
+                // Numeric sort for assessment
+                if (field === '_currentAsmt') {
+                  aVal = (a.values_mod_total || a.values_cama_total || 0);
+                  bVal = (b.values_mod_total || b.values_cama_total || 0);
+                  return summarySort.dir === 'asc' ? aVal - bVal : bVal - aVal;
+                }
+                // String sort
+                aVal = String(aVal).toLowerCase();
+                bVal = String(bVal).toLowerCase();
+                if (aVal < bVal) return summarySort.dir === 'asc' ? -1 : 1;
+                if (aVal > bVal) return summarySort.dir === 'asc' ? 1 : -1;
+                return 0;
+              });
+
+              const handleSortClick = (field) => {
+                setSummarySort(prev => ({
+                  field,
+                  dir: prev.field === field && prev.dir === 'asc' ? 'desc' : 'asc'
+                }));
+              };
+
+              const sortArrow = (field) => {
+                if (summarySort.field !== field) return '';
+                return summarySort.dir === 'asc' ? ' ▲' : ' ▼';
+              };
+
               // Class summary with rounding to nearest $100
               const classSummary = {
                 '1': { count: 0, currentTotal: 0, newTotal: 0, description: 'Vacant Land' },
@@ -3725,6 +3757,25 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 '4B': { count: 0, currentTotal: 0, newTotal: 0, description: 'Industrial' },
                 '4C': { count: 0, currentTotal: 0, newTotal: 0, description: 'Apartment' }
               };
+
+              // Populate Class 1 from CAMA totals (vacant land / building class blank or ≤10)
+              // These properties aren't evaluated by CME, so use their existing CAMA value
+              properties.forEach(p => {
+                const m4Class = p.property_m4_class || '';
+                if (m4Class !== '1') return;
+                // Only main cards
+                const card = (p.property_addl_card || '').toString().trim();
+                const isMain = vendorType === 'BRT'
+                  ? (!card || card === '1' || card === '')
+                  : (!card || card.toUpperCase() === 'M' || card.toUpperCase() === 'MAIN' || card === '');
+                if (!isMain) return;
+                // Exclude exempt
+                if (p.property_facility === 'EXEMPT') return;
+                const camaTotal = p.values_cama_total || 0;
+                classSummary['1'].count++;
+                classSummary['1'].currentTotal += camaTotal;
+                classSummary['1'].newTotal += camaTotal; // Same value — not re-appraised by CME
+              });
 
               successful.forEach(r => {
                 const m4Class = r.subject?.property_m4_class || '';
@@ -3852,21 +3903,21 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                         <h4 className="text-sm font-semibold text-amber-800 mb-2">
                           Properties Not Yet Evaluated ({notDone.length})
                         </h4>
-                        <div className="max-h-40 overflow-y-auto">
+                        <div className="max-h-64 overflow-y-auto">
                           <table className="min-w-full text-xs">
-                            <thead>
+                            <thead className="sticky top-0">
                               <tr className="bg-amber-100">
-                                <th className="px-2 py-1 text-left">VCS</th>
-                                <th className="px-2 py-1 text-left">Block</th>
-                                <th className="px-2 py-1 text-left">Lot</th>
-                                <th className="px-2 py-1 text-left">Qual</th>
-                                <th className="px-2 py-1 text-left">Location</th>
-                                <th className="px-2 py-1 text-left">Type/Use</th>
-                                <th className="px-2 py-1 text-right">Current Asmt</th>
+                                <th className="px-2 py-1 text-left cursor-pointer select-none hover:bg-amber-200" onClick={() => handleSortClick('property_vcs')}>VCS{sortArrow('property_vcs')}</th>
+                                <th className="px-2 py-1 text-left cursor-pointer select-none hover:bg-amber-200" onClick={() => handleSortClick('property_block')}>Block{sortArrow('property_block')}</th>
+                                <th className="px-2 py-1 text-left cursor-pointer select-none hover:bg-amber-200" onClick={() => handleSortClick('property_lot')}>Lot{sortArrow('property_lot')}</th>
+                                <th className="px-2 py-1 text-left cursor-pointer select-none hover:bg-amber-200" onClick={() => handleSortClick('property_qualifier')}>Qual{sortArrow('property_qualifier')}</th>
+                                <th className="px-2 py-1 text-left cursor-pointer select-none hover:bg-amber-200" onClick={() => handleSortClick('property_location')}>Location{sortArrow('property_location')}</th>
+                                <th className="px-2 py-1 text-left cursor-pointer select-none hover:bg-amber-200" onClick={() => handleSortClick('asset_type_use')}>Type/Use{sortArrow('asset_type_use')}</th>
+                                <th className="px-2 py-1 text-right cursor-pointer select-none hover:bg-amber-200" onClick={() => handleSortClick('_currentAsmt')}>Current Asmt{sortArrow('_currentAsmt')}</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {notDone.map((p, idx) => (
+                              {sortedNotDone.map((p, idx) => (
                                 <tr key={idx} className="border-t border-amber-200">
                                   <td className="px-2 py-1">{p.property_vcs}</td>
                                   <td className="px-2 py-1">{p.property_block}</td>
