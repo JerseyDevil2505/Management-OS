@@ -407,7 +407,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     }
   };
 
-  // Look up bracket mapping for a property (returns { bracket, searchScope } or null)
+  // Look up bracket mapping for a property (returns { bracket } or null)
   const getBracketMapping = (property) => {
     if (!bracketMappings || bracketMappings.length === 0) return null;
     const propVCS = property.property_vcs || '';
@@ -416,7 +416,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       const vcsMatch = !mapping.vcs_codes || mapping.vcs_codes.length === 0 || mapping.vcs_codes.includes(propVCS);
       const tuMatch = !mapping.type_use_codes || mapping.type_use_codes.length === 0 || mapping.type_use_codes.includes(propTypeUse);
       if (vcsMatch && tuMatch) {
-        return { bracket: mapping.bracket_value, searchScope: mapping.search_scope };
+        return { bracket: mapping.bracket_value };
       }
     }
     return null;
@@ -1090,7 +1090,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
           console.log(`   Year Built: ${subject.asset_year_built}, SFLA: ${subject.asset_sfla}`);
           console.log(`   Eligible sales pool: ${eligibleSales.length}`);
           if (subjectMapping) {
-            console.log(`   🗺️ Mapped bracket: ${subjectMapping.bracket}, scope: ${subjectMapping.searchScope}`);
+            console.log(`   🗺️ Mapped bracket: ${subjectMapping.bracket}`);
           }
         }
 

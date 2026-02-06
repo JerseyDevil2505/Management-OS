@@ -242,7 +242,6 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
         vcs_codes: null,
         type_use_codes: null,
         bracket_value: 'bracket_0',
-        search_scope: 'same_vcs',
         sort_order: prev.length,
         _isNew: true
       }
@@ -287,7 +286,6 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
           vcs_codes: m.vcs_codes,
           type_use_codes: m.type_use_codes,
           bracket_value: m.bracket_value,
-          search_scope: m.search_scope,
           sort_order: i
         }));
         const { error } = await supabase.from('job_cme_bracket_mappings').insert(rows);
@@ -2062,7 +2060,6 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">VCS Codes</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type/Use Codes</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bracket</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Search Scope</th>
                     <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase w-24">Actions</th>
                   </tr>
                 </thead>
@@ -2114,16 +2111,6 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
                         </select>
                       </td>
                       <td className="px-3 py-2">
-                        <select
-                          value={mapping.search_scope}
-                          onChange={(e) => updateMapping(idx, 'search_scope', e.target.value)}
-                          className="w-full text-xs border rounded p-1"
-                        >
-                          <option value="same_vcs">Same VCS Only</option>
-                          <option value="all_vcs">All VCS (Town-wide)</option>
-                        </select>
-                      </td>
-                      <td className="px-3 py-2">
                         <div className="flex items-center justify-center gap-1">
                           <button onClick={() => moveMappingUp(idx)} disabled={idx === 0} className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30" title="Move up">
                             <ChevronUp className="w-4 h-4" />
@@ -2146,7 +2133,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
           <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
             <p className="text-xs text-amber-800">
               <strong>How it works:</strong> When evaluating with "Auto" selected, the system checks each property's VCS and Type/Use against these rules top-to-bottom.
-              The first matching rule determines which bracket and search scope to use. Properties that don't match any rule will fall back to price-based bracket selection.
+              The first matching rule determines which adjustment bracket to use. Properties that don't match any rule will fall back to price-based bracket selection.
             </p>
           </div>
         </div>
