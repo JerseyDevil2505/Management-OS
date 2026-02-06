@@ -302,13 +302,29 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
   };
 
   // ==================== SALES STATS FOR MAPPING HINTS ====================
+  // Valid sales codes for CME (matches SalesComparisonTab defaults)
+  const VALID_SALES_CODES = ['', '0', '00', '7', '07', '32', '36'];
+
+  const isQualifyingSale = useCallback((p) => {
+    // Must have a sale price
+    const price = p.values_norm_time || p.sales_price;
+    if (!price || price <= 0) return false;
+    // Must be residential (building class > 10)
+    const buildingClass = parseInt(p.asset_building_class) || 0;
+    if (buildingClass <= 10) return false;
+    // Must have a valid sales code
+    const nuCode = String(p.sales_nu ?? '').trim();
+    if (!VALID_SALES_CODES.includes(nuCode)) return false;
+    return true;
+  }, []);
+
   const salesStats = useMemo(() => {
     if (!properties || properties.length === 0) return { byVCS: {}, byTypeUse: {} };
     const byVCS = {};
     const byTypeUse = {};
     properties.forEach(p => {
+      if (!isQualifyingSale(p)) return;
       const price = p.values_norm_time || p.sales_price;
-      if (!price || price <= 0) return;
       const vcs = p.property_vcs || 'Unknown';
       const tu = p.asset_type_use || 'Unknown';
       if (!byVCS[vcs]) byVCS[vcs] = { count: 0, total: 0 };
@@ -319,18 +335,18 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, propertie
       byTypeUse[tu].total += price;
     });
     return { byVCS, byTypeUse };
-  }, [properties]);
+  }, [properties, isQualifyingSale]);
 
   // Unique VCS and Type/Use values for dropdowns
   const uniqueVCS = useMemo(() => {
-    const set = new Set(properties.map(p => p.property_vcs).filter(Boolean));
+    const set = new Set(properties.filter(p => isQualifyingSale(p)).map(p => p.property_vcs).filter(Boolean));
     return [...set].sort();
-  }, [properties]);
+  }, [properties, isQualifyingSale]);
 
   const uniqueTypeUse = useMemo(() => {
-    const set = new Set(properties.map(p => p.asset_type_use).filter(Boolean));
+    const set = new Set(properties.filter(p => isQualifyingSale(p)).map(p => p.asset_type_use).filter(Boolean));
     return [...set].sort();
-  }, [properties]);
+  }, [properties, isQualifyingSale]);
 
   // All bracket options (default + custom)
   const allBracketOptions = useMemo(() => {
