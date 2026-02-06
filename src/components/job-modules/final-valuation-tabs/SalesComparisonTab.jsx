@@ -3369,11 +3369,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                     if (!classSummary[m4Class]) classSummary[m4Class] = { count: 0, currentTotal: 0, newTotal: 0 };
                     classSummary[m4Class].count++;
                     const currentTotal = r.subject.values_mod_total || r.subject.values_cama_total || 0;
-                    const currentLand = r.subject.values_cama_land || r.subject.values_mod_land || 0;
                     classSummary[m4Class].currentTotal += currentTotal;
                     classSummary[m4Class].newTotal += (r.projectedAssessment || 0);
-                    totalCurrentLand += currentLand;
-                    totalCurrentImpr += (currentTotal - currentLand);
                     totalCurrentTotal += currentTotal;
                     totalNewValue += (r.projectedAssessment || 0);
                   });
