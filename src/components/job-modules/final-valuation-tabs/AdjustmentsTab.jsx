@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase, getRawDataForJob } from '../../../lib/supabaseClient';
-import { Save, Plus, Trash2, Settings, X } from 'lucide-react';
+import { Save, Plus, Trash2, Settings, X, Map, ChevronDown, ChevronUp } from 'lucide-react';
 
-const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
+const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, properties = [] }) => {
   const vendorType = jobData?.vendor_type || 'BRT';
   const [activeSubTab, setActiveSubTab] = useState('adjustments');
 
@@ -35,6 +35,10 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
     attributeValues: {} // Will hold { lot_size_ff: { value: 0, type: 'flat' }, ... }
   });
   const [customBrackets, setCustomBrackets] = useState([]); // Load from DB
+
+  // Bracket mapping state
+  const [bracketMappings, setBracketMappings] = useState([]);
+  const [isSavingMappings, setIsSavingMappings] = useState(false);
   
   // Structure: maps attribute -> array of codes
   const [codeConfig, setCodeConfig] = useState({
@@ -198,6 +202,7 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
     loadAdjustments();
     loadAvailableCodes();
     loadCustomBrackets();
+    loadBracketMappings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id, isJobContainerLoading]);
 
@@ -211,6 +216,135 @@ const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false }) => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobData?.id, isJobContainerLoading, availableCodes, isLoadingCodes]);
+
+  // ==================== BRACKET MAPPING FUNCTIONS ====================
+  const loadBracketMappings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('job_cme_bracket_mappings')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .order('sort_order');
+      if (error) throw error;
+      setBracketMappings(data || []);
+    } catch (error) {
+      console.warn('Bracket mappings loading error:', error.message);
+      setBracketMappings([]);
+    }
+  };
+
+  const addBracketMapping = () => {
+    setBracketMappings(prev => [
+      ...prev,
+      {
+        id: `new_${Date.now()}`,
+        job_id: jobData.id,
+        vcs_codes: null,
+        type_use_codes: null,
+        bracket_value: 'bracket_0',
+        search_scope: 'same_vcs',
+        sort_order: prev.length,
+        _isNew: true
+      }
+    ]);
+  };
+
+  const updateMapping = (idx, field, value) => {
+    setBracketMappings(prev => prev.map((m, i) => i === idx ? { ...m, [field]: value } : m));
+  };
+
+  const removeMapping = (idx) => {
+    setBracketMappings(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const moveMappingUp = (idx) => {
+    if (idx === 0) return;
+    setBracketMappings(prev => {
+      const arr = [...prev];
+      [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+      return arr.map((m, i) => ({ ...m, sort_order: i }));
+    });
+  };
+
+  const moveMappingDown = (idx) => {
+    setBracketMappings(prev => {
+      if (idx >= prev.length - 1) return prev;
+      const arr = [...prev];
+      [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+      return arr.map((m, i) => ({ ...m, sort_order: i }));
+    });
+  };
+
+  const saveBracketMappings = async () => {
+    try {
+      setIsSavingMappings(true);
+      // Delete all existing mappings for this job
+      await supabase.from('job_cme_bracket_mappings').delete().eq('job_id', jobData.id);
+      // Insert current mappings
+      if (bracketMappings.length > 0) {
+        const rows = bracketMappings.map((m, i) => ({
+          job_id: jobData.id,
+          vcs_codes: m.vcs_codes,
+          type_use_codes: m.type_use_codes,
+          bracket_value: m.bracket_value,
+          search_scope: m.search_scope,
+          sort_order: i
+        }));
+        const { error } = await supabase.from('job_cme_bracket_mappings').insert(rows);
+        if (error) throw error;
+      }
+      await loadBracketMappings();
+      alert('Bracket mappings saved successfully!');
+    } catch (error) {
+      console.error('Error saving bracket mappings:', error);
+      alert('Failed to save bracket mappings: ' + error.message);
+    } finally {
+      setIsSavingMappings(false);
+    }
+  };
+
+  // ==================== SALES STATS FOR MAPPING HINTS ====================
+  const salesStats = useMemo(() => {
+    if (!properties || properties.length === 0) return { byVCS: {}, byTypeUse: {} };
+    const byVCS = {};
+    const byTypeUse = {};
+    properties.forEach(p => {
+      const price = p.values_norm_time || p.sales_price;
+      if (!price || price <= 0) return;
+      const vcs = p.property_vcs || 'Unknown';
+      const tu = p.asset_type_use || 'Unknown';
+      if (!byVCS[vcs]) byVCS[vcs] = { count: 0, total: 0 };
+      byVCS[vcs].count++;
+      byVCS[vcs].total += price;
+      if (!byTypeUse[tu]) byTypeUse[tu] = { count: 0, total: 0 };
+      byTypeUse[tu].count++;
+      byTypeUse[tu].total += price;
+    });
+    return { byVCS, byTypeUse };
+  }, [properties]);
+
+  // Unique VCS and Type/Use values for dropdowns
+  const uniqueVCS = useMemo(() => {
+    const set = new Set(properties.map(p => p.property_vcs).filter(Boolean));
+    return [...set].sort();
+  }, [properties]);
+
+  const uniqueTypeUse = useMemo(() => {
+    const set = new Set(properties.map(p => p.asset_type_use).filter(Boolean));
+    return [...set].sort();
+  }, [properties]);
+
+  // All bracket options (default + custom)
+  const allBracketOptions = useMemo(() => {
+    const options = CME_BRACKETS.map((b, idx) => ({
+      value: `bracket_${idx}`,
+      label: b.shortLabel
+    }));
+    customBrackets.forEach(cb => {
+      options.push({ value: `custom_${cb.bracket_id}`, label: cb.bracket_name });
+    });
+    return options;
+  }, [customBrackets]);
 
   const loadCustomBrackets = async () => {
     try {
