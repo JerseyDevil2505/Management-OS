@@ -1188,8 +1188,8 @@ export const interpretCodes = {
 
 **Purpose:** Generic key-value store for job-specific configuration settings that don't warrant dedicated columns. Allows flexible setting storage without schema changes.
 
-#### **job_cme_evaluations** ⚠️ LEGACY TABLE
-**Component:** Early CME prototype (superseded by final_valuation_data)
+#### **job_cme_evaluations** ⚠️ ACTIVE TABLE (Updated 2025)
+**Component:** SalesComparisonTab.jsx - Set-aside evaluation storage
 
 | Column | Data Type | Notes |
 |--------|-----------|-------|
@@ -1197,22 +1197,59 @@ export const interpretCodes = {
 | job_id | uuid | Foreign key to jobs |
 | evaluation_run_id | uuid | Batch evaluation identifier |
 | subject_property_id | uuid | Property being evaluated |
-| subject_pams | text | Property identifier string |
+| subject_pams | text | Property composite key (block-lot-qualifier) |
 | subject_address | text | Property address |
-| search_criteria | jsonb | Filter criteria used |
-| comparables | jsonb | Array of comparable properties |
-| projected_assessment | numeric | Estimated value |
+| search_criteria | jsonb | Filter criteria used for this evaluation |
+| comparables | jsonb | Array of comparable properties with adjustedPrice, adjustmentPercent, rank |
+| projected_assessment | numeric | CME projected value (weighted average of adjusted comps) |
 | weighted_average_price | numeric | Average of comps |
-| confidence_score | numeric | Quality metric |
-| status | text | 'pending', 'completed', 'failed' |
+| confidence_score | numeric | Quality metric (0-100) |
+| status | text | 'set_aside' (committed results) |
 | notes | text | Evaluation notes |
 | created_by | uuid | User who ran evaluation |
 | created_at | timestamp with time zone | |
 | updated_at | timestamp with time zone | |
 
-**Status:** LEGACY - Early prototype. Current system uses final_valuation_data table. May contain historical data but not actively used.
+**Status:** ACTIVE - Used for "Set Aside" workflow. When a user evaluates properties and sets aside successful results, they are saved here with status='set_aside'. The Summary tab aggregates these records to show working totals, VCS completion tracking, and projected net valuation.
 
-**Purpose:** Original CME evaluation storage before consolidation into final_valuation_data. Preserved for historical reference.
+**Purpose:** Stores committed CME evaluation results. Users evaluate in batches (by VCS, type/use, etc.), review results, then "Set Aside" successful evaluations (those with sufficient comparables). The Summary tab uses these records as the source of truth for the projected valuation table and export.
+
+#### **job_cme_result_sets** ⚠️ NEW TABLE (2025)
+**Component:** SalesComparisonTab.jsx - Named result set snapshots
+
+| Column | Data Type | Notes |
+|--------|-----------|-------|
+| id | uuid | Primary key |
+| job_id | uuid | Foreign key to jobs |
+| name | text | User-provided name for the result set |
+| adjustment_bracket | text | Bracket mode used ('auto', 'bracket_0', etc.) |
+| search_criteria | jsonb | Complete compFilters state at time of save |
+| results | jsonb | Full serialized evaluation results (subjects + comparables with all property fields) |
+| created_at | timestamp with time zone | |
+
+**Purpose:** Allows users to save named snapshots of evaluation results for later recall. Preserves complete subject and comparable property data so results can be reloaded and viewed in DetailedAppraisalGrid without re-running the evaluation. Users can load, delete, and manage multiple saved sets per job.
+
+#### **job_cme_bracket_mappings** ⚠️ NEW TABLE (2025)
+**Component:** AdjustmentsTab.jsx - Bracket Mapping sub-tab (drag-and-drop UI)
+
+| Column | Data Type | Notes |
+|--------|-----------|-------|
+| id | uuid | Primary key |
+| job_id | uuid | Foreign key to jobs |
+| vcs_codes | text[] | Array of VCS codes (null if type/use mapping) |
+| type_use_codes | text[] | Array of Type/Use codes (null if VCS mapping) |
+| bracket_value | text | Target bracket identifier (e.g., 'bracket_0', 'bracket_5') |
+| sort_order | integer | Processing priority order |
+| created_at | timestamp with time zone | |
+
+**Purpose:** Maps VCS and Type/Use codes to specific adjustment brackets. When CME runs in "Auto (based on mapping)" mode, each subject property is routed to the correct bracket based on its VCS or Type/Use code rather than falling back to price-based bracket selection. This is critical because a property's current assessed value may not reflect its true market segment — a $300K-assessed property in a $500K neighborhood should use the $500K bracket adjustments.
+
+**Drag-and-Drop UI:** Left side shows unassigned Type/Use and VCS codes stacked vertically. Right side shows bracket buckets in a 2-column grid with color-coding and average sale prices. Users drag codes into brackets to assign them.
+
+**Qualifying Sales Filter:** Average sale prices shown in bracket hints only include:
+- Building class > 10 (residential only)
+- Valid sales codes: 00, 0, 7, 07, 32, 36
+- Properties with values_norm_time > 0
 
 #### **analytics_runs** ⚠️ NEW TABLE (January 2025)
 **Component:** ProductionTracker.jsx - Analytics history tracking
