@@ -176,8 +176,12 @@ JobContainer (loads once with pagination)
 │   │   ├── PayrollManagement.jsx      ← Office Manager chaos killer, inspection bonuses (1,100 lines)
 │   │   ├── LandingPage.jsx            ← Initial dashboard/landing page
 │   │   ├── LandingPage.css            ← Landing page styles
-│   │   ├── UserManagement.jsx         ← User account management
+│   │   ├── UserManagement.jsx         ← User account management (Primary Owner only)
 │   │   ├── UserManagement.css         ← User management styles
+│   │   ├── OrganizationManagement.jsx ← Multi-tenant client org management (Primary Owner only)
+│   │   ├── OrganizationManagement.css ← Organization management styles
+│   │   ├── RevenueManagement.jsx      ← Invoice/billing tracking placeholder (Primary Owner only)
+│   │   ├── RevenueManagement.css      ← Revenue management styles
 │   │   ├── VirtualPropertyList.jsx    ← Paginated property display component (performance optimization)
 │   │   └── job-modules/               ← Job-specific workflow modules
 │   │       ├── JobContainer.jsx       ← Job module dispatcher, navigation & DATA LOADER (NEW ROLE!)
@@ -464,6 +468,66 @@ export const interpretCodes = {
 - **5 new performance indexes added**
 - **NEW table added**: `property_market_analysis` for field migration
 - **Major refactor**: Raw data consolidated from property to job level
+
+### Multi-Tenant Architecture (February 2025)
+
+**Purpose**: Enable external client access (Lojik CME assessor clients) while keeping PPA internal operations separate.
+
+**Organization Types:**
+- `internal` - PPA Associates (never charged, full access)
+- `assessor` - External clients (billed based on line items + users)
+
+**Pricing Model:**
+- Base fee based on line item count (primary cards only)
+- Primary user: $500/year
+- Additional staff: $250/year each
+- Government billing: Invoice → PO → Payment (no Stripe)
+
+**Tables Modified:**
+- `jobs` - Added `organization_id` (required)
+- `employees` - Added `organization_id` (required)
+- `profiles` - Added `organization_id` (required)
+- `planning_jobs` - Added `organization_id` (required)
+
+**New UI Components:**
+- `OrganizationManagement.jsx` - Add/manage client orgs, staff, billing status
+- `RevenueManagement.jsx` - Placeholder for invoice tracking (coming soon)
+
+**Access Control:**
+| Tab | Who Can See |
+|-----|-------------|
+| Employees, Jobs, Appeal Coverage | All Users |
+| Billing, Payroll | Admin + Owner |
+| Users, Organizations, Revenue | Primary Owner Only |
+
+#### **organizations** (NEW - February 2025)
+**Component:** `OrganizationManagement.jsx`
+
+| Column | Data Type | Description |
+|--------|-----------|-------------|
+| id | uuid | Primary key |
+| name | text | Organization name |
+| slug | text | URL-friendly identifier |
+| org_type | text | 'internal' or 'assessor' |
+| single_job_mode | boolean | Skip job list on login |
+| default_job_id | uuid | For single-job orgs |
+| tab_config | jsonb | Which tabs org users can see |
+| primary_contact_name | text | Billing contact |
+| primary_contact_email | text | Billing email |
+| billing_address | text | Invoice address |
+| line_item_count | integer | For fee calculation |
+| subscription_status | text | active/suspended/cancelled/trial |
+| invoice_sent_date | date | Billing workflow |
+| po_received_date | date | Billing workflow |
+| payment_received_date | date | Billing workflow |
+| renewal_date | date | Annual renewal |
+| annual_fee | numeric | Calculated fee |
+| created_at | timestamptz | Audit |
+| updated_at | timestamptz | Audit |
+
+**PPA Organization ID:** `00000000-0000-0000-0000-000000000001`
+
+---
 
 ### Core Production Tables with Component Mappings
 
@@ -1124,8 +1188,8 @@ export const interpretCodes = {
 
 **Purpose:** Generic key-value store for job-specific configuration settings that don't warrant dedicated columns. Allows flexible setting storage without schema changes.
 
-#### **job_cme_evaluations** ⚠️ LEGACY TABLE
-**Component:** Early CME prototype (superseded by final_valuation_data)
+#### **job_cme_evaluations** ⚠️ ACTIVE TABLE (Updated 2025)
+**Component:** SalesComparisonTab.jsx - Set-aside evaluation storage
 
 | Column | Data Type | Notes |
 |--------|-----------|-------|
@@ -1133,22 +1197,59 @@ export const interpretCodes = {
 | job_id | uuid | Foreign key to jobs |
 | evaluation_run_id | uuid | Batch evaluation identifier |
 | subject_property_id | uuid | Property being evaluated |
-| subject_pams | text | Property identifier string |
+| subject_pams | text | Property composite key (block-lot-qualifier) |
 | subject_address | text | Property address |
-| search_criteria | jsonb | Filter criteria used |
-| comparables | jsonb | Array of comparable properties |
-| projected_assessment | numeric | Estimated value |
+| search_criteria | jsonb | Filter criteria used for this evaluation |
+| comparables | jsonb | Array of comparable properties with adjustedPrice, adjustmentPercent, rank |
+| projected_assessment | numeric | CME projected value (weighted average of adjusted comps) |
 | weighted_average_price | numeric | Average of comps |
-| confidence_score | numeric | Quality metric |
-| status | text | 'pending', 'completed', 'failed' |
+| confidence_score | numeric | Quality metric (0-100) |
+| status | text | 'set_aside' (committed results) |
 | notes | text | Evaluation notes |
 | created_by | uuid | User who ran evaluation |
 | created_at | timestamp with time zone | |
 | updated_at | timestamp with time zone | |
 
-**Status:** LEGACY - Early prototype. Current system uses final_valuation_data table. May contain historical data but not actively used.
+**Status:** ACTIVE - Used for "Set Aside" workflow. When a user evaluates properties and sets aside successful results, they are saved here with status='set_aside'. The Summary tab aggregates these records to show working totals, VCS completion tracking, and projected net valuation.
 
-**Purpose:** Original CME evaluation storage before consolidation into final_valuation_data. Preserved for historical reference.
+**Purpose:** Stores committed CME evaluation results. Users evaluate in batches (by VCS, type/use, etc.), review results, then "Set Aside" successful evaluations (those with sufficient comparables). The Summary tab uses these records as the source of truth for the projected valuation table and export.
+
+#### **job_cme_result_sets** ⚠️ NEW TABLE (2025)
+**Component:** SalesComparisonTab.jsx - Named result set snapshots
+
+| Column | Data Type | Notes |
+|--------|-----------|-------|
+| id | uuid | Primary key |
+| job_id | uuid | Foreign key to jobs |
+| name | text | User-provided name for the result set |
+| adjustment_bracket | text | Bracket mode used ('auto', 'bracket_0', etc.) |
+| search_criteria | jsonb | Complete compFilters state at time of save |
+| results | jsonb | Full serialized evaluation results (subjects + comparables with all property fields) |
+| created_at | timestamp with time zone | |
+
+**Purpose:** Allows users to save named snapshots of evaluation results for later recall. Preserves complete subject and comparable property data so results can be reloaded and viewed in DetailedAppraisalGrid without re-running the evaluation. Users can load, delete, and manage multiple saved sets per job.
+
+#### **job_cme_bracket_mappings** ⚠️ NEW TABLE (2025)
+**Component:** AdjustmentsTab.jsx - Bracket Mapping sub-tab (drag-and-drop UI)
+
+| Column | Data Type | Notes |
+|--------|-----------|-------|
+| id | uuid | Primary key |
+| job_id | uuid | Foreign key to jobs |
+| vcs_codes | text[] | Array of VCS codes (null if type/use mapping) |
+| type_use_codes | text[] | Array of Type/Use codes (null if VCS mapping) |
+| bracket_value | text | Target bracket identifier (e.g., 'bracket_0', 'bracket_5') |
+| sort_order | integer | Processing priority order |
+| created_at | timestamp with time zone | |
+
+**Purpose:** Maps VCS and Type/Use codes to specific adjustment brackets. When CME runs in "Auto (based on mapping)" mode, each subject property is routed to the correct bracket based on its VCS or Type/Use code rather than falling back to price-based bracket selection. This is critical because a property's current assessed value may not reflect its true market segment — a $300K-assessed property in a $500K neighborhood should use the $500K bracket adjustments.
+
+**Drag-and-Drop UI:** Left side shows unassigned Type/Use and VCS codes stacked vertically. Right side shows bracket buckets in a 2-column grid with color-coding and average sale prices. Users drag codes into brackets to assign them.
+
+**Qualifying Sales Filter:** Average sale prices shown in bracket hints only include:
+- Building class > 10 (residential only)
+- Valid sales codes: 00, 0, 7, 07, 32, 36
+- Properties with values_norm_time > 0
 
 #### **analytics_runs** ⚠️ NEW TABLE (January 2025)
 **Component:** ProductionTracker.jsx - Analytics history tracking
@@ -1217,7 +1318,188 @@ export const interpretCodes = {
 | asset_type_use | text | |
 | asset_view | text | |
 | asset_year_built | integer | |
+| asset_bedrooms | integer | Bedroom count (BRT: BEDTOT, Microsystems: Total Bedrms) |
 | asset_zoning | text | **REMOVED** - Moved to property_market_analysis |
+| ac_area | numeric | **NEW** - Air conditioning area in square feet (CME attribute) |
+| barn_area | numeric | **NEW** - Barn area in square feet (CME attribute) |
+| basement_area | numeric | **NEW** - Basement area in square feet (CME attribute) |
+| deck_area | numeric | **NEW** - Deck area in square feet (CME attribute) |
+| det_garage_area | numeric | **NEW** - Detached garage area in square feet (CME attribute) |
+| enclosed_porch_area | numeric | **NEW** - Enclosed porch area in square feet (CME attribute) |
+| fin_basement_area | numeric | **NEW** - Finished basement area in square feet (CME attribute) |
+| fireplace_count | integer | **NEW** - Number of fireplaces (CME attribute) |
+| fireplaces | numeric | **NEW** - Fireplace count/area (CME attribute) |
+| garage_area | numeric | **NEW** - Attached garage area in square feet (CME attribute) |
+| open_porch_area | numeric | **NEW** - Open porch area in square feet (CME attribute) |
+| patio_area | numeric | **NEW** - Patio area in square feet (CME attribute) |
+| pole_barn_area | numeric | **NEW** - Pole barn area in square feet (CME attribute) |
+| pool_area | numeric | **NEW** - Pool area in square feet (CME attribute) |
+| stable_area | numeric | **NEW** - Stable area in square feet (CME attribute) |
+| attachedcode_1 | text | **NEW** - BRT attached item code 1 |
+| attachedcode_2 | text | **NEW** - BRT attached item code 2 |
+| attachedcode_3 | text | **NEW** - BRT attached item code 3 |
+| attachedcode_4 | text | **NEW** - BRT attached item code 4 |
+| attachedcode_5 | text | **NEW** - BRT attached item code 5 |
+| attachedcode_6 | text | **NEW** - BRT attached item code 6 |
+| attachedcode_7 | text | **NEW** - BRT attached item code 7 |
+| attachedcode_8 | text | **NEW** - BRT attached item code 8 |
+| attachedcode_9 | text | **NEW** - BRT attached item code 9 |
+| attachedcode_10 | text | **NEW** - BRT attached item code 10 |
+| attachedcode_11 | text | **NEW** - BRT attached item code 11 |
+| attachedcode_12 | text | **NEW** - BRT attached item code 12 |
+| attachedcode_13 | text | **NEW** - BRT attached item code 13 |
+| attachedcode_14 | text | **NEW** - BRT attached item code 14 |
+| attachedcode_15 | text | **NEW** - BRT attached item code 15 |
+| attachedarea_1 | numeric | **NEW** - BRT attached item area 1 |
+| attachedarea_2 | numeric | **NEW** - BRT attached item area 2 |
+| attachedarea_3 | numeric | **NEW** - BRT attached item area 3 |
+| attachedarea_4 | numeric | **NEW** - BRT attached item area 4 |
+| attachedarea_5 | numeric | **NEW** - BRT attached item area 5 |
+| attachedarea_6 | numeric | **NEW** - BRT attached item area 6 |
+| attachedarea_7 | numeric | **NEW** - BRT attached item area 7 |
+| attachedarea_8 | numeric | **NEW** - BRT attached item area 8 |
+| attachedarea_9 | numeric | **NEW** - BRT attached item area 9 |
+| attachedarea_10 | numeric | **NEW** - BRT attached item area 10 |
+| attachedarea_11 | numeric | **NEW** - BRT attached item area 11 |
+| attachedarea_12 | numeric | **NEW** - BRT attached item area 12 |
+| attachedarea_13 | numeric | **NEW** - BRT attached item area 13 |
+| attachedarea_14 | numeric | **NEW** - BRT attached item area 14 |
+| attachedarea_15 | numeric | **NEW** - BRT attached item area 15 |
+| detachedcode_1 | text | **NEW** - BRT detached item code 1 |
+| detachedcode_2 | text | **NEW** - BRT detached item code 2 |
+| detachedcode_3 | text | **NEW** - BRT detached item code 3 |
+| detachedcode_4 | text | **NEW** - BRT detached item code 4 |
+| detachedcode_5 | text | **NEW** - BRT detached item code 5 |
+| detachedcode_6 | text | **NEW** - BRT detached item code 6 |
+| detachedcode_7 | text | **NEW** - BRT detached item code 7 |
+| detachedcode_8 | text | **NEW** - BRT detached item code 8 |
+| detachedcode_9 | text | **NEW** - BRT detached item code 9 |
+| detachedcode_10 | text | **NEW** - BRT detached item code 10 |
+| detachedcode_11 | text | **NEW** - BRT detached item code 11 |
+| detacheddcsize_1 | numeric | **NEW** - BRT detached item size 1 |
+| detacheddcsize_2 | numeric | **NEW** - BRT detached item size 2 |
+| detacheddcsize_3 | numeric | **NEW** - BRT detached item size 3 |
+| detacheddcsize_4 | numeric | **NEW** - BRT detached item size 4 |
+| detacheddcsize_5 | numeric | **NEW** - BRT detached item size 5 |
+| detacheddcsize_6 | numeric | **NEW** - BRT detached item size 6 |
+| detacheddcsize_7 | numeric | **NEW** - BRT detached item size 7 |
+| detacheddcsize_8 | numeric | **NEW** - BRT detached item size 8 |
+| detacheddcsize_9 | numeric | **NEW** - BRT detached item size 9 |
+| detacheddcsize_10 | numeric | **NEW** - BRT detached item size 10 |
+| detacheddcsize_11 | numeric | **NEW** - BRT detached item size 11 |
+| detachednc_1 | numeric | **NEW** - BRT detached item count 1 |
+| detachednc_2 | numeric | **NEW** - BRT detached item count 2 |
+| detachednc_3 | numeric | **NEW** - BRT detached item count 3 |
+| detachednc_4 | numeric | **NEW** - BRT detached item count 4 |
+| detachednc_5 | numeric | **NEW** - BRT detached item count 5 |
+| detachednc_6 | numeric | **NEW** - BRT detached item count 6 |
+| detachednc_7 | numeric | **NEW** - BRT detached item count 7 |
+| detachednc_8 | numeric | **NEW** - BRT detached item count 8 |
+| detachednc_9 | numeric | **NEW** - BRT detached item count 9 |
+| detachednc_10 | numeric | **NEW** - BRT detached item count 10 |
+| detachednc_11 | numeric | **NEW** - BRT detached item count 11 |
+| detached_item_code1 | text | **NEW** - Microsystems detached item code 1 |
+| detached_item_code2 | text | **NEW** - Microsystems detached item code 2 |
+| detached_item_code3 | text | **NEW** - Microsystems detached item code 3 |
+| detached_item_code4 | text | **NEW** - Microsystems detached item code 4 |
+| detachedbuilding1 | text | **NEW** - Microsystems detached building code 1 |
+| detachedbuilding2 | text | **NEW** - Microsystems detached building code 2 |
+| detachedbuilding3 | text | **NEW** - Microsystems detached building code 3 |
+| detachedbuilding4 | text | **NEW** - Microsystems detached building code 4 |
+| depth1 | numeric | **NEW** - Microsystems detached item depth 1 |
+| depth2 | numeric | **NEW** - Microsystems detached item depth 2 |
+| depth3 | numeric | **NEW** - Microsystems detached item depth 3 |
+| depth4 | numeric | **NEW** - Microsystems detached item depth 4 |
+| depthn1 | numeric | **NEW** - Microsystems detached building depth 1 |
+| depthn2 | numeric | **NEW** - Microsystems detached building depth 2 |
+| depthn3 | numeric | **NEW** - Microsystems detached building depth 3 |
+| depthn4 | numeric | **NEW** - Microsystems detached building depth 4 |
+| width1 | numeric | **NEW** - Microsystems detached item width 1 |
+| width2 | numeric | **NEW** - Microsystems detached item width 2 |
+| width3 | numeric | **NEW** - Microsystems detached item width 3 |
+| width4 | numeric | **NEW** - Microsystems detached item width 4 |
+| widthn1 | numeric | **NEW** - Microsystems detached building width 1 |
+| widthn2 | numeric | **NEW** - Microsystems detached building width 2 |
+| widthn3 | numeric | **NEW** - Microsystems detached building width 3 |
+| widthn4 | numeric | **NEW** - Microsystems detached building width 4 |
+| misc_1_brt | text | **NEW** - BRT miscellaneous item 1 |
+| misc_2_brt | text | **NEW** - BRT miscellaneous item 2 |
+| misc_3_brt | text | **NEW** - BRT miscellaneous item 3 |
+| misc_4_brt | text | **NEW** - BRT miscellaneous item 4 |
+| misc_5_brt | text | **NEW** - BRT miscellaneous item 5 |
+| misc_item_1 | text | **NEW** - Microsystems miscellaneous item 1 |
+| misc_item_2 | text | **NEW** - Microsystems miscellaneous item 2 |
+| misc_item_3 | text | **NEW** - Microsystems miscellaneous item 3 |
+| miscnum_1 | numeric | **NEW** - BRT miscellaneous item count 1 |
+| miscnum_2 | numeric | **NEW** - BRT miscellaneous item count 2 |
+| miscnum_3 | numeric | **NEW** - BRT miscellaneous item count 3 |
+| miscnum_4 | numeric | **NEW** - BRT miscellaneous item count 4 |
+| miscnum_5 | numeric | **NEW** - BRT miscellaneous item count 5 |
+| landffcond_1 | text | **NEW** - BRT land favorable condition 1 |
+| landffcond_2 | text | **NEW** - BRT land favorable condition 2 |
+| landffcond_3 | text | **NEW** - BRT land favorable condition 3 |
+| landffcond_4 | text | **NEW** - BRT land favorable condition 4 |
+| landffcond_5 | text | **NEW** - BRT land favorable condition 5 |
+| landffcond_6 | text | **NEW** - BRT land favorable condition 6 |
+| landffinfl_1 | text | **NEW** - BRT land unfavorable influence 1 |
+| landffinfl_2 | text | **NEW** - BRT land unfavorable influence 2 |
+| landffinfl_3 | text | **NEW** - BRT land unfavorable influence 3 |
+| landffinfl_4 | text | **NEW** - BRT land unfavorable influence 4 |
+| landffinfl_5 | text | **NEW** - BRT land unfavorable influence 5 |
+| landffinfl_6 | text | **NEW** - BRT land unfavorable influence 6 |
+| landur_1 | text | **NEW** - Microsystems land use code 1 (lowercase variant) |
+| landur_2 | text | **NEW** - Microsystems land use code 2 (lowercase variant) |
+| landur_3 | text | **NEW** - Microsystems land use code 3 (lowercase variant) |
+| landur_4 | text | **NEW** - Microsystems land use code 4 (lowercase variant) |
+| landur_5 | text | **NEW** - Microsystems land use code 5 (lowercase variant) |
+| landur_6 | text | **NEW** - Microsystems land use code 6 (lowercase variant) |
+| landurcond_1 | text | **NEW** - BRT land urban condition 1 |
+| landurcond_2 | text | **NEW** - BRT land urban condition 2 |
+| landurcond_3 | text | **NEW** - BRT land urban condition 3 |
+| landurcond_4 | text | **NEW** - BRT land urban condition 4 |
+| landurcond_5 | text | **NEW** - BRT land urban condition 5 |
+| landurcond_6 | text | **NEW** - BRT land urban condition 6 |
+| landurinfl_1 | text | **NEW** - BRT land urban influence 1 |
+| landurinfl_2 | text | **NEW** - BRT land urban influence 2 |
+| landurinfl_3 | text | **NEW** - BRT land urban influence 3 |
+| landurinfl_4 | text | **NEW** - BRT land urban influence 4 |
+| landurinfl_5 | text | **NEW** - BRT land urban influence 5 |
+| landurinfl_6 | text | **NEW** - BRT land urban influence 6 |
+| landurunits_1 | numeric | **NEW** - Microsystems land use units 1 (lowercase variant) |
+| landurunits_2 | numeric | **NEW** - Microsystems land use units 2 (lowercase variant) |
+| landurunits_3 | numeric | **NEW** - Microsystems land use units 3 (lowercase variant) |
+| landurunits_4 | numeric | **NEW** - Microsystems land use units 4 (lowercase variant) |
+| landurunits_5 | numeric | **NEW** - Microsystems land use units 5 (lowercase variant) |
+| landurunits_6 | numeric | **NEW** - Microsystems land use units 6 (lowercase variant) |
+| functional1 | numeric | **NEW** - Functional item 1 |
+| functional2 | numeric | **NEW** - Functional item 2 |
+| functional3 | numeric | **NEW** - Functional item 3 |
+| functional4 | numeric | **NEW** - Functional item 4 |
+| functional_depr1 | numeric | **NEW** - Functional depreciation 1 |
+| functional_depr2 | numeric | **NEW** - Functional depreciation 2 |
+| functional_depr3 | numeric | **NEW** - Functional depreciation 3 |
+| functional_depr4 | numeric | **NEW** - Functional depreciation 4 |
+| location_economic1 | numeric | **NEW** - Location economic factor 1 |
+| location_economic2 | numeric | **NEW** - Location economic factor 2 |
+| location_economic3 | numeric | **NEW** - Location economic factor 3 |
+| location_economic4 | numeric | **NEW** - Location economic factor 4 |
+| locationl_depr1 | numeric | **NEW** - Locational depreciation 1 |
+| locationl_depr2 | numeric | **NEW** - Locational depreciation 2 |
+| locationl_depr3 | numeric | **NEW** - Locational depreciation 3 |
+| locationl_depr4 | numeric | **NEW** - Locational depreciation 4 |
+| physical_depr1 | numeric | **NEW** - Physical depreciation 1 |
+| physical_depr2 | numeric | **NEW** - Physical depreciation 2 |
+| physical_depr3 | numeric | **NEW** - Physical depreciation 3 |
+| physical_depr4 | numeric | **NEW** - Physical depreciation 4 |
+| pysical1 | numeric | **NEW** - Physical item 1 (note: typo in schema, likely should be "physical") |
+| pysical2 | numeric | **NEW** - Physical item 2 (note: typo in schema) |
+| pysical3 | numeric | **NEW** - Physical item 3 (note: typo in schema) |
+| pysical4 | numeric | **NEW** - Physical item 4 (note: typo in schema) |
+| overall_adj_reason1 | text | **NEW** - Overall adjustment reason 1 |
+| overall_adj_reason2 | text | **NEW** - Overall adjustment reason 2 |
+| overall_adj_reason3 | text | **NEW** - Overall adjustment reason 3 |
+| overall_adj_reason4 | text | **NEW** - Overall adjustment reason 4 |
+| raw_detached_items | text | **NEW** - Raw detached items text field |
 | special_tax_code_1 | text | **NEW** - Special tax district code 1 (BRT: EXEMPT_SPECIAL_TAXCODE1, Micro: Sp Tax Cd1) |
 | special_tax_code_2 | text | **NEW** - Special tax district code 2 (BRT: EXEMPT_SPECIAL_TAXCODE2, Micro: Sp Tax Cd2) |
 | special_tax_code_3 | text | **NEW** - Special tax district code 3 (BRT: EXEMPT_SPECIAL_TAXCODE3, Micro: N/A) |
@@ -1500,6 +1782,85 @@ LEFT JOIN employees e ON ja.employee_id = e.id;
 - `src/components/job-modules/market-tabs/LandValuationTab.jsx` (~10,000 lines)
 
 **Status:** ✅ **COMPLETE** - All export functionality standardized and working. Ready for PR.
+
+---
+
+### ✅ COMPLETED: CME Attribute Display & Garage Per-Car Categorization (January 2025)
+
+**Context:** Implementation of comprehensive attribute extraction system for Sales Comparison (CME) with configurable garage categorization based on square footage thresholds.
+
+**Key Accomplishments:**
+
+1. **Attribute Extraction System**:
+   - ✅ **97 detail columns extracted** for BRT vendor (attached/detached items, misc items, land adjustments)
+   - ✅ **Code configuration system** - Auto-loads from job_settings during file processing
+   - ✅ **Smart code matching** - `codeMatches()` helper handles leading zeros and descriptions ("02" matches "2 - CONC PATIO")
+   - ✅ **Dimension-based fallback** - Calculates area from width × depth when direct area unavailable
+   - ✅ **Percentage value handling** - Converts "100%" to actual value by multiplying with SFLA
+
+2. **Code Configuration Loading**:
+   - ✅ **Processor integration** - brt-processor.js loads configuration automatically
+   - ✅ **Updater integration** - brt-updater.js mirrors processor pattern for UPSERT operations
+   - ✅ **Edge Function sync** - recalculate-amenities function uses same codeMatches() logic
+   - ✅ **9 extraction methods** added: garage, deck, patio, open_porch, enclosed_porch, det_garage, pool, barn, stable, pole_barn
+   - ✅ **Bug fixes**: Finished basement field name (BSMNTFINISHAREA → BSMNTFINISHAREA), clearRawDataCache location fix
+
+3. **Garage Per-Car Categorization System**:
+   - ✅ **Configurable thresholds** (default: 1-399=ONE CAR, 400-799=TWO CAR, 800-999=THREE CAR, 1000+=MULTI CAR)
+   - ✅ **UI display format** - Shows "TWO CAR (650 SF)" instead of raw square footage
+   - ✅ **Category-based adjustments** - Adjustment = category_difference × adjustment_value
+     - Example: Subject ONE CAR (cat 1), Comp TWO CAR (cat 2) → -1 category → -$10,000
+     - Example: Subject MULTI CAR (cat 4), Comp TWO CAR (cat 2) → +2 category → +$20,000
+   - ✅ **Configuration UI** - AdjustmentsTab includes threshold editor with real-time category range display
+   - ✅ **State management** - Garage thresholds loaded from job_settings in multiple components
+   - ✅ **Adjustment type** - Changed default from 'flat' to 'count' for both garage and det_garage
+
+4. **DetailedAppraisalGrid Display Fix**:
+   - ✅ **Removed YES/NONE override** - Garage area now displays category + SF format
+   - ✅ **No Edge Function needed** - Display change only, data already populated from processors
+   - ✅ **Preserved YES/NONE** for other amenities (deck, patio, pool, etc.)
+
+**Files Modified:**
+- `src/lib/data-pipeline/brt-processor.js` - Added code config loading, codeMatches(), 9 extraction methods
+- `src/lib/data-pipeline/brt-updater.js` - Mirrored processor changes for UPSERT operations
+- `src/components/job-modules/final-valuation-tabs/AdjustmentsTab.jsx` - Garage threshold configuration UI
+- `src/components/job-modules/final-valuation-tabs/DetailedAppraisalGrid.jsx` - Category display for garage area
+- `src/components/job-modules/final-valuation-tabs/SalesComparisonTab.jsx` - Category-based adjustment calculation
+- `src/components/job-modules/FileUploadButton.jsx` - Fixed clearRawDataCache bug
+- `supabase/functions/recalculate-amenities/index.ts` - Added codeMatches() helper
+
+**Database Changes:**
+- Added 97 new columns to property_records table (see schema documentation)
+- Added job_settings entries for garage thresholds: garage_threshold_one_car_max, garage_threshold_two_car_max, garage_threshold_three_car_max
+
+**Code Pattern Established:**
+```javascript
+// Smart code matching (handles "02" matching "2 - CONC PATIO")
+codeMatches(rawCode, configuredCodes) {
+  const normalizedRaw = String(rawCode).replace(/^0+/, '') || '0';
+  return configuredCodes.some(configCode => {
+    const codePart = String(configCode).split(' - ')[0].trim();
+    const normalizedConfig = codePart.replace(/^0+/, '') || '0';
+    return normalizedRaw === normalizedConfig;
+  });
+}
+
+// Garage category conversion
+getGarageCategory(sqft, thresholds) {
+  if (!sqft || sqft === 0) return 0; // NONE
+  if (sqft <= thresholds.one_car_max) return 1; // ONE CAR
+  if (sqft <= thresholds.two_car_max) return 2; // TWO CAR
+  if (sqft <= thresholds.three_car_max) return 3; // THREE CAR
+  return 4; // MULTI CAR
+}
+```
+
+**Next Session Priorities:**
+1. ✅ Verify adjustment calculation logic works correctly (category differences)
+2. 🎯 Add modal with Edge Function to edit attributes on-the-fly
+3. 🎯 End-to-end testing of garage categorization workflow
+
+**Status:** ✅ **COMPLETE** - All attribute extraction and garage categorization implemented. Ready for testing.
 
 ---
 
@@ -5727,22 +6088,27 @@ Class 4: $256.8M @ 2.684% = $6,892,196 total tax
 
 ### SalesComparisonTab.jsx - Comparative Market Evaluation (CME) Engine 🔍
 
-**Scale**: 2,812 lines - THE LARGEST Final Valuation component!
+**Scale**: ~3,900+ lines - THE LARGEST Final Valuation component!
 
-**Core Philosophy**: Automated comparable search with sophisticated filtering and adjustment grid integration
+**Core Philosophy**: Automated comparable search with sophisticated filtering, bracket mapping, and adjustment grid integration. Supports batch-based workflows where users evaluate by VCS/Type-Use segments, set aside good results, and build toward a complete town valuation.
 
 **Key Features:**
 - **Subject Property Selection** - Multi-select by VCS, Type Use, or manual entry
 - **Comparable Filtering** - 15+ filter criteria with smart defaults
 - **Adjustment Grid Integration** - 10 price brackets with attribute adjustments
-- **Automated Evaluation** - Process hundreds/thousands of properties
+- **Bracket Mapping** - Drag-and-drop VCS/Type-Use → bracket assignment (configured in AdjustmentsTab)
+- **Automated Evaluation** - Process hundreds/thousands of properties with "Auto (based on mapping)" mode
+- **Set Aside Workflow** - Save successful evaluations incrementally as batches are completed
+- **Result Set Snapshots** - Save/load named result sets for review
 - **Manual Appraisal Mode** - Detailed grid for custom comparable selection
-- **Excel Export** - Comprehensive CME analysis report
+- **Summary Dashboard** - Working totals, VCS completion tracking, projected net valuation by class
+- **Excel Export** - Update file (BLQ + Improvement Override) and Final Roster (placeholder)
 
-**Three Nested Sub-Tabs:**
-1. **Search** - Subject selection and comparable filtering
-2. **Evaluate** - Run automated CME analysis
-3. **Detailed** - Manual comparable appraisal grid
+**Four Nested Sub-Tabs:**
+1. **Adjustments** - Adjustment grid configuration and bracket mapping (via AdjustmentsTab)
+2. **Search & Results** - Subject selection, comparable filtering, evaluation execution, inline results with Set Aside
+3. **Detailed** - Manual comparable appraisal grid (DetailedAppraisalGrid)
+4. **Summary** - Aggregated working totals from set-aside evaluations, VCS breakdown, projected net valuation table (mirrors Market Data format), export buttons
 
 **Search Sub-Tab:**
 
@@ -5850,33 +6216,38 @@ Class 4: $256.8M @ 2.684% = $6,892,196 total tax
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Evaluate Sub-Tab:**
+**Search & Results Sub-Tab:**
 
 **Automated CME Workflow:**
 
 **Step 1: Evaluation Mode Selection:**
-- **Fresh Evaluation** - Overwrites existing CME data
-- **Keep Existing** - Only evaluates properties without CME data
+- **Fresh Evaluation** - Clears all existing set-aside evaluations, starts over
+- **Keep Existing** - Skips properties already set aside, evaluates remaining
 
-**Step 2: Process Properties:**
+**Step 2: Bracket Selection:**
+- **Auto (based on mapping)** - Uses bracket mappings from AdjustmentsTab to route each property to the correct adjustment bracket based on its VCS or Type/Use code
+- **Specific bracket** - Force all properties into a single bracket
+- If no mapping exists for a property, falls back to price-based bracket selection
+
+**Step 3: Process Properties:**
 ```javascript
 for each subject property:
-  1. Find comparables matching all filter criteria
-  2. Apply adjustment grid for subject's price bracket
-  3. Calculate adjusted sale prices
-  4. Select best 5 comparables
-  5. Calculate min, max, average ranges
-  6. Save to final_valuation_data (cme_* fields)
+  1. Look up bracket mapping (VCS → bracket, or Type/Use → bracket)
+  2. If no mapping found, determine bracket from subject's sale price
+  3. Find comparables matching all filter criteria
+  4. Apply adjustment grid for the determined bracket
+  5. Calculate adjusted sale prices with weighted averaging
+  6. Select best 5 comparables (sorted by lowest net adjustment %)
+  7. Calculate projected assessment (weighted average by adjustment proximity)
 ```
 
-**Step 3: Progress Display:**
-```
-Processing CME Analysis...
-Progress: 456 / 1,234 properties (37%)
-Successes: 389 (85%)
-Failures: 67 (15%)
-Current: Block 123, Lot 45
-```
+**Step 4: Results Display & Set Aside:**
+- Results shown inline below search filters
+- Summary stats: Total evaluated, no comps, with N+ comps, set aside count
+- Valuation summary panel with class breakdown, current vs projected
+- **Set Aside** button: saves successful evaluations (N+ comps) to `job_cme_evaluations` table
+- **Save Result Set** button: saves named snapshot to `job_cme_result_sets` for later recall
+- **Create Update** / **Build Final Roster** export buttons on results
 
 **Adjustment Grid Application:**
 
@@ -5958,132 +6329,135 @@ cme_max_range = Math.max(...bestComps.map(c => c.adjustedPrice));
 
 **Purpose:**
 - Manual comparable selection for specific properties
-- Override automated CME results
-- Detailed appraisal grid interface
+- Click any "New Asmt" value in results table to jump to Detailed view for that property
+- Enter custom subject + comparables by BLQ for ad-hoc evaluations
 
 **Workflow:**
 1. Enter subject Block-Lot-Qualifier
 2. Manually enter up to 5 comparable Block-Lot-Qualifiers
 3. System loads property details for all
-4. Applies adjustment grid automatically
-5. Displays detailed appraisal grid
-6. Option to save as CME result
+4. Applies adjustment grid automatically (uses mapped bracket if available)
+5. Displays detailed appraisal grid (DetailedAppraisalGrid.jsx)
+6. Header shows bracket used: "Auto - Mapped ($500K-$749K)" or "Auto ($300K-$399K)" for price-based
 
-**Detailed Appraisal Grid:**
+**Detailed Appraisal Grid (DetailedAppraisalGrid.jsx):**
 
-Integrated component (DetailedAppraisalGrid.jsx - 577 lines):
-- Subject property details
+Integrated component (~1,700+ lines):
+- Subject property details with all attributes
 - Comparable property details (5 columns)
-- Row-by-row attribute comparison
-- Automatic adjustment calculations
-- Final adjusted values
-- Min/max/average ranges
+- Row-by-row attribute comparison with adjustment calculations
+- Editable fields in PDF export modal for what-if scenarios
+- Supports multi-card property aggregation (additional cards for SFLA, garages, etc.)
+- Bracket-aware: uses `mappedBracket` from evaluation result when available
 
 **Grid Rows:**
-- Address
-- Sale Price / Sale Date
-- Living Area (SFLA)
-- Year Built
-- Lot Size
-- Style
-- Condition
-- Garage
-- Basement
-- Fireplace
-- Pool
-- Central Air
-- [Custom attributes from grid]
-- Total Adjustments
-- Adjusted Sale Price
+- Address, Sale Price, Sale Date, VCS
+- Living Area (SFLA), Year Built, Lot Size
+- Style, Condition, Building Class
+- Garage (categorized: 1-car, 2-car, 3-car based on configurable SF thresholds)
+- Basement (finished), Fireplace, Pool, Central Air
+- Detached items (with condition multipliers: poor/standard/excellent)
+- Miscellaneous codes (land positive/negative adjustments)
+- [Custom attributes from adjustment grid]
+- Total/Net/Gross Adjustments with percentage
+- Adjusted Sale Price, Weight, Weighted Value
+
+**Summary Sub-Tab (CME Dashboard):**
+
+**Purpose:**
+- Working progress tracker showing what's done vs what's remaining
+- Projected net valuation table matching Market Data format
+- Export functionality for update files
+
+**Info Section - CME Evaluation Overview:**
+- 3 stat cards: Set Aside (Done), Not Yet Evaluated, Total Residential
+- VCS breakdown table: shows "Set Aside" vs "Not Done" counts per VCS (sortable)
+- "Not Yet Evaluated" expandable table with sortable headers (VCS, Block, Lot, Qual, Location, Type/Use, Current Asmt)
+
+**Projected Net Valuation (Taxable) - CME Total:**
+- Mirrors Market Data summary table structure exactly
+- All 9 property classes: 1, 2, 3A, 3B, 4A, 4B, 4C, 6A, 6B
+- Class 4* and Class 6* aggregate rows
+- Grand total row with blue bar
+
+**Class Population Logic:**
+- **Non-CME classes** (1, 3B, 4A, 4B, 4C, 6A, 6B): Uses `property_cama_class` and `values_cama_total` directly from data file. CME doesn't evaluate these — they carry through unchanged.
+- **Class 2/3A with building class ≤ 10** (detached-only parcels — garage, pool, no home): Uses CAMA values. CME skips these.
+- **Class 2/3A with building class > 10** (actual homes): Uses CME set-aside projected assessments, rounded to nearest $100.
+
+**Export Section:**
+- **Export Excel Update**: Block, Lot, Qualifier, Card, Improvement Override (rounded CME value minus `values_cama_land`)
+- **Build Final Roster**: Placeholder button — column selection TBD
 
 **Database Integration:**
-- Saves to final_valuation_data table
-- Fields: cme_projected_assessment, cme_min_range, cme_max_range
-- Comparable references: cme_comp1, cme_comp2, cme_comp3, cme_comp4, cme_comp5
-- Preserves manual overrides
-
-**Excel Export:**
-
-Comprehensive CME report with:
-- Subject property list
-- Comparable details for each
-- Adjustment breakdown
-- Adjusted sale prices
-- CME projected range
-- Formula-based calculations
-- Professional formatting
+- Set-aside evaluations: `job_cme_evaluations` table (status='set_aside')
+- Named result snapshots: `job_cme_result_sets` table
+- Bracket mappings: `job_cme_bracket_mappings` table
+- Adjustment grid: `job_adjustment_grid` table
 
 **Integration with AdjustmentsTab:**
 
-Adjustments grid configured in separate tab:
-- 10 price brackets
-- Default adjustments (Living Area, Garage, Pool, etc.)
-- Custom adjustments (user-defined)
-- Per-bracket customization
-- Saved to job_adjustment_grid table
+AdjustmentsTab contains two sub-sections:
+1. **Adjustment Grid** - 10 price brackets with default + custom adjustments, saved to `job_adjustment_grid`
+2. **Bracket Mapping** - Drag-and-drop VCS/Type-Use → bracket assignment with qualifying sale price hints, saved to `job_cme_bracket_mappings`
 
 **Critical Implementation Notes:**
 - Filter presets optimized for CSP methodology
-- Auto-adjustment uses subject's sales price bracket
-- Manual mode allows override of automated results
-- Export includes all comparables and adjustments
+- Auto mode uses bracket mapping first, then falls back to price-based bracket
+- Bracket mapping only affects bracket selection, NOT comp search filtering (VCS filtering remains user-controlled)
+- Set Aside is the commit mechanism — Summary tab only counts set-aside results
+- Values rounded to nearest $100 for projected assessments
+- Improvement Override in export uses `values_cama_land` (not mod4 land)
 - Performance optimized for 1,000+ subject properties
-- Progress tracking essential for large evaluations
 
 ---
 
-### 🚧 **CME_NEEDS_WORK_JAN2025** - Sales Comparison Issues to Address
+### ✅ **CME_NEEDS_WORK_JAN2025** - Sales Comparison Issues (RESOLVED)
 
 **SEARCHPHRASE for quick find: CME_NEEDS_WORK_JAN2025**
 
-**Priority Items for Next Session:**
+**All items completed as of 2025:**
 
-**1. ATTRIBUTE DATA VERIFICATION (CRITICAL):**
-- **Issue**: Attributes showing up in adjustment grid (decks, patios, pools, garages, etc.) need verification at individual Block-Lot level
-- **Action Required**:
-  - Check specific Block-Lot combinations in database vs what's displayed in CME grid
-  - Verify data is coming from correct source (property_records vs raw fields)
-  - Ensure Microsystems attribute mapping is correct (garage_area, pool_area, deck_area, etc.)
-  - Cross-reference with property detail views to confirm accuracy
-- **Files**: SalesComparisonTab.jsx, DetailedAppraisalGrid.jsx
-- **Database**: property_records table - attribute fields
+**1. ATTRIBUTE DATA VERIFICATION — COMPLETED**
+- Attributes verified working for both BRT and Microsystems vendor types
+- Multi-card aggregation implemented (additional cards contribute SFLA, garages, etc.)
+- Garage categorization uses configurable SF thresholds (job_settings)
+- Detached item condition multipliers (poor/standard/excellent) configurable per job
+- Microsystems attribute mapping verified with Glen Ridge test job
+- Ongoing: edge cases may surface during broader testing but core functionality is solid
 
-**2. PROGRESS BAR REALISM (UX):**
-- **Issue**: Evaluation progress bar jumps to 99% instantly, not realistic
-- **Current Behavior**: Bar hits 99% in ~1 second regardless of property count
-- **Desired Behavior**: Progressive real-time updates as evaluation proceeds:
-  - Find comparables (Phase 1)
-  - Calculate adjustments (Phase 2)
-  - Rank and select best comps (Phase 3)
-  - Save results (Phase 4)
-- **Action Required**: Implement true progress tracking with status updates per property
-- **Files**: SalesComparisonTab.jsx - Evaluate sub-tab
-- **Implementation**: Use state updates in evaluation loop, possibly with batching for performance
+**2. PROGRESS BAR REALISM — COMPLETED**
+- Evaluation loop now updates `evaluationProgress({ current, total })` per property
+- UI shows "Evaluating X of Y properties..." with real-time progress
+- No longer jumps to 99% instantly
 
-**3. ADJUSTMENT CALCULATION VERIFICATION (POST-DATA FIX):**
-- **Issue**: Once attribute data is verified correct, need to validate adjustment calculations
-- **Action Required**:
-  - Manual spot-check of adjustment math
-  - Verify bracket-based adjustment values applying correctly
-  - Confirm total adjustments, net adjustments, gross adjustments formulas
-  - Test edge cases (missing attributes, zero values, etc.)
-- **Dependencies**: Complete Item #1 first
-- **Files**: DetailedAppraisalGrid.jsx, SalesComparisonTab.jsx
+**3. ADJUSTMENT CALCULATION VERIFICATION — COMPLETED**
+- Bracket-based adjustments verified working correctly
+- Bracket mapping system routes properties to correct bracket via VCS/Type-Use mapping
+- User verified SE05 properties correctly using bracket_5 ($500K-$749K) adjustments
+- Label display fixed: header shows "Auto - Mapped ($500K-$749K)" when mapped bracket used
+- Net/gross adjustment percentages calculating correctly
+- Weighted average projected assessment using inverse-adjustment weighting
 
-**Status**: Ready for investigation - Microsystems jobs showing issues, BRT appears functional
+**Status**: All items resolved. Further edge cases will be caught through continued testing.
 
 ---
 
-### AdjustmentsTab.jsx - CME Adjustment Grid Configuration ⚙️
+### AdjustmentsTab.jsx - CME Adjustment Grid & Bracket Mapping ⚙️
 
-**Scale**: 1,325 lines of adjustment grid management
+**Scale**: ~1,500+ lines of adjustment grid management and bracket mapping
 
-**Core Philosophy**: Configure market-based adjustments across 10 price brackets for automated CME
+**Core Philosophy**: Configure market-based adjustments across 10 price brackets and map VCS/Type-Use codes to brackets for automated CME routing
+
+**Two Sections:**
+1. **Adjustment Grid** — Define per-bracket adjustment values for property attributes
+2. **Bracket Mapping** — Drag-and-drop assignment of VCS/Type-Use codes to brackets
 
 **Purpose:**
 - Define adjustment values for property attributes
 - Differentiate by price bracket (market segmentation)
 - Support both system defaults and custom adjustments
+- Map VCS and Type/Use codes to specific brackets (overrides price-based bracket selection)
 - Feed into Sales Comparison automated evaluation
 
 **10 Price Brackets:**

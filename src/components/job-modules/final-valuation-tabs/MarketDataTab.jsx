@@ -862,7 +862,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Lot': getNumericValue(property.property_lot) || '',
         'Qualifier': cleanValue(property.property_qualifier),
         'Card': maxCard || '',
-        'Card SF': totalCardSF || '',
+        'Card SF': totalCardSF || 0,
         'Address': property.property_location || '',
         'Owner Name': property.owner_name || '',
         'Owner Address': property.owner_street || '',
@@ -895,7 +895,7 @@ const MarketDataTab = ({ jobData, properties, marketLandData, hpiData, onUpdateJ
         'Design': padBRTCode(property.asset_design_style),
         'Bedroom Total': getBedroomTotal(property) || '',
         'Story Height': property.asset_story_height ? { v: String(property.asset_story_height), t: 's' } : '',
-        'SFLA': mainSFLA || '',
+        'SFLA': mainSFLA || 0,
         'Total SFLA': { f: `G${rowNum}+AL${rowNum}` }, // Formula: Card SF + SFLA
         'Exterior': padBRTCode(property.asset_ext_cond),
         'Interior': padBRTCode(property.asset_int_cond),

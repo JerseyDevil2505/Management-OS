@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save } from 'lucide-react';
+import { Factory, Settings, Download, RefreshCw, AlertTriangle, CheckCircle, TrendingUp, DollarSign, Users, Calendar, X, ChevronDown, ChevronUp, Eye, FileText, Lock, Unlock, Save, Building } from 'lucide-react';
 import { supabase, jobService } from '../../lib/supabaseClient';
 import * as XLSX from 'xlsx-js-style';
 
@@ -24,6 +24,7 @@ const ProductionTracker = ({
   const [billingAnalytics, setBillingAnalytics] = useState(null);
   const [validationReport, setValidationReport] = useState(null);
   const [missingPropertiesReport, setMissingPropertiesReport] = useState(null);
+  const [missingPricedReport, setMissingPricedReport] = useState(null);
   const [sessionHistory, setSessionHistory] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const notificationCounterRef = useRef(0);
@@ -807,7 +808,7 @@ const ProductionTracker = ({
         block: fullPropertyRecord.property_block,
         lot: fullPropertyRecord.property_lot,
         qualifier: fullPropertyRecord.property_qualifier || '',
-        card: fullPropertyRecord.property_addl_card || '1',
+        card: fullPropertyRecord.property_addl_card,
         property_location: fullPropertyRecord.property_location || '',
         property_class: fullPropertyRecord.property_m4_class,
         measure_by: fullPropertyRecord.inspection_measure_by,
@@ -987,6 +988,7 @@ const ProductionTracker = ({
     setValidationReport(null);
     setCommercialCounts({ total: 0, inspected: 0, priced: 0 });
     setMissingPropertiesReport(null);
+    setMissingPricedReport(null);
     setValidationOverrides([]);
     setOverrideMap({});
     setPendingValidations([]);
@@ -1180,6 +1182,7 @@ const ProductionTracker = ({
       const inspectionDataKeys = new Set(); // Track composite keys to prevent duplicates
       const missingProperties = []; // Track properties not added to inspection_data
       const pendingValidationsList = []; // NEW: Collect validation issues for modal
+      const missingPricedProperties = []; // Track commercial properties not yet priced
 
       // Initialize class counters - Count ALL properties for denominators
       const allClasses = ['1', '2', '3A', '3B', '4A', '4B', '4C', '15A', '15B', '15C', '15D', '15E', '15F', '5A', '5B', '6A', '6B'];
@@ -1287,7 +1290,7 @@ const ProductionTracker = ({
             block: record.property_block,
             lot: record.property_lot,
             qualifier: record.property_qualifier || '',
-            card: record.property_addl_card || '1',
+            card: record.property_addl_card,
             property_location: record.property_location || '',
             property_class: propertyClass,
             measure_by: inspector,
@@ -1333,7 +1336,7 @@ const ProductionTracker = ({
             block: record.property_block,
             lot: record.property_lot,
             qualifier: record.property_qualifier || '',
-            card: record.property_addl_card || '1',
+            card: record.property_addl_card,
             property_location: record.property_location || '',
             property_class: propertyClass,
             reason: reasonNotAdded,
@@ -1356,7 +1359,7 @@ const ProductionTracker = ({
             block: record.property_block,
             lot: record.property_lot,
             qualifier: record.property_qualifier || '',
-            card: record.property_addl_card || '1',
+            card: record.property_addl_card,
             property_location: record.property_location || '',
             property_class: propertyClass,
             reason: reasonNotAdded,
@@ -1380,6 +1383,7 @@ const ProductionTracker = ({
             block: record.property_block,
             lot: record.property_lot,
             qualifier: record.property_qualifier || '',
+            card: record.property_addl_card,
             property_location: record.property_location || '',
             property_class: propertyClass,
             reason: reasonNotAdded,
@@ -1454,7 +1458,7 @@ const ProductionTracker = ({
               block: record.property_block,
               lot: record.property_lot,
               qualifier: record.property_qualifier || '',
-              card: record.property_addl_card || '1',
+              card: record.property_addl_card,
               property_location: record.property_location || '',
               inspector: inspector,
               issues: []
@@ -1577,7 +1581,7 @@ const ProductionTracker = ({
             block: record.property_block,
             lot: record.property_lot,
             qualifier: record.property_qualifier || '',
-            card: record.property_addl_card || '1',
+            card: record.property_addl_card,
             property_location: record.property_location || '',
             property_class: propertyClass,
             inspector: inspector,
@@ -1653,6 +1657,23 @@ const ProductionTracker = ({
               if (classBreakdown[propertyClass]) {
                 classBreakdown[propertyClass].priced++;
               }
+            } else {
+              // Track commercial properties not yet priced
+              missingPricedProperties.push({
+                composite_key: propertyKey,
+                block: record.property_block,
+                lot: record.property_lot,
+                qualifier: record.property_qualifier || '',
+                card: record.property_addl_card,
+                property_location: record.property_location || '',
+                property_class: propertyClass,
+                inspector: inspector,
+                info_by_code: infoByCode,
+                measure_date: record.inspection_measure_date,
+                price_by: record.inspection_price_by || '',
+                price_date: record.inspection_price_date || null,
+                vendor: currentVendor
+              });
             }
           }
 
@@ -1664,7 +1685,7 @@ const ProductionTracker = ({
             block: record.property_block,
             lot: record.property_lot,
             qualifier: record.property_qualifier || '',
-            card: record.property_addl_card || '1',
+            card: record.property_addl_card,
             property_location: record.property_location || '',
             property_class: propertyClass,
             measure_by: inspector,
@@ -1780,7 +1801,7 @@ const ProductionTracker = ({
             block: fullRecord.property_block,
             lot: fullRecord.property_lot,
             qualifier: fullRecord.property_qualifier || '',
-            card: fullRecord.property_addl_card || '1',
+            card: fullRecord.property_addl_card,
             property_location: fullRecord.property_location || '',
             property_class: fullRecord.property_m4_class,
             measure_by: fullRecord.inspection_measure_by,
@@ -1987,6 +2008,25 @@ const ProductionTracker = ({
         detailed_missing: missingProperties
       };
 
+      // Create missing priced properties report (commercial properties not yet priced)
+      const missingPricedReportData = {
+        summary: {
+          total_missing: missingPricedProperties.length,
+          by_class: missingPricedProperties.reduce((acc, prop) => {
+            acc[prop.property_class] = (acc[prop.property_class] || 0) + 1;
+            return acc;
+          }, {}),
+          by_inspector: missingPricedProperties.reduce((acc, prop) => {
+            const insp = prop.inspector || 'None';
+            acc[insp] = (acc[insp] || 0) + 1;
+            return acc;
+          }, {}),
+          total_commercial: ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.total || 0), 0),
+          total_priced: ['4A', '4B', '4C'].reduce((sum, cls) => sum + (classBreakdown[cls]?.priced || 0), 0)
+        },
+        detailed_missing: missingPricedProperties
+      };
+
       // Final analytics result with correct entry rate
       const analyticsResult = {
         totalRecords: rawData.length,
@@ -2046,7 +2086,8 @@ const ProductionTracker = ({
       setBillingAnalytics(billingResult);
       setValidationReport(validationReportData);
       setMissingPropertiesReport(missingPropertiesReportData);
-      
+      setMissingPricedReport(missingPricedReportData);
+
       // Recalculate validation overrides to show the new ones from processing modal
       await calculateValidationOverrides(true); // Force fresh data fetch
 
@@ -2374,7 +2415,7 @@ const exportValidationReport = () => {
             issue.block,
             issue.lot,
             issue.qualifier || '',
-            issue.card || '1',
+            issue.card,
             issue.property_location || '',
             issue.warning_message,
             overrideStatus
@@ -2572,7 +2613,7 @@ const exportMissingPropertiesReport = () => {
           property.block,
           property.lot,
           property.qualifier || '',
-          property.card || '1',
+          property.card,
           property.property_location || '',
           property.property_class || '',
           property.inspector || '',
@@ -2741,6 +2782,7 @@ const exportMissingPropertiesReport = () => {
                         <h4 className="font-semibold text-gray-900 text-lg">
                           {currentValidation.block}-{currentValidation.lot}
                           {currentValidation.qualifier ? `-${currentValidation.qualifier}` : ''}
+                          {currentValidation.card ? ` (Card ${currentValidation.card})` : ''}
                         </h4>
                         <p className="text-sm text-gray-600 mt-1">{currentValidation.property_location}</p>
                       </div>
@@ -3249,6 +3291,16 @@ const exportMissingPropertiesReport = () => {
                 }`}
               >
                 🚫 Validation Overrides
+              </button>
+              <button
+                onClick={() => setActiveTab('missingPriced')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'missingPriced'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                💲 Missing Priced ({missingPricedReport?.summary.total_missing || 0})
               </button>
             </nav>
           </div>
@@ -3970,7 +4022,7 @@ const exportMissingPropertiesReport = () => {
                                 <td className="px-3 py-2 font-medium">{property.block}</td>
                                 <td className="px-3 py-2 font-medium">{property.lot}</td>
                                 <td className="px-3 py-2">{property.qualifier || '-'}</td>
-                                <td className="px-3 py-2">{property.card || '1'}</td>
+                                <td className="px-3 py-2">{property.card}</td>
                                 <td className="px-3 py-2">{property.property_location}</td>
                                 <td className="px-3 py-2">
                                   <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
@@ -4010,7 +4062,7 @@ const exportMissingPropertiesReport = () => {
                         let csvContent = "Block,Lot,Qualifier,Card,Property Location,Override Reason,Override By,Override Date\n";
                         
                         validationOverrides.forEach(override => {
-                          csvContent += `"${override.block}","${override.lot}","${override.qualifier || ''}","${override.card || '1'}","${override.property_location || ''}","${override.override_reason}","${override.override_by || 'Manager'}","${override.override_date || ''}"\n`;
+                          csvContent += `"${override.block}","${override.lot}","${override.qualifier || ''}","${override.card}","${override.property_location || ''}","${override.override_reason}","${override.override_by || 'Manager'}","${override.override_date || ''}"\n`;
                         });
 
                         const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -4126,6 +4178,180 @@ const exportMissingPropertiesReport = () => {
                             ))}
                           </tbody>
                         </table>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Missing Priced Properties Tab */}
+            {activeTab === 'missingPriced' && missingPricedReport && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Missing Priced Properties - Commercial Properties Awaiting Pricing
+                  </h3>
+                  {missingPricedReport.summary.total_missing > 0 && (
+                    <button
+                      onClick={() => {
+                        // Export missing priced properties
+                        let csvContent = "Block,Lot,Qualifier,Card,Property Location,Class,Inspector,InfoBy Code,Measure Date,Price By,Price Date\n";
+
+                        missingPricedReport.detailed_missing.forEach(property => {
+                          csvContent += `"${property.block}","${property.lot}","${property.qualifier || ''}","${property.card}","${property.property_location || ''}","${property.property_class}","${property.inspector}","${property.info_by_code || ''}","${property.measure_date || ''}","${property.price_by || ''}","${property.price_date || ''}"\n`;
+                        });
+
+                        const blob = new Blob([csvContent], { type: 'text/csv' });
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `Missing_Priced_Properties_${jobData.ccdd || jobData.ccddCode}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.csv`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+
+                        addNotification('Exported missing priced properties', 'success');
+                      }}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Export Missing Priced</span>
+                    </button>
+                  )}
+                </div>
+
+                {missingPricedReport.summary.total_missing === 0 ? (
+                  <div className="text-center py-8">
+                    <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2">All Commercial Properties Priced</h4>
+                    <p className="text-gray-600">All commercial properties (4A, 4B, 4C) have been priced</p>
+                    <p className="text-sm text-gray-500 mt-2">
+                      Total Commercial: {missingPricedReport.summary.total_commercial} |
+                      Priced: {missingPricedReport.summary.total_priced}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-purple-600 font-medium">Missing Priced</p>
+                            <p className="text-2xl font-bold text-purple-800">{missingPricedReport.summary.total_missing}</p>
+                          </div>
+                          <AlertTriangle className="w-8 h-8 text-purple-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-green-600 font-medium">Already Priced</p>
+                            <p className="text-2xl font-bold text-green-800">{missingPricedReport.summary.total_priced}</p>
+                          </div>
+                          <CheckCircle className="w-8 h-8 text-green-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-blue-600 font-medium">Total Commercial</p>
+                            <p className="text-2xl font-bold text-blue-800">{missingPricedReport.summary.total_commercial}</p>
+                          </div>
+                          <Building className="w-8 h-8 text-blue-500" />
+                        </div>
+                      </div>
+
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-yellow-600 font-medium">Pricing Progress</p>
+                            <p className="text-2xl font-bold text-yellow-800">
+                              {missingPricedReport.summary.total_commercial > 0
+                                ? Math.round((missingPricedReport.summary.total_priced / missingPricedReport.summary.total_commercial) * 100)
+                                : 0}%
+                            </p>
+                          </div>
+                          <TrendingUp className="w-8 h-8 text-yellow-500" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Breakdown by Class */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+                      <h4 className="font-semibold text-gray-900 mb-4">Missing Priced by Property Class</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {Object.entries(missingPricedReport.summary.by_class).map(([cls, count]) => (
+                          <div key={cls} className="p-3 bg-gray-50 rounded border">
+                            <div className="font-medium text-gray-900">Class {cls}</div>
+                            <div className="text-sm text-gray-600">{count} properties missing pricing</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Breakdown by Inspector */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+                      <h4 className="font-semibold text-gray-900 mb-4">Missing Priced by Inspector</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {Object.entries(missingPricedReport.summary.by_inspector).map(([inspector, count]) => (
+                          <div key={inspector} className="p-3 bg-gray-50 rounded border">
+                            <div className="font-medium text-gray-900">{inspector}</div>
+                            <div className="text-sm text-gray-600">{count} properties missing pricing</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Detailed Table */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                      <h4 className="font-semibold text-gray-900 mb-4">Detailed Missing Priced Properties</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Block</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Lot</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Qualifier</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Card</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Property Location</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Class</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Inspector</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Measure Date</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Price By</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-700">Price Date</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {missingPricedReport.detailed_missing.slice(0, 100).map((property, idx) => (
+                              <tr key={idx} className="border-t border-gray-200 bg-purple-50">
+                                <td className="px-3 py-2 font-medium">{property.block}</td>
+                                <td className="px-3 py-2 font-medium">{property.lot}</td>
+                                <td className="px-3 py-2">{property.qualifier || '-'}</td>
+                                <td className="px-3 py-2">{property.card}</td>
+                                <td className="px-3 py-2">{property.property_location}</td>
+                                <td className="px-3 py-2">
+                                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded font-medium">
+                                    {property.property_class}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2">{property.inspector || '-'}</td>
+                                <td className="px-3 py-2">{property.measure_date ? new Date(property.measure_date).toLocaleDateString() : '-'}</td>
+                                <td className="px-3 py-2">{property.price_by || '-'}</td>
+                                <td className="px-3 py-2">{property.price_date ? new Date(property.price_date).toLocaleDateString() : '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {missingPricedReport.detailed_missing.length > 100 && (
+                          <div className="mt-4 text-center text-sm text-gray-500">
+                            Showing first 100 of {missingPricedReport.detailed_missing.length} missing priced properties. Export to see all.
+                          </div>
+                        )}
                       </div>
                     </div>
                   </>

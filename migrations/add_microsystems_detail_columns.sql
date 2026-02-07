@@ -1,0 +1,73 @@
+-- Add detached item detail columns for Microsystems
+-- Detached Item Code1-4 with dimensions and depreciation
+ALTER TABLE property_records
+  ADD COLUMN IF NOT EXISTS detached_item_code1 TEXT,
+  ADD COLUMN IF NOT EXISTS width1 NUMERIC,
+  ADD COLUMN IF NOT EXISTS depth1 NUMERIC,
+  ADD COLUMN IF NOT EXISTS physical_depr1 NUMERIC,
+  ADD COLUMN IF NOT EXISTS functional_depr1 NUMERIC,
+  ADD COLUMN IF NOT EXISTS locationl_depr1 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS detached_item_code2 TEXT,
+  ADD COLUMN IF NOT EXISTS width2 NUMERIC,
+  ADD COLUMN IF NOT EXISTS depth2 NUMERIC,
+  ADD COLUMN IF NOT EXISTS physical_depr2 NUMERIC,
+  ADD COLUMN IF NOT EXISTS functional_depr2 NUMERIC,
+  ADD COLUMN IF NOT EXISTS locationl_depr2 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS detached_item_code3 TEXT,
+  ADD COLUMN IF NOT EXISTS width3 NUMERIC,
+  ADD COLUMN IF NOT EXISTS depth3 NUMERIC,
+  ADD COLUMN IF NOT EXISTS physical_depr3 NUMERIC,
+  ADD COLUMN IF NOT EXISTS functional_depr3 NUMERIC,
+  ADD COLUMN IF NOT EXISTS locationl_depr3 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS detached_item_code4 TEXT,
+  ADD COLUMN IF NOT EXISTS width4 NUMERIC,
+  ADD COLUMN IF NOT EXISTS depth4 NUMERIC,
+  ADD COLUMN IF NOT EXISTS physical_depr4 NUMERIC,
+  ADD COLUMN IF NOT EXISTS functional_depr4 NUMERIC,
+  ADD COLUMN IF NOT EXISTS locationl_depr4 NUMERIC;
+
+-- Detachedbuilding1-4 with dimensions and depreciation
+ALTER TABLE property_records
+  ADD COLUMN IF NOT EXISTS detachedbuilding1 TEXT,
+  ADD COLUMN IF NOT EXISTS widthn1 NUMERIC,
+  ADD COLUMN IF NOT EXISTS depthn1 NUMERIC,
+  ADD COLUMN IF NOT EXISTS pysical1 NUMERIC,
+  ADD COLUMN IF NOT EXISTS functional1 NUMERIC,
+  ADD COLUMN IF NOT EXISTS location_economic1 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS detachedbuilding2 TEXT,
+  ADD COLUMN IF NOT EXISTS widthn2 NUMERIC,
+  ADD COLUMN IF NOT EXISTS depthn2 NUMERIC,
+  ADD COLUMN IF NOT EXISTS pysical2 NUMERIC,
+  ADD COLUMN IF NOT EXISTS functional2 NUMERIC,
+  ADD COLUMN IF NOT EXISTS location_economic2 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS detachedbuilding3 TEXT,
+  ADD COLUMN IF NOT EXISTS widthn3 NUMERIC,
+  ADD COLUMN IF NOT EXISTS depthn3 NUMERIC,
+  ADD COLUMN IF NOT EXISTS pysical3 NUMERIC,
+  ADD COLUMN IF NOT EXISTS functional3 NUMERIC,
+  ADD COLUMN IF NOT EXISTS location_economic3 NUMERIC,
+  
+  ADD COLUMN IF NOT EXISTS detachedbuilding4 TEXT,
+  ADD COLUMN IF NOT EXISTS widthn4 NUMERIC,
+  ADD COLUMN IF NOT EXISTS depthn4 NUMERIC,
+  ADD COLUMN IF NOT EXISTS pysical4 NUMERIC,
+  ADD COLUMN IF NOT EXISTS functional4 NUMERIC,
+  ADD COLUMN IF NOT EXISTS location_economic4 NUMERIC;
+
+-- Miscellaneous items
+ALTER TABLE property_records
+  ADD COLUMN IF NOT EXISTS misc_item_1 TEXT,
+  ADD COLUMN IF NOT EXISTS misc_item_2 TEXT,
+  ADD COLUMN IF NOT EXISTS misc_item_3 TEXT;
+
+-- Land adjustment reasons
+ALTER TABLE property_records
+  ADD COLUMN IF NOT EXISTS overall_adj_reason1 TEXT,
+  ADD COLUMN IF NOT EXISTS overall_adj_reason2 TEXT,
+  ADD COLUMN IF NOT EXISTS overall_adj_reason3 TEXT,
+  ADD COLUMN IF NOT EXISTS overall_adj_reason4 TEXT;

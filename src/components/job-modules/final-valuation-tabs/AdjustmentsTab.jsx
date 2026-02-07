@@ -1,9 +1,32 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { supabase, getRawDataForJob } from '../../../lib/supabaseClient';
-import { Save, Plus, Trash2, Settings, X } from 'lucide-react';
+import { Save, Plus, Trash2, Settings, X, Map, ChevronDown, ChevronUp } from 'lucide-react';
 
-const AdjustmentsTab = ({ jobData = {} }) => {
+// Valid sales codes for CME averages (matches SalesComparisonTab defaults)
+const VALID_SALES_CODES = ['', '0', '00', '7', '07', '32', '36'];
+
+const AdjustmentsTab = ({ jobData = {}, isJobContainerLoading = false, properties = [] }) => {
+  const vendorType = jobData?.vendor_type || 'BRT';
   const [activeSubTab, setActiveSubTab] = useState('adjustments');
+
+  // Helper: Format adjustment names to title case for misc/land adjustments
+  const formatAdjustmentName = (name, adjustmentId) => {
+    // Check if it's a dynamic adjustment (misc or land)
+    const isDynamic = adjustmentId.includes('miscellaneous_') ||
+                      adjustmentId.includes('land_positive_') ||
+                      adjustmentId.includes('land_negative_');
+
+    if (isDynamic && name) {
+      // Convert to title case
+      return name
+        .toLowerCase()
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    }
+
+    return name;
+  };
   const [adjustments, setAdjustments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -15,6 +38,10 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     attributeValues: {} // Will hold { lot_size_ff: { value: 0, type: 'flat' }, ... }
   });
   const [customBrackets, setCustomBrackets] = useState([]); // Load from DB
+
+  // Bracket mapping state
+  const [bracketMappings, setBracketMappings] = useState([]);
+  const [isSavingMappings, setIsSavingMappings] = useState(false);
   
   // Structure: maps attribute -> array of codes
   const [codeConfig, setCodeConfig] = useState({
@@ -41,6 +68,46 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     '63': []  // Negative land adjustments
   });
   const [isLoadingCodes, setIsLoadingCodes] = useState(false);
+
+  // Garage per-car thresholds
+  const [garageThresholds, setGarageThresholds] = useState({
+    one_car_max: 399,
+    two_car_max: 799,
+    three_car_max: 999
+    // Anything above three_car_max is MULTI CAR
+  });
+
+  // Detached item condition multipliers (based on depreciation/net condition values)
+  const [detachedConditionMultipliers, setDetachedConditionMultipliers] = useState({
+    poor_threshold: 0.25,      // Depr <= this = poor condition
+    poor_multiplier: 0.50,     // Multiplier for poor condition
+    standard_multiplier: 1.00, // Multiplier for standard condition (between poor and excellent)
+    excellent_threshold: 0.75, // Depr >= this = excellent condition
+    excellent_multiplier: 1.25 // Multiplier for excellent condition
+  });
+
+  // Helper: Convert garage square footage to category number
+  const getGarageCategory = (sqft, thresholds = garageThresholds) => {
+    if (!sqft || sqft === 0) return 0; // NONE
+    if (sqft <= thresholds.one_car_max) return 1; // ONE CAR
+    if (sqft <= thresholds.two_car_max) return 2; // TWO CAR
+    if (sqft <= thresholds.three_car_max) return 3; // THREE CAR
+    return 4; // MULTI CAR
+  };
+
+  // Helper: Convert category number to display label
+  const getGarageCategoryLabel = (category) => {
+    const labels = ['NONE', 'ONE CAR', 'TWO CAR', 'THREE CAR', 'MULTI CAR'];
+    return labels[category] || 'NONE';
+  };
+
+  // Helper: Get garage display text with category and SF
+  const getGarageDisplayText = (sqft, thresholds = garageThresholds) => {
+    if (!sqft || sqft === 0) return 'None';
+    const category = getGarageCategory(sqft, thresholds);
+    const label = getGarageCategoryLabel(category);
+    return `${label} (${sqft.toLocaleString()} SF)`;
+  };
 
   // CME Price Brackets (matching OverallAnalysisTab)
   const CME_BRACKETS = [
@@ -80,9 +147,9 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       values: [1000, 2500, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000] },
     { id: 'fireplaces', name: 'Fireplaces', type: 'flat', isDefault: true, category: 'physical',
       values: [500, 1000, 2500, 2500, 2500, 2500, 2500, 2500, 2500, 2500] },
-    { id: 'garage', name: 'Garage', type: 'flat', isDefault: true, category: 'physical',
+    { id: 'garage', name: 'Garage', type: 'count', isDefault: true, category: 'physical',
       values: [2500, 5000, 7500, 7500, 7500, 10000, 15000, 25000, 35000, 40000] },
-    { id: 'det_garage', name: 'Det Garage', type: 'flat', isDefault: true, category: 'physical',
+    { id: 'det_garage', name: 'Det Garage', type: 'count', isDefault: true, category: 'physical',
       values: [1250, 2500, 3450, 3450, 3450, 5000, 7500, 12500, 17500, 20000] },
     { id: 'deck', name: 'Deck', type: 'flat', isDefault: true, category: 'amenity',
       values: [1000, 1500, 2000, 3500, 3500, 5000, 10000, 20000, 30000, 35000] },
@@ -121,14 +188,232 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     { id: 'land_negative', name: 'Negative Land', category: '63' }
   ];
 
-  // Load adjustments and custom brackets from database
+  // Helper: Check if attribute should be disabled for Microsystems
+  // For Microsystems, ONLY attached items are extracted from columns, not codes
+  const isAttributeDisabledForMicrosystems = (attributeId) => {
+    if (vendorType !== 'Microsystems') return false;
+    const attachedItemsFromColumns = [
+      'garage', 'deck', 'patio', 'open_porch', 'enclosed_porch'
+    ];
+    return attachedItemsFromColumns.includes(attributeId);
+  };
+
+  // Load adjustments and custom brackets - WAIT for property loading to complete
   useEffect(() => {
-    if (!jobData?.id) return;
+    if (!jobData?.id || isJobContainerLoading) return;
+
     loadAdjustments();
     loadAvailableCodes();
-    loadCodeConfig(); // Load after available codes are fetched
     loadCustomBrackets();
-  }, [jobData?.id]);
+    loadBracketMappings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobData?.id, isJobContainerLoading]);
+
+  // Load code config AFTER available codes are loaded
+  useEffect(() => {
+    if (!jobData?.id || isJobContainerLoading || !availableCodes || isLoadingCodes) return;
+
+    const codesLoaded = Object.values(availableCodes).some(arr => arr && arr.length > 0);
+    if (codesLoaded) {
+      loadCodeConfig();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobData?.id, isJobContainerLoading, availableCodes, isLoadingCodes]);
+
+  // ==================== BRACKET MAPPING FUNCTIONS ====================
+  const loadBracketMappings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('job_cme_bracket_mappings')
+        .select('*')
+        .eq('job_id', jobData.id)
+        .order('sort_order');
+      if (error) throw error;
+      setBracketMappings(data || []);
+    } catch (error) {
+      console.warn('Bracket mappings loading error:', error.message);
+      setBracketMappings([]);
+    }
+  };
+
+  // ==================== DRAG-AND-DROP BRACKET MAPPING ====================
+  const dragDataRef = useRef(null);
+
+  // Derive assignments from bracketMappings rows
+  const { typeUseToBracket, vcsToBracket } = useMemo(() => {
+    const tu = {};
+    const vcs = {};
+    (bracketMappings || []).forEach(m => {
+      if (m.type_use_codes && m.type_use_codes.length > 0 && (!m.vcs_codes || m.vcs_codes.length === 0)) {
+        m.type_use_codes.forEach(code => { tu[code] = m.bracket_value; });
+      } else if (m.vcs_codes && m.vcs_codes.length > 0 && (!m.type_use_codes || m.type_use_codes.length === 0)) {
+        m.vcs_codes.forEach(code => { vcs[code] = m.bracket_value; });
+      }
+    });
+    return { typeUseToBracket: tu, vcsToBracket: vcs };
+  }, [bracketMappings]);
+
+  const assignToBracket = (code, codeType, bracketValue) => {
+    setBracketMappings(prev => {
+      // Remove any existing assignment for this code
+      const filtered = prev.filter(m => {
+        if (codeType === 'type_use') {
+          return !(m.type_use_codes && m.type_use_codes.includes(code) && (!m.vcs_codes || m.vcs_codes.length === 0));
+        }
+        return !(m.vcs_codes && m.vcs_codes.includes(code) && (!m.type_use_codes || m.type_use_codes.length === 0));
+      });
+      return [...filtered, {
+        id: `new_${Date.now()}_${code}`,
+        job_id: jobData.id,
+        vcs_codes: codeType === 'vcs' ? [code] : null,
+        type_use_codes: codeType === 'type_use' ? [code] : null,
+        bracket_value: bracketValue,
+        sort_order: filtered.length,
+        _isNew: true
+      }];
+    });
+  };
+
+  const unassignFromBracket = (code, codeType) => {
+    setBracketMappings(prev => prev.filter(m => {
+      if (codeType === 'type_use') {
+        return !(m.type_use_codes && m.type_use_codes.includes(code) && (!m.vcs_codes || m.vcs_codes.length === 0));
+      }
+      return !(m.vcs_codes && m.vcs_codes.includes(code) && (!m.type_use_codes || m.type_use_codes.length === 0));
+    }));
+  };
+
+  const handleDragStart = (e, code, codeType) => {
+    dragDataRef.current = { code, codeType };
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', `${codeType}:${code}`);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e, bracketValue) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('ring-2', 'ring-blue-400');
+    if (dragDataRef.current) {
+      const { code, codeType } = dragDataRef.current;
+      assignToBracket(code, codeType, bracketValue);
+      dragDataRef.current = null;
+    }
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.currentTarget.classList.add('ring-2', 'ring-blue-400');
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('ring-2', 'ring-blue-400');
+  };
+
+  const saveBracketMappings = async () => {
+    try {
+      setIsSavingMappings(true);
+      await supabase.from('job_cme_bracket_mappings').delete().eq('job_id', jobData.id);
+      // Build rows: Type/Use first (higher priority in lookup), then VCS
+      const typeUseRows = Object.entries(typeUseToBracket).map(([code, bracket]) => ({
+        job_id: jobData.id,
+        vcs_codes: null,
+        type_use_codes: [code],
+        bracket_value: bracket,
+        sort_order: 0
+      }));
+      const vcsRows = Object.entries(vcsToBracket).map(([code, bracket]) => ({
+        job_id: jobData.id,
+        vcs_codes: [code],
+        type_use_codes: null,
+        bracket_value: bracket,
+        sort_order: 0
+      }));
+      const allRows = [...typeUseRows, ...vcsRows].map((r, i) => ({ ...r, sort_order: i }));
+      if (allRows.length > 0) {
+        const { error } = await supabase.from('job_cme_bracket_mappings').insert(allRows);
+        if (error) throw error;
+      }
+      await loadBracketMappings();
+      alert('Bracket mappings saved successfully!');
+    } catch (error) {
+      console.error('Error saving bracket mappings:', error);
+      alert('Failed to save bracket mappings: ' + error.message);
+    } finally {
+      setIsSavingMappings(false);
+    }
+  };
+
+  // ==================== SALES STATS FOR MAPPING HINTS ====================
+  const isQualifyingSale = useCallback((p) => {
+    // Must have a sale price
+    const price = p.values_norm_time || p.sales_price;
+    if (!price || price <= 0) return false;
+    // Must be residential (building class > 10)
+    const buildingClass = parseInt(p.asset_building_class) || 0;
+    if (buildingClass <= 10) return false;
+    // Must have a valid sales code
+    const nuCode = String(p.sales_nu ?? '').trim();
+    if (!VALID_SALES_CODES.includes(nuCode)) return false;
+    return true;
+  }, []);
+
+  const salesStats = useMemo(() => {
+    if (!properties || properties.length === 0) return { byVCS: {}, byTypeUse: {} };
+    const byVCS = {};
+    const byTypeUse = {};
+    properties.forEach(p => {
+      if (!isQualifyingSale(p)) return;
+      const price = p.values_norm_time || p.sales_price;
+      const vcs = p.property_vcs || 'Unknown';
+      const tu = p.asset_type_use || 'Unknown';
+      if (!byVCS[vcs]) byVCS[vcs] = { count: 0, total: 0 };
+      byVCS[vcs].count++;
+      byVCS[vcs].total += price;
+      if (!byTypeUse[tu]) byTypeUse[tu] = { count: 0, total: 0 };
+      byTypeUse[tu].count++;
+      byTypeUse[tu].total += price;
+    });
+    return { byVCS, byTypeUse };
+  }, [properties, isQualifyingSale]);
+
+  // Unique VCS and Type/Use values for dropdowns
+  const uniqueVCS = useMemo(() => {
+    const set = new Set(properties.filter(p => isQualifyingSale(p)).map(p => p.property_vcs).filter(Boolean));
+    return [...set].sort();
+  }, [properties, isQualifyingSale]);
+
+  const uniqueTypeUse = useMemo(() => {
+    const set = new Set(properties.filter(p => isQualifyingSale(p)).map(p => p.asset_type_use).filter(Boolean));
+    return [...set].sort();
+  }, [properties, isQualifyingSale]);
+
+  // Unassigned codes (codes not yet mapped to any bracket)
+  const unassignedTypeUse = useMemo(() =>
+    uniqueTypeUse.filter(t => !typeUseToBracket[t]),
+    [uniqueTypeUse, typeUseToBracket]
+  );
+
+  const unassignedVCS = useMemo(() =>
+    uniqueVCS.filter(v => !vcsToBracket[v]),
+    [uniqueVCS, vcsToBracket]
+  );
+
+  // All bracket options (default + custom)
+  const allBracketOptions = useMemo(() => {
+    const options = CME_BRACKETS.map((b, idx) => ({
+      value: `bracket_${idx}`,
+      label: b.shortLabel
+    }));
+    customBrackets.forEach(cb => {
+      options.push({ value: `custom_${cb.bracket_id}`, label: cb.bracket_name });
+    });
+    return options;
+  }, [customBrackets]);
 
   const loadCustomBrackets = async () => {
     try {
@@ -141,23 +426,11 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       if (error) throw error;
       setCustomBrackets(data || []);
     } catch (error) {
-      console.error('Error loading custom brackets:', error);
+      // Silent error handling - don't interfere with job loading
+      console.warn('⚠️ Custom brackets loading error (non-critical):', error.message || error);
+      setCustomBrackets([]); // Set empty array on error
     }
   };
-
-  // Auto-populate config after codes are loaded (if no saved config exists)
-  useEffect(() => {
-    // Only auto-populate if:
-    // 1. Available codes have been loaded
-    // 2. Config is still empty (no saved settings)
-    const codesLoaded = Object.values(availableCodes).some(arr => arr.length > 0);
-    const configEmpty = Object.values(codeConfig).every(arr => arr.length === 0);
-
-    if (codesLoaded && configEmpty && !isLoadingCodes) {
-      console.log('🚀 Triggering auto-populate after codes loaded');
-      autoPopulateCodeConfig();
-    }
-  }, [availableCodes, isLoadingCodes]);
 
   const loadAdjustments = async () => {
     try {
@@ -196,13 +469,21 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         setAdjustments(defaultData);
       }
     } catch (error) {
-      console.error('Error loading adjustments:', error);
+      // Silent error handling - don't interfere with job loading
+      console.warn('⚠️ Adjustments loading error (non-critical):', error.message || error);
+      setAdjustments([]); // Set empty array on error
     } finally {
       setIsLoading(false);
     }
   };
 
   const loadCodeConfig = async () => {
+    // Safety check: Don't run if availableCodes isn't ready or jobData is missing
+    if (!jobData?.id || !availableCodes || typeof availableCodes !== 'object') {
+      console.log('⏳ Skipping loadCodeConfig - prerequisites not ready');
+      return;
+    }
+
     try {
       const settingKeys = [
         'adjustment_codes_garage',
@@ -218,7 +499,15 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         'adjustment_codes_miscellaneous',
         'adjustment_codes_land_positive',
         'adjustment_codes_land_negative',
-        'adjustment_codes_version' // Track code definition version
+        'adjustment_codes_version', // Track code definition version
+        'garage_threshold_one_car_max',
+        'garage_threshold_two_car_max',
+        'garage_threshold_three_car_max',
+        'detached_condition_poor_threshold',
+        'detached_condition_poor_multiplier',
+        'detached_condition_standard_multiplier',
+        'detached_condition_excellent_threshold',
+        'detached_condition_excellent_multiplier'
       ];
 
       const { data, error } = await supabase
@@ -238,17 +527,37 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       if (data && data.length > 0 && savedVersion === currentVersion) {
         // User has saved settings AND version matches - load them
         const newConfig = { ...codeConfig };
+        const newThresholds = { ...garageThresholds };
+
+        const newConditionMultipliers = { ...detachedConditionMultipliers };
+
         data.forEach(setting => {
-          const attributeId = setting.setting_key.replace('adjustment_codes_', '');
-          if (attributeId !== 'version') {
-            try {
-              newConfig[attributeId] = setting.setting_value ? JSON.parse(setting.setting_value) : [];
-            } catch (e) {
-              newConfig[attributeId] = [];
+          // Handle garage thresholds
+          if (setting.setting_key.startsWith('garage_threshold_')) {
+            const thresholdKey = setting.setting_key.replace('garage_threshold_', '');
+            newThresholds[thresholdKey] = parseInt(setting.setting_value, 10) || garageThresholds[thresholdKey];
+          }
+          // Handle detached condition multipliers
+          else if (setting.setting_key.startsWith('detached_condition_')) {
+            const multiplierKey = setting.setting_key.replace('detached_condition_', '');
+            newConditionMultipliers[multiplierKey] = parseFloat(setting.setting_value) || detachedConditionMultipliers[multiplierKey];
+          }
+          // Handle code configuration
+          else {
+            const attributeId = setting.setting_key.replace('adjustment_codes_', '');
+            if (attributeId !== 'version') {
+              try {
+                newConfig[attributeId] = setting.setting_value ? JSON.parse(setting.setting_value) : [];
+              } catch (e) {
+                newConfig[attributeId] = [];
+              }
             }
           }
         });
+
         setCodeConfig(newConfig);
+        setGarageThresholds(newThresholds);
+        setDetachedConditionMultipliers(newConditionMultipliers);
       } else {
         // No saved settings OR version mismatch (code table changed) - re-auto-populate
         if (savedVersion && savedVersion !== currentVersion) {
@@ -261,7 +570,9 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         autoPopulateCodeConfig();
       }
     } catch (error) {
-      console.error('Error loading code config:', error);
+      // Silent error handling - don't interfere with job loading
+      console.warn('⚠️ Code config loading error (non-critical):', error.message || error);
+      // Don't throw or set error state - this is optional configuration data
     }
   };
 
@@ -343,59 +654,108 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       const codeDefinitions = job.parsed_code_definitions;
       console.log('📊 Code definitions structure:', codeDefinitions);
 
-      const sections = codeDefinitions.sections || codeDefinitions || {};
-      console.log('📂 Available sections:', Object.keys(sections));
-
       // Extract codes from specific categories WITHIN the Residential section
       const categoryCodes = {
-        '11': [], // Attached items (garage, deck, patio, open porch, enclosed porch)
+        '11': [], // Attached items (garage, deck, patio, open porch, enclosed porch) - BRT only
         '15': [], // Detached items (det garage, pools, barn, stable, pole barn)
         '39': [], // Miscellaneous items
         '62': [], // Positive land adjustments
         '63': []  // Negative land adjustments
       };
 
-      // BRT codes are nested: sections.Residential contains parent keys that have KEYs like "11", "15", etc.
-      const residentialSection = sections.Residential || sections.residential || {};
-      console.log('🏠 Residential section keys:', Object.keys(residentialSection));
+      // MICROSYSTEMS: Load from field_codes with specific prefixes
+      if (vendorType === 'Microsystems' && codeDefinitions.field_codes) {
+        console.log('📂 Microsystems field_codes available:', Object.keys(codeDefinitions.field_codes));
 
-      // Search through Residential section to find categories by their KEY property
-      Object.keys(residentialSection).forEach(parentKey => {
-        const parentSection = residentialSection[parentKey];
+        // Category 15: Detached items from prefix 680
+        const detachedCodes = codeDefinitions.field_codes['680'] || {};
+        Object.entries(detachedCodes).forEach(([code, data]) => {
+          if (data.description) {
+            categoryCodes['15'].push({
+              code: code,
+              description: data.description.trim()
+            });
+          }
+        });
+        console.log(`✅ Microsystems detached items (680): ${categoryCodes['15'].length} codes`);
 
-        // Check if this parent section has a KEY property matching our category numbers
-        const categoryKey = parentSection?.KEY || parentSection?.key;
-
-        if (categoryKey && categoryCodes.hasOwnProperty(categoryKey)) {
-          console.log(`🎯 Found category ${categoryKey} at parent key "${parentKey}"`);
-
-          // Now extract codes from the MAP within this category
-          const categoryMap = parentSection.MAP || parentSection.map || {};
-
-          Object.keys(categoryMap).forEach(codeKey => {
-            const codeItem = categoryMap[codeKey];
-            let description = '';
-
-            // Extract description from DATA.VALUE
-            if (codeItem?.DATA?.VALUE) {
-              description = codeItem.DATA.VALUE;
-            } else if (codeItem?.VALUE) {
-              description = codeItem.VALUE;
-            } else if (typeof codeItem === 'string') {
-              description = codeItem;
-            }
-
-            if (description && codeKey !== 'KEY' && codeKey !== 'DATA' && codeKey !== 'MAP') {
-              categoryCodes[categoryKey].push({
-                code: codeKey,
-                description: description.trim()
-              });
+        // Category 39: Miscellaneous items from prefixes 590, 591, 592, 593
+        // Use Map to deduplicate codes that appear in multiple prefixes
+        const miscCodesMap = new Map();
+        ['590', '591', '592', '593'].forEach(prefix => {
+          const miscCodes = codeDefinitions.field_codes[prefix] || {};
+          Object.entries(miscCodes).forEach(([code, data]) => {
+            if (data.description && !miscCodesMap.has(code)) {
+              miscCodesMap.set(code, data.description.trim());
             }
           });
+        });
+        miscCodesMap.forEach((description, code) => {
+          categoryCodes['39'].push({ code, description });
+        });
+        console.log(`✅ Microsystems miscellaneous (590-593): ${categoryCodes['39'].length} codes`);
 
-          console.log(`✅ Category ${categoryKey} loaded ${categoryCodes[categoryKey].length} codes`);
-        }
-      });
+        // Categories 62 & 63: Land adjustments from table 220
+        // Use Map to deduplicate, then add to both positive and negative
+        const landCodesMap = new Map();
+        const landCodes = codeDefinitions.field_codes['220'] || {};
+        Object.entries(landCodes).forEach(([code, data]) => {
+          if (data.description && !landCodesMap.has(code)) {
+            landCodesMap.set(code, data.description.trim());
+          }
+        });
+        landCodesMap.forEach((description, code) => {
+          categoryCodes['62'].push({ code, description });
+          categoryCodes['63'].push({ code, description });
+        });
+        console.log(`✅ Microsystems land adjustments (220): ${categoryCodes['62'].length} codes`);
+      }
+      // BRT: Load from sections.Residential
+      else {
+        const sections = codeDefinitions.sections || codeDefinitions || {};
+        console.log('📂 Available sections:', Object.keys(sections));
+
+        const residentialSection = sections.Residential || sections.residential || {};
+        console.log('🏠 Residential section keys:', Object.keys(residentialSection));
+
+        // Search through Residential section to find categories by their KEY property
+        Object.keys(residentialSection).forEach(parentKey => {
+          const parentSection = residentialSection[parentKey];
+
+          // Check if this parent section has a KEY property matching our category numbers
+          const categoryKey = parentSection?.KEY || parentSection?.key;
+
+          if (categoryKey && categoryCodes.hasOwnProperty(categoryKey)) {
+            console.log(`🎯 Found category ${categoryKey} at parent key "${parentKey}"`);
+
+            // Now extract codes from the MAP within this category
+            const categoryMap = parentSection.MAP || parentSection.map || {};
+
+            Object.keys(categoryMap).forEach(codeKey => {
+              const codeItem = categoryMap[codeKey];
+              let description = '';
+
+              // Extract description from DATA.VALUE
+              if (codeItem?.DATA?.VALUE) {
+                description = codeItem.DATA.VALUE;
+              } else if (codeItem?.VALUE) {
+                description = codeItem.VALUE;
+              } else if (typeof codeItem === 'string') {
+                description = codeItem;
+              }
+
+              if (description && codeKey !== 'KEY' && codeKey !== 'DATA' && codeKey !== 'MAP') {
+                categoryCodes[categoryKey].push({
+                  code: codeKey,
+                  description: description.trim()
+                });
+              }
+            });
+
+            console.log(`✅ Category ${categoryKey} loaded ${categoryCodes[categoryKey].length} codes`);
+          }
+        });
+      }
 
       // Sort by code numerically
       Object.keys(categoryCodes).forEach(cat => {
@@ -412,7 +772,9 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       console.log('📦 Final categoryCodes:', categoryCodes);
       setAvailableCodes(categoryCodes);
     } catch (error) {
-      console.error('Error loading available codes:', error);
+      // Silent error handling - don't interfere with job loading
+      console.warn('⚠️ Available codes loading error (non-critical):', error.message || error);
+      setAvailableCodes({}); // Set empty object on error
     } finally {
       setIsLoadingCodes(false);
     }
@@ -421,9 +783,11 @@ const AdjustmentsTab = ({ jobData = {} }) => {
   const handleAdjustmentChange = (adjustmentId, bracketIndex, value) => {
     setAdjustments(prev => prev.map(adj => {
       if (adj.adjustment_id === adjustmentId) {
+        // Store value as-is while typing (allows "-", ".", "-." etc.)
+        // The onBlur handler will convert to proper number
         return {
           ...adj,
-          [`bracket_${bracketIndex}`]: parseFloat(value) || 0
+          [`bracket_${bracketIndex}`]: value
         };
       }
       return adj;
@@ -434,14 +798,29 @@ const AdjustmentsTab = ({ jobData = {} }) => {
     try {
       setIsSaving(true);
 
+      // Normalize all bracket values to numbers before saving
+      const normalizedAdjustments = adjustments.map(adj => {
+        const normalized = { ...adj };
+        for (let i = 0; i < 10; i++) {
+          const key = `bracket_${i}`;
+          if (normalized[key] !== undefined) {
+            const parsed = parseFloat(normalized[key]);
+            normalized[key] = isNaN(parsed) ? 0 : parsed;
+          }
+        }
+        return normalized;
+      });
+
       const { error } = await supabase
         .from('job_adjustment_grid')
-        .upsert(adjustments, {
+        .upsert(normalizedAdjustments, {
           onConflict: 'job_id,adjustment_id'
         });
 
       if (error) throw error;
 
+      // Update local state with normalized values
+      setAdjustments(normalizedAdjustments);
       alert('Adjustments saved successfully!');
     } catch (error) {
       console.error('Error saving adjustments:', error);
@@ -577,28 +956,105 @@ const AdjustmentsTab = ({ jobData = {} }) => {
 
   const handleSaveCodeConfig = async () => {
     try {
-      // Save code configuration settings
-      const settings = Object.keys(codeConfig)
-        .filter(attributeId => codeConfig[attributeId] && codeConfig[attributeId].length > 0) // Only save if codes are selected
-        .map(attributeId => ({
-          job_id: jobData.id,
-          setting_key: `adjustment_codes_${attributeId}`,
-          setting_value: JSON.stringify(codeConfig[attributeId])
-        }));
+      // Separate settings into those with values and those to delete
+      const settingsToSave = [];
+      const settingsToDelete = [];
+
+      Object.keys(codeConfig).forEach(attributeId => {
+        const codes = codeConfig[attributeId] || [];
+        const settingKey = `adjustment_codes_${attributeId}`;
+
+        if (codes.length > 0) {
+          // Has codes - save them
+          settingsToSave.push({
+            job_id: jobData.id,
+            setting_key: settingKey,
+            setting_value: JSON.stringify(codes)
+          });
+        } else {
+          // Empty array - delete the setting to clear old values
+          settingsToDelete.push(settingKey);
+        }
+      });
 
       // Add version hash to detect future code table changes
       const currentVersion = generateCodeVersion(availableCodes);
-      settings.push({
+      settingsToSave.push({
         job_id: jobData.id,
         setting_key: 'adjustment_codes_version',
         setting_value: currentVersion
       });
 
-      const { error: settingsError } = await supabase
-        .from('job_settings')
-        .upsert(settings, { onConflict: 'job_id,setting_key' });
+      // Add garage thresholds
+      settingsToSave.push(
+        {
+          job_id: jobData.id,
+          setting_key: 'garage_threshold_one_car_max',
+          setting_value: String(garageThresholds.one_car_max)
+        },
+        {
+          job_id: jobData.id,
+          setting_key: 'garage_threshold_two_car_max',
+          setting_value: String(garageThresholds.two_car_max)
+        },
+        {
+          job_id: jobData.id,
+          setting_key: 'garage_threshold_three_car_max',
+          setting_value: String(garageThresholds.three_car_max)
+        }
+      );
 
-      if (settingsError) throw settingsError;
+      // Add detached item condition multipliers
+      settingsToSave.push(
+        {
+          job_id: jobData.id,
+          setting_key: 'detached_condition_poor_threshold',
+          setting_value: String(detachedConditionMultipliers.poor_threshold)
+        },
+        {
+          job_id: jobData.id,
+          setting_key: 'detached_condition_poor_multiplier',
+          setting_value: String(detachedConditionMultipliers.poor_multiplier)
+        },
+        {
+          job_id: jobData.id,
+          setting_key: 'detached_condition_standard_multiplier',
+          setting_value: String(detachedConditionMultipliers.standard_multiplier)
+        },
+        {
+          job_id: jobData.id,
+          setting_key: 'detached_condition_excellent_threshold',
+          setting_value: String(detachedConditionMultipliers.excellent_threshold)
+        },
+        {
+          job_id: jobData.id,
+          setting_key: 'detached_condition_excellent_multiplier',
+          setting_value: String(detachedConditionMultipliers.excellent_multiplier)
+        }
+      );
+
+      // Save settings that have values
+      if (settingsToSave.length > 0) {
+        const { error: settingsError } = await supabase
+          .from('job_settings')
+          .upsert(settingsToSave, { onConflict: 'job_id,setting_key' });
+
+        if (settingsError) throw settingsError;
+      }
+
+      // Delete settings for empty arrays
+      if (settingsToDelete.length > 0) {
+        console.log('🗑️ Deleting empty configuration settings:', settingsToDelete);
+        const { error: deleteError } = await supabase
+          .from('job_settings')
+          .delete()
+          .eq('job_id', jobData.id)
+          .in('setting_key', settingsToDelete);
+
+        if (deleteError) {
+          console.error('Error deleting empty settings:', deleteError);
+        }
+      }
 
       // For dynamic attributes with selected codes, create/update adjustment rows
       const attributeLabels = {
@@ -608,7 +1064,8 @@ const AdjustmentsTab = ({ jobData = {} }) => {
       };
 
       // Attributes that create individual rows per code (using code description as name)
-      const individualRowAttributes = ['miscellaneous', 'land_positive', 'land_negative'];
+      // Detached items (barn, pole_barn, stable), miscellaneous, and land adjustments all create one row per code
+      const individualRowAttributes = ['barn', 'pole_barn', 'stable', 'miscellaneous', 'land_positive', 'land_negative'];
 
       const newAdjustments = [];
       let maxSortOrder = Math.max(...adjustments.map(a => a.sort_order || 0), 0);
@@ -628,12 +1085,21 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                 const adjustmentId = `${attr.id}_${codeValue}`;
                 const existingAdj = adjustments.find(adj => adj.adjustment_id === adjustmentId);
 
+                // Convert description to title case (lowercase first, then capitalize each word)
+                const titleCaseName = codeObj.description
+                  .toLowerCase()
+                  .split(' ')
+                  .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                  .join(' ');
+
                 if (!existingAdj) {
+                  // Create new adjustment row
                   maxSortOrder += 1;
                   newAdjustments.push({
+                    id: crypto.randomUUID(),
                     job_id: jobData.id,
                     adjustment_id: adjustmentId,
-                    adjustment_name: codeObj.description,
+                    adjustment_name: titleCaseName,
                     adjustment_type: 'flat',
                     category: 'amenity',
                     is_default: false,
@@ -649,6 +1115,12 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                     bracket_8: 0,
                     bracket_9: 0
                   });
+                } else if (existingAdj.adjustment_name !== titleCaseName) {
+                  // Update existing adjustment if name changed (e.g., "BUSY STREET" -> "Busy Street")
+                  newAdjustments.push({
+                    ...existingAdj,
+                    adjustment_name: titleCaseName
+                  });
                 }
               }
             });
@@ -659,6 +1131,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
             if (!existingAdj) {
               maxSortOrder += 1;
               newAdjustments.push({
+                id: crypto.randomUUID(),
                 job_id: jobData.id,
                 adjustment_id: attr.id,
                 adjustment_name: attributeLabels[attr.id] || attr.name,
@@ -682,6 +1155,59 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         }
       });
 
+      // DELETE adjustment rows for codes that were removed from configuration
+      const rowsToDelete = [];
+      adjustments.forEach(adj => {
+        if (!adj.is_default) {
+          // Delete OLD LEGACY rows (barn, pole_barn, stable without code suffix)
+          if (adj.adjustment_id === 'barn' || adj.adjustment_id === 'pole_barn' || adj.adjustment_id === 'stable') {
+            rowsToDelete.push(adj.adjustment_id);
+            console.log(`🗑️ Marking LEGACY row for deletion: ${adj.adjustment_id} (replaced by per-code rows)`);
+            return;
+          }
+
+          // Check if this is a dynamic adjustment row (detached items, miscellaneous, or land adjustments)
+          const isDynamicRow = adj.adjustment_id.startsWith('barn_') ||
+                               adj.adjustment_id.startsWith('pole_barn_') ||
+                               adj.adjustment_id.startsWith('stable_') ||
+                               adj.adjustment_id.startsWith('miscellaneous_') ||
+                               adj.adjustment_id.startsWith('land_positive_') ||
+                               adj.adjustment_id.startsWith('land_negative_');
+
+          if (isDynamicRow) {
+            // Extract the type and code from adjustment_id
+            const match = adj.adjustment_id.match(/^(barn|pole_barn|stable|miscellaneous|land_positive|land_negative)_(.+)$/);
+            if (match) {
+              const [, type, code] = match;
+              const selectedCodes = codeConfig[type] || [];
+
+              // If this code is NOT in the current config, mark for deletion
+              if (!selectedCodes.includes(code)) {
+                rowsToDelete.push(adj.adjustment_id);
+                console.log(`🗑️ Marking for deletion: ${adj.adjustment_id} (code "${code}" not in ${type} config)`);
+              }
+            }
+          }
+        }
+      });
+
+      // Delete orphaned rows from database
+      if (rowsToDelete.length > 0) {
+        console.log('🗑️ Deleting removed adjustment rows:', rowsToDelete);
+        const { error: deleteError } = await supabase
+          .from('job_adjustment_grid')
+          .delete()
+          .eq('job_id', jobData.id)
+          .in('adjustment_id', rowsToDelete);
+
+        if (deleteError) {
+          console.error('Error deleting adjustment rows:', deleteError);
+        } else {
+          // Update local state to remove deleted rows
+          setAdjustments(prev => prev.filter(adj => !rowsToDelete.includes(adj.adjustment_id)));
+        }
+      }
+
       // Save new adjustment rows to database
       if (newAdjustments.length > 0) {
         const { error: adjError } = await supabase
@@ -702,41 +1228,24 @@ const AdjustmentsTab = ({ jobData = {} }) => {
         });
       }
 
-      // CRITICAL: Recalculate amenity areas for all properties using new code mappings
-      console.log('🔄 Triggering database recalculation with new code mappings...');
+      // Configuration saved - applies immediately to CME evaluations
+      console.log('✅ Code configuration saved successfully');
+      console.log('📌 Dynamic adjustments will now work in CME evaluations');
 
-      const { data: { session } } = await supabase.auth.getSession();
-      const recalcResponse = await fetch(
-        `${supabase.supabaseUrl}/functions/v1/recalculate-amenities`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}`
-          },
-          body: JSON.stringify({
-            jobId: jobData.id,
-            codeConfig: codeConfig
-          })
-        }
-      );
+      const messages = [];
+      if (newAdjustments.length > 0) messages.push(`${newAdjustments.length} new adjustment row(s) added`);
+      if (rowsToDelete.length > 0) messages.push(`${rowsToDelete.length} adjustment row(s) removed`);
 
-      if (!recalcResponse.ok) {
-        const errorData = await recalcResponse.json();
-        throw new Error(`Recalculation failed: ${errorData.error}`);
-      }
+      const summary = messages.length > 0 ? `\n\n${messages.join(', ')}.` : '';
 
-      const recalcResult = await recalcResponse.json();
-      console.log('✅ Recalculation complete:', recalcResult);
-
-      alert(`Code configuration saved and ${recalcResult.updatedCount} properties updated!${newAdjustments.length > 0 ? ` ${newAdjustments.length} new adjustment row(s) added to grid.` : ''}\n\nAmenity areas have been recalculated using your custom code mappings.`);
+      alert(`Code configuration saved!${summary}\n\n✓ Dynamic adjustments are now active and will be applied during evaluations.\n\nRefresh the page to see changes in the adjustment grid.`);
 
       // Dismiss auto-populate notice and reset flag after saving
       setShowAutoPopulateNotice(false);
       setWasReset(false);
 
       // Optionally switch to adjustment grid tab to show new rows
-      if (newAdjustments.length > 0) {
+      if (newAdjustments.length > 0 || rowsToDelete.length > 0) {
         setActiveSubTab('adjustments');
       }
     } catch (error) {
@@ -784,6 +1293,20 @@ const AdjustmentsTab = ({ jobData = {} }) => {
           >
             Adjustment Grid
           </button>
+          <button
+            onClick={() => setActiveSubTab('mapping')}
+            className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm inline-flex items-center gap-2 ${
+              activeSubTab === 'mapping'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <Map className="w-4 h-4" />
+            Bracket Mapping
+            {bracketMappings.length > 0 && (
+              <span className="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded-full">{bracketMappings.length}</span>
+            )}
+          </button>
         </nav>
       </div>
 
@@ -795,6 +1318,145 @@ const AdjustmentsTab = ({ jobData = {} }) => {
             <p className="text-sm text-gray-600">
               Assign BRT codes to each adjustment attribute. Static attributes are always visible in the adjustment grid.
               Dynamic attributes will only appear in the grid after codes are assigned and saved.
+            </p>
+          </div>
+
+          {/* Garage Per-Car Thresholds */}
+          <div className="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <h4 className="text-sm font-semibold text-gray-900 mb-3">Garage Per-Car Thresholds (Square Feet)</h4>
+            <p className="text-xs text-gray-600 mb-3">
+              Configure how garage square footage is categorized into car count categories. These thresholds apply to both attached garages and detached garages.
+            </p>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  One Car Maximum
+                </label>
+                <input
+                  type="number"
+                  value={garageThresholds.one_car_max}
+                  onChange={(e) => setGarageThresholds(prev => ({ ...prev, one_car_max: parseInt(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">1-{garageThresholds.one_car_max} SF = ONE CAR</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Two Car Maximum
+                </label>
+                <input
+                  type="number"
+                  value={garageThresholds.two_car_max}
+                  onChange={(e) => setGarageThresholds(prev => ({ ...prev, two_car_max: parseInt(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">{garageThresholds.one_car_max + 1}-{garageThresholds.two_car_max} SF = TWO CAR</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Three Car Maximum
+                </label>
+                <input
+                  type="number"
+                  value={garageThresholds.three_car_max}
+                  onChange={(e) => setGarageThresholds(prev => ({ ...prev, three_car_max: parseInt(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">{garageThresholds.two_car_max + 1}-{garageThresholds.three_car_max} SF = THREE CAR</p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-600 mt-3">
+              <strong>Note:</strong> Garages over {garageThresholds.three_car_max} SF are categorized as <strong>MULTI CAR</strong>.
+              Category differences are multiplied by the adjustment value (e.g., ONE CAR to TWO CAR = 1 step × adjustment amount).
+            </p>
+          </div>
+
+          {/* Detached Item Condition Multipliers */}
+          <div className="mb-6 bg-purple-50 border border-purple-200 rounded-lg p-4">
+            <h4 className="text-sm font-semibold text-gray-900 mb-3">Detached Item Condition Multipliers</h4>
+            <p className="text-xs text-gray-600 mb-3">
+              Apply multipliers to detached item adjustments (Barn, Pole Barn, Stable, Pool, etc.) based on the inspector's depreciation/net condition value.
+              BRT uses DETACHEDNC fields; Microsystems uses the average of Physical, Functional, and Locational depreciation.
+            </p>
+            <div className="grid grid-cols-5 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Poor Threshold
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0"
+                  max="1"
+                  value={detachedConditionMultipliers.poor_threshold}
+                  onChange={(e) => setDetachedConditionMultipliers(prev => ({ ...prev, poor_threshold: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">≤ this = Poor</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Poor Multiplier
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0"
+                  max="2"
+                  value={detachedConditionMultipliers.poor_multiplier}
+                  onChange={(e) => setDetachedConditionMultipliers(prev => ({ ...prev, poor_multiplier: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">×{detachedConditionMultipliers.poor_multiplier}</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Standard Multiplier
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0"
+                  max="2"
+                  value={detachedConditionMultipliers.standard_multiplier}
+                  onChange={(e) => setDetachedConditionMultipliers(prev => ({ ...prev, standard_multiplier: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">×{detachedConditionMultipliers.standard_multiplier}</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Excellent Threshold
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0"
+                  max="1"
+                  value={detachedConditionMultipliers.excellent_threshold}
+                  onChange={(e) => setDetachedConditionMultipliers(prev => ({ ...prev, excellent_threshold: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">≥ this = Excellent</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Excellent Multiplier
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0"
+                  max="2"
+                  value={detachedConditionMultipliers.excellent_multiplier}
+                  onChange={(e) => setDetachedConditionMultipliers(prev => ({ ...prev, excellent_multiplier: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">×{detachedConditionMultipliers.excellent_multiplier}</p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-600 mt-3">
+              <strong>Example:</strong> Base adjustment $10,000 with depr value 0.15 → Poor condition → $10,000 × {detachedConditionMultipliers.poor_multiplier} = ${(10000 * detachedConditionMultipliers.poor_multiplier).toLocaleString()}
             </p>
           </div>
 
@@ -880,55 +1542,64 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                       {STATIC_ATTRIBUTES.map(attr => {
                         const codes = getCodesForAttribute(attr.id, attr.category);
                         const selectedCodes = codeConfig[attr.id] || [];
+                        const isDisabled = isAttributeDisabledForMicrosystems(attr.id);
 
                         return (
-                          <tr key={attr.id} className="border-b hover:bg-gray-50">
-                            <td className="py-3 px-4 font-medium text-gray-900">{attr.name}</td>
+                          <tr key={attr.id} className={`border-b ${isDisabled ? 'bg-gray-50' : 'hover:bg-gray-50'}`}>
+                            <td className={`py-3 px-4 font-medium ${isDisabled ? 'text-gray-400' : 'text-gray-900'}`}>
+                              {attr.name}
+                            </td>
                             <td className="py-3 px-4">
-                              <div className="space-y-2">
-                                {/* Selected codes as chips */}
-                                {selectedCodes.length > 0 && (
-                                  <div className="flex flex-wrap gap-2 mb-2">
-                                    {selectedCodes.map(codeVal => {
-                                      const codeObj = codes.find(c => c.code === codeVal);
-                                      return (
-                                        <span
-                                          key={codeVal}
-                                          className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium"
-                                        >
-                                          {codeVal} - {codeObj?.description || 'Unknown'}
-                                          <button
-                                            onClick={() => handleCodeToggle(attr.id, codeVal)}
-                                            className="ml-1 text-blue-600 hover:text-blue-800"
+                              {isDisabled ? (
+                                <div className="text-xs text-gray-500 italic">
+                                  Extracted from source file columns
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {/* Selected codes as chips */}
+                                  {selectedCodes.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mb-2">
+                                      {selectedCodes.map(codeVal => {
+                                        const codeObj = codes.find(c => c.code === codeVal);
+                                        return (
+                                          <span
+                                            key={`${attr.id}-${codeVal}`}
+                                            className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium"
                                           >
-                                            <X className="w-3 h-3" />
-                                          </button>
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                )}
+                                            {codeVal} - {codeObj?.description || 'Unknown'}
+                                            <button
+                                              onClick={() => handleCodeToggle(attr.id, codeVal)}
+                                              className="ml-1 text-blue-600 hover:text-blue-800"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
 
-                                {/* Dropdown to add codes */}
-                                <select
-                                  value=""
-                                  onChange={(e) => {
-                                    if (e.target.value) {
-                                      handleCodeToggle(attr.id, e.target.value);
-                                    }
-                                  }}
-                                  className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 text-sm"
-                                >
-                                  <option value="">-- Add Code --</option>
-                                  {codes
-                                    .filter(code => !selectedCodes.includes(code.code))
-                                    .map(code => (
-                                      <option key={code.code} value={code.code}>
-                                        {code.code} - {code.description}
-                                      </option>
-                                    ))}
-                                </select>
-                              </div>
+                                  {/* Dropdown to add codes */}
+                                  <select
+                                    value=""
+                                    onChange={(e) => {
+                                      if (e.target.value) {
+                                        handleCodeToggle(attr.id, e.target.value);
+                                      }
+                                    }}
+                                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 text-sm"
+                                  >
+                                    <option value="">-- Add Code --</option>
+                                    {codes
+                                      .filter(code => !selectedCodes.includes(code.code))
+                                      .map(code => (
+                                        <option key={`${attr.id}-${code.code}`} value={code.code}>
+                                          {code.code} - {code.description}
+                                        </option>
+                                      ))}
+                                  </select>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         );
@@ -958,55 +1629,64 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                       {DYNAMIC_ATTRIBUTES.map(attr => {
                         const codes = getCodesForAttribute(attr.id, attr.category);
                         const selectedCodes = codeConfig[attr.id] || [];
+                        const isDisabled = isAttributeDisabledForMicrosystems(attr.id);
 
                         return (
-                          <tr key={attr.id} className="border-b hover:bg-gray-50">
-                            <td className="py-3 px-4 font-medium text-gray-900">{attr.name}</td>
+                          <tr key={attr.id} className={`border-b ${isDisabled ? 'bg-gray-50' : 'hover:bg-gray-50'}`}>
+                            <td className={`py-3 px-4 font-medium ${isDisabled ? 'text-gray-400' : 'text-gray-900'}`}>
+                              {attr.name}
+                            </td>
                             <td className="py-3 px-4">
-                              <div className="space-y-2">
-                                {/* Selected codes as chips */}
-                                {selectedCodes.length > 0 && (
-                                  <div className="flex flex-wrap gap-2 mb-2">
-                                    {selectedCodes.map(codeVal => {
-                                      const codeObj = codes.find(c => c.code === codeVal);
-                                      return (
-                                        <span
-                                          key={codeVal}
-                                          className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium"
-                                        >
-                                          {codeVal} - {codeObj?.description || 'Unknown'}
-                                          <button
-                                            onClick={() => handleCodeToggle(attr.id, codeVal)}
-                                            className="ml-1 text-green-600 hover:text-green-800"
+                              {isDisabled ? (
+                                <div className="text-xs text-gray-500 italic">
+                                  Extracted from source file columns
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {/* Selected codes as chips */}
+                                  {selectedCodes.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mb-2">
+                                      {selectedCodes.map(codeVal => {
+                                        const codeObj = codes.find(c => c.code === codeVal);
+                                        return (
+                                          <span
+                                            key={`${attr.id}-${codeVal}`}
+                                            className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium"
                                           >
-                                            <X className="w-3 h-3" />
-                                          </button>
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                )}
+                                            {codeVal} - {codeObj?.description || 'Unknown'}
+                                            <button
+                                              onClick={() => handleCodeToggle(attr.id, codeVal)}
+                                              className="ml-1 text-green-600 hover:text-green-800"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
 
-                                {/* Dropdown to add codes */}
-                                <select
-                                  value=""
-                                  onChange={(e) => {
-                                    if (e.target.value) {
-                                      handleCodeToggle(attr.id, e.target.value);
-                                    }
-                                  }}
-                                  className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 text-sm"
-                                >
-                                  <option value="">-- Add Code --</option>
-                                  {codes
-                                    .filter(code => !selectedCodes.includes(code.code))
-                                    .map(code => (
-                                      <option key={code.code} value={code.code}>
-                                        {code.code} - {code.description}
-                                      </option>
-                                    ))}
-                                </select>
-                              </div>
+                                  {/* Dropdown to add codes */}
+                                  <select
+                                    value=""
+                                    onChange={(e) => {
+                                      if (e.target.value) {
+                                        handleCodeToggle(attr.id, e.target.value);
+                                      }
+                                    }}
+                                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 text-sm"
+                                  >
+                                    <option value="">-- Add Code --</option>
+                                    {codes
+                                      .filter(code => !selectedCodes.includes(code.code))
+                                      .map(code => (
+                                        <option key={`${attr.id}-${code.code}`} value={code.code}>
+                                          {code.code} - {code.description}
+                                        </option>
+                                      ))}
+                                  </select>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         );
@@ -1104,10 +1784,45 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {adjustments.map((adj) => (
+                {adjustments
+                  .filter((adj) => {
+                    // Always show default adjustments
+                    if (adj.is_default) return true;
+
+                    // HIDE OLD LEGACY rows (barn, pole_barn, stable without code suffix)
+                    if (adj.adjustment_id === 'barn' || adj.adjustment_id === 'pole_barn' || adj.adjustment_id === 'stable') {
+                      return false;
+                    }
+
+                    // For dynamic adjustments, only show if configuration has been saved
+                    // Check if this adjustment has corresponding codes in codeConfig
+                    const isDynamic = adj.adjustment_id.includes('barn_') ||
+                                    adj.adjustment_id.includes('pole_barn_') ||
+                                    adj.adjustment_id.includes('stable_') ||
+                                    adj.adjustment_id.includes('miscellaneous_') ||
+                                    adj.adjustment_id.includes('land_positive_') ||
+                                    adj.adjustment_id.includes('land_negative_');
+
+                    if (isDynamic) {
+                      // Check if codes are saved for this attribute type (all create per-code rows now)
+                      const match = adj.adjustment_id.match(/^(barn|pole_barn|stable|miscellaneous|land_positive|land_negative)_(.+)$/);
+                      if (match) {
+                        const [, type, code] = match;
+                        const isConfigured = (codeConfig[type] || []).includes(code);
+                        if (!isConfigured) {
+                          console.log(`⚠️ Hiding ${adj.adjustment_id} - code "${code}" not in ${type} configuration`);
+                        }
+                        return isConfigured;
+                      }
+                    }
+
+                    // Show any other custom adjustments (user-created)
+                    return true;
+                  })
+                  .map((adj) => (
                   <tr key={adj.adjustment_id} className="hover:bg-gray-50">
                     <td className="sticky left-0 z-10 bg-white px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-gray-200">
-                      {adj.adjustment_name}
+                      {formatAdjustmentName(adj.adjustment_name, adj.adjustment_id)}
                     </td>
                     {/* Default Bracket Values */}
                     {CME_BRACKETS.map((bracket, bIdx) => (
@@ -1117,11 +1832,20 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                         style={{ backgroundColor: `${bracket.color}33` }}
                       >
                         <input
-                          type="number"
-                          value={adj[`bracket_${bIdx}`] || 0}
+                          type="text"
+                          inputMode="decimal"
+                          value={adj[`bracket_${bIdx}`] ?? 0}
                           onChange={(e) => handleAdjustmentChange(adj.adjustment_id, bIdx, e.target.value)}
+                          onBlur={(e) => {
+                            // Convert to number on blur
+                            const parsed = parseFloat(e.target.value);
+                            if (!isNaN(parsed)) {
+                              handleAdjustmentChange(adj.adjustment_id, bIdx, parsed);
+                            } else if (e.target.value === '' || e.target.value === '-') {
+                              handleAdjustmentChange(adj.adjustment_id, bIdx, 0);
+                            }
+                          }}
                           className="w-20 px-2 py-1 text-sm text-center border rounded focus:ring-2 focus:ring-blue-500"
-                          step={adj.adjustment_type === 'per_sqft' ? '0.01' : '100'}
                         />
                       </td>
                     ))}
@@ -1136,7 +1860,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                           <div className="text-sm font-medium text-gray-900">
                             {customValue.value || 0}
                             <span className="text-xs text-gray-500 ml-1">
-                              {customValue.type === 'flat' ? '$' : customValue.type === 'per_sqft' ? '$/SF' : '%'}
+                              {customValue.type === 'flat' ? '$' : customValue.type === 'per_sqft' ? '$/SF' : customValue.type === 'count' ? '#' : '%'}
                             </span>
                           </div>
                         </td>
@@ -1148,13 +1872,11 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                           value={adj.adjustment_type}
                           onChange={(e) => handleTypeChange(adj.adjustment_id, e.target.value)}
                           className="text-xs border rounded px-2 py-1"
-                          disabled={adj.is_default && adj.adjustment_type !== 'percent'}
                         >
                           <option value="flat">Flat ($)</option>
                           <option value="per_sqft">Per SF ($/SF)</option>
-                          {(adj.adjustment_type === 'percent' || adj.adjustment_type === 'flat_or_percent') && (
-                            <option value="percent">Percent (%)</option>
-                          )}
+                          <option value="count">Count (#)</option>
+                          <option value="percent">Percent (%)</option>
                         </select>
                         {!adj.is_default && (
                           <button
@@ -1179,7 +1901,8 @@ const AdjustmentsTab = ({ jobData = {} }) => {
             <ul className="text-sm text-gray-700 space-y-1">
               <li><strong>Flat ($)</strong> - Fixed dollar amount adjustment</li>
               <li><strong>Per SF ($/SF)</strong> - Adjustment per square foot (e.g., Living Area)</li>
-              <li><strong>Percent (%)</strong> - Percentage-based adjustment (available for Condition)</li>
+              <li><strong>Count (#)</strong> - Adjustment based on quantity (e.g., number of fireplaces)</li>
+              <li><strong>Percent (%)</strong> - Percentage-based adjustment (e.g., condition, land adjustments)</li>
             </ul>
           </div>
 
@@ -1262,7 +1985,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                             return (
                               <tr key={adj.adjustment_id} className="hover:bg-gray-50">
                                 <td className="px-4 py-2 text-sm font-medium text-gray-900 whitespace-nowrap">
-                                  {adj.adjustment_name}
+                                  {formatAdjustmentName(adj.adjustment_name, adj.adjustment_id)}
                                   {!adj.is_default && (
                                     <span className="ml-2 text-xs text-purple-600 font-normal">(Custom)</span>
                                   )}
@@ -1273,7 +1996,7 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                                     value={attrValue.value}
                                     onChange={(e) => handleCustomBracketValueChange(adj.adjustment_id, 'value', e.target.value)}
                                     className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                                    step={attrValue.type === 'per_sqft' ? '0.01' : attrValue.type === 'percent' ? '1' : '100'}
+                                    step={attrValue.type === 'per_sqft' ? '0.01' : attrValue.type === 'percent' ? '1' : attrValue.type === 'count' ? '1' : '100'}
                                   />
                                 </td>
                                 <td className="px-4 py-2">
@@ -1284,9 +2007,8 @@ const AdjustmentsTab = ({ jobData = {} }) => {
                                   >
                                     <option value="flat">Flat ($)</option>
                                     <option value="per_sqft">Per SF ($/SF)</option>
-                                    {(adj.adjustment_type === 'percent' || adj.adjustment_type === 'flat_or_percent') && (
-                                      <option value="percent">Percent (%)</option>
-                                    )}
+                                    <option value="count">Count (#)</option>
+                                    <option value="percent">Percent (%)</option>
                                   </select>
                                 </td>
                               </tr>
@@ -1316,6 +2038,201 @@ const AdjustmentsTab = ({ jobData = {} }) => {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Bracket Mapping Tab */}
+      {activeSubTab === 'mapping' && (
+        <div>
+          <div className="mb-4 flex justify-between items-center">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Bracket Mapping</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Drag Type/Use or VCS codes into adjustment brackets. When "Auto" is selected during evaluation,
+                each property uses the mapped bracket. Type/Use matches take priority over VCS.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {(Object.keys(typeUseToBracket).length > 0 || Object.keys(vcsToBracket).length > 0) && (
+                <button
+                  onClick={() => setBracketMappings([])}
+                  className="inline-flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-red-600 border border-gray-300 rounded hover:border-red-300"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Clear All
+                </button>
+              )}
+              <button
+                onClick={saveBracketMappings}
+                disabled={isSavingMappings}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                {isSavingMappings ? 'Saving...' : 'Save Mappings'}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex gap-4" style={{ minHeight: '400px' }}>
+            {/* Left: Unassigned Codes */}
+            <div className="w-1/3 space-y-4 flex-shrink-0">
+              {/* Unassigned Type/Use */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-purple-50 px-3 py-2 border-b">
+                  <h4 className="text-xs font-semibold text-purple-800 uppercase">
+                    Type/Use ({unassignedTypeUse.length} unassigned)
+                  </h4>
+                </div>
+                <div className="p-2 max-h-56 overflow-y-auto">
+                  {unassignedTypeUse.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic text-center py-2">All Type/Use codes assigned</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {unassignedTypeUse.map(code => {
+                        const stats = salesStats.byTypeUse[code];
+                        const avgK = stats ? `$${Math.round(stats.total / stats.count / 1000)}K` : null;
+                        return (
+                          <div
+                            key={code}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, code, 'type_use')}
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium cursor-grab active:cursor-grabbing hover:bg-purple-200 border border-purple-200 select-none"
+                            title={stats ? `${code}: $${Math.round(stats.total / stats.count).toLocaleString()} avg (${stats.count} sales)` : code}
+                          >
+                            {code}
+                            {avgK && <span className="text-purple-500 text-[10px]">{avgK}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Unassigned VCS */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-teal-50 px-3 py-2 border-b">
+                  <h4 className="text-xs font-semibold text-teal-800 uppercase">
+                    VCS ({unassignedVCS.length} unassigned)
+                  </h4>
+                </div>
+                <div className="p-2 max-h-56 overflow-y-auto">
+                  {unassignedVCS.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic text-center py-2">All VCS codes assigned</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {unassignedVCS.map(code => {
+                        const stats = salesStats.byVCS[code];
+                        const avgK = stats ? `$${Math.round(stats.total / stats.count / 1000)}K` : null;
+                        return (
+                          <div
+                            key={code}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, code, 'vcs')}
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-teal-100 text-teal-800 rounded text-xs font-medium cursor-grab active:cursor-grabbing hover:bg-teal-200 border border-teal-200 select-none"
+                            title={stats ? `${code}: $${Math.round(stats.total / stats.count).toLocaleString()} avg (${stats.count} sales)` : code}
+                          >
+                            {code}
+                            {avgK && <span className="text-teal-500 text-[10px]">{avgK}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* How it works */}
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-xs text-amber-800">
+                  <strong>How it works:</strong> Drag codes into brackets. Type/Use matches take priority over VCS.
+                  Unmapped properties fall back to price-based bracket selection. You can also drag codes between brackets to reassign.
+                </p>
+              </div>
+            </div>
+
+            {/* Right: Bracket Buckets */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="grid grid-cols-2 gap-3">
+                {allBracketOptions.map((opt, idx) => {
+                  const bracket = CME_BRACKETS[idx];
+                  const bgColor = bracket ? bracket.color : '#D1D5DB';
+                  const assignedTU = Object.entries(typeUseToBracket)
+                    .filter(([, b]) => b === opt.value)
+                    .map(([code]) => code)
+                    .sort();
+                  const assignedVCS = Object.entries(vcsToBracket)
+                    .filter(([, b]) => b === opt.value)
+                    .map(([code]) => code)
+                    .sort();
+                  const hasAssignments = assignedTU.length > 0 || assignedVCS.length > 0;
+
+                  return (
+                    <div
+                      key={opt.value}
+                      onDragOver={handleDragOver}
+                      onDragEnter={handleDragEnter}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, opt.value)}
+                      className={`border-2 rounded-lg overflow-hidden transition-all ${hasAssignments ? 'border-gray-300' : 'border-dashed border-gray-200 hover:border-gray-300'}`}
+                    >
+                      <div
+                        className="px-3 py-1.5 flex items-center justify-between"
+                        style={{ backgroundColor: bgColor + '60' }}
+                      >
+                        <span className="text-xs font-bold text-gray-800">{opt.label}</span>
+                        {hasAssignments && (
+                          <span className="text-[10px] text-gray-500 bg-white/60 px-1.5 py-0.5 rounded">
+                            {assignedTU.length + assignedVCS.length}
+                          </span>
+                        )}
+                      </div>
+                      <div className="p-2 min-h-[44px] bg-white">
+                        {!hasAssignments ? (
+                          <p className="text-[10px] text-gray-300 text-center italic py-1">Drop codes here</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {assignedTU.map(code => (
+                              <span
+                                key={`tu_${code}`}
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, code, 'type_use')}
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[11px] font-medium cursor-grab active:cursor-grabbing"
+                              >
+                                {code}
+                                <button
+                                  onClick={() => unassignFromBracket(code, 'type_use')}
+                                  className="ml-0.5 text-purple-400 hover:text-purple-600"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                            {assignedVCS.map(code => (
+                              <span
+                                key={`vcs_${code}`}
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, code, 'vcs')}
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded text-[11px] font-medium cursor-grab active:cursor-grabbing"
+                              >
+                                {code}
+                                <button
+                                  onClick={() => unassignFromBracket(code, 'vcs')}
+                                  className="ml-0.5 text-teal-400 hover:text-teal-600"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

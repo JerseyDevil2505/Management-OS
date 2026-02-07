@@ -32,7 +32,7 @@ const UserManagement = () => {
         .from('employees')
         .select('*')
         .eq('employment_status', 'full_time')  // Only full-time employees
-        .in('role', ['Management', 'Admin'])   // Only Management and Admin roles
+        .in('role', ['Management', 'Admin', 'Owner'])   // Management, Admin, and Owner roles
         .order('last_name');
 
       if (error) throw error;
@@ -153,6 +153,7 @@ const UserManagement = () => {
 
   const getRoleBadgeClass = (role) => {
     switch (role) {
+      case 'Owner': return 'badge-owner';
       case 'Admin': return 'badge-admin';
       case 'Management': return 'badge-manager';
       default: return 'badge-inspector';
@@ -169,6 +170,45 @@ const UserManagement = () => {
         >
           Create User Account
         </button>
+      </div>
+
+      {/* Access Control Summary */}
+      <div className="access-control-summary">
+        <h3>Tab Access Control</h3>
+        <div className="access-grid">
+          <div className="access-item">
+            <span className="access-tab">👥 Employees</span>
+            <span className="access-roles all-roles">All Users</span>
+          </div>
+          <div className="access-item">
+            <span className="access-tab">📋 Jobs</span>
+            <span className="access-roles all-roles">All Users</span>
+          </div>
+          <div className="access-item">
+            <span className="access-tab">⚖️ Appeal Coverage</span>
+            <span className="access-roles all-roles">All Users</span>
+          </div>
+          <div className="access-item">
+            <span className="access-tab">💰 Billing</span>
+            <span className="access-roles admin-only">Admin + Owner</span>
+          </div>
+          <div className="access-item">
+            <span className="access-tab">💸 Payroll</span>
+            <span className="access-roles admin-only">Admin + Owner</span>
+          </div>
+          <div className="access-item">
+            <span className="access-tab">🔐 Users</span>
+            <span className="access-roles owner-only">Primary Owner Only</span>
+          </div>
+          <div className="access-item">
+            <span className="access-tab">🏢 Organizations</span>
+            <span className="access-roles owner-only">Primary Owner Only</span>
+          </div>
+          <div className="access-item">
+            <span className="access-tab">💵 Revenue</span>
+            <span className="access-roles owner-only">Primary Owner Only</span>
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -206,6 +246,7 @@ const UserManagement = () => {
                       onChange={(e) => handleRoleChange(user.id, e.target.value)}
                       className={`role-select ${getRoleBadgeClass(user.role)}`}
                     >
+                      <option value="Owner">Owner</option>
                       <option value="Admin">Admin</option>
                       <option value="Management">Management</option>
                     </select>
@@ -285,6 +326,7 @@ const UserManagement = () => {
                   value={newUser.role}
                   onChange={(e) => setNewUser({...newUser, role: e.target.value})}
                 >
+                  <option value="Owner">Owner</option>
                   <option value="Admin">Admin</option>
                   <option value="Management">Management</option>
                 </select>

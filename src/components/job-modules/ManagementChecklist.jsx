@@ -396,14 +396,19 @@ useEffect(() => {
       if (error) throw error;
       
       // Update local state
-      setChecklistItems(items => items.map(item => 
-        item.id === itemId ? { 
-          ...item, 
+      setChecklistItems(items => items.map(item =>
+        item.id === itemId ? {
+          ...item,
           client_approved: approved,
           client_approved_date: approved ? new Date().toISOString() : null,
           client_approved_by: approved ? (currentUser?.name || 'Jim Duda') : null
         } : item
       ));
+
+      // Auto-mark as complete when client approves
+      if (approved) {
+        await handleItemStatusChange(itemId, 'completed');
+      }
 
     } catch (error) {
       console.error('Error updating client approval:', error);
@@ -988,11 +993,28 @@ useEffect(() => {
   };
   const handleTurnoverDate = async (itemId, date) => {
     if (date) {
-      // First update the item status
+      // Update the item status to completed
       await handleItemStatusChange(itemId, 'completed');
-      
-      // Then show archive confirmation
-      setShowArchiveConfirm(true);
+
+      // Save the turnover date to the job
+      try {
+        const { error } = await supabase
+          .from('jobs')
+          .update({
+            turnover_date: date,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', jobData.id);
+
+        if (error) {
+          console.error('Error saving turnover date:', error);
+        } else {
+          console.log('✅ Turnover date saved:', date);
+        }
+      } catch (err) {
+        console.error('Error saving turnover date:', err);
+      }
+      // Archive can be done manually from Admin Jobs
     }
   };
 
@@ -1088,7 +1110,8 @@ useEffect(() => {
   const replaceGoToWithComplete = new Set([
     'Land Value Tables Built',
     'Land Values Entered',
-    'Building Class Review/Updated'
+    'Building Class Review/Updated',
+    'Effective Age Loaded/Set'
   ]);
 
   // Navigate to analysis section with detailed mapping and subtab dispatching

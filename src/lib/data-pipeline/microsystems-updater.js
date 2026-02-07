@@ -17,10 +17,13 @@ export class MicrosystemsUpdater {
   constructor() {
     this.codeLookups = new Map();
     this.headers = [];
-    
+
     // Store all parsed codes for database storage
     this.allCodes = {};
     this.categories = {};
+
+    // Store code configuration for categorizing detached items
+    this.codeConfig = {};
   }
 
   /**
@@ -324,10 +327,13 @@ export class MicrosystemsUpdater {
             // Example: "140R   9999" → suffix="R"
             suffix = afterPrefix.charAt(0);
           } else {
-            // Other codes: extract letters until space or number
+            // Other codes: extract letters OR numbers (with decimals) until space
             // Example: "520CL  9999" → suffix="CL"
-            const match = afterPrefix.match(/^[A-Z]+/);
-            suffix = match ? match[0] : afterPrefix.charAt(0);
+            // Example: "5101.5  9999" → suffix="1.5"
+            // Example: "5101  9999" → suffix="1"
+            const letterMatch = afterPrefix.match(/^[A-Z]+/);
+            const numberMatch = afterPrefix.match(/^[\d.]+/);
+            suffix = letterMatch ? letterMatch[0] : (numberMatch ? numberMatch[0] : afterPrefix.charAt(0));
           }
         }
         
@@ -595,12 +601,84 @@ export class MicrosystemsUpdater {
       enclosed_porch_area: this.extractEnclosedPorchArea(rawRecord),
       det_garage_area: this.extractDetGarageArea(rawRecord),
       pool_area: this.extractPoolArea(rawRecord),
+      barn_area: this.extractBarnArea(rawRecord),
+      stable_area: this.extractStableArea(rawRecord),
+      pole_barn_area: this.extractPoleBarnArea(rawRecord),
       ac_area: this.extractAcArea(rawRecord),
+
+      // Detached Item Code1-4 with dimensions and depreciation
+      detached_item_code1: rawRecord['Detached Item Code1'] || null,
+      width1: this.parseNumeric(rawRecord['Width1']),
+      depth1: this.parseNumeric(rawRecord['Depth1']),
+      physical_depr1: this.parseNumeric(rawRecord['Physical Depr1']),
+      functional_depr1: this.parseNumeric(rawRecord['Functional Depr1']),
+      locationl_depr1: this.parseNumeric(rawRecord['Locationl Depr1']),
+
+      detached_item_code2: rawRecord['Detached Item Code2'] || null,
+      width2: this.parseNumeric(rawRecord['Width2']),
+      depth2: this.parseNumeric(rawRecord['Depth2']),
+      physical_depr2: this.parseNumeric(rawRecord['Physical Depr2']),
+      functional_depr2: this.parseNumeric(rawRecord['Functional Depr2']),
+      locationl_depr2: this.parseNumeric(rawRecord['Locationl Depr2']),
+
+      detached_item_code3: rawRecord['Detached Item Code3'] || null,
+      width3: this.parseNumeric(rawRecord['Width3']),
+      depth3: this.parseNumeric(rawRecord['Depth3']),
+      physical_depr3: this.parseNumeric(rawRecord['Physical Depr3']),
+      functional_depr3: this.parseNumeric(rawRecord['Functional Depr3']),
+      locationl_depr3: this.parseNumeric(rawRecord['Locationl Depr3']),
+
+      detached_item_code4: rawRecord['Detached Item Code4'] || null,
+      width4: this.parseNumeric(rawRecord['Width4']),
+      depth4: this.parseNumeric(rawRecord['Depth4']),
+      physical_depr4: this.parseNumeric(rawRecord['Physical Depr4']),
+      functional_depr4: this.parseNumeric(rawRecord['Functional Depr4']),
+      locationl_depr4: this.parseNumeric(rawRecord['Locationl Depr4']),
+
+      // Detachedbuilding1-4 with dimensions and depreciation
+      detachedbuilding1: rawRecord['Detachedbuilding1'] || null,
+      widthn1: this.parseNumeric(rawRecord['Widthn1']),
+      depthn1: this.parseNumeric(rawRecord['Depthn1']),
+      pysical1: this.parseNumeric(rawRecord['Pysical1']),
+      functional1: this.parseNumeric(rawRecord['Functional1']),
+      location_economic1: this.parseNumeric(rawRecord['Location Economic1']),
+
+      detachedbuilding2: rawRecord['Detachedbuilding2'] || null,
+      widthn2: this.parseNumeric(rawRecord['Widthn2']),
+      depthn2: this.parseNumeric(rawRecord['Depthn2']),
+      pysical2: this.parseNumeric(rawRecord['Pysical2']),
+      functional2: this.parseNumeric(rawRecord['Functional2']),
+      location_economic2: this.parseNumeric(rawRecord['Location Economic2']),
+
+      detachedbuilding3: rawRecord['Detachedbuilding3'] || null,
+      widthn3: this.parseNumeric(rawRecord['Widthn3']),
+      depthn3: this.parseNumeric(rawRecord['Depthn3']),
+      pysical3: this.parseNumeric(rawRecord['Pysical3']),
+      functional3: this.parseNumeric(rawRecord['Functional3']),
+      location_economic3: this.parseNumeric(rawRecord['Location Economic3']),
+
+      detachedbuilding4: rawRecord['Detachedbuilding4'] || null,
+      widthn4: this.parseNumeric(rawRecord['Widthn4']),
+      depthn4: this.parseNumeric(rawRecord['Depthn4']),
+      pysical4: this.parseNumeric(rawRecord['Pysical4']),
+      functional4: this.parseNumeric(rawRecord['Functional4']),
+      location_economic4: this.parseNumeric(rawRecord['Location Economic4']),
+
+      // Miscellaneous items
+      misc_item_1: rawRecord['Misc Item 1'] || null,
+      misc_item_2: rawRecord['Misc Item 2'] || null,
+      misc_item_3: rawRecord['Misc Item 3'] || null,
+
+      // Land adjustment reasons
+      overall_adj_reason1: rawRecord['Overall Adj Reason1'] || null,
+      overall_adj_reason2: rawRecord['Overall Adj Reason2'] || null,
+      overall_adj_reason3: rawRecord['Overall Adj Reason3'] || null,
+      overall_adj_reason4: rawRecord['Overall Adj Reason4'] || null,
 
       // Processing metadata
       processed_at: new Date().toISOString(),
       is_new_since_last_upload: false, // UPSERT operation
-      
+
       // File tracking with version info
       source_file_name: versionInfo.source_file_name || null,
       source_file_version_id: versionInfo.source_file_version_id || null,
@@ -622,6 +700,48 @@ export class MicrosystemsUpdater {
     // SIMPLIFIED: Return baseRecord only - no field preservation needed
     // is_assigned_property will remain untouched since it's not in baseRecord
     return baseRecord;
+  }
+
+  /**
+   * Load code configuration from job_settings to categorize detached items
+   */
+  async loadCodeConfiguration(jobId) {
+    try {
+      const { data, error } = await supabase
+        .from('job_settings')
+        .select('setting_key, setting_value')
+        .eq('job_id', jobId)
+        .in('setting_key', [
+          'adjustment_codes_det_garage',
+          'adjustment_codes_pool',
+          'adjustment_codes_barn',
+          'adjustment_codes_stable',
+          'adjustment_codes_pole_barn'
+        ]);
+
+      if (error) {
+        console.log('⚠️ No code configuration found - detached items will not be categorized');
+        this.codeConfig = {};
+        return;
+      }
+
+      // Parse saved configuration
+      const config = {};
+      (data || []).forEach(setting => {
+        const attributeId = setting.setting_key.replace('adjustment_codes_', '');
+        try {
+          config[attributeId] = setting.setting_value ? JSON.parse(setting.setting_value) : [];
+        } catch (e) {
+          config[attributeId] = [];
+        }
+      });
+
+      this.codeConfig = config;
+      console.log('✅ Loaded code configuration for detached items:', this.codeConfig);
+    } catch (error) {
+      console.error('Error loading code configuration:', error);
+      this.codeConfig = {};
+    }
   }
 
   /**
@@ -658,6 +778,9 @@ export class MicrosystemsUpdater {
       } else {
         console.log('⏭️ Step 2 skipped: No code file provided');
       }
+
+      // Load code configuration for categorizing detached items
+      await this.loadCodeConfiguration(jobId);
 
       // Fetch job data to calculate yearPriorToDueYear for effective age conversion
       let yearPriorToDueYear = null;
@@ -1020,6 +1143,7 @@ export class MicrosystemsUpdater {
     total += this.parseInteger(rawRecord['Fp 2 Sty']) || 0;
     total += this.parseInteger(rawRecord['Fp Same Stack']) || 0;
     total += this.parseInteger(rawRecord['Fp Heatilator']) || 0;
+    total += this.parseInteger(rawRecord['Fp Freestanding']) || 0;
     return total > 0 ? total : null;
   }
 
@@ -1102,6 +1226,7 @@ export class MicrosystemsUpdater {
     let total = 0;
     total += this.parseNumeric(rawRecord['Attgar']) || 0;
     total += this.parseNumeric(rawRecord['Attgar2']) || 0;
+    total += this.parseNumeric(rawRecord['Basmtgar']) || 0;
     total += this.parseNumeric(rawRecord['Bi Ga']) || 0;
     total += this.parseNumeric(rawRecord['Big']) || 0;
     total += this.parseNumeric(rawRecord['Big2']) || 0;
@@ -1110,28 +1235,178 @@ export class MicrosystemsUpdater {
   }
 
   /**
-   * Extract detached garage area
-   * TODO: User mentioned this is tricky - may need configuration
+   * Extract all detached items from 8 slots (Detached Item Code1-4 + Detachedbuilding1-4)
+   * Returns array of {code, area} objects
    */
-  extractDetGarageArea(rawRecord) {
-    // Placeholder for now - may need to be configured
-    return null;
+  extractDetachedItems(rawRecord) {
+    const items = [];
+
+    // Detached Item Code1-4 (use Width/Depth or Sq Ft)
+    for (let i = 1; i <= 4; i++) {
+      const code = rawRecord[`Detached Item Code${i}`];
+      if (!code || code.trim() === '') continue;
+
+      // Try Sq Ft first, then calculate from Width × Depth
+      let area = this.parseNumeric(rawRecord[`Sq Ft${i}`]);
+      if (!area) {
+        const width = this.parseNumeric(rawRecord[`Width${i}`]);
+        const depth = this.parseNumeric(rawRecord[`Depth${i}`]);
+        if (width && depth) {
+          area = width * depth;
+        }
+      }
+
+      if (area && area > 0) {
+        items.push({ code: code.trim(), area });
+      }
+    }
+
+    // Detachedbuilding1-4 (use Widthn/Depthn or Area)
+    for (let i = 1; i <= 4; i++) {
+      const code = rawRecord[`Detachedbuilding${i}`];
+      if (!code || code.trim() === '') continue;
+
+      // Try Area first, then calculate from Widthn × Depthn
+      let area = this.parseNumeric(rawRecord[`Area${i}`]);
+      if (!area) {
+        const width = this.parseNumeric(rawRecord[`Widthn${i}`]);
+        const depth = this.parseNumeric(rawRecord[`Depthn${i}`]);
+        if (width && depth) {
+          area = width * depth;
+        }
+      }
+
+      if (area && area > 0) {
+        items.push({ code: code.trim(), area });
+      }
+    }
+
+    return items;
   }
 
   /**
-   * Extract pool area
-   * TODO: User mentioned detached items are tricky - may need configuration
+   * Extract detached garage area by summing items with garage codes
+   * Uses code configuration to identify which codes are garages
+   */
+  extractDetGarageArea(rawRecord) {
+    const detachedItems = this.extractDetachedItems(rawRecord);
+    const garageCodes = this.codeConfig.det_garage || [];
+
+    if (garageCodes.length === 0 || detachedItems.length === 0) {
+      return null;
+    }
+
+    // Sum areas for items matching garage codes
+    const totalArea = detachedItems
+      .filter(item => garageCodes.includes(item.code))
+      .reduce((sum, item) => sum + item.area, 0);
+
+    return totalArea > 0 ? totalArea : null;
+  }
+
+  /**
+   * Extract pool area by summing items with pool codes
+   * Uses code configuration to identify which codes are pools
    */
   extractPoolArea(rawRecord) {
-    // Placeholder for now - may need to be configured
-    return null;
+    const detachedItems = this.extractDetachedItems(rawRecord);
+    const poolCodes = this.codeConfig.pool || [];
+
+    if (poolCodes.length === 0 || detachedItems.length === 0) {
+      return null;
+    }
+
+    // Sum areas for items matching pool codes
+    const totalArea = detachedItems
+      .filter(item => poolCodes.includes(item.code))
+      .reduce((sum, item) => sum + item.area, 0);
+
+    return totalArea > 0 ? totalArea : null;
+  }
+
+  /**
+   * Extract barn area by summing items with barn codes
+   * Uses code configuration to identify which codes are barns
+   */
+  extractBarnArea(rawRecord) {
+    const detachedItems = this.extractDetachedItems(rawRecord);
+    const barnCodes = this.codeConfig.barn || [];
+
+    if (barnCodes.length === 0 || detachedItems.length === 0) {
+      return null;
+    }
+
+    // Sum areas for items matching barn codes
+    const totalArea = detachedItems
+      .filter(item => barnCodes.includes(item.code))
+      .reduce((sum, item) => sum + item.area, 0);
+
+    return totalArea > 0 ? totalArea : null;
+  }
+
+  /**
+   * Extract stable area by summing items with stable codes
+   * Uses code configuration to identify which codes are stables
+   */
+  extractStableArea(rawRecord) {
+    const detachedItems = this.extractDetachedItems(rawRecord);
+    const stableCodes = this.codeConfig.stable || [];
+
+    if (stableCodes.length === 0 || detachedItems.length === 0) {
+      return null;
+    }
+
+    // Sum areas for items matching stable codes
+    const totalArea = detachedItems
+      .filter(item => stableCodes.includes(item.code))
+      .reduce((sum, item) => sum + item.area, 0);
+
+    return totalArea > 0 ? totalArea : null;
+  }
+
+  /**
+   * Extract pole barn area by summing items with pole barn codes
+   * Uses code configuration to identify which codes are pole barns
+   */
+  extractPoleBarnArea(rawRecord) {
+    const detachedItems = this.extractDetachedItems(rawRecord);
+    const poleBarnCodes = this.codeConfig.pole_barn || [];
+
+    if (poleBarnCodes.length === 0 || detachedItems.length === 0) {
+      return null;
+    }
+
+    // Sum areas for items matching pole barn codes
+    const totalArea = detachedItems
+      .filter(item => poleBarnCodes.includes(item.code))
+      .reduce((sum, item) => sum + item.area, 0);
+
+    return totalArea > 0 ? totalArea : null;
   }
 
   /**
    * Extract AC area from AC Sf field
+   * If value contains %, it's a percentage of SFLA
    */
   extractAcArea(rawRecord) {
-    return this.parseNumeric(rawRecord['AC Sf']);
+    const sfla = this.parseNumeric(rawRecord['Livable Area']) || 0;
+    const acValue = rawRecord['Ac Sf'];
+
+    if (!acValue || acValue.trim() === '') return null;
+
+    // Check if it's a percentage
+    if (acValue.includes('%')) {
+      const percentage = parseFloat(acValue.replace('%', '').trim());
+      if (!isNaN(percentage) && sfla > 0) {
+        return Math.round(sfla * (percentage / 100));
+      }
+    } else {
+      // It's actual square footage
+      const sqft = this.parseNumeric(acValue);
+      return sqft;
+    }
+
+    return null;
   }
 
   /**

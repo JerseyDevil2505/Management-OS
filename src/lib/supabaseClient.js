@@ -1060,9 +1060,39 @@ brtParsedStructureMap: {
     const categoryData = fieldCodes[prefix];
     const cleanCode = code.trim().toUpperCase();
 
+    // Debug logging for story height
+    if (fieldName === 'asset_story_height' && !window._storyHeightDebugLogged) {
+      console.log('🔍 Story Height Lookup Debug:', {
+        fieldName,
+        prefix,
+        codeFromProperty: code,
+        cleanCode,
+        propertyBlock: property.property_block,
+        propertyLot: property.property_lot,
+        availableCodesInCategory: Object.keys(categoryData),
+        sampleCategoryData: Object.entries(categoryData).slice(0, 5).map(([k, v]) => ({
+          code: k,
+          description: v.description
+        }))
+      });
+      window._storyHeightDebugLogged = true;
+    }
+
     // First try exact match
     if (categoryData[cleanCode] && categoryData[cleanCode].description) {
-      return categoryData[cleanCode].description;
+      const result = categoryData[cleanCode].description;
+
+      // Debug logging for story height
+      if (fieldName === 'asset_story_height' && !window._storyHeightResultLogged) {
+        console.log('✅ Story Height Found (exact match):', {
+          cleanCode,
+          result,
+          categoryDataKeys: Object.keys(categoryData).slice(0, 10)
+        });
+        window._storyHeightResultLogged = true;
+      }
+
+      return result;
     }
 
     // If not found, try looking for codes that might have the prefix stripped
@@ -1075,11 +1105,31 @@ brtParsedStructureMap: {
 
     // Fallback to flat_lookup only as last resort, but verify it belongs to the right category
     const flatLookup = codeDefinitions.flat_lookup || {};
-    const paddedCode = cleanCode.padEnd(4);
-    const lookupKey = `${prefix}${paddedCode}9999`;
 
-    if (flatLookup[lookupKey]) {
-      return flatLookup[lookupKey];
+    // Try multiple lookup patterns for Microsystems
+    const lookupPatterns = [
+      `${prefix}${cleanCode}9999`,           // Direct: "51019999"
+      `${prefix}${cleanCode.padEnd(4)}9999`, // Padded: "5101   9999"
+      `${prefix}${cleanCode.padStart(4, '0')}9999`, // Zero-padded: "510000019999"
+    ];
+
+    for (const lookupKey of lookupPatterns) {
+      if (flatLookup[lookupKey]) {
+        const result = flatLookup[lookupKey];
+
+        // Debug logging for story height
+        if (fieldName === 'asset_story_height' && !window._storyHeightResultLogged) {
+          console.log('✅ Story Height Found (flat_lookup):', {
+            cleanCode,
+            lookupKey,
+            result,
+            allPatternsTried: lookupPatterns
+          });
+          window._storyHeightResultLogged = true;
+        }
+
+        return result;
+      }
     }
 
     // Return original code if no valid description found in the correct category
@@ -1191,6 +1241,21 @@ getBRTValue: function(property, codeDefinitions, fieldName) {
     }
 
     return viewCode;
+  },
+
+  getStoryHeightName: function(property, codeDefinitions, vendorType) {
+    if (!property || !codeDefinitions) return null;
+
+    const storyCode = property.asset_story_height || property.asset_stories;
+    if (!storyCode || storyCode.toString().trim() === '') return null;
+
+    if (vendorType === 'Microsystems') {
+      return this.getMicrosystemsValue(property, codeDefinitions, 'asset_story_height');
+    } else if (vendorType === 'BRT') {
+      return this.getBRTValue(property, codeDefinitions, 'asset_story_height');
+    }
+
+    return storyCode;
   },
 
   // Check if a field is empty (handles spaces, null, undefined, and BRT's "00")
@@ -3799,7 +3864,7 @@ export const checklistService = {
     try {
       const { data, error } = await supabase
         .from('jobs')
-        .update({ 
+        .update({
           status: 'archived',
           turnover_date: turnoverDate,
           archived_at: new Date().toISOString(),
@@ -3808,13 +3873,14 @@ export const checklistService = {
         .eq('id', jobId)
         .select()
         .single();
-      
+
       if (error) throw error;
       console.log('✅ Job archived successfully');
       return data;
     } catch (error) {
-      console.error('Job archive error:', error);
-      throw error;
+      const errorMsg = getErrorMessage(error);
+      console.error('Job archive error:', errorMsg);
+      throw new Error(errorMsg);
     }
   }
 };

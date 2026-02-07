@@ -230,10 +230,9 @@ h3, h4, h5, h6 {
   color: #111827; /* Tailwind gray-900 */
 }
 
-/* Override accidental .text-white inside modals (common culprit when header styles bleed in) */
-.fixed.inset-0.z-40 .text-white,
-.fixed.inset-0.z-50 .text-white,
-.fixed.inset-0[role="dialog"] .text-white {
+/* Allow .text-white on colored backgrounds (headers, buttons) - only override in light content areas */
+.fixed.inset-0 .bg-white .text-white,
+.fixed.inset-0 .bg-gray-50 .text-white {
   color: #111827 !important;
 }
 

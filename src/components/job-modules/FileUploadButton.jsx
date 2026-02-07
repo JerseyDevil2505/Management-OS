@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, X, Database, Settings, Download, Eye, Calendar, RefreshCw } from 'lucide-react';
-import { jobService, propertyService, supabase, preservedFieldsHandler } from '../../lib/supabaseClient';
+import { jobService, propertyService, supabase, preservedFieldsHandler, interpretCodes } from '../../lib/supabaseClient';
 import * as XLSX from 'xlsx';
 
 const FileUploadButton = ({
@@ -314,7 +314,11 @@ const handleCodeFileUpdate = async () => {
     } else {
       throw new Error('Unsupported vendor type');
     }
-    
+
+    // Clear cached data for this job to ensure fresh code definitions are loaded
+    propertyService.clearRawDataCache(job.id);
+    console.log(`🗑️ Cleared cache for job ${job.id} after code file update`);
+
     // Only update date stamp if we successfully got here
     const processedDate = new Date().toISOString();
     setLastCodeProcessedDate(processedDate);
