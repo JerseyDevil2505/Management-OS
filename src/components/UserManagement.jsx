@@ -194,6 +194,12 @@ const UserManagement = ({ onViewAs }) => {
       });
       if (authError) throw authError;
 
+      // Store the initial password on the employee record for admin reference
+      await supabase
+        .from('employees')
+        .update({ initial_password: newUser.password })
+        .eq('id', employeeId);
+
       setSuccessMessage(`Account created for ${fullName}. They should check their email to confirm.`);
       setShowCreateModal(false);
       setNewUser({ firstName: '', lastName: '', email: '', password: '', confirmPassword: '', role: 'Admin', organizationId: '' });
@@ -381,6 +387,7 @@ const UserManagement = ({ onViewAs }) => {
                 <th>Role</th>
                 <th>Status</th>
                 <th>Has Account</th>
+                <th>Password</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -427,6 +434,18 @@ const UserManagement = ({ onViewAs }) => {
                     <span className={`account-badge ${user.has_account ? 'has-account' : 'no-account'}`}>
                       {user.has_account ? 'Yes' : 'No'}
                     </span>
+                  </td>
+                  <td>
+                    {user.initial_password ? (
+                      <code style={{
+                        padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem',
+                        background: '#f3f4f6', color: '#374151', fontFamily: 'monospace'
+                      }}>
+                        {user.initial_password}
+                      </code>
+                    ) : (
+                      <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>--</span>
+                    )}
                   </td>
                   <td style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     <button
