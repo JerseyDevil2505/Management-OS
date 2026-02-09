@@ -190,7 +190,8 @@ const UserManagement = ({ onViewAs }) => {
       loadUsers();
     } catch (err) {
       console.error('Error creating user:', err);
-      setError(err.message || 'Failed to create user');
+      const msg = err?.message || err?.error_description || err?.details || (typeof err === 'object' ? JSON.stringify(err) : String(err));
+      setError(msg || 'Failed to create user');
     }
   };
 
