@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import './UserManagement.css';
 
-const UserManagement = () => {
+const UserManagement = ({ onViewAs }) => {
   const [users, setUsers] = useState([]);
+  const [organizations, setOrganizations] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [filterOrg, setFilterOrg] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -23,7 +25,22 @@ const UserManagement = () => {
 
   useEffect(() => {
     loadUsers();
+    loadOrganizations();
   }, []);
+
+  const loadOrganizations = async () => {
+    try {
+      const { data } = await supabase
+        .from('organizations')
+        .select('id, name, org_type')
+        .order('name');
+      const orgMap = {};
+      (data || []).forEach(org => { orgMap[org.id] = org; });
+      setOrganizations(orgMap);
+    } catch (err) {
+      console.error('Error loading organizations:', err);
+    }
+  };
 
   const loadUsers = async () => {
     try {
@@ -31,8 +48,8 @@ const UserManagement = () => {
       const { data, error } = await supabase
         .from('employees')
         .select('*')
-        .eq('employment_status', 'full_time')  // Only full-time employees
-        .in('role', ['Management', 'Admin', 'Owner'])   // Management, Admin, and Owner roles
+        .eq('employment_status', 'full_time')
+        .in('role', ['Management', 'Admin', 'Owner'])
         .order('last_name');
 
       if (error) throw error;
@@ -44,6 +61,28 @@ const UserManagement = () => {
       setLoading(false);
     }
   };
+
+  const PPA_ORG_ID = '00000000-0000-0000-0000-000000000001';
+  const isDevMode = process.env.NODE_ENV === 'development';
+
+  const getOrgName = (orgId) => {
+    if (!orgId) return 'PPA (Internal)';
+    const org = organizations[orgId];
+    if (!org) return orgId === PPA_ORG_ID ? 'PPA (Internal)' : 'Unknown';
+    return org.org_type === 'internal' ? `${org.name} (Internal)` : org.name;
+  };
+
+  const isAssessorUser = (user) => {
+    return user.organization_id && user.organization_id !== PPA_ORG_ID;
+  };
+
+  const filteredUsers = filterOrg === 'all'
+    ? users
+    : filterOrg === 'ppa'
+      ? users.filter(u => !u.organization_id || u.organization_id === PPA_ORG_ID)
+      : users.filter(u => u.organization_id === filterOrg);
+
+  const uniqueOrgIds = [...new Set(users.map(u => u.organization_id).filter(Boolean))];
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
@@ -219,6 +258,25 @@ const UserManagement = () => {
         <div className="um-success">{successMessage}</div>
       )}
 
+      {/* Filter Bar */}
+      <div className="um-filter-bar" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+        <label style={{ fontSize: '0.875rem', fontWeight: '500', color: '#374151' }}>Filter:</label>
+        <select
+          value={filterOrg}
+          onChange={(e) => setFilterOrg(e.target.value)}
+          style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '0.875rem' }}
+        >
+          <option value="all">All Users ({users.length})</option>
+          <option value="ppa">PPA Internal</option>
+          {uniqueOrgIds.filter(id => id !== PPA_ORG_ID).map(orgId => (
+            <option key={orgId} value={orgId}>{getOrgName(orgId)}</option>
+          ))}
+        </select>
+        <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>
+          Showing {filteredUsers.length} of {users.length} users
+        </span>
+      </div>
+
       {loading ? (
         <div className="um-loading">Loading users...</div>
       ) : (
@@ -228,18 +286,27 @@ const UserManagement = () => {
               <tr>
                 <th>Name</th>
                 <th>Email</th>
+                <th>Organization</th>
                 <th>Role</th>
-                <th>Inspector Type</th>
                 <th>Status</th>
                 <th>Has Account</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {users.map(user => (
+              {filteredUsers.map(user => (
                 <tr key={user.id}>
                   <td>{user.first_name} {user.last_name}</td>
                   <td>{user.email}</td>
+                  <td>
+                    <span style={{
+                      padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '600',
+                      background: isAssessorUser(user) ? '#dbeafe' : '#f3f4f6',
+                      color: isAssessorUser(user) ? '#1e40af' : '#6b7280'
+                    }}>
+                      {getOrgName(user.organization_id)}
+                    </span>
+                  </td>
                   <td>
                     <select
                       value={user.role || 'Management'}
@@ -251,7 +318,6 @@ const UserManagement = () => {
                       <option value="Management">Management</option>
                     </select>
                   </td>
-                  <td>{user.inspector_type || '-'}</td>
                   <td>
                     <span className={`status-badge ${user.employment_status === 'Inactive' ? 'inactive' : 'active'}`}>
                       {user.employment_status || 'Active'}
@@ -262,7 +328,7 @@ const UserManagement = () => {
                       {user.has_account ? 'Yes' : 'No'}
                     </span>
                   </td>
-                  <td>
+                  <td style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     <button
                       className="reset-pwd-btn"
                       onClick={() => {
@@ -273,6 +339,19 @@ const UserManagement = () => {
                     >
                       Reset Password
                     </button>
+                    {isDevMode && isAssessorUser(user) && onViewAs && (
+                      <button
+                        onClick={() => onViewAs(user)}
+                        style={{
+                          padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600',
+                          background: '#7c3aed', color: 'white', border: 'none', cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                        title={`View dashboard as ${user.first_name} ${user.last_name}`}
+                      >
+                        View As
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
