@@ -185,7 +185,10 @@ const UserManagement = ({ onViewAs }) => {
         email: emailTrimmed,
         password: newUser.password,
         options: {
-          data: { full_name: fullName }
+          data: {
+            full_name: fullName,
+            organization_id: selectedOrgId
+          }
         }
       });
       if (authError) throw authError;
