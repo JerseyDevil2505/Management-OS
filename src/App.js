@@ -12,6 +12,7 @@ import LandingPage from './components/LandingPage';
 import UserManagement from './components/UserManagement';
 import OrganizationManagement from './components/OrganizationManagement';
 import RevenueManagement from './components/RevenueManagement';
+import AssessorDashboard from './components/AssessorDashboard';
 
 /**
  * MANAGEMENT OS - LIVE DATA ARCHITECTURE
@@ -157,6 +158,11 @@ const App = () => {
   // Only the primary owner can access User Management
   const PRIMARY_OWNER_ID = '5df85ca3-7a54-4798-a665-c31da8d9caad';
   const canManageUsers = user?.id === PRIMARY_OWNER_ID;
+
+  // Non-PPA assessor detection - assessor org users get the simplified dashboard
+  const PPA_ORG_ID = '00000000-0000-0000-0000-000000000001';
+  const userOrgId = user?.employeeData?.organization_id;
+  const isAssessorUser = userOrgId && userOrgId !== PPA_ORG_ID;
 
   // Update URL when view changes
   const handleViewChange = useCallback((view) => {
@@ -850,7 +856,11 @@ const App = () => {
   const handleLogin = (userData) => {
     setUser(userData);
     // Set default tab based on role
-    if (userData.role === 'manager') {
+    const loginOrgId = userData?.employeeData?.organization_id;
+    const loginIsAssessor = loginOrgId && loginOrgId !== '00000000-0000-0000-0000-000000000001';
+    if (loginIsAssessor) {
+      setActiveView('assessor-dashboard');
+    } else if (userData.role === 'manager') {
       setActiveView('employees');
     }
   };
