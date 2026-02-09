@@ -21,7 +21,8 @@ const OrganizationManagement = () => {
     primary_contact_email: '',
     billing_address: '',
     line_item_count: 0,
-    single_job_mode: false
+    single_job_mode: false,
+    is_free_account: false
   });
 
   // Form state for new staff member
@@ -95,6 +96,9 @@ const OrganizationManagement = () => {
           billing_address: newOrg.billing_address,
           line_item_count: newOrg.line_item_count || 0,
           single_job_mode: newOrg.single_job_mode,
+          is_free_account: newOrg.is_free_account,
+          subscription_status: newOrg.is_free_account ? 'free' : 'active',
+          annual_fee: newOrg.is_free_account ? 0 : null,
           tab_config: {
             staffing: true,
             jobs: true,
@@ -115,7 +119,8 @@ const OrganizationManagement = () => {
         primary_contact_email: '',
         billing_address: '',
         line_item_count: 0,
-        single_job_mode: false
+        single_job_mode: false,
+        is_free_account: false
       });
       loadOrganizations();
     } catch (err) {
@@ -268,7 +273,9 @@ const OrganizationManagement = () => {
                   </td>
                   <td>
                     <div className="billing-status">
-                      {org.payment_received_date ? (
+                      {org.is_free_account || org.subscription_status === 'free' ? (
+                        <span className="billing-paid" style={{ background: '#dcfce7', color: '#166534' }}>Free</span>
+                      ) : org.payment_received_date ? (
                         <span className="billing-paid">Paid</span>
                       ) : org.po_received_date ? (
                         <span className="billing-po">PO Received</span>
@@ -365,14 +372,30 @@ const OrganizationManagement = () => {
                     />
                     Single Job Mode (skip job list on login)
                   </label>
+                  <label style={{ marginTop: '8px', display: 'block' }}>
+                    <input
+                      type="checkbox"
+                      checked={newOrg.is_free_account}
+                      onChange={(e) => setNewOrg({...newOrg, is_free_account: e.target.checked})}
+                    />
+                    Free Account (no invoicing)
+                  </label>
                 </div>
               </div>
 
-              {newOrg.line_item_count > 0 && (
+              {newOrg.line_item_count > 0 && !newOrg.is_free_account && (
                 <div className="fee-preview">
                   <strong>Estimated Annual Fee:</strong> ${calculateAnnualFee(newOrg.line_item_count, 1).toLocaleString()}
                   <div className="fee-breakdown">
                     Line Items: ${(newOrg.line_item_count * 0.10).toFixed(2)} + Primary User: $500
+                  </div>
+                </div>
+              )}
+              {newOrg.is_free_account && (
+                <div className="fee-preview" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}>
+                  <strong style={{ color: '#166534' }}>Free Account</strong>
+                  <div className="fee-breakdown" style={{ color: '#15803d' }}>
+                    No invoices will be generated for this organization
                   </div>
                 </div>
               )}
