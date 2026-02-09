@@ -1303,6 +1303,14 @@ const App = () => {
           <RevenueManagement />
         )}
 
+        {activeView === 'assessor-dashboard' && isAssessorUser && (
+          <AssessorDashboard
+            user={user}
+            onJobSelect={handleJobSelect}
+            onDataUpdate={updateDataSection}
+          />
+        )}
+
         {activeView === 'job-modules' && selectedJob && (
           <div>
             <JobContainer
