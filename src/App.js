@@ -1026,7 +1026,7 @@ const App = () => {
           </div>
           
           {/* Only show main navigation when NOT in job-specific modules */}
-          {activeView !== 'job-modules' && (
+          {activeView !== 'job-modules' && !isAssessorUser && (
             <nav className="flex space-x-4">
               <button
                 onClick={() => handleViewChange('employees')}
