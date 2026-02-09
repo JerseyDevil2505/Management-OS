@@ -1311,7 +1311,7 @@ const App = () => {
         )}
 
         {activeView === 'users' && (isAdmin ? (
-          <UserManagement />
+          <UserManagement onViewAs={handleViewAs} />
         ) : (
           <div className="p-6 bg-white rounded-lg shadow-sm border border-gray-200 text-center">
             <h3 className="text-lg font-semibold">Access Denied</h3>
@@ -1328,11 +1328,33 @@ const App = () => {
         )}
 
         {activeView === 'assessor-dashboard' && isAssessorUser && (
-          <AssessorDashboard
-            user={user}
-            onJobSelect={handleJobSelect}
-            onDataUpdate={updateDataSection}
-          />
+          <>
+            {viewingAs && (
+              <div style={{
+                background: '#7c3aed', color: 'white', padding: '8px 16px',
+                borderRadius: '8px', marginBottom: '16px',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+              }}>
+                <span style={{ fontSize: '0.875rem', fontWeight: '600' }}>
+                  Viewing as: {viewingAs.first_name} {viewingAs.last_name} ({viewingAs.email})
+                </span>
+                <button
+                  onClick={handleExitViewAs}
+                  style={{
+                    padding: '4px 14px', borderRadius: '6px', fontWeight: '600', fontSize: '0.8rem',
+                    background: 'white', color: '#7c3aed', border: 'none', cursor: 'pointer'
+                  }}
+                >
+                  Exit View As
+                </button>
+              </div>
+            )}
+            <AssessorDashboard
+              user={assessorUser}
+              onJobSelect={handleJobSelect}
+              onDataUpdate={updateDataSection}
+            />
+          </>
         )}
 
         {activeView === 'job-modules' && selectedJob && (
