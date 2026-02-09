@@ -148,6 +148,8 @@ const UserManagement = ({ onViewAs }) => {
           ? `ORG-${Date.now().toString(36).toUpperCase()}`
           : `EMP-${Date.now().toString(36).toUpperCase()}`;
 
+        const initials = `${newUser.firstName.charAt(0)}${newUser.lastName.charAt(0)}`.toUpperCase();
+
         const { data: newEmp, error: empError } = await supabase
           .from('employees')
           .insert({
@@ -155,6 +157,7 @@ const UserManagement = ({ onViewAs }) => {
             last_name: newUser.lastName.trim(),
             email: emailTrimmed,
             employee_number: empNumber,
+            initials: initials,
             role: newUser.role,
             organization_id: selectedOrgId,
             employment_status: 'full_time',
