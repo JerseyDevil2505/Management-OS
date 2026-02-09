@@ -152,6 +152,9 @@ const App = () => {
   // Job selection state
   const [selectedJob, setSelectedJob] = useState(null);
 
+  // Dev mode: "View As" impersonation state
+  const [viewingAs, setViewingAs] = useState(null);
+
   // Simple helper - true for users allowed to access billing/payroll
   const isAdmin = (user?.role || '').toString().toLowerCase() === 'admin' || (user?.role || '').toString().toLowerCase() === 'owner';
 
@@ -162,7 +165,28 @@ const App = () => {
   // Non-PPA assessor detection - assessor org users get the simplified dashboard
   const PPA_ORG_ID = '00000000-0000-0000-0000-000000000001';
   const userOrgId = user?.employeeData?.organization_id;
-  const isAssessorUser = userOrgId && userOrgId !== PPA_ORG_ID;
+  const isRealAssessorUser = userOrgId && userOrgId !== PPA_ORG_ID;
+  // When dev is using "View As", treat them as an assessor user
+  const isAssessorUser = isRealAssessorUser || !!viewingAs;
+  // The effective user for the assessor dashboard (real user or impersonated)
+  const assessorUser = viewingAs ? {
+    ...user,
+    employeeData: viewingAs,
+    role: viewingAs.role
+  } : user;
+
+  const handleViewAs = (employee) => {
+    setViewingAs(employee);
+    setSelectedJob(null);
+    setActiveView('assessor-dashboard');
+    window.history.pushState({}, '', '/assessor-dashboard');
+  };
+
+  const handleExitViewAs = () => {
+    setViewingAs(null);
+    setActiveView('users');
+    window.history.pushState({}, '', '/users');
+  };
 
   // Update URL when view changes
   const handleViewChange = useCallback((view) => {
