@@ -138,6 +138,10 @@ const OrganizationManagement = () => {
     setError('');
 
     try {
+      // Get current auth user for created_by
+      const { data: { session } } = await supabase.auth.getSession();
+      const currentUserId = session?.user?.id;
+
       // Generate employee_number for org staff: ORG-<slug>-<timestamp>
       const empNumber = `ORG-${selectedOrg.slug?.substring(0, 10) || 'EXT'}-${Date.now().toString(36).toUpperCase()}`;
 
@@ -154,7 +158,8 @@ const OrganizationManagement = () => {
           role: newStaff.is_primary ? 'Admin' : 'Management',
           organization_id: selectedOrg.id,
           employment_status: 'full_time',
-          has_account: false
+          has_account: false,
+          created_by: currentUserId
         });
 
       if (error) throw error;
