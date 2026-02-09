@@ -66,7 +66,7 @@ const UserManagement = ({ onViewAs }) => {
   const isDevMode = process.env.NODE_ENV === 'development';
 
   const getOrgName = (orgId) => {
-    if (!orgId) return 'PPA (Internal)';
+    if (!orgId) return 'PPA Inc (Internal)';
     const org = organizations[orgId];
     if (!org) return orgId === PPA_ORG_ID ? 'PPA (Internal)' : 'Unknown';
     return org.org_type === 'internal' ? `${org.name} (Internal)` : org.name;
@@ -267,7 +267,7 @@ const UserManagement = ({ onViewAs }) => {
           style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '0.875rem' }}
         >
           <option value="all">All Users ({users.length})</option>
-          <option value="ppa">PPA Internal</option>
+          <option value="ppa">PPA Inc</option>
           {uniqueOrgIds.filter(id => id !== PPA_ORG_ID).map(orgId => (
             <option key={orgId} value={orgId}>{getOrgName(orgId)}</option>
           ))}
