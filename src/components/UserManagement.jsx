@@ -68,8 +68,8 @@ const UserManagement = ({ onViewAs }) => {
   const getOrgName = (orgId) => {
     if (!orgId) return 'PPA Inc (Internal)';
     const org = organizations[orgId];
-    if (!org) return orgId === PPA_ORG_ID ? 'PPA (Internal)' : 'Unknown';
-    return org.org_type === 'internal' ? `${org.name} (Internal)` : org.name;
+    if (!org) return orgId === PPA_ORG_ID ? 'PPA Inc (Internal)' : 'Unknown';
+    return org.org_type === 'internal' ? 'PPA Inc (Internal)' : org.name;
   };
 
   const isAssessorUser = (user) => {
