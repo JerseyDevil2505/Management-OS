@@ -1161,6 +1161,18 @@ const App = () => {
             </nav>
           )}
           
+          {/* Assessor user nav - simplified, only shows when on dashboard */}
+          {isAssessorUser && activeView === 'assessor-dashboard' && (
+            <nav className="flex space-x-4">
+              <button
+                className="px-4 py-2 rounded-xl font-medium text-sm border text-blue-600 shadow-lg border-white"
+                style={{ backgroundColor: '#FFFFFF', opacity: 1, backdropFilter: 'none' }}
+              >
+                📋 My Jobs
+              </button>
+            </nav>
+          )}
+
           {/* Show job context when in job-specific modules */}
           {activeView === 'job-modules' && selectedJob && (
             <div className="flex items-center justify-between">
