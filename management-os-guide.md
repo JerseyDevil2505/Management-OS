@@ -474,7 +474,7 @@ export const interpretCodes = {
 **Purpose**: Enable external client access (Lojik CME assessor clients) while keeping PPA internal operations separate.
 
 **Organization Types:**
-- `internal` - PPA Associates (never charged, full access)
+- `internal` - PPA Inc (never charged, full access)
 - `assessor` - External clients (billed based on line items + users)
 
 **Pricing Model:**
