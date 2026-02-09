@@ -868,11 +868,17 @@ const App = () => {
   // If a non-admin user becomes active and the current view is restricted, redirect them
   useEffect(() => {
     if (!user) return;
+    // Assessor users should always land on their dashboard
+    if (isAssessorUser && activeView !== 'assessor-dashboard' && activeView !== 'job-modules') {
+      setActiveView('assessor-dashboard');
+      window.history.pushState({}, '', '/assessor-dashboard');
+      return;
+    }
     if (!isAdmin && (activeView === 'billing' || activeView === 'payroll')) {
       setActiveView('employees');
       window.history.pushState({}, '', '/employees');
     }
-  }, [user, isAdmin, activeView]);
+  }, [user, isAdmin, isAssessorUser, activeView]);
 
   const handleLogout = async () => {
     try {
