@@ -15,10 +15,13 @@ const UserManagement = ({ onViewAs }) => {
   
   // Form states
   const [newUser, setNewUser] = useState({
+    firstName: '',
+    lastName: '',
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'Management'
+    role: 'Admin',
+    organizationId: ''
   });
   const [resetPassword, setResetPassword] = useState('');
   const [confirmResetPassword, setConfirmResetPassword] = useState('');
@@ -84,10 +87,22 @@ const UserManagement = ({ onViewAs }) => {
 
   const uniqueOrgIds = [...new Set(users.map(u => u.organization_id).filter(Boolean))];
 
+  const orgList = Object.values(organizations).sort((a, b) => {
+    // Internal orgs first, then alphabetical
+    if (a.org_type === 'internal' && b.org_type !== 'internal') return -1;
+    if (a.org_type !== 'internal' && b.org_type === 'internal') return 1;
+    return a.name.localeCompare(b.name);
+  });
+
   const handleCreateUser = async (e) => {
     e.preventDefault();
     setError('');
     setSuccessMessage('');
+
+    if (!newUser.firstName.trim() || !newUser.lastName.trim()) {
+      setError('First name and last name are required');
+      return;
+    }
 
     if (newUser.password !== newUser.confirmPassword) {
       setError('Passwords do not match');
@@ -100,48 +115,70 @@ const UserManagement = ({ onViewAs }) => {
     }
 
     try {
-      // Just trim the email, don't force lowercase - keep it exactly as entered
-      const emailToSearch = newUser.email.trim();
-      
-      // Check if employee exists using case-insensitive search
+      const emailTrimmed = newUser.email.trim();
+      const fullName = `${newUser.firstName.trim()} ${newUser.lastName.trim()}`;
+      const selectedOrgId = newUser.organizationId || null;
+
+      // Check if employee already exists
       const { data: existingEmployee } = await supabase
         .from('employees')
         .select('*')
-        .ilike('email', emailToSearch)  // Use ilike for case-insensitive search
+        .ilike('email', emailTrimmed)
         .single();
 
-      if (!existingEmployee) {
-        setError('Employee record not found. Please create employee record first.');
-        return;
+      let employeeId;
+
+      if (existingEmployee) {
+        // Employee exists - update it
+        employeeId = existingEmployee.id;
+        const { error: updateError } = await supabase
+          .from('employees')
+          .update({
+            first_name: newUser.firstName.trim(),
+            last_name: newUser.lastName.trim(),
+            role: newUser.role,
+            organization_id: selectedOrgId,
+            has_account: true
+          })
+          .eq('id', existingEmployee.id);
+        if (updateError) throw updateError;
+      } else {
+        // Create new employee record
+        const empNumber = selectedOrgId && selectedOrgId !== PPA_ORG_ID
+          ? `ORG-${Date.now().toString(36).toUpperCase()}`
+          : `EMP-${Date.now().toString(36).toUpperCase()}`;
+
+        const { data: newEmp, error: empError } = await supabase
+          .from('employees')
+          .insert({
+            first_name: newUser.firstName.trim(),
+            last_name: newUser.lastName.trim(),
+            email: emailTrimmed,
+            employee_number: empNumber,
+            role: newUser.role,
+            organization_id: selectedOrgId,
+            employment_status: 'full_time',
+            has_account: true
+          })
+          .select()
+          .single();
+        if (empError) throw empError;
+        employeeId = newEmp.id;
       }
 
-      // Create auth user with metadata for profiles table
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: emailToSearch,  // Use the email as entered
+      // Create Supabase auth account
+      const { error: authError } = await supabase.auth.signUp({
+        email: emailTrimmed,
         password: newUser.password,
         options: {
-          data: {
-            full_name: `${existingEmployee.first_name} ${existingEmployee.last_name}`
-          }
+          data: { full_name: fullName }
         }
       });
-
       if (authError) throw authError;
 
-      // Update employee role and has_account flag using the ID (more reliable than email)
-      const { error: updateError } = await supabase
-        .from('employees')
-        .update({ 
-          role: newUser.role,
-          has_account: true 
-        })
-        .eq('id', existingEmployee.id);  // Use ID instead of email for update
-
-      if (updateError) throw updateError;
-
-      setSuccessMessage('User created successfully. They should check their email to confirm.');
+      setSuccessMessage(`Account created for ${fullName}. They should check their email to confirm.`);
       setShowCreateModal(false);
-      setNewUser({ email: '', password: '', confirmPassword: '', role: 'Management' });
+      setNewUser({ firstName: '', lastName: '', email: '', password: '', confirmPassword: '', role: 'Admin', organizationId: '' });
       loadUsers();
     } catch (err) {
       console.error('Error creating user:', err);
@@ -367,36 +404,75 @@ const UserManagement = ({ onViewAs }) => {
             <h3>Create User Account</h3>
             <form onSubmit={handleCreateUser}>
               <div className="um-form-group">
-                <label>Employee Email</label>
+                <label>Organization</label>
+                <select
+                  value={newUser.organizationId}
+                  onChange={(e) => setNewUser({...newUser, organizationId: e.target.value})}
+                >
+                  <option value="">-- Select Organization --</option>
+                  {orgList.map(org => (
+                    <option key={org.id} value={org.id}>
+                      {org.org_type === 'internal' ? 'PPA Inc' : org.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <div className="um-form-group" style={{ flex: 1 }}>
+                  <label>First Name *</label>
+                  <input
+                    type="text"
+                    value={newUser.firstName}
+                    onChange={(e) => setNewUser({...newUser, firstName: e.target.value})}
+                    placeholder="First name"
+                    required
+                  />
+                </div>
+                <div className="um-form-group" style={{ flex: 1 }}>
+                  <label>Last Name *</label>
+                  <input
+                    type="text"
+                    value={newUser.lastName}
+                    onChange={(e) => setNewUser({...newUser, lastName: e.target.value})}
+                    placeholder="Last name"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="um-form-group">
+                <label>Email *</label>
                 <input
                   type="email"
                   value={newUser.email}
                   onChange={(e) => setNewUser({...newUser, email: e.target.value})}
-                  placeholder="Select from existing employees"
-                  required
-                />
-              </div>
-              
-              <div className="um-form-group">
-                <label>Initial Password</label>
-                <input
-                  type="password"
-                  value={newUser.password}
-                  onChange={(e) => setNewUser({...newUser, password: e.target.value})}
-                  placeholder="Minimum 6 characters"
+                  placeholder="user@example.com"
                   required
                 />
               </div>
 
-              <div className="um-form-group">
-                <label>Confirm Password</label>
-                <input
-                  type="password"
-                  value={newUser.confirmPassword}
-                  onChange={(e) => setNewUser({...newUser, confirmPassword: e.target.value})}
-                  placeholder="Confirm password"
-                  required
-                />
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <div className="um-form-group" style={{ flex: 1 }}>
+                  <label>Password *</label>
+                  <input
+                    type="password"
+                    value={newUser.password}
+                    onChange={(e) => setNewUser({...newUser, password: e.target.value})}
+                    placeholder="Min 6 characters"
+                    required
+                  />
+                </div>
+                <div className="um-form-group" style={{ flex: 1 }}>
+                  <label>Confirm Password *</label>
+                  <input
+                    type="password"
+                    value={newUser.confirmPassword}
+                    onChange={(e) => setNewUser({...newUser, confirmPassword: e.target.value})}
+                    placeholder="Confirm password"
+                    required
+                  />
+                </div>
               </div>
 
               <div className="um-form-group">
@@ -405,9 +481,9 @@ const UserManagement = ({ onViewAs }) => {
                   value={newUser.role}
                   onChange={(e) => setNewUser({...newUser, role: e.target.value})}
                 >
-                  <option value="Owner">Owner</option>
                   <option value="Admin">Admin</option>
                   <option value="Management">Management</option>
+                  <option value="Owner">Owner</option>
                 </select>
               </div>
 
