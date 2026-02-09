@@ -114,14 +114,20 @@ const UserManagement = ({ onViewAs }) => {
       return;
     }
 
+    if (!newUser.organizationId) {
+      setError('Please select an organization');
+      return;
+    }
+
     try {
       const emailTrimmed = newUser.email.trim();
       const fullName = `${newUser.firstName.trim()} ${newUser.lastName.trim()}`;
-      const selectedOrgId = newUser.organizationId || null;
+      const selectedOrgId = newUser.organizationId;
 
       // Get current auth user for created_by
       const { data: { session } } = await supabase.auth.getSession();
-      const currentUserId = session?.user?.id;
+      // In dev mode, fall back to the PPA admin user ID
+      const currentUserId = session?.user?.id || '5df85ca3-7a54-4798-a665-c31da8d9caad';
 
       // Check if employee already exists
       const { data: existingEmployee } = await supabase
