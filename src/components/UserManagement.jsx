@@ -119,6 +119,10 @@ const UserManagement = ({ onViewAs }) => {
       const fullName = `${newUser.firstName.trim()} ${newUser.lastName.trim()}`;
       const selectedOrgId = newUser.organizationId || null;
 
+      // Get current auth user for created_by
+      const { data: { session } } = await supabase.auth.getSession();
+      const currentUserId = session?.user?.id;
+
       // Check if employee already exists
       const { data: existingEmployee } = await supabase
         .from('employees')
@@ -161,7 +165,8 @@ const UserManagement = ({ onViewAs }) => {
             role: newUser.role,
             organization_id: selectedOrgId,
             employment_status: 'full_time',
-            has_account: true
+            has_account: true,
+            created_by: currentUserId
           })
           .select()
           .single();
