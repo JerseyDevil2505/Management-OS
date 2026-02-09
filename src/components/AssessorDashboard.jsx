@@ -233,11 +233,18 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
 
       const createdJob = await jobService.create(jobData);
 
-      // Link job to organization
+      // Link job to organization and pre-fill assessor contact from org
       if (organization?.id) {
+        const jobUpdate = { organization_id: organization.id };
+        if (organization.primary_contact_name) {
+          jobUpdate.assessor_name = organization.primary_contact_name;
+        }
+        if (organization.primary_contact_email) {
+          jobUpdate.assessor_email = organization.primary_contact_email;
+        }
         await supabase
           .from('jobs')
-          .update({ organization_id: organization.id })
+          .update(jobUpdate)
           .eq('id', createdJob.id);
       }
 
