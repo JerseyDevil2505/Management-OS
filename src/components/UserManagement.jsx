@@ -345,15 +345,24 @@ const UserManagement = ({ onViewAs }) => {
                     </span>
                   </td>
                   <td>
-                    <select
-                      value={user.role || 'Management'}
-                      onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                      className={`role-select ${getRoleBadgeClass(user.role)}`}
-                    >
-                      <option value="Owner">Owner</option>
-                      <option value="Admin">Admin</option>
-                      <option value="Management">Management</option>
-                    </select>
+                    {isAssessorUser(user) ? (
+                      <span style={{
+                        padding: '4px 10px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: '600',
+                        background: '#dbeafe', color: '#1e40af'
+                      }}>
+                        Client User
+                      </span>
+                    ) : (
+                      <select
+                        value={user.role || 'Management'}
+                        onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                        className={`role-select ${getRoleBadgeClass(user.role)}`}
+                      >
+                        <option value="Owner">Owner</option>
+                        <option value="Admin">Admin</option>
+                        <option value="Management">Management</option>
+                      </select>
+                    )}
                   </td>
                   <td>
                     <span className={`status-badge ${user.employment_status === 'Inactive' ? 'inactive' : 'active'}`}>
@@ -475,17 +484,19 @@ const UserManagement = ({ onViewAs }) => {
                 </div>
               </div>
 
-              <div className="um-form-group">
-                <label>Role</label>
-                <select
-                  value={newUser.role}
-                  onChange={(e) => setNewUser({...newUser, role: e.target.value})}
-                >
-                  <option value="Admin">Admin</option>
-                  <option value="Management">Management</option>
-                  <option value="Owner">Owner</option>
-                </select>
-              </div>
+              {(!newUser.organizationId || newUser.organizationId === PPA_ORG_ID || (organizations[newUser.organizationId]?.org_type === 'internal')) && (
+                <div className="um-form-group">
+                  <label>Role</label>
+                  <select
+                    value={newUser.role}
+                    onChange={(e) => setNewUser({...newUser, role: e.target.value})}
+                  >
+                    <option value="Admin">Admin</option>
+                    <option value="Management">Management</option>
+                    <option value="Owner">Owner</option>
+                  </select>
+                </div>
+              )}
 
               <div className="um-modal-actions">
                 <button type="button" onClick={() => setShowCreateModal(false)}>
