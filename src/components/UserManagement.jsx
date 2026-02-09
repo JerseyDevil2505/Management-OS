@@ -416,7 +416,11 @@ const UserManagement = ({ onViewAs }) => {
                 <label>Organization</label>
                 <select
                   value={newUser.organizationId}
-                  onChange={(e) => setNewUser({...newUser, organizationId: e.target.value})}
+                  onChange={(e) => {
+                    const orgId = e.target.value;
+                    const isExternal = orgId && orgId !== PPA_ORG_ID && organizations[orgId]?.org_type !== 'internal';
+                    setNewUser({...newUser, organizationId: orgId, role: isExternal ? 'Admin' : newUser.role});
+                  }}
                 >
                   <option value="">-- Select Organization --</option>
                   {orgList.map(org => (
