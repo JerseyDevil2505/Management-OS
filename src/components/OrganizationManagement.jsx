@@ -8,10 +8,14 @@ const OrganizationManagement = () => {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [showStaffModal, setShowStaffModal] = useState(false);
   const [selectedOrg, setSelectedOrg] = useState(null);
   const [orgStaff, setOrgStaff] = useState([]);
   const [loadingStaff, setLoadingStaff] = useState(false);
+
+  // Form state for editing organization
+  const [editOrg, setEditOrg] = useState(null);
 
   // Form state for new organization
   const [newOrg, setNewOrg] = useState({
@@ -167,6 +171,57 @@ const OrganizationManagement = () => {
     }
   };
 
+  const handleEditOrg = (org) => {
+    setEditOrg({
+      id: org.id,
+      name: org.name || '',
+      slug: org.slug || '',
+      primary_contact_name: org.primary_contact_name || '',
+      primary_contact_email: org.primary_contact_email || '',
+      billing_address: org.billing_address || '',
+      line_item_count: org.line_item_count || 0,
+      single_job_mode: org.single_job_mode || false,
+      is_free_account: org.is_free_account || org.subscription_status === 'free' || false,
+      subscription_status: org.subscription_status || 'active'
+    });
+    setShowEditModal(true);
+  };
+
+  const handleSaveOrg = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccessMessage('');
+
+    try {
+      const updateData = {
+        name: editOrg.name,
+        primary_contact_name: editOrg.primary_contact_name,
+        primary_contact_email: editOrg.primary_contact_email,
+        billing_address: editOrg.billing_address,
+        line_item_count: editOrg.line_item_count,
+        single_job_mode: editOrg.single_job_mode,
+        is_free_account: editOrg.is_free_account,
+        subscription_status: editOrg.is_free_account ? 'free' : (editOrg.subscription_status === 'free' ? 'active' : editOrg.subscription_status),
+        annual_fee: editOrg.is_free_account ? 0 : null
+      };
+
+      const { error } = await supabase
+        .from('organizations')
+        .update(updateData)
+        .eq('id', editOrg.id);
+
+      if (error) throw error;
+
+      setSuccessMessage('Organization updated successfully');
+      setShowEditModal(false);
+      setEditOrg(null);
+      loadOrganizations();
+    } catch (err) {
+      console.error('Error updating organization:', err);
+      setError(err.message || 'Failed to update organization');
+    }
+  };
+
   const handleViewStaff = (org) => {
     setSelectedOrg(org);
     setShowStaffModal(true);
@@ -295,7 +350,7 @@ const OrganizationManagement = () => {
                       >
                         Staff
                       </button>
-                      <button className="edit-btn">Edit</button>
+                      <button className="edit-btn" onClick={() => handleEditOrg(org)}>Edit</button>
                     </div>
                   </td>
                 </tr>
@@ -406,6 +461,109 @@ const OrganizationManagement = () => {
                 </button>
                 <button type="submit" className="primary">
                   Create Organization
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Organization Modal */}
+      {showEditModal && editOrg && (
+        <div className="org-modal-overlay" onClick={() => setShowEditModal(false)}>
+          <div className="org-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Edit Organization</h3>
+            <form onSubmit={handleSaveOrg}>
+              <div className="org-form-group">
+                <label>Organization Name *</label>
+                <input
+                  type="text"
+                  value={editOrg.name}
+                  onChange={(e) => setEditOrg({...editOrg, name: e.target.value})}
+                  required
+                />
+              </div>
+
+              <div className="org-form-row">
+                <div className="org-form-group">
+                  <label>Primary Contact Name</label>
+                  <input
+                    type="text"
+                    value={editOrg.primary_contact_name}
+                    onChange={(e) => setEditOrg({...editOrg, primary_contact_name: e.target.value})}
+                  />
+                </div>
+                <div className="org-form-group">
+                  <label>Primary Contact Email</label>
+                  <input
+                    type="email"
+                    value={editOrg.primary_contact_email}
+                    onChange={(e) => setEditOrg({...editOrg, primary_contact_email: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="org-form-group">
+                <label>Billing Address</label>
+                <textarea
+                  value={editOrg.billing_address}
+                  onChange={(e) => setEditOrg({...editOrg, billing_address: e.target.value})}
+                  rows={2}
+                />
+              </div>
+
+              <div className="org-form-row">
+                <div className="org-form-group">
+                  <label>Line Item Count</label>
+                  <input
+                    type="number"
+                    value={editOrg.line_item_count}
+                    onChange={(e) => setEditOrg({...editOrg, line_item_count: parseInt(e.target.value) || 0})}
+                  />
+                </div>
+                <div className="org-form-group checkbox-group">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={editOrg.single_job_mode}
+                      onChange={(e) => setEditOrg({...editOrg, single_job_mode: e.target.checked})}
+                    />
+                    Single Job Mode
+                  </label>
+                  <label style={{ marginTop: '8px', display: 'block' }}>
+                    <input
+                      type="checkbox"
+                      checked={editOrg.is_free_account}
+                      onChange={(e) => setEditOrg({...editOrg, is_free_account: e.target.checked})}
+                    />
+                    Free Account (no invoicing)
+                  </label>
+                </div>
+              </div>
+
+              {editOrg.line_item_count > 0 && !editOrg.is_free_account && (
+                <div className="fee-preview">
+                  <strong>Estimated Annual Fee:</strong> ${calculateAnnualFee(editOrg.line_item_count, 1).toLocaleString()}
+                  <div className="fee-breakdown">
+                    Line Items: ${(editOrg.line_item_count * 0.10).toFixed(2)} + Primary User: $500
+                  </div>
+                </div>
+              )}
+              {editOrg.is_free_account && (
+                <div className="fee-preview" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}>
+                  <strong style={{ color: '#166534' }}>Free Account</strong>
+                  <div className="fee-breakdown" style={{ color: '#15803d' }}>
+                    No invoices will be generated for this organization
+                  </div>
+                </div>
+              )}
+
+              <div className="org-modal-actions">
+                <button type="button" onClick={() => setShowEditModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="primary">
+                  Save Changes
                 </button>
               </div>
             </form>
