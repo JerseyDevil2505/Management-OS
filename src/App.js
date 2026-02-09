@@ -572,14 +572,14 @@ const App = () => {
 
   const handleBackToJobs = useCallback(() => {
     setSelectedJob(null);
-    setActiveView('admin-jobs');
-    // Reset URL when going back to jobs
-    window.history.pushState({}, '', '/admin-jobs');
-    
+    const backView = isAssessorUser ? 'assessor-dashboard' : 'admin-jobs';
+    setActiveView(backView);
+    window.history.pushState({}, '', `/${backView}`);
+
     // Refresh jobs data to show any updates made in modules
     console.log('🔄 Refreshing jobs data after returning from modules');
     loadLiveData(['jobs']);
-  }, [loadLiveData]);
+  }, [loadLiveData, isAssessorUser]);
 
   const handleFileProcessed = useCallback(() => {
     console.log('📁 File processed acknowledged - jobs list will refresh when user returns to jobs');
