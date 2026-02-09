@@ -129,7 +129,7 @@ const OrganizationManagement = () => {
       loadOrganizations();
     } catch (err) {
       console.error('Error creating organization:', err);
-      setError(err.message || 'Failed to create organization');
+      setError(err?.message || err?.details || JSON.stringify(err) || 'Failed to create organization');
     }
   };
 
@@ -218,7 +218,7 @@ const OrganizationManagement = () => {
       loadOrganizations();
     } catch (err) {
       console.error('Error updating organization:', err);
-      setError(err.message || 'Failed to update organization');
+      setError(err?.message || err?.details || JSON.stringify(err) || 'Failed to update organization');
     }
   };
 
