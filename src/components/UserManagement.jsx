@@ -11,6 +11,7 @@ const UserManagement = ({ onViewAs }) => {
   const [filterOrg, setFilterOrg] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   
   // Form states
@@ -228,6 +229,41 @@ const UserManagement = ({ onViewAs }) => {
     }
   };
 
+  const handleDeleteUser = async (user) => {
+    setError('');
+    setSuccessMessage('');
+    try {
+      // Delete from profiles table (linked to auth.users)
+      if (user.email) {
+        // Find the auth user's profile by email and delete it
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id')
+          .ilike('email', user.email)
+          .single();
+        if (profile) {
+          await supabase.from('profiles').delete().eq('id', profile.id);
+        }
+      }
+
+      // Delete the employee record
+      const { error: delError } = await supabase
+        .from('employees')
+        .delete()
+        .eq('id', user.id);
+      if (delError) throw delError;
+
+      setSuccessMessage(`Deleted ${user.first_name} ${user.last_name}`);
+      setShowDeleteConfirm(null);
+      loadUsers();
+    } catch (err) {
+      console.error('Error deleting user:', err);
+      const msg = err?.message || err?.error_description || err?.details || (typeof err === 'object' ? JSON.stringify(err) : String(err));
+      setError(msg || 'Failed to delete user');
+      setShowDeleteConfirm(null);
+    }
+  };
+
   const handleRoleChange = async (userId, newRole) => {
     try {
       const { error } = await supabase
@@ -403,6 +439,41 @@ const UserManagement = ({ onViewAs }) => {
                     >
                       Reset Password
                     </button>
+                    {showDeleteConfirm === user.id ? (
+                      <>
+                        <button
+                          onClick={() => handleDeleteUser(user)}
+                          style={{
+                            padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600',
+                            background: '#dc2626', color: 'white', border: 'none', cursor: 'pointer',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          onClick={() => setShowDeleteConfirm(null)}
+                          style={{
+                            padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600',
+                            background: '#e5e7eb', color: '#374151', border: 'none', cursor: 'pointer',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => setShowDeleteConfirm(user.id)}
+                        style={{
+                          padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600',
+                          background: '#fee2e2', color: '#dc2626', border: 'none', cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        Delete
+                      </button>
+                    )}
                     {isDevMode && isAssessorUser(user) && onViewAs && (
                       <button
                         onClick={() => onViewAs(user)}
@@ -487,21 +558,23 @@ const UserManagement = ({ onViewAs }) => {
                 <div className="um-form-group" style={{ flex: 1 }}>
                   <label>Password *</label>
                   <input
-                    type="password"
+                    type="text"
                     value={newUser.password}
                     onChange={(e) => setNewUser({...newUser, password: e.target.value})}
                     placeholder="Min 6 characters"
                     required
+                    autoComplete="off"
                   />
                 </div>
                 <div className="um-form-group" style={{ flex: 1 }}>
                   <label>Confirm Password *</label>
                   <input
-                    type="password"
+                    type="text"
                     value={newUser.confirmPassword}
                     onChange={(e) => setNewUser({...newUser, confirmPassword: e.target.value})}
                     placeholder="Confirm password"
                     required
+                    autoComplete="off"
                   />
                 </div>
               </div>
