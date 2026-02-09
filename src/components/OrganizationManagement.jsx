@@ -129,12 +129,16 @@ const OrganizationManagement = () => {
     setError('');
 
     try {
+      // Generate employee_number for org staff: ORG-<slug>-<timestamp>
+      const empNumber = `ORG-${selectedOrg.slug?.substring(0, 10) || 'EXT'}-${Date.now().toString(36).toUpperCase()}`;
+
       const { error } = await supabase
         .from('employees')
         .insert({
           first_name: newStaff.first_name,
           last_name: newStaff.last_name,
           email: newStaff.email,
+          employee_number: empNumber,
           role: newStaff.is_primary ? 'Admin' : 'Management',
           organization_id: selectedOrg.id,
           employment_status: 'full_time',
