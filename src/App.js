@@ -1328,6 +1328,7 @@ const App = () => {
         {/* Component Views */}
         {activeView === 'admin-jobs' && (
           <AdminJobManagement
+            isAdmin={isAdmin}
             jobs={isAssessorUser
               ? appData.jobs.filter(j => j.organization_id === (viewingAs?.organization_id || userOrgId))
               : appData.jobs}

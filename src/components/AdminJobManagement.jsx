@@ -40,10 +40,10 @@ const CHECKLIST_TEMPLATE = [
 ];
 
 // Accept jobMetrics props for live metrics integration
-const AdminJobManagement = ({ 
-  onJobSelect, 
-  jobMetrics, 
-  isLoadingMetrics, 
+const AdminJobManagement = ({
+  onJobSelect,
+  jobMetrics,
+  isLoadingMetrics,
   onJobProcessingComplete,
   jobs: propsJobs,
   planningJobs: propsPlanningJobs,
@@ -54,7 +54,8 @@ const AdminJobManagement = ({
   workflowStats,
   jobFreshness,
   onDataUpdate,
-  onRefresh
+  onRefresh,
+  isAdmin
 }) => {
   const [activeTab, setActiveTab] = useState('jobs');
   const [jobScope, setJobScope] = useState('ppa');
@@ -2413,20 +2414,8 @@ const AdminJobManagement = ({
         </div>
       )}
 
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          {jobScope === 'ppa' ? 'PPA Jobs' : 'LOJIK Client Jobs'}
-        </h1>
-        <p className="text-gray-600">
-          {jobScope === 'ppa'
-            ? 'Manage PPA appraisal jobs with source file integration and team assignments'
-            : 'Manage client municipality jobs and data'}
-        </p>
-      </div>
-
-      {/* PPA / Client Toggle */}
-      <div className="mb-6 flex items-center gap-2">
+      {/* PPA / Client Toggle - Admin only */}
+      {isAdmin && <div className="mb-6 flex items-center gap-2">
         <button
           onClick={() => { setJobScope('ppa'); setActiveTab('jobs'); }}
           className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
@@ -2447,7 +2436,7 @@ const AdminJobManagement = ({
         >
           LOJIK Clients ({jobs.filter(j => !isPpaJob(j)).length})
         </button>
-      </div>
+      </div>}
 
       {/* Property Totals */}
       <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
