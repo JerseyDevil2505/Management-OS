@@ -816,10 +816,10 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
             <div style={{ marginLeft: 'auto' }}>
               <button
                 onClick={createAssessorJob}
-                disabled={processing || !fileAnalysis.sourceFile || !fileAnalysis.codeFile || !jobForm.ccddCode || !jobForm.name || !jobForm.municipality || !jobForm.dueDate}
+                disabled={processing || !fileAnalysis.sourceFile || !fileAnalysis.codeFile || !jobForm.ccddCode || !jobForm.name || !jobForm.municipality || (jobForm.isReassessment && !jobForm.dueDate)}
                 style={{
                   padding: '12px 32px', borderRadius: '8px', fontWeight: '700', fontSize: '1rem',
-                  background: (fileAnalysis.sourceFile && fileAnalysis.codeFile && jobForm.ccddCode && jobForm.name && jobForm.municipality && jobForm.dueDate)
+                  background: (fileAnalysis.sourceFile && fileAnalysis.codeFile && jobForm.ccddCode && jobForm.name && jobForm.municipality && (!jobForm.isReassessment || jobForm.dueDate))
                     ? '#2563eb' : '#9ca3af',
                   color: 'white', border: 'none', cursor: 'pointer',
                   opacity: processing ? 0.6 : 1
