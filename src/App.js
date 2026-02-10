@@ -1254,13 +1254,29 @@ const App = () => {
           )}
           
           {/* Assessor user nav - simplified, only shows when on dashboard */}
-          {isAssessorUser && activeView === 'assessor-dashboard' && (
+          {isAssessorUser && activeView !== 'job-modules' && (
             <nav className="flex space-x-4">
               <button
-                className="px-4 py-2 rounded-xl font-medium text-sm border text-blue-600 shadow-lg border-white"
-                style={{ backgroundColor: '#FFFFFF', opacity: 1, backdropFilter: 'none' }}
+                onClick={() => handleViewChange('assessor-dashboard')}
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                  activeView === 'assessor-dashboard'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                }`}
+                style={activeView === 'assessor-dashboard' ? { backgroundColor: '#FFFFFF', opacity: 1, backdropFilter: 'none' } : {}}
               >
-                📋 My Jobs
+                📋 Dashboard
+              </button>
+              <button
+                onClick={() => handleViewChange('admin-jobs')}
+                className={`px-4 py-2 rounded-xl font-medium text-sm border ${
+                  activeView === 'admin-jobs'
+                    ? 'text-blue-600 shadow-lg border-white'
+                    : 'bg-white bg-opacity-10 text-white hover:bg-opacity-20 backdrop-blur-sm border-white border-opacity-30 hover:border-opacity-50'
+                }`}
+                style={activeView === 'admin-jobs' ? { backgroundColor: '#FFFFFF', opacity: 1, backdropFilter: 'none' } : {}}
+              >
+                📂 Job Management
               </button>
             </nav>
           )}
@@ -1312,10 +1328,16 @@ const App = () => {
         {/* Component Views */}
         {activeView === 'admin-jobs' && (
           <AdminJobManagement
-            jobs={appData.jobs}
+            jobs={isAssessorUser
+              ? appData.jobs.filter(j => j.organization_id === (viewingAs?.organization_id || userOrgId))
+              : appData.jobs}
             onJobSelect={handleJobSelect}
-            planningJobs={appData.planningJobs}
-            archivedJobs={appData.archivedJobs}
+            planningJobs={isAssessorUser
+              ? appData.planningJobs.filter(j => j.organization_id === (viewingAs?.organization_id || userOrgId))
+              : appData.planningJobs}
+            archivedJobs={isAssessorUser
+              ? appData.archivedJobs.filter(j => j.organization_id === (viewingAs?.organization_id || userOrgId))
+              : appData.archivedJobs}
             managers={appData.managers}
             countyHpiData={appData.countyHpiData}
             jobResponsibilities={appData.jobResponsibilities}
