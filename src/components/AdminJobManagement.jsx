@@ -2679,7 +2679,7 @@ const AdminJobManagement = ({
                               {(() => {
                                 const cs = jobFreshness[job.id]?.clientSummary;
                                 return (
-                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
+                                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
                                     <div className="text-center">
                                       <div className="text-lg font-bold text-blue-600">
                                         {cs ? cs.totalRecords.toLocaleString() : (job.totalProperties || 0).toLocaleString()}
@@ -2701,14 +2701,20 @@ const AdminJobManagement = ({
                                       <div className="text-xs text-gray-600">Residential / Commercial</div>
                                     </div>
                                     <div className="text-center">
-                                      <div className="text-sm font-bold text-indigo-600">
-                                        {cs && cs.salesMinDate
-                                          ? `${new Date(cs.salesMinDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} – ${new Date(cs.salesMaxDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
+                                      <div className="text-sm font-bold text-orange-600">
+                                        {cs?.avgMeasureDate
+                                          ? new Date(cs.avgMeasureDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                                           : '—'}
                                       </div>
-                                      <div className="text-xs text-gray-600">
-                                        Sales Range {cs?.salesCount ? `(${cs.salesCount.toLocaleString()})` : ''}
+                                      <div className="text-xs text-gray-600">Avg Measured Date</div>
+                                    </div>
+                                    <div className="text-center">
+                                      <div className="text-sm font-bold text-indigo-600">
+                                        {cs?.mostRecentMeasureDate
+                                          ? new Date(cs.mostRecentMeasureDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                          : '—'}
                                       </div>
+                                      <div className="text-xs text-gray-600">Most Recent Measured</div>
                                     </div>
                                   </div>
                                 );

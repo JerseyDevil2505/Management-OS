@@ -312,11 +312,20 @@ const App = () => {
               .eq('job_id', job.id);
 
             if (summaryData && summaryData.length > 0) {
-              const salesWithDates = summaryData.filter(p => p.sales_date);
-              const salesDates = salesWithDates.map(p => p.sales_date).sort();
               const inspected = summaryData.filter(p =>
                 p.inspection_measure_by && p.inspection_measure_by.trim() && p.inspection_measure_date
               );
+              const measureDates = inspected
+                .map(p => p.inspection_measure_date)
+                .filter(Boolean)
+                .map(d => new Date(d).getTime())
+                .filter(t => !isNaN(t));
+              const avgMeasureDate = measureDates.length > 0
+                ? new Date(measureDates.reduce((a, b) => a + b, 0) / measureDates.length).toISOString().split('T')[0]
+                : null;
+              const mostRecentMeasureDate = measureDates.length > 0
+                ? new Date(Math.max(...measureDates)).toISOString().split('T')[0]
+                : null;
               const residential = summaryData.filter(p => {
                 const use = (p.asset_type_use || '').toString();
                 return use.startsWith('2') || use.startsWith('3A') || use === '1' || use.startsWith('1');
@@ -328,11 +337,10 @@ const App = () => {
 
               freshnessData[job.id].clientSummary = {
                 totalRecords: summaryData.length,
-                salesCount: salesWithDates.length,
-                salesMinDate: salesDates[0] || null,
-                salesMaxDate: salesDates[salesDates.length - 1] || null,
                 inspectedCount: inspected.length,
                 entryRate: summaryData.length > 0 ? Math.round((inspected.length / summaryData.length) * 100) : 0,
+                avgMeasureDate,
+                mostRecentMeasureDate,
                 residentialCount: residential.length,
                 commercialCount: commercial.length
               };
