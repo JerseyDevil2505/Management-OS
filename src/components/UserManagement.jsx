@@ -216,22 +216,44 @@ const UserManagement = ({ onViewAs }) => {
     setError('');
     setSuccessMessage('');
 
+    if (!resetPassword.trim()) {
+      setError('Please enter a new password');
+      return;
+    }
+    if (resetPassword.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
     try {
-      // Send password reset email
-      const { error } = await supabase.auth.resetPasswordForEmail(selectedUser.email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      // Call edge function to update auth password
+      const { data: { session } } = await supabase.auth.getSession();
+      const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+      const res = await fetch(`${supabaseUrl}/functions/v1/update-user-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token || process.env.REACT_APP_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ email: selectedUser.email, password: resetPassword }),
       });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Failed to update password');
 
-      if (error) throw error;
+      // Store the new password on the employee record
+      await supabase
+        .from('employees')
+        .update({ initial_password: resetPassword })
+        .eq('id', selectedUser.id);
 
-      setSuccessMessage(`Password reset email sent to ${selectedUser.email}`);
+      setSuccessMessage(`Password updated for ${selectedUser.first_name} ${selectedUser.last_name}`);
       setShowResetModal(false);
       setResetPassword('');
-      setConfirmResetPassword('');
       setSelectedUser(null);
+      loadUsers();
     } catch (err) {
       console.error('Error resetting password:', err);
-      setError(err.message || 'Failed to send reset email');
+      setError(err.message || 'Failed to reset password');
     }
   };
 
@@ -379,6 +401,16 @@ const UserManagement = ({ onViewAs }) => {
       ) : (
         <div className="um-table-container">
           <table className="um-table">
+            <colgroup>
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '18%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '8%' }} />
+              <col style={{ width: '7%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '23%' }} />
+            </colgroup>
             <thead>
               <tr>
                 <th>Name</th>
@@ -386,7 +418,7 @@ const UserManagement = ({ onViewAs }) => {
                 <th>Organization</th>
                 <th>Role</th>
                 <th>Status</th>
-                <th>Has Account</th>
+                <th>Account</th>
                 <th>Password</th>
                 <th>Actions</th>
               </tr>
@@ -630,16 +662,32 @@ const UserManagement = ({ onViewAs }) => {
         <div className="um-modal-overlay" onClick={() => setShowResetModal(false)}>
           <div className="um-modal" onClick={(e) => e.stopPropagation()}>
             <h3>Reset Password for {selectedUser.first_name} {selectedUser.last_name}</h3>
-            <p className="reset-info">
-              A password reset email will be sent to {selectedUser.email}
+            <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '1rem' }}>
+              Set a new password for {selectedUser.email}
             </p>
+            {selectedUser.initial_password && (
+              <p style={{ fontSize: '0.8rem', color: '#9ca3af', marginBottom: '1rem' }}>
+                Current stored password: <code style={{ background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>{selectedUser.initial_password}</code>
+              </p>
+            )}
             <form onSubmit={handleResetPassword}>
+              <div className="um-form-group">
+                <label>New Password *</label>
+                <input
+                  type="text"
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  placeholder="Min 6 characters"
+                  required
+                  autoComplete="off"
+                />
+              </div>
               <div className="um-modal-actions">
-                <button type="button" onClick={() => setShowResetModal(false)}>
+                <button type="button" onClick={() => { setShowResetModal(false); setResetPassword(''); }}>
                   Cancel
                 </button>
                 <button type="submit" className="primary">
-                  Send Reset Email
+                  Update Password
                 </button>
               </div>
             </form>
