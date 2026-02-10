@@ -57,11 +57,18 @@ const AdminJobManagement = ({
   onRefresh
 }) => {
   const [activeTab, setActiveTab] = useState('jobs');
+  const [jobScope, setJobScope] = useState('ppa');
   const [currentUser, setCurrentUser] = useState({ role: 'admin', canAccessBilling: true });
-  
+
   const [jobs, setJobs] = useState(propsJobs || []);
   const [archivedJobs, setArchivedJobs] = useState(propsArchivedJobs || []);
   const [planningJobs, setPlanningJobs] = useState(propsPlanningJobs || []);
+
+  const PPA_ORG_ID = '00000000-0000-0000-0000-000000000001';
+  const isPpaJob = (job) => !job.organization_id || job.organization_id === PPA_ORG_ID;
+  const scopedJobs = jobScope === 'ppa' ? jobs.filter(isPpaJob) : jobs.filter(j => !isPpaJob(j));
+  const scopedPlanning = jobScope === 'ppa' ? planningJobs.filter(isPpaJob) : planningJobs.filter(j => !isPpaJob(j));
+  const scopedArchived = jobScope === 'ppa' ? archivedJobs.filter(isPpaJob) : archivedJobs.filter(j => !isPpaJob(j));
   const [managers, setManagers] = useState(propsManagers || []);
   const [showCreateJob, setShowCreateJob] = useState(false);
   const [showCreatePlanning, setShowCreatePlanning] = useState(false);
@@ -2409,24 +2416,50 @@ const AdminJobManagement = ({
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Management OS - Current Jobs List
+          {jobScope === 'ppa' ? 'PPA Jobs' : 'LOJIK Client Jobs'}
         </h1>
         <p className="text-gray-600">
-          Manage appraisal jobs with source file integration and team assignments
+          {jobScope === 'ppa'
+            ? 'Manage PPA appraisal jobs with source file integration and team assignments'
+            : 'Manage client municipality jobs and data'}
         </p>
+      </div>
+
+      {/* PPA / Client Toggle */}
+      <div className="mb-6 flex items-center gap-2">
+        <button
+          onClick={() => { setJobScope('ppa'); setActiveTab('jobs'); }}
+          className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+            jobScope === 'ppa'
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          PPA Jobs ({jobs.filter(isPpaJob).length})
+        </button>
+        <button
+          onClick={() => { setJobScope('client'); setActiveTab('jobs'); }}
+          className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+            jobScope === 'client'
+              ? 'bg-indigo-600 text-white shadow-md'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          LOJIK Clients ({jobs.filter(j => !isPpaJob(j)).length})
+        </button>
       </div>
 
       {/* Property Totals */}
       <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
         <div className="flex items-center justify-center gap-6 text-sm">
           <span className="font-medium text-blue-700">
-            📊 Total Properties: {jobs.reduce((sum, job) => sum + (job.totalProperties || 0), 0).toLocaleString()}
+            📊 Total Properties: {scopedJobs.reduce((sum, job) => sum + (job.totalProperties || 0), 0).toLocaleString()}
           </span>
           <span className="font-medium text-green-600">
-            🏠 Residential: {jobs.reduce((sum, job) => sum + (job.totalresidential || 0), 0).toLocaleString()}
+            🏠 Residential: {scopedJobs.reduce((sum, job) => sum + (job.totalresidential || 0), 0).toLocaleString()}
           </span>
           <span className="font-medium text-purple-600">
-            🏢 Commercial: {jobs.reduce((sum, job) => sum + (job.totalcommercial || 0), 0).toLocaleString()}
+            🏢 Commercial: {scopedJobs.reduce((sum, job) => sum + (job.totalcommercial || 0), 0).toLocaleString()}
           </span>
         </div>
       </div>
@@ -2443,27 +2476,27 @@ const AdminJobManagement = ({
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              📋 Active Jobs ({jobs.length})
+              📋 Active Jobs ({scopedJobs.length})
             </button>
             <button
               onClick={() => setActiveTab('planning')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'planning' 
-                  ? 'border-blue-500 text-blue-600' 
+                activeTab === 'planning'
+                  ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              📅 Planning Jobs ({planningJobs.length})
+              📅 Planning Jobs ({scopedPlanning.length})
             </button>
             <button
               onClick={() => setActiveTab('archived')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'archived' 
-                  ? 'border-blue-500 text-blue-600' 
+                activeTab === 'archived'
+                  ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              🗄️ Archived Jobs ({archivedJobs.length})
+              🗄️ Archived Jobs ({scopedArchived.length})
             </button>
             <button
               onClick={() => setActiveTab('county-hpi')}
@@ -2500,7 +2533,7 @@ const AdminJobManagement = ({
                   <h2 className="text-2xl font-bold text-gray-800">📋 Active Job Management</h2>
                   <p className="text-gray-600 mt-1">
                     {dbConnected 
-                      ? `Connected to database with ${jobs.length} active jobs tracked`
+                      ? `Connected to database with ${scopedJobs.length} active jobs tracked`
                       : 'Manage appraisal jobs with source data and team assignments'
                     }
                   </p>
@@ -2517,14 +2550,14 @@ const AdminJobManagement = ({
 
             {/* Job Cards with LIVE METRICS */}
             <div className="space-y-3">
-              {jobs.length === 0 ? (
+              {scopedJobs.length === 0 ? (
                 <div className="text-center text-gray-500 py-12">
                   <div className="text-4xl mb-4">📋</div>
-                  <h4 className="text-lg font-medium mb-2">No Jobs Found</h4>
-                  <p className="text-sm">Create your first job to get started!</p>
+                  <h4 className="text-lg font-medium mb-2">No {jobScope === 'ppa' ? 'PPA' : 'Client'} Jobs Found</h4>
+                  <p className="text-sm">{jobScope === 'client' ? 'No client municipality jobs yet.' : 'Create your first job to get started!'}</p>
                 </div>
               ) : (
-                sortJobsByBilling(jobs).map(job => {
+                sortJobsByBilling(scopedJobs).map(job => {
                   const metrics = getMetricsDisplay(job);
                   const propertyDisplay = getPropertyCountDisplay(job);
                   
@@ -2792,14 +2825,14 @@ const AdminJobManagement = ({
             </div>
 
             <div className="space-y-3">
-              {planningJobs.length === 0 ? (
+              {scopedPlanning.length === 0 ? (
                 <div className="text-center text-gray-500 py-12">
                   <div className="text-4xl mb-4">📅</div>
                   <h4 className="text-lg font-medium mb-2">No Planning Jobs</h4>
                   <p className="text-sm">Add planning jobs to track your future project pipeline!</p>
                 </div>
               ) : (
-                planningJobs.map(planningJob => (
+                scopedPlanning.map(planningJob => (
                   <div key={planningJob.id} className="p-4 bg-white rounded-lg border-l-4 border-yellow-400 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01] hover:bg-yellow-50">
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
@@ -2887,14 +2920,14 @@ const AdminJobManagement = ({
             </div>
 
             <div className="space-y-3">
-              {archivedJobs.length === 0 ? (
+              {scopedArchived.length === 0 ? (
                 <div className="text-center text-gray-500 py-12">
                   <div className="text-4xl mb-4">🗄️</div>
                   <h4 className="text-lg font-medium mb-2">No Archived Jobs</h4>
                   <p className="text-sm">Completed jobs will appear here for historical reference</p>
                 </div>
               ) : (
-                archivedJobs.map(job => (
+                scopedArchived.map(job => (
                   <div key={job.id} className="p-4 bg-white rounded-lg border-l-4 border-purple-400 shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01] hover:bg-purple-50">
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
