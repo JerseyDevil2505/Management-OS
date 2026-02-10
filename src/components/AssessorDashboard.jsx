@@ -524,7 +524,11 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
         }}>
           <div style={{ marginBottom: '24px' }}>
             <h3 style={{ fontSize: '1.35rem', fontWeight: '700', color: '#1f2937', marginBottom: '4px' }}>
-              {orgJobs.length > 0 ? 'Create New Assessment Job' : 'Set Up Your Assessment'}
+              {orgJobs.length > 0
+                ? 'Create New Assessment Job'
+                : organization?.single_job_mode
+                  ? 'Set Up Your Municipality'
+                  : 'Set Up Your Assessment'}
             </h3>
             <p style={{ color: '#6b7280', fontSize: '0.9rem' }}>
               Upload your property data and code definitions files to get started.
