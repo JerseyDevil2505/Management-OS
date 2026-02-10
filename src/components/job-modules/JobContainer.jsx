@@ -18,7 +18,8 @@ const JobContainer = ({
   onUpdateWorkflowStats,
   fileRefreshTrigger
 }) => {
-  const [activeModule, setActiveModule] = useState('checklist');
+  const isClientJob = selectedJob?.organization_id && selectedJob.organization_id !== PPA_ORG_ID;
+  const [activeModule, setActiveModule] = useState(isClientJob ? 'final-valuation' : 'checklist');
   const [jobData, setJobData] = useState(null);
   const [latestFileVersion, setLatestFileVersion] = useState(1);
   const [latestCodeVersion, setLatestCodeVersion] = useState(1);
