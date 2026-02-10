@@ -25,7 +25,8 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
     name: '',
     municipality: '',
     county: '',
-    ccddCode: ''
+    ccddCode: '',
+    isReassessment: false
   });
 
   // Processing state
@@ -183,8 +184,12 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
   };
 
   const createAssessorJob = async () => {
-    if (!jobForm.ccddCode || !jobForm.name || !jobForm.municipality || !jobForm.dueDate) {
-      alert('Please fill in all required fields (CCDD Code, Job Name, Municipality, Due Date).');
+    if (!jobForm.ccddCode || !jobForm.name || !jobForm.municipality) {
+      alert('Please fill in all required fields (CCDD Code, Job Name, Municipality).');
+      return;
+    }
+    if (jobForm.isReassessment && !jobForm.dueDate) {
+      alert('Please enter a due date for your reassessment/revaluation.');
       return;
     }
     if (!sourceFile || !codeFile) {
@@ -199,7 +204,11 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
       setProcessingResult(null);
       setProcessingStatus({ step: 'Creating job record...', progress: 10, logs: [] });
 
-      const assessmentYear = jobForm.dueDate ? parseInt(jobForm.dueDate.split('-')[0]) : new Date().getFullYear();
+      // If not a reassessment, default end_date to Dec 31 of current year
+      const effectiveDueDate = jobForm.isReassessment && jobForm.dueDate
+        ? jobForm.dueDate
+        : `${new Date().getFullYear()}-12-31`;
+      const assessmentYear = parseInt(effectiveDueDate.split('-')[0]);
       const startDate = `${assessmentYear}-01-01`;
 
       const jobData = {
@@ -209,7 +218,7 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
         county: capitalizeCounty(jobForm.county),
         state: 'NJ',
         vendor: fileAnalysis.detectedVendor,
-        dueDate: jobForm.dueDate,
+        dueDate: effectiveDueDate,
         createdDate: startDate,
         assignedManagers: [],
         totalProperties: fileAnalysis.propertyCount,
@@ -606,7 +615,31 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
                   }}
                 />
               </div>
-              <div>
+            </div>
+
+            {/* Reassessment toggle */}
+            <div style={{ marginTop: '16px' }}>
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer',
+                fontSize: '0.9rem', color: '#374151', fontWeight: '500'
+              }}>
+                <input
+                  type="checkbox"
+                  checked={jobForm.isReassessment}
+                  onChange={e => setJobForm({ ...jobForm, isReassessment: e.target.checked, dueDate: e.target.checked ? jobForm.dueDate : '' })}
+                  style={{ width: '18px', height: '18px', accentColor: '#2563eb', cursor: 'pointer' }}
+                />
+                This is a reassessment or revaluation
+              </label>
+              <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px', marginLeft: '28px' }}>
+                {jobForm.isReassessment
+                  ? 'Enter the completion deadline for your reassessment.'
+                  : `Assessment year will default to ${new Date().getFullYear()}.`}
+              </p>
+            </div>
+
+            {jobForm.isReassessment && (
+              <div style={{ marginTop: '12px' }}>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '500', color: '#374151', marginBottom: '6px' }}>
                   Due Date *
                 </label>
@@ -615,12 +648,12 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
                   value={jobForm.dueDate}
                   onChange={e => setJobForm({ ...jobForm, dueDate: e.target.value })}
                   style={{
-                    width: '100%', padding: '8px 12px', borderRadius: '6px',
+                    width: '50%', padding: '8px 12px', borderRadius: '6px',
                     border: '1px solid #d1d5db', fontSize: '0.95rem', boxSizing: 'border-box'
                   }}
                 />
               </div>
-            </div>
+            )}
           </div>
 
           {/* File Upload Section */}
