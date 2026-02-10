@@ -237,24 +237,27 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
           rates: { entryRate: 0, refusalRate: 0, pricingRate: 0, commercialInspectionRate: 0 },
           appeals: { totalCount: 0, percentOfWhole: 0, byClass: {} }
         },
-        created_by: user?.id
+        created_by: user?.id,
+        organization_id: organization?.id || user?.employeeData?.organization_id
       };
 
       const createdJob = await jobService.create(jobData);
 
-      // Link job to organization and pre-fill assessor contact from org
+      // Pre-fill assessor contact info from org
       if (organization?.id) {
-        const jobUpdate = { organization_id: organization.id };
+        const jobUpdate = {};
         if (organization.primary_contact_name) {
           jobUpdate.assessor_name = organization.primary_contact_name;
         }
         if (organization.primary_contact_email) {
           jobUpdate.assessor_email = organization.primary_contact_email;
         }
-        await supabase
-          .from('jobs')
-          .update(jobUpdate)
-          .eq('id', createdJob.id);
+        if (Object.keys(jobUpdate).length > 0) {
+          await supabase
+            .from('jobs')
+            .update(jobUpdate)
+            .eq('id', createdJob.id);
+        }
       }
 
       if (!isMountedRef.current) return;
