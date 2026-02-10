@@ -155,6 +155,14 @@ const App = () => {
   // Dev mode: "View As" impersonation state
   const [viewingAs, setViewingAs] = useState(null);
 
+  // Change Password modal state
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [cpCurrentPwd, setCpCurrentPwd] = useState('');
+  const [cpNewPwd, setCpNewPwd] = useState('');
+  const [cpConfirmPwd, setCpConfirmPwd] = useState('');
+  const [cpError, setCpError] = useState('');
+  const [cpSuccess, setCpSuccess] = useState('');
+
   // Simple helper - true for users allowed to access billing/payroll
   const isAdmin = (user?.role || '').toString().toLowerCase() === 'admin' || (user?.role || '').toString().toLowerCase() === 'owner';
 
@@ -174,6 +182,59 @@ const App = () => {
     employeeData: viewingAs,
     role: viewingAs.role
   } : user;
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setCpError('');
+    setCpSuccess('');
+
+    if (cpNewPwd.length < 6) {
+      setCpError('New password must be at least 6 characters');
+      return;
+    }
+    if (cpNewPwd !== cpConfirmPwd) {
+      setCpError('New passwords do not match');
+      return;
+    }
+
+    try {
+      // Verify current password by attempting sign-in
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: cpCurrentPwd,
+      });
+      if (verifyError) {
+        setCpError('Current password is incorrect');
+        return;
+      }
+
+      // Update password via Supabase Auth
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: cpNewPwd,
+      });
+      if (updateError) throw updateError;
+
+      // Update stored password on employee record for admin visibility
+      if (user.employeeData?.id) {
+        await supabase
+          .from('employees')
+          .update({ initial_password: cpNewPwd })
+          .eq('id', user.employeeData.id);
+      }
+
+      setCpSuccess('Password updated successfully');
+      setCpCurrentPwd('');
+      setCpNewPwd('');
+      setCpConfirmPwd('');
+      setTimeout(() => {
+        setShowChangePassword(false);
+        setCpSuccess('');
+      }, 1500);
+    } catch (err) {
+      console.error('Error changing password:', err);
+      setCpError(err.message || 'Failed to change password');
+    }
+  };
 
   const handleViewAs = (employee) => {
     setViewingAs(employee);
@@ -1041,6 +1102,13 @@ const App = () => {
                 )}
               </button>
               <button
+                onClick={() => setShowChangePassword(true)}
+                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
+                title="Change your password"
+              >
+                Change Password
+              </button>
+              <button
                 onClick={handleLogout}
                 className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
               >
@@ -1367,6 +1435,86 @@ const App = () => {
           </div>
         )}
       </main>
+
+      {/* Change Password Modal */}
+      {showChangePassword && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', zIndex: 9999
+        }} onClick={() => { setShowChangePassword(false); setCpError(''); setCpSuccess(''); }}>
+          <div style={{
+            background: 'white', borderRadius: '12px', padding: '2rem',
+            width: '90%', maxWidth: '420px', boxShadow: '0 20px 25px rgba(0,0,0,0.15)'
+          }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 1.25rem', fontSize: '1.25rem', color: '#1a202c' }}>Change Password</h3>
+            <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '1.25rem' }}>
+              {user.employeeData?.name || user.email}
+            </p>
+            {cpError && (
+              <div style={{ padding: '8px 12px', background: '#fee', color: '#c53030', borderRadius: '6px', fontSize: '0.85rem', marginBottom: '1rem', border: '1px solid #feb2b2' }}>
+                {cpError}
+              </div>
+            )}
+            {cpSuccess && (
+              <div style={{ padding: '8px 12px', background: '#f0fdf4', color: '#166534', borderRadius: '6px', fontSize: '0.85rem', marginBottom: '1rem', border: '1px solid #bbf7d0' }}>
+                {cpSuccess}
+              </div>
+            )}
+            <form onSubmit={handleChangePassword}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '0.4rem' }}>Current Password</label>
+                <input
+                  type="password"
+                  value={cpCurrentPwd}
+                  onChange={(e) => setCpCurrentPwd(e.target.value)}
+                  required
+                  style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #cbd5e0', borderRadius: '6px', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '0.4rem' }}>New Password</label>
+                <input
+                  type="text"
+                  value={cpNewPwd}
+                  onChange={(e) => setCpNewPwd(e.target.value)}
+                  required
+                  placeholder="Min 6 characters"
+                  autoComplete="off"
+                  style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #cbd5e0', borderRadius: '6px', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#4a5568', marginBottom: '0.4rem' }}>Confirm New Password</label>
+                <input
+                  type="text"
+                  value={cpConfirmPwd}
+                  onChange={(e) => setCpConfirmPwd(e.target.value)}
+                  required
+                  placeholder="Confirm new password"
+                  autoComplete="off"
+                  style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #cbd5e0', borderRadius: '6px', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowChangePassword(false); setCpError(''); setCpSuccess(''); setCpCurrentPwd(''); setCpNewPwd(''); setCpConfirmPwd(''); }}
+                  style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', background: '#f3f4f6', color: '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '0.85rem' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', background: 'linear-gradient(135deg, #2a5298, #1e3c72)', color: 'white', fontWeight: '600', cursor: 'pointer', fontSize: '0.85rem' }}
+                >
+                  Update Password
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
