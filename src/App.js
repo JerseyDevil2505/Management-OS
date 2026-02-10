@@ -298,9 +298,49 @@ const App = () => {
         freshnessData[job.id] = {
           lastFileUpload: fileData?.[0]?.updated_at || null,
           lastProductionRun: prodData?.[0]?.upload_date || null,
-          needsUpdate: prodData?.[0]?.upload_date && fileData?.[0]?.updated_at ? 
+          needsUpdate: prodData?.[0]?.upload_date && fileData?.[0]?.updated_at ?
             new Date(fileData[0].updated_at) > new Date(prodData[0].upload_date) : false
         };
+
+        // For non-PPA jobs, load lightweight summary stats from property_records
+        const isClientJob = job.organization_id && job.organization_id !== PPA_ORG_ID;
+        if (isClientJob) {
+          try {
+            const { data: summaryData } = await supabase
+              .from('property_records')
+              .select('sales_date, sales_price, inspection_measure_by, inspection_measure_date, asset_type_use')
+              .eq('job_id', job.id);
+
+            if (summaryData && summaryData.length > 0) {
+              const salesWithDates = summaryData.filter(p => p.sales_date);
+              const salesDates = salesWithDates.map(p => p.sales_date).sort();
+              const inspected = summaryData.filter(p =>
+                p.inspection_measure_by && p.inspection_measure_by.trim() && p.inspection_measure_date
+              );
+              const residential = summaryData.filter(p => {
+                const use = (p.asset_type_use || '').toString();
+                return use.startsWith('2') || use.startsWith('3A') || use === '1' || use.startsWith('1');
+              });
+              const commercial = summaryData.filter(p => {
+                const use = (p.asset_type_use || '').toString();
+                return use.startsWith('4') || use.startsWith('5');
+              });
+
+              freshnessData[job.id].clientSummary = {
+                totalRecords: summaryData.length,
+                salesCount: salesWithDates.length,
+                salesMinDate: salesDates[0] || null,
+                salesMaxDate: salesDates[salesDates.length - 1] || null,
+                inspectedCount: inspected.length,
+                entryRate: summaryData.length > 0 ? Math.round((inspected.length / summaryData.length) * 100) : 0,
+                residentialCount: residential.length,
+                commercialCount: commercial.length
+              };
+            }
+          } catch (summaryError) {
+            console.error(`Error loading client summary for job ${job.id}:`, summaryError.message);
+          }
+        }
       } catch (error) {
         console.error(`Error loading freshness for job ${job.id}:`, error.message);
         freshnessData[job.id] = {
