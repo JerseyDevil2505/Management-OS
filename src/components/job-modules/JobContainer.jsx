@@ -4,8 +4,11 @@ import { supabase, interpretCodes } from '../../lib/supabaseClient';
 import DataVisualizations from './DataVisualizations';
 import ManagementChecklist from './ManagementChecklist';
 import ProductionTracker from './ProductionTracker';
+import InspectionInfo from './InspectionInfo';
 import MarketAnalysis from './MarketAnalysis';
 import FinalValuation from './FinalValuation';
+
+const PPA_ORG_ID = '00000000-0000-0000-0000-000000000001';
 
 // 🔧 ENHANCED: Accept App.js workflow state management props + file refresh trigger
 const JobContainer = ({
@@ -15,7 +18,8 @@ const JobContainer = ({
   onUpdateWorkflowStats,
   fileRefreshTrigger
 }) => {
-  const [activeModule, setActiveModule] = useState('checklist');
+  const isClientJob = selectedJob?.organization_id && selectedJob.organization_id !== PPA_ORG_ID;
+  const [activeModule, setActiveModule] = useState(isClientJob ? 'final-valuation' : 'checklist');
   const [jobData, setJobData] = useState(null);
   const [latestFileVersion, setLatestFileVersion] = useState(1);
   const [latestCodeVersion, setLatestCodeVersion] = useState(1);
@@ -699,13 +703,22 @@ const JobContainer = ({
       }
 
       // 5. Load employees (for ProductionTracker inspector names)
+      // Filter by organization for non-PPA jobs to prevent initials collision
+      const jobOrgId = jobData?.organization_id;
+      const isAssessorJob = jobOrgId && jobOrgId !== PPA_ORG_ID;
       let employeesData = [];
       try {
+        let empQuery = supabase
+          .from('employees')
+          .select('*')
+          .order('last_name', { ascending: true });
+
+        if (isAssessorJob) {
+          empQuery = empQuery.eq('organization_id', jobOrgId);
+        }
+
         const { data, error } = await withTimeout(
-          supabase
-            .from('employees')
-            .select('*')
-            .order('last_name', { ascending: true }),
+          empQuery,
           10000,
           'employees query'
         );
@@ -1051,6 +1064,8 @@ const JobContainer = ({
     );
   }
 
+  const isAssessorJob = jobData?.organization_id && jobData.organization_id !== PPA_ORG_ID;
+
   const modules = [
     {
       id: 'visualizations',
@@ -1066,13 +1081,20 @@ const JobContainer = ({
       component: ManagementChecklist,
       description: 'Project checklist and documentation'
     },
-    {
+    // Show ProductionTracker for PPA jobs, InspectionInfo for assessor jobs
+    ...(isAssessorJob ? [{
+      id: 'inspection-info',
+      name: 'Inspection Info',
+      icon: Database,
+      component: InspectionInfo,
+      description: 'Property inspection metrics and status'
+    }] : [{
       id: 'production',
       name: 'ProductionTracker',
       icon: Factory,
       component: ProductionTracker,
       description: 'Analytics and validation engine'
-    },
+    }]),
     {
       id: 'market-analysis',
       name: 'Market & Land Analysis',
