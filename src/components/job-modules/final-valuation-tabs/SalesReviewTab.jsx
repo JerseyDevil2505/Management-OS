@@ -41,13 +41,15 @@ function formatDate(dateStr) {
   return date.toLocaleDateString('en-US');
 }
 
-const SalesReviewTab = ({ 
-  jobData = {}, 
-  properties = [], 
+const SalesReviewTab = ({
+  jobData = {},
+  properties = [],
   marketLandData = {},
   hpiData = [],
-  onUpdateJobCache = () => {} 
+  onUpdateJobCache = () => {},
+  tenantConfig = null
 }) => {
+  const isLojikTenant = tenantConfig?.orgType === 'assessor';
   const vendorType = jobData?.vendor_type || jobData?.vendor_source || 'BRT';
   const parsedCodeDefinitions = useMemo(() => jobData?.parsed_code_definitions || {}, [jobData?.parsed_code_definitions]);
 
@@ -304,13 +306,28 @@ const SalesReviewTab = ({
 
     // Default filter: Show only properties with sales data
     if (!showAllProperties) {
-      filtered = filtered.filter(p =>
-        p.sales_date !== null &&
-        p.sales_date !== undefined &&
-        p.values_norm_time !== null &&
-        p.values_norm_time !== undefined &&
-        p.values_norm_time > 0
-      );
+      if (isLojikTenant) {
+        // LOJIK: Show sales based on price and building class (no normalization required)
+        const VALID_SALES_CODES = ['0', '00', '07', '7', '32', '36'];
+        filtered = filtered.filter(p => {
+          if (!p.sales_date) return false;
+          if (!p.sales_price || p.sales_price <= 100) return false;
+          const bc = parseInt(p.asset_building_class) || 0;
+          if (bc <= 10) return false;
+          // Default to valid sales codes
+          const nuCode = p.normalizedSalesNu || '0';
+          return VALID_SALES_CODES.includes(nuCode);
+        });
+      } else {
+        // PPA: Require normalization values (existing behavior)
+        filtered = filtered.filter(p =>
+          p.sales_date !== null &&
+          p.sales_date !== undefined &&
+          p.values_norm_time !== null &&
+          p.values_norm_time !== undefined &&
+          p.values_norm_time > 0
+        );
+      }
     }
 
     // Sales NU filter (using normalized codes)
@@ -360,7 +377,7 @@ const SalesReviewTab = ({
     }
 
     return filtered;
-  }, [enrichedProperties, showAllProperties, showAllNormalizedSales, dateRange, salesNuFilter, vcsFilter, typeFilter, designFilter, periodFilter, viewFilter]);
+  }, [enrichedProperties, showAllProperties, showAllNormalizedSales, dateRange, salesNuFilter, vcsFilter, typeFilter, designFilter, periodFilter, viewFilter, isLojikTenant]);
 
   // Get unique normalized Sales NU codes for dropdown
   const uniqueSalesNuCodes = useMemo(() => {

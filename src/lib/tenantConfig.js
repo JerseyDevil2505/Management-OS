@@ -92,7 +92,7 @@ const TENANT_CONFIGS = {
     },
 
     behavior: {
-      autoNormalize: true,             // Auto-normalize after file upload
+      autoNormalize: false,            // No auto-normalize needed; Sales Review/CME use sales_price directly
       defaultJobTab: 'final-valuation',
     },
   },

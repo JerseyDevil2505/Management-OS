@@ -5,7 +5,8 @@ import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
 
-const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, isJobContainerLoading = false }) => {
+const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, isJobContainerLoading = false, tenantConfig = null }) => {
+  const isLojikTenant = tenantConfig?.orgType === 'assessor';
   // ==================== NESTED TAB STATE ====================
   const [activeSubTab, setActiveSubTab] = useState('search');
   const resultsRef = React.useRef(null);
@@ -1547,8 +1548,19 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     const cspStart = new Date(assessmentYear - 1, 9, 1);
     const cspEnd = new Date(assessmentYear, 11, 31);
 
+    const VALID_SALES_CODES = ['0', '00', '07', '7', '32', '36'];
+
     return properties.filter(p => {
-      if (!p.sales_date || !p.values_norm_time) return false;
+      if (!p.sales_date) return false;
+
+      // LOJIK: use sales_price instead of values_norm_time for eligibility
+      if (isLojikTenant) {
+        if (!p.sales_price || p.sales_price <= 100) return false;
+        const bc = parseInt(p.asset_building_class) || 0;
+        if (bc <= 10) return false;
+      } else {
+        if (!p.values_norm_time) return false;
+      }
 
       const saleDate = new Date(p.sales_date);
       const inCSP = saleDate >= cspStart && saleDate <= cspEnd;
@@ -1561,6 +1573,13 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       if (includeOverride === false) return false; // Manual exclude (even if in CSP)
 
       // Default: Include if in CSP period
+      // For LOJIK, also filter by valid default sales codes
+      if (isLojikTenant) {
+        const nuCode = String(p.sales_nu || '0').trim();
+        const normalizedNu = nuCode === '' || nuCode === '00' ? '0' : nuCode;
+        return inCSP && VALID_SALES_CODES.includes(normalizedNu);
+      }
+
       return inCSP;
     });
   };
