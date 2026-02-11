@@ -1348,14 +1348,14 @@ const App = () => {
                   <p className="text-lg font-semibold text-white">{selectedJob.job_name || selectedJob.name}</p>
                 </div>
                 
-                {/* File Upload Controls - Code File Only */}
+                {/* File Upload Controls - Full for LOJIK users, Code-only for PPA */}
                 <div className="border-l border-white border-opacity-30 pl-6">
                   <FileUploadButton
                     job={selectedJob}
                     onFileProcessed={handleFileProcessed}
                     onDataRefresh={handleFileProcessed}
                     onUpdateJobCache={handleJobDataRefresh}
-                    codeFileOnly={true}
+                    codeFileOnly={!isAssessorUser && isPpaJob(selectedJob)}
                   />
                 </div>
               </div>
