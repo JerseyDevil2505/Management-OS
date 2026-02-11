@@ -4,6 +4,7 @@ import {
   DollarSign, Trash2, CheckCircle, Archive, TrendingUp, Target, AlertTriangle, X, Clock, Download
 } from 'lucide-react';
 import { supabase, employeeService, jobService, planningJobService, utilityService, authService, propertyService, checklistService } from '../lib/supabaseClient';
+import { getJobTenantConfig } from '../lib/tenantConfig';
 import FileUploadButton from './job-modules/FileUploadButton';
 
 // Checklist template - must match ManagementChecklist.jsx
@@ -3202,6 +3203,7 @@ const AdminJobManagement = ({
                   }
                 }}
                 standalone={true}
+                tenantConfig={getJobTenantConfig(selectedJobForUpload)}
               />
             </div>
           </div>
