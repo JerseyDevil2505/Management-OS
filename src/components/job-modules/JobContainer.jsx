@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Building, Factory, TrendingUp, DollarSign, Database, AlertCircle, LineChart } from 'lucide-react';
 import { supabase, interpretCodes } from '../../lib/supabaseClient';
+import { PPA_ORG_ID, getJobTenantConfig, getLabel } from '../../lib/tenantConfig';
 import DataVisualizations from './DataVisualizations';
 import ManagementChecklist from './ManagementChecklist';
 import ProductionTracker from './ProductionTracker';
@@ -8,18 +9,18 @@ import InspectionInfo from './InspectionInfo';
 import MarketAnalysis from './MarketAnalysis';
 import FinalValuation from './FinalValuation';
 
-const PPA_ORG_ID = '00000000-0000-0000-0000-000000000001';
-
 // 🔧 ENHANCED: Accept App.js workflow state management props + file refresh trigger
 const JobContainer = ({
   selectedJob,
   onBackToJobs,
   workflowStats,
   onUpdateWorkflowStats,
-  fileRefreshTrigger
+  fileRefreshTrigger,
+  tenantConfig: tenantConfigProp
 }) => {
+  const jobTenantConfig = tenantConfigProp || getJobTenantConfig(selectedJob);
   const isClientJob = selectedJob?.organization_id && selectedJob.organization_id !== PPA_ORG_ID;
-  const [activeModule, setActiveModule] = useState(isClientJob ? 'final-valuation' : 'checklist');
+  const [activeModule, setActiveModule] = useState(jobTenantConfig.behavior.defaultJobTab);
   const [jobData, setJobData] = useState(null);
   const [latestFileVersion, setLatestFileVersion] = useState(1);
   const [latestCodeVersion, setLatestCodeVersion] = useState(1);
@@ -929,6 +930,7 @@ const JobContainer = ({
       checklistItems,  // NEW: Pass checklist items
       checklistStatus,  // NEW: Pass checklist status
       employees,  // NEW: Pass employees data
+      tenantConfig: jobTenantConfig,  // Tenant configuration for module behavior
       onBackToJobs,
       activeSubModule: activeModule,
       onSubModuleChange: setActiveModule,
@@ -1064,52 +1066,60 @@ const JobContainer = ({
     );
   }
 
-  const isAssessorJob = jobData?.organization_id && jobData.organization_id !== PPA_ORG_ID;
-
-  const modules = [
+  // Build module tabs based on tenant config
+  const allModules = [
     {
       id: 'visualizations',
       name: 'Data Visualizations',
       icon: LineChart,
       component: DataVisualizations,
-      description: 'Interactive charts and analytics'
+      description: 'Interactive charts and analytics',
+      configKey: 'dataVisualizations'
     },
     {
       id: 'checklist',
       name: 'Checklist',
       icon: Building,
       component: ManagementChecklist,
-      description: 'Project checklist and documentation'
+      description: 'Project checklist and documentation',
+      configKey: 'checklist'
     },
-    // Show ProductionTracker for PPA jobs, InspectionInfo for assessor jobs
-    ...(isAssessorJob ? [{
-      id: 'inspection-info',
-      name: 'Inspection Info',
-      icon: Database,
-      component: InspectionInfo,
-      description: 'Property inspection metrics and status'
-    }] : [{
+    {
       id: 'production',
-      name: 'ProductionTracker',
+      name: getLabel(jobTenantConfig, 'productionTab', 'ProductionTracker'),
       icon: Factory,
       component: ProductionTracker,
-      description: 'Analytics and validation engine'
-    }]),
+      description: 'Analytics and validation engine',
+      configKey: 'production'
+    },
+    {
+      id: 'inspection-info',
+      name: getLabel(jobTenantConfig, 'productionTab', 'Inspection Info'),
+      icon: Database,
+      component: InspectionInfo,
+      description: 'Property inspection metrics and status',
+      configKey: 'inspectionInfo'
+    },
     {
       id: 'market-analysis',
       name: 'Market & Land Analysis',
       icon: TrendingUp,
       component: MarketAnalysis,
-      description: 'Market analysis and land valuation'
+      description: 'Market analysis and land valuation',
+      configKey: 'marketAnalysis'
     },
     {
       id: 'final-valuation',
       name: 'Final Valuation',
       icon: DollarSign,
       component: FinalValuation,
-      description: 'Final property valuations'
+      description: 'Final property valuations',
+      configKey: 'finalValuation'
     }
   ];
+
+  // Filter modules based on tenant config
+  const modules = allModules.filter(m => jobTenantConfig.jobModules[m.configKey]);
 
   const activeModuleData = modules.find(m => m.id === activeModule);
   const ActiveComponent = activeModuleData?.component;

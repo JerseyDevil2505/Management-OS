@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from './lib/supabaseClient';
+import { PPA_ORG_ID, isPpaJob, getUserTenantConfig, getJobTenantConfig, getLabel } from './lib/tenantConfig';
 import './App.css'; 
 import AdminJobManagement from './components/AdminJobManagement';
 import EmployeeManagement from './components/EmployeeManagement';
@@ -170,9 +171,8 @@ const App = () => {
   const PRIMARY_OWNER_ID = '5df85ca3-7a54-4798-a665-c31da8d9caad';
   const canManageUsers = user?.id === PRIMARY_OWNER_ID;
 
-  // Non-PPA assessor detection - assessor org users get the simplified dashboard
-  const PPA_ORG_ID = '00000000-0000-0000-0000-000000000001';
-  const isPpaJob = (job) => !job.organization_id || job.organization_id === PPA_ORG_ID;
+  // Tenant configuration - determines module visibility, terminology, behavior
+  const tenantConfig = getUserTenantConfig(user);
   const userOrgId = user?.employeeData?.organization_id;
   const isRealAssessorUser = userOrgId && userOrgId !== PPA_ORG_ID;
   // When dev is using "View As", treat them as an assessor user
@@ -256,21 +256,28 @@ const App = () => {
     const role = user?.role?.toString?.().toLowerCase?.() || '';
     const isAdminLocal = role === 'admin' || role === 'owner';
     if ((view === 'billing' || view === 'payroll') && !isAdminLocal) {
-      setActiveView('employees');
-      window.history.pushState({}, '', '/employees');
+      setActiveView('admin-jobs');
+      window.history.pushState({}, '', '/admin-jobs');
+      return;
+    }
+    // Block modules disabled by tenant config
+    const moduleMap = { billing: 'billing', payroll: 'payroll', employees: 'employees', organizations: 'organizations' };
+    if (moduleMap[view] && !tenantConfig.modules[moduleMap[view]]) {
+      setActiveView('admin-jobs');
+      window.history.pushState({}, '', '/admin-jobs');
       return;
     }
     // Only primary owner can access users, organizations, and revenue
     if ((view === 'users' || view === 'organizations' || view === 'revenue') && user?.id !== PRIMARY_OWNER_ID) {
-      setActiveView('employees');
-      window.history.pushState({}, '', '/employees');
+      setActiveView('admin-jobs');
+      window.history.pushState({}, '', '/admin-jobs');
       return;
     }
 
     setActiveView(view);
     // Update URL without page reload
     window.history.pushState({}, '', `/${view}`);
-  }, [user]);
+  }, [user, tenantConfig]);
 
   // ==========================================
   // JOB FRESHNESS CALCULATOR
@@ -1184,7 +1191,7 @@ const App = () => {
                   backdropFilter: 'none'
                 } : {}}
               >
-                👥 Employees ({appData.employees.length})
+                👥 {getLabel(tenantConfig, 'employeesTab', 'Employees')} ({appData.employees.length})
               </button>
               <button
                 onClick={() => handleViewChange('admin-jobs')}
@@ -1216,7 +1223,7 @@ const App = () => {
               >
                 ⚖️ Appeal Coverage
               </button>
-              {isAdmin && (
+              {isAdmin && tenantConfig.modules.billing && (
                 <button
                   onClick={() => handleViewChange('billing')}
                   className={`px-4 py-2 rounded-xl font-medium text-sm border ${
@@ -1233,7 +1240,7 @@ const App = () => {
                   💰 Billing
                 </button>
               )}
-              {isAdmin && (
+              {isAdmin && tenantConfig.modules.payroll && (
                 <button
                   onClick={() => handleViewChange('payroll')}
                   className={`px-4 py-2 rounded-xl font-medium text-sm border ${
@@ -1281,7 +1288,7 @@ const App = () => {
                   backdropFilter: 'none'
                 } : {}}
               >
-                🏢 Organizations
+                🏢 {getLabel(tenantConfig, 'organizationsTab', 'Organizations')}
               </button>
               )}
               {canManageUsers && (
@@ -1505,6 +1512,7 @@ const App = () => {
               selectedJob={selectedJob}
               onBackToJobs={handleBackToJobs}
               onWorkflowStatsUpdate={handleWorkflowStatsUpdate}
+              tenantConfig={getJobTenantConfig(selectedJob)}
             />
           </div>
         )}
