@@ -172,6 +172,7 @@ const App = () => {
 
   // Non-PPA assessor detection - assessor org users get the simplified dashboard
   const PPA_ORG_ID = '00000000-0000-0000-0000-000000000001';
+  const isPpaJob = (job) => !job.organization_id || job.organization_id === PPA_ORG_ID;
   const userOrgId = user?.employeeData?.organization_id;
   const isRealAssessorUser = userOrgId && userOrgId !== PPA_ORG_ID;
   // When dev is using "View As", treat them as an assessor user
@@ -588,10 +589,12 @@ const App = () => {
           updates.distributions = distributionsData;
         }
 
-        // Calculate billing metrics
+        // Calculate billing metrics - only PPA jobs (exclude client/Lojik jobs)
+        const billingActiveJobs = (updates.activeJobs || appData.activeJobs)?.filter(isPpaJob);
+        const billingLegacyJobs = (updates.legacyJobs || appData.legacyJobs)?.filter(isPpaJob);
         updates.billingMetrics = calculateBillingMetrics(
-          updates.activeJobs || appData.activeJobs,
-          updates.legacyJobs || appData.legacyJobs,
+          billingActiveJobs,
+          billingLegacyJobs,
           updates.planningJobs || appData.planningJobs,
           updates.expenses || appData.expenses,
           updates.receivables || appData.receivables,
@@ -1400,8 +1403,8 @@ const App = () => {
 
         {activeView === 'billing' && (isAdmin ? (
           <BillingManagement
-            activeJobs={appData.activeJobs}
-            legacyJobs={appData.legacyJobs}
+            activeJobs={appData.activeJobs?.filter(isPpaJob)}
+            legacyJobs={appData.legacyJobs?.filter(isPpaJob)}
             planningJobs={appData.planningJobs}
             expenses={appData.expenses}
             receivables={appData.receivables}
@@ -1432,7 +1435,7 @@ const App = () => {
               ['active', 'part_time', 'full_time'].includes(e.employment_status) &&
               ['residential', 'management'].includes(e.inspector_type?.toLowerCase())
             )}
-            jobs={appData.jobs}
+            jobs={appData.jobs?.filter(isPpaJob)}
             archivedPeriods={appData.archivedPayrollPeriods}
             dataRecency={appData.dataRecency}
             onDataUpdate={updateDataSection}
