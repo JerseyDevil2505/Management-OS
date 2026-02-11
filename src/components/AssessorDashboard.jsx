@@ -95,7 +95,8 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
           county: job.county,
           vendor: job.vendor_type,
           ccddCode: job.ccdd_code,
-          totalProperties: job.total_properties || 0
+          totalProperties: job.total_properties || 0,
+          organization_id: job.organization_id
         });
         return;
       }
@@ -339,7 +340,8 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
       county: job.county,
       vendor: job.vendor_type,
       ccddCode: job.ccdd_code,
-      totalProperties: job.total_properties || 0
+      totalProperties: job.total_properties || 0,
+      organization_id: job.organization_id
     });
   };
 

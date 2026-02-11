@@ -19,7 +19,6 @@ const JobContainer = ({
   tenantConfig: tenantConfigProp
 }) => {
   const jobTenantConfig = tenantConfigProp || getJobTenantConfig(selectedJob);
-  const isClientJob = selectedJob?.organization_id && selectedJob.organization_id !== PPA_ORG_ID;
   const [activeModule, setActiveModule] = useState(jobTenantConfig.behavior.defaultJobTab);
   const [jobData, setJobData] = useState(null);
   const [latestFileVersion, setLatestFileVersion] = useState(1);
@@ -58,11 +57,14 @@ const JobContainer = ({
   const pendingRefreshRef = useRef(false);
 
   // Load latest file versions and properties
+  // Reset active module to tenant default when job changes
   useEffect(() => {
     if (selectedJob) {
+      const config = tenantConfigProp || getJobTenantConfig(selectedJob);
+      setActiveModule(config.behavior.defaultJobTab);
       loadLatestFileVersions();
     }
-  }, [selectedJob]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedJob?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // NEW: Refresh when App.js signals file processing completion
   useEffect(() => {
