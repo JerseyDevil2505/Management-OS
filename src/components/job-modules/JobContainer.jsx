@@ -1226,9 +1226,9 @@ const JobContainer = ({
                     Assigned Properties Only
                   </span>
                 )}
-                {!versionError && jobData?.source_file_uploaded_at && (
+                {!versionError && (jobData?.source_file_uploaded_at || jobData?.updated_at || jobData?.created_at) && (
                   <span className="text-sm text-blue-600">
-                    • Last Updated: {new Date(jobData.source_file_uploaded_at).toLocaleDateString('en-US', {
+                    • Last Updated: {new Date(jobData.source_file_uploaded_at || jobData.updated_at || jobData.created_at).toLocaleDateString('en-US', {
                       month: 'short',
                       day: 'numeric',
                       year: 'numeric',

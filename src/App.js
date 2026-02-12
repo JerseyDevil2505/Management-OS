@@ -1374,12 +1374,22 @@ const App = () => {
                 </div>
               </div>
               
-              <button
-                onClick={handleBackToJobs}
-                className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
-              >
-                ← Back to Jobs
-              </button>
+              <div className="flex items-center gap-2">
+                {viewingAs && (
+                  <button
+                    onClick={handleExitViewAs}
+                    className="px-4 py-2 bg-purple-500 bg-opacity-80 hover:bg-opacity-100 backdrop-blur-sm rounded-lg text-white font-medium text-sm transition-all duration-200"
+                  >
+                    Exit View As
+                  </button>
+                )}
+                <button
+                  onClick={handleBackToJobs}
+                  className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm rounded-lg text-white font-medium transition-all duration-200"
+                >
+                  ← Back to Jobs
+                </button>
+              </div>
             </div>
           )}
         </div>

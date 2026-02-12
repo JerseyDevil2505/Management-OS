@@ -87,17 +87,7 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
       // If single_job_mode and has a job, go straight to it
       if (org?.single_job_mode && jobs?.length > 0) {
         const job = jobs[0];
-        onJobSelect({
-          id: job.id,
-          name: job.job_name,
-          job_name: job.job_name,
-          municipality: job.municipality,
-          county: job.county,
-          vendor: job.vendor_type,
-          ccddCode: job.ccdd_code,
-          totalProperties: job.total_properties || 0,
-          organization_id: job.organization_id
-        });
+        onJobSelect(job);
         return;
       }
 
@@ -332,17 +322,7 @@ const AssessorDashboard = ({ user, onJobSelect, onDataUpdate }) => {
   };
 
   const handleJobClick = (job) => {
-    onJobSelect({
-      id: job.id,
-      name: job.job_name,
-      job_name: job.job_name,
-      municipality: job.municipality,
-      county: job.county,
-      vendor: job.vendor_type,
-      ccddCode: job.ccdd_code,
-      totalProperties: job.total_properties || 0,
-      organization_id: job.organization_id
-    });
+    onJobSelect(job);
   };
 
   const formatDate = (dateStr) => {

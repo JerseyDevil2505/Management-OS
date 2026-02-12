@@ -110,6 +110,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   const [salesPoolSort, setSalesPoolSort] = useState({ field: 'sales_date', dir: 'desc' });
   const [salesPoolSearch, setSalesPoolSearch] = useState('');
   const [poolAnalyticsExpanded, setPoolAnalyticsExpanded] = useState({ vcs: false, style: false, typeUse: false, view: false });
+  // Pool display filters (filter the table view, not inclusion logic)
+  const [poolFilterVCS, setPoolFilterVCS] = useState([]);
+  const [poolFilterType, setPoolFilterType] = useState([]);
+  const [poolFilterStyle, setPoolFilterStyle] = useState([]);
+  const [poolFilterView, setPoolFilterView] = useState([]);
 
   const vendorType = jobData?.vendor_type || 'BRT';
 
@@ -635,6 +640,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   }, [allSalesCandidates, compFilters.salesDateStart, compFilters.salesDateEnd, compFilters.salesCodes, salesPoolOverrides, normalizeSalesCode]);
 
   const includedSalesCount = useMemo(() => salesPoolEntries.filter(e => e._included).length, [salesPoolEntries]);
+
+  // Unique values from pool candidates for filter dropdowns
+  const poolUniqueVCS = useMemo(() => [...new Set(allSalesCandidates.map(p => p.property_vcs).filter(Boolean))].sort(), [allSalesCandidates]);
+  const poolUniqueTypes = useMemo(() => [...new Set(allSalesCandidates.map(p => p.asset_type_use).filter(Boolean))].sort(), [allSalesCandidates]);
+  const poolUniqueStyles = useMemo(() => [...new Set(allSalesCandidates.map(p => p.asset_design_style).filter(Boolean))].sort(), [allSalesCandidates]);
+  const poolUniqueViews = useMemo(() => [...new Set(allSalesCandidates.map(p => p.asset_view).filter(Boolean))].sort(), [allSalesCandidates]);
 
   // ==================== SALES POOL ANALYTICS ====================
   const includedPoolSales = useMemo(() => salesPoolEntries.filter(e => e._included), [salesPoolEntries]);
@@ -2700,60 +2711,108 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
               </div>
 
               {/* Filters Row */}
-              <div className="flex flex-wrap items-end gap-4 mb-4 pb-4 border-b border-gray-200">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Sales Date From</label>
-                  <input
-                    type="date"
-                    value={compFilters.salesDateStart}
-                    onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateStart: e.target.value }))}
-                    className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Sales Date To</label>
-                  <input
-                    type="date"
-                    value={compFilters.salesDateEnd}
-                    onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateEnd: e.target.value }))}
-                    className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Sales Codes</label>
-                  <div className="flex flex-wrap gap-1">
-                    {uniqueSalesCodes.map(code => {
-                      const isActive = compFilters.salesCodes.includes(code);
-                      return (
-                        <button
-                          key={code}
-                          onClick={() => toggleCompFilterChip('salesCodes')(code)}
-                          className={`px-2 py-0.5 text-xs rounded-full border ${
-                            isActive
-                              ? 'bg-blue-100 border-blue-300 text-blue-800'
-                              : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
-                          }`}
-                        >
+              <div className="space-y-3 mb-4 pb-4 border-b border-gray-200">
+                {/* Row 1: Date range + Sales Codes + Search */}
+                <div className="flex flex-wrap items-end gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Sales Date From</label>
+                    <input type="date" value={compFilters.salesDateStart} onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateStart: e.target.value }))} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Sales Date To</label>
+                    <input type="date" value={compFilters.salesDateEnd} onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateEnd: e.target.value }))} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Sales Codes</label>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {compFilters.salesCodes.map(code => (
+                        <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-blue-100 border border-blue-300 text-blue-800">
                           {code || '00'}
-                        </button>
-                      );
-                    })}
+                          <button onClick={() => toggleCompFilterChip('salesCodes')(code)} className="hover:text-blue-900"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                      <select value="" onChange={(e) => { if (e.target.value && !compFilters.salesCodes.includes(e.target.value)) toggleCompFilterChip('salesCodes')(e.target.value); }} className="px-1 py-0.5 text-xs border border-gray-300 rounded">
+                        <option value="">+ Code</option>
+                        {uniqueSalesCodes.filter(c => !compFilters.salesCodes.includes(c)).map(code => (
+                          <option key={code} value={code}>{code || '00'}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 ml-auto">
+                    <input type="text" placeholder="Search block/lot/address..." value={salesPoolSearch} onChange={(e) => setSalesPoolSearch(e.target.value)} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 w-48" />
+                    {Object.keys(salesPoolOverrides).length > 0 && (
+                      <button onClick={() => setSalesPoolOverrides({})} className="px-2 py-1.5 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded hover:bg-orange-100">
+                        Clear overrides ({Object.keys(salesPoolOverrides).length})
+                      </button>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 ml-auto">
-                  <input
-                    type="text"
-                    placeholder="Search block/lot/address..."
-                    value={salesPoolSearch}
-                    onChange={(e) => setSalesPoolSearch(e.target.value)}
-                    className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 w-48"
-                  />
-                  {Object.keys(salesPoolOverrides).length > 0 && (
-                    <button
-                      onClick={() => setSalesPoolOverrides({})}
-                      className="px-2 py-1.5 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded hover:bg-orange-100"
-                    >
-                      Clear overrides ({Object.keys(salesPoolOverrides).length})
+                {/* Row 2: Display filters - VCS, Type/Use, Style, View */}
+                <div className="flex flex-wrap items-end gap-4">
+                  {/* VCS Filter */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">VCS</label>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {poolFilterVCS.map(v => (
+                        <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-100 border border-green-300 text-green-800">
+                          {v}<button onClick={() => setPoolFilterVCS(prev => prev.filter(x => x !== v))} className="hover:text-green-900"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                      <select value="" onChange={(e) => { if (e.target.value) setPoolFilterVCS(prev => [...prev, e.target.value]); }} className="px-1 py-0.5 text-xs border border-gray-300 rounded">
+                        <option value="">+ VCS</option>
+                        {poolUniqueVCS.filter(v => !poolFilterVCS.includes(v)).map(v => (<option key={v} value={v}>{v}</option>))}
+                      </select>
+                    </div>
+                  </div>
+                  {/* Type/Use Filter */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Type/Use</label>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {poolFilterType.map(v => (
+                        <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-purple-100 border border-purple-300 text-purple-800">
+                          {v}<button onClick={() => setPoolFilterType(prev => prev.filter(x => x !== v))} className="hover:text-purple-900"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                      <select value="" onChange={(e) => { if (e.target.value) setPoolFilterType(prev => [...prev, e.target.value]); }} className="px-1 py-0.5 text-xs border border-gray-300 rounded">
+                        <option value="">+ Type</option>
+                        {poolUniqueTypes.filter(v => !poolFilterType.includes(v)).map(v => (<option key={v} value={v}>{v}</option>))}
+                      </select>
+                    </div>
+                  </div>
+                  {/* Style Filter */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Design/Style</label>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {poolFilterStyle.map(v => (
+                        <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-orange-100 border border-orange-300 text-orange-800">
+                          {v}<button onClick={() => setPoolFilterStyle(prev => prev.filter(x => x !== v))} className="hover:text-orange-900"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                      <select value="" onChange={(e) => { if (e.target.value) setPoolFilterStyle(prev => [...prev, e.target.value]); }} className="px-1 py-0.5 text-xs border border-gray-300 rounded">
+                        <option value="">+ Style</option>
+                        {poolUniqueStyles.filter(v => !poolFilterStyle.includes(v)).map(v => (<option key={v} value={v}>{v}</option>))}
+                      </select>
+                    </div>
+                  </div>
+                  {/* View Filter */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">View</label>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {poolFilterView.map(v => (
+                        <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-pink-100 border border-pink-300 text-pink-800">
+                          {v}<button onClick={() => setPoolFilterView(prev => prev.filter(x => x !== v))} className="hover:text-pink-900"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                      <select value="" onChange={(e) => { if (e.target.value) setPoolFilterView(prev => [...prev, e.target.value]); }} className="px-1 py-0.5 text-xs border border-gray-300 rounded">
+                        <option value="">+ View</option>
+                        {poolUniqueViews.filter(v => !poolFilterView.includes(v)).map(v => (<option key={v} value={v}>{v}</option>))}
+                      </select>
+                    </div>
+                  </div>
+                  {(poolFilterVCS.length > 0 || poolFilterType.length > 0 || poolFilterStyle.length > 0 || poolFilterView.length > 0) && (
+                    <button onClick={() => { setPoolFilterVCS([]); setPoolFilterType([]); setPoolFilterStyle([]); setPoolFilterView([]); }} className="px-2 py-1 text-xs text-gray-600 bg-gray-100 border border-gray-200 rounded hover:bg-gray-200">
+                      Clear filters
                     </button>
                   )}
                 </div>
@@ -2764,41 +2823,44 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 <table className="min-w-full text-xs">
                   <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr>
-                      <th className="px-2 py-2 text-center font-medium text-gray-600 w-16">Include</th>
-                      <th
-                        className="px-2 py-2 text-left font-medium text-gray-600 cursor-pointer hover:text-blue-600"
-                        onClick={() => setSalesPoolSort(prev => ({
-                          field: 'property_block',
-                          dir: prev.field === 'property_block' && prev.dir === 'asc' ? 'desc' : 'asc'
-                        }))}
-                      >
-                        Block {salesPoolSort.field === 'property_block' ? (salesPoolSort.dir === 'asc' ? '▲' : '▼') : ''}
-                      </th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-600">Lot</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-600">Qual</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-600">Location</th>
-                      <th
-                        className="px-2 py-2 text-left font-medium text-gray-600 cursor-pointer hover:text-blue-600"
-                        onClick={() => setSalesPoolSort(prev => ({
-                          field: 'sales_date',
-                          dir: prev.field === 'sales_date' && prev.dir === 'desc' ? 'asc' : 'desc'
-                        }))}
-                      >
-                        Sale Date {salesPoolSort.field === 'sales_date' ? (salesPoolSort.dir === 'asc' ? '▲' : '▼') : ''}
-                      </th>
-                      <th
-                        className="px-2 py-2 text-right font-medium text-gray-600 cursor-pointer hover:text-blue-600"
-                        onClick={() => setSalesPoolSort(prev => ({
-                          field: 'sales_price',
-                          dir: prev.field === 'sales_price' && prev.dir === 'desc' ? 'asc' : 'desc'
-                        }))}
-                      >
-                        Sale Price {salesPoolSort.field === 'sales_price' ? (salesPoolSort.dir === 'asc' ? '▲' : '▼') : ''}
-                      </th>
-                      <th className="px-2 py-2 text-center font-medium text-gray-600">NU Code</th>
-                      <th className="px-2 py-2 text-center font-medium text-gray-600">Bldg Class</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-600">VCS</th>
-                      <th className="px-2 py-2 text-left font-medium text-gray-600">Type/Use</th>
+                      {(() => {
+                        const SortTh = ({ field, label, align = 'left' }) => (
+                          <th
+                            className={`px-2 py-2 font-medium text-gray-600 cursor-pointer hover:text-blue-600 select-none ${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}`}
+                            onClick={() => setSalesPoolSort(prev => ({ field, dir: prev.field === field && prev.dir === 'asc' ? 'desc' : 'asc' }))}
+                          >
+                            {label} {salesPoolSort.field === field ? (salesPoolSort.dir === 'asc' ? '▲' : '▼') : ''}
+                          </th>
+                        );
+                        return (
+                          <>
+                            <th className="px-2 py-2 text-center font-medium text-gray-600 w-20">Use</th>
+                            <SortTh field="property_block" label="Block" />
+                            <SortTh field="property_lot" label="Lot" />
+                            <SortTh field="property_qualifier" label="Qual" />
+                            <SortTh field="property_location" label="Address" />
+                            <SortTh field="property_vcs" label="VCS" />
+                            <SortTh field="asset_type_use" label="Type/Use" />
+                            <SortTh field="asset_design_style" label="Design/Style" />
+                            <SortTh field="asset_building_class" label="Bldg Class" align="center" />
+                            <SortTh field="asset_year_built" label="Yr Built" align="right" />
+                            <SortTh field="sales_date" label="Sale Date" />
+                            <SortTh field="sales_nu" label="NU" align="center" />
+                            <SortTh field="sales_price" label="Sale Price" align="right" />
+                            <SortTh field="asset_sfla" label="SFLA" align="right" />
+                            <th className="px-2 py-2 text-right font-medium text-gray-600 cursor-pointer hover:text-blue-600 select-none" onClick={() => setSalesPoolSort(prev => ({ field: '_ppsf', dir: prev.field === '_ppsf' && prev.dir === 'asc' ? 'desc' : 'asc' }))}>
+                              PPSF {salesPoolSort.field === '_ppsf' ? (salesPoolSort.dir === 'asc' ? '▲' : '▼') : ''}
+                            </th>
+                            <SortTh field="asset_lot_acre" label="Lot Acre" align="right" />
+                            <SortTh field="asset_lot_sf" label="Lot SF" align="right" />
+                            <SortTh field="asset_lot_frontage" label="Lot FF" align="right" />
+                            <th className="px-2 py-2 text-right font-medium text-gray-600 cursor-pointer hover:text-blue-600 select-none" onClick={() => setSalesPoolSort(prev => ({ field: '_salesRatio', dir: prev.field === '_salesRatio' && prev.dir === 'asc' ? 'desc' : 'asc' }))}>
+                              Sales Ratio {salesPoolSort.field === '_salesRatio' ? (salesPoolSort.dir === 'asc' ? '▲' : '▼') : ''}
+                            </th>
+                            <SortTh field="asset_view" label="View" />
+                          </>
+                        );
+                      })()}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -2815,23 +2877,37 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                         );
                       }
 
+                      // Display filters
+                      if (poolFilterVCS.length > 0) displayed = displayed.filter(p => poolFilterVCS.includes(p.property_vcs));
+                      if (poolFilterType.length > 0) displayed = displayed.filter(p => poolFilterType.includes(p.asset_type_use));
+                      if (poolFilterStyle.length > 0) displayed = displayed.filter(p => poolFilterStyle.includes(p.asset_design_style));
+                      if (poolFilterView.length > 0) displayed = displayed.filter(p => poolFilterView.includes(p.asset_view));
+
+                      // Compute derived fields for sorting
+                      displayed = displayed.map(p => ({
+                        ...p,
+                        _ppsf: p.sales_price && p.asset_sfla > 0 ? p.sales_price / p.asset_sfla : 0,
+                        _salesRatio: p.values_norm_time && p.values_norm_time > 0 && p.values_mod_total ? (p.values_mod_total / p.values_norm_time) * 100 : 0,
+                      }));
+
                       // Sort
                       displayed.sort((a, b) => {
                         const dir = salesPoolSort.dir === 'asc' ? 1 : -1;
                         const field = salesPoolSort.field;
-                        const aVal = a[field] || '';
-                        const bVal = b[field] || '';
-                        if (field === 'sales_price') {
+                        const aVal = a[field];
+                        const bVal = b[field];
+                        // Numeric fields
+                        if (['sales_price', 'asset_sfla', 'asset_year_built', 'asset_lot_acre', 'asset_lot_sf', 'asset_lot_frontage', '_ppsf', '_salesRatio', 'asset_building_class'].includes(field)) {
                           return ((parseFloat(aVal) || 0) - (parseFloat(bVal) || 0)) * dir;
                         }
-                        return String(aVal).localeCompare(String(bVal)) * dir;
+                        return String(aVal || '').localeCompare(String(bVal || '')) * dir;
                       });
 
                       if (displayed.length === 0) {
                         return (
                           <tr>
-                            <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
-                              No sales match the current date range and code filters.
+                            <td colSpan={21} className="px-4 py-8 text-center text-gray-500">
+                              No sales match the current filters.
                             </td>
                           </tr>
                         );
@@ -2840,53 +2916,63 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       return displayed.map((p, idx) => {
                         const key = p._poolKey;
                         const included = p._included;
-                        const hasOverride = p._override !== undefined;
 
                         return (
                           <tr
                             key={key + '-' + idx}
-                            className={`${included ? 'bg-white' : 'bg-gray-50 text-gray-400'} hover:bg-blue-50 transition-colors`}
+                            className={`${included ? 'bg-green-50' : ''} hover:bg-blue-50 transition-colors`}
                           >
                             <td className="px-2 py-1.5 text-center">
-                              <button
-                                onClick={() => {
-                                  setSalesPoolOverrides(prev => {
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => setSalesPoolOverrides(prev => {
                                     const next = { ...prev };
-                                    if (next[key] === undefined) {
-                                      // Currently auto — force opposite of auto state
-                                      next[key] = !p._autoIncluded;
-                                    } else if (next[key] === true) {
-                                      // Force included → force exclude
-                                      next[key] = false;
-                                    } else {
-                                      // Force excluded → back to auto
-                                      delete next[key];
-                                    }
+                                    if (next[key] === true) { delete next[key]; } else { next[key] = true; }
                                     return next;
-                                  });
-                                }}
-                                className="p-0.5"
-                                title={hasOverride ? (included ? 'Force included (click to exclude)' : 'Force excluded (click to reset)') : (included ? 'Auto-included (click to exclude)' : 'Auto-excluded (click to include)')}
-                              >
-                                {included ? (
-                                  <CheckCircle className={`w-4 h-4 ${hasOverride ? 'text-green-600' : 'text-green-400'}`} />
-                                ) : (
-                                  <XCircle className={`w-4 h-4 ${hasOverride ? 'text-red-500' : 'text-gray-300'}`} />
-                                )}
-                              </button>
+                                  })}
+                                  className={`p-0.5 rounded ${included ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400 hover:bg-green-200'}`}
+                                  title="Include in pool"
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => setSalesPoolOverrides(prev => {
+                                    const next = { ...prev };
+                                    if (next[key] === false) { delete next[key]; } else { next[key] = false; }
+                                    return next;
+                                  })}
+                                  className={`p-0.5 rounded ${p._override === false ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-400 hover:bg-red-200'}`}
+                                  title="Exclude from pool"
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                </button>
+                              </div>
                             </td>
                             <td className="px-2 py-1.5">{p.property_block}</td>
                             <td className="px-2 py-1.5">{p.property_lot}</td>
                             <td className="px-2 py-1.5">{p.property_qualifier || ''}</td>
                             <td className="px-2 py-1.5 truncate max-w-[180px]">{p.property_location || ''}</td>
+                            <td className="px-2 py-1.5">{p.property_vcs || ''}</td>
+                            <td className="px-2 py-1.5">{p.asset_type_use || ''}</td>
+                            <td className="px-2 py-1.5">{p.asset_design_style || ''}</td>
+                            <td className="px-2 py-1.5 text-center">{p.asset_building_class || ''}</td>
+                            <td className="px-2 py-1.5 text-right">{p.asset_year_built || ''}</td>
                             <td className="px-2 py-1.5">{p.sales_date || ''}</td>
+                            <td className="px-2 py-1.5 text-center">{p.sales_nu || '00'}</td>
                             <td className="px-2 py-1.5 text-right font-mono">
                               {p.sales_price ? `$${Number(p.sales_price).toLocaleString()}` : '-'}
                             </td>
-                            <td className="px-2 py-1.5 text-center">{p.sales_nu || '00'}</td>
-                            <td className="px-2 py-1.5 text-center">{p.asset_building_class || ''}</td>
-                            <td className="px-2 py-1.5">{p.property_vcs || ''}</td>
-                            <td className="px-2 py-1.5">{p.asset_type_use || ''}</td>
+                            <td className="px-2 py-1.5 text-right">{p.asset_sfla ? Number(p.asset_sfla).toLocaleString() : '-'}</td>
+                            <td className="px-2 py-1.5 text-right font-mono">
+                              {p._ppsf > 0 ? `$${p._ppsf.toFixed(0)}` : '-'}
+                            </td>
+                            <td className="px-2 py-1.5 text-right">{p.asset_lot_acre ? Number(p.asset_lot_acre).toFixed(2) : '-'}</td>
+                            <td className="px-2 py-1.5 text-right">{p.asset_lot_sf ? Number(p.asset_lot_sf).toLocaleString() : '-'}</td>
+                            <td className="px-2 py-1.5 text-right">{p.asset_lot_frontage || '-'}</td>
+                            <td className="px-2 py-1.5 text-right font-mono">
+                              {p._salesRatio > 0 ? `${p._salesRatio.toFixed(1)}%` : '-'}
+                            </td>
+                            <td className="px-2 py-1.5">{p.asset_view || ''}</td>
                           </tr>
                         );
                       });
@@ -2897,11 +2983,9 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
               {/* Legend */}
               <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
-                <span className="flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5 text-green-400" /> Auto-included</span>
-                <span className="flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5 text-green-600" /> Force included</span>
-                <span className="flex items-center gap-1"><XCircle className="w-3.5 h-3.5 text-gray-300" /> Auto-excluded</span>
-                <span className="flex items-center gap-1"><XCircle className="w-3.5 h-3.5 text-red-500" /> Force excluded</span>
-                <span className="ml-auto">Click icon to cycle: auto → force → reset</span>
+                <span className="flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5 text-green-500" /> Include</span>
+                <span className="flex items-center gap-1"><XCircle className="w-3.5 h-3.5 text-red-500" /> Exclude</span>
+                <span>Green row = included in pool</span>
               </div>
             </div>
           </div>
