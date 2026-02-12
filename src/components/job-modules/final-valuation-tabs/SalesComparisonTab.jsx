@@ -598,7 +598,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       return;
     }
 
-    const compositeKey = `${manualBlockLot.block}-${manualBlockLot.lot}-${manualBlockLot.qualifier || ''}`;
+    const compositeKey = `${manualBlockLot.block}-${manualBlockLot.lot}${manualBlockLot.qualifier ? `-${manualBlockLot.qualifier}` : ''}`;
     
     if (manualProperties.includes(compositeKey)) {
       alert('This property is already added');
@@ -949,10 +949,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
       let subjects = [];
 
       if (manualProperties.length > 0) {
-        // Use manually entered properties (still enforce building_class > 10)
-        subjects = properties.filter(p =>
-          manualProperties.includes(p.property_composite_key) && isResidentialProperty(p)
-        );
+        // Use manually entered properties (match by block/lot/qualifier, same as detailed tab)
+        subjects = properties.filter(p => {
+          if (!isResidentialProperty(p)) return false;
+          return manualProperties.some(key => {
+            const parts = key.split('-');
+            const block = (parts[0] || '').trim().toUpperCase();
+            const lot = (parts[1] || '').trim().toUpperCase();
+            const qual = (parts[2] || '').trim().toUpperCase();
+            const blockMatch = (p.property_block || '').trim().toUpperCase() === block;
+            const lotMatch = (p.property_lot || '').trim().toUpperCase() === lot;
+            const qualMatch = (p.property_qualifier || '').trim().toUpperCase() === qual;
+            return blockMatch && lotMatch && qualMatch;
+          });
+        });
       } else {
         // Use VCS + Type/Use filters
         subjects = properties.filter(p => {
