@@ -3357,31 +3357,29 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 Which comparables do you want to use?
               </h3>
 
-              {/* Row 1: Sales Codes + Sales Between */}
-              <div className="grid grid-cols-2 gap-8 mb-4">
+              {/* Row 1: Sales Codes + Sales Between (centered) */}
+              <div className="flex flex-wrap items-start justify-center gap-8 mb-4">
                 {/* Sales Codes - Dropdown with chips */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Sales Codes</label>
-                  <select
-                    value=""
-                    onChange={(e) => { if (e.target.value) toggleCompFilterChip('salesCodes')(e.target.value); }}
-                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                  >
-                    <option value="">Select code...</option>
-                    {uniqueSalesCodes.map(code => (
-                      <option key={code} value={code}>{code || '(blank)'}</option>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {compFilters.salesCodes.map(code => (
+                      <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs">
+                        {code || '(blank)'}
+                        <button onClick={() => toggleCompFilterChip('salesCodes')(code)} className="text-blue-600 hover:text-blue-800"><X className="w-3 h-3" /></button>
+                      </span>
                     ))}
-                  </select>
-                  {compFilters.salesCodes.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {compFilters.salesCodes.map(code => (
-                        <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
-                          {code || '(blank)'}
-                          <button onClick={() => toggleCompFilterChip('salesCodes')(code)} className="text-blue-600 hover:text-blue-800"><X className="w-3 h-3" /></button>
-                        </span>
+                    <select
+                      value=""
+                      onChange={(e) => { if (e.target.value) toggleCompFilterChip('salesCodes')(e.target.value); }}
+                      className="px-1 py-0.5 text-xs border border-gray-300 rounded w-20"
+                    >
+                      <option value="">+ Code</option>
+                      {uniqueSalesCodes.filter(c => !compFilters.salesCodes.includes(c)).map(code => (
+                        <option key={code} value={code}>{code || '(blank)'}</option>
                       ))}
-                    </div>
-                  )}
+                    </select>
+                  </div>
                   <p className="text-xs text-gray-500 mt-1">Can select multiple sales codes. Blank for all</p>
                 </div>
                 {/* Sales Between */}
