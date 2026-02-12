@@ -627,6 +627,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
       const included = override === true ? true : override === false ? false : autoIncluded;
 
+      // Detect farm/package sales
+      const packageData = interpretCodes.getPackageSaleData(properties, p);
+      const isFarm = packageData?.is_farm_package || p.property_m4_class === '3A';
+      const isPackage = packageData && (packageData.is_additional_card || packageData.is_multi_property_package);
+
       return {
         ...p,
         _poolKey: key,
@@ -635,9 +640,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         _included: included,
         _inDateRange: inDateRange,
         _codeMatch: codeMatch,
+        _isFarm: isFarm,
+        _isPackage: isPackage,
+        _packageData: packageData,
       };
     });
-  }, [allSalesCandidates, compFilters.salesDateStart, compFilters.salesDateEnd, compFilters.salesCodes, salesPoolOverrides, normalizeSalesCode]);
+  }, [allSalesCandidates, compFilters.salesDateStart, compFilters.salesDateEnd, compFilters.salesCodes, salesPoolOverrides, normalizeSalesCode, properties]);
 
   const includedSalesCount = useMemo(() => salesPoolEntries.filter(e => e._included).length, [salesPoolEntries]);
 
@@ -1392,10 +1400,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
               return false;
             }
           } else {
-            const yearDiff = Math.abs((comp.asset_year_built || 0) - (subject.asset_year_built || 0));
+            // Normalize pre-1925 year built to 1925 for comparison purposes only.
+            // Historic homes (1790, 1850, 1910, etc.) are all treated as 1925 so they can match each other.
+            const YEAR_FLOOR = 1925;
+            const normalizedCompYear = Math.max(comp.asset_year_built || 0, YEAR_FLOOR);
+            const normalizedSubjectYear = Math.max(subject.asset_year_built || 0, YEAR_FLOOR);
+            const yearDiff = Math.abs(normalizedCompYear - normalizedSubjectYear);
             if (yearDiff > compFilters.builtWithinYears) {
               if (isFirstProperty) debugFilters.yearBuilt++;
-              logExclusion('year built', `diff=${yearDiff} > limit=${compFilters.builtWithinYears} (comp=${comp.asset_year_built}, subject=${subject.asset_year_built})`);
+              logExclusion('year built', `diff=${yearDiff} > limit=${compFilters.builtWithinYears} (comp=${comp.asset_year_built}→${normalizedCompYear}, subject=${subject.asset_year_built}→${normalizedSubjectYear})`);
               return false;
             }
           }
@@ -2580,7 +2593,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         {/* SALES POOL TAB */}
         {activeSubTab === 'sales-pool' && (
           <div className="space-y-4">
-            <div className="bg-white border border-gray-300 rounded-lg p-4">
+            <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-3">
                 Sales Pool
                 <span className="ml-2 text-sm font-normal text-gray-500">
@@ -2852,7 +2865,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
               </div>
 
               {/* Sales Table */}
-              <div className="overflow-auto max-h-[500px]">
+              <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '70vh' }}>
                 <table className="min-w-full text-xs">
                   <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr>
@@ -2990,7 +3003,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                                 </button>
                               </div>
                             </td>
-                            <td className="px-2 py-1.5">{p.property_vcs || ''}</td>
+                            <td className="px-2 py-1.5 whitespace-nowrap">
+                              {p.property_vcs || ''}
+                              {p._isFarm && <span className="ml-1 px-1 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800 rounded" title="Farm Sale">FARM</span>}
+                              {p._isPackage && !p._isFarm && <span className="ml-1 px-1 py-0.5 text-[10px] font-medium bg-violet-100 text-violet-800 rounded" title="Package Sale">PKG</span>}
+                            </td>
                             <td className="px-2 py-1.5">{p.property_block}</td>
                             <td className="px-2 py-1.5">{p.property_lot}</td>
                             <td className="px-2 py-1.5">{p.property_qualifier || ''}</td>
@@ -3029,6 +3046,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 <span className="flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5 text-green-500" /> Include</span>
                 <span className="flex items-center gap-1"><XCircle className="w-3.5 h-3.5 text-red-500" /> Exclude</span>
                 <span>Green row = included in pool</span>
+                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded">FARM</span>
+                <span className="px-1.5 py-0.5 bg-violet-100 text-violet-800 rounded">PKG</span>
               </div>
             </div>
           </div>
