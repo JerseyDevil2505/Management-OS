@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, interpretCodes, getRawDataForJob } from '../../../lib/supabaseClient';
-import { Search, X, Upload, Sliders, FileText, BarChart3, Download } from 'lucide-react';
+import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
@@ -25,12 +25,14 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   // Calculate CSP date range on mount
   const getCSPDateRange = useCallback(() => {
     if (!jobData?.end_date) return { start: '', end: '' };
-    const assessmentYear = new Date(jobData.end_date).getFullYear();
+    const rawYear = new Date(jobData.end_date).getFullYear();
+    // LOJIK: assessment year is prior year (end_date is the job end, not assessment date)
+    const assessmentYear = isLojikTenant ? rawYear - 1 : rawYear;
     return {
-      start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0], // 10/1 prior-prior year
-      end: new Date(assessmentYear, 11, 31).toISOString().split('T')[0] // 12/31 prior year
+      start: new Date(assessmentYear - 1, 9, 1).toISOString().split('T')[0], // 10/1 prior year
+      end: new Date(assessmentYear, 11, 31).toISOString().split('T')[0] // 12/31 assessment year
     };
-  }, [jobData?.end_date]);
+  }, [jobData?.end_date, isLojikTenant]);
 
   const cspDateRange = useMemo(() => getCSPDateRange(), [getCSPDateRange]);
 
@@ -102,6 +104,11 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   ]);
   const [manualEvaluationResult, setManualEvaluationResult] = useState(null);
   const [isManualEvaluating, setIsManualEvaluating] = useState(false);
+
+  // ==================== SALES POOL STATE ====================
+  const [salesPoolOverrides, setSalesPoolOverrides] = useState({}); // { compositeKey: true/false }
+  const [salesPoolSort, setSalesPoolSort] = useState({ field: 'sales_date', dir: 'desc' });
+  const [salesPoolSearch, setSalesPoolSearch] = useState('');
 
   const vendorType = jobData?.vendor_type || 'BRT';
 
@@ -568,6 +575,66 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     return Array.from(viewSet).sort();
   }, [properties]);
 
+  // ==================== SALES POOL (ALL CANDIDATE SALES) ====================
+  // Get all properties that have sales data (before date/code filtering)
+  const allSalesCandidates = useMemo(() => {
+    // Only show main card properties (avoid duplicate cards)
+    const seen = new Set();
+    return properties.filter(p => {
+      if (!p.sales_date) return false;
+      // Deduplicate by block-lot-qualifier
+      const baseKey = `${p.property_block || ''}-${p.property_lot || ''}-${p.property_qualifier || ''}`;
+      if (seen.has(baseKey)) return false;
+      seen.add(baseKey);
+
+      if (isLojikTenant) {
+        if (!p.sales_price || p.sales_price <= 100) return false;
+        const bc = parseInt(p.asset_building_class) || 0;
+        if (bc <= 10) return false;
+      } else {
+        if (!p.values_norm_time) return false;
+      }
+      return true;
+    });
+  }, [properties, isLojikTenant]);
+
+  // Compute which sales are included in the pool based on filters + overrides
+  const salesPoolEntries = useMemo(() => {
+    return allSalesCandidates.map(p => {
+      const key = p.property_composite_key || `${p.property_block}-${p.property_lot}`;
+      const saleDate = p.sales_date;
+      const nuCode = String(p.sales_nu || '0').trim();
+
+      // Check date range
+      const inDateRange = (!compFilters.salesDateStart || saleDate >= compFilters.salesDateStart) &&
+                          (!compFilters.salesDateEnd || saleDate <= compFilters.salesDateEnd);
+
+      // Check sales code
+      const codeMatch = compFilters.salesCodes.length === 0 ||
+                        compFilters.salesCodes.some(fc => normalizeSalesCode(fc) === normalizeSalesCode(nuCode));
+
+      // Auto-included if passes date + code filters
+      const autoIncluded = inDateRange && codeMatch;
+
+      // Check for manual override
+      const override = salesPoolOverrides[key]; // true = force include, false = force exclude, undefined = auto
+
+      const included = override === true ? true : override === false ? false : autoIncluded;
+
+      return {
+        ...p,
+        _poolKey: key,
+        _autoIncluded: autoIncluded,
+        _override: override,
+        _included: included,
+        _inDateRange: inDateRange,
+        _codeMatch: codeMatch,
+      };
+    });
+  }, [allSalesCandidates, compFilters.salesDateStart, compFilters.salesDateEnd, compFilters.salesCodes, salesPoolOverrides, normalizeSalesCode]);
+
+  const includedSalesCount = useMemo(() => salesPoolEntries.filter(e => e._included).length, [salesPoolEntries]);
+
   // ==================== HANDLE CHIP TOGGLES ====================
   const toggleChip = (array, setter) => (value) => {
     if (array.includes(value)) {
@@ -1031,12 +1098,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
       console.log(`🔍 Evaluating ${subjects.length} subject properties...`);
 
-      // Step 2: Get eligible sales (from Sales Review logic)
+      // Step 2: Get eligible sales from the curated Sales Pool
       const eligibleSales = getEligibleSales();
-      console.log(`📊 Found ${eligibleSales.length} eligible sales (CSP period)`);
+      console.log(`📊 Found ${eligibleSales.length} eligible sales from Sales Pool`);
 
       if (eligibleSales.length === 0) {
-        alert(`No eligible sales found for comparison.\n\nThe CSP period (${compFilters.salesDateStart} to ${compFilters.salesDateEnd}) has no valid sales with time-adjusted prices.\n\nPlease check your Sales Review tab or adjust your date range.`);
+        alert(`No eligible sales found for comparison.\n\nThe Sales Pool (${compFilters.salesDateStart} to ${compFilters.salesDateEnd}) has no included sales.\n\nGo to the Sales Pool tab to adjust your date range, codes, or manually include sales.`);
         setIsEvaluating(false);
         setEvaluationProgress({ current: 0, total: 0 });
         return;
@@ -1130,25 +1197,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
             return false;
           }
 
-          // Sales codes filter (normalize blank, '00', '0' to '')
-          if (compFilters.salesCodes.length > 0) {
-            const normalizedCompCode = normalizeSalesCode(comp.sales_nu);
-            const normalizedFilterCodes = compFilters.salesCodes.map(normalizeSalesCode);
-            if (!normalizedFilterCodes.includes(normalizedCompCode)) {
-              if (isFirstProperty) debugFilters.salesCodes++;
-              return false;
-            }
-          }
-
-          // Sales date range
-          if (compFilters.salesDateStart && comp.sales_date < compFilters.salesDateStart) {
-            if (isFirstProperty) debugFilters.salesDate++;
-            return false;
-          }
-          if (compFilters.salesDateEnd && comp.sales_date > compFilters.salesDateEnd) {
-            if (isFirstProperty) debugFilters.salesDate++;
-            return false;
-          }
+          // Note: Sales codes and date range filtering is handled by the Sales Pool tab.
+          // The eligible sales passed to this loop are already curated by the pool.
 
           // VCS filter - always user-controlled via comp filters
           if (compFilters.sameVCS) {
@@ -1551,47 +1601,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
 
   // ==================== GET ELIGIBLE SALES ====================
   const getEligibleSales = () => {
-    if (!jobData?.end_date) return [];
-
-    const assessmentYear = new Date(jobData.end_date).getFullYear();
-
-    const cspStart = new Date(assessmentYear - 1, 9, 1);
-    const cspEnd = new Date(assessmentYear, 11, 31);
-
-    const VALID_SALES_CODES = ['0', '00', '07', '7', '32', '36'];
-
-    return properties.filter(p => {
-      if (!p.sales_date) return false;
-
-      // LOJIK: use sales_price instead of values_norm_time for eligibility
-      if (isLojikTenant) {
-        if (!p.sales_price || p.sales_price <= 100) return false;
-        const bc = parseInt(p.asset_building_class) || 0;
-        if (bc <= 10) return false;
-      } else {
-        if (!p.values_norm_time) return false;
-      }
-
-      const saleDate = new Date(p.sales_date);
-      const inCSP = saleDate >= cspStart && saleDate <= cspEnd;
-
-      // Check for manual override from Sales Review (property_market_analysis.cme_include_override)
-      const includeOverride = p.cme_include_override; // null, true, or false
-
-      // If override exists, respect it; otherwise use default (CSP auto-included)
-      if (includeOverride === true) return true; // Manual include (even if not in CSP)
-      if (includeOverride === false) return false; // Manual exclude (even if in CSP)
-
-      // Default: Include if in CSP period
-      // For LOJIK, also filter by valid default sales codes
-      if (isLojikTenant) {
-        const nuCode = String(p.sales_nu || '0').trim();
-        const normalizedNu = nuCode === '' || nuCode === '00' ? '0' : nuCode;
-        return inCSP && VALID_SALES_CODES.includes(normalizedNu);
-      }
-
-      return inCSP;
-    });
+    // Use the curated sales pool — respects user's date range, sales codes, and manual overrides
+    return salesPoolEntries.filter(e => e._included);
   };
 
   // ==================== CALCULATE ADJUSTMENTS ====================
@@ -2383,6 +2394,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   // ==================== RENDER ====================
   const subTabs = [
     { id: 'adjustments', label: 'Adjustments', icon: Sliders },
+    { id: 'sales-pool', label: `Sales Pool (${includedSalesCount})`, icon: List },
     { id: 'search', label: 'Search & Results', icon: Search },
     { id: 'detailed', label: 'Detailed', icon: FileText },
     { id: 'summary', label: 'Summary', icon: BarChart3 }
@@ -2421,6 +2433,225 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         {/* ADJUSTMENTS TAB */}
         {activeSubTab === 'adjustments' && (
           <AdjustmentsTab jobData={jobData} properties={properties} />
+        )}
+
+        {/* SALES POOL TAB */}
+        {activeSubTab === 'sales-pool' && (
+          <div className="space-y-4">
+            <div className="bg-white border border-gray-300 rounded-lg p-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                Sales Pool
+                <span className="ml-2 text-sm font-normal text-gray-500">
+                  {includedSalesCount} of {allSalesCandidates.length} sales included
+                </span>
+              </h3>
+
+              {/* Filters Row */}
+              <div className="flex flex-wrap items-end gap-4 mb-4 pb-4 border-b border-gray-200">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Sales Date From</label>
+                  <input
+                    type="date"
+                    value={compFilters.salesDateStart}
+                    onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateStart: e.target.value }))}
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Sales Date To</label>
+                  <input
+                    type="date"
+                    value={compFilters.salesDateEnd}
+                    onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateEnd: e.target.value }))}
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Sales Codes</label>
+                  <div className="flex flex-wrap gap-1">
+                    {uniqueSalesCodes.map(code => {
+                      const isActive = compFilters.salesCodes.includes(code);
+                      return (
+                        <button
+                          key={code}
+                          onClick={() => toggleCompFilterChip('salesCodes')(code)}
+                          className={`px-2 py-0.5 text-xs rounded-full border ${
+                            isActive
+                              ? 'bg-blue-100 border-blue-300 text-blue-800'
+                              : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
+                          }`}
+                        >
+                          {code || '00'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 ml-auto">
+                  <input
+                    type="text"
+                    placeholder="Search block/lot/address..."
+                    value={salesPoolSearch}
+                    onChange={(e) => setSalesPoolSearch(e.target.value)}
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 w-48"
+                  />
+                  {Object.keys(salesPoolOverrides).length > 0 && (
+                    <button
+                      onClick={() => setSalesPoolOverrides({})}
+                      className="px-2 py-1.5 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded hover:bg-orange-100"
+                    >
+                      Clear overrides ({Object.keys(salesPoolOverrides).length})
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Sales Table */}
+              <div className="overflow-auto max-h-[500px]">
+                <table className="min-w-full text-xs">
+                  <thead className="bg-gray-50 sticky top-0 z-10">
+                    <tr>
+                      <th className="px-2 py-2 text-center font-medium text-gray-600 w-16">Include</th>
+                      <th
+                        className="px-2 py-2 text-left font-medium text-gray-600 cursor-pointer hover:text-blue-600"
+                        onClick={() => setSalesPoolSort(prev => ({
+                          field: 'property_block',
+                          dir: prev.field === 'property_block' && prev.dir === 'asc' ? 'desc' : 'asc'
+                        }))}
+                      >
+                        Block {salesPoolSort.field === 'property_block' ? (salesPoolSort.dir === 'asc' ? '▲' : '▼') : ''}
+                      </th>
+                      <th className="px-2 py-2 text-left font-medium text-gray-600">Lot</th>
+                      <th className="px-2 py-2 text-left font-medium text-gray-600">Qual</th>
+                      <th className="px-2 py-2 text-left font-medium text-gray-600">Location</th>
+                      <th
+                        className="px-2 py-2 text-left font-medium text-gray-600 cursor-pointer hover:text-blue-600"
+                        onClick={() => setSalesPoolSort(prev => ({
+                          field: 'sales_date',
+                          dir: prev.field === 'sales_date' && prev.dir === 'desc' ? 'asc' : 'desc'
+                        }))}
+                      >
+                        Sale Date {salesPoolSort.field === 'sales_date' ? (salesPoolSort.dir === 'asc' ? '▲' : '▼') : ''}
+                      </th>
+                      <th
+                        className="px-2 py-2 text-right font-medium text-gray-600 cursor-pointer hover:text-blue-600"
+                        onClick={() => setSalesPoolSort(prev => ({
+                          field: 'sales_price',
+                          dir: prev.field === 'sales_price' && prev.dir === 'desc' ? 'asc' : 'desc'
+                        }))}
+                      >
+                        Sale Price {salesPoolSort.field === 'sales_price' ? (salesPoolSort.dir === 'asc' ? '▲' : '▼') : ''}
+                      </th>
+                      <th className="px-2 py-2 text-center font-medium text-gray-600">NU Code</th>
+                      <th className="px-2 py-2 text-center font-medium text-gray-600">Bldg Class</th>
+                      <th className="px-2 py-2 text-left font-medium text-gray-600">VCS</th>
+                      <th className="px-2 py-2 text-left font-medium text-gray-600">Type/Use</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {(() => {
+                      let displayed = [...salesPoolEntries];
+
+                      // Search filter
+                      if (salesPoolSearch) {
+                        const q = salesPoolSearch.toLowerCase();
+                        displayed = displayed.filter(p =>
+                          (p.property_block || '').toLowerCase().includes(q) ||
+                          (p.property_lot || '').toLowerCase().includes(q) ||
+                          (p.property_location || '').toLowerCase().includes(q)
+                        );
+                      }
+
+                      // Sort
+                      displayed.sort((a, b) => {
+                        const dir = salesPoolSort.dir === 'asc' ? 1 : -1;
+                        const field = salesPoolSort.field;
+                        const aVal = a[field] || '';
+                        const bVal = b[field] || '';
+                        if (field === 'sales_price') {
+                          return ((parseFloat(aVal) || 0) - (parseFloat(bVal) || 0)) * dir;
+                        }
+                        return String(aVal).localeCompare(String(bVal)) * dir;
+                      });
+
+                      if (displayed.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
+                              No sales match the current date range and code filters.
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return displayed.map((p, idx) => {
+                        const key = p._poolKey;
+                        const included = p._included;
+                        const hasOverride = p._override !== undefined;
+
+                        return (
+                          <tr
+                            key={key + '-' + idx}
+                            className={`${included ? 'bg-white' : 'bg-gray-50 text-gray-400'} hover:bg-blue-50 transition-colors`}
+                          >
+                            <td className="px-2 py-1.5 text-center">
+                              <button
+                                onClick={() => {
+                                  setSalesPoolOverrides(prev => {
+                                    const next = { ...prev };
+                                    if (next[key] === undefined) {
+                                      // Currently auto — force opposite of auto state
+                                      next[key] = !p._autoIncluded;
+                                    } else if (next[key] === true) {
+                                      // Force included → force exclude
+                                      next[key] = false;
+                                    } else {
+                                      // Force excluded → back to auto
+                                      delete next[key];
+                                    }
+                                    return next;
+                                  });
+                                }}
+                                className="p-0.5"
+                                title={hasOverride ? (included ? 'Force included (click to exclude)' : 'Force excluded (click to reset)') : (included ? 'Auto-included (click to exclude)' : 'Auto-excluded (click to include)')}
+                              >
+                                {included ? (
+                                  <CheckCircle className={`w-4 h-4 ${hasOverride ? 'text-green-600' : 'text-green-400'}`} />
+                                ) : (
+                                  <XCircle className={`w-4 h-4 ${hasOverride ? 'text-red-500' : 'text-gray-300'}`} />
+                                )}
+                              </button>
+                            </td>
+                            <td className="px-2 py-1.5">{p.property_block}</td>
+                            <td className="px-2 py-1.5">{p.property_lot}</td>
+                            <td className="px-2 py-1.5">{p.property_qualifier || ''}</td>
+                            <td className="px-2 py-1.5 truncate max-w-[180px]">{p.property_location || ''}</td>
+                            <td className="px-2 py-1.5">{p.sales_date || ''}</td>
+                            <td className="px-2 py-1.5 text-right font-mono">
+                              {p.sales_price ? `$${Number(p.sales_price).toLocaleString()}` : '-'}
+                            </td>
+                            <td className="px-2 py-1.5 text-center">{p.sales_nu || '00'}</td>
+                            <td className="px-2 py-1.5 text-center">{p.asset_building_class || ''}</td>
+                            <td className="px-2 py-1.5">{p.property_vcs || ''}</td>
+                            <td className="px-2 py-1.5">{p.asset_type_use || ''}</td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Legend */}
+              <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
+                <span className="flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5 text-green-400" /> Auto-included</span>
+                <span className="flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5 text-green-600" /> Force included</span>
+                <span className="flex items-center gap-1"><XCircle className="w-3.5 h-3.5 text-gray-300" /> Auto-excluded</span>
+                <span className="flex items-center gap-1"><XCircle className="w-3.5 h-3.5 text-red-500" /> Force excluded</span>
+                <span className="ml-auto">Click icon to cycle: auto → force → reset</span>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* SEARCH TAB */}
