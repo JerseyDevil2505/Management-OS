@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, interpretCodes, getRawDataForJob } from '../../../lib/supabaseClient';
-import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle } from 'lucide-react';
+import { Search, X, Upload, Sliders, FileText, BarChart3, Download, List, CheckCircle, XCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import AdjustmentsTab from './AdjustmentsTab';
 import DetailedAppraisalGrid from './DetailedAppraisalGrid';
@@ -109,6 +109,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   const [salesPoolOverrides, setSalesPoolOverrides] = useState({}); // { compositeKey: true/false }
   const [salesPoolSort, setSalesPoolSort] = useState({ field: 'sales_date', dir: 'desc' });
   const [salesPoolSearch, setSalesPoolSearch] = useState('');
+  const [poolAnalyticsExpanded, setPoolAnalyticsExpanded] = useState({ vcs: false, style: false, typeUse: false, view: false });
 
   const vendorType = jobData?.vendor_type || 'BRT';
 
@@ -634,6 +635,110 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
   }, [allSalesCandidates, compFilters.salesDateStart, compFilters.salesDateEnd, compFilters.salesCodes, salesPoolOverrides, normalizeSalesCode]);
 
   const includedSalesCount = useMemo(() => salesPoolEntries.filter(e => e._included).length, [salesPoolEntries]);
+
+  // ==================== SALES POOL ANALYTICS ====================
+  const includedPoolSales = useMemo(() => salesPoolEntries.filter(e => e._included), [salesPoolEntries]);
+
+  const poolVcsAnalytics = useMemo(() => {
+    const groups = {};
+    const totals = { count: 0, totalPrice: 0, sflaSum: 0, yearBuiltSum: 0, yearBuiltCount: 0 };
+
+    includedPoolSales.forEach(p => {
+      const vcs = p.property_vcs || 'Unknown';
+      if (!groups[vcs]) groups[vcs] = { count: 0, totalPrice: 0, sflaSum: 0, yearBuiltSum: 0, yearBuiltCount: 0 };
+      groups[vcs].count++;
+      if (p.sales_price) { groups[vcs].totalPrice += p.sales_price; totals.totalPrice += p.sales_price; }
+      if (p.asset_sfla) { groups[vcs].sflaSum += p.asset_sfla; totals.sflaSum += p.asset_sfla; }
+      if (p.asset_year_built) { groups[vcs].yearBuiltSum += p.asset_year_built; groups[vcs].yearBuiltCount++; totals.yearBuiltSum += p.asset_year_built; totals.yearBuiltCount++; }
+      totals.count++;
+    });
+
+    const rows = Object.entries(groups).map(([vcs, d]) => ({
+      vcs, count: d.count,
+      avgPrice: d.count > 0 ? d.totalPrice / d.count : 0,
+      avgPPSF: d.sflaSum > 0 ? d.totalPrice / d.sflaSum : 0,
+      avgSFLA: d.count > 0 ? Math.round(d.sflaSum / d.count) : 0,
+      avgYearBuilt: d.yearBuiltCount > 0 ? Math.round(d.yearBuiltSum / d.yearBuiltCount) : 0,
+    })).sort((a, b) => a.vcs.localeCompare(b.vcs));
+
+    const summary = {
+      vcs: 'OVERALL', count: totals.count,
+      avgPrice: totals.count > 0 ? totals.totalPrice / totals.count : 0,
+      avgPPSF: totals.sflaSum > 0 ? totals.totalPrice / totals.sflaSum : 0,
+      avgSFLA: totals.count > 0 ? Math.round(totals.sflaSum / totals.count) : 0,
+      avgYearBuilt: totals.yearBuiltCount > 0 ? Math.round(totals.yearBuiltSum / totals.yearBuiltCount) : 0,
+    };
+    return { rows, summary };
+  }, [includedPoolSales]);
+
+  const poolStyleAnalytics = useMemo(() => {
+    const groups = {};
+    const totals = { count: 0, totalPrice: 0, sflaSum: 0 };
+    includedPoolSales.forEach(p => {
+      const style = p.asset_design_style || 'Unknown';
+      if (!groups[style]) groups[style] = { count: 0, totalPrice: 0, sflaSum: 0 };
+      groups[style].count++;
+      if (p.sales_price) { groups[style].totalPrice += p.sales_price; totals.totalPrice += p.sales_price; }
+      if (p.asset_sfla) { groups[style].sflaSum += p.asset_sfla; totals.sflaSum += p.asset_sfla; }
+      totals.count++;
+    });
+    const parsedCodes = jobData?.parsed_code_definitions;
+    const rows = Object.entries(groups).map(([style, d]) => ({
+      style,
+      styleName: interpretCodes.getDesignName?.({ asset_design_style: style }, parsedCodes, vendorType) || style,
+      count: d.count,
+      avgPrice: d.count > 0 ? d.totalPrice / d.count : 0,
+      avgPPSF: d.sflaSum > 0 ? d.totalPrice / d.sflaSum : 0,
+    })).sort((a, b) => b.count - a.count);
+    const summary = { styleName: 'OVERALL', count: totals.count, avgPrice: totals.count > 0 ? totals.totalPrice / totals.count : 0, avgPPSF: totals.sflaSum > 0 ? totals.totalPrice / totals.sflaSum : 0 };
+    return { rows, summary };
+  }, [includedPoolSales, jobData?.parsed_code_definitions, vendorType]);
+
+  const poolTypeUseAnalytics = useMemo(() => {
+    const groups = {};
+    const totals = { count: 0, totalPrice: 0, sflaSum: 0 };
+    includedPoolSales.forEach(p => {
+      const type = p.asset_type_use || 'Unknown';
+      if (!groups[type]) groups[type] = { count: 0, totalPrice: 0, sflaSum: 0 };
+      groups[type].count++;
+      if (p.sales_price) { groups[type].totalPrice += p.sales_price; totals.totalPrice += p.sales_price; }
+      if (p.asset_sfla) { groups[type].sflaSum += p.asset_sfla; totals.sflaSum += p.asset_sfla; }
+      totals.count++;
+    });
+    const parsedCodes = jobData?.parsed_code_definitions;
+    const rows = Object.entries(groups).map(([type, d]) => ({
+      type,
+      typeName: interpretCodes.getTypeName?.({ asset_type_use: type }, parsedCodes, vendorType) || type,
+      count: d.count,
+      avgPrice: d.count > 0 ? d.totalPrice / d.count : 0,
+      avgPPSF: d.sflaSum > 0 ? d.totalPrice / d.sflaSum : 0,
+    })).sort((a, b) => b.count - a.count);
+    const summary = { typeName: 'OVERALL', count: totals.count, avgPrice: totals.count > 0 ? totals.totalPrice / totals.count : 0, avgPPSF: totals.sflaSum > 0 ? totals.totalPrice / totals.sflaSum : 0 };
+    return { rows, summary };
+  }, [includedPoolSales, jobData?.parsed_code_definitions, vendorType]);
+
+  const poolViewAnalytics = useMemo(() => {
+    const groups = {};
+    const totals = { count: 0, totalPrice: 0, sflaSum: 0 };
+    includedPoolSales.forEach(p => {
+      const view = p.asset_view || 'Unknown';
+      if (!groups[view]) groups[view] = { count: 0, totalPrice: 0, sflaSum: 0 };
+      groups[view].count++;
+      if (p.sales_price) { groups[view].totalPrice += p.sales_price; totals.totalPrice += p.sales_price; }
+      if (p.asset_sfla) { groups[view].sflaSum += p.asset_sfla; totals.sflaSum += p.asset_sfla; }
+      totals.count++;
+    });
+    const parsedCodes = jobData?.parsed_code_definitions;
+    const rows = Object.entries(groups).map(([view, d]) => ({
+      view,
+      viewName: interpretCodes.getViewName?.({ asset_view: view }, parsedCodes, vendorType) || view,
+      count: d.count,
+      avgPrice: d.count > 0 ? d.totalPrice / d.count : 0,
+      avgPPSF: d.sflaSum > 0 ? d.totalPrice / d.sflaSum : 0,
+    })).sort((a, b) => b.count - a.count);
+    const summary = { viewName: 'OVERALL', count: totals.count, avgPrice: totals.count > 0 ? totals.totalPrice / totals.count : 0, avgPPSF: totals.sflaSum > 0 ? totals.totalPrice / totals.sflaSum : 0 };
+    return { rows, summary };
+  }, [includedPoolSales, jobData?.parsed_code_definitions, vendorType]);
 
   // ==================== HANDLE CHIP TOGGLES ====================
   const toggleChip = (array, setter) => (value) => {
@@ -2440,6 +2545,159 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                   {includedSalesCount} of {allSalesCandidates.length} sales included
                 </span>
               </h3>
+
+              {/* Analytics Sections */}
+              <div className="mb-4 space-y-1">
+                {/* VCS Analysis */}
+                <div className="border rounded bg-white">
+                  <button onClick={() => setPoolAnalyticsExpanded(prev => ({ ...prev, vcs: !prev.vcs }))} className="w-full px-3 py-2 flex items-center justify-between hover:bg-gray-50 text-sm">
+                    <span className="font-medium text-gray-900">VCS Analysis</span>
+                    {poolAnalyticsExpanded.vcs ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  </button>
+                  {poolAnalyticsExpanded.vcs && (
+                    <div className="px-3 pb-3 overflow-x-auto">
+                      <table className="min-w-full text-xs">
+                        <thead><tr className="border-b">
+                          <th className="text-left py-1.5 px-2">VCS</th>
+                          <th className="text-right py-1.5 px-2"># Sales</th>
+                          <th className="text-right py-1.5 px-2">Avg Price</th>
+                          <th className="text-right py-1.5 px-2">Avg SFLA</th>
+                          <th className="text-right py-1.5 px-2">Avg PPSF</th>
+                          <th className="text-right py-1.5 px-2">Avg Yr Built</th>
+                        </tr></thead>
+                        <tbody>
+                          <tr className="border-b-2 border-gray-400 bg-blue-50 font-bold">
+                            <td className="py-1.5 px-2">{poolVcsAnalytics.summary.vcs}</td>
+                            <td className="py-1.5 px-2 text-right">{poolVcsAnalytics.summary.count}</td>
+                            <td className="py-1.5 px-2 text-right">${poolVcsAnalytics.summary.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                            <td className="py-1.5 px-2 text-right">{poolVcsAnalytics.summary.avgSFLA.toLocaleString()}</td>
+                            <td className="py-1.5 px-2 text-right">${poolVcsAnalytics.summary.avgPPSF.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                            <td className="py-1.5 px-2 text-right">{poolVcsAnalytics.summary.avgYearBuilt || '-'}</td>
+                          </tr>
+                          {poolVcsAnalytics.rows.map(r => (
+                            <tr key={r.vcs} className="border-b hover:bg-gray-50">
+                              <td className="py-1.5 px-2 font-medium">{r.vcs}</td>
+                              <td className="py-1.5 px-2 text-right">{r.count}</td>
+                              <td className="py-1.5 px-2 text-right">${r.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                              <td className="py-1.5 px-2 text-right">{r.avgSFLA.toLocaleString()}</td>
+                              <td className="py-1.5 px-2 text-right">${r.avgPPSF.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                              <td className="py-1.5 px-2 text-right">{r.avgYearBuilt || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Style Analysis */}
+                <div className="border rounded bg-white">
+                  <button onClick={() => setPoolAnalyticsExpanded(prev => ({ ...prev, style: !prev.style }))} className="w-full px-3 py-2 flex items-center justify-between hover:bg-gray-50 text-sm">
+                    <span className="font-medium text-gray-900">Style Analysis</span>
+                    {poolAnalyticsExpanded.style ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  </button>
+                  {poolAnalyticsExpanded.style && (
+                    <div className="px-3 pb-3 overflow-x-auto">
+                      <table className="min-w-full text-xs">
+                        <thead><tr className="border-b">
+                          <th className="text-left py-1.5 px-2">Style</th>
+                          <th className="text-right py-1.5 px-2"># Sales</th>
+                          <th className="text-right py-1.5 px-2">Avg Price</th>
+                          <th className="text-right py-1.5 px-2">Avg PPSF</th>
+                        </tr></thead>
+                        <tbody>
+                          <tr className="border-b-2 border-gray-400 bg-blue-50 font-bold">
+                            <td className="py-1.5 px-2">{poolStyleAnalytics.summary.styleName}</td>
+                            <td className="py-1.5 px-2 text-right">{poolStyleAnalytics.summary.count}</td>
+                            <td className="py-1.5 px-2 text-right">${poolStyleAnalytics.summary.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                            <td className="py-1.5 px-2 text-right">${poolStyleAnalytics.summary.avgPPSF.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                          </tr>
+                          {poolStyleAnalytics.rows.map(r => (
+                            <tr key={r.style} className="border-b hover:bg-gray-50">
+                              <td className="py-1.5 px-2 font-medium">{r.styleName}</td>
+                              <td className="py-1.5 px-2 text-right">{r.count}</td>
+                              <td className="py-1.5 px-2 text-right">${r.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                              <td className="py-1.5 px-2 text-right">${r.avgPPSF.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Type/Use Analysis */}
+                <div className="border rounded bg-white">
+                  <button onClick={() => setPoolAnalyticsExpanded(prev => ({ ...prev, typeUse: !prev.typeUse }))} className="w-full px-3 py-2 flex items-center justify-between hover:bg-gray-50 text-sm">
+                    <span className="font-medium text-gray-900">Type/Use Analysis</span>
+                    {poolAnalyticsExpanded.typeUse ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  </button>
+                  {poolAnalyticsExpanded.typeUse && (
+                    <div className="px-3 pb-3 overflow-x-auto">
+                      <table className="min-w-full text-xs">
+                        <thead><tr className="border-b">
+                          <th className="text-left py-1.5 px-2">Type/Use</th>
+                          <th className="text-right py-1.5 px-2"># Sales</th>
+                          <th className="text-right py-1.5 px-2">Avg Price</th>
+                          <th className="text-right py-1.5 px-2">Avg PPSF</th>
+                        </tr></thead>
+                        <tbody>
+                          <tr className="border-b-2 border-gray-400 bg-blue-50 font-bold">
+                            <td className="py-1.5 px-2">{poolTypeUseAnalytics.summary.typeName}</td>
+                            <td className="py-1.5 px-2 text-right">{poolTypeUseAnalytics.summary.count}</td>
+                            <td className="py-1.5 px-2 text-right">${poolTypeUseAnalytics.summary.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                            <td className="py-1.5 px-2 text-right">${poolTypeUseAnalytics.summary.avgPPSF.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                          </tr>
+                          {poolTypeUseAnalytics.rows.map(r => (
+                            <tr key={r.type} className="border-b hover:bg-gray-50">
+                              <td className="py-1.5 px-2 font-medium">{r.typeName}</td>
+                              <td className="py-1.5 px-2 text-right">{r.count}</td>
+                              <td className="py-1.5 px-2 text-right">${r.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                              <td className="py-1.5 px-2 text-right">${r.avgPPSF.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* View Analysis */}
+                <div className="border rounded bg-white">
+                  <button onClick={() => setPoolAnalyticsExpanded(prev => ({ ...prev, view: !prev.view }))} className="w-full px-3 py-2 flex items-center justify-between hover:bg-gray-50 text-sm">
+                    <span className="font-medium text-gray-900">View Analysis</span>
+                    {poolAnalyticsExpanded.view ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  </button>
+                  {poolAnalyticsExpanded.view && (
+                    <div className="px-3 pb-3 overflow-x-auto">
+                      <table className="min-w-full text-xs">
+                        <thead><tr className="border-b">
+                          <th className="text-left py-1.5 px-2">View</th>
+                          <th className="text-right py-1.5 px-2"># Sales</th>
+                          <th className="text-right py-1.5 px-2">Avg Price</th>
+                          <th className="text-right py-1.5 px-2">Avg PPSF</th>
+                        </tr></thead>
+                        <tbody>
+                          <tr className="border-b-2 border-gray-400 bg-blue-50 font-bold">
+                            <td className="py-1.5 px-2">{poolViewAnalytics.summary.viewName}</td>
+                            <td className="py-1.5 px-2 text-right">{poolViewAnalytics.summary.count}</td>
+                            <td className="py-1.5 px-2 text-right">${poolViewAnalytics.summary.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                            <td className="py-1.5 px-2 text-right">${poolViewAnalytics.summary.avgPPSF.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                          </tr>
+                          {poolViewAnalytics.rows.map(r => (
+                            <tr key={r.view} className="border-b hover:bg-gray-50">
+                              <td className="py-1.5 px-2 font-medium">{r.viewName}</td>
+                              <td className="py-1.5 px-2 text-right">{r.count}</td>
+                              <td className="py-1.5 px-2 text-right">${r.avgPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                              <td className="py-1.5 px-2 text-right">${r.avgPPSF.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
 
               {/* Filters Row */}
               <div className="flex flex-wrap items-end gap-4 mb-4 pb-4 border-b border-gray-200">
