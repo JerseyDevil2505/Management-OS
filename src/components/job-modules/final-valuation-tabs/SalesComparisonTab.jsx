@@ -2710,10 +2710,10 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                 </div>
               </div>
 
-              {/* Filters Row */}
+              {/* Filters */}
               <div className="space-y-3 mb-4 pb-4 border-b border-gray-200">
-                {/* Row 1: Date range + Sales Codes + Search */}
-                <div className="flex flex-wrap items-end gap-4">
+                {/* Row 1: Date range + Search (centered) */}
+                <div className="flex flex-wrap items-end justify-center gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Sales Date From</label>
                     <input type="date" value={compFilters.salesDateStart} onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateStart: e.target.value }))} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
@@ -2723,7 +2723,20 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                     <input type="date" value={compFilters.salesDateEnd} onChange={(e) => setCompFilters(prev => ({ ...prev, salesDateEnd: e.target.value }))} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Sales Codes</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Search Block/Lot/Address</label>
+                    <input type="text" placeholder="Search..." value={salesPoolSearch} onChange={(e) => setSalesPoolSearch(e.target.value)} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 w-48" />
+                  </div>
+                  {Object.keys(salesPoolOverrides).length > 0 && (
+                    <button onClick={() => setSalesPoolOverrides({})} className="px-2 py-1.5 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded hover:bg-orange-100">
+                      Clear overrides ({Object.keys(salesPoolOverrides).length})
+                    </button>
+                  )}
+                </div>
+                {/* Row 2: Sales Code, VCS, Type/Use, Style, View (centered) */}
+                <div className="flex flex-wrap items-end justify-center gap-4">
+                  {/* Sales Codes */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Sales Code</label>
                     <div className="flex flex-wrap items-center gap-1">
                       {compFilters.salesCodes.map(code => (
                         <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-blue-100 border border-blue-300 text-blue-800">
@@ -2739,17 +2752,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       </select>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 ml-auto">
-                    <input type="text" placeholder="Search block/lot/address..." value={salesPoolSearch} onChange={(e) => setSalesPoolSearch(e.target.value)} className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 w-48" />
-                    {Object.keys(salesPoolOverrides).length > 0 && (
-                      <button onClick={() => setSalesPoolOverrides({})} className="px-2 py-1.5 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded hover:bg-orange-100">
-                        Clear overrides ({Object.keys(salesPoolOverrides).length})
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {/* Row 2: Display filters - VCS, Type/Use, Style, View */}
-                <div className="flex flex-wrap items-end gap-4">
                   {/* VCS Filter */}
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">VCS</label>
@@ -2782,7 +2784,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                   </div>
                   {/* Style Filter */}
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Design/Style</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Style</label>
                     <div className="flex flex-wrap items-center gap-1">
                       {poolFilterStyle.map(v => (
                         <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-orange-100 border border-orange-300 text-orange-800">
@@ -2826,7 +2828,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       {(() => {
                         const SortTh = ({ field, label, align = 'left' }) => (
                           <th
-                            className={`px-2 py-2 font-medium text-gray-600 cursor-pointer hover:text-blue-600 select-none ${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}`}
+                            className={`px-2 py-2 font-medium text-gray-600 cursor-pointer hover:text-blue-600 select-none whitespace-nowrap ${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}`}
                             onClick={() => setSalesPoolSort(prev => ({ field, dir: prev.field === field && prev.dir === 'asc' ? 'desc' : 'asc' }))}
                           >
                             {label} {salesPoolSort.field === field ? (salesPoolSort.dir === 'asc' ? '▲' : '▼') : ''}
@@ -2834,30 +2836,25 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                         );
                         return (
                           <>
-                            <th className="px-2 py-2 text-center font-medium text-gray-600 w-20">Use</th>
+                            <th className="px-2 py-2 text-center font-medium text-gray-600 w-16">Use</th>
+                            <SortTh field="property_vcs" label="VCS" />
                             <SortTh field="property_block" label="Block" />
                             <SortTh field="property_lot" label="Lot" />
                             <SortTh field="property_qualifier" label="Qual" />
-                            <SortTh field="property_location" label="Address" />
-                            <SortTh field="property_vcs" label="VCS" />
-                            <SortTh field="asset_type_use" label="Type/Use" />
-                            <SortTh field="asset_design_style" label="Design/Style" />
-                            <SortTh field="asset_building_class" label="Bldg Class" align="center" />
-                            <SortTh field="asset_year_built" label="Yr Built" align="right" />
-                            <SortTh field="sales_date" label="Sale Date" />
-                            <SortTh field="sales_nu" label="NU" align="center" />
-                            <SortTh field="sales_price" label="Sale Price" align="right" />
-                            <SortTh field="asset_sfla" label="SFLA" align="right" />
-                            <th className="px-2 py-2 text-right font-medium text-gray-600 cursor-pointer hover:text-blue-600 select-none" onClick={() => setSalesPoolSort(prev => ({ field: '_ppsf', dir: prev.field === '_ppsf' && prev.dir === 'asc' ? 'desc' : 'asc' }))}>
-                              PPSF {salesPoolSort.field === '_ppsf' ? (salesPoolSort.dir === 'asc' ? '▲' : '▼') : ''}
-                            </th>
-                            <SortTh field="asset_lot_acre" label="Lot Acre" align="right" />
-                            <SortTh field="asset_lot_sf" label="Lot SF" align="right" />
+                            <SortTh field="property_location" label="Location" />
+                            <SortTh field="asset_design_style" label="Style" />
+                            <SortTh field="_currentAsmt" label="Current Asmt" align="right" />
+                            <SortTh field="sales_price" label="Sales Price" align="right" />
+                            <SortTh field="asset_lot_acre" label="Lot Size Acre/SF" align="right" />
                             <SortTh field="asset_lot_frontage" label="Lot FF" align="right" />
-                            <th className="px-2 py-2 text-right font-medium text-gray-600 cursor-pointer hover:text-blue-600 select-none" onClick={() => setSalesPoolSort(prev => ({ field: '_salesRatio', dir: prev.field === '_salesRatio' && prev.dir === 'asc' ? 'desc' : 'asc' }))}>
-                              Sales Ratio {salesPoolSort.field === '_salesRatio' ? (salesPoolSort.dir === 'asc' ? '▲' : '▼') : ''}
-                            </th>
+                            <SortTh field="asset_sfla" label="Sq Ft" align="right" />
+                            <SortTh field="_ppsf" label="PPSF" align="right" />
+                            <SortTh field="sales_nu" label="Sale Code" align="center" />
+                            <SortTh field="sales_date" label="Sale Date" />
+                            <SortTh field="asset_year_built" label="Yr Built" align="right" />
                             <SortTh field="asset_view" label="View" />
+                            <SortTh field="asset_type_use" label="Type/Use" />
+                            <SortTh field="_salesRatio" label="S Ratio" align="right" />
                           </>
                         );
                       })()}
@@ -2883,11 +2880,15 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       if (poolFilterStyle.length > 0) displayed = displayed.filter(p => poolFilterStyle.includes(p.asset_design_style));
                       if (poolFilterView.length > 0) displayed = displayed.filter(p => poolFilterView.includes(p.asset_view));
 
-                      // Compute derived fields for sorting
+                      // Compute derived fields for sorting and display
                       displayed = displayed.map(p => ({
                         ...p,
+                        _currentAsmt: p.values_mod_total || p.values_cama_total || 0,
                         _ppsf: p.sales_price && p.asset_sfla > 0 ? p.sales_price / p.asset_sfla : 0,
-                        _salesRatio: p.values_norm_time && p.values_norm_time > 0 && p.values_mod_total ? (p.values_mod_total / p.values_norm_time) * 100 : 0,
+                        // Sales Ratio = Current Assessment / Sale Price (calculate on ALL sales)
+                        _salesRatio: (p.values_mod_total || p.values_cama_total) && p.sales_price > 0
+                          ? ((p.values_mod_total || p.values_cama_total) / p.sales_price) * 100
+                          : 0,
                       }));
 
                       // Sort
@@ -2897,7 +2898,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                         const aVal = a[field];
                         const bVal = b[field];
                         // Numeric fields
-                        if (['sales_price', 'asset_sfla', 'asset_year_built', 'asset_lot_acre', 'asset_lot_sf', 'asset_lot_frontage', '_ppsf', '_salesRatio', 'asset_building_class'].includes(field)) {
+                        if (['sales_price', 'asset_sfla', 'asset_year_built', 'asset_lot_acre', 'asset_lot_sf', 'asset_lot_frontage', '_ppsf', '_salesRatio', '_currentAsmt', 'asset_building_class'].includes(field)) {
                           return ((parseFloat(aVal) || 0) - (parseFloat(bVal) || 0)) * dir;
                         }
                         return String(aVal || '').localeCompare(String(bVal || '')) * dir;
@@ -2906,7 +2907,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       if (displayed.length === 0) {
                         return (
                           <tr>
-                            <td colSpan={21} className="px-4 py-8 text-center text-gray-500">
+                            <td colSpan={19} className="px-4 py-8 text-center text-gray-500">
                               No sales match the current filters.
                             </td>
                           </tr>
@@ -2916,6 +2917,16 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       return displayed.map((p, idx) => {
                         const key = p._poolKey;
                         const included = p._included;
+
+                        // Format lot size: acre with decimals + (SF with comma)
+                        const lotSizeDisplay = (() => {
+                          const acre = p.asset_lot_acre ? Number(p.asset_lot_acre) : null;
+                          const sf = p.asset_lot_sf ? Number(p.asset_lot_sf) : null;
+                          if (acre && sf) return `${acre.toFixed(2)} (${sf.toLocaleString()})`;
+                          if (acre) return acre.toFixed(2);
+                          if (sf) return `(${sf.toLocaleString()})`;
+                          return '-';
+                        })();
 
                         return (
                           <tr
@@ -2948,31 +2959,32 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                                 </button>
                               </div>
                             </td>
+                            <td className="px-2 py-1.5">{p.property_vcs || ''}</td>
                             <td className="px-2 py-1.5">{p.property_block}</td>
                             <td className="px-2 py-1.5">{p.property_lot}</td>
                             <td className="px-2 py-1.5">{p.property_qualifier || ''}</td>
                             <td className="px-2 py-1.5 truncate max-w-[180px]">{p.property_location || ''}</td>
-                            <td className="px-2 py-1.5">{p.property_vcs || ''}</td>
-                            <td className="px-2 py-1.5">{p.asset_type_use || ''}</td>
                             <td className="px-2 py-1.5">{p.asset_design_style || ''}</td>
-                            <td className="px-2 py-1.5 text-center">{p.asset_building_class || ''}</td>
-                            <td className="px-2 py-1.5 text-right">{p.asset_year_built || ''}</td>
-                            <td className="px-2 py-1.5">{p.sales_date || ''}</td>
-                            <td className="px-2 py-1.5 text-center">{p.sales_nu || '00'}</td>
+                            <td className="px-2 py-1.5 text-right font-mono">
+                              {p._currentAsmt > 0 ? `$${Number(p._currentAsmt).toLocaleString()}` : '-'}
+                            </td>
                             <td className="px-2 py-1.5 text-right font-mono">
                               {p.sales_price ? `$${Number(p.sales_price).toLocaleString()}` : '-'}
                             </td>
+                            <td className="px-2 py-1.5 text-right whitespace-nowrap">{lotSizeDisplay}</td>
+                            <td className="px-2 py-1.5 text-right">{p.asset_lot_frontage || '-'}</td>
                             <td className="px-2 py-1.5 text-right">{p.asset_sfla ? Number(p.asset_sfla).toLocaleString() : '-'}</td>
                             <td className="px-2 py-1.5 text-right font-mono">
                               {p._ppsf > 0 ? `$${p._ppsf.toFixed(0)}` : '-'}
                             </td>
-                            <td className="px-2 py-1.5 text-right">{p.asset_lot_acre ? Number(p.asset_lot_acre).toFixed(2) : '-'}</td>
-                            <td className="px-2 py-1.5 text-right">{p.asset_lot_sf ? Number(p.asset_lot_sf).toLocaleString() : '-'}</td>
-                            <td className="px-2 py-1.5 text-right">{p.asset_lot_frontage || '-'}</td>
+                            <td className="px-2 py-1.5 text-center">{p.sales_nu || '00'}</td>
+                            <td className="px-2 py-1.5">{p.sales_date || ''}</td>
+                            <td className="px-2 py-1.5 text-right">{p.asset_year_built || ''}</td>
+                            <td className="px-2 py-1.5">{p.asset_view || ''}</td>
+                            <td className="px-2 py-1.5">{p.asset_type_use || ''}</td>
                             <td className="px-2 py-1.5 text-right font-mono">
                               {p._salesRatio > 0 ? `${p._salesRatio.toFixed(1)}%` : '-'}
                             </td>
-                            <td className="px-2 py-1.5">{p.asset_view || ''}</td>
                           </tr>
                         );
                       });
