@@ -1872,11 +1872,6 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
         compValue = (comp.stable_area && comp.stable_area > 0) ? 1 : 0;
         break;
 
-      case 'pole_barn':
-        subjectValue = (subject.pole_barn_area && subject.pole_barn_area > 0) ? 1 : 0;
-        compValue = (comp.pole_barn_area && comp.pole_barn_area > 0) ? 1 : 0;
-        break;
-
       default:
         // Handle dynamic adjustments (detached items, miscellaneous, land adjustments)
         // CNET APPROACH: Check raw code columns at runtime against saved configuration
