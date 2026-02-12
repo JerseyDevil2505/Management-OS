@@ -184,6 +184,20 @@ const App = () => {
     role: viewingAs.role
   } : user;
 
+  // Centralized job visibility filter:
+  // - Admin (primary owner): all jobs
+  // - Assessor: only their org's jobs
+  // - PPA Owner/Manager: only PPA jobs (no LOJIK client jobs)
+  const filterJobsForUser = (jobList) => {
+    if (canManageUsers) return jobList; // Admin sees everything
+    if (isAssessorUser) {
+      const orgId = viewingAs?.organization_id || userOrgId;
+      return jobList.filter(j => j.organization_id === orgId);
+    }
+    // PPA users (owner, manager) - only PPA jobs
+    return jobList.filter(isPpaJob);
+  };
+
   const handleChangePassword = async (e) => {
     e.preventDefault();
     setCpError('');
@@ -1206,7 +1220,7 @@ const App = () => {
                   backdropFilter: 'none'
                 } : {}}
               >
-                📋 Jobs ({appData.jobs.length})
+                📋 Jobs ({filterJobsForUser(appData.jobs).length})
               </button>
               <button
                 onClick={() => handleViewChange('appeal-coverage')}
@@ -1387,16 +1401,10 @@ const App = () => {
         {activeView === 'admin-jobs' && (
           <AdminJobManagement
             isAdmin={isAdmin}
-            jobs={isAssessorUser
-              ? appData.jobs.filter(j => j.organization_id === (viewingAs?.organization_id || userOrgId))
-              : appData.jobs}
+            jobs={filterJobsForUser(appData.jobs)}
             onJobSelect={handleJobSelect}
-            planningJobs={isAssessorUser
-              ? appData.planningJobs.filter(j => j.organization_id === (viewingAs?.organization_id || userOrgId))
-              : appData.planningJobs}
-            archivedJobs={isAssessorUser
-              ? appData.archivedJobs.filter(j => j.organization_id === (viewingAs?.organization_id || userOrgId))
-              : appData.archivedJobs}
+            planningJobs={filterJobsForUser(appData.planningJobs)}
+            archivedJobs={filterJobsForUser(appData.archivedJobs)}
             managers={appData.managers}
             countyHpiData={appData.countyHpiData}
             jobResponsibilities={appData.jobResponsibilities}
