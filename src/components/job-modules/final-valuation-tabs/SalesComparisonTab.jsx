@@ -581,6 +581,35 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
     return Array.from(viewSet).sort();
   }, [properties]);
 
+  // Code description lookup maps (code -> human-readable definition from job's code table)
+  const codeDescriptions = useMemo(() => {
+    const parsedCodes = codeDefinitions || jobData?.parsed_code_definitions;
+    if (!parsedCodes) return { typeUse: {}, style: {}, view: {}, storyHeight: {} };
+    const typeUse = {}, style = {}, view = {}, storyHeight = {};
+    properties.forEach(p => {
+      if (p.asset_type_use && !typeUse[p.asset_type_use]) {
+        typeUse[p.asset_type_use] = interpretCodes.getTypeName?.({ asset_type_use: p.asset_type_use }, parsedCodes, vendorType) || '';
+      }
+      if (p.asset_design_style && !style[p.asset_design_style]) {
+        style[p.asset_design_style] = interpretCodes.getDesignName?.({ asset_design_style: p.asset_design_style }, parsedCodes, vendorType) || '';
+      }
+      if (p.asset_view && !view[p.asset_view]) {
+        view[p.asset_view] = interpretCodes.getViewName?.({ asset_view: p.asset_view }, parsedCodes, vendorType) || '';
+      }
+      if (p.asset_story_height && !storyHeight[p.asset_story_height]) {
+        storyHeight[p.asset_story_height] = interpretCodes.getStoryHeightName?.({ asset_story_height: p.asset_story_height }, parsedCodes, vendorType) || '';
+      }
+    });
+    return { typeUse, style, view, storyHeight };
+  }, [properties, codeDefinitions, jobData?.parsed_code_definitions, vendorType]);
+
+  // Helper to format code with definition
+  const getCodeLabel = useCallback((type, code) => {
+    if (!code) return '';
+    const desc = codeDescriptions[type]?.[code];
+    return desc && desc !== code ? `${code} - ${desc}` : code;
+  }, [codeDescriptions]);
+
   // ==================== SALES POOL (ALL CANDIDATE SALES) ====================
   // Get all properties that have sales data (before date/code filtering)
   const allSalesCandidates = useMemo(() => {
@@ -2817,12 +2846,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                     <div className="flex flex-wrap items-center gap-1">
                       {poolFilterType.map(v => (
                         <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-purple-100 border border-purple-300 text-purple-800">
-                          {v}<button onClick={() => setPoolFilterType(prev => prev.filter(x => x !== v))} className="hover:text-purple-900"><X className="w-3 h-3" /></button>
+                          {getCodeLabel('typeUse', v)}<button onClick={() => setPoolFilterType(prev => prev.filter(x => x !== v))} className="hover:text-purple-900"><X className="w-3 h-3" /></button>
                         </span>
                       ))}
                       <select value="" onChange={(e) => { if (e.target.value) setPoolFilterType(prev => [...prev, e.target.value]); }} className="px-1 py-0.5 text-xs border border-gray-300 rounded">
                         <option value="">+ Type</option>
-                        {poolUniqueTypes.filter(v => !poolFilterType.includes(v)).map(v => (<option key={v} value={v}>{v}</option>))}
+                        {poolUniqueTypes.filter(v => !poolFilterType.includes(v)).map(v => (<option key={v} value={v}>{getCodeLabel('typeUse', v)}</option>))}
                       </select>
                     </div>
                   </div>
@@ -2832,12 +2861,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                     <div className="flex flex-wrap items-center gap-1">
                       {poolFilterStyle.map(v => (
                         <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-orange-100 border border-orange-300 text-orange-800">
-                          {v}<button onClick={() => setPoolFilterStyle(prev => prev.filter(x => x !== v))} className="hover:text-orange-900"><X className="w-3 h-3" /></button>
+                          {getCodeLabel('style', v)}<button onClick={() => setPoolFilterStyle(prev => prev.filter(x => x !== v))} className="hover:text-orange-900"><X className="w-3 h-3" /></button>
                         </span>
                       ))}
                       <select value="" onChange={(e) => { if (e.target.value) setPoolFilterStyle(prev => [...prev, e.target.value]); }} className="px-1 py-0.5 text-xs border border-gray-300 rounded">
                         <option value="">+ Style</option>
-                        {poolUniqueStyles.filter(v => !poolFilterStyle.includes(v)).map(v => (<option key={v} value={v}>{v}</option>))}
+                        {poolUniqueStyles.filter(v => !poolFilterStyle.includes(v)).map(v => (<option key={v} value={v}>{getCodeLabel('style', v)}</option>))}
                       </select>
                     </div>
                   </div>
@@ -2847,12 +2876,12 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                     <div className="flex flex-wrap items-center gap-1">
                       {poolFilterView.map(v => (
                         <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-pink-100 border border-pink-300 text-pink-800">
-                          {v}<button onClick={() => setPoolFilterView(prev => prev.filter(x => x !== v))} className="hover:text-pink-900"><X className="w-3 h-3" /></button>
+                          {getCodeLabel('view', v)}<button onClick={() => setPoolFilterView(prev => prev.filter(x => x !== v))} className="hover:text-pink-900"><X className="w-3 h-3" /></button>
                         </span>
                       ))}
                       <select value="" onChange={(e) => { if (e.target.value) setPoolFilterView(prev => [...prev, e.target.value]); }} className="px-1 py-0.5 text-xs border border-gray-300 rounded">
                         <option value="">+ View</option>
-                        {poolUniqueViews.filter(v => !poolFilterView.includes(v)).map(v => (<option key={v} value={v}>{v}</option>))}
+                        {poolUniqueViews.filter(v => !poolFilterView.includes(v)).map(v => (<option key={v} value={v}>{getCodeLabel('view', v)}</option>))}
                       </select>
                     </div>
                   </div>
@@ -3012,7 +3041,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                             <td className="px-2 py-1.5">{p.property_lot}</td>
                             <td className="px-2 py-1.5">{p.property_qualifier || ''}</td>
                             <td className="px-2 py-1.5 truncate max-w-[180px]">{p.property_location || ''}</td>
-                            <td className="px-2 py-1.5">{p.asset_design_style || ''}</td>
+                            <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_design_style ? getCodeLabel('style', p.asset_design_style) : ''}</td>
                             <td className="px-2 py-1.5 text-right font-mono">
                               {p._currentAsmt > 0 ? `$${Number(p._currentAsmt).toLocaleString()}` : '-'}
                             </td>
@@ -3028,8 +3057,8 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                             <td className="px-2 py-1.5 text-center">{p.sales_nu || '00'}</td>
                             <td className="px-2 py-1.5">{p.sales_date || ''}</td>
                             <td className="px-2 py-1.5 text-right">{p.asset_year_built || ''}</td>
-                            <td className="px-2 py-1.5">{p.asset_view || ''}</td>
-                            <td className="px-2 py-1.5">{p.asset_type_use || ''}</td>
+                            <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_view ? getCodeLabel('view', p.asset_view) : ''}</td>
+                            <td className="px-2 py-1.5 whitespace-nowrap">{p.asset_type_use ? getCodeLabel('typeUse', p.asset_type_use) : ''}</td>
                             <td className="px-2 py-1.5 text-right font-mono">
                               {p._salesRatio > 0 ? `${p._salesRatio.toFixed(1)}%` : '-'}
                             </td>
@@ -3118,7 +3147,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                     >
                       <option value="">Select Type/Use...</option>
                       {uniqueTypeUse.map(type => (
-                        <option key={type} value={type}>{type}</option>
+                        <option key={type} value={type}>{getCodeLabel('typeUse', type)}</option>
                       ))}
                     </select>
                     <p className="text-xs text-gray-500 mt-1">Can select multiple. Blank for all</p>
@@ -3130,7 +3159,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                             key={type}
                             className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs"
                           >
-                            {type}
+                            {getCodeLabel('typeUse', type)}
                             <button
                               onClick={() => toggleChip(subjectTypeUse, setSubjectTypeUse)(type)}
                               className="ml-0.5 text-green-600 hover:text-green-800"
@@ -3600,7 +3629,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       disabled={compFilters.sameTypeUse}
                     >
                       <option value="">Select...</option>
-                      {uniqueTypeUse.map(t => <option key={t} value={t}>{t}</option>)}
+                      {uniqueTypeUse.map(t => <option key={t} value={t}>{getCodeLabel('typeUse', t)}</option>)}
                     </select>
                     <label className="flex items-center gap-1 text-xs whitespace-nowrap">
                       <span className="text-gray-500">OR Same Type/Use</span>
@@ -3619,7 +3648,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       disabled={compFilters.sameStyle}
                     >
                       <option value="">Select...</option>
-                      {uniqueStyle.map(s => <option key={s} value={s}>{s}</option>)}
+                      {uniqueStyle.map(s => <option key={s} value={s}>{getCodeLabel('style', s)}</option>)}
                     </select>
                     <label className="flex items-center gap-1 text-xs whitespace-nowrap">
                       <span className="text-gray-500">OR Same Style</span>
@@ -3638,7 +3667,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       disabled={compFilters.sameStoryHeight}
                     >
                       <option value="">Select...</option>
-                      {uniqueStoryHeight.map(h => <option key={h} value={h}>{h}</option>)}
+                      {uniqueStoryHeight.map(h => <option key={h} value={h}>{getCodeLabel('storyHeight', h)}</option>)}
                     </select>
                     <label className="flex items-center gap-1 text-xs whitespace-nowrap">
                       <span className="text-gray-500">OR Same Story Height</span>
@@ -3657,7 +3686,7 @@ const SalesComparisonTab = ({ jobData, properties, hpiData, onUpdateJobCache, is
                       disabled={compFilters.sameView}
                     >
                       <option value="">Select...</option>
-                      {uniqueView.map(v => <option key={v} value={v}>{v}</option>)}
+                      {uniqueView.map(v => <option key={v} value={v}>{getCodeLabel('view', v)}</option>)}
                     </select>
                     <label className="flex items-center gap-1 text-xs whitespace-nowrap">
                       <span className="text-gray-500">OR Same View</span>
